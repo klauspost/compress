@@ -79,6 +79,43 @@ func largeDataChunk() []byte {
 	return result
 }
 
+func TestCRC(t *testing.T) {
+	for _, x := range deflateTests {
+		y := x.out
+		if len(y) >= minMatchLength {
+			t.Logf("In: %v, Out:0x%08x", y[0:minMatchLength], crc32sse(y[0:minMatchLength]))
+		}
+	}
+}
+
+func TestCRCBulk(t *testing.T) {
+	for _, x := range deflateTests {
+		y := x.out
+		if len(y) >= minMatchLength {
+			y = append(y, y...)
+			for j := 4; j < len(y); j++ {
+				y := y[:j]
+				dst := make([]uint32, len(y)-minMatchLength+1)
+				for i := range dst {
+					dst[i] = uint32(i + 100)
+				}
+				crc32sseAll(y, dst)
+				for i, val := range dst {
+					got := int(val)
+					expect := crc32sse(y[i:])
+					if got != expect && got == i+100 {
+						t.Errorf("Len:%d Index:%d, expected 0x%08x but not modified", len(y), i, expect)
+					} else if got != expect {
+						t.Errorf("Len:%d Index:%d, got 0x%08x expected:0x%08x", len(y), i, got, expect)
+					} else {
+						t.Logf("Len:%d Index:%d OK", len(y), i)
+					}
+				}
+			}
+		}
+	}
+}
+
 func TestDeflate(t *testing.T) {
 	for _, h := range deflateTests {
 		var buf bytes.Buffer
@@ -90,7 +127,7 @@ func TestDeflate(t *testing.T) {
 		w.Write(h.in)
 		w.Close()
 		if !bytes.Equal(buf.Bytes(), h.out) {
-			t.Errorf("Deflate(%d, %x) = %x, want %x", h.level, h.in, buf.Bytes(), h.out)
+			t.Errorf("Deflate(%d, %x) = \n%#v, want \n%#v", h.level, h.in, buf.Bytes(), h.out)
 		}
 	}
 }
@@ -288,6 +325,9 @@ func testToFromWithLevelAndLimit(t *testing.T, level int, input []byte, name str
 		t.Errorf("level: %d, len(compress(data)) = %d > limit = %d", level, buffer.Len(), limit)
 		return
 	}
+	if limit > 0 {
+		t.Logf("level: %d - Size:%.2f%%\n", level, float64(buffer.Len()*100)/float64(limit))
+	}
 	r := NewReader(&buffer)
 	out, err := ioutil.ReadAll(r)
 	if err != nil {
@@ -449,6 +489,8 @@ func TestWriterReset(t *testing.T) {
 		// DeepEqual doesn't compare functions.
 		w.d.fill, wref.d.fill = nil, nil
 		w.d.step, wref.d.step = nil, nil
+		w.d.hasher, wref.d.hasher = nil, nil
+		w.d.hasher, wref.d.hasher = nil, nil
 		if !reflect.DeepEqual(w, wref) {
 			t.Errorf("level %d Writer not reset after Reset", level)
 		}
