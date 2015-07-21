@@ -174,24 +174,13 @@ func (d *compressor) findMatch(pos int, prevHead int, prevLength int, lookahead 
 		tries >>= 2
 	}
 
-	w0 := win[pos]
-	w1 := win[pos+1]
 	wEnd := win[pos+length]
 	minIndex := pos - windowSize
 
 	for i := prevHead; tries > 0; tries-- {
-		//n := match.MatchLen(win[i:], win[pos:], len(win)-(pos))
-		if w0 == win[i] && w1 == win[i+1] && wEnd == win[i+length] {
+		if wEnd == win[i+length] {
+			n := match.MatchLen(win[i:], win[pos:], len(win)-(pos))
 
-			n := 2 + match.MatchLen(win[i+2:], win[pos+2:], len(win)-(pos)-2)
-
-			/*
-				_ = match.MatchLen
-				n := 2
-				for pos+n < len(win) && win[i+n] == win[pos+n] {
-					n++
-				}
-			*/
 			if n > length && (n > minMatchLength || pos-i <= 4096) {
 				length = n
 				offset = pos - i
