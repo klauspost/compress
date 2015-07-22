@@ -108,14 +108,13 @@ func TestCRCBulk(t *testing.T) {
 				}
 				crc32sseAll(y, dst)
 				for i, got := range dst {
-					//got := hash(val)
 					expect := crc32sse(y[i:])
 					if got != expect && got == hash(i)+100 {
 						t.Errorf("Len:%d Index:%d, expected 0x%08x but not modified", len(y), i, expect)
 					} else if got != expect {
 						t.Errorf("Len:%d Index:%d, got 0x%08x expected:0x%08x", len(y), i, got, expect)
 					} else {
-						t.Logf("Len:%d Index:%d OK", len(y), i)
+						//t.Logf("Len:%d Index:%d OK", len(y), i)
 					}
 				}
 			}
@@ -143,7 +142,7 @@ func TestCRCBulkOld(t *testing.T) {
 					} else if got != expect {
 						t.Errorf("Len:%d Index:%d, got 0x%08x expected:0x%08x", len(y), i, got, expect)
 					} else {
-						t.Logf("Len:%d Index:%d OK (0x%08x)", len(y), i, got)
+						//t.Logf("Len:%d Index:%d OK (0x%08x)", len(y), i, got)
 					}
 				}
 			}
