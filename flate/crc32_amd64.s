@@ -1,5 +1,7 @@
 //+build !noasm !appengine
 
+// Copyright 2015, Klaus Post, see LICENSE for details.
+
 // func crc32sse(a []byte) hash
 TEXT ·crc32sse(SB),7, $0
     MOVQ    a+0(FP), R10

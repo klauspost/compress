@@ -6,7 +6,6 @@ package flate
 
 import (
 	"fmt"
-	"github.com/klauspost/cpuid"
 	"github.com/klauspost/match"
 	"io"
 	"math"
@@ -38,6 +37,8 @@ const (
 
 	skipNever = math.MaxInt32
 )
+
+var useSSE42 bool
 
 type compressionLevel struct {
 	good, lazy, nice, chain, fastSkipHashing int
@@ -247,7 +248,7 @@ func (d *compressor) initDeflate() {
 	d.chainHead = -1
 	d.hasher = oldHash
 	d.bulkHasher = oldBulkHash
-	if cpuid.CPU.SSE42() {
+	if useSSE42 {
 		d.hasher = crc32sse
 		d.bulkHasher = crc32sseAll
 	}

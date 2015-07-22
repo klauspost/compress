@@ -7,7 +7,6 @@ package flate
 import (
 	"bytes"
 	"fmt"
-	"github.com/klauspost/cpuid"
 	"io"
 	"io/ioutil"
 	"reflect"
@@ -81,7 +80,7 @@ func largeDataChunk() []byte {
 }
 
 func TestCRC(t *testing.T) {
-	if !cpuid.CPU.SSE42() {
+	if !useSSE42 {
 		t.Skip("Skipping CRC test, no SSE 4.2 available")
 	}
 	for _, x := range deflateTests {
@@ -93,7 +92,7 @@ func TestCRC(t *testing.T) {
 }
 
 func TestCRCBulk(t *testing.T) {
-	if !cpuid.CPU.SSE42() {
+	if !useSSE42 {
 		t.Skip("Skipping CRC test, no SSE 4.2 available")
 	}
 	for _, x := range deflateTests {
