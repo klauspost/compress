@@ -154,6 +154,47 @@ func (d *compressor) writeBlock(tokens []token, index int, eof bool) error {
 	return nil
 }
 
+// fillWindow will fill the current window with the supplied
+// dictionary. This is much faster than doing a full
+// encode.
+func (d *compressor) fillWindow(b []byte) {
+	// Any better way of finding if we are storing?
+	if d.compressionLevel.good == 0 {
+		return
+	}
+	if len(b) > windowSize {
+		b = b[len(b)-windowSize:]
+	}
+	n := copy(d.window[d.windowEnd:], b)
+	d.windowEnd += n
+	loops := (n + 256 - minMatchLength) / 256
+	for j := 0; j < loops; j++ {
+		startindex := j * 256
+		end := startindex + 256 + minMatchLength - 1
+		if end > n {
+			end = n
+		}
+		tocheck := d.window[startindex:end]
+		dstSize := len(tocheck) - minMatchLength + 1
+		if dstSize > 0 {
+			dst := d.hashMatch[:dstSize]
+			d.bulkHasher(tocheck, dst)
+			var newH hash
+			for i, val := range dst {
+				di := i + startindex
+				newH = val & hashMask
+				// Get previous value with the same hash.
+				// Our chain should point to the previous value.
+				d.hashPrev[di&windowMask] = d.hashHead[newH]
+				// Set the head of the hash chain to us.
+				d.hashHead[newH] = di + d.hashOffset
+			}
+			d.hash = newH
+		}
+	}
+	d.index = n
+}
+
 // Try to find a match starting at index whose length is greater than prevSize.
 // We only look at chainCount possibilities before giving up.
 // pos = d.index, prevHead = d.chainHead-d.hashOffset, prevLength=minMatchLength-1, lookahead
@@ -550,28 +591,22 @@ func NewWriter(w io.Writer, level int) (*Writer, error) {
 // can only be decompressed by a Reader initialized with the
 // same dictionary.
 func NewWriterDict(w io.Writer, level int, dict []byte) (*Writer, error) {
-	dw := &dictWriter{w, false}
+	dw := &dictWriter{w}
 	zw, err := NewWriter(dw, level)
 	if err != nil {
 		return nil, err
 	}
-	zw.Write(dict)
-	zw.Flush()
-	dw.enabled = true
+	zw.d.fillWindow(dict)
 	zw.dict = append(zw.dict, dict...) // duplicate dictionary for Reset method.
 	return zw, err
 }
 
 type dictWriter struct {
-	w       io.Writer
-	enabled bool
+	w io.Writer
 }
 
 func (w *dictWriter) Write(b []byte) (n int, err error) {
-	if w.enabled {
-		return w.w.Write(b)
-	}
-	return len(b), nil
+	return w.w.Write(b)
 }
 
 // A Writer takes data written to it and writes the compressed
@@ -613,10 +648,7 @@ func (w *Writer) Reset(dst io.Writer) {
 		// w was created with NewWriterDict
 		dw.w = dst
 		w.d.reset(dw)
-		dw.enabled = false
-		w.Write(w.dict)
-		w.Flush()
-		dw.enabled = true
+		w.d.fillWindow(w.dict)
 	} else {
 		// w was created with NewWriter
 		w.d.reset(dst)
