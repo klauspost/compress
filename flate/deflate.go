@@ -155,18 +155,22 @@ func (d *compressor) writeBlock(tokens []token, index int, eof bool) error {
 }
 
 // fillWindow will fill the current window with the supplied
-// dictionary. This is much faster than doing a full
-// encode.
+// dictionary and calculate all hashes.
+// This is much faster than doing a full encode.
+// Should only be used after a start/reset.
 func (d *compressor) fillWindow(b []byte) {
 	// Any better way of finding if we are storing?
 	if d.compressionLevel.good == 0 {
 		return
 	}
+	// If we are given too much, cut it.
 	if len(b) > windowSize {
 		b = b[len(b)-windowSize:]
 	}
+	// Add all to window.
 	n := copy(d.window[d.windowEnd:], b)
-	d.windowEnd += n
+
+	// Calculate 256 hashes at the time (more L1 cache hits)
 	loops := (n + 256 - minMatchLength) / 256
 	for j := 0; j < loops; j++ {
 		startindex := j * 256
@@ -176,22 +180,27 @@ func (d *compressor) fillWindow(b []byte) {
 		}
 		tocheck := d.window[startindex:end]
 		dstSize := len(tocheck) - minMatchLength + 1
-		if dstSize > 0 {
-			dst := d.hashMatch[:dstSize]
-			d.bulkHasher(tocheck, dst)
-			var newH hash
-			for i, val := range dst {
-				di := i + startindex
-				newH = val & hashMask
-				// Get previous value with the same hash.
-				// Our chain should point to the previous value.
-				d.hashPrev[di&windowMask] = d.hashHead[newH]
-				// Set the head of the hash chain to us.
-				d.hashHead[newH] = di + d.hashOffset
-			}
-			d.hash = newH
+
+		if dstSize <= 0 {
+			continue
 		}
+
+		dst := d.hashMatch[:dstSize]
+		d.bulkHasher(tocheck, dst)
+		var newH hash
+		for i, val := range dst {
+			di := i + startindex
+			newH = val & hashMask
+			// Get previous value with the same hash.
+			// Our chain should point to the previous value.
+			d.hashPrev[di&windowMask] = d.hashHead[newH]
+			// Set the head of the hash chain to us.
+			d.hashHead[newH] = di + d.hashOffset
+		}
+		d.hash = newH
 	}
+	// Update window information.
+	d.windowEnd += n
 	d.index = n
 }
 
