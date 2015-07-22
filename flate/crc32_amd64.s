@@ -5,7 +5,7 @@
 // func crc32sse(a []byte) hash
 TEXT ·crc32sse(SB),7, $0
     MOVQ    a+0(FP), R10
-    MOVQ    $0, BX
+    XORQ    BX, BX
     MOVL    (R10), AX
 
     // CRC32   EAX, EBX
@@ -36,12 +36,12 @@ crc_loop:
     XORQ    DX,DX
     XORQ    DI,DI
     MOVQ    R11, R12
-    SHRQ    $8, R12
-    MOVQ    R11, AX
-    MOVQ    R12, CX
-    SHRQ    $16, R11
+    SHRQ    $8, R11
+    MOVQ    R12, AX
+    MOVQ    R11, CX
     SHRQ    $16, R12
-    MOVQ    R11, SI
+    SHRQ    $16, R11
+    MOVQ    R12, SI
 
     // CRC32   EAX, EBX
     BYTE $0xF2; BYTE $0x0f; 
@@ -57,7 +57,7 @@ crc_loop:
     MOVL    DI, 8(R9)
 
     XORQ    BX, BX
-    MOVL    R12, AX
+    MOVL    R11, AX
 
     // CRC32   EAX, EBX
     BYTE $0xF2; BYTE $0x0f; 
@@ -74,9 +74,7 @@ remain_crc:
     TESTQ    R13, R13
     JZ      end
 rem_loop:
-    XORQ    AX, AX
     MOVL    (R8), AX
-    XORQ    BX, BX
 
     // CRC32   EAX, EBX
     BYTE $0xF2; BYTE $0x0f; 
@@ -85,6 +83,7 @@ rem_loop:
     MOVL    BX,(R9)
     ADDQ    $4, R9
     ADDQ    $1, R8
+    XORQ    BX, BX
     SUBQ    $1, R13
     JNZ    rem_loop
 end:
