@@ -62,8 +62,9 @@ var levels = []compressionLevel{
 type compressor struct {
 	compressionLevel
 
-	w      *huffmanBitWriter
-	hasher func([]byte) int
+	w          *huffmanBitWriter
+	hasher     func([]byte) hash
+	bulkHasher func([]byte, []hash)
 
 	// compression algorithm
 	fill func(*compressor, []byte) int // copy data to window
@@ -93,12 +94,14 @@ type compressor struct {
 	// deflate state
 	length         int
 	offset         int
-	hash           int
+	hash           hash
 	maxInsertIndex int
 	err            error
 
-	hashMatch [maxMatchLength + minMatchLength]uint32
+	hashMatch [maxMatchLength + minMatchLength]hash
 }
+
+type hash int32
 
 func (d *compressor) fillDeflate(b []byte) int {
 	if d.index >= 2*windowSize-(minMatchLength+maxMatchLength) {
@@ -213,10 +216,23 @@ func (d *compressor) writeStoredBlock(buf []byte) error {
 	return d.w.err
 }
 
-func oldHash(b []byte) int {
-	return int(b[0])<<(hashShift*2) + int(b[1])<<hashShift + int(b[2])
+func oldHash(b []byte) hash {
+	return hash(b[0])<<(hashShift*3) + hash(b[1])<<(hashShift*2) + hash(b[2])<<hashShift + hash(b[3])
 }
 
+func oldBulkHash(b []byte, dst []hash) {
+	if len(b) < minMatchLength {
+		return
+	}
+	h := oldHash(b)
+	dst[0] = h
+	i := 1
+	end := len(b) - minMatchLength + 1
+	for ; i < end; i++ {
+		h = (h << hashShift) + hash(b[i+3])
+		dst[i] = h
+	}
+}
 func (d *compressor) initDeflate() {
 	d.hashHead = make([]int, hashSize)
 	d.hashPrev = make([]int, windowSize)
@@ -230,10 +246,10 @@ func (d *compressor) initDeflate() {
 	d.hash = 0
 	d.chainHead = -1
 	d.hasher = oldHash
+	d.bulkHasher = oldBulkHash
 	if cpuid.CPU.SSE42() {
 		d.hasher = crc32sse
-	} else {
-		panic("not implemented, we need SSE 4.2")
+		d.bulkHasher = crc32sseAll
 	}
 }
 
@@ -337,11 +353,11 @@ Loop:
 				dstSize := len(tocheck) - minMatchLength + 1
 				if dstSize > 0 {
 					dst := d.hashMatch[:dstSize]
-					crc32sseAll(tocheck, dst)
-					var newH int
+					d.bulkHasher(tocheck, dst)
+					var newH hash
 					for i, val := range dst {
 						di := i + startindex
-						newH = int(val) & hashMask
+						newH = val & hashMask
 						// Get previous value with the same hash.
 						// Our chain should point to the previous value.
 						d.hashPrev[di&windowMask] = d.hashHead[newH]

@@ -7,6 +7,7 @@ package flate
 import (
 	"bytes"
 	"fmt"
+	"github.com/klauspost/cpuid"
 	"io"
 	"io/ioutil"
 	"reflect"
@@ -80,6 +81,9 @@ func largeDataChunk() []byte {
 }
 
 func TestCRC(t *testing.T) {
+	if !cpuid.CPU.SSE42() {
+		t.Skip("Skipping CRC test, no SSE 4.2 available")
+	}
 	for _, x := range deflateTests {
 		y := x.out
 		if len(y) >= minMatchLength {
@@ -89,26 +93,57 @@ func TestCRC(t *testing.T) {
 }
 
 func TestCRCBulk(t *testing.T) {
+	if !cpuid.CPU.SSE42() {
+		t.Skip("Skipping CRC test, no SSE 4.2 available")
+	}
 	for _, x := range deflateTests {
 		y := x.out
 		if len(y) >= minMatchLength {
 			y = append(y, y...)
 			for j := 4; j < len(y); j++ {
 				y := y[:j]
-				dst := make([]uint32, len(y)-minMatchLength+1)
+				dst := make([]hash, len(y)-minMatchLength+1)
 				for i := range dst {
-					dst[i] = uint32(i + 100)
+					dst[i] = hash(i + 100)
 				}
 				crc32sseAll(y, dst)
-				for i, val := range dst {
-					got := int(val)
+				for i, got := range dst {
+					//got := hash(val)
 					expect := crc32sse(y[i:])
-					if got != expect && got == i+100 {
+					if got != expect && got == hash(i)+100 {
 						t.Errorf("Len:%d Index:%d, expected 0x%08x but not modified", len(y), i, expect)
 					} else if got != expect {
 						t.Errorf("Len:%d Index:%d, got 0x%08x expected:0x%08x", len(y), i, got, expect)
 					} else {
 						t.Logf("Len:%d Index:%d OK", len(y), i)
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestCRCBulkOld(t *testing.T) {
+	for _, x := range deflateTests {
+		y := x.out
+		if len(y) >= minMatchLength {
+			y = append(y, y...)
+			for j := 4; j < len(y); j++ {
+				y := y[:j]
+				dst := make([]hash, len(y)-minMatchLength+1)
+				for i := range dst {
+					dst[i] = hash(i + 100)
+				}
+				oldBulkHash(y, dst)
+				for i, val := range dst {
+					got := val & hashMask
+					expect := oldHash(y[i:]) & hashMask
+					if got != expect && got == hash(i)+100 {
+						t.Errorf("Len:%d Index:%d, expected 0x%08x but not modified", len(y), i, expect)
+					} else if got != expect {
+						t.Errorf("Len:%d Index:%d, got 0x%08x expected:0x%08x", len(y), i, got, expect)
+					} else {
+						t.Logf("Len:%d Index:%d OK (0x%08x)", len(y), i, got)
 					}
 				}
 			}
@@ -490,7 +525,7 @@ func TestWriterReset(t *testing.T) {
 		w.d.fill, wref.d.fill = nil, nil
 		w.d.step, wref.d.step = nil, nil
 		w.d.hasher, wref.d.hasher = nil, nil
-		w.d.hasher, wref.d.hasher = nil, nil
+		w.d.bulkHasher, wref.d.bulkHasher = nil, nil
 		if !reflect.DeepEqual(w, wref) {
 			t.Errorf("level %d Writer not reset after Reset", level)
 		}

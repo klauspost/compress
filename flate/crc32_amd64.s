@@ -1,6 +1,6 @@
 //+build !noasm !appengine
 
-// func crc32sse(a []byte) int
+// func crc32sse(a []byte) hash
 TEXT ·crc32sse(SB),7, $0
     MOVQ    a+0(FP), R10
     MOVQ    $0, BX
@@ -10,10 +10,10 @@ TEXT ·crc32sse(SB),7, $0
     BYTE $0xF2; BYTE $0x0f; 
     BYTE $0x38; BYTE $0xf1; BYTE $0xd8
 
-    MOVQ    BX, ret+24(FP)
+    MOVL    BX, ret+24(FP)
     RET
 
-// func crc32sseAll(a []byte, dst []uint32)
+// func crc32sseAll(a []byte, dst []hash)
 TEXT ·crc32sseAll(SB), 7, $0
     MOVQ    a+0(FP), R8
     MOVQ    a_len+8(FP), R10
