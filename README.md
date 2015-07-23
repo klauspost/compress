@@ -2,6 +2,8 @@
 
 This package is based on an optimized Deflate function, which is used by gzip/zip packages.
 
+[![Build Status](https://travis-ci.org/klauspost/compress.svg?branch=master)](https://travis-ci.org/klauspost/compress)
+
 # usage
 
 The packages are drop-in replacements for standard libraries. Simply replace the import path to use them:
@@ -12,7 +14,7 @@ The packages are drop-in replacements for standard libraries. Simply replace the
 | `archive/zip`      | `github.com/klauspost/compress/zip`     |
 | `compress/deflate` | `github.com/klauspost/compress/deflate` |
 
-You may also be interested in [pgzip](https://github.com/klauspost/pgzip), which is a drop in replacement for gzip, which support multithreaded compression on big files and the optimized [https://github.com/klauspost/crc32](crc32) used by these packages.
+You may also be interested in [pgzip](https://github.com/klauspost/pgzip), which is a drop in replacement for gzip, which support multithreaded compression on big files and the optimized [crc32](https://github.com/klauspost/crc32) package used by these packages.
 
 # deflate optimizations
 
