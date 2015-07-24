@@ -6,6 +6,7 @@
 package flate
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/klauspost/match"
 	"io"
@@ -135,6 +136,23 @@ func (d *compressor) fillDeflate(b []byte) int {
 					d.hashHead[i] = 0
 				}
 			}
+		}
+	}
+	n := copy(d.window[d.windowEnd:], b)
+	d.windowEnd += n
+	return n
+}
+
+func (d *compressor) fillDeflateBrute(b []byte) int {
+	if d.index >= 2*windowSize-(8+maxMatchLength) {
+		// shift the window by windowSize
+		copy(d.window, d.window[windowSize:2*windowSize])
+		d.index -= windowSize
+		d.windowEnd -= windowSize
+		if d.blockStart >= windowSize {
+			d.blockStart -= windowSize
+		} else {
+			d.blockStart = math.MaxInt32
 		}
 	}
 	n := copy(d.window[d.windowEnd:], b)
@@ -307,6 +325,7 @@ func (d *compressor) initDeflate() {
 
 func (d *compressor) deflate() {
 	if d.windowEnd-d.index < minMatchLength+maxMatchLength && !d.sync {
+		fmt.Println("return early")
 		return
 	}
 
@@ -463,6 +482,176 @@ Loop:
 	}
 }
 
+func (d *compressor) deflateBrute() {
+	if d.windowEnd-d.index < minMatchLength+maxMatchLength && !d.sync {
+		fmt.Println("return early")
+		return
+	}
+
+	d.maxInsertIndex = d.windowEnd - (minMatchLength - 1)
+	var m4 []int
+	var m8 []int
+Loop:
+	for {
+		if d.index > d.windowEnd {
+			fmt.Println("panic:", d.index, ">", d.windowEnd)
+			panic("index > windowEnd")
+		}
+		lookahead := d.windowEnd - d.index
+		if lookahead < 8+maxMatchLength {
+			if !d.sync {
+				//fmt.Println("more lookahead")
+				break Loop
+			}
+			if d.index > d.windowEnd {
+				fmt.Println("panic:", d.index, "to", d.windowEnd)
+				panic("index > windowEnd")
+			}
+			if lookahead == 0 {
+				// Flush current output block if any.
+				if len(d.tokens) > 0 {
+					if d.err = d.writeBlock(d.tokens, d.index, false); d.err != nil {
+						return
+					}
+					d.tokens = d.tokens[:0]
+				}
+				break Loop
+			}
+		}
+		doLit := true
+		if lookahead >= 8 {
+			minIndex := d.index - 32000
+			if minIndex < 0 {
+				minIndex = 0
+			}
+			// Actually it can be up to maxMatchLen
+			endIndex := d.index - minIndex - 0
+			endIndex = minIndex + ((endIndex)/16)*16
+
+			//fmt.Println("searchin:", minIndex, "to", endIndex)
+
+			m8, m4 = match.Match8And4(d.window[d.index:d.index+8], d.window[minIndex:endIndex], m8, m4)
+			if len(m8) == 0 && len(m4) == 0 {
+				doLit = true
+			} else if len(m8) == 0 {
+				aa := d.window[d.index+4]
+				ab := d.window[d.index+5]
+				ac := d.window[d.index+6]
+				i := len(m4) - 1
+				endi := i + 10
+				if endi < 0 {
+					endi = 0
+				}
+				maxMatch := 4
+				longestI := m4[i]
+
+				for ; i >= endi; i-- {
+					base := m4[i] + 4 + minIndex
+					ba := d.window[base]
+					bb := d.window[base+1]
+					bc := d.window[base+2]
+					switch maxMatch {
+					case 4:
+						if aa == ba {
+							maxMatch = 5
+							longestI = m4[i]
+							if ab == bb {
+								maxMatch = 6
+								longestI = m4[i]
+								if ac == bc {
+									maxMatch = 7
+									longestI = m4[i]
+									break
+								}
+							}
+						}
+					case 5:
+						if aa == ba && ab == bb {
+							maxMatch = 6
+							longestI = m4[i]
+							if ac == bc {
+								maxMatch = 7
+								longestI = m4[i]
+								break
+							}
+						}
+					case 6:
+						if aa == ba && ab == bb && ac == bc {
+							maxMatch = 7
+							longestI = m4[i]
+							break
+						}
+					}
+
+				}
+				longestI += minIndex
+				if false {
+					a := d.window[d.index : d.index+maxMatch]
+					b := d.window[longestI : longestI+maxMatch]
+					if bytes.Compare(a, b) != 0 {
+						panic(fmt.Sprintf("doesn't match:\n%v\n%v", a, b))
+					}
+				}
+				//fmt.Println("found 4 len", maxMatch, "match at offset", d.index-longestI, "abs:", longestI, "windowEnd:", d.windowEnd)
+				if maxMatch > 5 {
+					d.tokens = append(d.tokens, matchToken(uint32(maxMatch-3), uint32(d.index-longestI-minOffsetSize)))
+					d.index += maxMatch
+
+					//fmt.Println("new index:", d.index)
+					doLit = false
+				}
+
+			} else {
+				maxSearch := maxMatchLength - 8
+				if d.index+maxSearch >= d.windowEnd-8 {
+					maxSearch = d.windowEnd - d.index - 1 - 8
+				}
+				maxMatch := 0
+				i := len(m8) - 1
+				longestI := m8[i]
+				searchfor := d.window[d.index+8 : d.index+maxMatchLength]
+				for ; i >= 0; i-- {
+					idx := m8[i] + 8 + minIndex
+					m := match.MatchLen(searchfor, d.window[idx:idx+maxMatchLength], maxSearch)
+					if m > maxMatch {
+						longestI = m8[i]
+						maxMatch = m
+						if m == maxMatchLength {
+							break
+						}
+					}
+				}
+				longestI += minIndex
+				maxMatch += 8
+				if false {
+					a := d.window[d.index : d.index+maxMatch]
+					b := d.window[longestI : longestI+maxMatch]
+					if bytes.Compare(a, b) != 0 {
+						panic(fmt.Sprintf("doesn't match:\n%v\n%v", a, b))
+					}
+				}
+				//fmt.Println("found len", maxMatch, "match at offset", d.index-longestI, "abs:", longestI, "windowEnd:", d.windowEnd)
+				d.tokens = append(d.tokens, matchToken(uint32(maxMatch-3), uint32(d.index-longestI-minOffsetSize)))
+				d.index += maxMatch
+				//fmt.Println("new index:", d.index)
+				doLit = false
+			}
+		}
+		if doLit {
+			//fmt.Println("literal:", d.window[d.index])
+			d.tokens = append(d.tokens, literalToken(uint32(d.window[d.index])))
+			d.index++
+		}
+		if len(d.tokens) == maxFlateBlockTokens {
+			//fmt.Println("writeblovk:", len(d.tokens))
+			if d.err = d.writeBlock(d.tokens, d.index, false); d.err != nil {
+				return
+			}
+			d.tokens = d.tokens[:0]
+		}
+	}
+}
+
 func (d *compressor) fillStore(b []byte) int {
 	n := copy(d.window[d.windowEnd:], b)
 	d.windowEnd += n
@@ -512,8 +701,8 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 	case 1 <= level && level <= 9:
 		d.compressionLevel = levels[level]
 		d.initDeflate()
-		d.fill = (*compressor).fillDeflate
-		d.step = (*compressor).deflate
+		d.fill = (*compressor).fillDeflateBrute
+		d.step = (*compressor).deflateBrute
 	default:
 		return fmt.Errorf("flate: invalid compression level %d: want value in range [-1, 9]", level)
 	}
