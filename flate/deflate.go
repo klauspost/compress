@@ -643,6 +643,13 @@ Loop:
 					if bytes.Compare(a, b) != 0 {
 						panic(fmt.Sprintf("doesn't match:\n%v\n%v", a, b))
 					}
+					if maxMatch != maxMatchLength && maxMatch != maxSearch+8 {
+						a = d.window[d.index : d.index+maxMatch+1]
+						b = d.window[longestI : longestI+maxMatch+1]
+						if bytes.Compare(a, b) == 0 {
+							panic(fmt.Sprintf("shouldn't match:\n%v\n%v. Longest:%d of %d", a, b, maxMatch, maxSearch+8))
+						}
+					}
 				}
 				if d.index-longestI > 32768 || d.index-longestI <= 0 {
 					fmt.Println("found 4 len", maxMatch, "match at offset", d.index-longestI, "abs:", longestI, "windowEnd:", d.windowEnd)
