@@ -7,7 +7,10 @@ package gzip
 import (
 	"bufio"
 	"bytes"
+	oldgz "compress/gzip"
+	"io"
 	"io/ioutil"
+	"math/rand"
 	"testing"
 	"time"
 )
@@ -227,5 +230,152 @@ func TestWriterReset(t *testing.T) {
 	z.Close()
 	if buf.String() != buf2.String() {
 		t.Errorf("buf2 %q != original buf of %q", buf2.String(), buf.String())
+	}
+}
+
+var testbuf []byte
+
+func testFile(i int, t *testing.T) {
+	dat, _ := ioutil.ReadFile("testdata/test.json")
+	dl := len(dat)
+	if len(testbuf) != i*dl {
+		// Make results predictable
+		testbuf = make([]byte, i*dl)
+		for j := 0; j < i; j++ {
+			copy(testbuf[j*dl:j*dl+dl], dat)
+		}
+	}
+
+	br := bytes.NewBuffer(testbuf)
+	var buf bytes.Buffer
+	w, _ := NewWriterLevel(&buf, 6)
+	io.Copy(w, br)
+	w.Close()
+	r, err := NewReader(&buf)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	decoded, err := ioutil.ReadAll(r)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	if !bytes.Equal(testbuf, decoded) {
+		t.Errorf("decoded content does not match.")
+	}
+}
+
+func TestFile1(t *testing.T)  { testFile(1, t) }
+func TestFile10(t *testing.T) { testFile(10, t) }
+
+func TestFile50(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping during short test")
+	}
+	testFile(50, t)
+}
+
+func TestFile200(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping during short test")
+	}
+	testFile(200, t)
+}
+
+func testBigGzip(i int, t *testing.T) {
+	if len(testbuf) != i {
+		// Make results predictable
+		rand.Seed(1337)
+		testbuf = make([]byte, i)
+		for idx := range testbuf {
+			testbuf[idx] = byte(65 + rand.Intn(32))
+		}
+	}
+
+	br := bytes.NewBuffer(testbuf)
+	var buf bytes.Buffer
+	w, _ := NewWriterLevel(&buf, 6)
+	io.Copy(w, br)
+
+	r, err := NewReader(&buf)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	decoded, err := ioutil.ReadAll(r)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	if !bytes.Equal(testbuf, decoded) {
+		t.Errorf("decoded content does not match.")
+	}
+}
+
+func TestGzip1K(t *testing.T)   { testBigGzip(1000, t) }
+func TestGzip100K(t *testing.T) { testBigGzip(100000, t) }
+func TestGzip1M(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping during short test")
+	}
+
+	testBigGzip(1000000, t)
+}
+func TestGzip10M(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping during short test")
+	}
+	testBigGzip(10000000, t)
+}
+
+func BenchmarkGzipL1(b *testing.B) { benchmarkGzipN(b, 1) }
+func BenchmarkGzipL2(b *testing.B) { benchmarkGzipN(b, 2) }
+func BenchmarkGzipL3(b *testing.B) { benchmarkGzipN(b, 3) }
+func BenchmarkGzipL4(b *testing.B) { benchmarkGzipN(b, 4) }
+func BenchmarkGzipL5(b *testing.B) { benchmarkGzipN(b, 5) }
+func BenchmarkGzipL6(b *testing.B) { benchmarkGzipN(b, 6) }
+func BenchmarkGzipL7(b *testing.B) { benchmarkGzipN(b, 7) }
+func BenchmarkGzipL8(b *testing.B) { benchmarkGzipN(b, 8) }
+func BenchmarkGzipL9(b *testing.B) { benchmarkGzipN(b, 9) }
+
+func benchmarkGzipN(b *testing.B, level int) {
+	dat, _ := ioutil.ReadFile("testdata/test.json")
+	dat = append(dat, dat...)
+	dat = append(dat, dat...)
+	dat = append(dat, dat...)
+	dat = append(dat, dat...)
+	dat = append(dat, dat...)
+	b.SetBytes(int64(len(dat)))
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		w, _ := NewWriterLevel(ioutil.Discard, level)
+		w.Write(dat)
+		w.Flush()
+		w.Close()
+	}
+}
+
+func BenchmarkOldGzipL1(b *testing.B) { benchmarkOldGzipN(b, 1) }
+func BenchmarkOldGzipL2(b *testing.B) { benchmarkOldGzipN(b, 2) }
+func BenchmarkOldGzipL3(b *testing.B) { benchmarkOldGzipN(b, 3) }
+func BenchmarkOldGzipL4(b *testing.B) { benchmarkOldGzipN(b, 4) }
+func BenchmarkOldGzipL5(b *testing.B) { benchmarkOldGzipN(b, 5) }
+func BenchmarkOldGzipL6(b *testing.B) { benchmarkOldGzipN(b, 6) }
+func BenchmarkOldGzipL7(b *testing.B) { benchmarkOldGzipN(b, 7) }
+func BenchmarkOldGzipL8(b *testing.B) { benchmarkOldGzipN(b, 8) }
+func BenchmarkOldGzipL9(b *testing.B) { benchmarkOldGzipN(b, 9) }
+
+func benchmarkOldGzipN(b *testing.B, level int) {
+	dat, _ := ioutil.ReadFile("testdata/test.json")
+	dat = append(dat, dat...)
+	dat = append(dat, dat...)
+	dat = append(dat, dat...)
+	dat = append(dat, dat...)
+	dat = append(dat, dat...)
+
+	b.SetBytes(int64(len(dat)))
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		w, _ := oldgz.NewWriterLevel(ioutil.Discard, level)
+		w.Write(dat)
+		w.Flush()
+		w.Close()
 	}
 }
