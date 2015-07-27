@@ -295,6 +295,10 @@ func testBigGzip(i int, t *testing.T) {
 	var buf bytes.Buffer
 	w, _ := NewWriterLevel(&buf, 6)
 	io.Copy(w, br)
+	err := w.Close()
+	if err != nil {
+		t.Fatal(err.Error())
+	}
 
 	r, err := NewReader(&buf)
 	if err != nil {
