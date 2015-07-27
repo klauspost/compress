@@ -360,7 +360,7 @@ func testToFromWithLevelAndLimit(t *testing.T, level int, input []byte, name str
 		return
 	}
 	if limit > 0 {
-		t.Logf("level: %d - Size:%.2f%%\n", level, float64(buffer.Len()*100)/float64(limit))
+		t.Logf("level: %d - Size:%.2f%%, %d b\n", level, float64(buffer.Len()*100)/float64(limit), buffer.Len())
 	}
 	r := NewReader(&buffer)
 	out, err := ioutil.ReadAll(r)
