@@ -117,11 +117,8 @@ func (w *huffmanBitWriter) reset(writer io.Writer) {
 		w.literalEncoding,
 		w.offsetEncoding,
 		w.codegenEncoding} {
-		for i := range enc.code {
-			enc.code[i] = 0
-		}
-		for i := range enc.codeBits {
-			enc.codeBits[i] = 0
+		for i := range enc.codes {
+			enc.codes[i] = 0
 		}
 	}
 }
@@ -236,8 +233,17 @@ func (w *huffmanBitWriter) generateCodegen(numLiterals int, numOffsets int) {
 	// so far.
 	codegen := w.codegen // cache
 	// Copy the concatenated code sizes to codegen.  Put a marker at the end.
-	copy(codegen[0:numLiterals], w.literalEncoding.codeBits)
-	copy(codegen[numLiterals:numLiterals+numOffsets], w.offsetEncoding.codeBits)
+	//copy(codegen[0:numLiterals], w.literalEncoding.codeBits)
+	cgnl := codegen[0:numLiterals]
+	for i := range cgnl {
+		cgnl[i] = w.literalEncoding.codes[i].bits()
+	}
+
+	//copy(codegen[numLiterals:numLiterals+numOffsets], w.offsetEncoding.codeBits)
+	cgnl = codegen[numLiterals : numLiterals+numOffsets]
+	for i := range cgnl {
+		cgnl[i] = w.offsetEncoding.codes[i].bits()
+	}
 	codegen[numLiterals+numOffsets] = badCode
 
 	size := codegen[0]
@@ -310,7 +316,8 @@ func (w *huffmanBitWriter) writeCode(code *huffmanEncoder, literal uint32) {
 	if w.err != nil {
 		return
 	}
-	w.writeBits(int32(code.code[literal]), int32(code.codeBits[literal]))
+	c := code.codes[literal]
+	w.writeBits(int32(c.code()), int32(c.bits()))
 }
 
 // Write the header of a dynamic Huffman block to the output stream.
@@ -332,7 +339,8 @@ func (w *huffmanBitWriter) writeDynamicHeader(numLiterals int, numOffsets int, n
 	w.writeBits(int32(numCodegens-4), 4)
 
 	for i := 0; i < numCodegens; i++ {
-		value := w.codegenEncoding.codeBits[codegenOrder[i]]
+		//value := w.codegenEncoding.codeBits[codegenOrder[i]]
+		value := w.codegenEncoding.codes[codegenOrder[i]].bits()
 		w.writeBits(int32(value), 3)
 	}
 

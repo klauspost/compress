@@ -9,9 +9,10 @@ import (
 	"sort"
 )
 
+type hcode uint32
+
 type huffmanEncoder struct {
-	codeBits []uint8
-	code     []uint16
+	codes []hcode
 }
 
 type literalNode struct {
@@ -39,17 +40,40 @@ type levelInfo struct {
 	needed int32
 }
 
+func (h hcode) codeBits() (code uint16, bits uint8) {
+	return uint16(h), uint8(h >> 16)
+}
+
+func (h *hcode) set(code uint16, bits uint8) {
+	*h = hcode(code) | hcode(uint32(bits)<<16)
+}
+
+func (h *hcode) setBits(bits uint8) {
+	*h = hcode(*h&0xffff) | hcode(uint32(bits)<<16)
+}
+
+func toCode(code uint16, bits uint8) hcode {
+	return hcode(code) | hcode(uint32(bits)<<16)
+}
+
+func (h hcode) code() (code uint16) {
+	return uint16(h)
+}
+
+func (h hcode) bits() (bits uint8) {
+	return uint8(h >> 16)
+}
+
 func maxNode() literalNode { return literalNode{math.MaxUint16, math.MaxInt32} }
 
 func newHuffmanEncoder(size int) *huffmanEncoder {
-	return &huffmanEncoder{make([]uint8, size), make([]uint16, size)}
+	return &huffmanEncoder{make([]hcode, size)}
 }
 
 // Generates a HuffmanCode corresponding to the fixed literal table
 func generateFixedLiteralEncoding() *huffmanEncoder {
 	h := newHuffmanEncoder(maxLit)
-	codeBits := h.codeBits
-	code := h.code
+	codes := h.codes
 	var ch uint16
 	for ch = 0; ch < maxLit; ch++ {
 		var bits uint16
@@ -75,19 +99,16 @@ func generateFixedLiteralEncoding() *huffmanEncoder {
 			bits = ch + 192 - 280
 			size = 8
 		}
-		codeBits[ch] = size
-		code[ch] = reverseBits(bits, size)
+		codes[ch] = toCode(reverseBits(bits, size), size)
 	}
 	return h
 }
 
 func generateFixedOffsetEncoding() *huffmanEncoder {
 	h := newHuffmanEncoder(30)
-	codeBits := h.codeBits
-	code := h.code
+	codes := h.codes
 	for ch := uint16(0); ch < 30; ch++ {
-		codeBits[ch] = 5
-		code[ch] = reverseBits(ch, 5)
+		codes[ch] = toCode(reverseBits(ch, 5), 5)
 	}
 	return h
 }
@@ -99,7 +120,7 @@ func (h *huffmanEncoder) bitLength(freq []int32) int64 {
 	var total int64
 	for i, f := range freq {
 		if f != 0 {
-			total += int64(f) * int64(h.codeBits[i])
+			total += int64(f) * int64(h.codes[i].bits())
 		}
 	}
 	return total
@@ -248,8 +269,7 @@ func (h *huffmanEncoder) assignEncodingAndSize(bitCount []int32, list []literalN
 		chunk := list[len(list)-int(bits):]
 		sortByLiteral(chunk)
 		for _, node := range chunk {
-			h.codeBits[node.literal] = uint8(n)
-			h.code[node.literal] = reverseBits(code, uint8(n))
+			h.codes[node.literal] = toCode(reverseBits(code, uint8(n)), uint8(n))
 			code++
 		}
 		list = list[0 : len(list)-int(bits)]
@@ -270,19 +290,23 @@ func (h *huffmanEncoder) generate(freq []int32, maxBits int32) {
 			list[count] = literalNode{uint16(i), f}
 			count++
 		} else {
-			h.codeBits[i] = 0
+			//h.codeBits[i] = 0
+			h.codes[i].setBits(0)
 		}
 	}
 	// If freq[] is shorter than codeBits[], fill rest of codeBits[] with zeros
-	h.codeBits = h.codeBits[0:len(freq)]
+	// FIXME: Doesn't do what it says on the tin (klauspost)
+	//h.codeBits = h.codeBits[0:len(freq)]
+
 	list = list[0:count]
 	if count <= 2 {
 		// Handle the small cases here, because they are awkward for the general case code.  With
 		// two or fewer literals, everything has bit length 1.
 		for i, node := range list {
 			// "list" is in order of increasing literal value.
-			h.codeBits[node.literal] = 1
-			h.code[node.literal] = uint16(i)
+			h.codes[node.literal].set(uint16(i), 1)
+			//h.codeBits[node.literal] = 1
+			//h.code[node.literal] = uint16(i)
 		}
 		return
 	}
