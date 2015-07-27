@@ -476,6 +476,146 @@ Loop:
 	}
 }
 
+// same as deflate, but with d.fastSkipHashing == skipNever
+func (d *compressor) deflateNoSkip() {
+	if d.windowEnd-d.index < minMatchLength+maxMatchLength && !d.sync {
+		return
+	}
+
+	d.maxInsertIndex = d.windowEnd - (minMatchLength - 1)
+	if d.index < d.maxInsertIndex {
+		//d.hash = int(d.window[d.index])<<hashShift + int(d.window[d.index+1])
+		d.hash = d.hasher(d.window[d.index:d.index+minMatchLength]) & hashMask
+	}
+
+Loop:
+	for {
+		if d.index > d.windowEnd {
+			panic("index > windowEnd")
+		}
+		lookahead := d.windowEnd - d.index
+		if lookahead < minMatchLength+maxMatchLength {
+			if !d.sync {
+				break Loop
+			}
+			if d.index > d.windowEnd {
+				panic("index > windowEnd")
+			}
+			if lookahead == 0 {
+				// Flush current output block if any.
+				if d.byteAvailable {
+					// There is still one pending token that needs to be flushed
+					d.tokens = append(d.tokens, literalToken(uint32(d.window[d.index-1])))
+					d.byteAvailable = false
+				}
+				if len(d.tokens) > 0 {
+					if d.err = d.writeBlock(d.tokens, d.index, false); d.err != nil {
+						return
+					}
+					d.tokens = d.tokens[:0]
+				}
+				break Loop
+			}
+		}
+		if d.index < d.maxInsertIndex {
+			// Update the hash
+			//d.hash = (d.hash<<hashShift + int(d.window[d.index+2])) & hashMask
+			d.hash = d.hasher(d.window[d.index:d.index+minMatchLength]) & hashMask
+			d.chainHead = d.hashHead[d.hash]
+			d.hashPrev[d.index&windowMask] = d.chainHead
+			d.hashHead[d.hash] = d.index + d.hashOffset
+		}
+		prevLength := d.length
+		prevOffset := d.offset
+		d.length = minMatchLength - 1
+		d.offset = 0
+		minIndex := d.index - windowSize
+		if minIndex < 0 {
+			minIndex = 0
+		}
+
+		if d.chainHead-d.hashOffset >= minIndex && lookahead > prevLength && prevLength < d.lazy {
+			if newLength, newOffset, ok := d.findMatch(d.index, d.chainHead-d.hashOffset, minMatchLength-1, lookahead); ok {
+				d.length = newLength
+				d.offset = newOffset
+			}
+		}
+		if prevLength >= minMatchLength && d.length <= prevLength {
+			// There was a match at the previous step, and the current match is
+			// not better. Output the previous match.
+			d.tokens = append(d.tokens, matchToken(uint32(prevLength-3), uint32(prevOffset-minOffsetSize)))
+			// Insert in the hash table all strings up to the end of the match.
+			// index and index-1 are already inserted. If there is not enough
+			// lookahead, the last two strings are not inserted into the hash
+			// table.
+			if true {
+				var newIndex int
+				newIndex = d.index + prevLength - 1
+				// Calculate missing hashes
+				end := newIndex
+				if end > d.maxInsertIndex {
+					end = d.maxInsertIndex
+				}
+				end += minMatchLength - 1
+				startindex := d.index + 1
+				if startindex > d.maxInsertIndex {
+					startindex = d.maxInsertIndex
+				}
+				tocheck := d.window[startindex:end]
+				dstSize := len(tocheck) - minMatchLength + 1
+				if dstSize > 0 {
+					dst := d.hashMatch[:dstSize]
+					d.bulkHasher(tocheck, dst)
+					var newH hash
+					for i, val := range dst {
+						di := i + startindex
+						newH = val & hashMask
+						// Get previous value with the same hash.
+						// Our chain should point to the previous value.
+						d.hashPrev[di&windowMask] = d.hashHead[newH]
+						// Set the head of the hash chain to us.
+						d.hashHead[newH] = di + d.hashOffset
+					}
+					d.hash = newH
+				}
+
+				d.index = newIndex
+
+				d.byteAvailable = false
+				d.length = minMatchLength - 1
+			} else {
+				// For matches this long, we don't bother inserting each individual
+				// item into the table.
+				d.index += d.length
+				if d.index < d.maxInsertIndex {
+					d.hash = d.hasher(d.window[d.index:d.index+minMatchLength]) & hashMask
+					//d.hash = (int(d.window[d.index])<<hashShift + int(d.window[d.index+1]))
+				}
+			}
+			if len(d.tokens) == maxFlateBlockTokens {
+				// The block includes the current character
+				if d.err = d.writeBlock(d.tokens, d.index, false); d.err != nil {
+					return
+				}
+				d.tokens = d.tokens[:0]
+			}
+		} else {
+			if d.byteAvailable {
+				i := d.index - 1
+				d.tokens = append(d.tokens, literalToken(uint32(d.window[i])))
+				if len(d.tokens) == maxFlateBlockTokens {
+					if d.err = d.writeBlock(d.tokens, i+1, false); d.err != nil {
+						return
+					}
+					d.tokens = d.tokens[:0]
+				}
+			}
+			d.index++
+			d.byteAvailable = true
+		}
+	}
+}
+
 func (d *compressor) fillStore(b []byte) int {
 	n := copy(d.window[d.windowEnd:], b)
 	d.windowEnd += n
@@ -526,7 +666,11 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 		d.compressionLevel = levels[level]
 		d.initDeflate()
 		d.fill = (*compressor).fillDeflate
-		d.step = (*compressor).deflate
+		if d.fastSkipHashing == skipNever {
+			d.step = (*compressor).deflateNoSkip
+		} else {
+			d.step = (*compressor).deflate
+		}
 	default:
 		return fmt.Errorf("flate: invalid compression level %d: want value in range [-1, 9]", level)
 	}
