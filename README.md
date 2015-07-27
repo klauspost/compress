@@ -145,5 +145,55 @@ This means that from level 1-5 you can expect a compression level increase of a 
  * Uses the faster deflate
  * Uses SSE 4.2 CRC32 calculations.
 
-Speed increase is up to 3x of the standard library. Without SSE 4.1, speed is roughly equivalent, but compression should be slightly better.
+Speed increase is up to 3x of the standard library, but usually around 30%. Without SSE 4.1, speed is roughly equivalent, but compression should be slightly better.
 
+This is close to a real world benchmark as you will get. A 2.3MB JSON file.
+```
+benchmark           old ns/op     new ns/op     delta
+BenchmarkGzipL1     95035436      71914113      -24.33%
+BenchmarkGzipL2     100665758     74774276      -25.72%
+BenchmarkGzipL3     111666387     80764620      -27.67%
+BenchmarkGzipL4     141848114     101145785     -28.69%
+BenchmarkGzipL5     185630618     127187274     -31.48%
+BenchmarkGzipL6     207511870     137047840     -33.96%
+BenchmarkGzipL7     265115163     183970522     -30.61%
+BenchmarkGzipL8     454926020     348619940     -23.37%
+BenchmarkGzipL9     488327935     377671600     -22.66%
+
+benchmark           old MB/s     new MB/s     speedup
+BenchmarkGzipL1     52.21        69.00        1.32x
+BenchmarkGzipL2     49.29        66.36        1.35x
+BenchmarkGzipL3     44.43        61.43        1.38x
+BenchmarkGzipL4     34.98        49.06        1.40x
+BenchmarkGzipL5     26.73        39.01        1.46x
+BenchmarkGzipL6     23.91        36.20        1.51x
+BenchmarkGzipL7     18.72        26.97        1.44x
+BenchmarkGzipL8     10.91        14.23        1.30x
+BenchmarkGzipL9     10.16        13.14        1.29x
+```
+
+Multithreaded compression using [pgzip](https://github.com/klauspost/pgzip) comparison, Quadcore, CPU = 8:
+
+```
+benchmark           old ns/op     new ns/op     delta
+BenchmarkGzipL1     95035436      30381737      -68.03%
+BenchmarkGzipL2     100665758     31341793      -68.87%
+BenchmarkGzipL3     111666387     32891881      -70.54%
+BenchmarkGzipL4     141848114     41767389      -70.55%
+BenchmarkGzipL5     185630618     47742730      -74.28%
+BenchmarkGzipL6     207511870     50272875      -75.77%
+BenchmarkGzipL7     265115163     62693586      -76.35%
+BenchmarkGzipL8     454926020     107436145     -76.38%
+BenchmarkGzipL9     488327935     114066524     -76.64%
+
+benchmark           old MB/s     new MB/s     speedup
+BenchmarkGzipL1     52.21        163.31       3.13x
+BenchmarkGzipL2     49.29        158.31       3.21x
+BenchmarkGzipL3     44.43        150.85       3.40x
+BenchmarkGzipL4     34.98        118.80       3.40x
+BenchmarkGzipL5     26.73        103.93       3.89x
+BenchmarkGzipL6     23.91        98.70        4.13x
+BenchmarkGzipL7     18.72        79.14        4.23x
+BenchmarkGzipL8     10.91        46.18        4.23x
+BenchmarkGzipL9     10.16        43.50        4.28x
+```
