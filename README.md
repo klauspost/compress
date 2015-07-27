@@ -65,8 +65,16 @@ BenchmarkEncodeTwainCompress1e4      12.00        14.71        1.23x
 BenchmarkEncodeTwainCompress1e5      6.88         13.56        1.97x
 BenchmarkEncodeTwainCompress1e6      6.25         12.97        2.08x
 ```
+* "Speed" is compression level 1
+* "Default" is compression level 6
+* "Compress" is compression level 9
+* Test files are [Digits](https://github.com/klauspost/compress/blob/master/testdata/e.txt) (no matches) and [Twain](https://github.com/klauspost/compress/blob/master/testdata/Mark.Twain-Tom.Sawyer.txt) (plain text) .
 
-Without assembly:
+As can be seen speed on low-matching souces `Digits` are a tiny bit slower at compression level 1, but for default compression it shows a very good speedup.
+
+`Twain` is a much more realistic benchmark, and will be closer to JSON/HTML performance. Here speed is equivalent or faster, up to 2 times.
+
+Without assembly. This is what you can expect on systems that does not have amd64 and SSE 4.2:
 ```
 benchmark                            old ns/op     new ns/op     delta
 BenchmarkEncodeDigitsSpeed1e4        571065        647787        +13.43%
@@ -109,6 +117,24 @@ BenchmarkEncodeTwainCompress1e5      6.88         9.36         1.36x
 BenchmarkEncodeTwainCompress1e6      6.25         8.80         1.41x
 ```
 
+## Compression level
+
+This table shows the compression at each level, and the percentage of the output size compared to output
+at the similar level with the standard library. Compression data is `Twain`, see above.
+
+| Level | Bytes  | % size |
+|-------|--------|--------|
+| 1     | 180539 | 96.24% |
+| 2     | 174684 | 96.85% |
+| 3     | 170301 | 98.45% |
+| 4     | 165253 | 97.69% |
+| 5     | 161274 | 98.65% |
+| 6     | 160464 | 99.71% |
+| 7     | 160304 | 99.87% |
+| 8     | 160279 | 99.99% |
+| 9     | 160279 | 99.99% |
+
+This means that from level 1-5 you can expect a compression level increase of a few percent.
 
 # gzip/zip optimizations
  * Uses the faster deflate
