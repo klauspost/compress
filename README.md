@@ -24,6 +24,92 @@ You may also be interested in [pgzip](https://github.com/klauspost/pgzip), which
 * Bulk hashing on matches.
 * Much faster dictionary indexing with `NewWriterDict()`/`Reset()`.
 
+
+```
+BenchmarkEncodeDigitsSpeed1e4        571065        571799        +0.13%
+BenchmarkEncodeDigitsSpeed1e5        3680010       4645932       +26.25%
+BenchmarkEncodeDigitsSpeed1e6        34667982      45532604      +31.34%
+BenchmarkEncodeDigitsDefault1e4      770694        619535        -19.61%
+BenchmarkEncodeDigitsDefault1e5      13682782      6032845       -55.91%
+BenchmarkEncodeDigitsDefault1e6      152778738     61443514      -59.78%
+BenchmarkEncodeDigitsCompress1e4     771094        620635        -19.51%
+BenchmarkEncodeDigitsCompress1e5     13683782      5999343       -56.16%
+BenchmarkEncodeDigitsCompress1e6     152648731     61228502      -59.89%
+BenchmarkEncodeTwainSpeed1e4         595100        570165        -4.19%
+BenchmarkEncodeTwainSpeed1e5         3432796       3376593       -1.64%
+BenchmarkEncodeTwainSpeed1e6         31573806      30687755      -2.81%
+BenchmarkEncodeTwainDefault1e4       828697        674388        -18.62%
+BenchmarkEncodeTwainDefault1e5       11572161      6733885       -41.81%
+BenchmarkEncodeTwainDefault1e6       122607013     68998946      -43.72%
+BenchmarkEncodeTwainCompress1e4      833297        679738        -18.43%
+BenchmarkEncodeTwainCompress1e5      14539831      7372921       -49.29%
+BenchmarkEncodeTwainCompress1e6      160019152     77099410      -51.82%
+
+benchmark                            old MB/s     new MB/s     speedup
+BenchmarkEncodeDigitsSpeed1e4        17.51        17.49        1.00x
+BenchmarkEncodeDigitsSpeed1e5        27.17        21.52        0.79x
+BenchmarkEncodeDigitsSpeed1e6        28.85        21.96        0.76x
+BenchmarkEncodeDigitsDefault1e4      12.98        16.14        1.24x
+BenchmarkEncodeDigitsDefault1e5      7.31         16.58        2.27x
+BenchmarkEncodeDigitsDefault1e6      6.55         16.28        2.49x
+BenchmarkEncodeDigitsCompress1e4     12.97        16.11        1.24x
+BenchmarkEncodeDigitsCompress1e5     7.31         16.67        2.28x
+BenchmarkEncodeDigitsCompress1e6     6.55         16.33        2.49x
+BenchmarkEncodeTwainSpeed1e4         16.80        17.54        1.04x
+BenchmarkEncodeTwainSpeed1e5         29.13        29.62        1.02x
+BenchmarkEncodeTwainSpeed1e6         31.67        32.59        1.03x
+BenchmarkEncodeTwainDefault1e4       12.07        14.83        1.23x
+BenchmarkEncodeTwainDefault1e5       8.64         14.85        1.72x
+BenchmarkEncodeTwainDefault1e6       8.16         14.49        1.78x
+BenchmarkEncodeTwainCompress1e4      12.00        14.71        1.23x
+BenchmarkEncodeTwainCompress1e5      6.88         13.56        1.97x
+BenchmarkEncodeTwainCompress1e6      6.25         12.97        2.08x
+```
+
+Without assembly:
+```
+benchmark                            old ns/op     new ns/op     delta
+BenchmarkEncodeDigitsSpeed1e4        571065        647787        +13.43%
+BenchmarkEncodeDigitsSpeed1e5        3680010       5925338       +61.01%
+BenchmarkEncodeDigitsSpeed1e6        34667982      59040043      +70.30%
+BenchmarkEncodeDigitsDefault1e4      770694        723391        -6.14%
+BenchmarkEncodeDigitsDefault1e5      13682782      9633051       -29.60%
+BenchmarkEncodeDigitsDefault1e6      152778738     102595868     -32.85%
+BenchmarkEncodeDigitsCompress1e4     771094        724141        -6.09%
+BenchmarkEncodeDigitsCompress1e5     13683782      9589048       -29.92%
+BenchmarkEncodeDigitsCompress1e6     152648731     102295851     -32.99%
+BenchmarkEncodeTwainSpeed1e4         595100        620835        +4.32%
+BenchmarkEncodeTwainSpeed1e5         3432796       4013029       +16.90%
+BenchmarkEncodeTwainSpeed1e6         31573806      37160125      +17.69%
+BenchmarkEncodeTwainDefault1e4       828697        774044        -6.60%
+BenchmarkEncodeTwainDefault1e5       11572161      9537045       -17.59%
+BenchmarkEncodeTwainDefault1e6       122607013     99745705      -18.65%
+BenchmarkEncodeTwainCompress1e4      833297        784094        -5.90%
+BenchmarkEncodeTwainCompress1e5      14539831      10679610      -26.55%
+BenchmarkEncodeTwainCompress1e6      160019152     113616498     -29.00%
+
+benchmark                            old MB/s     new MB/s     speedup
+BenchmarkEncodeDigitsSpeed1e4        17.51        15.44        0.88x
+BenchmarkEncodeDigitsSpeed1e5        27.17        16.88        0.62x
+BenchmarkEncodeDigitsSpeed1e6        28.85        16.94        0.59x
+BenchmarkEncodeDigitsDefault1e4      12.98        13.82        1.06x
+BenchmarkEncodeDigitsDefault1e5      7.31         10.38        1.42x
+BenchmarkEncodeDigitsDefault1e6      6.55         9.75         1.49x
+BenchmarkEncodeDigitsCompress1e4     12.97        13.81        1.06x
+BenchmarkEncodeDigitsCompress1e5     7.31         10.43        1.43x
+BenchmarkEncodeDigitsCompress1e6     6.55         9.78         1.49x
+BenchmarkEncodeTwainSpeed1e4         16.80        16.11        0.96x
+BenchmarkEncodeTwainSpeed1e5         29.13        24.92        0.86x
+BenchmarkEncodeTwainSpeed1e6         31.67        26.91        0.85x
+BenchmarkEncodeTwainDefault1e4       12.07        12.92        1.07x
+BenchmarkEncodeTwainDefault1e5       8.64         10.49        1.21x
+BenchmarkEncodeTwainDefault1e6       8.16         10.03        1.23x
+BenchmarkEncodeTwainCompress1e4      12.00        12.75        1.06x
+BenchmarkEncodeTwainCompress1e5      6.88         9.36         1.36x
+BenchmarkEncodeTwainCompress1e6      6.25         8.80         1.41x
+```
+
+
 # gzip/zip optimizations
  * Uses the faster deflate
  * Uses SSE 4.2 CRC32 calculations.
