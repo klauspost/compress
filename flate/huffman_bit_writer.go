@@ -22,6 +22,10 @@ const (
 	// The number of codegen codes.
 	codegenCodeCount = 19
 	badCode          = 255
+
+	// Output byte buffer size
+	// Must be multiple of 6 (48 bits) + 8
+	bufferSize = 240 + 8
 )
 
 // The number of extra bits needed by length code X - LENGTH_CODES_START.
@@ -70,9 +74,9 @@ type huffmanBitWriter struct {
 	w io.Writer
 	// Data waiting to be written is bytes[0:nbytes]
 	// and then the low nbits of bits.
-	bits            uint32
+	bits            uint64
 	nbits           uint32
-	bytes           [64]byte
+	bytes           [bufferSize]byte
 	nbytes          int
 	literalFreq     []int32
 	offsetFreq      []int32
@@ -100,7 +104,7 @@ func newHuffmanBitWriter(w io.Writer) *huffmanBitWriter {
 func (w *huffmanBitWriter) reset(writer io.Writer) {
 	w.w = writer
 	w.bits, w.nbits, w.nbytes, w.err = 0, 0, 0, nil
-	w.bytes = [64]byte{}
+	w.bytes = [bufferSize]byte{}
 	for i := range w.codegen {
 		w.codegen[i] = 0
 	}
@@ -122,6 +126,7 @@ func (w *huffmanBitWriter) reset(writer io.Writer) {
 	}
 }
 
+/* Inlined in writeBits
 func (w *huffmanBitWriter) flushBits() {
 	if w.err != nil {
 		w.nbits = 0
@@ -139,6 +144,7 @@ func (w *huffmanBitWriter) flushBits() {
 	}
 	w.nbytes = n
 }
+*/
 
 func (w *huffmanBitWriter) flush() {
 	if w.err != nil {
@@ -146,15 +152,14 @@ func (w *huffmanBitWriter) flush() {
 		return
 	}
 	n := w.nbytes
-	if w.nbits > 8 {
+	for w.nbits != 0 {
 		w.bytes[n] = byte(w.bits)
 		w.bits >>= 8
-		w.nbits -= 8
-		n++
-	}
-	if w.nbits > 0 {
-		w.bytes[n] = byte(w.bits)
-		w.nbits = 0
+		if w.nbits > 8 { // Avoid underflow
+			w.nbits -= 8
+		} else {
+			w.nbits = 0
+		}
 		n++
 	}
 	w.bits = 0
@@ -163,9 +168,25 @@ func (w *huffmanBitWriter) flush() {
 }
 
 func (w *huffmanBitWriter) writeBits(b, nb int32) {
-	w.bits |= uint32(b) << w.nbits
-	if w.nbits += uint32(nb); w.nbits >= 16 {
-		w.flushBits()
+	w.bits |= uint64(b) << w.nbits
+	w.nbits += uint32(nb)
+	if w.nbits >= 48 {
+		bits := w.bits
+		w.bits >>= 48
+		w.nbits -= 48
+		n := w.nbytes
+		w.bytes[n] = byte(bits)
+		w.bytes[n+1] = byte(bits >> 8)
+		w.bytes[n+2] = byte(bits >> 16)
+		w.bytes[n+3] = byte(bits >> 24)
+		w.bytes[n+4] = byte(bits >> 32)
+		w.bytes[n+5] = byte(bits >> 40)
+		n += 6
+		if n >= bufferSize-8 {
+			_, w.err = w.w.Write(w.bytes[:bufferSize-8])
+			n = 0
+		}
+		w.nbytes = n
 	}
 }
 
@@ -174,9 +195,10 @@ func (w *huffmanBitWriter) writeBytes(bytes []byte) {
 		return
 	}
 	n := w.nbytes
-	if w.nbits == 8 {
+	for w.nbits != 0 {
 		w.bytes[n] = byte(w.bits)
-		w.nbits = 0
+		w.bits >>= 8
+		w.nbits -= 8
 		n++
 	}
 	if w.nbits != 0 {
