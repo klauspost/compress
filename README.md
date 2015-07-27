@@ -134,6 +134,8 @@ at the similar level with the standard library. Compression data is `Twain`, see
 | 8     | 160279 | 99.99% |
 | 9     | 160279 | 99.99% |
 
+To interpret and example, this version of deflate compresses input of 407287 bytes to 180539 bytes at level 1, which is 96% of the size of what the standard library produces; 187563 bytes.
+
 This means that from level 1-5 you can expect a compression level increase of a few percent.
 
 # gzip/zip optimizations
