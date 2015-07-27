@@ -23,6 +23,7 @@ You may also be interested in [pgzip](https://github.com/klauspost/pgzip), which
 * Literal byte matching using SSE 4.2 for faster string comparisons.
 * Bulk hashing on matches.
 * Much faster dictionary indexing with `NewWriterDict()`/`Reset()`.
+* Make Bit Coder faster by assuming we are on a 64 bit CPU.
 
 
 ```
