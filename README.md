@@ -2,6 +2,8 @@
 
 This package is based on an optimized Deflate function, which is used by gzip/zip packages.
 
+It offers slightly better compression at lower compression settings, and up to 3x faster encoding at highest compression level.
+
 [![Build Status](https://travis-ci.org/klauspost/compress.svg?branch=master)](https://travis-ci.org/klauspost/compress)
 
 # usage
@@ -143,5 +145,5 @@ This means that from level 1-5 you can expect a compression level increase of a 
  * Uses the faster deflate
  * Uses SSE 4.2 CRC32 calculations.
 
-Speed increase is up to 30%. Without SSE 4.1, speed is roughly equivalent, but compression shoudl be slightly better.
+Speed increase is up to 3x of the standard library. Without SSE 4.1, speed is roughly equivalent, but compression should be slightly better.
 
