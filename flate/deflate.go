@@ -7,7 +7,6 @@ package flate
 
 import (
 	"fmt"
-	"github.com/klauspost/match"
 	"io"
 	"math"
 )
@@ -67,6 +66,7 @@ type compressor struct {
 	w          *huffmanBitWriter
 	hasher     func([]byte) hash
 	bulkHasher func([]byte, []hash)
+	matcher    func(a, b []byte, max int) int
 
 	// compression algorithm
 	fill func(*compressor, []byte) int // copy data to window
@@ -235,7 +235,7 @@ func (d *compressor) findMatch(pos int, prevHead int, prevLength int, lookahead 
 
 	for i := prevHead; tries > 0; tries-- {
 		if wEnd == win[i+length] {
-			n := match.MatchLen(win[i:], wPos, len(win)-pos)
+			n := d.matcher(win[i:], wPos, len(win)-pos)
 
 			if n > length && (n > minMatchLength || pos-i <= 4096) {
 				length = n
@@ -285,6 +285,17 @@ func oldBulkHash(b []byte, dst []hash) {
 		dst[i] = h
 	}
 }
+
+func matchLen(a, b []byte, max int) int {
+	a = a[:max]
+	for i, av := range a {
+		if b[i] != av {
+			return i
+		}
+	}
+	return max
+}
+
 func (d *compressor) initDeflate() {
 	d.hashHead = make([]int, hashSize)
 	d.hashPrev = make([]int, windowSize)
@@ -299,9 +310,11 @@ func (d *compressor) initDeflate() {
 	d.chainHead = -1
 	d.hasher = oldHash
 	d.bulkHasher = oldBulkHash
+	d.matcher = matchLen
 	if useSSE42 {
 		d.hasher = crc32sse
 		d.bulkHasher = crc32sseAll
+		d.matcher = matchLenSSE4
 	}
 }
 

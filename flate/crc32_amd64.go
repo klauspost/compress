@@ -11,6 +11,7 @@ import (
 
 func crc32sse(a []byte) hash
 func crc32sseAll(a []byte, dst []hash)
+func matchLenSSE4(a, b []byte, max int) int
 
 func init() {
 	useSSE42 = cpuid.CPU.SSE42()

@@ -525,6 +525,7 @@ func TestWriterReset(t *testing.T) {
 		w.d.step, wref.d.step = nil, nil
 		w.d.hasher, wref.d.hasher = nil, nil
 		w.d.bulkHasher, wref.d.bulkHasher = nil, nil
+		w.d.matcher, wref.d.matcher = nil, nil
 		if !reflect.DeepEqual(w, wref) {
 			t.Errorf("level %d Writer not reset after Reset", level)
 		}

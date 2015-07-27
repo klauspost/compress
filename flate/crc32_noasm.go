@@ -15,3 +15,8 @@ func crc32sse(a []byte) hash {
 func crc32sseAll(a []byte, dst []hash) {
 	panic("no assembler")
 }
+
+func matchLenSSE4(a, b []byte, max int) int {
+	panic("no assembler")
+	return 0
+}
