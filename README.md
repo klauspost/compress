@@ -18,10 +18,14 @@ The packages are drop-in replacements for standard libraries. Simply replace the
 
 You may also be interested in [pgzip](https://github.com/klauspost/pgzip), which is a drop in replacement for gzip, which support multithreaded compression on big files and the optimized [crc32](https://github.com/klauspost/crc32) package used by these packages.
 
+The packages contains the same as the standard library, so you can use the godoc for that: [gzip](http://golang.org/pkg/compress/gzip/), [zip](http://golang.org/pkg/archive/zip/), [flate](http://golang.org/pkg/compress/flate/).
+
+Currently there is only minor speedup on decompression (primarily CRC32 calculation).
+
 # deflate optimizations
 
 * Minimum matches are 4 bytes, this leads to fewer searches and better compression.
-* Stronger hash (iSCSI CRC32) for matches on x64 with SSE 4.1 support. This leads to fewer hash collisions.
+* Stronger hash (iSCSI CRC32) for matches on x64 with SSE 4.2 support. This leads to fewer hash collisions.
 * Literal byte matching using SSE 4.2 for faster string comparisons.
 * Bulk hashing on matches.
 * Much faster dictionary indexing with `NewWriterDict()`/`Reset()`.
@@ -77,7 +81,7 @@ As can be seen speed on low-matching souces `Digits` are a tiny bit slower at co
 
 `Twain` is a much more realistic benchmark, and will be closer to JSON/HTML performance. Here speed is equivalent or faster, up to 2 times.
 
-Without assembly. This is what you can expect on systems that does not have amd64 and SSE 4.2:
+**Without assembly**. This is what you can expect on systems that does not have amd64 and SSE 4:
 ```
 benchmark                            old ns/op     new ns/op     delta
 BenchmarkEncodeDigitsSpeed1e4        571065        647787        +13.43%
@@ -145,7 +149,7 @@ This means that from level 1-5 you can expect a compression level increase of a 
  * Uses the faster deflate
  * Uses SSE 4.2 CRC32 calculations.
 
-Speed increase is up to 3x of the standard library, but usually around 30%. Without SSE 4.1, speed is roughly equivalent, but compression should be slightly better.
+Speed increase is up to 3x of the standard library, but usually around 30%. Without SSE 4.2, speed is roughly equivalent, but compression should be slightly better.
 
 This is close to a real world benchmark as you will get. A 2.3MB JSON file.
 ```
