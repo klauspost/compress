@@ -5,8 +5,8 @@
 package zlib
 
 import (
-	"compress/flate"
 	"fmt"
+	"github.com/klauspost/compress/flate"
 	"hash"
 	"hash/adler32"
 	"io"

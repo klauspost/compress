@@ -197,7 +197,7 @@ func TestWriterDictIsUsed(t *testing.T) {
 	}
 	compressor.Write(input)
 	compressor.Close()
-	const expectedMaxSize = 25
+	const expectedMaxSize = 35
 	output := buf.Bytes()
 	if len(output) > expectedMaxSize {
 		t.Errorf("result too large (got %d, want <= %d bytes). Is the dictionary being used?", len(output), expectedMaxSize)

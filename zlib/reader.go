@@ -25,8 +25,8 @@ package zlib
 
 import (
 	"bufio"
-	"compress/flate"
 	"errors"
+	"github.com/klauspost/compress/flate"
 	"hash"
 	"hash/adler32"
 	"io"
