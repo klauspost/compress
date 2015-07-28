@@ -25,7 +25,7 @@ Currently there is only minor speedup on decompression (primarily CRC32 calculat
 # deflate optimizations
 
 * Minimum matches are 4 bytes, this leads to fewer searches and better compression.
-* Stronger hash (iSCSI CRC32) for matches on x64 with SSE 4.1 support. This leads to fewer hash collisions.
+* Stronger hash (iSCSI CRC32) for matches on x64 with SSE 4.2 support. This leads to fewer hash collisions.
 * Literal byte matching using SSE 4.2 for faster string comparisons.
 * Bulk hashing on matches.
 * Much faster dictionary indexing with `NewWriterDict()`/`Reset()`.
@@ -149,7 +149,7 @@ This means that from level 1-5 you can expect a compression level increase of a 
  * Uses the faster deflate
  * Uses SSE 4.2 CRC32 calculations.
 
-Speed increase is up to 3x of the standard library, but usually around 30%. Without SSE 4.1, speed is roughly equivalent, but compression should be slightly better.
+Speed increase is up to 3x of the standard library, but usually around 30%. Without SSE 4.2, speed is roughly equivalent, but compression should be slightly better.
 
 This is close to a real world benchmark as you will get. A 2.3MB JSON file.
 ```
