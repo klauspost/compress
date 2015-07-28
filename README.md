@@ -18,6 +18,10 @@ The packages are drop-in replacements for standard libraries. Simply replace the
 
 You may also be interested in [pgzip](https://github.com/klauspost/pgzip), which is a drop in replacement for gzip, which support multithreaded compression on big files and the optimized [crc32](https://github.com/klauspost/crc32) package used by these packages.
 
+The packages contains the same as the standard library, so you can use the godoc for that: [gzip](http://golang.org/pkg/compress/gzip/), [zip](http://golang.org/pkg/archive/zip/), [flate](http://golang.org/pkg/compress/flate/).
+
+Currently there is only minor speedup on decompression (primarily CRC32 calculation).
+
 # deflate optimizations
 
 * Minimum matches are 4 bytes, this leads to fewer searches and better compression.
@@ -77,7 +81,7 @@ As can be seen speed on low-matching souces `Digits` are a tiny bit slower at co
 
 `Twain` is a much more realistic benchmark, and will be closer to JSON/HTML performance. Here speed is equivalent or faster, up to 2 times.
 
-Without assembly. This is what you can expect on systems that does not have amd64 and SSE 4.2:
+Without assembly. This is what you can expect on systems that does not have amd64 and SSE 4:
 ```
 benchmark                            old ns/op     new ns/op     delta
 BenchmarkEncodeDigitsSpeed1e4        571065        647787        +13.43%
