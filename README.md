@@ -13,12 +13,13 @@ The packages are drop-in replacements for standard libraries. Simply replace the
 | old import         | new import                              |
 |--------------------|-----------------------------------------|
 | `compress/gzip`    | `github.com/klauspost/compress/gzip`    |
+| `compress/zlib`    | `github.com/klauspost/compress/zlib`    |
 | `archive/zip`      | `github.com/klauspost/compress/zip`     |
 | `compress/deflate` | `github.com/klauspost/compress/deflate` |
 
 You may also be interested in [pgzip](https://github.com/klauspost/pgzip), which is a drop in replacement for gzip, which support multithreaded compression on big files and the optimized [crc32](https://github.com/klauspost/crc32) package used by these packages.
 
-The packages contains the same as the standard library, so you can use the godoc for that: [gzip](http://golang.org/pkg/compress/gzip/), [zip](http://golang.org/pkg/archive/zip/), [flate](http://golang.org/pkg/compress/flate/).
+The packages contains the same as the standard library, so you can use the godoc for that: [gzip](http://golang.org/pkg/compress/gzip/), [zip](http://golang.org/pkg/archive/zip/),  [zlib](http://golang.org/pkg/archive/zlib/), [flate](http://golang.org/pkg/compress/flate/).
 
 Currently there is only minor speedup on decompression (primarily CRC32 calculation).
 
