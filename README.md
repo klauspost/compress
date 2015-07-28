@@ -81,7 +81,7 @@ As can be seen speed on low-matching souces `Digits` are a tiny bit slower at co
 
 `Twain` is a much more realistic benchmark, and will be closer to JSON/HTML performance. Here speed is equivalent or faster, up to 2 times.
 
-Without assembly. This is what you can expect on systems that does not have amd64 and SSE 4:
+**Without assembly**. This is what you can expect on systems that does not have amd64 and SSE 4:
 ```
 benchmark                            old ns/op     new ns/op     delta
 BenchmarkEncodeDigitsSpeed1e4        571065        647787        +13.43%
