@@ -318,6 +318,8 @@ func (d *compressor) initDeflate() {
 	}
 }
 
+// Assumes that d.fastSkipHashing != skipNever,
+// otherwise use deflateNoSkip
 func (d *compressor) deflate() {
 	if d.windowEnd-d.index < minMatchLength+maxMatchLength && !d.sync {
 		return
@@ -343,12 +345,6 @@ Loop:
 				panic("index > windowEnd")
 			}
 			if lookahead == 0 {
-				// Flush current output block if any.
-				if d.byteAvailable {
-					// There is still one pending token that needs to be flushed
-					d.tokens = append(d.tokens, literalToken(uint32(d.window[d.index-1])))
-					d.byteAvailable = false
-				}
 				if len(d.tokens) > 0 {
 					if d.err = d.writeBlock(d.tokens, d.index, false); d.err != nil {
 						return
@@ -366,8 +362,6 @@ Loop:
 			d.hashPrev[d.index&windowMask] = d.chainHead
 			d.hashHead[d.hash] = d.index + d.hashOffset
 		}
-		prevLength := d.length
-		prevOffset := d.offset
 		d.length = minMatchLength - 1
 		d.offset = 0
 		minIndex := d.index - windowSize
@@ -375,35 +369,24 @@ Loop:
 			minIndex = 0
 		}
 
-		if d.chainHead-d.hashOffset >= minIndex &&
-			(d.fastSkipHashing != skipNever && lookahead > minMatchLength-1 ||
-				d.fastSkipHashing == skipNever && lookahead > prevLength && prevLength < d.lazy) {
+		if d.chainHead-d.hashOffset >= minIndex && lookahead > minMatchLength-1 {
 			if newLength, newOffset, ok := d.findMatch(d.index, d.chainHead-d.hashOffset, minMatchLength-1, lookahead); ok {
 				d.length = newLength
 				d.offset = newOffset
 			}
 		}
-		if d.fastSkipHashing != skipNever && d.length >= minMatchLength ||
-			d.fastSkipHashing == skipNever && prevLength >= minMatchLength && d.length <= prevLength {
+		if d.length >= minMatchLength {
 			// There was a match at the previous step, and the current match is
 			// not better. Output the previous match.
-			if d.fastSkipHashing != skipNever {
-				// "d.length-3" should NOT be "d.length-minMatchLength", since the format always assume 3
-				d.tokens = append(d.tokens, matchToken(uint32(d.length-3), uint32(d.offset-minOffsetSize)))
-			} else {
-				d.tokens = append(d.tokens, matchToken(uint32(prevLength-3), uint32(prevOffset-minOffsetSize)))
-			}
+			// "d.length-3" should NOT be "d.length-minMatchLength", since the format always assume 3
+			d.tokens = append(d.tokens, matchToken(uint32(d.length-3), uint32(d.offset-minOffsetSize)))
 			// Insert in the hash table all strings up to the end of the match.
 			// index and index-1 are already inserted. If there is not enough
 			// lookahead, the last two strings are not inserted into the hash
 			// table.
 			if d.length <= d.fastSkipHashing {
 				var newIndex int
-				if d.fastSkipHashing != skipNever {
-					newIndex = d.index + d.length
-				} else {
-					newIndex = d.index + prevLength - 1
-				}
+				newIndex = d.index + d.length
 				// Calculate missing hashes
 				end := newIndex
 				if end > d.maxInsertIndex {
@@ -434,10 +417,6 @@ Loop:
 
 				d.index = newIndex
 
-				if d.fastSkipHashing == skipNever {
-					d.byteAvailable = false
-					d.length = minMatchLength - 1
-				}
 			} else {
 				// For matches this long, we don't bother inserting each individual
 				// item into the table.
@@ -455,23 +434,15 @@ Loop:
 				d.tokens = d.tokens[:0]
 			}
 		} else {
-			if d.fastSkipHashing != skipNever || d.byteAvailable {
-				i := d.index - 1
-				if d.fastSkipHashing != skipNever {
-					i = d.index
+			i := d.index
+			d.tokens = append(d.tokens, literalToken(uint32(d.window[i])))
+			if len(d.tokens) == maxFlateBlockTokens {
+				if d.err = d.writeBlock(d.tokens, i+1, false); d.err != nil {
+					return
 				}
-				d.tokens = append(d.tokens, literalToken(uint32(d.window[i])))
-				if len(d.tokens) == maxFlateBlockTokens {
-					if d.err = d.writeBlock(d.tokens, i+1, false); d.err != nil {
-						return
-					}
-					d.tokens = d.tokens[:0]
-				}
+				d.tokens = d.tokens[:0]
 			}
 			d.index++
-			if d.fastSkipHashing == skipNever {
-				d.byteAvailable = true
-			}
 		}
 	}
 }
