@@ -11,6 +11,7 @@ import (
 	"io"
 	"io/ioutil"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -422,7 +423,14 @@ func TestDeflateInflateString(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		testToFromWithLimit(t, gold, test.label, test.limit)
+		// Remove returns that may be present on Windows
+		neutral := strings.Map(func(r rune) rune {
+			if r != '\r' {
+				return r
+			}
+			return -1
+		}, string(gold))
+		testToFromWithLimit(t, []byte(neutral), test.label, test.limit)
 		if testing.Short() {
 			break
 		}
