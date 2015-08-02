@@ -60,6 +60,8 @@ var levels = []compressionLevel{
 	{32, 258, 258, 4096, skipNever},
 }
 
+type hashid uint32
+
 type compressor struct {
 	compressionLevel
 
@@ -79,8 +81,8 @@ type compressor struct {
 	// hashPrev[hashHead[hashValue] & windowMask] contains the previous index
 	// with the same hash value.
 	chainHead  int
-	hashHead   []int
-	hashPrev   []int
+	hashHead   []hashid
+	hashPrev   []hashid
 	hashOffset int
 
 	// input window: unprocessed data is window[index:windowEnd]
@@ -122,15 +124,15 @@ func (d *compressor) fillDeflate(b []byte) int {
 			d.hashOffset -= delta
 			d.chainHead -= delta
 			for i, v := range d.hashPrev {
-				if v > delta {
-					d.hashPrev[i] -= delta
+				if int(v) > delta {
+					d.hashPrev[i] = hashid(int(v) - delta)
 				} else {
 					d.hashPrev[i] = 0
 				}
 			}
 			for i, v := range d.hashHead {
-				if v > delta {
-					d.hashHead[i] -= delta
+				if int(v) > delta {
+					d.hashHead[i] = hashid(int(v) - delta)
 				} else {
 					d.hashHead[i] = 0
 				}
@@ -196,7 +198,7 @@ func (d *compressor) fillWindow(b []byte) {
 			// Our chain should point to the previous value.
 			d.hashPrev[di&windowMask] = d.hashHead[newH]
 			// Set the head of the hash chain to us.
-			d.hashHead[newH] = di + d.hashOffset
+			d.hashHead[newH] = hashid(di + d.hashOffset)
 		}
 		d.hash = newH
 	}
@@ -252,7 +254,7 @@ func (d *compressor) findMatch(pos int, prevHead int, prevLength int, lookahead 
 			// hashPrev[i & windowMask] has already been overwritten, so stop now.
 			break
 		}
-		i = d.hashPrev[i&windowMask] - d.hashOffset
+		i = int(d.hashPrev[i&windowMask]) - d.hashOffset
 		if i < minIndex || i < 0 {
 			break
 		}
@@ -297,8 +299,8 @@ func matchLen(a, b []byte, max int) int {
 }
 
 func (d *compressor) initDeflate() {
-	d.hashHead = make([]int, hashSize)
-	d.hashPrev = make([]int, windowSize)
+	d.hashHead = make([]hashid, hashSize)
+	d.hashPrev = make([]hashid, windowSize)
 	d.window = make([]byte, 2*windowSize)
 	d.hashOffset = 1
 	d.tokens = make([]token, 0, maxFlateBlockTokens+1)
@@ -358,9 +360,10 @@ Loop:
 			// Update the hash
 			//d.hash = (d.hash<<hashShift + int(d.window[d.index+2])) & hashMask
 			d.hash = d.hasher(d.window[d.index:d.index+minMatchLength]) & hashMask
-			d.chainHead = d.hashHead[d.hash]
-			d.hashPrev[d.index&windowMask] = d.chainHead
-			d.hashHead[d.hash] = d.index + d.hashOffset
+			ch := d.hashHead[d.hash]
+			d.chainHead = int(ch)
+			d.hashPrev[d.index&windowMask] = ch
+			d.hashHead[d.hash] = hashid(d.index + d.hashOffset)
 		}
 		d.length = minMatchLength - 1
 		d.offset = 0
@@ -410,7 +413,7 @@ Loop:
 						// Our chain should point to the previous value.
 						d.hashPrev[di&windowMask] = d.hashHead[newH]
 						// Set the head of the hash chain to us.
-						d.hashHead[newH] = di + d.hashOffset
+						d.hashHead[newH] = hashid(di + d.hashOffset)
 					}
 					d.hash = newH
 				}
@@ -492,9 +495,10 @@ Loop:
 			// Update the hash
 			//d.hash = (d.hash<<hashShift + int(d.window[d.index+2])) & hashMask
 			d.hash = d.hasher(d.window[d.index:d.index+minMatchLength]) & hashMask
-			d.chainHead = d.hashHead[d.hash]
-			d.hashPrev[d.index&windowMask] = d.chainHead
-			d.hashHead[d.hash] = d.index + d.hashOffset
+			ch := d.hashHead[d.hash]
+			d.chainHead = int(ch)
+			d.hashPrev[d.index&windowMask] = ch
+			d.hashHead[d.hash] = hashid(d.index + d.hashOffset)
 		}
 		prevLength := d.length
 		prevOffset := d.offset
@@ -545,7 +549,7 @@ Loop:
 						// Our chain should point to the previous value.
 						d.hashPrev[di&windowMask] = d.hashHead[newH]
 						// Set the head of the hash chain to us.
-						d.hashHead[newH] = di + d.hashOffset
+						d.hashHead[newH] = hashid(di + d.hashOffset)
 					}
 					d.hash = newH
 				}
@@ -648,7 +652,8 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 	return nil
 }
 
-var zeroes [32]int
+var zeroes [64]int
+var hzeroes [256]hashid
 var bzeroes [256]byte
 
 func (d *compressor) reset(w io.Writer) {
@@ -665,25 +670,17 @@ func (d *compressor) reset(w io.Writer) {
 	default:
 		d.chainHead = -1
 		for s := d.hashHead; len(s) > 0; {
-			n := copy(s, zeroes[:])
+			n := copy(s, hzeroes[:])
 			s = s[n:]
 		}
-		for s := d.hashPrev; len(s) > 0; s = s[len(zeroes):] {
-			copy(s, zeroes[:])
+		for s := d.hashPrev; len(s) > 0; s = s[len(hzeroes):] {
+			copy(s, hzeroes[:])
 		}
 		d.hashOffset = 1
 
 		d.index, d.windowEnd = 0, 0
-		for s := d.window; len(s) > 0; {
-			n := copy(s, bzeroes[:])
-			s = s[n:]
-		}
 		d.blockStart, d.byteAvailable = 0, false
 
-		d.tokens = d.tokens[:maxFlateBlockTokens+1]
-		for i := 0; i <= maxFlateBlockTokens; i++ {
-			d.tokens[i] = 0
-		}
 		d.tokens = d.tokens[:0]
 		d.length = minMatchLength - 1
 		d.offset = 0

@@ -534,6 +534,14 @@ func TestWriterReset(t *testing.T) {
 		w.d.hasher, wref.d.hasher = nil, nil
 		w.d.bulkHasher, wref.d.bulkHasher = nil, nil
 		w.d.matcher, wref.d.matcher = nil, nil
+		if len(w.d.tokens) != 0 {
+			t.Errorf("level %d Writer not reset after Reset. %d tokens were present", level, len(w.d.tokens))
+		}
+		// As long as the length is 0, we don't care about the content.
+		w.d.tokens = wref.d.tokens
+
+		// We don't care if there are values in the window, as long as it is at d.index is 0
+		w.d.window = wref.d.window
 		if !reflect.DeepEqual(w, wref) {
 			t.Errorf("level %d Writer not reset after Reset", level)
 		}
