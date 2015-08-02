@@ -4,6 +4,9 @@ This package is based on an optimized Deflate function, which is used by gzip/zi
 
 It offers slightly better compression at lower compression settings, and up to 3x faster encoding at highest compression level.
 
+* [High Throuhput Benchmark](http://blog.klauspost.com/go-gzipdeflate-benchmarks/).
+* Small payload Benvhmarks- coming soon.
+
 [![Build Status](https://travis-ci.org/klauspost/compress.svg?branch=master)](https://travis-ci.org/klauspost/compress)
 
 # usage
