@@ -381,6 +381,7 @@ func testToFromWithLimit(t *testing.T, input []byte, name string, limit [10]int)
 	for i := 0; i < 10; i++ {
 		testToFromWithLevelAndLimit(t, i, input, name, limit[i])
 	}
+	testToFromWithLevelAndLimit(t, -2, input, name, limit[0])
 }
 
 func TestDeflateInflate(t *testing.T) {

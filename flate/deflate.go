@@ -12,18 +12,19 @@ import (
 )
 
 const (
-	NoCompression      = 0
-	BestSpeed          = 1
-	fastCompression    = 3
-	BestCompression    = 9
-	DefaultCompression = -1
-	logWindowSize      = 15
-	windowSize         = 1 << logWindowSize
-	windowMask         = windowSize - 1
-	logMaxOffsetSize   = 15  // Standard DEFLATE
-	minMatchLength     = 4   // The smallest match that the compressor looks for
-	maxMatchLength     = 258 // The longest match for the compressor
-	minOffsetSize      = 1   // The shortest offset that makes any sense
+	NoCompression       = 0
+	BestSpeed           = 1
+	fastCompression     = 3
+	BestCompression     = 9
+	DefaultCompression  = -1
+	ConstantCompression = -2
+	logWindowSize       = 15
+	windowSize          = 1 << logWindowSize
+	windowMask          = windowSize - 1
+	logMaxOffsetSize    = 15  // Standard DEFLATE
+	minMatchLength      = 4   // The smallest match that the compressor looks for
+	maxMatchLength      = 258 // The longest match for the compressor
+	minOffsetSize       = 1   // The shortest offset that makes any sense
 
 	// The maximum number of tokens we put into a single flat block, just too
 	// stop things from getting too large.
@@ -604,6 +605,27 @@ func (d *compressor) store() {
 	d.windowEnd = 0
 }
 
+func (d *compressor) fillHuff(b []byte) int {
+	n := copy(d.window[d.windowEnd:], b)
+	d.windowEnd += n
+	return n
+}
+
+func (d *compressor) storeHuff() {
+	d.blockStart = 0
+	ntokens := d.windowEnd
+	if d.windowEnd == 0 {
+		return
+	}
+	for i, v := range d.window[:d.windowEnd] {
+		d.tokens[i] = literalToken(uint32(v))
+	}
+	if d.err = d.writeBlock(d.tokens[:ntokens], d.windowEnd, false); d.err != nil {
+		return
+	}
+	d.windowEnd = 0
+}
+
 func (d *compressor) write(b []byte) (n int, err error) {
 	n = len(b)
 	b = b[d.fill(d, b):]
@@ -634,6 +656,11 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 		d.window = make([]byte, maxStoreBlockSize)
 		d.fill = (*compressor).fillStore
 		d.step = (*compressor).store
+	case level == ConstantCompression:
+		d.window = make([]byte, maxStoreBlockSize)
+		d.tokens = make([]token, maxStoreBlockSize+1)
+		d.fill = (*compressor).fillHuff
+		d.step = (*compressor).storeHuff
 	case level == DefaultCompression:
 		level = 6
 		fallthrough
@@ -663,10 +690,10 @@ func (d *compressor) reset(w io.Writer) {
 	switch d.compressionLevel.chain {
 	case 0:
 		// level was NoCompression.
-		for i := range d.window {
-			d.window[i] = 0
-		}
 		d.windowEnd = 0
+	case ConstantCompression:
+		d.windowEnd = 0
+		d.blockStart = 0
 	default:
 		d.chainHead = -1
 		for s := d.hashHead; len(s) > 0; {
