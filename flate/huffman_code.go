@@ -326,30 +326,35 @@ func (h *huffmanEncoder) generate(freq []int32, maxBits int32) {
 	h.assignEncodingAndSize(bitCount, list)
 }
 
-type literalNodeSorter struct {
-	a    []literalNode
-	less func(i, j int) bool
-}
+type literalNodeSorter []literalNode
 
-func (s literalNodeSorter) Len() int { return len(s.a) }
+func (s literalNodeSorter) Len() int { return len(s) }
 
 func (s literalNodeSorter) Less(i, j int) bool {
-	return s.less(i, j)
+	return s[i].literal < s[j].literal
 }
 
-func (s literalNodeSorter) Swap(i, j int) { s.a[i], s.a[j] = s.a[j], s.a[i] }
+func (s literalNodeSorter) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+
+type literalFreqSorter []literalNode
+
+func (s literalFreqSorter) Len() int { return len(s) }
+
+func (s literalFreqSorter) Less(i, j int) bool {
+	if s[i].freq == s[j].freq {
+		return s[i].literal < s[j].literal
+	}
+	return s[i].freq < s[j].freq
+}
+
+func (s literalFreqSorter) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
 func sortByFreq(a []literalNode) {
-	s := &literalNodeSorter{a, func(i, j int) bool {
-		if a[i].freq == a[j].freq {
-			return a[i].literal < a[j].literal
-		}
-		return a[i].freq < a[j].freq
-	}}
-	sort.Sort(s)
+	sort.Sort(literalFreqSorter(a))
 }
 
 func sortByLiteral(a []literalNode) {
-	s := &literalNodeSorter{a, func(i, j int) bool { return a[i].literal < a[j].literal }}
+	// FIXME: Still a single 32B allocation left.
+	s := literalNodeSorter(a)
 	sort.Sort(s)
 }
