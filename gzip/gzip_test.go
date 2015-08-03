@@ -347,9 +347,10 @@ func benchmarkGzipN(b *testing.B, level int) {
 	dat = append(dat, dat...)
 	dat = append(dat, dat...)
 	b.SetBytes(int64(len(dat)))
+	w, _ := NewWriterLevel(ioutil.Discard, level)
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		w, _ := NewWriterLevel(ioutil.Discard, level)
+		w.Reset(ioutil.Discard)
 		w.Write(dat)
 		w.Flush()
 		w.Close()
@@ -375,9 +376,10 @@ func benchmarkOldGzipN(b *testing.B, level int) {
 	dat = append(dat, dat...)
 
 	b.SetBytes(int64(len(dat)))
+	w, _ := oldgz.NewWriterLevel(ioutil.Discard, level)
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		w, _ := oldgz.NewWriterLevel(ioutil.Discard, level)
+		w.Reset(ioutil.Discard)
 		w.Write(dat)
 		w.Flush()
 		w.Close()
