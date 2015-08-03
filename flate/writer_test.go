@@ -29,14 +29,18 @@ func benchmarkEncoder(b *testing.B, testfile, level, n int) {
 	}
 	buf0 = nil
 	runtime.GC()
+	w, err := NewWriter(ioutil.Discard, level)
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		w, err := NewWriter(ioutil.Discard, level)
+		w.Reset(ioutil.Discard)
+		_, err = w.Write(buf1)
 		if err != nil {
 			b.Fatal(err)
 		}
-		w.Write(buf1)
-		w.Close()
+		err = w.Close()
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
