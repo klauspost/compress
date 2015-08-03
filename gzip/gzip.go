@@ -16,10 +16,11 @@ import (
 // These constants are copied from the flate package, so that code that imports
 // "compress/gzip" does not also have to import "compress/flate".
 const (
-	NoCompression      = flate.NoCompression
-	BestSpeed          = flate.BestSpeed
-	BestCompression    = flate.BestCompression
-	DefaultCompression = flate.DefaultCompression
+	NoCompression       = flate.NoCompression
+	BestSpeed           = flate.BestSpeed
+	BestCompression     = flate.BestCompression
+	DefaultCompression  = flate.DefaultCompression
+	ConstantCompression = flate.ConstantCompression
 )
 
 // A Writer is an io.WriteCloser.
@@ -56,11 +57,11 @@ func NewWriter(w io.Writer) *Writer {
 // NewWriterLevel is like NewWriter but specifies the compression level instead
 // of assuming DefaultCompression.
 //
-// The compression level can be DefaultCompression, NoCompression, or any
-// integer value between BestSpeed and BestCompression inclusive. The error
-// returned will be nil if the level is valid.
+// The compression level can be ConstantCompression, DefaultCompression,
+// NoCompression, or any integer value between BestSpeed and BestCompression
+// inclusive. The error returned will be nil if the level is valid.
 func NewWriterLevel(w io.Writer, level int) (*Writer, error) {
-	if level < DefaultCompression || level > BestCompression {
+	if level < ConstantCompression || level > BestCompression {
 		return nil, fmt.Errorf("gzip: invalid compression level: %d", level)
 	}
 	z := new(Writer)
