@@ -12,7 +12,9 @@ import (
 type hcode uint32
 
 type huffmanEncoder struct {
-	codes []hcode
+	codes     []hcode
+	freqcache []literalNode
+	bitCount  [17]int32
 }
 
 type literalNode struct {
@@ -67,7 +69,7 @@ func (h hcode) bits() (bits uint8) {
 func maxNode() literalNode { return literalNode{math.MaxUint16, math.MaxInt32} }
 
 func newHuffmanEncoder(size int) *huffmanEncoder {
-	return &huffmanEncoder{make([]hcode, size)}
+	return &huffmanEncoder{codes: make([]hcode, size), freqcache: nil}
 }
 
 // Generates a HuffmanCode corresponding to the fixed literal table
@@ -241,7 +243,8 @@ func (h *huffmanEncoder) bitCounts(list []literalNode, maxBits int32) []int32 {
 		panic("leafCounts[maxBits][maxBits] != n")
 	}
 
-	bitCount := make([]int32, maxBits+1)
+	bitCount := h.bitCount[:maxBits+1]
+	//make([]int32, maxBits+1)
 	bits := 1
 	counts := &leafCounts[maxBits]
 	for level := maxBits; level > 0; level-- {
@@ -281,7 +284,10 @@ func (h *huffmanEncoder) assignEncodingAndSize(bitCount []int32, list []literalN
 // freq  An array of frequencies, in which frequency[i] gives the frequency of literal i.
 // maxBits  The maximum number of bits to use for any literal.
 func (h *huffmanEncoder) generate(freq []int32, maxBits int32) {
-	list := make([]literalNode, len(freq)+1)
+	if h.freqcache == nil {
+		h.freqcache = make([]literalNode, 300)
+	}
+	list := h.freqcache[:len(freq)+1]
 	// Number of non-zero literals
 	count := 0
 	// Set list to be the set of all non-zero literals and their frequencies
@@ -290,10 +296,12 @@ func (h *huffmanEncoder) generate(freq []int32, maxBits int32) {
 			list[count] = literalNode{uint16(i), f}
 			count++
 		} else {
+			list[count] = literalNode{}
 			//h.codeBits[i] = 0
 			h.codes[i].setBits(0)
 		}
 	}
+	list[len(freq)] = literalNode{}
 	// If freq[] is shorter than codeBits[], fill rest of codeBits[] with zeros
 	// FIXME: Doesn't do what it says on the tin (klauspost)
 	//h.codeBits = h.codeBits[0:len(freq)]
