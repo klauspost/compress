@@ -15,6 +15,8 @@ type huffmanEncoder struct {
 	codes     []hcode
 	freqcache []literalNode
 	bitCount  [17]int32
+	lns       literalNodeSorter
+	lfs       literalFreqSorter
 }
 
 type literalNode struct {
@@ -270,7 +272,8 @@ func (h *huffmanEncoder) assignEncodingAndSize(bitCount []int32, list []literalN
 		// code, code + 1, ....  The code values are
 		// assigned in literal order (not frequency order).
 		chunk := list[len(list)-int(bits):]
-		sortByLiteral(chunk)
+
+		h.lns.Sort(chunk)
 		for _, node := range chunk {
 			h.codes[node.literal] = toCode(reverseBits(code, uint8(n)), uint8(n))
 			code++
@@ -318,7 +321,7 @@ func (h *huffmanEncoder) generate(freq []int32, maxBits int32) {
 		}
 		return
 	}
-	sortByFreq(list)
+	h.lfs.Sort(list)
 
 	// Get the number of literals for each bit count
 	bitCount := h.bitCounts(list, maxBits)
@@ -327,6 +330,11 @@ func (h *huffmanEncoder) generate(freq []int32, maxBits int32) {
 }
 
 type literalNodeSorter []literalNode
+
+func (s *literalNodeSorter) Sort(a []literalNode) {
+	*s = literalNodeSorter(a)
+	sort.Sort(s)
+}
 
 func (s literalNodeSorter) Len() int { return len(s) }
 
@@ -338,6 +346,11 @@ func (s literalNodeSorter) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
 type literalFreqSorter []literalNode
 
+func (s *literalFreqSorter) Sort(a []literalNode) {
+	*s = literalFreqSorter(a)
+	sort.Sort(s)
+}
+
 func (s literalFreqSorter) Len() int { return len(s) }
 
 func (s literalFreqSorter) Less(i, j int) bool {
@@ -348,13 +361,3 @@ func (s literalFreqSorter) Less(i, j int) bool {
 }
 
 func (s literalFreqSorter) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
-
-func sortByFreq(a []literalNode) {
-	sort.Sort(literalFreqSorter(a))
-}
-
-func sortByLiteral(a []literalNode) {
-	// FIXME: Still a single 32B allocation left.
-	s := literalNodeSorter(a)
-	sort.Sort(s)
-}
