@@ -612,17 +612,14 @@ func (d *compressor) fillHuff(b []byte) int {
 }
 
 func (d *compressor) storeHuff() {
-	d.blockStart = 0
-	ntokens := d.windowEnd
+	// We only compress if we have >= 32KB (maxStoreBlockSize/2)
+	if d.windowEnd < (maxStoreBlockSize/2) && !d.sync {
+		return
+	}
 	if d.windowEnd == 0 {
 		return
 	}
-	for i, v := range d.window[:d.windowEnd] {
-		d.tokens[i] = literalToken(uint32(v))
-	}
-	if d.err = d.writeBlock(d.tokens[:ntokens], d.windowEnd, false); d.err != nil {
-		return
-	}
+	d.w.writeBlockHuff(false, d.window[:d.windowEnd])
 	d.windowEnd = 0
 }
 

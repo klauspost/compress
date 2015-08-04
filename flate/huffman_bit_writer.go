@@ -431,9 +431,8 @@ func (w *huffmanBitWriter) writeBlock(tokens []token, eof bool, input []byte) {
 	if w.err != nil {
 		return
 	}
-	for i := range w.literalFreq {
-		w.literalFreq[i] = 0
-	}
+	copy(w.literalFreq, zeroLits[:])
+
 	for i := range w.offsetFreq {
 		w.offsetFreq[i] = 0
 	}
@@ -574,4 +573,96 @@ func (w *huffmanBitWriter) writeBlock(tokens []token, eof bool, input []byte) {
 			panic("unknown token type: " + string(t))
 		}
 	}
+}
+
+var huffOffset *huffmanEncoder
+var zeroLits [maxNumLit]int32
+
+func init() {
+	var w = newHuffmanBitWriter(nil)
+	w.offsetFreq[0] = 1
+	w.offsetEncoding = newHuffmanEncoder(offsetCodeCount)
+	w.offsetEncoding.generate(w.offsetFreq, 15)
+	huffOffset = w.offsetEncoding
+}
+
+func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
+	if w.err != nil {
+		return
+	}
+	copy(w.literalFreq, zeroLits[:])
+	for _, t := range input {
+		w.literalFreq[t]++
+	}
+	w.literalFreq[endBlockMarker]++
+
+	// get the number of literals
+	numLiterals := len(w.literalFreq)
+	for w.literalFreq[numLiterals-1] == 0 {
+		numLiterals--
+	}
+
+	// We haven't found a single match. If we want to go with the dynamic encoding,
+	// we should count at least one offset to be sure that the offset huffman tree could be encoded.
+	numOffsets := 1
+
+	w.literalEncoding.generate(w.literalFreq, 15)
+	w.offsetEncoding = huffOffset
+
+	storedBytes := len(input)
+
+	var extraBits int64
+	var storedSize int64 = math.MaxInt64
+	if storedBytes <= maxStoreBlockSize {
+		storedSize = int64((storedBytes + 5) * 8)
+		// We only bother calculating the costs of the extra bits required by
+		// the length of offset fields (which will be the same for both fixed
+		// and dynamic encoding), if we need to compare those two encodings
+		// against stored encoding.
+		for lengthCode := lengthCodesStart + 8; lengthCode < numLiterals; lengthCode++ {
+			// First eight length codes have extra size = 0.
+			extraBits += int64(w.literalFreq[lengthCode]) * int64(lengthExtraBits[lengthCode-lengthCodesStart])
+		}
+		for offsetCode := 4; offsetCode < numOffsets; offsetCode++ {
+			// First four offset codes have extra size = 0.
+			extraBits += int64(w.offsetFreq[offsetCode]) * int64(offsetExtraBits[offsetCode])
+		}
+	}
+
+	// Figure out smallest code.
+	// Always use dynamic Huffman or Store
+	var numCodegens int
+
+	// Generate codegen and codegenFrequencies, which indicates how to encode
+	// the literalEncoding and the offsetEncoding.
+	w.generateCodegen(numLiterals, numOffsets)
+	w.codegenEncoding.generate(w.codegenFreq, 7)
+	numCodegens = len(w.codegenFreq)
+	for numCodegens > 4 && w.codegenFreq[codegenOrder[numCodegens-1]] == 0 {
+		numCodegens--
+	}
+	dynamicHeader := int64(3+5+5+4+(3*numCodegens)) +
+		w.codegenEncoding.bitLength(w.codegenFreq) +
+		int64(extraBits) +
+		int64(w.codegenFreq[16]*2) +
+		int64(w.codegenFreq[17]*3) +
+		int64(w.codegenFreq[18]*7)
+	size := dynamicHeader +
+		w.literalEncoding.bitLength(w.literalFreq) +
+		1 /*w.offsetEncoding.bitLength(w.offsetFreq)*/
+
+	// Stored bytes?
+	if storedSize < size {
+		w.writeStoredHeader(storedBytes, eof)
+		w.writeBytes(input[0:storedBytes])
+		return
+	}
+
+	// Huffman.
+	w.writeDynamicHeader(numLiterals, numOffsets, numCodegens, eof)
+	for _, t := range input {
+		w.writeCode(w.literalEncoding, uint32(t))
+	}
+	// Write EOB
+	w.writeCode(w.literalEncoding, endBlockMarker)
 }
