@@ -4,8 +4,8 @@ This package is based on an optimized Deflate function, which is used by gzip/zi
 
 It offers slightly better compression at lower compression settings, and up to 3x faster encoding at highest compression level.
 
-* [High Throuhput Benchmark](http://blog.klauspost.com/go-gzipdeflate-benchmarks/).
-* Small payload Benvhmarks- coming soon.
+* [High Throughput Benchmark](http://blog.klauspost.com/go-gzipdeflate-benchmarks/).
+* Small payload Benchmarks- coming soon.
 
 [![Build Status](https://travis-ci.org/klauspost/compress.svg?branch=master)](https://travis-ci.org/klauspost/compress)
 
@@ -159,50 +159,50 @@ Speed increase is up to 3x of the standard library, but usually around 30%. With
 This is close to a real world benchmark as you will get. A 2.3MB JSON file.
 ```
 benchmark           old ns/op     new ns/op     delta
-BenchmarkGzipL1     95035436      71914113      -24.33%
-BenchmarkGzipL2     100665758     74774276      -25.72%
-BenchmarkGzipL3     111666387     80764620      -27.67%
-BenchmarkGzipL4     141848114     101145785     -28.69%
-BenchmarkGzipL5     185630618     127187274     -31.48%
-BenchmarkGzipL6     207511870     137047840     -33.96%
-BenchmarkGzipL7     265115163     183970522     -30.61%
-BenchmarkGzipL8     454926020     348619940     -23.37%
-BenchmarkGzipL9     488327935     377671600     -22.66%
+BenchmarkGzipL1     96155500      69203960      -28.03%
+BenchmarkGzipL2     101905830     71304080      -30.03%
+BenchmarkGzipL3     113506490     77754450      -31.50%
+BenchmarkGzipL4     143708220     97105555      -32.43%
+BenchmarkGzipL5     188210770     123207050     -34.54%
+BenchmarkGzipL6     209812000     129607410     -38.23%
+BenchmarkGzipL7     270015440     176510100     -34.63%
+BenchmarkGzipL8     461359700     328218760     -28.86%
+BenchmarkGzipL9     498361833     355687000     -28.63%
 
 benchmark           old MB/s     new MB/s     speedup
-BenchmarkGzipL1     52.21        69.00        1.32x
-BenchmarkGzipL2     49.29        66.36        1.35x
-BenchmarkGzipL3     44.43        61.43        1.38x
-BenchmarkGzipL4     34.98        49.06        1.40x
-BenchmarkGzipL5     26.73        39.01        1.46x
-BenchmarkGzipL6     23.91        36.20        1.51x
-BenchmarkGzipL7     18.72        26.97        1.44x
-BenchmarkGzipL8     10.91        14.23        1.30x
-BenchmarkGzipL9     10.16        13.14        1.29x
+BenchmarkGzipL1     51.60        71.70        1.39x
+BenchmarkGzipL2     48.69        69.59        1.43x
+BenchmarkGzipL3     43.71        63.81        1.46x
+BenchmarkGzipL4     34.53        51.10        1.48x
+BenchmarkGzipL5     26.36        40.27        1.53x
+BenchmarkGzipL6     23.65        38.28        1.62x
+BenchmarkGzipL7     18.38        28.11        1.53x
+BenchmarkGzipL8     10.75        15.12        1.41x
+BenchmarkGzipL9     9.96         13.95        1.40x
 ```
 
 Multithreaded compression using [pgzip](https://github.com/klauspost/pgzip) comparison, Quadcore, CPU = 8:
 
 ```
 benchmark           old ns/op     new ns/op     delta
-BenchmarkGzipL1     95035436      30381737      -68.03%
-BenchmarkGzipL2     100665758     31341793      -68.87%
-BenchmarkGzipL3     111666387     32891881      -70.54%
-BenchmarkGzipL4     141848114     41767389      -70.55%
-BenchmarkGzipL5     185630618     47742730      -74.28%
-BenchmarkGzipL6     207511870     50272875      -75.77%
-BenchmarkGzipL7     265115163     62693586      -76.35%
-BenchmarkGzipL8     454926020     107436145     -76.38%
-BenchmarkGzipL9     488327935     114066524     -76.64%
+BenchmarkGzipL1     96155500      25981486      -72.98%
+BenchmarkGzipL2     101905830     24601408      -75.86%
+BenchmarkGzipL3     113506490     26321506      -76.81%
+BenchmarkGzipL4     143708220     31761818      -77.90%
+BenchmarkGzipL5     188210770     39602266      -78.96%
+BenchmarkGzipL6     209812000     40402313      -80.74%
+BenchmarkGzipL7     270015440     56103210      -79.22%
+BenchmarkGzipL8     461359700     91255220      -80.22%
+BenchmarkGzipL9     498361833     88755075      -82.19%
 
 benchmark           old MB/s     new MB/s     speedup
-BenchmarkGzipL1     52.21        163.31       3.13x
-BenchmarkGzipL2     49.29        158.31       3.21x
-BenchmarkGzipL3     44.43        150.85       3.40x
-BenchmarkGzipL4     34.98        118.80       3.40x
-BenchmarkGzipL5     26.73        103.93       3.89x
-BenchmarkGzipL6     23.91        98.70        4.13x
-BenchmarkGzipL7     18.72        79.14        4.23x
-BenchmarkGzipL8     10.91        46.18        4.23x
-BenchmarkGzipL9     10.16        43.50        4.28x
+BenchmarkGzipL1     51.60        190.97       3.70x
+BenchmarkGzipL2     48.69        201.69       4.14x
+BenchmarkGzipL3     43.71        188.51       4.31x
+BenchmarkGzipL4     34.53        156.22       4.52x
+BenchmarkGzipL5     26.36        125.29       4.75x
+BenchmarkGzipL6     23.65        122.81       5.19x
+BenchmarkGzipL7     18.38        88.44        4.81x
+BenchmarkGzipL8     10.75        54.37        5.06x
+BenchmarkGzipL9     9.96         55.90        5.61x
 ```
