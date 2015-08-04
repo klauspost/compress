@@ -71,6 +71,7 @@ func benchmarkDecode(b *testing.B, testfile, level, n int) {
 // These short names are so that gofmt doesn't break the BenchmarkXxx function
 // bodies below over multiple lines.
 const (
+	constant = ConstantCompression
 	speed    = BestSpeed
 	default_ = DefaultCompression
 	compress = BestCompression
