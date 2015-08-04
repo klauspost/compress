@@ -661,7 +661,27 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
 	// Huffman.
 	w.writeDynamicHeader(numLiterals, numOffsets, numCodegens, eof)
 	for _, t := range input {
-		w.writeCode(w.literalEncoding, uint32(t))
+		c := w.literalEncoding.codes[t]
+		w.bits |= uint64(c.code()) << w.nbits
+		w.nbits += uint32(c.bits())
+		if w.nbits >= 48 {
+			bits := w.bits
+			w.bits >>= 48
+			w.nbits -= 48
+			n := w.nbytes
+			w.bytes[n] = byte(bits)
+			w.bytes[n+1] = byte(bits >> 8)
+			w.bytes[n+2] = byte(bits >> 16)
+			w.bytes[n+3] = byte(bits >> 24)
+			w.bytes[n+4] = byte(bits >> 32)
+			w.bytes[n+5] = byte(bits >> 40)
+			n += 6
+			if n >= bufferSize-8 {
+				_, w.err = w.w.Write(w.bytes[:bufferSize-8])
+				n = 0
+			}
+			w.nbytes = n
+		}
 	}
 	// Write EOB
 	w.writeCode(w.literalEncoding, endBlockMarker)
