@@ -586,11 +586,17 @@ func init() {
 	huffOffset = w.offsetEncoding
 }
 
+// writeBlockHuff will write a block of bytes as either
+// Huffman encoded literals, or uncompressed bytes depending
+// on what yields the smallest result.
 func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
 	if w.err != nil {
 		return
 	}
+	// Clear histogram
 	copy(w.literalFreq, zeroLits[:])
+
+	// Add everything as literals
 	for _, t := range input {
 		w.literalFreq[t]++
 	}
@@ -602,7 +608,6 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
 		numLiterals--
 	}
 
-	// We haven't found a single match. If we want to go with the dynamic encoding,
 	// we should count at least one offset to be sure that the offset huffman tree could be encoded.
 	numOffsets := 1
 
@@ -622,10 +627,6 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
 		for lengthCode := lengthCodesStart + 8; lengthCode < numLiterals; lengthCode++ {
 			// First eight length codes have extra size = 0.
 			extraBits += int64(w.literalFreq[lengthCode]) * int64(lengthExtraBits[lengthCode-lengthCodesStart])
-		}
-		for offsetCode := 4; offsetCode < numOffsets; offsetCode++ {
-			// First four offset codes have extra size = 0.
-			extraBits += int64(w.offsetFreq[offsetCode]) * int64(offsetExtraBits[offsetCode])
 		}
 	}
 
@@ -661,6 +662,7 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
 	// Huffman.
 	w.writeDynamicHeader(numLiterals, numOffsets, numCodegens, eof)
 	for _, t := range input {
+		// Bitwriting inlined, ~30% speedup
 		c := w.literalEncoding.codes[t]
 		w.bits |= uint64(c.code()) << w.nbits
 		w.nbits += uint32(c.bits())
