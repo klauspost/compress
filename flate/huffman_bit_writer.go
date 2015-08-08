@@ -597,9 +597,8 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
 	copy(w.literalFreq, zeroLits[:])
 
 	// Add everything as literals
-	for _, t := range input {
-		w.literalFreq[t]++
-	}
+	histogram(input, w.literalFreq)
+
 	w.literalFreq[endBlockMarker]++
 
 	// get the number of literals
