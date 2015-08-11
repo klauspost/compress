@@ -100,7 +100,7 @@ func (z *Writer) writeHeader() (err error) {
 	// The next bit, FDICT, is set if a dictionary is given.
 	// The final five FCHECK bits form a mod-31 checksum.
 	switch z.level {
-	case 0, 1:
+	case -2, 0, 1:
 		z.scratch[1] = 0 << 6
 	case 2, 3, 4, 5:
 		z.scratch[1] = 1 << 6
