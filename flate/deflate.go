@@ -651,12 +651,10 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 	switch {
 	case level == NoCompression:
 		d.window = make([]byte, maxStoreBlockSize)
-		d.tokens = make([]token, 0)
 		d.fill = (*compressor).fillStore
 		d.step = (*compressor).store
 	case level == ConstantCompression:
 		d.window = make([]byte, maxStoreBlockSize)
-		d.tokens = make([]token, maxStoreBlockSize+1)
 		d.fill = (*compressor).fillHuff
 		d.step = (*compressor).storeHuff
 	case level == DefaultCompression:
@@ -687,9 +685,8 @@ func (d *compressor) reset(w io.Writer) {
 	d.err = nil
 	switch d.compressionLevel.chain {
 	case 0:
-		// level was NoCompression.
+		// level was NoCompression or ConstantCompresssion.
 		d.windowEnd = 0
-		d.tokens = d.tokens[:0]
 	default:
 		d.chainHead = -1
 		for s := d.hashHead; len(s) > 0; {
