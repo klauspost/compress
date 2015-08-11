@@ -510,7 +510,10 @@ func TestRegression2508(t *testing.T) {
 }
 
 func TestWriterReset(t *testing.T) {
-	for level := 0; level <= 9; level++ {
+	for level := -2; level <= 9; level++ {
+		if level == -1 {
+			level++
+		}
 		if testing.Short() && level > 1 {
 			break
 		}
