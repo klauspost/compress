@@ -377,15 +377,16 @@ func testToFromWithLevelAndLimit(t *testing.T, level int, input []byte, name str
 	testSync(t, level, input, name)
 }
 
-func testToFromWithLimit(t *testing.T, input []byte, name string, limit [10]int) {
+func testToFromWithLimit(t *testing.T, input []byte, name string, limit [11]int) {
 	for i := 0; i < 10; i++ {
 		testToFromWithLevelAndLimit(t, i, input, name, limit[i])
 	}
+	testToFromWithLevelAndLimit(t, -2, input, name, limit[10])
 }
 
 func TestDeflateInflate(t *testing.T) {
 	for i, h := range deflateInflateTests {
-		testToFromWithLimit(t, h.in, fmt.Sprintf("#%d", i), [10]int{})
+		testToFromWithLimit(t, h.in, fmt.Sprintf("#%d", i), [11]int{})
 	}
 }
 
@@ -401,19 +402,19 @@ func TestReverseBits(t *testing.T) {
 type deflateInflateStringTest struct {
 	filename string
 	label    string
-	limit    [10]int
+	limit    [11]int // Number 11 is ConstantCompression
 }
 
 var deflateInflateStringTests = []deflateInflateStringTest{
 	{
 		"../testdata/e.txt",
 		"2.718281828...",
-		[...]int{100018, 50650, 50960, 51150, 50930, 50790, 50790, 50790, 50790, 50790},
+		[...]int{100018, 50650, 50960, 51150, 50930, 50790, 50790, 50790, 50790, 50790, 43683 + 100},
 	},
 	{
 		"../testdata/Mark.Twain-Tom.Sawyer.txt",
 		"Mark.Twain-Tom.Sawyer",
-		[...]int{407330, 187598, 180361, 172974, 169160, 163476, 160936, 160506, 160295, 160295},
+		[...]int{407330, 187598, 180361, 172974, 169160, 163476, 160936, 160506, 160295, 160295, 233460 + 100},
 	},
 }
 
@@ -430,7 +431,9 @@ func TestDeflateInflateString(t *testing.T) {
 			}
 			return -1
 		}, string(gold))
+
 		testToFromWithLimit(t, []byte(neutral), test.label, test.limit)
+
 		if testing.Short() {
 			break
 		}
@@ -509,7 +512,10 @@ func TestRegression2508(t *testing.T) {
 }
 
 func TestWriterReset(t *testing.T) {
-	for level := 0; level <= 9; level++ {
+	for level := -2; level <= 9; level++ {
+		if level == -1 {
+			level++
+		}
 		if testing.Short() && level > 1 {
 			break
 		}
@@ -549,10 +555,12 @@ func TestWriterReset(t *testing.T) {
 	testResetOutput(t, func(w io.Writer) (*Writer, error) { return NewWriter(w, NoCompression) })
 	testResetOutput(t, func(w io.Writer) (*Writer, error) { return NewWriter(w, DefaultCompression) })
 	testResetOutput(t, func(w io.Writer) (*Writer, error) { return NewWriter(w, BestCompression) })
+	testResetOutput(t, func(w io.Writer) (*Writer, error) { return NewWriter(w, ConstantCompression) })
 	dict := []byte("we are the world")
 	testResetOutput(t, func(w io.Writer) (*Writer, error) { return NewWriterDict(w, NoCompression, dict) })
 	testResetOutput(t, func(w io.Writer) (*Writer, error) { return NewWriterDict(w, DefaultCompression, dict) })
 	testResetOutput(t, func(w io.Writer) (*Writer, error) { return NewWriterDict(w, BestCompression, dict) })
+	testResetOutput(t, func(w io.Writer) (*Writer, error) { return NewWriterDict(w, ConstantCompression, dict) })
 }
 
 func testResetOutput(t *testing.T, newWriter func(w io.Writer) (*Writer, error)) {
@@ -566,7 +574,7 @@ func testResetOutput(t *testing.T, newWriter func(w io.Writer) (*Writer, error))
 		w.Write(b)
 	}
 	w.Close()
-	out1 := buf.String()
+	out1 := buf.Bytes()
 
 	buf2 := new(bytes.Buffer)
 	w.Reset(buf2)
@@ -574,10 +582,22 @@ func testResetOutput(t *testing.T, newWriter func(w io.Writer) (*Writer, error))
 		w.Write(b)
 	}
 	w.Close()
-	out2 := buf2.String()
+	out2 := buf2.Bytes()
 
-	if out1 != out2 {
-		t.Errorf("got %q, expected %q", out2, out1)
+	if len(out1) != len(out2) {
+		t.Errorf("got %d, expected %d bytes", len(out2), len(out1))
+	}
+	if bytes.Compare(out1, out2) != 0 {
+		mm := 0
+		for i, b := range out1[:len(out2)] {
+			if b != out2[i] {
+				t.Errorf("mismatch index %d: %02x, expected %02x", i, out2[i], b)
+			}
+			mm++
+			if mm == 10 {
+				t.Fatal("Stopping")
+			}
+		}
 	}
 	t.Logf("got %d bytes", len(out1))
 }

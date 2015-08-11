@@ -113,10 +113,12 @@ func (w *huffmanBitWriter) reset(writer io.Writer) {
 			s[i] = 0
 		}
 	}
-	for _, enc := range [...]*huffmanEncoder{
-		w.literalEncoding,
-		w.offsetEncoding,
-		w.codegenEncoding} {
+	encs := []*huffmanEncoder{w.literalEncoding, w.codegenEncoding}
+	// Don't reset, if we are huffman only mode
+	if w.offsetEncoding != huffOffset {
+		encs = append(encs, w.offsetEncoding)
+	}
+	for _, enc := range encs {
 		for i := range enc.codes {
 			enc.codes[i] = 0
 		}
@@ -431,9 +433,8 @@ func (w *huffmanBitWriter) writeBlock(tokens []token, eof bool, input []byte) {
 	if w.err != nil {
 		return
 	}
-	for i := range w.literalFreq {
-		w.literalFreq[i] = 0
-	}
+	copy(w.literalFreq, zeroLits[:])
+
 	for i := range w.offsetFreq {
 		w.offsetFreq[i] = 0
 	}
@@ -574,4 +575,116 @@ func (w *huffmanBitWriter) writeBlock(tokens []token, eof bool, input []byte) {
 			panic("unknown token type: " + string(t))
 		}
 	}
+}
+
+var huffOffset *huffmanEncoder
+var zeroLits [maxNumLit]int32
+
+func init() {
+	var w = newHuffmanBitWriter(nil)
+	w.offsetFreq[0] = 1
+	w.offsetEncoding = newHuffmanEncoder(offsetCodeCount)
+	w.offsetEncoding.generate(w.offsetFreq, 15)
+	huffOffset = w.offsetEncoding
+}
+
+// writeBlockHuff will write a block of bytes as either
+// Huffman encoded literals, or uncompressed bytes depending
+// on what yields the smallest result.
+func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
+	if w.err != nil {
+		return
+	}
+	// Clear histogram
+	copy(w.literalFreq, zeroLits[:])
+
+	// Add everything as literals
+	histogram(input, w.literalFreq)
+
+	w.literalFreq[endBlockMarker]++
+
+	// get the number of literals
+	numLiterals := len(w.literalFreq)
+	for w.literalFreq[numLiterals-1] == 0 {
+		numLiterals--
+	}
+
+	numOffsets := 1
+
+	w.literalEncoding.generate(w.literalFreq, 15)
+	w.offsetEncoding = huffOffset
+
+	storedBytes := len(input)
+
+	var extraBits int64
+	var storedSize int64 = math.MaxInt64
+	if storedBytes <= maxStoreBlockSize {
+		storedSize = int64((storedBytes + 5) * 8)
+		// We only bother calculating the costs of the extra bits required by
+		// the length of offset fields (which will be the same for both fixed
+		// and dynamic encoding), if we need to compare those two encodings
+		// against stored encoding.
+		for lengthCode := lengthCodesStart + 8; lengthCode < numLiterals; lengthCode++ {
+			// First eight length codes have extra size = 0.
+			extraBits += int64(w.literalFreq[lengthCode]) * int64(lengthExtraBits[lengthCode-lengthCodesStart])
+		}
+	}
+
+	// Figure out smallest code.
+	// Always use dynamic Huffman or Store
+	var numCodegens int
+
+	// Generate codegen and codegenFrequencies, which indicates how to encode
+	// the literalEncoding and the offsetEncoding.
+	w.generateCodegen(numLiterals, numOffsets)
+	w.codegenEncoding.generate(w.codegenFreq, 7)
+	numCodegens = len(w.codegenFreq)
+	for numCodegens > 4 && w.codegenFreq[codegenOrder[numCodegens-1]] == 0 {
+		numCodegens--
+	}
+	dynamicHeader := int64(3+5+5+4+(3*numCodegens)) +
+		w.codegenEncoding.bitLength(w.codegenFreq) +
+		int64(extraBits) +
+		int64(w.codegenFreq[16]*2) +
+		int64(w.codegenFreq[17]*3) +
+		int64(w.codegenFreq[18]*7)
+	size := dynamicHeader +
+		w.literalEncoding.bitLength(w.literalFreq) +
+		1 /*w.offsetEncoding.bitLength(w.offsetFreq)*/
+
+	// Stored bytes?
+	if storedSize < size {
+		w.writeStoredHeader(storedBytes, eof)
+		w.writeBytes(input[0:storedBytes])
+		return
+	}
+
+	// Huffman.
+	w.writeDynamicHeader(numLiterals, numOffsets, numCodegens, eof)
+	for _, t := range input {
+		// Bitwriting inlined, ~30% speedup
+		c := w.literalEncoding.codes[t]
+		w.bits |= uint64(c.code()) << w.nbits
+		w.nbits += uint32(c.bits())
+		if w.nbits >= 48 {
+			bits := w.bits
+			w.bits >>= 48
+			w.nbits -= 48
+			n := w.nbytes
+			w.bytes[n] = byte(bits)
+			w.bytes[n+1] = byte(bits >> 8)
+			w.bytes[n+2] = byte(bits >> 16)
+			w.bytes[n+3] = byte(bits >> 24)
+			w.bytes[n+4] = byte(bits >> 32)
+			w.bytes[n+5] = byte(bits >> 40)
+			n += 6
+			if n >= bufferSize-8 {
+				_, w.err = w.w.Write(w.bytes[:bufferSize-8])
+				n = 0
+			}
+			w.nbytes = n
+		}
+	}
+	// Write EOB
+	w.writeCode(w.literalEncoding, endBlockMarker)
 }

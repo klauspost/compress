@@ -144,3 +144,23 @@ match_ended:
 done_matchlen:
     MOVQ    R11, ret+56(FP)
     RET
+
+// func histogram(b []byte, h []int32)
+TEXT ·histogram(SB), 7, $0
+    MOVQ    b+0(FP),SI                  // SI: &b
+    MOVQ    b_len+8(FP),R9              // R9: len(b)
+    MOVQ    h+24(FP), DI                // DI: Histogram
+    XORQ    R10, R10
+    TESTQ   R9, R9
+    JZ end_hist
+
+loop_hist:
+    MOVB    (SI), R10
+    ADDL    $1, (DI)(R10*4)
+
+    ADDQ    $1, SI
+    SUBQ    $1, R9
+    JNZ     loop_hist
+
+end_hist:
+    RET

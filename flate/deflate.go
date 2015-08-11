@@ -12,18 +12,19 @@ import (
 )
 
 const (
-	NoCompression      = 0
-	BestSpeed          = 1
-	fastCompression    = 3
-	BestCompression    = 9
-	DefaultCompression = -1
-	logWindowSize      = 15
-	windowSize         = 1 << logWindowSize
-	windowMask         = windowSize - 1
-	logMaxOffsetSize   = 15  // Standard DEFLATE
-	minMatchLength     = 4   // The smallest match that the compressor looks for
-	maxMatchLength     = 258 // The longest match for the compressor
-	minOffsetSize      = 1   // The shortest offset that makes any sense
+	NoCompression       = 0
+	BestSpeed           = 1
+	fastCompression     = 3
+	BestCompression     = 9
+	DefaultCompression  = -1
+	ConstantCompression = -2 // Does only Huffman encoding
+	logWindowSize       = 15
+	windowSize          = 1 << logWindowSize
+	windowMask          = windowSize - 1
+	logMaxOffsetSize    = 15  // Standard DEFLATE
+	minMatchLength      = 4   // The smallest match that the compressor looks for
+	maxMatchLength      = 258 // The longest match for the compressor
+	minOffsetSize       = 1   // The shortest offset that makes any sense
 
 	// The maximum number of tokens we put into a single flat block, just too
 	// stop things from getting too large.
@@ -604,6 +605,24 @@ func (d *compressor) store() {
 	d.windowEnd = 0
 }
 
+func (d *compressor) fillHuff(b []byte) int {
+	n := copy(d.window[d.windowEnd:], b)
+	d.windowEnd += n
+	return n
+}
+
+func (d *compressor) storeHuff() {
+	// We only compress if we have >= 32KB (maxStoreBlockSize/2)
+	if d.windowEnd < (maxStoreBlockSize/2) && !d.sync {
+		return
+	}
+	if d.windowEnd == 0 {
+		return
+	}
+	d.w.writeBlockHuff(false, d.window[:d.windowEnd])
+	d.windowEnd = 0
+}
+
 func (d *compressor) write(b []byte) (n int, err error) {
 	n = len(b)
 	b = b[d.fill(d, b):]
@@ -634,6 +653,10 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 		d.window = make([]byte, maxStoreBlockSize)
 		d.fill = (*compressor).fillStore
 		d.step = (*compressor).store
+	case level == ConstantCompression:
+		d.window = make([]byte, maxStoreBlockSize)
+		d.fill = (*compressor).fillHuff
+		d.step = (*compressor).storeHuff
 	case level == DefaultCompression:
 		level = 6
 		fallthrough
@@ -647,7 +670,7 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 			d.step = (*compressor).deflate
 		}
 	default:
-		return fmt.Errorf("flate: invalid compression level %d: want value in range [-1, 9]", level)
+		return fmt.Errorf("flate: invalid compression level %d: want value in range [-2, 9]", level)
 	}
 	return nil
 }
@@ -662,10 +685,7 @@ func (d *compressor) reset(w io.Writer) {
 	d.err = nil
 	switch d.compressionLevel.chain {
 	case 0:
-		// level was NoCompression.
-		for i := range d.window {
-			d.window[i] = 0
-		}
+		// level was NoCompression or ConstantCompresssion.
 		d.windowEnd = 0
 	default:
 		d.chainHead = -1

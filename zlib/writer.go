@@ -15,10 +15,11 @@ import (
 // These constants are copied from the flate package, so that code that imports
 // "compress/zlib" does not also have to import "compress/flate".
 const (
-	NoCompression      = flate.NoCompression
-	BestSpeed          = flate.BestSpeed
-	BestCompression    = flate.BestCompression
-	DefaultCompression = flate.DefaultCompression
+	NoCompression       = flate.NoCompression
+	BestSpeed           = flate.BestSpeed
+	BestCompression     = flate.BestCompression
+	DefaultCompression  = flate.DefaultCompression
+	ConstantCompression = flate.ConstantCompression
 )
 
 // A Writer takes data written to it and writes the compressed
@@ -60,7 +61,7 @@ func NewWriterLevel(w io.Writer, level int) (*Writer, error) {
 // The dictionary may be nil. If not, its contents should not be modified until
 // the Writer is closed.
 func NewWriterLevelDict(w io.Writer, level int, dict []byte) (*Writer, error) {
-	if level < DefaultCompression || level > BestCompression {
+	if level < ConstantCompression || level > BestCompression {
 		return nil, fmt.Errorf("zlib: invalid compression level: %d", level)
 	}
 	return &Writer{
@@ -99,7 +100,7 @@ func (z *Writer) writeHeader() (err error) {
 	// The next bit, FDICT, is set if a dictionary is given.
 	// The final five FCHECK bits form a mod-31 checksum.
 	switch z.level {
-	case 0, 1:
+	case -2, 0, 1:
 		z.scratch[1] = 0 << 6
 	case 2, 3, 4, 5:
 		z.scratch[1] = 1 << 6
