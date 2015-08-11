@@ -17,7 +17,7 @@ const (
 	fastCompression     = 3
 	BestCompression     = 9
 	DefaultCompression  = -1
-	ConstantCompression = -2
+	ConstantCompression = -2 // Does only Huffman encoding
 	logWindowSize       = 15
 	windowSize          = 1 << logWindowSize
 	windowMask          = windowSize - 1
@@ -671,7 +671,7 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 			d.step = (*compressor).deflate
 		}
 	default:
-		return fmt.Errorf("flate: invalid compression level %d: want value in range [-1, 9]", level)
+		return fmt.Errorf("flate: invalid compression level %d: want value in range [-2, 9]", level)
 	}
 	return nil
 }
