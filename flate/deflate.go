@@ -238,7 +238,7 @@ func (d *compressor) findMatch(pos int, prevHead int, prevLength int, lookahead 
 
 	for i := prevHead; tries > 0; tries-- {
 		if wEnd == win[i+length] {
-			n := d.matcher(win[i:], wPos, len(win)-pos)
+			n := d.matcher(win[i:], wPos, minMatchLook)
 
 			if n > length && (n > minMatchLength || pos-i <= 4096) {
 				length = n
@@ -324,19 +324,24 @@ func (d *compressor) initDeflate() {
 // Assumes that d.fastSkipHashing != skipNever,
 // otherwise use deflateNoSkip
 func (d *compressor) deflate() {
+
+	// Sanity enables additional runtime tests.
+	// It's intended to be used during development
+	// to supplement the currently ad-hoc unit tests.
+	const sanity = false
+
 	if d.windowEnd-d.index < minMatchLength+maxMatchLength && !d.sync {
 		return
 	}
 
 	d.maxInsertIndex = d.windowEnd - (minMatchLength - 1)
 	if d.index < d.maxInsertIndex {
-		//d.hash = int(d.window[d.index])<<hashShift + int(d.window[d.index+1])
 		d.hash = d.hasher(d.window[d.index:d.index+minMatchLength]) & hashMask
 	}
 
 Loop:
 	for {
-		if d.index > d.windowEnd {
+		if sanity && d.index > d.windowEnd {
 			panic("index > windowEnd")
 		}
 		lookahead := d.windowEnd - d.index
@@ -344,7 +349,7 @@ Loop:
 			if !d.sync {
 				break Loop
 			}
-			if d.index > d.windowEnd {
+			if sanity && d.index > d.windowEnd {
 				panic("index > windowEnd")
 			}
 			if lookahead == 0 {
@@ -359,7 +364,6 @@ Loop:
 		}
 		if d.index < d.maxInsertIndex {
 			// Update the hash
-			//d.hash = (d.hash<<hashShift + int(d.window[d.index+2])) & hashMask
 			d.hash = d.hasher(d.window[d.index:d.index+minMatchLength]) & hashMask
 			ch := d.hashHead[d.hash]
 			d.chainHead = int(ch)
@@ -453,19 +457,23 @@ Loop:
 
 // same as deflate, but with d.fastSkipHashing == skipNever
 func (d *compressor) deflateNoSkip() {
+	// Sanity enables additional runtime tests.
+	// It's intended to be used during development
+	// to supplement the currently ad-hoc unit tests.
+	const sanity = false
+
 	if d.windowEnd-d.index < minMatchLength+maxMatchLength && !d.sync {
 		return
 	}
 
 	d.maxInsertIndex = d.windowEnd - (minMatchLength - 1)
 	if d.index < d.maxInsertIndex {
-		//d.hash = int(d.window[d.index])<<hashShift + int(d.window[d.index+1])
 		d.hash = d.hasher(d.window[d.index:d.index+minMatchLength]) & hashMask
 	}
 
 Loop:
 	for {
-		if d.index > d.windowEnd {
+		if sanity && d.index > d.windowEnd {
 			panic("index > windowEnd")
 		}
 		lookahead := d.windowEnd - d.index
@@ -473,7 +481,7 @@ Loop:
 			if !d.sync {
 				break Loop
 			}
-			if d.index > d.windowEnd {
+			if sanity && d.index > d.windowEnd {
 				panic("index > windowEnd")
 			}
 			if lookahead == 0 {
@@ -494,7 +502,6 @@ Loop:
 		}
 		if d.index < d.maxInsertIndex {
 			// Update the hash
-			//d.hash = (d.hash<<hashShift + int(d.window[d.index+2])) & hashMask
 			d.hash = d.hasher(d.window[d.index:d.index+minMatchLength]) & hashMask
 			ch := d.hashHead[d.hash]
 			d.chainHead = int(ch)
@@ -524,50 +531,40 @@ Loop:
 			// index and index-1 are already inserted. If there is not enough
 			// lookahead, the last two strings are not inserted into the hash
 			// table.
-			if true {
-				var newIndex int
-				newIndex = d.index + prevLength - 1
-				// Calculate missing hashes
-				end := newIndex
-				if end > d.maxInsertIndex {
-					end = d.maxInsertIndex
-				}
-				end += minMatchLength - 1
-				startindex := d.index + 1
-				if startindex > d.maxInsertIndex {
-					startindex = d.maxInsertIndex
-				}
-				tocheck := d.window[startindex:end]
-				dstSize := len(tocheck) - minMatchLength + 1
-				if dstSize > 0 {
-					dst := d.hashMatch[:dstSize]
-					d.bulkHasher(tocheck, dst)
-					var newH hash
-					for i, val := range dst {
-						di := i + startindex
-						newH = val & hashMask
-						// Get previous value with the same hash.
-						// Our chain should point to the previous value.
-						d.hashPrev[di&windowMask] = d.hashHead[newH]
-						// Set the head of the hash chain to us.
-						d.hashHead[newH] = hashid(di + d.hashOffset)
-					}
-					d.hash = newH
-				}
-
-				d.index = newIndex
-
-				d.byteAvailable = false
-				d.length = minMatchLength - 1
-			} else {
-				// For matches this long, we don't bother inserting each individual
-				// item into the table.
-				d.index += d.length
-				if d.index < d.maxInsertIndex {
-					d.hash = d.hasher(d.window[d.index:d.index+minMatchLength]) & hashMask
-					//d.hash = (int(d.window[d.index])<<hashShift + int(d.window[d.index+1]))
-				}
+			var newIndex int
+			newIndex = d.index + prevLength - 1
+			// Calculate missing hashes
+			end := newIndex
+			if end > d.maxInsertIndex {
+				end = d.maxInsertIndex
 			}
+			end += minMatchLength - 1
+			startindex := d.index + 1
+			if startindex > d.maxInsertIndex {
+				startindex = d.maxInsertIndex
+			}
+			tocheck := d.window[startindex:end]
+			dstSize := len(tocheck) - minMatchLength + 1
+			if dstSize > 0 {
+				dst := d.hashMatch[:dstSize]
+				d.bulkHasher(tocheck, dst)
+				var newH hash
+				for i, val := range dst {
+					di := i + startindex
+					newH = val & hashMask
+					// Get previous value with the same hash.
+					// Our chain should point to the previous value.
+					d.hashPrev[di&windowMask] = d.hashHead[newH]
+					// Set the head of the hash chain to us.
+					d.hashHead[newH] = hashid(di + d.hashOffset)
+				}
+				d.hash = newH
+			}
+
+			d.index = newIndex
+
+			d.byteAvailable = false
+			d.length = minMatchLength - 1
 			if len(d.tokens) == maxFlateBlockTokens {
 				// The block includes the current character
 				if d.err = d.writeBlock(d.tokens, d.index, false); d.err != nil {
