@@ -235,7 +235,7 @@ func TestWriterReset(t *testing.T) {
 
 var testbuf []byte
 
-func testFile(i int, t *testing.T) {
+func testFile(i, level int, t *testing.T) {
 	dat, _ := ioutil.ReadFile("testdata/test.json")
 	dl := len(dat)
 	if len(testbuf) != i*dl {
@@ -248,9 +248,21 @@ func testFile(i int, t *testing.T) {
 
 	br := bytes.NewBuffer(testbuf)
 	var buf bytes.Buffer
-	w, _ := NewWriterLevel(&buf, 6)
-	io.Copy(w, br)
-	w.Close()
+	w, err := NewWriterLevel(&buf, DefaultCompression)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := io.Copy(w, br)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if int(n) != len(testbuf) {
+		t.Fatal("Short write:", n, "!=", testbuf)
+	}
+	err = w.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
 	r, err := NewReader(&buf)
 	if err != nil {
 		t.Fatal(err.Error())
@@ -264,21 +276,32 @@ func testFile(i int, t *testing.T) {
 	}
 }
 
-func TestFile1(t *testing.T)  { testFile(1, t) }
-func TestFile10(t *testing.T) { testFile(10, t) }
+func TestFile1xM2(t *testing.T) { testFile(1, -2, t) }
+func TestFile1xM1(t *testing.T) { testFile(1, -1, t) }
+func TestFile1x0(t *testing.T)  { testFile(1, 0, t) }
+func TestFile1x1(t *testing.T)  { testFile(1, 1, t) }
+func TestFile1x2(t *testing.T)  { testFile(1, 2, t) }
+func TestFile1x3(t *testing.T)  { testFile(1, 3, t) }
+func TestFile1x4(t *testing.T)  { testFile(1, 4, t) }
+func TestFile1x5(t *testing.T)  { testFile(1, 5, t) }
+func TestFile1x6(t *testing.T)  { testFile(1, 6, t) }
+func TestFile1x7(t *testing.T)  { testFile(1, 7, t) }
+func TestFile1x8(t *testing.T)  { testFile(1, 8, t) }
+func TestFile1x9(t *testing.T)  { testFile(1, 9, t) }
+func TestFile10(t *testing.T)   { testFile(10, DefaultCompression, t) }
 
 func TestFile50(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping during short test")
 	}
-	testFile(50, t)
+	testFile(50, DefaultCompression, t)
 }
 
 func TestFile200(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping during short test")
 	}
-	testFile(200, t)
+	testFile(200, BestSpeed, t)
 }
 
 func testBigGzip(i int, t *testing.T) {
@@ -287,15 +310,28 @@ func testBigGzip(i int, t *testing.T) {
 		rand.Seed(1337)
 		testbuf = make([]byte, i)
 		for idx := range testbuf {
-			testbuf[idx] = byte(65 + rand.Intn(32))
+			testbuf[idx] = byte(65 + rand.Intn(20))
 		}
+	}
+	c := BestCompression
+	if testing.Short() {
+		c = BestSpeed
 	}
 
 	br := bytes.NewBuffer(testbuf)
 	var buf bytes.Buffer
-	w, _ := NewWriterLevel(&buf, 6)
-	io.Copy(w, br)
-	err := w.Close()
+	w, err := NewWriterLevel(&buf, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := io.Copy(w, br)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if int(n) != len(testbuf) {
+		t.Fatal("Short write:", n, "!=", testbuf)
+	}
+	err = w.Close()
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -352,9 +388,17 @@ func benchmarkGzipN(b *testing.B, level int) {
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
 		w.Reset(ioutil.Discard)
-		w.Write(dat)
-		w.Flush()
-		w.Close()
+		n, err := w.Write(dat)
+		if n != len(dat) {
+			panic("short write")
+		}
+		if err != nil {
+			panic(err)
+		}
+		err = w.Close()
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
@@ -381,8 +425,16 @@ func benchmarkOldGzipN(b *testing.B, level int) {
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
 		w.Reset(ioutil.Discard)
-		w.Write(dat)
-		w.Flush()
-		w.Close()
+		n, err := w.Write(dat)
+		if n != len(dat) {
+			panic("short write")
+		}
+		if err != nil {
+			panic(err)
+		}
+		err = w.Close()
+		if err != nil {
+			panic(err)
+		}
 	}
 }
