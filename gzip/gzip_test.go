@@ -329,7 +329,7 @@ func testBigGzip(i int, t *testing.T) {
 		t.Fatal(err)
 	}
 	if int(n) != len(testbuf) {
-		t.Fatal("Short write:", n, "!=", testbuf)
+		t.Fatal("Short write:", n, "!=", len(testbuf))
 	}
 	err = w.Close()
 	if err != nil {
