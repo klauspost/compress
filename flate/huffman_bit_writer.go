@@ -113,10 +113,12 @@ func (w *huffmanBitWriter) reset(writer io.Writer) {
 			s[i] = 0
 		}
 	}
-	for _, enc := range [...]*huffmanEncoder{
-		w.literalEncoding,
-		w.offsetEncoding,
-		w.codegenEncoding} {
+	encs := []*huffmanEncoder{w.literalEncoding, w.codegenEncoding}
+	// Don't reset, if we are huffman only mode
+	if w.offsetEncoding != huffOffset {
+		encs = append(encs, w.offsetEncoding)
+	}
+	for _, enc := range encs {
 		for i := range enc.codes {
 			enc.codes[i] = 0
 		}
@@ -607,7 +609,6 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
 		numLiterals--
 	}
 
-	// we should count at least one offset to be sure that the offset huffman tree could be encoded.
 	numOffsets := 1
 
 	w.literalEncoding.generate(w.literalFreq, 15)
