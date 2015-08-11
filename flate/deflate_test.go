@@ -553,10 +553,12 @@ func TestWriterReset(t *testing.T) {
 	testResetOutput(t, func(w io.Writer) (*Writer, error) { return NewWriter(w, NoCompression) })
 	testResetOutput(t, func(w io.Writer) (*Writer, error) { return NewWriter(w, DefaultCompression) })
 	testResetOutput(t, func(w io.Writer) (*Writer, error) { return NewWriter(w, BestCompression) })
+	testResetOutput(t, func(w io.Writer) (*Writer, error) { return NewWriter(w, ConstantCompression) })
 	dict := []byte("we are the world")
 	testResetOutput(t, func(w io.Writer) (*Writer, error) { return NewWriterDict(w, NoCompression, dict) })
 	testResetOutput(t, func(w io.Writer) (*Writer, error) { return NewWriterDict(w, DefaultCompression, dict) })
 	testResetOutput(t, func(w io.Writer) (*Writer, error) { return NewWriterDict(w, BestCompression, dict) })
+	testResetOutput(t, func(w io.Writer) (*Writer, error) { return NewWriterDict(w, ConstantCompression, dict) })
 }
 
 func testResetOutput(t *testing.T, newWriter func(w io.Writer) (*Writer, error)) {
@@ -570,7 +572,7 @@ func testResetOutput(t *testing.T, newWriter func(w io.Writer) (*Writer, error))
 		w.Write(b)
 	}
 	w.Close()
-	out1 := buf.String()
+	out1 := buf.Bytes()
 
 	buf2 := new(bytes.Buffer)
 	w.Reset(buf2)
@@ -578,10 +580,22 @@ func testResetOutput(t *testing.T, newWriter func(w io.Writer) (*Writer, error))
 		w.Write(b)
 	}
 	w.Close()
-	out2 := buf2.String()
+	out2 := buf2.Bytes()
 
-	if out1 != out2 {
-		t.Errorf("got %q, expected %q", out2, out1)
+	if len(out1) != len(out2) {
+		t.Errorf("got %d, expected %d bytes", len(out2), len(out1))
+	}
+	if bytes.Compare(out1, out2) != 0 {
+		mm := 0
+		for i, b := range out1[:len(out2)] {
+			if b != out2[i] {
+				t.Errorf("mismatch index %d: %02x, expected %02x", i, out2[i], b)
+			}
+			mm++
+			if mm == 10 {
+				t.Fatal("Stopping")
+			}
+		}
 	}
 	t.Logf("got %d bytes", len(out1))
 }
