@@ -17,7 +17,7 @@ const (
 	fastCompression     = 3
 	BestCompression     = 9
 	DefaultCompression  = -1
-	ConstantCompression = -2
+	ConstantCompression = -2 // Does only Huffman encoding
 	logWindowSize       = 15
 	windowSize          = 1 << logWindowSize
 	windowMask          = windowSize - 1
@@ -238,7 +238,7 @@ func (d *compressor) findMatch(pos int, prevHead int, prevLength int, lookahead 
 
 	for i := prevHead; tries > 0; tries-- {
 		if wEnd == win[i+length] {
-			n := d.matcher(win[i:], wPos, len(win)-pos)
+			n := d.matcher(win[i:], wPos, minMatchLook)
 
 			if n > length && (n > minMatchLength || pos-i <= 4096) {
 				length = n
@@ -324,19 +324,24 @@ func (d *compressor) initDeflate() {
 // Assumes that d.fastSkipHashing != skipNever,
 // otherwise use deflateNoSkip
 func (d *compressor) deflate() {
+
+	// Sanity enables additional runtime tests.
+	// It's intended to be used during development
+	// to supplement the currently ad-hoc unit tests.
+	const sanity = false
+
 	if d.windowEnd-d.index < minMatchLength+maxMatchLength && !d.sync {
 		return
 	}
 
 	d.maxInsertIndex = d.windowEnd - (minMatchLength - 1)
 	if d.index < d.maxInsertIndex {
-		//d.hash = int(d.window[d.index])<<hashShift + int(d.window[d.index+1])
 		d.hash = d.hasher(d.window[d.index:d.index+minMatchLength]) & hashMask
 	}
 
 Loop:
 	for {
-		if d.index > d.windowEnd {
+		if sanity && d.index > d.windowEnd {
 			panic("index > windowEnd")
 		}
 		lookahead := d.windowEnd - d.index
@@ -344,7 +349,7 @@ Loop:
 			if !d.sync {
 				break Loop
 			}
-			if d.index > d.windowEnd {
+			if sanity && d.index > d.windowEnd {
 				panic("index > windowEnd")
 			}
 			if lookahead == 0 {
@@ -359,7 +364,6 @@ Loop:
 		}
 		if d.index < d.maxInsertIndex {
 			// Update the hash
-			//d.hash = (d.hash<<hashShift + int(d.window[d.index+2])) & hashMask
 			d.hash = d.hasher(d.window[d.index:d.index+minMatchLength]) & hashMask
 			ch := d.hashHead[d.hash]
 			d.chainHead = int(ch)
@@ -453,19 +457,23 @@ Loop:
 
 // same as deflate, but with d.fastSkipHashing == skipNever
 func (d *compressor) deflateNoSkip() {
+	// Sanity enables additional runtime tests.
+	// It's intended to be used during development
+	// to supplement the currently ad-hoc unit tests.
+	const sanity = false
+
 	if d.windowEnd-d.index < minMatchLength+maxMatchLength && !d.sync {
 		return
 	}
 
 	d.maxInsertIndex = d.windowEnd - (minMatchLength - 1)
 	if d.index < d.maxInsertIndex {
-		//d.hash = int(d.window[d.index])<<hashShift + int(d.window[d.index+1])
 		d.hash = d.hasher(d.window[d.index:d.index+minMatchLength]) & hashMask
 	}
 
 Loop:
 	for {
-		if d.index > d.windowEnd {
+		if sanity && d.index > d.windowEnd {
 			panic("index > windowEnd")
 		}
 		lookahead := d.windowEnd - d.index
@@ -473,7 +481,7 @@ Loop:
 			if !d.sync {
 				break Loop
 			}
-			if d.index > d.windowEnd {
+			if sanity && d.index > d.windowEnd {
 				panic("index > windowEnd")
 			}
 			if lookahead == 0 {
@@ -494,7 +502,6 @@ Loop:
 		}
 		if d.index < d.maxInsertIndex {
 			// Update the hash
-			//d.hash = (d.hash<<hashShift + int(d.window[d.index+2])) & hashMask
 			d.hash = d.hasher(d.window[d.index:d.index+minMatchLength]) & hashMask
 			ch := d.hashHead[d.hash]
 			d.chainHead = int(ch)
@@ -524,50 +531,40 @@ Loop:
 			// index and index-1 are already inserted. If there is not enough
 			// lookahead, the last two strings are not inserted into the hash
 			// table.
-			if true {
-				var newIndex int
-				newIndex = d.index + prevLength - 1
-				// Calculate missing hashes
-				end := newIndex
-				if end > d.maxInsertIndex {
-					end = d.maxInsertIndex
-				}
-				end += minMatchLength - 1
-				startindex := d.index + 1
-				if startindex > d.maxInsertIndex {
-					startindex = d.maxInsertIndex
-				}
-				tocheck := d.window[startindex:end]
-				dstSize := len(tocheck) - minMatchLength + 1
-				if dstSize > 0 {
-					dst := d.hashMatch[:dstSize]
-					d.bulkHasher(tocheck, dst)
-					var newH hash
-					for i, val := range dst {
-						di := i + startindex
-						newH = val & hashMask
-						// Get previous value with the same hash.
-						// Our chain should point to the previous value.
-						d.hashPrev[di&windowMask] = d.hashHead[newH]
-						// Set the head of the hash chain to us.
-						d.hashHead[newH] = hashid(di + d.hashOffset)
-					}
-					d.hash = newH
-				}
-
-				d.index = newIndex
-
-				d.byteAvailable = false
-				d.length = minMatchLength - 1
-			} else {
-				// For matches this long, we don't bother inserting each individual
-				// item into the table.
-				d.index += d.length
-				if d.index < d.maxInsertIndex {
-					d.hash = d.hasher(d.window[d.index:d.index+minMatchLength]) & hashMask
-					//d.hash = (int(d.window[d.index])<<hashShift + int(d.window[d.index+1]))
-				}
+			var newIndex int
+			newIndex = d.index + prevLength - 1
+			// Calculate missing hashes
+			end := newIndex
+			if end > d.maxInsertIndex {
+				end = d.maxInsertIndex
 			}
+			end += minMatchLength - 1
+			startindex := d.index + 1
+			if startindex > d.maxInsertIndex {
+				startindex = d.maxInsertIndex
+			}
+			tocheck := d.window[startindex:end]
+			dstSize := len(tocheck) - minMatchLength + 1
+			if dstSize > 0 {
+				dst := d.hashMatch[:dstSize]
+				d.bulkHasher(tocheck, dst)
+				var newH hash
+				for i, val := range dst {
+					di := i + startindex
+					newH = val & hashMask
+					// Get previous value with the same hash.
+					// Our chain should point to the previous value.
+					d.hashPrev[di&windowMask] = d.hashHead[newH]
+					// Set the head of the hash chain to us.
+					d.hashHead[newH] = hashid(di + d.hashOffset)
+				}
+				d.hash = newH
+			}
+
+			d.index = newIndex
+
+			d.byteAvailable = false
+			d.length = minMatchLength - 1
 			if len(d.tokens) == maxFlateBlockTokens {
 				// The block includes the current character
 				if d.err = d.writeBlock(d.tokens, d.index, false); d.err != nil {
@@ -612,17 +609,14 @@ func (d *compressor) fillHuff(b []byte) int {
 }
 
 func (d *compressor) storeHuff() {
-	d.blockStart = 0
-	ntokens := d.windowEnd
+	// We only compress if we have >= 32KB (maxStoreBlockSize/2)
+	if d.windowEnd < (maxStoreBlockSize/2) && !d.sync {
+		return
+	}
 	if d.windowEnd == 0 {
 		return
 	}
-	for i, v := range d.window[:d.windowEnd] {
-		d.tokens[i] = literalToken(uint32(v))
-	}
-	if d.err = d.writeBlock(d.tokens[:ntokens], d.windowEnd, false); d.err != nil {
-		return
-	}
+	d.w.writeBlockHuff(false, d.window[:d.windowEnd])
 	d.windowEnd = 0
 }
 
@@ -658,7 +652,6 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 		d.step = (*compressor).store
 	case level == ConstantCompression:
 		d.window = make([]byte, maxStoreBlockSize)
-		d.tokens = make([]token, maxStoreBlockSize+1)
 		d.fill = (*compressor).fillHuff
 		d.step = (*compressor).storeHuff
 	case level == DefaultCompression:
@@ -674,7 +667,7 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 			d.step = (*compressor).deflate
 		}
 	default:
-		return fmt.Errorf("flate: invalid compression level %d: want value in range [-1, 9]", level)
+		return fmt.Errorf("flate: invalid compression level %d: want value in range [-2, 9]", level)
 	}
 	return nil
 }
@@ -689,11 +682,8 @@ func (d *compressor) reset(w io.Writer) {
 	d.err = nil
 	switch d.compressionLevel.chain {
 	case 0:
-		// level was NoCompression.
+		// level was NoCompression or ConstantCompresssion.
 		d.windowEnd = 0
-	case ConstantCompression:
-		d.windowEnd = 0
-		d.blockStart = 0
 	default:
 		d.chainHead = -1
 		for s := d.hashHead; len(s) > 0; {

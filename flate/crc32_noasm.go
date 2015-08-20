@@ -20,3 +20,9 @@ func matchLenSSE4(a, b []byte, max int) int {
 	panic("no assembler")
 	return 0
 }
+
+func histogram(b []byte, h []int32) {
+	for _, t := range b {
+		h[t]++
+	}
+}
