@@ -6,6 +6,7 @@ It offers slightly better compression at lower compression settings, and up to 3
 
 * [High Throughput Benchmark](http://blog.klauspost.com/go-gzipdeflate-benchmarks/).
 * [Small Payload/Webserver Benchmarks](http://blog.klauspost.com/gzip-performance-for-go-webservers/).
+* [Constant Time Compression](http://blog.klauspost.com/constant-time-gzipzip-compression/).
 
 [![Build Status](https://travis-ci.org/klauspost/compress.svg?branch=master)](https://travis-ci.org/klauspost/compress)
 
@@ -161,6 +162,8 @@ Since this type of compression is much more constant, the compression speed is m
 The downside is that the compression ratio is usually considerably worse than even the fastest conventional compression. The compression raio can never be better than 8:1 (12.5%). 
 
 So the constant time compression can be used as a "better than nothing" mode, where you cannot risk the encoder to slow down on some content. For comparison, the size of the "Twain" text is *233460 bytes* (+29% vs. level 1) and encode speed is 144MB/s (4.5x level 1). So in this case you trade a 30% size increase for a 4 times speedup.
+
+For more information see my blog post on [Constant Time Compression](http://blog.klauspost.com/constant-time-gzipzip-compression/).
 
 # gzip/zip optimizations
  * Uses the faster deflate
