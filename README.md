@@ -151,19 +151,19 @@ To interpret and example, this version of deflate compresses input of 407287 byt
 
 This means that from level 1-5 you can expect a compression level increase of a few percent.
 
-# constant time compression
+# linear time compression
 
-This compression library adds a special compression level, named `ConstantCompression`, which allows near constant time compression. This is done by completely disabling matching of previous data, and only reduce the number of bits to represent each character. 
+This compression library adds a special compression level, named `ConstantCompression`, which allows near linear time compression. This is done by completely disabling matching of previous data, and only reduce the number of bits to represent each character. 
 
 This means that often used characters, like 'e' and ' ' (space) in text use the fewest bits to represent, and rare characters like '¤' takes more bits to represent. For more information see [wikipedia](https://en.wikipedia.org/wiki/Huffman_coding) or this nice [video](https://youtu.be/ZdooBTdW5bM).
 
-Since this type of compression is much more constant, the compression speed is mostly unaffected by the input data, and is usually more than *150MB/s* for a single core.
+Since this type of compression has much less variance, the compression speed is mostly unaffected by the input data, and is usually more than *150MB/s* for a single core.
 
 The downside is that the compression ratio is usually considerably worse than even the fastest conventional compression. The compression raio can never be better than 8:1 (12.5%). 
 
-So the constant time compression can be used as a "better than nothing" mode, where you cannot risk the encoder to slow down on some content. For comparison, the size of the "Twain" text is *233460 bytes* (+29% vs. level 1) and encode speed is 144MB/s (4.5x level 1). So in this case you trade a 30% size increase for a 4 times speedup.
+The linear time compression can be used as a "better than nothing" mode, where you cannot risk the encoder to slow down on some content. For comparison, the size of the "Twain" text is *233460 bytes* (+29% vs. level 1) and encode speed is 144MB/s (4.5x level 1). So in this case you trade a 30% size increase for a 4 times speedup.
 
-For more information see my blog post on [Constant Time Compression](http://blog.klauspost.com/constant-time-gzipzip-compression/).
+For more information see my blog post on [Fast Linear Time Compression](http://blog.klauspost.com/constant-time-gzipzip-compression/).
 
 # gzip/zip optimizations
  * Uses the faster deflate
