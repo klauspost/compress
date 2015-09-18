@@ -620,6 +620,20 @@ func (d *compressor) storeHuff() {
 	d.windowEnd = 0
 }
 
+func (d *compressor) storeSnappy() {
+	// We only compress if we have >= 32KB (maxStoreBlockSize/2)
+	if d.windowEnd < (maxStoreBlockSize/2) && !d.sync {
+		return
+	}
+	if d.windowEnd == 0 {
+		return
+	}
+	t := &tokens{tokens: d.tokens[:]}
+	snappyEncode(t, d.window[:d.windowEnd])
+	d.w.writeBlock(t.tokens, false, d.window[:d.windowEnd])
+	d.windowEnd = 0
+}
+
 func (d *compressor) write(b []byte) (n int, err error) {
 	n = len(b)
 	b = b[d.fill(d, b):]
@@ -654,6 +668,11 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 		d.window = make([]byte, maxStoreBlockSize)
 		d.fill = (*compressor).fillHuff
 		d.step = (*compressor).storeHuff
+	case level == 1:
+		d.window = make([]byte, maxStoreBlockSize)
+		d.fill = (*compressor).fillHuff
+		d.step = (*compressor).storeSnappy
+		d.tokens = make([]token, 0, maxStoreBlockSize+1)
 	case level == DefaultCompression:
 		level = 6
 		fallthrough
