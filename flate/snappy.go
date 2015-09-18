@@ -81,7 +81,7 @@ func snappyEncode(dst *tokens, src []byte) {
 			t++
 		}
 		// Emit the copied bytes.
-		//emitCopy(dst, s-t, s-s0)
+		// inlined: emitCopy(dst, s-t, s-s0)
 		dst.tokens = append(dst.tokens, matchToken(uint32(s-s0-3), uint32(s-t-minOffsetSize)))
 
 		lit = s
