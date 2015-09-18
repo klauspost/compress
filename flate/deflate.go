@@ -29,7 +29,7 @@ const (
 
 	// The maximum number of tokens we put into a single flat block, just too
 	// stop things from getting too large.
-	maxFlateBlockTokens = 1 << 15
+	maxFlateBlockTokens = 1 << 14
 	maxStoreBlockSize   = 65535
 	hashBits            = 17 // After 17 performance degrades
 	hashSize            = 1 << hashBits
@@ -658,7 +658,7 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 		d.window = make([]byte, maxStoreBlockSize)
 		d.fill = (*compressor).fillHuff
 		d.step = (*compressor).storeHuff
-		d.tokens = make([]token, 0, maxFlateBlockTokens+1)
+		d.tokens = make([]token, 0, maxStoreBlockSize+1)
 	case level == DefaultCompression:
 		level = 6
 		fallthrough
