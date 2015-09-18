@@ -18,7 +18,6 @@ const (
 	BestCompression     = 9
 	DefaultCompression  = -1
 	ConstantCompression = -2 // Does only Huffman encoding
-	SnappyCompression   = -3 // Does only Snappy-like encoding
 	logWindowSize       = 15
 	windowSize          = 1 << logWindowSize
 	windowMask          = windowSize - 1
@@ -629,7 +628,6 @@ func (d *compressor) storeSnappy() {
 	if d.windowEnd == 0 {
 		return
 	}
-	//d.w.writeBlockHuff(false, d.window[:d.windowEnd])
 	t := &tokens{tokens: d.tokens[:]}
 	snappyEncode(t, d.window[:d.windowEnd])
 	d.w.writeBlock(t.tokens, false, d.window[:d.windowEnd])
