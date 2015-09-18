@@ -84,7 +84,7 @@ BenchmarkEncodeTwainCompress1e6-4      5.17         11.01        2.13x
 * "Compress" is compression level 9
 * Test files are [Digits](https://github.com/klauspost/compress/blob/master/testdata/e.txt) (no matches) and [Twain](https://github.com/klauspost/compress/blob/master/testdata/Mark.Twain-Tom.Sawyer.txt) (plain text) .
 
-As can be seen speed on low-matching souces `Digits` are a tiny bit slower at compression level 1, but for default compression it shows a very good speedup.
+As can be seen it shows a very good speedup all across the line.
 
 `Twain` is a much more realistic benchmark, and will be closer to JSON/HTML performance. Here speed is equivalent or faster, up to 2 times.
 
@@ -130,7 +130,9 @@ BenchmarkEncodeTwainCompress1e4-4      12.05        15.57        1.29x
 BenchmarkEncodeTwainCompress1e5-4      6.02         8.96         1.49x
 BenchmarkEncodeTwainCompress1e6-4      5.17         8.21         1.59x
 ```
-## Level 1 "Snappy" compression
+So even without the assembly optimizations there is a general speedup across the board.
+
+## level 1 "snappy" compression
 
 Level 1 "BestSpeed" is completely replaced by a converted version of the algorithm found in Snappy.
 This version is considerably faster than the "old" deflate at level 1. It does however come at a compression loss, usually in the order of 3-4% compared to the old level 1. However, the speed is usually 1.75 times that of the fastest deflate mode.
@@ -141,7 +143,7 @@ However, the modified Snappy algorithm provides a very good sweet spot. Usually 
 
 Input is split into blocks between 32 and 64kb, and they are encoded independently (no backreferences across blocks) for the best speed. Contrary to Snappy the output is entropy-encoded, so you will almost always see better compression than Snappy. But Snappy is still about twice as fast as Snappy in deflate mode.
 
-## Compression level
+## compression levels
 
 This table shows the compression at each level, and the percentage of the output size compared to output
 at the similar level with the standard library. Compression data is `Twain`, see above.
@@ -208,6 +210,8 @@ BenchmarkGzipL9-4     8.81         12.30        1.40x
 ```
 
 Multithreaded compression using [pgzip](https://github.com/klauspost/pgzip) comparison, Quadcore, CPU = 8:
+
+(Not updated with new level 1 optimizations)
 
 ```
 benchmark           old ns/op     new ns/op     delta
