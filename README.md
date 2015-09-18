@@ -40,44 +40,44 @@ Currently there is only minor speedup on decompression (primarily CRC32 calculat
 
 ```
 benchmark                              old ns/op     new ns/op     delta
-BenchmarkEncodeDigitsSpeed1e4-4        1384066       242354        -82.49%
-BenchmarkEncodeDigitsSpeed1e5-4        4680153       2255480       -51.81%
-BenchmarkEncodeDigitsSpeed1e6-4        38413996      22487169      -41.46%
-BenchmarkEncodeDigitsDefault1e4-4      1569564       455660        -70.97%
-BenchmarkEncodeDigitsDefault1e5-4      16352741      6163936       -62.31%
-BenchmarkEncodeDigitsDefault1e6-4      174296430     65393170      -62.48%
-BenchmarkEncodeDigitsCompress1e4-4     1563731       449619        -71.25%
-BenchmarkEncodeDigitsCompress1e5-4     16327115      6238991       -61.79%
-BenchmarkEncodeDigitsCompress1e6-4     174614590     66643880      -61.83%
-BenchmarkEncodeTwainSpeed1e4-4         1448479       257964        -82.19%
-BenchmarkEncodeTwainSpeed1e5-4         4580435       2054643       -55.14%
-BenchmarkEncodeTwainSpeed1e6-4         36429376      20353457      -44.13%
-BenchmarkEncodeTwainDefault1e4-4       1642155       504991        -69.25%
-BenchmarkEncodeTwainDefault1e5-4       13942046      6845407       -50.90%
-BenchmarkEncodeTwainDefault1e6-4       142828830     73648630      -48.44%
-BenchmarkEncodeTwainCompress1e4-4      1621868       501998        -69.05%
-BenchmarkEncodeTwainCompress1e5-4      17421421      7589886       -56.43%
-BenchmarkEncodeTwainCompress1e6-4      184582970     81904175      -55.63%
+BenchmarkEncodeDigitsSpeed1e4-4        554029        265175        -52.14%
+BenchmarkEncodeDigitsSpeed1e5-4        3908558       2416595       -38.17%
+BenchmarkEncodeDigitsSpeed1e6-4        37546692      24875330      -33.75%
+BenchmarkEncodeDigitsDefault1e4-4      781510        486322        -37.77%
+BenchmarkEncodeDigitsDefault1e5-4      15530248      6740175       -56.60%
+BenchmarkEncodeDigitsDefault1e6-4      174915710     76498625      -56.27%
+BenchmarkEncodeDigitsCompress1e4-4     769995        485652        -36.93%
+BenchmarkEncodeDigitsCompress1e5-4     15450113      6929589       -55.15%
+BenchmarkEncodeDigitsCompress1e6-4     175114660     73348495      -58.11%
+BenchmarkEncodeTwainSpeed1e4-4         560122        275977        -50.73%
+BenchmarkEncodeTwainSpeed1e5-4         3740978       2506095       -33.01%
+BenchmarkEncodeTwainSpeed1e6-4         35542802      21904440      -38.37%
+BenchmarkEncodeTwainDefault1e4-4       828534        549026        -33.74%
+BenchmarkEncodeTwainDefault1e5-4       13667153      7528455       -44.92%
+BenchmarkEncodeTwainDefault1e6-4       141191770     79952170      -43.37%
+BenchmarkEncodeTwainCompress1e4-4      830050        545694        -34.26%
+BenchmarkEncodeTwainCompress1e5-4      16620852      8460600       -49.10%
+BenchmarkEncodeTwainCompress1e6-4      193326820     90808750      -53.03%
 
 benchmark                              old MB/s     new MB/s     speedup
-BenchmarkEncodeDigitsSpeed1e4-4        7.23         41.26        5.71x
-BenchmarkEncodeDigitsSpeed1e5-4        21.37        44.34        2.07x
-BenchmarkEncodeDigitsSpeed1e6-4        26.03        44.47        1.71x
-BenchmarkEncodeDigitsDefault1e4-4      6.37         21.95        3.45x
-BenchmarkEncodeDigitsDefault1e5-4      6.12         16.22        2.65x
-BenchmarkEncodeDigitsDefault1e6-4      5.74         15.29        2.66x
-BenchmarkEncodeDigitsCompress1e4-4     6.39         22.24        3.48x
-BenchmarkEncodeDigitsCompress1e5-4     6.12         16.03        2.62x
-BenchmarkEncodeDigitsCompress1e6-4     5.73         15.01        2.62x
-BenchmarkEncodeTwainSpeed1e4-4         6.90         38.76        5.62x
-BenchmarkEncodeTwainSpeed1e5-4         21.83        48.67        2.23x
-BenchmarkEncodeTwainSpeed1e6-4         27.45        49.13        1.79x
-BenchmarkEncodeTwainDefault1e4-4       6.09         19.80        3.25x
-BenchmarkEncodeTwainDefault1e5-4       7.17         14.61        2.04x
-BenchmarkEncodeTwainDefault1e6-4       7.00         13.58        1.94x
-BenchmarkEncodeTwainCompress1e4-4      6.17         19.92        3.23x
-BenchmarkEncodeTwainCompress1e5-4      5.74         13.18        2.30x
-BenchmarkEncodeTwainCompress1e6-4      5.42         12.21        2.25x
+BenchmarkEncodeDigitsSpeed1e4-4        18.05        37.71        2.09x
+BenchmarkEncodeDigitsSpeed1e5-4        25.58        41.38        1.62x
+BenchmarkEncodeDigitsSpeed1e6-4        26.63        40.20        1.51x
+BenchmarkEncodeDigitsDefault1e4-4      12.80        20.56        1.61x
+BenchmarkEncodeDigitsDefault1e5-4      6.44         14.84        2.30x
+BenchmarkEncodeDigitsDefault1e6-4      5.72         13.07        2.28x
+BenchmarkEncodeDigitsCompress1e4-4     12.99        20.59        1.59x
+BenchmarkEncodeDigitsCompress1e5-4     6.47         14.43        2.23x
+BenchmarkEncodeDigitsCompress1e6-4     5.71         13.63        2.39x
+BenchmarkEncodeTwainSpeed1e4-4         17.85        36.23        2.03x
+BenchmarkEncodeTwainSpeed1e5-4         26.73        39.90        1.49x
+BenchmarkEncodeTwainSpeed1e6-4         28.14        45.65        1.62x
+BenchmarkEncodeTwainDefault1e4-4       12.07        18.21        1.51x
+BenchmarkEncodeTwainDefault1e5-4       7.32         13.28        1.81x
+BenchmarkEncodeTwainDefault1e6-4       7.08         12.51        1.77x
+BenchmarkEncodeTwainCompress1e4-4      12.05        18.33        1.52x
+BenchmarkEncodeTwainCompress1e5-4      6.02         11.82        1.96x
+BenchmarkEncodeTwainCompress1e6-4      5.17         11.01        2.13x
 ```
 * "Speed" is compression level 1
 * "Default" is compression level 6
@@ -91,44 +91,44 @@ As can be seen speed on low-matching souces `Digits` are a tiny bit slower at co
 **Without assembly**. This is what you can expect on systems that does not have amd64 and SSE 4:
 ```
 benchmark                              old ns/op     new ns/op     delta
-BenchmarkEncodeDigitsSpeed1e4-4        1384066       251761        -81.81%
-BenchmarkEncodeDigitsSpeed1e5-4        4680153       2355534       -49.67%
-BenchmarkEncodeDigitsSpeed1e6-4        38413996      22744953      -40.79%
-BenchmarkEncodeDigitsDefault1e4-4      1569564       620075        -60.49%
-BenchmarkEncodeDigitsDefault1e5-4      16352741      10236776      -37.40%
-BenchmarkEncodeDigitsDefault1e6-4      174296430     124677990     -28.47%
-BenchmarkEncodeDigitsCompress1e4-4     1563731       602055        -61.50%
-BenchmarkEncodeDigitsCompress1e5-4     16327115      10466877      -35.89%
-BenchmarkEncodeDigitsCompress1e6-4     174614590     110307460     -36.83%
-BenchmarkEncodeTwainSpeed1e4-4         1448479       260372        -82.02%
-BenchmarkEncodeTwainSpeed1e5-4         4580435       2139385       -53.29%
-BenchmarkEncodeTwainSpeed1e6-4         36429376      20903734      -42.62%
-BenchmarkEncodeTwainDefault1e4-4       1642155       660436        -59.78%
-BenchmarkEncodeTwainDefault1e5-4       13942046      10376797      -25.57%
-BenchmarkEncodeTwainDefault1e6-4       142828830     107270570     -24.90%
-BenchmarkEncodeTwainCompress1e4-4      1621868       635404        -60.82%
-BenchmarkEncodeTwainCompress1e5-4      17421421      11347456      -34.86%
-BenchmarkEncodeTwainCompress1e6-4      184582970     121477220     -34.19%
+BenchmarkEncodeDigitsSpeed1e4-4        554029        249558        -54.96%
+BenchmarkEncodeDigitsSpeed1e5-4        3908558       2295216       -41.28%
+BenchmarkEncodeDigitsSpeed1e6-4        37546692      22594905      -39.82%
+BenchmarkEncodeDigitsDefault1e4-4      781510        579850        -25.80%
+BenchmarkEncodeDigitsDefault1e5-4      15530248      10096561      -34.99%
+BenchmarkEncodeDigitsDefault1e6-4      174915710     111470780     -36.27%
+BenchmarkEncodeDigitsCompress1e4-4     769995        579708        -24.71%
+BenchmarkEncodeDigitsCompress1e5-4     15450113      10266373      -33.55%
+BenchmarkEncodeDigitsCompress1e6-4     175114660     110170120     -37.09%
+BenchmarkEncodeTwainSpeed1e4-4         560122        260679        -53.46%
+BenchmarkEncodeTwainSpeed1e5-4         3740978       2097372       -43.94%
+BenchmarkEncodeTwainSpeed1e6-4         35542802      20353449      -42.74%
+BenchmarkEncodeTwainDefault1e4-4       828534        646016        -22.03%
+BenchmarkEncodeTwainDefault1e5-4       13667153      10056369      -26.42%
+BenchmarkEncodeTwainDefault1e6-4       141191770     105268770     -25.44%
+BenchmarkEncodeTwainCompress1e4-4      830050        642401        -22.61%
+BenchmarkEncodeTwainCompress1e5-4      16620852      11157081      -32.87%
+BenchmarkEncodeTwainCompress1e6-4      193326820     121780770     -37.01%
 
 benchmark                              old MB/s     new MB/s     speedup
-BenchmarkEncodeDigitsSpeed1e4-4        7.23         39.72        5.49x
-BenchmarkEncodeDigitsSpeed1e5-4        21.37        42.45        1.99x
-BenchmarkEncodeDigitsSpeed1e6-4        26.03        43.97        1.69x
-BenchmarkEncodeDigitsDefault1e4-4      6.37         16.13        2.53x
-BenchmarkEncodeDigitsDefault1e5-4      6.12         9.77         1.60x
-BenchmarkEncodeDigitsDefault1e6-4      5.74         8.02         1.40x
-BenchmarkEncodeDigitsCompress1e4-4     6.39         16.61        2.60x
-BenchmarkEncodeDigitsCompress1e5-4     6.12         9.55         1.56x
-BenchmarkEncodeDigitsCompress1e6-4     5.73         9.07         1.58x
-BenchmarkEncodeTwainSpeed1e4-4         6.90         38.41        5.57x
-BenchmarkEncodeTwainSpeed1e5-4         21.83        46.74        2.14x
-BenchmarkEncodeTwainSpeed1e6-4         27.45        47.84        1.74x
-BenchmarkEncodeTwainDefault1e4-4       6.09         15.14        2.49x
-BenchmarkEncodeTwainDefault1e5-4       7.17         9.64         1.34x
-BenchmarkEncodeTwainDefault1e6-4       7.00         9.32         1.33x
-BenchmarkEncodeTwainCompress1e4-4      6.17         15.74        2.55x
-BenchmarkEncodeTwainCompress1e5-4      5.74         8.81         1.53x
-BenchmarkEncodeTwainCompress1e6-4      5.42         8.23         1.52x
+BenchmarkEncodeDigitsSpeed1e4-4        18.05        40.07        2.22x
+BenchmarkEncodeDigitsSpeed1e5-4        25.58        43.57        1.70x
+BenchmarkEncodeDigitsSpeed1e6-4        26.63        44.26        1.66x
+BenchmarkEncodeDigitsDefault1e4-4      12.80        17.25        1.35x
+BenchmarkEncodeDigitsDefault1e5-4      6.44         9.90         1.54x
+BenchmarkEncodeDigitsDefault1e6-4      5.72         8.97         1.57x
+BenchmarkEncodeDigitsCompress1e4-4     12.99        17.25        1.33x
+BenchmarkEncodeDigitsCompress1e5-4     6.47         9.74         1.51x
+BenchmarkEncodeDigitsCompress1e6-4     5.71         9.08         1.59x
+BenchmarkEncodeTwainSpeed1e4-4         17.85        38.36        2.15x
+BenchmarkEncodeTwainSpeed1e5-4         26.73        47.68        1.78x
+BenchmarkEncodeTwainSpeed1e6-4         28.14        49.13        1.75x
+BenchmarkEncodeTwainDefault1e4-4       12.07        15.48        1.28x
+BenchmarkEncodeTwainDefault1e5-4       7.32         9.94         1.36x
+BenchmarkEncodeTwainDefault1e6-4       7.08         9.50         1.34x
+BenchmarkEncodeTwainCompress1e4-4      12.05        15.57        1.29x
+BenchmarkEncodeTwainCompress1e5-4      6.02         8.96         1.49x
+BenchmarkEncodeTwainCompress1e6-4      5.17         8.21         1.59x
 ```
 ## Level 1 "Snappy" compression
 
