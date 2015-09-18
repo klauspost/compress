@@ -6,7 +6,7 @@ It offers slightly better compression at lower compression settings, and up to 3
 
 * [High Throughput Benchmark](http://blog.klauspost.com/go-gzipdeflate-benchmarks/).
 * [Small Payload/Webserver Benchmarks](http://blog.klauspost.com/gzip-performance-for-go-webservers/).
-* [Constant Time Compression](http://blog.klauspost.com/constant-time-gzipzip-compression/).
+* [Linear Time Compression](http://blog.klauspost.com/constant-time-gzipzip-compression/).
 
 [![Build Status](https://travis-ci.org/klauspost/compress.svg?branch=master)](https://travis-ci.org/klauspost/compress)
 
