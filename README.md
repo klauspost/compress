@@ -35,48 +35,49 @@ Currently there is only minor speedup on decompression (primarily CRC32 calculat
 * Bulk hashing on matches.
 * Much faster dictionary indexing with `NewWriterDict()`/`Reset()`.
 * Make Bit Coder faster by assuming we are on a 64 bit CPU.
+* Level 1 compression replaced by converted "Snappy" algorithm.
 
 
 ```
-benchmark                            old ns/op     new ns/op     delta
-BenchmarkEncodeDigitsSpeed1e4        574032        391822        -31.74%
-BenchmarkEncodeDigitsSpeed1e5        3634207       4260243       +17.23%
-BenchmarkEncodeDigitsSpeed1e6        34501974      43035796      +24.73%
-BenchmarkEncodeDigitsDefault1e4      813046        434024        -46.62%
-BenchmarkEncodeDigitsDefault1e5      14030802      5553651       -60.42%
-BenchmarkEncodeDigitsDefault1e6      155308880     58503350      -62.33%
-BenchmarkEncodeDigitsCompress1e4     789545        433691        -45.07%
-BenchmarkEncodeDigitsCompress1e5     14110807      5680325       -59.74%
-BenchmarkEncodeDigitsCompress1e6     154308830     59653410      -61.34%
-BenchmarkEncodeTwainSpeed1e4         607034        367221        -39.51%
-BenchmarkEncodeTwainSpeed1e5         3458197       3042174       -12.03%
-BenchmarkEncodeTwainSpeed1e6         31841820      28901652      -9.23%
-BenchmarkEncodeTwainDefault1e4       833047        471026        -43.46%
-BenchmarkEncodeTwainDefault1e5       11690669      6245357       -46.58%
-BenchmarkEncodeTwainDefault1e6       124307110     64903715      -47.79%
-BenchmarkEncodeTwainCompress1e4      841048        475360        -43.48%
-BenchmarkEncodeTwainCompress1e5      14620836      6870393       -53.01%
-BenchmarkEncodeTwainCompress1e6      161409230     74254250      -54.00%
+benchmark                              old ns/op     new ns/op     delta
+BenchmarkEncodeDigitsSpeed1e4-4        1384066       242354        -82.49%
+BenchmarkEncodeDigitsSpeed1e5-4        4680153       2255480       -51.81%
+BenchmarkEncodeDigitsSpeed1e6-4        38413996      22487169      -41.46%
+BenchmarkEncodeDigitsDefault1e4-4      1569564       455660        -70.97%
+BenchmarkEncodeDigitsDefault1e5-4      16352741      6163936       -62.31%
+BenchmarkEncodeDigitsDefault1e6-4      174296430     65393170      -62.48%
+BenchmarkEncodeDigitsCompress1e4-4     1563731       449619        -71.25%
+BenchmarkEncodeDigitsCompress1e5-4     16327115      6238991       -61.79%
+BenchmarkEncodeDigitsCompress1e6-4     174614590     66643880      -61.83%
+BenchmarkEncodeTwainSpeed1e4-4         1448479       257964        -82.19%
+BenchmarkEncodeTwainSpeed1e5-4         4580435       2054643       -55.14%
+BenchmarkEncodeTwainSpeed1e6-4         36429376      20353457      -44.13%
+BenchmarkEncodeTwainDefault1e4-4       1642155       504991        -69.25%
+BenchmarkEncodeTwainDefault1e5-4       13942046      6845407       -50.90%
+BenchmarkEncodeTwainDefault1e6-4       142828830     73648630      -48.44%
+BenchmarkEncodeTwainCompress1e4-4      1621868       501998        -69.05%
+BenchmarkEncodeTwainCompress1e5-4      17421421      7589886       -56.43%
+BenchmarkEncodeTwainCompress1e6-4      184582970     81904175      -55.63%
 
-benchmark                            old MB/s     new MB/s     speedup
-BenchmarkEncodeDigitsSpeed1e4        17.42        25.52        1.46x
-BenchmarkEncodeDigitsSpeed1e5        27.52        23.47        0.85x
-BenchmarkEncodeDigitsSpeed1e6        28.98        23.24        0.80x
-BenchmarkEncodeDigitsDefault1e4      12.30        23.04        1.87x
-BenchmarkEncodeDigitsDefault1e5      7.13         18.01        2.53x
-BenchmarkEncodeDigitsDefault1e6      6.44         17.09        2.65x
-BenchmarkEncodeDigitsCompress1e4     12.67        23.06        1.82x
-BenchmarkEncodeDigitsCompress1e5     7.09         17.60        2.48x
-BenchmarkEncodeDigitsCompress1e6     6.48         16.76        2.59x
-BenchmarkEncodeTwainSpeed1e4         16.47        27.23        1.65x
-BenchmarkEncodeTwainSpeed1e5         28.92        32.87        1.14x
-BenchmarkEncodeTwainSpeed1e6         31.41        34.60        1.10x
-BenchmarkEncodeTwainDefault1e4       12.00        21.23        1.77x
-BenchmarkEncodeTwainDefault1e5       8.55         16.01        1.87x
-BenchmarkEncodeTwainDefault1e6       8.04         15.41        1.92x
-BenchmarkEncodeTwainCompress1e4      11.89        21.04        1.77x
-BenchmarkEncodeTwainCompress1e5      6.84         14.56        2.13x
-BenchmarkEncodeTwainCompress1e6      6.20         13.47        2.17x
+benchmark                              old MB/s     new MB/s     speedup
+BenchmarkEncodeDigitsSpeed1e4-4        7.23         41.26        5.71x
+BenchmarkEncodeDigitsSpeed1e5-4        21.37        44.34        2.07x
+BenchmarkEncodeDigitsSpeed1e6-4        26.03        44.47        1.71x
+BenchmarkEncodeDigitsDefault1e4-4      6.37         21.95        3.45x
+BenchmarkEncodeDigitsDefault1e5-4      6.12         16.22        2.65x
+BenchmarkEncodeDigitsDefault1e6-4      5.74         15.29        2.66x
+BenchmarkEncodeDigitsCompress1e4-4     6.39         22.24        3.48x
+BenchmarkEncodeDigitsCompress1e5-4     6.12         16.03        2.62x
+BenchmarkEncodeDigitsCompress1e6-4     5.73         15.01        2.62x
+BenchmarkEncodeTwainSpeed1e4-4         6.90         38.76        5.62x
+BenchmarkEncodeTwainSpeed1e5-4         21.83        48.67        2.23x
+BenchmarkEncodeTwainSpeed1e6-4         27.45        49.13        1.79x
+BenchmarkEncodeTwainDefault1e4-4       6.09         19.80        3.25x
+BenchmarkEncodeTwainDefault1e5-4       7.17         14.61        2.04x
+BenchmarkEncodeTwainDefault1e6-4       7.00         13.58        1.94x
+BenchmarkEncodeTwainCompress1e4-4      6.17         19.92        3.23x
+BenchmarkEncodeTwainCompress1e5-4      5.74         13.18        2.30x
+BenchmarkEncodeTwainCompress1e6-4      5.42         12.21        2.25x
 ```
 * "Speed" is compression level 1
 * "Default" is compression level 6
@@ -89,46 +90,55 @@ As can be seen speed on low-matching souces `Digits` are a tiny bit slower at co
 
 **Without assembly**. This is what you can expect on systems that does not have amd64 and SSE 4:
 ```
-benchmark                            old ns/op     new ns/op     delta
-BenchmarkEncodeDigitsSpeed1e4        574032        468026        -18.47%
-BenchmarkEncodeDigitsSpeed1e5        3634207       5553651       +52.82%
-BenchmarkEncodeDigitsSpeed1e6        34501974      56253220      +63.04%
-BenchmarkEncodeDigitsDefault1e4      813046        541030        -33.46%
-BenchmarkEncodeDigitsDefault1e5      14030802      9020516       -35.71%
-BenchmarkEncodeDigitsDefault1e6      155308880     97755590      -37.06%
-BenchmarkEncodeDigitsCompress1e4     789545        543697        -31.14%
-BenchmarkEncodeDigitsCompress1e5     14110807      9040517       -35.93%
-BenchmarkEncodeDigitsCompress1e6     154308830     98005610      -36.49%
-BenchmarkEncodeTwainSpeed1e4         607034        427024        -29.65%
-BenchmarkEncodeTwainSpeed1e5         3458197       3654209       +5.67%
-BenchmarkEncodeTwainSpeed1e6         31841820      35182014      +10.49%
-BenchmarkEncodeTwainDefault1e4       833047        581699        -30.17%
-BenchmarkEncodeTwainDefault1e5       11690669      8935511       -23.57%
-BenchmarkEncodeTwainDefault1e6       124307110     95505460      -23.17%
-BenchmarkEncodeTwainCompress1e4      841048        590533        -29.79%
-BenchmarkEncodeTwainCompress1e5      14620836      10085576      -31.02%
-BenchmarkEncodeTwainCompress1e6      161409230     109806280     -31.97%
+benchmark                              old ns/op     new ns/op     delta
+BenchmarkEncodeDigitsSpeed1e4-4        1384066       251761        -81.81%
+BenchmarkEncodeDigitsSpeed1e5-4        4680153       2355534       -49.67%
+BenchmarkEncodeDigitsSpeed1e6-4        38413996      22744953      -40.79%
+BenchmarkEncodeDigitsDefault1e4-4      1569564       620075        -60.49%
+BenchmarkEncodeDigitsDefault1e5-4      16352741      10236776      -37.40%
+BenchmarkEncodeDigitsDefault1e6-4      174296430     124677990     -28.47%
+BenchmarkEncodeDigitsCompress1e4-4     1563731       602055        -61.50%
+BenchmarkEncodeDigitsCompress1e5-4     16327115      10466877      -35.89%
+BenchmarkEncodeDigitsCompress1e6-4     174614590     110307460     -36.83%
+BenchmarkEncodeTwainSpeed1e4-4         1448479       260372        -82.02%
+BenchmarkEncodeTwainSpeed1e5-4         4580435       2139385       -53.29%
+BenchmarkEncodeTwainSpeed1e6-4         36429376      20903734      -42.62%
+BenchmarkEncodeTwainDefault1e4-4       1642155       660436        -59.78%
+BenchmarkEncodeTwainDefault1e5-4       13942046      10376797      -25.57%
+BenchmarkEncodeTwainDefault1e6-4       142828830     107270570     -24.90%
+BenchmarkEncodeTwainCompress1e4-4      1621868       635404        -60.82%
+BenchmarkEncodeTwainCompress1e5-4      17421421      11347456      -34.86%
+BenchmarkEncodeTwainCompress1e6-4      184582970     121477220     -34.19%
 
-benchmark                            old MB/s     new MB/s     speedup
-BenchmarkEncodeDigitsSpeed1e4        17.42        21.37        1.23x
-BenchmarkEncodeDigitsSpeed1e5        27.52        18.01        0.65x
-BenchmarkEncodeDigitsSpeed1e6        28.98        17.78        0.61x
-BenchmarkEncodeDigitsDefault1e4      12.30        18.48        1.50x
-BenchmarkEncodeDigitsDefault1e5      7.13         11.09        1.56x
-BenchmarkEncodeDigitsDefault1e6      6.44         10.23        1.59x
-BenchmarkEncodeDigitsCompress1e4     12.67        18.39        1.45x
-BenchmarkEncodeDigitsCompress1e5     7.09         11.06        1.56x
-BenchmarkEncodeDigitsCompress1e6     6.48         10.20        1.57x
-BenchmarkEncodeTwainSpeed1e4         16.47        23.42        1.42x
-BenchmarkEncodeTwainSpeed1e5         28.92        27.37        0.95x
-BenchmarkEncodeTwainSpeed1e6         31.41        28.42        0.90x
-BenchmarkEncodeTwainDefault1e4       12.00        17.19        1.43x
-BenchmarkEncodeTwainDefault1e5       8.55         11.19        1.31x
-BenchmarkEncodeTwainDefault1e6       8.04         10.47        1.30x
-BenchmarkEncodeTwainCompress1e4      11.89        16.93        1.42x
-BenchmarkEncodeTwainCompress1e5      6.84         9.92         1.45x
-BenchmarkEncodeTwainCompress1e6      6.20         9.11         1.47x
+benchmark                              old MB/s     new MB/s     speedup
+BenchmarkEncodeDigitsSpeed1e4-4        7.23         39.72        5.49x
+BenchmarkEncodeDigitsSpeed1e5-4        21.37        42.45        1.99x
+BenchmarkEncodeDigitsSpeed1e6-4        26.03        43.97        1.69x
+BenchmarkEncodeDigitsDefault1e4-4      6.37         16.13        2.53x
+BenchmarkEncodeDigitsDefault1e5-4      6.12         9.77         1.60x
+BenchmarkEncodeDigitsDefault1e6-4      5.74         8.02         1.40x
+BenchmarkEncodeDigitsCompress1e4-4     6.39         16.61        2.60x
+BenchmarkEncodeDigitsCompress1e5-4     6.12         9.55         1.56x
+BenchmarkEncodeDigitsCompress1e6-4     5.73         9.07         1.58x
+BenchmarkEncodeTwainSpeed1e4-4         6.90         38.41        5.57x
+BenchmarkEncodeTwainSpeed1e5-4         21.83        46.74        2.14x
+BenchmarkEncodeTwainSpeed1e6-4         27.45        47.84        1.74x
+BenchmarkEncodeTwainDefault1e4-4       6.09         15.14        2.49x
+BenchmarkEncodeTwainDefault1e5-4       7.17         9.64         1.34x
+BenchmarkEncodeTwainDefault1e6-4       7.00         9.32         1.33x
+BenchmarkEncodeTwainCompress1e4-4      6.17         15.74        2.55x
+BenchmarkEncodeTwainCompress1e5-4      5.74         8.81         1.53x
+BenchmarkEncodeTwainCompress1e6-4      5.42         8.23         1.52x
 ```
+## Modified Level 1 compression
+
+Level 1 "BestSpeed" is completely replaced by a converted version of the algorithm found in Snappy.
+This version is considerably faster than the "old" deflate at level 1. It does however come at a compression loss, usually in the order of 3-4% compared to the old level 1. However, the speed is usually 1.75 times that of the fastest deflate mode.
+
+In my previous experiments the most common case for "level 1" was that it provided no significant speedup, only lower compression compared to level 2 and sometimes even 3.
+
+However, the modified Snappy algorithm provides a very good sweet spot. Usually about 75% faster and with only little compression loss. Therefore I decided to *replace* level 1 with this mode entirely.
+
 
 ## Compression level
 
@@ -137,7 +147,7 @@ at the similar level with the standard library. Compression data is `Twain`, see
 
 | Level | Bytes  | % size |
 |-------|--------|--------|
-| 1     | 180539 | 96.24% |
+| 1     | 194622 | 103.7% |
 | 2     | 174684 | 96.85% |
 | 3     | 170301 | 98.45% |
 | 4     | 165253 | 97.69% |
@@ -147,9 +157,9 @@ at the similar level with the standard library. Compression data is `Twain`, see
 | 8     | 160279 | 99.99% |
 | 9     | 160279 | 99.99% |
 
-To interpret and example, this version of deflate compresses input of 407287 bytes to 180539 bytes at level 1, which is 96% of the size of what the standard library produces; 187563 bytes.
+To interpret and example, this version of deflate compresses input of 407287 bytes to 161274 bytes at level 5, which is 98.6% of the size of what the standard library produces; 161274 bytes.
 
-This means that from level 1-5 you can expect a compression level increase of a few percent.
+This means that from level 2-5 you can expect a compression level increase of a few percent. Level 1 is about 3% worse, as descibed above.
 
 # linear time compression
 
@@ -173,27 +183,27 @@ Speed increase is up to 3x of the standard library, but usually around 30%. With
 
 This is close to a real world benchmark as you will get. A 2.3MB JSON file.
 ```
-benchmark           old ns/op     new ns/op     delta
-BenchmarkGzipL1     96155500      69203960      -28.03%
-BenchmarkGzipL2     101905830     71304080      -30.03%
-BenchmarkGzipL3     113506490     77754450      -31.50%
-BenchmarkGzipL4     143708220     97105555      -32.43%
-BenchmarkGzipL5     188210770     123207050     -34.54%
-BenchmarkGzipL6     209812000     129607410     -38.23%
-BenchmarkGzipL7     270015440     176510100     -34.63%
-BenchmarkGzipL8     461359700     328218760     -28.86%
-BenchmarkGzipL9     498361833     355687000     -28.63%
+benchmark             old ns/op     new ns/op     delta
+BenchmarkGzipL1-4     95212470      59938275      -37.05%
+BenchmarkGzipL2-4     102069730     76349195      -25.20%
+BenchmarkGzipL3-4     115472770     82492215      -28.56%
+BenchmarkGzipL4-4     153197780     107570890     -29.78%
+BenchmarkGzipL5-4     203930260     134387930     -34.10%
+BenchmarkGzipL6-4     233172100     145495400     -37.60%
+BenchmarkGzipL7-4     297190260     197926950     -33.40%
+BenchmarkGzipL8-4     512819750     376244733     -26.63%
+BenchmarkGzipL9-4     563366800     403266833     -28.42%
 
-benchmark           old MB/s     new MB/s     speedup
-BenchmarkGzipL1     51.60        71.70        1.39x
-BenchmarkGzipL2     48.69        69.59        1.43x
-BenchmarkGzipL3     43.71        63.81        1.46x
-BenchmarkGzipL4     34.53        51.10        1.48x
-BenchmarkGzipL5     26.36        40.27        1.53x
-BenchmarkGzipL6     23.65        38.28        1.62x
-BenchmarkGzipL7     18.38        28.11        1.53x
-BenchmarkGzipL8     10.75        15.12        1.41x
-BenchmarkGzipL9     9.96         13.95        1.40x
+benchmark             old MB/s     new MB/s     speedup
+BenchmarkGzipL1-4     52.11        82.78        1.59x
+BenchmarkGzipL2-4     48.61        64.99        1.34x
+BenchmarkGzipL3-4     42.97        60.15        1.40x
+BenchmarkGzipL4-4     32.39        46.13        1.42x
+BenchmarkGzipL5-4     24.33        36.92        1.52x
+BenchmarkGzipL6-4     21.28        34.10        1.60x
+BenchmarkGzipL7-4     16.70        25.07        1.50x
+BenchmarkGzipL8-4     9.68         13.19        1.36x
+BenchmarkGzipL9-4     8.81         12.30        1.40x
 ```
 
 Multithreaded compression using [pgzip](https://github.com/klauspost/pgzip) comparison, Quadcore, CPU = 8:
