@@ -15,7 +15,7 @@ const maxOffset = 1 << 15
 // emitLiteral writes a literal chunk and returns the number of bytes written.
 func emitLiteral(dst *tokens, lit []byte) {
 	for _, v := range lit {
-		dst.tokens = append(dst.tokens, literalToken(uint32(v)))
+		dst.tokens = append(dst.tokens, token(v))
 	}
 }
 
