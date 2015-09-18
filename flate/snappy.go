@@ -15,7 +15,7 @@ const maxOffset = 1 << 15
 // emitLiteral writes a literal chunk and returns the number of bytes written.
 func emitLiteral(dst *tokens, lit []byte) {
 	ol := len(dst.tokens)
-	dst.tokens = dst.tokens[0:ol+len(lit)]
+	dst.tokens = dst.tokens[0 : ol+len(lit)]
 	t := dst.tokens[ol:]
 	for i, v := range lit {
 		t[i] = token(v)
@@ -74,12 +74,12 @@ func snappyEncode(dst *tokens, src []byte) {
 		}
 		// Extend the match to be as long as possible.
 		s0 := s
-		s1 := s+maxMatchLength
+		s1 := s + maxMatchLength
 		if s1 > len(src) {
 			s1 = len(src)
 		}
 		s, t = s+4, t+4
-		for s < s1 && src[s] == src[t]  {
+		for s < s1 && src[s] == src[t] {
 			s++
 			t++
 		}
