@@ -71,13 +71,19 @@ func snappyEncode(dst *tokens, src []byte) {
 		}
 		// Extend the match to be as long as possible.
 		s0 := s
+		s1 := s+maxMatchLength
+		if s1 > len(src) {
+			s1 = len(src)
+		}
 		s, t = s+4, t+4
-		for s < len(src) && src[s] == src[t] && s-s0 < maxMatchLength {
+		for s < s1 && src[s] == src[t]  {
 			s++
 			t++
 		}
 		// Emit the copied bytes.
-		emitCopy(dst, s-t, s-s0)
+		//emitCopy(dst, s-t, s-s0)
+		dst.tokens = append(dst.tokens, matchToken(uint32(s-s0-3), uint32(s-t-minOffsetSize)))
+
 		lit = s
 	}
 
