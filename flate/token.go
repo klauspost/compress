@@ -67,6 +67,11 @@ var offsetCodes = [...]uint32{
 
 type token uint32
 
+type tokens struct {
+	tokens []token
+	n int
+}
+
 // Convert a literal into a literal token.
 func literalToken(literal uint32) token { return token(literalType + literal) }
 

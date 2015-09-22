@@ -94,7 +94,7 @@ type compressor struct {
 	byteAvailable bool // if true, still need to process window[index-1].
 
 	// queued output tokens
-	tokens []token
+	tokens tokens
 
 	// deflate state
 	length         int
@@ -145,14 +145,14 @@ func (d *compressor) fillDeflate(b []byte) int {
 	return n
 }
 
-func (d *compressor) writeBlock(tokens []token, index int, eof bool) error {
+func (d *compressor) writeBlock(tok tokens, index int, eof bool) error {
 	if index > 0 || eof {
 		var window []byte
 		if d.blockStart <= index {
 			window = d.window[d.blockStart:index]
 		}
 		d.blockStart = index
-		d.w.writeBlock(tokens, eof, window)
+		d.w.writeBlock(tok, eof, window)
 		return d.w.err
 	}
 	return nil
@@ -304,7 +304,7 @@ func (d *compressor) initDeflate() {
 	d.hashPrev = make([]hashid, windowSize)
 	d.window = make([]byte, 2*windowSize)
 	d.hashOffset = 1
-	d.tokens = make([]token, 0, maxFlateBlockTokens+1)
+	d.tokens.tokens = make([]token, maxFlateBlockTokens+1)
 	d.length = minMatchLength - 1
 	d.offset = 0
 	d.byteAvailable = false
@@ -353,11 +353,11 @@ Loop:
 				panic("index > windowEnd")
 			}
 			if lookahead == 0 {
-				if len(d.tokens) > 0 {
+				if d.tokens.n > 0 {
 					if d.err = d.writeBlock(d.tokens, d.index, false); d.err != nil {
 						return
 					}
-					d.tokens = d.tokens[:0]
+					d.tokens.n = 0
 				}
 				break Loop
 			}
@@ -387,7 +387,8 @@ Loop:
 			// There was a match at the previous step, and the current match is
 			// not better. Output the previous match.
 			// "d.length-3" should NOT be "d.length-minMatchLength", since the format always assume 3
-			d.tokens = append(d.tokens, matchToken(uint32(d.length-3), uint32(d.offset-minOffsetSize)))
+			d.tokens.tokens[d.tokens.n] = matchToken(uint32(d.length-3), uint32(d.offset-minOffsetSize))
+			d.tokens.n++
 			// Insert in the hash table all strings up to the end of the match.
 			// index and index-1 are already inserted. If there is not enough
 			// lookahead, the last two strings are not inserted into the hash
@@ -434,21 +435,22 @@ Loop:
 					//d.hash = (int(d.window[d.index])<<hashShift + int(d.window[d.index+1]))
 				}
 			}
-			if len(d.tokens) == maxFlateBlockTokens {
+			if d.tokens.n == maxFlateBlockTokens {
 				// The block includes the current character
 				if d.err = d.writeBlock(d.tokens, d.index, false); d.err != nil {
 					return
 				}
-				d.tokens = d.tokens[:0]
+				d.tokens.n = 0
 			}
 		} else {
 			i := d.index
-			d.tokens = append(d.tokens, literalToken(uint32(d.window[i])))
-			if len(d.tokens) == maxFlateBlockTokens {
+			d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[i]))
+			d.tokens.n++
+			if d.tokens.n == maxFlateBlockTokens {
 				if d.err = d.writeBlock(d.tokens, i+1, false); d.err != nil {
 					return
 				}
-				d.tokens = d.tokens[:0]
+				d.tokens.n = 0
 			}
 			d.index++
 		}
@@ -488,14 +490,15 @@ Loop:
 				// Flush current output block if any.
 				if d.byteAvailable {
 					// There is still one pending token that needs to be flushed
-					d.tokens = append(d.tokens, literalToken(uint32(d.window[d.index-1])))
+					d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[d.index-1]))
+					d.tokens.n++
 					d.byteAvailable = false
 				}
-				if len(d.tokens) > 0 {
+				if d.tokens.n > 0 {
 					if d.err = d.writeBlock(d.tokens, d.index, false); d.err != nil {
 						return
 					}
-					d.tokens = d.tokens[:0]
+					d.tokens.n = 0
 				}
 				break Loop
 			}
@@ -526,7 +529,8 @@ Loop:
 		if prevLength >= minMatchLength && d.length <= prevLength {
 			// There was a match at the previous step, and the current match is
 			// not better. Output the previous match.
-			d.tokens = append(d.tokens, matchToken(uint32(prevLength-3), uint32(prevOffset-minOffsetSize)))
+			d.tokens.tokens[d.tokens.n] = matchToken(uint32(prevLength-3), uint32(prevOffset-minOffsetSize))
+			d.tokens.n++
 			// Insert in the hash table all strings up to the end of the match.
 			// index and index-1 are already inserted. If there is not enough
 			// lookahead, the last two strings are not inserted into the hash
@@ -565,22 +569,23 @@ Loop:
 
 			d.byteAvailable = false
 			d.length = minMatchLength - 1
-			if len(d.tokens) == maxFlateBlockTokens {
+			if d.tokens.n == maxFlateBlockTokens {
 				// The block includes the current character
 				if d.err = d.writeBlock(d.tokens, d.index, false); d.err != nil {
 					return
 				}
-				d.tokens = d.tokens[:0]
+				d.tokens.n = 0
 			}
 		} else {
 			if d.byteAvailable {
 				i := d.index - 1
-				d.tokens = append(d.tokens, literalToken(uint32(d.window[i])))
-				if len(d.tokens) == maxFlateBlockTokens {
+				d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[i]))
+				d.tokens.n++
+				if d.tokens.n == maxFlateBlockTokens {
 					if d.err = d.writeBlock(d.tokens, i+1, false); d.err != nil {
 						return
 					}
-					d.tokens = d.tokens[:0]
+					d.tokens.n = 0
 				}
 			}
 			d.index++
@@ -628,9 +633,9 @@ func (d *compressor) storeSnappy() {
 	if d.windowEnd == 0 {
 		return
 	}
-	t := &tokens{tokens: d.tokens[:]}
-	snappyEncode(t, d.window[:d.windowEnd])
-	d.w.writeBlock(t.tokens, false, d.window[:d.windowEnd])
+	snappyEncode(&d.tokens, d.window[:d.windowEnd])
+	d.w.writeBlock(d.tokens, false, d.window[:d.windowEnd])
+	d.tokens.n = 0
 	d.windowEnd = 0
 }
 
@@ -672,11 +677,11 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 		d.window = make([]byte, maxStoreBlockSize)
 		d.fill = (*compressor).fillHuff
 		d.step = (*compressor).storeSnappy
-		d.tokens = make([]token, 0, maxStoreBlockSize+1)
+		d.tokens.tokens = make([]token, maxStoreBlockSize+1)
 	case level == DefaultCompression:
 		level = 6
 		fallthrough
-	case 1 <= level && level <= 9:
+	case 2 <= level && level <= 9:
 		d.compressionLevel = levels[level]
 		d.initDeflate()
 		d.fill = (*compressor).fillDeflate
@@ -717,7 +722,7 @@ func (d *compressor) reset(w io.Writer) {
 		d.index, d.windowEnd = 0, 0
 		d.blockStart, d.byteAvailable = 0, false
 
-		d.tokens = d.tokens[:0]
+		d.tokens.n = 0
 		d.length = minMatchLength - 1
 		d.offset = 0
 		d.hash = 0
