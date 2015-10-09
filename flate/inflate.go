@@ -459,6 +459,15 @@ func (f *decompressor) readHuffman() error {
 		return CorruptInputError(f.roffset)
 	}
 
+	// In order to preserve the property that we never read any extra bytes
+	// after the end of the DEFLATE stream, huffSym conservatively reads min
+	// bits at a time until it decodes the symbol. However, since every block
+	// must end with an EOB marker, we can use that as the minimum number of
+	// bits to read and guarantee we never read past the end of the stream.
+	if f.bits[endBlockMarker] > 0 {
+		f.h1.min = f.bits[endBlockMarker] // Length of EOB marker
+	}
+
 	return nil
 }
 
