@@ -429,7 +429,7 @@ func (w *huffmanBitWriter) writeFixedHeader(isEof bool) {
 	w.writeBits(value, 3)
 }
 
-func (w *huffmanBitWriter) writeBlock(tokens []token, eof bool, input []byte) {
+func (w *huffmanBitWriter) writeBlock(tok tokens, eof bool, input []byte) {
 	if w.err != nil {
 		return
 	}
@@ -439,9 +439,9 @@ func (w *huffmanBitWriter) writeBlock(tokens []token, eof bool, input []byte) {
 		w.offsetFreq[i] = 0
 	}
 
-	n := len(tokens)
-	tokens = tokens[0 : n+1]
-	tokens[n] = endBlockMarker
+	tok.tokens[tok.n] = endBlockMarker
+	tokens := tok.tokens[0 : tok.n+1]
+
 
 	for _, t := range tokens {
 		switch t.typ() {

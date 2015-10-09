@@ -540,8 +540,8 @@ func TestWriterReset(t *testing.T) {
 		w.d.hasher, wref.d.hasher = nil, nil
 		w.d.bulkHasher, wref.d.bulkHasher = nil, nil
 		w.d.matcher, wref.d.matcher = nil, nil
-		if len(w.d.tokens) != 0 {
-			t.Errorf("level %d Writer not reset after Reset. %d tokens were present", level, len(w.d.tokens))
+		if w.d.tokens.n != 0 {
+			t.Errorf("level %d Writer not reset after Reset. %d tokens were present", level, w.d.tokens.n)
 		}
 		// As long as the length is 0, we don't care about the content.
 		w.d.tokens = wref.d.tokens

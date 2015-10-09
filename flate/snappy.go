@@ -5,26 +5,22 @@
 
 package flate
 
-type tokens struct {
-	tokens []token
-}
-
 // We limit how far copy back-references can go, the same as the C++ code.
 const maxOffset = 1 << 15
 
 // emitLiteral writes a literal chunk and returns the number of bytes written.
 func emitLiteral(dst *tokens, lit []byte) {
-	ol := len(dst.tokens)
-	dst.tokens = dst.tokens[0 : ol+len(lit)]
-	t := dst.tokens[ol:]
+	ol := dst.n
 	for i, v := range lit {
-		t[i] = token(v)
+		dst.tokens[i+ol] = token(v)
 	}
+	dst.n += len(lit)
 }
 
 // emitCopy writes a copy chunk and returns the number of bytes written.
 func emitCopy(dst *tokens, offset, length int) {
-	dst.tokens = append(dst.tokens, matchToken(uint32(length-3), uint32(offset-minOffsetSize)))
+	dst.tokens[dst.n] = matchToken(uint32(length-3), uint32(offset-minOffsetSize))
+	dst.n++
 }
 
 // snappyEncode uses Snappy-like compression, but stores as Huffman
@@ -85,7 +81,8 @@ func snappyEncode(dst *tokens, src []byte) {
 		}
 		// Emit the copied bytes.
 		// inlined: emitCopy(dst, s-t, s-s0)
-		dst.tokens = append(dst.tokens, matchToken(uint32(s-s0-3), uint32(s-t-minOffsetSize)))
+		dst.tokens[dst.n] = matchToken(uint32(s-s0-3), uint32(s-t-minOffsetSize))
+		dst.n++
 
 		lit = s
 	}
