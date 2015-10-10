@@ -835,6 +835,7 @@ func (w *Writer) Reset(dst io.Writer) {
 // the result of NewWriter or NewWriterDict called with dst
 // and w's level, but sets a specific dictionary.
 func (w *Writer) ResetDict(dst io.Writer, dict []byte) {
+	w.dict = dict
 	w.d.reset(dst)
 	w.d.fillWindow(w.dict)
 }
