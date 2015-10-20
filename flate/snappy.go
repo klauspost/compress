@@ -62,7 +62,8 @@ func snappyEncode(dst *tokens, src []byte) {
 		// If t is invalid or src[s:s+4] differs from src[t:t+4], accumulate a literal byte.
 		if t < 0 || s-t >= maxOffset || b0 != src[t] || b1 != src[t+1] || b2 != src[t+2] || b3 != src[t+3] {
 			misses++
-			s += 1 + (misses >> 5)
+			// Skip 1 byte for 16 consecutive missed.
+			s += 1 + (misses >> 4)
 			continue
 		}
 		// Otherwise, we have a match. First, emit any pending literal bytes.
