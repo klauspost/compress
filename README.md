@@ -31,12 +31,14 @@ Currently there is only minor speedup on decompression (primarily CRC32 calculat
 
 * Minimum matches are 4 bytes, this leads to fewer searches and better compression.
 * Stronger hash (iSCSI CRC32) for matches on x64 with SSE 4.2 support. This leads to fewer hash collisions.
-* Literal byte matching using SSE 4.2 for faster string comparisons.
+* Literal byte matching using SSE 4.2 for faster match comparisons.
 * Bulk hashing on matches.
 * Much faster dictionary indexing with `NewWriterDict()`/`Reset()`.
 * Make Bit Coder faster by assuming we are on a 64 bit CPU.
 * Level 1 compression replaced by converted "Snappy" algorithm.
-
+* Uncompressible content is detected and skipped faster.
+* A lot of branching eliminated by having two encoders for levels 2+3 and 4+.
+* All heap memory allocacations eliminated.
 
 ```
 benchmark                              old ns/op     new ns/op     delta
