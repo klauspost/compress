@@ -102,7 +102,7 @@ type compressor struct {
 	hash           hash
 	maxInsertIndex int
 	err            error
-	ii             uint16 // position of last match
+	ii             uint16 // position of last match, intended to overflow to reset.
 
 	hashMatch [maxMatchLength + minMatchLength]hash
 }
@@ -584,7 +584,12 @@ Loop:
 				d.tokens.n = 0
 			}
 		} else {
+			// Reset, if we got a match this run.
+			if d.length >= minMatchLength {
+				d.ii = 0
+			}
 			if d.byteAvailable {
+				d.ii++
 				i := d.index - 1
 				d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[i]))
 				d.tokens.n++
@@ -594,8 +599,33 @@ Loop:
 					}
 					d.tokens.n = 0
 				}
+				d.index++
+
+				// If we have a long run of no matches, skip additional bytes
+				// Resets when d.ii overflows after 64KB.
+				if d.ii > 31 {
+					n := int(d.ii >> 5)
+					for j := 0; j < n; j++ {
+						i := d.index - 1
+						if d.index >= d.windowEnd-1 {
+							break
+						}
+
+						d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[i]))
+						d.tokens.n++
+						if d.tokens.n == maxFlateBlockTokens {
+							if d.err = d.writeBlock(d.tokens, i+1, false); d.err != nil {
+								return
+							}
+							d.tokens.n = 0
+						}
+						d.index++
+					}
+				}
+
+			} else {
+				d.index++
 			}
-			d.index++
 			d.byteAvailable = true
 		}
 	}
