@@ -102,6 +102,7 @@ type compressor struct {
 	hash           hash
 	maxInsertIndex int
 	err            error
+	ii             uint16 // position of last match
 
 	hashMatch [maxMatchLength + minMatchLength]hash
 }
@@ -384,6 +385,7 @@ Loop:
 			}
 		}
 		if d.length >= minMatchLength {
+			d.ii = 0
 			// There was a match at the previous step, and the current match is
 			// not better. Output the previous match.
 			// "d.length-3" should NOT be "d.length-minMatchLength", since the format always assume 3
@@ -432,7 +434,6 @@ Loop:
 				d.index += d.length
 				if d.index < d.maxInsertIndex {
 					d.hash = d.hasher(d.window[d.index:d.index+minMatchLength]) & hashMask
-					//d.hash = (int(d.window[d.index])<<hashShift + int(d.window[d.index+1]))
 				}
 			}
 			if d.tokens.n == maxFlateBlockTokens {
@@ -443,16 +444,22 @@ Loop:
 				d.tokens.n = 0
 			}
 		} else {
-			i := d.index
-			d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[i]))
-			d.tokens.n++
-			if d.tokens.n == maxFlateBlockTokens {
-				if d.err = d.writeBlock(d.tokens, i+1, false); d.err != nil {
-					return
-				}
-				d.tokens.n = 0
+			d.ii++
+			end := d.index + int(d.ii>>uint(d.fastSkipHashing)) + 1
+			if end > d.windowEnd {
+				end = d.windowEnd
 			}
-			d.index++
+			for i := d.index; i < end; i++ {
+				d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[i]))
+				d.tokens.n++
+				if d.tokens.n == maxFlateBlockTokens {
+					if d.err = d.writeBlock(d.tokens, i+1, false); d.err != nil {
+						return
+					}
+					d.tokens.n = 0
+				}
+			}
+			d.index = end
 		}
 	}
 }
@@ -726,6 +733,7 @@ func (d *compressor) reset(w io.Writer) {
 		d.length = minMatchLength - 1
 		d.offset = 0
 		d.hash = 0
+		d.ii = 0
 		d.maxInsertIndex = 0
 	}
 }

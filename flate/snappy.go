@@ -42,7 +42,7 @@ func snappyEncode(dst *tokens, src []byte) {
 		tableSize *= 2
 	}
 	var table [maxTableSize]int
-
+	var misses int
 	// Iterate over the source bytes.
 	var (
 		s   int // The iterator position.
@@ -61,7 +61,8 @@ func snappyEncode(dst *tokens, src []byte) {
 		t, *p = *p-1, s+1
 		// If t is invalid or src[s:s+4] differs from src[t:t+4], accumulate a literal byte.
 		if t < 0 || s-t >= maxOffset || b0 != src[t] || b1 != src[t+1] || b2 != src[t+2] || b3 != src[t+3] {
-			s++
+			misses++
+			s += 1 + (misses >> 5)
 			continue
 		}
 		// Otherwise, we have a match. First, emit any pending literal bytes.
@@ -79,11 +80,12 @@ func snappyEncode(dst *tokens, src []byte) {
 			s++
 			t++
 		}
+		misses = 0
 		// Emit the copied bytes.
 		// inlined: emitCopy(dst, s-t, s-s0)
+
 		dst.tokens[dst.n] = matchToken(uint32(s-s0-3), uint32(s-t-minOffsetSize))
 		dst.n++
-
 		lit = s
 	}
 
