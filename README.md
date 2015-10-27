@@ -38,7 +38,7 @@ Currently there is only minor speedup on decompression (primarily CRC32 calculat
 * Level 1 compression replaced by converted "Snappy" algorithm.
 * Uncompressible content is detected and skipped faster.
 * A lot of branching eliminated by having two encoders for levels 2+3 and 4+.
-* All heap memory allocacations eliminated.
+* All heap memory allocations eliminated.
 
 ```
 benchmark                              old ns/op     new ns/op     delta
