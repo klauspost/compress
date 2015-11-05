@@ -9,11 +9,12 @@ package gzip
 import (
 	"bufio"
 	"errors"
-	"github.com/klauspost/compress/flate"
-	"github.com/klauspost/crc32"
 	"hash"
 	"io"
 	"time"
+
+	"github.com/klauspost/compress/flate"
+	"github.com/klauspost/crc32"
 )
 
 const (
@@ -281,6 +282,60 @@ func (z *Reader) Read(p []byte) (n int, err error) {
 	z.digest.Reset()
 	z.size = 0
 	return z.Read(p)
+}
+
+// Support the io.WriteTo interface for io.Copy and friends.
+func (z *Reader) WriteTo(w io.Writer) (int64, error) {
+	total := int64(0)
+	for {
+		if z.err != nil {
+			if z.err == io.EOF {
+				return total, nil
+			}
+			return total, z.err
+		}
+
+		// We write both to output and digest.
+		mw := io.MultiWriter(w, z.digest)
+		n, err := z.decompressor.(io.WriterTo).WriteTo(mw)
+		total += n
+		z.size += uint32(n)
+		if err != nil {
+			z.err = err
+			return total, z.err
+		}
+
+		// Finished file; check checksum + size.
+		if _, err := io.ReadFull(z.r, z.buf[0:8]); err != nil {
+			z.err = err
+			return 0, err
+		}
+		crc32, isize := get4(z.buf[0:4]), get4(z.buf[4:8])
+		sum := z.digest.Sum32()
+		if sum != crc32 || isize != z.size {
+			z.err = ErrChecksum
+			return 0, z.err
+		}
+
+		// File is ok; is there another?
+		if !z.multistream {
+			return total, nil
+		}
+
+		err = z.readHeader(false)
+		// There was not more
+		if err == io.EOF {
+			return total, nil
+		}
+		if err != nil {
+			z.err = err
+			return total, err
+		}
+
+		// Yes.  Reset and read from it.
+		z.digest.Reset()
+		z.size = 0
+	}
 }
 
 // Close closes the Reader. It does not close the underlying io.Reader.

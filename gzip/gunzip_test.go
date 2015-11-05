@@ -6,6 +6,7 @@ package gzip
 
 import (
 	"bytes"
+	"crypto/rand"
 	"io"
 	"io/ioutil"
 	"os"
@@ -406,5 +407,127 @@ Found:
 
 	if err := r.Reset(br); err != io.EOF {
 		t.Fatalf("third reset: err=%v, want io.EOF", err)
+	}
+}
+
+func TestWriteTo(t *testing.T) {
+	input := make([]byte, 100000)
+	n, err := rand.Read(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != len(input) {
+		t.Fatal("did not fill buffer")
+	}
+	compressed := &bytes.Buffer{}
+	// Do it twice to test MultiStream functionality
+	for i := 0; i < 2; i++ {
+		w, err := NewWriterLevel(compressed, -2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		n, err = w.Write(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n != len(input) {
+			t.Fatal("did not fill buffer")
+		}
+		w.Close()
+	}
+	input = append(input, input...)
+	buf := compressed.Bytes()
+
+	dec, err := NewReader(bytes.NewBuffer(buf))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// ReadAll does not use WriteTo, but we wrap it in a NopCloser to be sure.
+	readall, err := ioutil.ReadAll(ioutil.NopCloser(dec))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(readall) != len(input) {
+		t.Fatal("did not decompress everything")
+	}
+	if bytes.Compare(readall, input) != 0 {
+		t.Fatal("output did not match input")
+	}
+
+	dec, err = NewReader(bytes.NewBuffer(buf))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wtbuf := &bytes.Buffer{}
+	written, err := dec.WriteTo(wtbuf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if written != int64(len(input)) {
+		t.Error("Returned length did not match, expected", len(input), "got", written)
+	}
+	if wtbuf.Len() != len(input) {
+		t.Error("Actual Length did not match, expected", len(input), "got", wtbuf.Len())
+	}
+	if bytes.Compare(wtbuf.Bytes(), input) != 0 {
+		t.Fatal("output did not match input")
+	}
+}
+
+func BenchmarkGunzipCopy(b *testing.B) {
+	dat, _ := ioutil.ReadFile("testdata/test.json")
+	dat = append(dat, dat...)
+	dat = append(dat, dat...)
+	dat = append(dat, dat...)
+	dat = append(dat, dat...)
+	dat = append(dat, dat...)
+	dst := &bytes.Buffer{}
+	w, _ := NewWriterLevel(dst, 1)
+	_, err := w.Write(dat)
+	if err != nil {
+		b.Fatal(err)
+	}
+	w.Close()
+	input := dst.Bytes()
+	b.SetBytes(int64(len(dat)))
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		r, err := NewReader(bytes.NewBuffer(input))
+		if err != nil {
+			b.Fatal(err)
+		}
+		_, err = io.Copy(ioutil.Discard, r)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkGunzipReadAll(b *testing.B) {
+	dat, _ := ioutil.ReadFile("testdata/test.json")
+	dat = append(dat, dat...)
+	dat = append(dat, dat...)
+	dat = append(dat, dat...)
+	dat = append(dat, dat...)
+	dat = append(dat, dat...)
+	dst := &bytes.Buffer{}
+	w, _ := NewWriterLevel(dst, 1)
+	_, err := w.Write(dat)
+	if err != nil {
+		b.Fatal(err)
+	}
+	w.Close()
+	input := dst.Bytes()
+	b.SetBytes(int64(len(dat)))
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		r, err := NewReader(bytes.NewBuffer(input))
+		if err != nil {
+			b.Fatal(err)
+		}
+		_, err = ioutil.ReadAll(ioutil.NopCloser(r))
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
