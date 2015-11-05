@@ -6,6 +6,7 @@ package flate
 
 import (
 	"bytes"
+	"crypto/rand"
 	"io"
 	"io/ioutil"
 	"strconv"
@@ -170,4 +171,54 @@ var infOutTests = []infOutTest{
 	infOutTest{"63 18 68 30 d0 0 0", "force split window update", 4, -8, 259, false},
 	infOutTest{"3 0", "use fixed blocks", 0, -15, 1, false},
 	infOutTest{"", "bad window size", 0, 1, 0, true},
+}
+
+func TestWriteTo(t *testing.T) {
+	input := make([]byte, 100000)
+	n, err := rand.Read(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != len(input) {
+		t.Fatal("did not fill buffer")
+	}
+	compressed := &bytes.Buffer{}
+	w, err := NewWriter(compressed, -2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err = w.Write(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != len(input) {
+		t.Fatal("did not fill buffer")
+	}
+	w.Close()
+	buf := compressed.Bytes()
+
+	dec := NewReader(bytes.NewBuffer(buf))
+	readall, err := ioutil.ReadAll(dec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(readall) != len(input) {
+		t.Fatal("did not decompress everything")
+	}
+
+	dec = NewReader(bytes.NewBuffer(buf))
+	wtbuf := &bytes.Buffer{}
+	written, err := dec.(io.WriterTo).WriteTo(wtbuf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if written != int64(len(input)) {
+		t.Error("Returned length did not match, expected", len(input), "got", written)
+	}
+	if wtbuf.Len() != len(input) {
+		t.Error("Actual Length did not match, expected", len(input), "got", wtbuf.Len())
+	}
+	if bytes.Compare(wtbuf.Bytes(), input) != 0 {
+		t.Fatal("output did not match input")
+	}
 }
