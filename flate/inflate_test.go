@@ -198,7 +198,8 @@ func TestWriteTo(t *testing.T) {
 	buf := compressed.Bytes()
 
 	dec := NewReader(bytes.NewBuffer(buf))
-	readall, err := ioutil.ReadAll(dec)
+	// ReadAll does not use WriteTo, but we wrap it in a NopCloser to be sure.
+	readall, err := ioutil.ReadAll(ioutil.NopCloser(dec))
 	if err != nil {
 		t.Fatal(err)
 	}
