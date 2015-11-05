@@ -27,6 +27,10 @@ The packages contains the same as the standard library, so you can use the godoc
 
 Currently there is only minor speedup on decompression (primarily CRC32 calculation).
 
+# changelog
+
+* Oct 15 2015: Added skipping on uncompressible data. Random data speed up >5x.
+
 # deflate optimizations
 
 * Minimum matches are 4 bytes, this leads to fewer searches and better compression.
