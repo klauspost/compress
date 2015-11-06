@@ -6,6 +6,7 @@ package gzip
 
 import (
 	"bytes"
+	oldgz "compress/gzip"
 	"crypto/rand"
 	"io"
 	"io/ioutil"
@@ -503,7 +504,7 @@ func BenchmarkGunzipCopy(b *testing.B) {
 	}
 }
 
-func BenchmarkGunzipReadAll(b *testing.B) {
+func BenchmarkGunzipNoWriteTo(b *testing.B) {
 	dat, _ := ioutil.ReadFile("testdata/test.json")
 	dat = append(dat, dat...)
 	dat = append(dat, dat...)
@@ -518,14 +519,51 @@ func BenchmarkGunzipReadAll(b *testing.B) {
 	}
 	w.Close()
 	input := dst.Bytes()
+	r, err := NewReader(bytes.NewBuffer(input))
+	if err != nil {
+		b.Fatal(err)
+	}
 	b.SetBytes(int64(len(dat)))
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		r, err := NewReader(bytes.NewBuffer(input))
+		err := r.Reset(bytes.NewBuffer(input))
 		if err != nil {
 			b.Fatal(err)
 		}
-		_, err = ioutil.ReadAll(ioutil.NopCloser(r))
+		_, err = io.Copy(ioutil.Discard, ioutil.NopCloser(r))
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkGunzipStdlib(b *testing.B) {
+	dat, _ := ioutil.ReadFile("testdata/test.json")
+	dat = append(dat, dat...)
+	dat = append(dat, dat...)
+	dat = append(dat, dat...)
+	dat = append(dat, dat...)
+	dat = append(dat, dat...)
+	dst := &bytes.Buffer{}
+	w, _ := NewWriterLevel(dst, 1)
+	_, err := w.Write(dat)
+	if err != nil {
+		b.Fatal(err)
+	}
+	w.Close()
+	input := dst.Bytes()
+	r, err := oldgz.NewReader(bytes.NewBuffer(input))
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.SetBytes(int64(len(dat)))
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		err := r.Reset(bytes.NewBuffer(input))
+		if err != nil {
+			b.Fatal(err)
+		}
+		_, err = io.Copy(ioutil.Discard, r)
 		if err != nil {
 			b.Fatal(err)
 		}
