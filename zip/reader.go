@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"hash"
 	"io"
 	"os"
@@ -22,9 +23,10 @@ var (
 )
 
 type Reader struct {
-	r       io.ReaderAt
-	File    []*File
-	Comment string
+	r             io.ReaderAt
+	File          []*File
+	Comment       string
+	decompressors map[uint16]Decompressor
 }
 
 type ReadCloser struct {
@@ -34,6 +36,7 @@ type ReadCloser struct {
 
 type File struct {
 	FileHeader
+	zip          *Reader
 	zipr         io.ReaderAt
 	zipsize      int64
 	headerOffset int64
@@ -78,6 +81,9 @@ func (z *Reader) init(r io.ReaderAt, size int64) error {
 	if err != nil {
 		return err
 	}
+	if end.directoryRecords > uint64(size)/fileHeaderLen {
+		return fmt.Errorf("archive/zip: TOC declares impossible %d files in %d byte zip", end.directoryRecords, size)
+	}
 	z.r = r
 	z.File = make([]*File, 0, end.directoryRecords)
 	z.Comment = end.comment
@@ -92,7 +98,7 @@ func (z *Reader) init(r io.ReaderAt, size int64) error {
 	// a bad one, and then only report a ErrFormat or UnexpectedEOF if
 	// the file count modulo 65536 is incorrect.
 	for {
-		f := &File{zipr: r, zipsize: size}
+		f := &File{zip: z, zipr: r, zipsize: size}
 		err = readDirectoryHeader(f, buf)
 		if err == ErrFormat || err == io.ErrUnexpectedEOF {
 			break
@@ -108,6 +114,26 @@ func (z *Reader) init(r io.ReaderAt, size int64) error {
 		return err
 	}
 	return nil
+}
+
+// RegisterDeompressor registers or overrides a custom decompressor for a
+// specific method ID.  If a decompressor for a given method is not found,
+// Reader will default to looking up the decompressor at the package level.
+//
+// Must not be called concurrently with Open on any Files in the Reader.
+func (z *Reader) RegisterDecompressor(method uint16, dcomp Decompressor) {
+	if z.decompressors == nil {
+		z.decompressors = make(map[uint16]Decompressor)
+	}
+	z.decompressors[method] = dcomp
+}
+
+func (z *Reader) decompressor(method uint16) Decompressor {
+	dcomp := z.decompressors[method]
+	if dcomp == nil {
+		dcomp = decompressor(method)
+	}
+	return dcomp
 }
 
 // Close closes the Zip file, rendering it unusable for I/O.
@@ -137,7 +163,7 @@ func (f *File) Open() (rc io.ReadCloser, err error) {
 	}
 	size := int64(f.CompressedSize64)
 	r := io.NewSectionReader(f.zipr, f.headerOffset+bodyOffset, size)
-	dcomp := decompressor(f.Method)
+	dcomp := f.zip.decompressor(f.Method)
 	if dcomp == nil {
 		err = ErrAlgorithm
 		return
@@ -147,16 +173,22 @@ func (f *File) Open() (rc io.ReadCloser, err error) {
 	if f.hasDataDescriptor() {
 		desr = io.NewSectionReader(f.zipr, f.headerOffset+bodyOffset+size, dataDescriptorLen)
 	}
-	rc = &checksumReader{rc, crc32.NewIEEE(), f, desr, nil}
+	rc = &checksumReader{
+		rc:   rc,
+		hash: crc32.NewIEEE(),
+		f:    f,
+		desr: desr,
+	}
 	return
 }
 
 type checksumReader struct {
-	rc   io.ReadCloser
-	hash hash.Hash32
-	f    *File
-	desr io.Reader // if non-nil, where to read the data descriptor
-	err  error     // sticky error
+	rc    io.ReadCloser
+	hash  hash.Hash32
+	nread uint64 // number of bytes read so far
+	f     *File
+	desr  io.Reader // if non-nil, where to read the data descriptor
+	err   error     // sticky error
 }
 
 func (r *checksumReader) Read(b []byte) (n int, err error) {
@@ -165,13 +197,21 @@ func (r *checksumReader) Read(b []byte) (n int, err error) {
 	}
 	n, err = r.rc.Read(b)
 	r.hash.Write(b[:n])
+	r.nread += uint64(n)
 	if err == nil {
 		return
 	}
 	if err == io.EOF {
+		if r.nread != r.f.UncompressedSize64 {
+			return 0, io.ErrUnexpectedEOF
+		}
 		if r.desr != nil {
 			if err1 := readDataDescriptor(r.desr, r.f); err1 != nil {
-				err = err1
+				if err1 == io.EOF {
+					err = io.ErrUnexpectedEOF
+				} else {
+					err = err1
+				}
 			} else if r.hash.Sum32() != r.f.CRC32 {
 				err = ErrChecksum
 			}
@@ -359,14 +399,16 @@ func readDirectoryEnd(r io.ReaderAt, size int64) (dir *directoryEnd, err error) 
 	}
 	d.comment = string(b[:l])
 
-	p, err := findDirectory64End(r, directoryEndOffset)
-	if err == nil && p >= 0 {
-		err = readDirectory64End(r, p, d)
+	// These values mean that the file can be a zip64 file
+	if d.directoryRecords == 0xffff || d.directorySize == 0xffff || d.directoryOffset == 0xffffffff {
+		p, err := findDirectory64End(r, directoryEndOffset)
+		if err == nil && p >= 0 {
+			err = readDirectory64End(r, p, d)
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
-	if err != nil {
-		return nil, err
-	}
-
 	// Make sure directoryOffset points to somewhere in our file.
 	if o := int64(d.directoryOffset); o < 0 || o >= size {
 		return nil, ErrFormat
@@ -390,8 +432,13 @@ func findDirectory64End(r io.ReaderAt, directoryEndOffset int64) (int64, error) 
 	if sig := b.uint32(); sig != directory64LocSignature {
 		return -1, nil
 	}
-	b = b[4:]       // skip number of the disk with the start of the zip64 end of central directory
-	p := b.uint64() // relative offset of the zip64 end of central directory record
+	if b.uint32() != 0 { // number of the disk with the start of the zip64 end of central directory
+		return -1, nil // the file is not a valid zip64-file
+	}
+	p := b.uint64()      // relative offset of the zip64 end of central directory record
+	if b.uint32() != 1 { // total number of disks
+		return -1, nil // the file is not a valid zip64-file
+	}
 	return int64(p), nil
 }
 
