@@ -7,10 +7,11 @@ package zip_test
 import (
 	"bytes"
 	"fmt"
-	"github.com/klauspost/compress/zip"
 	"io"
 	"log"
 	"os"
+
+	"github.com/klauspost/compress/zip"
 )
 
 func ExampleWriter() {

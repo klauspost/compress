@@ -6,10 +6,11 @@ package zlib
 
 import (
 	"fmt"
-	"github.com/klauspost/compress/flate"
 	"hash"
 	"hash/adler32"
 	"io"
+
+	"github.com/klauspost/compress/flate"
 )
 
 // These constants are copied from the flate package, so that code that imports

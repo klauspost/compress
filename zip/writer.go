@@ -8,9 +8,10 @@ import (
 	"bufio"
 	"encoding/binary"
 	"errors"
-	"github.com/klauspost/crc32"
 	"hash"
 	"io"
+
+	"github.com/klauspost/crc32"
 )
 
 // TODO(adg): support zip file comments

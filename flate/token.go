@@ -69,7 +69,7 @@ type token uint32
 
 type tokens struct {
 	tokens []token
-	n int
+	n      int
 }
 
 // Convert a literal into a literal token.

@@ -9,11 +9,12 @@ package gzip
 import (
 	"bufio"
 	"errors"
-	"github.com/klauspost/compress/flate"
-	"github.com/klauspost/crc32"
 	"hash"
 	"io"
 	"time"
+
+	"github.com/klauspost/compress/flate"
+	"github.com/klauspost/crc32"
 )
 
 const (
