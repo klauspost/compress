@@ -6,10 +6,11 @@ package zip
 
 import (
 	"errors"
-	"github.com/klauspost/compress/flate"
 	"io"
 	"io/ioutil"
 	"sync"
+
+	"github.com/klauspost/compress/flate"
 )
 
 // A Compressor returns a compressing writer, writing to the

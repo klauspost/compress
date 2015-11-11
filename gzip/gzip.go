@@ -7,10 +7,11 @@ package gzip
 import (
 	"errors"
 	"fmt"
-	"github.com/klauspost/compress/flate"
-	"github.com/klauspost/crc32"
 	"hash"
 	"io"
+
+	"github.com/klauspost/compress/flate"
+	"github.com/klauspost/crc32"
 )
 
 // These constants are copied from the flate package, so that code that imports

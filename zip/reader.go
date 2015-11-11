@@ -8,10 +8,11 @@ import (
 	"bufio"
 	"encoding/binary"
 	"errors"
-	"github.com/klauspost/crc32"
 	"hash"
 	"io"
 	"os"
+
+	"github.com/klauspost/crc32"
 )
 
 var (

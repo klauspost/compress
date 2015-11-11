@@ -26,10 +26,11 @@ package zlib
 import (
 	"bufio"
 	"errors"
-	"github.com/klauspost/compress/flate"
 	"hash"
 	"hash/adler32"
 	"io"
+
+	"github.com/klauspost/compress/flate"
 )
 
 const zlibDeflate = 8

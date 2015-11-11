@@ -98,7 +98,7 @@ func TestInflate(t *testing.T) {
 		}
 
 		if test.n != 0 && err == nil {
-			t.Errorf("%q:Expected an error, but got none", test.id, err)
+			t.Errorf("%q:Expected an error, but got none", test.id)
 			continue
 		}
 		t.Fatal(test.n, err)

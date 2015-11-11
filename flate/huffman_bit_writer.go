@@ -442,7 +442,6 @@ func (w *huffmanBitWriter) writeBlock(tok tokens, eof bool, input []byte) {
 	tok.tokens[tok.n] = endBlockMarker
 	tokens := tok.tokens[0 : tok.n+1]
 
-
 	for _, t := range tokens {
 		switch t.typ() {
 		case literalType:
