@@ -30,6 +30,7 @@ Currently there is only minor speedup on decompression (primarily CRC32 calculat
 # changelog
 
 * Oct 15 2015: Added skipping on uncompressible data. Random data speed up >5x.
+* Nov 11 2015: Merged [CL 16669](https://go-review.googlesource.com/#/c/16669/4): archive/zip: enable overriding (de)compressors per file
 
 # deflate optimizations
 
