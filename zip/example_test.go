@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/klauspost/compress/flate"
 	"github.com/klauspost/compress/zip"
 )
 
@@ -73,4 +74,32 @@ func ExampleReader() {
 	// Output:
 	// Contents of README:
 	// This is the source code repository for the Go programming language.
+}
+
+func ExampleWriter_RegisterCompressor() {
+	// Override the default Deflate compressor with a higher compression
+	// level.
+
+	// Create a buffer to write our archive to.
+	buf := new(bytes.Buffer)
+
+	// Create a new zip archive.
+	w := zip.NewWriter(buf)
+
+	var fw *flate.Writer
+
+	// Register the deflator.
+	w.RegisterCompressor(zip.Deflate, func(out io.Writer) (io.WriteCloser, error) {
+		var err error
+		if fw == nil {
+			// Creating a flate compressor for every file is
+			// expensive, create one and reuse it.
+			fw, err = flate.NewWriter(out, flate.BestCompression)
+		} else {
+			fw.Reset(out)
+		}
+		return fw, err
+	})
+
+	// Proceed to add files to w.
 }
