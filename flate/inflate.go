@@ -350,6 +350,32 @@ func (f *decompressor) Read(b []byte) (int, error) {
 	}
 }
 
+// Support the io.WriteTo interface for io.Copy and friends.
+func (f *decompressor) WriteTo(w io.Writer) (int64, error) {
+	total := int64(0)
+	for {
+		if f.err != nil {
+			if f.err == io.EOF {
+				return total, nil
+			}
+			return total, f.err
+		}
+		if len(f.toRead) > 0 {
+			var n int
+			n, f.err = w.Write(f.toRead)
+			if f.err != nil {
+				return total, f.err
+			}
+			if n != len(f.toRead) {
+				return total, io.ErrShortWrite
+			}
+			f.toRead = f.toRead[:0]
+			total += int64(n)
+		}
+		f.step(f)
+	}
+}
+
 func (f *decompressor) Close() error {
 	if f.err == io.EOF {
 		return nil
