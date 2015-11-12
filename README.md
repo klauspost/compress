@@ -10,6 +10,12 @@ It offers slightly better compression at lower compression settings, and up to 3
 
 [![Build Status](https://travis-ci.org/klauspost/compress.svg?branch=master)](https://travis-ci.org/klauspost/compress)
 
+# changelog
+
+* Nov 12 2015: Added [io.WriterTo](https://golang.org/pkg/io/#WriterTo) support to gzip/inflate.
+* Nov 11 2015: Merged [CL 16669](https://go-review.googlesource.com/#/c/16669/4): archive/zip: enable overriding (de)compressors per file
+* Oct 15 2015: Added skipping on uncompressible data. Random data speed up >5x.
+
 # usage
 
 The packages are drop-in replacements for standard libraries. Simply replace the import path to use them:
@@ -26,11 +32,6 @@ You may also be interested in [pgzip](https://github.com/klauspost/pgzip), which
 The packages contains the same as the standard library, so you can use the godoc for that: [gzip](http://golang.org/pkg/compress/gzip/), [zip](http://golang.org/pkg/archive/zip/),  [zlib](http://golang.org/pkg/compress/zlib/), [flate](http://golang.org/pkg/compress/flate/).
 
 Currently there is only minor speedup on decompression (primarily CRC32 calculation).
-
-# changelog
-
-* Oct 15 2015: Added skipping on uncompressible data. Random data speed up >5x.
-* Nov 11 2015: Merged [CL 16669](https://go-review.googlesource.com/#/c/16669/4): archive/zip: enable overriding (de)compressors per file
 
 # deflate optimizations
 
