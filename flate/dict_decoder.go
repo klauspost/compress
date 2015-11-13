@@ -4,7 +4,7 @@
 
 package flate
 
-type dictDecoder struct {
+type dictionary struct {
 	// Invariant: len(hist) <= size
 	size int    // Sliding window size
 	hist []byte // Sliding window history, dynamically grown to match size
@@ -15,8 +15,8 @@ type dictDecoder struct {
 	full  bool // Has a full window length been written yet?
 }
 
-func (dd *dictDecoder) Init(size int, dict []byte) {
-	*dd = dictDecoder{hist: dd.hist}
+func (dd *dictionary) Init(size int, dict []byte) {
+	*dd = dictionary{hist: dd.hist}
 
 	dd.size = size
 	if len(dd.hist) < size {
@@ -36,35 +36,43 @@ func (dd *dictDecoder) Init(size int, dict []byte) {
 }
 
 // HistSize reports the total amount of historical data in the dictionary.
-func (dd *dictDecoder) HistSize() int {
+func (dd *dictionary) HistSize() int {
 	if dd.full {
 		return dd.size
 	}
 	return dd.wrPos
 }
 
-// FlushSize reports the number of bytes that can be flushed by ReadFlush.
-func (dd *dictDecoder) FlushSize() int {
+// AvailRead reports the number of bytes that can be flushed by ReadFlush.
+func (dd *dictionary) AvailRead() int {
 	return dd.wrPos - dd.rdPos
 }
 
-// AvailSize reports the available amount of output buffer space.
-func (dd *dictDecoder) AvailSize() int {
+// AvailWrite reports the available amount of output buffer space.
+func (dd *dictionary) AvailWrite() int {
 	return len(dd.hist) - dd.wrPos
 }
 
 // WriteSlice returns a slice of the available buffer to write data to.
 //
 // This invariant will be kept: len(s) <= AvailSize()
-func (dd *dictDecoder) WriteSlice() []byte {
+func (dd *dictionary) WriteSlice() []byte {
 	return dd.hist[dd.wrPos:]
 }
 
 // WriteMark advances the writer pointer by cnt.
 //
 // This invariant must be kept: 0 <= cnt <= AvailSize()
-func (dd *dictDecoder) WriteMark(cnt int) {
+func (dd *dictionary) WriteMark(cnt int) {
 	dd.wrPos += cnt
+}
+
+// AddByte adds a byte to the dictionary.
+// Not used since inlined version is faster *sigh*.
+func (dd *dictionary) AddByte(v byte) bool {
+	dd.hist[dd.wrPos] = byte(v)
+	dd.wrPos++
+	return len(dd.hist)-dd.wrPos == 0
 }
 
 // WriteCopy copies a string at a given (distance, length) to the output.
@@ -72,7 +80,7 @@ func (dd *dictDecoder) WriteMark(cnt int) {
 // length if the available space in the output buffer is too small.
 //
 // This invariant must be kept: 0 <= dist <= HistSize()
-func (dd *dictDecoder) WriteCopy(dist, length int) int {
+func (dd *dictionary) WriteCopy(dist, length int) int {
 	wrBase := dd.wrPos
 	wrEnd := dd.wrPos + length
 	if wrEnd > len(dd.hist) {
@@ -97,7 +105,7 @@ func (dd *dictDecoder) WriteCopy(dist, length int) int {
 // ReadFlush returns a slice of the historical buffer that is ready to be
 // emitted to the user. A call to ReadFlush is only valid after all of the data
 // from a previous call to ReadFlush has been consumed.
-func (dd *dictDecoder) ReadFlush() []byte {
+func (dd *dictionary) ReadFlush() []byte {
 	toRead := dd.hist[dd.rdPos:dd.wrPos]
 	dd.rdPos = dd.wrPos
 	if dd.wrPos == len(dd.hist) {

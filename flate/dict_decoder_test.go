@@ -64,13 +64,13 @@ func TestDictDecoder(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	var dd dictDecoder
+	var dd dictionary
 	dd.Init(1<<11, nil)
 
 	var writeCopy = func(dist, length int) {
 		for length > 0 {
 			length -= dd.WriteCopy(dist, length)
-			if dd.AvailSize() == 0 {
+			if dd.AvailWrite() == 0 {
 				buf.Write(dd.ReadFlush())
 			}
 		}
@@ -80,7 +80,7 @@ func TestDictDecoder(t *testing.T) {
 			cnt := copy(dd.WriteSlice(), str)
 			str = str[cnt:]
 			dd.WriteMark(cnt)
-			if dd.AvailSize() == 0 {
+			if dd.AvailWrite() == 0 {
 				buf.Write(dd.ReadFlush())
 			}
 		}
@@ -135,7 +135,7 @@ func BenchmarkDictDecoderCopy(b *testing.B) {
 	b.SetBytes(int64(nb))
 
 	for i := 0; i < b.N; i++ {
-		var dd dictDecoder
+		var dd dictionary
 		dd.Init(1<<16, nil)
 
 		copy(dd.WriteSlice(), "abc")
@@ -144,7 +144,7 @@ func BenchmarkDictDecoderCopy(b *testing.B) {
 		dist, length := 3, nb
 		for length > 0 {
 			length -= dd.WriteCopy(dist, length)
-			if dd.AvailSize() == 0 {
+			if dd.AvailWrite() == 0 {
 				dd.ReadFlush()
 			}
 		}

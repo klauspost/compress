@@ -282,7 +282,7 @@ type decompressor struct {
 	codebits *[numCodes]int
 
 	// Output history, buffer.
-	dict dictDecoder
+	dict dictionary
 
 	// Temporary buffer (avoids repeated allocation).
 	buf [4]byte
@@ -300,7 +300,7 @@ type decompressor struct {
 
 func (f *decompressor) nextBlock() {
 	if f.final {
-		if f.dict.FlushSize() > 0 {
+		if f.dict.AvailRead() > 0 {
 			f.toRead = f.dict.ReadFlush()
 			f.step = (*decompressor).nextBlock
 			return
@@ -518,7 +518,7 @@ func (f *decompressor) huffmanBlock() {
 		case v < 256:
 			f.dict.hist[f.dict.wrPos] = byte(v)
 			f.dict.wrPos++
-			if f.dict.AvailSize() == 0 {
+			if len(f.dict.hist)-f.dict.wrPos == 0 {
 				f.toRead = f.dict.ReadFlush()
 				f.step = (*decompressor).huffmanBlock
 				return
@@ -623,7 +623,7 @@ func (f *decompressor) huffmanBlock() {
 // It reports whether the f.hist buffer is full.
 func (f *decompressor) copyHist() bool {
 	f.copyLen -= f.dict.WriteCopy(f.copyDist, f.copyLen)
-	if f.dict.AvailSize() == 0 || f.copyLen > 0 {
+	if f.dict.AvailWrite() == 0 {
 		f.toRead = f.dict.ReadFlush()
 		f.step = (*decompressor).copyHuff // We need to continue this work
 		return true
@@ -692,7 +692,7 @@ func (f *decompressor) copyData() {
 		return
 	}
 
-	if f.dict.AvailSize() == 0 || f.copyLen > 0 {
+	if f.dict.AvailWrite() == 0 || f.copyLen > 0 {
 		f.toRead = f.dict.ReadFlush()
 		f.step = (*decompressor).copyData
 		return
@@ -723,9 +723,17 @@ func (f *decompressor) huffSym(h *huffmanDecoder) (int, error) {
 	n := uint(h.min)
 	for {
 		for f.nb < n {
-			if err := f.moreBits(); err != nil {
+			// moreBits inlined manually ~1.05x faster overall.
+			c, err := f.r.ReadByte()
+			if err != nil {
+				if err == io.EOF {
+					err = io.ErrUnexpectedEOF
+				}
 				return 0, err
 			}
+			f.roffset++
+			f.b |= uint32(c) << f.nb
+			f.nb += 8
 		}
 		chunk := h.chunks[f.b&(huffmanNumChunks-1)]
 		n = uint(chunk & huffmanCountMask)
