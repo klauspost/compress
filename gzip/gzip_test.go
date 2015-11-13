@@ -365,6 +365,71 @@ func TestGzip10M(t *testing.T) {
 	testBigGzip(10000000, t)
 }
 
+// Test if two runs produce identical results.
+func TestDeterministicLM2(t *testing.T) { testDeterm(-2, t) }
+func TestDeterministicL0(t *testing.T)  { testDeterm(0, t) }
+func TestDeterministicL1(t *testing.T)  { testDeterm(1, t) }
+func TestDeterministicL2(t *testing.T)  { testDeterm(2, t) }
+func TestDeterministicL3(t *testing.T)  { testDeterm(3, t) }
+func TestDeterministicL4(t *testing.T)  { testDeterm(4, t) }
+func TestDeterministicL5(t *testing.T)  { testDeterm(5, t) }
+func TestDeterministicL6(t *testing.T)  { testDeterm(6, t) }
+func TestDeterministicL7(t *testing.T)  { testDeterm(7, t) }
+func TestDeterministicL8(t *testing.T)  { testDeterm(8, t) }
+func TestDeterministicL9(t *testing.T)  { testDeterm(9, t) }
+
+func testDeterm(i int, t *testing.T) {
+	var length = 500000
+	if testing.Short() {
+		length = 100000
+	}
+	rand.Seed(1337)
+	t1 := make([]byte, length)
+	for idx := range t1 {
+		t1[idx] = byte(65 + rand.Intn(8))
+	}
+
+	br := bytes.NewBuffer(t1)
+	var b1 bytes.Buffer
+	w, err := NewWriterLevel(&b1, i)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = io.Copy(w, br)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Flush()
+	w.Close()
+
+	// We
+	rand.Seed(1337)
+	t2 := make([]byte, length)
+	for idx := range t2 {
+		t2[idx] = byte(65 + rand.Intn(8))
+	}
+
+	br2 := bytes.NewBuffer(t2)
+	var b2 bytes.Buffer
+	w2, err := NewWriterLevel(&b2, i)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = io.Copy(w2, br2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w2.Flush()
+	w2.Close()
+
+	b1b := b1.Bytes()
+	b2b := b2.Bytes()
+
+	if bytes.Compare(b1b, b2b) != 0 {
+		t.Fatalf("Level %d did not produce deterministric result, len(a) = %d, len(b) = %d", i, len(b1b), len(b2b))
+	}
+}
+
 func BenchmarkGzipLM2(b *testing.B) { benchmarkGzipN(b, -2) }
 func BenchmarkGzipL1(b *testing.B)  { benchmarkGzipN(b, 1) }
 func BenchmarkGzipL2(b *testing.B)  { benchmarkGzipN(b, 2) }
