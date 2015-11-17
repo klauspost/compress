@@ -425,9 +425,7 @@ Loop:
 					}
 					d.hash = newH
 				}
-
 				d.index = newIndex
-
 			} else {
 				// For matches this long, we don't bother inserting each individual
 				// item into the table.
@@ -480,7 +478,6 @@ func (d *compressor) deflateNoSkip() {
 		d.hash = d.hasher(d.window[d.index:d.index+minMatchLength]) & hashMask
 	}
 
-Loop:
 	for {
 		if sanity && d.index > d.windowEnd {
 			panic("index > windowEnd")
@@ -488,7 +485,7 @@ Loop:
 		lookahead := d.windowEnd - d.index
 		if lookahead < minMatchLength+maxMatchLength {
 			if !d.sync {
-				break Loop
+				return
 			}
 			if sanity && d.index > d.windowEnd {
 				panic("index > windowEnd")
@@ -507,7 +504,7 @@ Loop:
 					}
 					d.tokens.n = 0
 				}
-				break Loop
+				return
 			}
 		}
 		if d.index < d.maxInsertIndex {
@@ -538,6 +535,7 @@ Loop:
 			// not better. Output the previous match.
 			d.tokens.tokens[d.tokens.n] = matchToken(uint32(prevLength-3), uint32(prevOffset-minOffsetSize))
 			d.tokens.n++
+
 			// Insert in the hash table all strings up to the end of the match.
 			// index and index-1 are already inserted. If there is not enough
 			// lookahead, the last two strings are not inserted into the hash
@@ -573,7 +571,6 @@ Loop:
 			}
 
 			d.index = newIndex
-
 			d.byteAvailable = false
 			d.length = minMatchLength - 1
 			if d.tokens.n == maxFlateBlockTokens {
@@ -588,13 +585,13 @@ Loop:
 			if d.length >= minMatchLength {
 				d.ii = 0
 			}
+			// We have a byte waiting. Emit it.
 			if d.byteAvailable {
 				d.ii++
-				i := d.index - 1
-				d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[i]))
+				d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[d.index-1]))
 				d.tokens.n++
 				if d.tokens.n == maxFlateBlockTokens {
-					if d.err = d.writeBlock(d.tokens, i+1, false); d.err != nil {
+					if d.err = d.writeBlock(d.tokens, d.index, false); d.err != nil {
 						return
 					}
 					d.tokens.n = 0
@@ -604,29 +601,38 @@ Loop:
 				// If we have a long run of no matches, skip additional bytes
 				// Resets when d.ii overflows after 64KB.
 				if d.ii > 31 {
-					n := int(d.ii >> 5)
+					n := int(d.ii >> 6)
 					for j := 0; j < n; j++ {
-						i := d.index - 1
 						if d.index >= d.windowEnd-1 {
 							break
 						}
 
-						d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[i]))
+						d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[d.index-1]))
 						d.tokens.n++
 						if d.tokens.n == maxFlateBlockTokens {
-							if d.err = d.writeBlock(d.tokens, i+1, false); d.err != nil {
+							if d.err = d.writeBlock(d.tokens, d.index, false); d.err != nil {
 								return
 							}
 							d.tokens.n = 0
 						}
 						d.index++
 					}
+					// Flush last byte
+					d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[d.index-1]))
+					d.tokens.n++
+					d.byteAvailable = false
+					// d.length = minMatchLength - 1 // not needed, since d.ii is reset above, so it should never be > minMatchLength
+					if d.tokens.n == maxFlateBlockTokens {
+						if d.err = d.writeBlock(d.tokens, d.index, false); d.err != nil {
+							return
+						}
+						d.tokens.n = 0
+					}
 				}
-
 			} else {
 				d.index++
+				d.byteAvailable = true
 			}
-			d.byteAvailable = true
 		}
 	}
 }
@@ -659,6 +665,7 @@ func (d *compressor) storeHuff() {
 		return
 	}
 	d.w.writeBlockHuff(false, d.window[:d.windowEnd])
+	d.err = d.w.err
 	d.windowEnd = 0
 }
 
@@ -672,22 +679,31 @@ func (d *compressor) storeSnappy() {
 	}
 	snappyEncode(&d.tokens, d.window[:d.windowEnd])
 	d.w.writeBlock(d.tokens, false, d.window[:d.windowEnd])
+	d.err = d.w.err
 	d.tokens.n = 0
 	d.windowEnd = 0
 }
 
 func (d *compressor) write(b []byte) (n int, err error) {
+	if d.err != nil {
+		return 0, d.err
+	}
 	n = len(b)
-	b = b[d.fill(d, b):]
 	for len(b) > 0 {
 		d.step(d)
 		b = b[d.fill(d, b):]
+		if d.err != nil {
+			return 0, d.err
+		}
 	}
 	return n, d.err
 }
 
 func (d *compressor) syncFlush() error {
 	d.sync = true
+	if d.err != nil {
+		return d.err
+	}
 	d.step(d)
 	if d.err == nil {
 		d.w.writeStoredHeader(0, false)
@@ -733,9 +749,7 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 	return nil
 }
 
-var zeroes [64]int
 var hzeroes [256]hashid
-var bzeroes [256]byte
 
 func (d *compressor) reset(w io.Writer) {
 	d.w.reset(w)
@@ -769,6 +783,9 @@ func (d *compressor) reset(w io.Writer) {
 }
 
 func (d *compressor) close() error {
+	if d.err != nil {
+		return d.err
+	}
 	d.sync = true
 	d.step(d)
 	if d.err != nil {
