@@ -42,23 +42,23 @@ const (
 var useSSE42 bool
 
 type compressionLevel struct {
-	good, lazy, nice, chain, fastSkipHashing int
+	good, lazy, nice, chain, fastSkipHashing, level int
 }
 
 var levels = []compressionLevel{
 	{}, // 0
 	// For levels 1-3 we don't bother trying with lazy matches
-	{4, 0, 8, 4, 4},
-	{4, 0, 16, 8, 5},
-	{4, 0, 32, 32, 6},
+	{4, 0, 8, 4, 4, 1},
+	{4, 0, 16, 8, 5, 2},
+	{4, 0, 32, 32, 6, 3},
 	// Levels 4-9 use increasingly more lazy matching
 	// and increasingly stringent conditions for "good enough".
-	{4, 4, 16, 16, skipNever},
-	{8, 16, 32, 32, skipNever},
-	{8, 16, 128, 128, skipNever},
-	{8, 32, 128, 256, skipNever},
-	{32, 128, 258, 1024, skipNever},
-	{32, 258, 258, 4096, skipNever},
+	{4, 4, 16, 16, skipNever, 4},
+	{8, 16, 32, 32, skipNever, 5},
+	{8, 16, 128, 128, skipNever, 6},
+	{8, 32, 128, 256, skipNever, 7},
+	{32, 128, 258, 1024, skipNever, 8},
+	{32, 258, 258, 4096, skipNever, 9},
 }
 
 type hashid uint32
@@ -164,8 +164,9 @@ func (d *compressor) writeBlock(tok tokens, index int, eof bool) error {
 // This is much faster than doing a full encode.
 // Should only be used after a start/reset.
 func (d *compressor) fillWindow(b []byte) {
-	// Any better way of finding if we are storing?
-	if d.compressionLevel.good == 0 {
+	// Do not fill window if we are in store-only mode,
+	// use constant or Snappy compression.
+	if d.compressionLevel.level == 0 {
 		return
 	}
 	// If we are given too much, cut it.
@@ -272,10 +273,14 @@ func (d *compressor) writeStoredBlock(buf []byte) error {
 	return d.w.err
 }
 
+// oldHash is the hash function used when no native crc32 calculation
+// or similar is present.
 func oldHash(b []byte) hash {
 	return hash(b[0])<<(hashShift*3) + hash(b[1])<<(hashShift*2) + hash(b[2])<<hashShift + hash(b[3])
 }
 
+// oldBulkHash will compute hashes using the same
+// algorithm as oldHash
 func oldBulkHash(b []byte, dst []hash) {
 	if len(b) < minMatchLength {
 		return
@@ -290,6 +295,9 @@ func oldBulkHash(b []byte, dst []hash) {
 	}
 }
 
+// matchLen returns the number of matching bytes in a and b
+// up to length 'max'. Both slices must be at least 'max'
+// bytes in size.
 func matchLen(a, b []byte, max int) int {
 	a = a[:max]
 	for i, av := range a {
@@ -462,8 +470,9 @@ Loop:
 	}
 }
 
-// same as deflate, but with d.fastSkipHashing == skipNever
-func (d *compressor) deflateNoSkip() {
+// deflateLazy is the same as deflate, but with d.fastSkipHashing == skipNever,
+// meaning it always has lazy matching on.
+func (d *compressor) deflateLazy() {
 	// Sanity enables additional runtime tests.
 	// It's intended to be used during development
 	// to supplement the currently ad-hoc unit tests.
@@ -650,12 +659,17 @@ func (d *compressor) store() {
 	d.windowEnd = 0
 }
 
+// fillHuff will fill the buffer with data for huffman-only compression.
+// The number of bytes copied is returned.
 func (d *compressor) fillHuff(b []byte) int {
 	n := copy(d.window[d.windowEnd:], b)
 	d.windowEnd += n
 	return n
 }
 
+// storeHuff will compress and store the currently added data,
+// if enough has been accumulated or we at the end of the stream.
+// Any error that occurred will be in d.err
 func (d *compressor) storeHuff() {
 	// We only compress if we have >= 32KB (maxStoreBlockSize/2)
 	if d.windowEnd < (maxStoreBlockSize/2) && !d.sync {
@@ -669,6 +683,9 @@ func (d *compressor) storeHuff() {
 	d.windowEnd = 0
 }
 
+// storeHuff will compress and store the currently added data,
+// if enough has been accumulated or we at the end of the stream.
+// Any error that occurred will be in d.err
 func (d *compressor) storeSnappy() {
 	// We only compress if we have >= 32KB (maxStoreBlockSize/2)
 	if d.windowEnd < (maxStoreBlockSize/2) && !d.sync {
@@ -684,6 +701,8 @@ func (d *compressor) storeSnappy() {
 	d.windowEnd = 0
 }
 
+// write will add input byte to the stream.
+// Unless an error occurs all bytes will be consumed.
 func (d *compressor) write(b []byte) (n int, err error) {
 	if d.err != nil {
 		return 0, d.err
@@ -739,7 +758,7 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 		d.initDeflate()
 		d.fill = (*compressor).fillDeflate
 		if d.fastSkipHashing == skipNever {
-			d.step = (*compressor).deflateNoSkip
+			d.step = (*compressor).deflateLazy
 		} else {
 			d.step = (*compressor).deflate
 		}
@@ -749,8 +768,10 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 	return nil
 }
 
+// Used for zeroing the hash slice
 var hzeroes [256]hashid
 
+// reset the state of the compressor.
 func (d *compressor) reset(w io.Writer) {
 	d.w.reset(w)
 	d.sync = false
@@ -804,8 +825,11 @@ func (d *compressor) close() error {
 // (NoCompression) does not attempt any compression; it only adds the
 // necessary DEFLATE framing. Level -1 (DefaultCompression) uses the default
 // compression level.
+// Level -2 (ConstantCompression) will use Huffman compression only, giving
+// a very fast compression for all types of input, but sacrificing considerable
+// compression efficiency.
 //
-// If level is in the range [-1, 9] then the error returned will be nil.
+// If level is in the range [-2, 9] then the error returned will be nil.
 // Otherwise the error returned will be non-nil.
 func NewWriter(w io.Writer, level int) (*Writer, error) {
 	var dw Writer
