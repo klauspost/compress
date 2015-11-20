@@ -7,13 +7,13 @@ TEXT ·crc32sse(SB),7, $0
     MOVQ    a+0(FP), R10
     XORQ    BX, BX
     // CRC32   dword (R10), EBX
-    BYTE $0xF2; BYTE $0x41; BYTE $0x0f 
+    BYTE $0xF2; BYTE $0x41; BYTE $0x0f
     BYTE $0x38; BYTE $0xf1; BYTE $0x1a
 
 
     // MOVL    (R10), AX
     // CRC32   EAX, EBX
-    //BYTE $0xF2; BYTE $0x0f; 
+    //BYTE $0xF2; BYTE $0x0f;
     //BYTE $0x38; BYTE $0xf1; BYTE $0xd8
 
     MOVL    BX, ret+24(FP)
@@ -48,13 +48,13 @@ crc_loop:
     MOVQ    R12, SI
 
     // CRC32   EAX, EBX
-    BYTE $0xF2; BYTE $0x0f; 
+    BYTE $0xF2; BYTE $0x0f;
     BYTE $0x38; BYTE $0xf1; BYTE $0xd8
     // CRC32   ECX, EDX
-    BYTE $0xF2; BYTE $0x0f; 
+    BYTE $0xF2; BYTE $0x0f;
     BYTE $0x38; BYTE $0xf1; BYTE $0xd1
     // CRC32   ESI, EDI
-    BYTE $0xF2; BYTE $0x0f; 
+    BYTE $0xF2; BYTE $0x0f;
     BYTE $0x38; BYTE $0xf1; BYTE $0xfe
     MOVL    BX, (R9)
     MOVL    DX, 4(R9)
@@ -64,7 +64,7 @@ crc_loop:
     MOVL    R11, AX
 
     // CRC32   EAX, EBX
-    BYTE $0xF2; BYTE $0x0f; 
+    BYTE $0xF2; BYTE $0x0f;
     BYTE $0x38; BYTE $0xf1; BYTE $0xd8
     MOVL    BX, 12(R9)
 
@@ -81,7 +81,7 @@ rem_loop:
     MOVL    (R8), AX
 
     // CRC32   EAX, EBX
-    BYTE $0xF2; BYTE $0x0f; 
+    BYTE $0xF2; BYTE $0x0f;
     BYTE $0x38; BYTE $0xf1; BYTE $0xd8
 
     MOVL    BX,(R9)
