@@ -12,6 +12,7 @@ It offers slightly better compression at lower compression settings, and up to 3
 
 # changelog
 
+* Nov 20 2015: Small optimization to bit writer on 64 bit systems.
 * Nov 17 2015: Fixed out-of-bound errors if the underlying Writer returned an error. See [#15](https://github.com/klauspost/compress/issues/15).
 * Nov 12 2015: Added [io.WriterTo](https://golang.org/pkg/io/#WriterTo) support to gzip/inflate.
 * Nov 11 2015: Merged [CL 16669](https://go-review.googlesource.com/#/c/16669/4): archive/zip: enable overriding (de)compressors per file
