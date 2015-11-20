@@ -64,8 +64,8 @@ func (h hcode) code() (code uint16) {
 	return uint16(h)
 }
 
-func (h hcode) bits() (bits uint8) {
-	return uint8(h >> 16)
+func (h hcode) bits() (bits uint) {
+	return uint(h >> 16)
 }
 
 func maxNode() literalNode { return literalNode{math.MaxUint16, math.MaxInt32} }

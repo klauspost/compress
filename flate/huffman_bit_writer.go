@@ -75,7 +75,7 @@ type huffmanBitWriter struct {
 	// Data waiting to be written is bytes[0:nbytes]
 	// and then the low nbits of bits.
 	bits            uint64
-	nbits           uint32
+	nbits           uint
 	bytes           [bufferSize]byte
 	nbytes          int
 	literalFreq     []int32
@@ -166,9 +166,9 @@ func (w *huffmanBitWriter) flush() {
 	w.nbytes = 0
 }
 
-func (w *huffmanBitWriter) writeBits(b, nb int32) {
+func (w *huffmanBitWriter) writeBits(b int32, nb uint) {
 	w.bits |= uint64(b) << w.nbits
-	w.nbits += uint32(nb)
+	w.nbits += nb
 	if w.nbits >= 48 {
 		bits := w.bits
 		w.bits >>= 48
@@ -238,13 +238,13 @@ func (w *huffmanBitWriter) generateCodegen(numLiterals int, numOffsets int) {
 	//copy(codegen[0:numLiterals], w.literalEncoding.codeBits)
 	cgnl := codegen[0:numLiterals]
 	for i := range cgnl {
-		cgnl[i] = w.literalEncoding.codes[i].bits()
+		cgnl[i] = uint8(w.literalEncoding.codes[i].bits())
 	}
 
 	//copy(codegen[numLiterals:numLiterals+numOffsets], w.offsetEncoding.codeBits)
 	cgnl = codegen[numLiterals : numLiterals+numOffsets]
 	for i := range cgnl {
-		cgnl[i] = w.offsetEncoding.codes[i].bits()
+		cgnl[i] = uint8(w.offsetEncoding.codes[i].bits())
 	}
 	codegen[numLiterals+numOffsets] = badCode
 
@@ -330,7 +330,7 @@ func (w *huffmanBitWriter) writeCode(code *huffmanEncoder, literal uint32) {
 	}
 	c := code.codes[literal]
 	w.bits |= uint64(c.code()) << w.nbits
-	w.nbits += uint32(c.bits())
+	w.nbits += c.bits()
 	if w.nbits >= 48 {
 		bits := w.bits
 		w.bits >>= 48
@@ -555,7 +555,7 @@ func (w *huffmanBitWriter) writeBlock(tok tokens, eof bool, input []byte) {
 			length := t.length()
 			lengthCode := lengthCode(length)
 			w.writeCode(literalEncoding, lengthCode+lengthCodesStart)
-			extraLengthBits := int32(lengthExtraBits[lengthCode])
+			extraLengthBits := uint(lengthExtraBits[lengthCode])
 			if extraLengthBits > 0 {
 				extraLength := int32(length - lengthBase[lengthCode])
 				w.writeBits(extraLength, extraLengthBits)
@@ -564,7 +564,7 @@ func (w *huffmanBitWriter) writeBlock(tok tokens, eof bool, input []byte) {
 			offset := t.offset()
 			offsetCode := offsetCode(offset)
 			w.writeCode(offsetEncoding, offsetCode)
-			extraOffsetBits := int32(offsetExtraBits[offsetCode])
+			extraOffsetBits := uint(offsetExtraBits[offsetCode])
 			if extraOffsetBits > 0 {
 				extraOffset := int32(offset - offsetBase[offsetCode])
 				w.writeBits(extraOffset, extraOffsetBits)
@@ -664,7 +664,7 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
 		// Bitwriting inlined, ~30% speedup
 		c := w.literalEncoding.codes[t]
 		w.bits |= uint64(c.code()) << w.nbits
-		w.nbits += uint32(c.bits())
+		w.nbits += c.bits()
 		if w.nbits >= 48 {
 			bits := w.bits
 			w.bits >>= 48
@@ -679,9 +679,10 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
 			n += 6
 			if n >= bufferSize-8 {
 				_, w.err = w.w.Write(w.bytes[:bufferSize-8])
-				n = 0
+				w.nbytes = 0
+			} else {
+				w.nbytes = n
 			}
-			w.nbytes = n
 		}
 	}
 	// Write EOB
