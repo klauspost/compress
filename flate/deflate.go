@@ -1035,8 +1035,8 @@ func (d *compressor) fillHuff(b []byte) int {
 // if enough has been accumulated or we at the end of the stream.
 // Any error that occurred will be in d.err
 func (d *compressor) storeHuff() {
-	// We only compress if we have >= 32KB (maxStoreBlockSize/2)
-	if d.windowEnd < (maxStoreBlockSize/2) && !d.sync {
+	// We only compress if we have maxStoreBlockSize or we are at end-of-stream
+	if d.windowEnd < maxStoreBlockSize && !d.sync {
 		return
 	}
 	if d.windowEnd == 0 {
@@ -1051,8 +1051,8 @@ func (d *compressor) storeHuff() {
 // if enough has been accumulated or we at the end of the stream.
 // Any error that occurred will be in d.err
 func (d *compressor) storeSnappy() {
-	// We only compress if we have >= 32KB (maxStoreBlockSize/2)
-	if d.windowEnd < (maxStoreBlockSize/2) && !d.sync {
+	// We only compress if we have maxStoreBlockSize.
+	if d.windowEnd < maxStoreBlockSize && !d.sync {
 		return
 	}
 	if d.windowEnd == 0 {

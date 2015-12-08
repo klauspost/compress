@@ -367,16 +367,18 @@ func TestGzip10M(t *testing.T) {
 
 // Test if two runs produce identical results.
 func TestDeterministicLM2(t *testing.T) { testDeterm(-2, t) }
-func TestDeterministicL0(t *testing.T)  { testDeterm(0, t) }
-func TestDeterministicL1(t *testing.T)  { testDeterm(1, t) }
-func TestDeterministicL2(t *testing.T)  { testDeterm(2, t) }
-func TestDeterministicL3(t *testing.T)  { testDeterm(3, t) }
-func TestDeterministicL4(t *testing.T)  { testDeterm(4, t) }
-func TestDeterministicL5(t *testing.T)  { testDeterm(5, t) }
-func TestDeterministicL6(t *testing.T)  { testDeterm(6, t) }
-func TestDeterministicL7(t *testing.T)  { testDeterm(7, t) }
-func TestDeterministicL8(t *testing.T)  { testDeterm(8, t) }
-func TestDeterministicL9(t *testing.T)  { testDeterm(9, t) }
+
+// Level 0 is not deterministic since it depends on the size of each write.
+// func TestDeterministicL0(t *testing.T)  { testDeterm(0, t) }
+func TestDeterministicL1(t *testing.T) { testDeterm(1, t) }
+func TestDeterministicL2(t *testing.T) { testDeterm(2, t) }
+func TestDeterministicL3(t *testing.T) { testDeterm(3, t) }
+func TestDeterministicL4(t *testing.T) { testDeterm(4, t) }
+func TestDeterministicL5(t *testing.T) { testDeterm(5, t) }
+func TestDeterministicL6(t *testing.T) { testDeterm(6, t) }
+func TestDeterministicL7(t *testing.T) { testDeterm(7, t) }
+func TestDeterministicL8(t *testing.T) { testDeterm(8, t) }
+func TestDeterministicL9(t *testing.T) { testDeterm(9, t) }
 
 func testDeterm(i int, t *testing.T) {
 	var length = 500000
@@ -402,7 +404,8 @@ func testDeterm(i int, t *testing.T) {
 	w.Flush()
 	w.Close()
 
-	// We
+	// We recreate the buffer, so we have a goos chance of getting a
+	// different memory address.
 	rand.Seed(1337)
 	t2 := make([]byte, length)
 	for idx := range t2 {
@@ -415,7 +418,18 @@ func testDeterm(i int, t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = io.Copy(w2, br2)
+
+	// We write the same data, but with a different size than
+	// the default copy.
+	for {
+		_, err = io.CopyN(w2, br2, 1234)
+		if err == io.EOF {
+			err = nil
+			break
+		} else if err != nil {
+			break
+		}
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
