@@ -67,9 +67,7 @@ type compressor struct {
 	compressionLevel
 
 	w          *huffmanBitWriter
-	hasher     func([]byte) hash
 	bulkHasher func([]byte, []hash)
-	matcher    func(a, b []byte, max int) int
 
 	// compression algorithm
 	fill func(*compressor, []byte) int // copy data to window
@@ -375,13 +373,9 @@ func (d *compressor) initDeflate() {
 	d.index = 0
 	d.hash = 0
 	d.chainHead = -1
-	d.hasher = oldHash
 	d.bulkHasher = oldBulkHash
-	d.matcher = matchLen
 	if useSSE42 {
-		d.hasher = crc32sse
 		d.bulkHasher = crc32sseAll
-		d.matcher = matchLenSSE4
 	}
 }
 
