@@ -99,23 +99,60 @@ func TestCRCBulk(t *testing.T) {
 	}
 	for _, x := range deflateTests {
 		y := x.out
-		if len(y) >= minMatchLength {
+		y = append(y, y...)
+		y = append(y, y...)
+		y = append(y, y...)
+		y = append(y, y...)
+		y = append(y, y...)
+		y = append(y, y...)
+		if !testing.Short() {
 			y = append(y, y...)
-			for j := 4; j < len(y); j++ {
-				y := y[:j]
-				dst := make([]hash, len(y)-minMatchLength+1)
+			y = append(y, y...)
+		}
+		y = append(y, 1)
+		if len(y) >= minMatchLength {
+			for j := len(y) - 1; j >= 4; j-- {
+
+				// Create copy, so we easier detect of-of-bound reads
+				test := make([]byte, j)
+				test2 := make([]byte, j)
+				copy(test, y[:j])
+				copy(test2, y[:j])
+
+				// We allocate one more than we need to test for unintentional overwrites
+				dst := make([]hash, j-3+1)
+				ref := make([]hash, j-3+1)
 				for i := range dst {
 					dst[i] = hash(i + 100)
+					ref[i] = hash(i + 101)
 				}
-				crc32sseAll(y, dst)
+				// Last entry must NOT be overwritten.
+				dst[j-3] = 0x1234
+				ref[j-3] = 0x1234
+
+				// Do two encodes we can compare
+				crc32sseAll(test, dst)
+				crc32sseAll(test2, ref)
+
+				// Check all values
 				for i, got := range dst {
-					expect := crc32sse(y[i:])
+					if i == j-3 {
+						if dst[i] != 0x1234 {
+							t.Fatalf("end of expected dst overwritten, was %08x", uint32(dst[i]))
+						}
+						continue
+					}
+					expect := crc32sse(y[i : i+4])
 					if got != expect && got == hash(i)+100 {
-						t.Errorf("Len:%d Index:%d, expected 0x%08x but not modified", len(y), i, expect)
+						t.Errorf("Len:%d Index:%d, expected 0x%08x but not modified", len(y), i, uint32(expect))
 					} else if got != expect {
-						t.Errorf("Len:%d Index:%d, got 0x%08x expected:0x%08x", len(y), i, got, expect)
+						t.Errorf("Len:%d Index:%d, got 0x%08x expected:0x%08x", len(y), i, uint32(got), uint32(expect))
 					} else {
 						//t.Logf("Len:%d Index:%d OK", len(y), i)
+					}
+					expect = ref[i]
+					if got != expect {
+						t.Errorf("Len:%d Index:%d, got 0x%08x expected:0x%08x", len(y), i, got, expect)
 					}
 				}
 			}

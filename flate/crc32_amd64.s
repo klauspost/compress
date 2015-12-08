@@ -10,29 +10,24 @@ TEXT ·crc32sse(SB),7, $0
     BYTE $0xF2; BYTE $0x41; BYTE $0x0f
     BYTE $0x38; BYTE $0xf1; BYTE $0x1a
 
-
-    // MOVL    (R10), AX
-    // CRC32   EAX, EBX
-    //BYTE $0xF2; BYTE $0x0f;
-    //BYTE $0x38; BYTE $0xf1; BYTE $0xd8
-
     MOVL    BX, ret+24(FP)
     RET
 
 // func crc32sseAll(a []byte, dst []hash)
 TEXT ·crc32sseAll(SB), 7, $0
-    MOVQ    a+0(FP), R8
-    MOVQ    a_len+8(FP), R10
-    MOVQ    dst+24(FP), R9
-    MOVQ    $0, AX
-    SUBQ    $3, R10
-    JZ      end
+    MOVQ    a+0(FP), R8     // R8: src
+    MOVQ    a_len+8(FP), R10  // input length
+    MOVQ    dst+24(FP), R9  // R9: dst
+    SUBQ    $4, R10
     JS      end
+    JZ      one_crc
     MOVQ    R10, R13
     SHRQ    $2, R10  // len/4
     ANDQ    $3, R13  // len&3
-    TESTQ   R10,R10
-    JZ      remain_crc
+    XORQ    BX, BX    
+    ADDQ    $1, R13
+    TESTQ   R10, R10
+    JZ      rem_loop
 
 crc_loop:
     MOVQ    (R8), R11
@@ -70,13 +65,10 @@ crc_loop:
 
     ADDQ    $16, R9
     ADDQ    $4, R8
+    XORQ    BX, BX
     SUBQ    $1, R10
     JNZ     crc_loop
 
-remain_crc:
-    XORQ    BX, BX
-    TESTQ    R13, R13
-    JZ      end
 rem_loop:
     MOVL    (R8), AX
 
@@ -84,7 +76,7 @@ rem_loop:
     BYTE $0xF2; BYTE $0x0f;
     BYTE $0x38; BYTE $0xf1; BYTE $0xd8
 
-    MOVL    BX,(R9)
+    MOVL    BX, (R9)
     ADDQ    $4, R9
     ADDQ    $1, R8
     XORQ    BX, BX
@@ -92,6 +84,11 @@ rem_loop:
     JNZ    rem_loop
 end:
     RET
+
+one_crc:
+    MOVQ    $1, R13
+    XORQ    BX, BX  
+    JMP     rem_loop
 
 
 // func matchLenSSE4(a, b []byte, max int) int
