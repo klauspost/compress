@@ -147,17 +147,59 @@ TEXT ·histogram(SB), 7, $0
     MOVQ    b+0(FP),SI                  // SI: &b
     MOVQ    b_len+8(FP),R9              // R9: len(b)
     MOVQ    h+24(FP), DI                // DI: Histogram
+    MOVQ    R9, R8
+    SHRQ    $3, R8
+    JZ      hist1
+    XORQ    R11, R11
+
+loop_hist8:
+    MOVQ    (SI), R10
+
+    MOVB    R10, R11
+    INCL    (DI)(R11*4)
+    SHRQ    $8, R10
+
+    MOVB    R10, R11
+    INCL    (DI)(R11*4)
+    SHRQ    $8, R10
+
+    MOVB    R10, R11
+    INCL    (DI)(R11*4)
+    SHRQ    $8, R10
+
+    MOVB    R10, R11
+    INCL    (DI)(R11*4)
+    SHRQ    $8, R10
+
+    MOVB    R10, R11
+    INCL    (DI)(R11*4)
+    SHRQ    $8, R10
+
+    MOVB    R10, R11
+    INCL    (DI)(R11*4)
+    SHRQ    $8, R10
+
+    MOVB    R10, R11
+    INCL    (DI)(R11*4)
+    SHRQ    $8, R10
+
+    INCL    (DI)(R10*4)
+
+    ADDQ    $8, SI
+    DECQ    R8
+    JNZ     loop_hist8
+
+hist1:
+    ANDQ    $7, R9
+    JZ      end_hist
     XORQ    R10, R10
-    TESTQ   R9, R9
-    JZ end_hist
 
-loop_hist:
+loop_hist1:
     MOVB    (SI), R10
-    ADDL    $1, (DI)(R10*4)
-
-    ADDQ    $1, SI
-    SUBQ    $1, R9
-    JNZ     loop_hist
+    INCL    (DI)(R10*4)
+    INCQ    SI
+    DECQ    R9
+    JNZ     loop_hist1
 
 end_hist:
     RET
