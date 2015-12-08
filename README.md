@@ -12,6 +12,7 @@ It offers slightly better compression at lower compression settings, and up to 3
 
 # changelog
 
+* Dec 8 2015: Fixed rare [one byte out-of bounds read](https://github.com/klauspost/compress/issues/20). Please update!
 * Nov 23 2015: Optimization on token writer. ~2-4% faster. Contributed by [@dsnet](https://github.com/dsnet).
 * Nov 20 2015: Small optimization to bit writer on 64 bit systems.
 * Nov 17 2015: Fixed out-of-bound errors if the underlying Writer returned an error. See [#15](https://github.com/klauspost/compress/issues/15).
