@@ -250,3 +250,7 @@ BenchmarkGzipL7     18.38        88.44        4.81x
 BenchmarkGzipL8     10.75        54.37        5.06x
 BenchmarkGzipL9     9.96         55.90        5.61x
 ```
+
+# license
+
+This code is licensed under the same conditions as the original Go code. See LICENSE file.
