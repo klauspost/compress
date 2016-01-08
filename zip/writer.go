@@ -79,7 +79,7 @@ func (w *Writer) Close() error {
 		b.uint16(h.ModifiedTime)
 		b.uint16(h.ModifiedDate)
 		b.uint32(h.CRC32)
-		if h.isZip64() || h.offset > uint32max {
+		if h.isZip64() || h.offset >= uint32max {
 			// the file needs a zip64 header. store maxint in both
 			// 32 bit size fields (and offset later) to signal that the
 			// zip64 extra header should be used.
@@ -272,7 +272,7 @@ func writeHeader(w io.Writer, h *FileHeader) error {
 }
 
 // RegisterCompressor registers or overrides a custom compressor for a specific
-// method ID.  If a compressor for a given method is not found, Writer will
+// method ID. If a compressor for a given method is not found, Writer will
 // default to looking up the compressor at the package level.
 func (w *Writer) RegisterCompressor(method uint16, comp Compressor) {
 	if w.compressors == nil {
