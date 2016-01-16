@@ -157,6 +157,30 @@ func (d *compressor) writeBlock(tok tokens, index int, eof bool) error {
 	return nil
 }
 
+// writeBlockSkip writes the current block and uses the number of tokens
+// to determine if the block should be stored on no matches, or
+// only huffman encoded.
+func (d *compressor) writeBlockSkip(tok tokens, index int, eof bool) error {
+	if index > 0 || eof {
+		if d.blockStart <= index {
+			window := d.window[d.blockStart:index]
+			if tok.n == len(window) && !eof {
+				d.writeStoredBlock(window)
+				// If we removed less than 10 literals, huffman compress the block.
+			} else if tok.n > len(window)-10 {
+				d.w.writeBlockHuff(eof, window)
+			} else {
+				d.w.writeBlock(tok, eof, window)
+			}
+		} else {
+			d.w.writeBlock(tok, eof, nil)
+		}
+		d.blockStart = index
+		return d.w.err
+	}
+	return nil
+}
+
 // fillWindow will fill the current window with the supplied
 // dictionary and calculate all hashes.
 // This is much faster than doing a full encode.
@@ -380,7 +404,7 @@ func (d *compressor) initDeflate() {
 }
 
 // Assumes that d.fastSkipHashing != skipNever,
-// otherwise use deflateNoSkip
+// otherwise use deflateLazy
 func (d *compressor) deflate() {
 
 	// Sanity enables additional runtime tests.
@@ -411,7 +435,7 @@ func (d *compressor) deflate() {
 			}
 			if lookahead == 0 {
 				if d.tokens.n > 0 {
-					if d.err = d.writeBlock(d.tokens, d.index, false); d.err != nil {
+					if d.err = d.writeBlockSkip(d.tokens, d.index, false); d.err != nil {
 						return
 					}
 					d.tokens.n = 0
@@ -492,7 +516,7 @@ func (d *compressor) deflate() {
 			}
 			if d.tokens.n == maxFlateBlockTokens {
 				// The block includes the current character
-				if d.err = d.writeBlock(d.tokens, d.index, false); d.err != nil {
+				if d.err = d.writeBlockSkip(d.tokens, d.index, false); d.err != nil {
 					return
 				}
 				d.tokens.n = 0
@@ -507,7 +531,7 @@ func (d *compressor) deflate() {
 				d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[i]))
 				d.tokens.n++
 				if d.tokens.n == maxFlateBlockTokens {
-					if d.err = d.writeBlock(d.tokens, i+1, false); d.err != nil {
+					if d.err = d.writeBlockSkip(d.tokens, i+1, false); d.err != nil {
 						return
 					}
 					d.tokens.n = 0
@@ -695,7 +719,7 @@ func (d *compressor) deflateLazy() {
 }
 
 // Assumes that d.fastSkipHashing != skipNever,
-// otherwise use deflateNoSkip
+// otherwise use deflateLazySSE
 func (d *compressor) deflateSSE() {
 
 	// Sanity enables additional runtime tests.
@@ -726,7 +750,7 @@ func (d *compressor) deflateSSE() {
 			}
 			if lookahead == 0 {
 				if d.tokens.n > 0 {
-					if d.err = d.writeBlock(d.tokens, d.index, false); d.err != nil {
+					if d.err = d.writeBlockSkip(d.tokens, d.index, false); d.err != nil {
 						return
 					}
 					d.tokens.n = 0
@@ -808,7 +832,7 @@ func (d *compressor) deflateSSE() {
 			}
 			if d.tokens.n == maxFlateBlockTokens {
 				// The block includes the current character
-				if d.err = d.writeBlock(d.tokens, d.index, false); d.err != nil {
+				if d.err = d.writeBlockSkip(d.tokens, d.index, false); d.err != nil {
 					return
 				}
 				d.tokens.n = 0
@@ -823,7 +847,7 @@ func (d *compressor) deflateSSE() {
 				d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[i]))
 				d.tokens.n++
 				if d.tokens.n == maxFlateBlockTokens {
-					if d.err = d.writeBlock(d.tokens, i+1, false); d.err != nil {
+					if d.err = d.writeBlockSkip(d.tokens, i+1, false); d.err != nil {
 						return
 					}
 					d.tokens.n = 0
@@ -1059,8 +1083,17 @@ func (d *compressor) storeSnappy() {
 		return
 	}
 	snappyEncode(&d.tokens, d.window[:d.windowEnd])
-	d.w.writeBlock(d.tokens, false, d.window[:d.windowEnd])
-	d.err = d.w.err
+	// If we made zero matches, store the block as is.
+	if d.tokens.n == d.windowEnd {
+		d.err = d.writeStoredBlock(d.window[:d.windowEnd])
+		// If we removed less than 10 literals, huffman compress the block.
+	} else if d.tokens.n > d.windowEnd-10 {
+		d.w.writeBlockHuff(false, d.window[:d.windowEnd])
+		d.err = d.w.err
+	} else {
+		d.w.writeBlock(d.tokens, false, d.window[:d.windowEnd])
+		d.err = d.w.err
+	}
 	d.tokens.n = 0
 	d.windowEnd = 0
 }

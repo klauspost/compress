@@ -12,6 +12,7 @@ It offers slightly better compression at lower compression settings, and up to 3
 
 # changelog
 
+* Jan 16, 2016: Optimization on deflate level 1,2,3 compression.
 * Jan 8 2016: Merge [CL 18317](https://go-review.googlesource.com/#/c/18317): fix reading, writing of zip64 archives.
 * Dec 8 2015: Make level 1 and -2 deterministic even if write size differs.
 * Dec 8 2015: Split encoding functions, so hashing and matching can potentially be inlined. 1-3% faster on AMD64. 5% faster on other platforms.
