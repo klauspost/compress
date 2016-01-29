@@ -572,7 +572,9 @@ func (w *huffmanBitWriter) writeBlock(tok tokens, eof bool, input []byte) {
 	}
 }
 
-// writeBlockDynamic will write a block
+// writeBlockDynamic will write a block as dynamic Huffman table
+// compressed. This should be used, if the caller has a reasonable expectation
+// that this block contains compressible data.
 func (w *huffmanBitWriter) writeBlockDynamic(tok tokens, eof bool, input []byte) {
 	if w.err != nil {
 		return
