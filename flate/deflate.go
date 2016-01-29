@@ -170,7 +170,8 @@ func (d *compressor) writeBlockSkip(tok tokens, index int, eof bool) error {
 			} else if tok.n > len(window)-10 {
 				d.w.writeBlockHuff(eof, window)
 			} else {
-				d.w.writeBlock(tok, eof, window)
+				// Write a dynamic huffman block.
+				d.w.writeBlockDynamic(tok, eof, window)
 			}
 		} else {
 			d.w.writeBlock(tok, eof, nil)
@@ -1091,7 +1092,7 @@ func (d *compressor) storeSnappy() {
 		d.w.writeBlockHuff(false, d.window[:d.windowEnd])
 		d.err = d.w.err
 	} else {
-		d.w.writeBlock(d.tokens, false, d.window[:d.windowEnd])
+		d.w.writeBlockDynamic(d.tokens, false, d.window[:d.windowEnd])
 		d.err = d.w.err
 	}
 	d.tokens.n = 0
