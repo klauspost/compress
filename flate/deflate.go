@@ -50,7 +50,7 @@ var levels = []compressionLevel{
 	// For levels 1-3 we don't bother trying with lazy matches
 	{4, 0, 8, 4, 4, 1},
 	{4, 0, 16, 8, 5, 2},
-	{4, 0, 32, 32, 6, 3},
+	{4, 0, 24, 24, 6, 3},
 	// Levels 4-9 use increasingly more lazy matching
 	// and increasingly stringent conditions for "good enough".
 	{4, 4, 16, 16, skipNever, 4},
