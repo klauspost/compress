@@ -50,7 +50,7 @@ var levels = []compressionLevel{
 	// For levels 1-3 we don't bother trying with lazy matches
 	{4, 0, 8, 4, 4, 1},
 	{4, 0, 16, 8, 5, 2},
-	{4, 0, 32, 32, 6, 3},
+	{4, 0, 24, 24, 6, 3},
 	// Levels 4-9 use increasingly more lazy matching
 	// and increasingly stringent conditions for "good enough".
 	{4, 4, 16, 16, skipNever, 4},
@@ -170,7 +170,8 @@ func (d *compressor) writeBlockSkip(tok tokens, index int, eof bool) error {
 			} else if tok.n > len(window)-10 {
 				d.w.writeBlockHuff(eof, window)
 			} else {
-				d.w.writeBlock(tok, eof, window)
+				// Write a dynamic huffman block.
+				d.w.writeBlockDynamic(tok, eof, window)
 			}
 		} else {
 			d.w.writeBlock(tok, eof, nil)
@@ -1091,7 +1092,7 @@ func (d *compressor) storeSnappy() {
 		d.w.writeBlockHuff(false, d.window[:d.windowEnd])
 		d.err = d.w.err
 	} else {
-		d.w.writeBlock(d.tokens, false, d.window[:d.windowEnd])
+		d.w.writeBlockDynamic(d.tokens, false, d.window[:d.windowEnd])
 		d.err = d.w.err
 	}
 	d.tokens.n = 0

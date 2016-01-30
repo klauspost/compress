@@ -572,6 +572,100 @@ func (w *huffmanBitWriter) writeBlock(tok tokens, eof bool, input []byte) {
 	}
 }
 
+// writeBlockDynamic will write a block as dynamic Huffman table
+// compressed. This should be used, if the caller has a reasonable expectation
+// that this block contains compressible data.
+func (w *huffmanBitWriter) writeBlockDynamic(tok tokens, eof bool, input []byte) {
+	if w.err != nil {
+		return
+	}
+	copy(w.literalFreq, zeroLits[:])
+
+	for i := range w.offsetFreq {
+		w.offsetFreq[i] = 0
+	}
+
+	tok.tokens[tok.n] = endBlockMarker
+	tokens := tok.tokens[0 : tok.n+1]
+
+	for _, t := range tokens {
+		switch t.typ() {
+		case literalType:
+			w.literalFreq[t.literal()]++
+		case matchType:
+			length := t.length()
+			offset := t.offset()
+			w.literalFreq[lengthCodesStart+lengthCode(length)]++
+			w.offsetFreq[offsetCode(offset)]++
+		}
+	}
+
+	// get the number of literals
+	numLiterals := len(w.literalFreq)
+	for w.literalFreq[numLiterals-1] == 0 {
+		numLiterals--
+	}
+	// get the number of offsets
+	numOffsets := len(w.offsetFreq)
+	for numOffsets > 0 && w.offsetFreq[numOffsets-1] == 0 {
+		numOffsets--
+	}
+	if numOffsets == 0 {
+		// We haven't found a single match. If we want to go with the dynamic encoding,
+		// we should count at least one offset to be sure that the offset huffman tree could be encoded.
+		w.offsetFreq[0] = 1
+		numOffsets = 1
+	}
+
+	w.literalEncoding.generate(w.literalFreq, 15)
+	w.dynamicEncoding.generate(w.offsetFreq, 15)
+
+	var numCodegens int
+
+	// Generate codegen and codegenFrequencies, which indicates how to encode
+	// the literalEncoding and the offsetEncoding.
+	w.generateCodegen(numLiterals, numOffsets, w.dynamicEncoding)
+	w.codegenEncoding.generate(w.codegenFreq, 7)
+	numCodegens = len(w.codegenFreq)
+	for numCodegens > 4 && w.codegenFreq[codegenOrder[numCodegens-1]] == 0 {
+		numCodegens--
+	}
+	var literalEncoding = w.literalEncoding
+	var offsetEncoding = w.dynamicEncoding
+
+	// Write Huffman table.
+	w.writeDynamicHeader(numLiterals, numOffsets, numCodegens, eof)
+	for _, t := range tokens {
+		switch t.typ() {
+		case literalType:
+			w.writeCode(literalEncoding, t.literal())
+			break
+		case matchType:
+			// Write the length
+			length := t.length()
+			lengthCode := lengthCode(length)
+			w.writeCode(literalEncoding, lengthCode+lengthCodesStart)
+			extraLengthBits := uint(lengthExtraBits[lengthCode])
+			if extraLengthBits > 0 {
+				extraLength := int32(length - lengthBase[lengthCode])
+				w.writeBits(extraLength, extraLengthBits)
+			}
+			// Write the offset
+			offset := t.offset()
+			offsetCode := offsetCode(offset)
+			w.writeCode(offsetEncoding, offsetCode)
+			extraOffsetBits := uint(offsetExtraBits[offsetCode])
+			if extraOffsetBits > 0 {
+				extraOffset := int32(offset - offsetBase[offsetCode])
+				w.writeBits(extraOffset, extraOffsetBits)
+			}
+			break
+		default:
+			panic("unknown token type: " + string(t))
+		}
+	}
+}
+
 // static offset encoder used for huffman only encoding.
 var huffOffset *huffmanEncoder
 var zeroLits [maxNumLit]int32
@@ -642,8 +736,8 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
 		w.literalEncoding.bitLength(w.literalFreq) +
 		1 /*w.offsetEncoding.bitLength(w.offsetFreq)*/
 
-	// Stored bytes?
-	if storedSize < size {
+	// Store bytes, if we don't get a reasonable improvement.
+	if storedSize < (size + size>>4) {
 		w.writeStoredHeader(storedBytes, eof)
 		w.writeBytes(input[0:storedBytes])
 		return
