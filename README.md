@@ -11,6 +11,8 @@ It offers slightly better compression at lower compression settings, and up to 3
 [![Build Status](https://travis-ci.org/klauspost/compress.svg?branch=master)](https://travis-ci.org/klauspost/compress)
 
 # changelog
+* Feb 12, 2016: (Snappy) Added AMD64 SSE 4.2 optimizations to matching, which makes easy to compress material run faster. Typical speedup is around 25%.
+* Feb 9, 2016: Added Snappy package fork. This version is 5-7% faster, much more on hard to compress content.
 * Jan 30, 2016: Optimize level 1 to 3 by not considering static dictionary or storing uncompressed. ~4-5% speedup.
 * Jan 16, 2016: Optimization on deflate level 1,2,3 compression.
 * Jan 8 2016: Merge [CL 18317](https://go-review.googlesource.com/#/c/18317): fix reading, writing of zip64 archives.
@@ -34,6 +36,7 @@ The packages are drop-in replacements for standard libraries. Simply replace the
 | `compress/zlib`    | `github.com/klauspost/compress/zlib`    |
 | `archive/zip`      | `github.com/klauspost/compress/zip`     |
 | `compress/deflate` | `github.com/klauspost/compress/deflate` |
+| `github.com/golang/snappy`    | `github.com/klauspost/compress/snappy`    |
 
 You may also be interested in [pgzip](https://github.com/klauspost/pgzip), which is a drop in replacement for gzip, which support multithreaded compression on big files and the optimized [crc32](https://github.com/klauspost/crc32) package used by these packages.
 
@@ -251,6 +254,42 @@ BenchmarkGzipL6     23.65        122.81       5.19x
 BenchmarkGzipL7     18.38        88.44        4.81x
 BenchmarkGzipL8     10.75        54.37        5.06x
 BenchmarkGzipL9     9.96         55.90        5.61x
+```
+
+# snappy package
+
+The Snappy package contains some optimizations over the standard package.
+
+This speeds up mainly **hard** and **easy** to compress material.
+
+Here are the "standard" benchmarks, compared to current Snappy master (9 feb 2016).
+
+```
+benchmark                      old MB/s     new MB/s     speedup
+Benchmark_ZFlat0-4             260.49       325.37       1.25x
+Benchmark_ZFlat1-4             130.77       127.61       0.98x
+Benchmark_ZFlat2-4             93.96        9878.99      105.14x
+Benchmark_ZFlat3-4             92.89        9964.63      107.27x
+Benchmark_ZFlat4-4             112.50       3946.07      35.08x
+Benchmark_ZFlat5-4             263.54       328.50       1.25x
+Benchmark_ZFlat6-4             109.25       126.24       1.16x
+Benchmark_ZFlat7-4             106.88       115.86       1.08x
+Benchmark_ZFlat8-4             112.86       129.03       1.14x
+Benchmark_ZFlat9-4             100.40       109.11       1.09x
+Benchmark_ZFlat10-4            297.55       389.41       1.31x
+Benchmark_ZFlat11-4            155.24       206.28       1.33x
+Benchmark_Stream_ZFlat0-4      251.58       324.35       1.29x
+Benchmark_Stream_ZFlat1-4      127.35       129.12       1.01x
+Benchmark_Stream_ZFlat2-4      89.23        3907.65      43.79x
+Benchmark_Stream_ZFlat3-4      94.82        3927.62      41.42x
+Benchmark_Stream_ZFlat4-4      106.33       2396.34      22.54x
+Benchmark_Stream_ZFlat5-4      243.73       298.37       1.22x
+Benchmark_Stream_ZFlat6-4      111.55       122.42       1.10x
+Benchmark_Stream_ZFlat7-4      103.23       109.65       1.06x
+Benchmark_Stream_ZFlat8-4      117.06       126.05       1.08x
+Benchmark_Stream_ZFlat9-4      99.01        105.45       1.07x
+Benchmark_Stream_ZFlat10-4     257.45       362.46       1.41x
+Benchmark_Stream_ZFlat11-4     161.51       198.39       1.23x
 ```
 
 # license
