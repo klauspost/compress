@@ -395,11 +395,9 @@ func (w *huffmanBitWriter) writeBlock(tok tokens, eof bool, input []byte) {
 	if w.err != nil {
 		return
 	}
-	copy(w.literalFreq, zeroLits[:])
 
-	for i := range w.offsetFreq {
-		w.offsetFreq[i] = 0
-	}
+	copy(w.literalFreq, zeroLits[:])
+	copy(w.offsetFreq, zeroLits[:maxNumDist])
 
 	tok.tokens[tok.n] = endBlockMarker
 	tokens := tok.tokens[0 : tok.n+1]
@@ -546,10 +544,7 @@ func (w *huffmanBitWriter) writeBlockDynamic(tok tokens, eof bool, input []byte)
 		return
 	}
 	copy(w.literalFreq, zeroLits[:])
-
-	for i := range w.offsetFreq {
-		w.offsetFreq[i] = 0
-	}
+	copy(w.offsetFreq, zeroLits[:maxNumDist])
 
 	tok.tokens[tok.n] = endBlockMarker
 	tokens := tok.tokens[0 : tok.n+1]
