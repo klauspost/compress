@@ -105,41 +105,7 @@ func (w *huffmanBitWriter) reset(writer io.Writer) {
 	w.w = writer
 	w.bits, w.nbits, w.nbytes, w.err = 0, 0, 0, nil
 	w.bytes = [bufferSize]byte{}
-	for i := range w.codegen {
-		w.codegen[i] = 0
-	}
-	for _, s := range [...][]int32{w.literalFreq, w.offsetFreq, w.codegenFreq} {
-		for i := range s {
-			s[i] = 0
-		}
-	}
-	encs := []*huffmanEncoder{w.literalEncoding, w.codegenEncoding, w.dynamicEncoding}
-	for _, enc := range encs {
-		for i := range enc.codes {
-			enc.codes[i] = 0
-		}
-	}
 }
-
-/* Inlined in writeBits
-func (w *huffmanBitWriter) flushBits() {
-	if w.err != nil {
-		w.nbits = 0
-		return
-	}
-	bits := w.bits
-	w.bits >>= 16
-	w.nbits -= 16
-	n := w.nbytes
-	w.bytes[n] = byte(bits)
-	w.bytes[n+1] = byte(bits >> 8)
-	if n += 2; n >= len(w.bytes) {
-		_, w.err = w.w.Write(w.bytes[0:])
-		n = 0
-	}
-	w.nbytes = n
-}
-*/
 
 func (w *huffmanBitWriter) flush() {
 	if w.err != nil {
@@ -429,11 +395,9 @@ func (w *huffmanBitWriter) writeBlock(tok tokens, eof bool, input []byte) {
 	if w.err != nil {
 		return
 	}
-	copy(w.literalFreq, zeroLits[:])
 
-	for i := range w.offsetFreq {
-		w.offsetFreq[i] = 0
-	}
+	copy(w.literalFreq, zeroLits[:])
+	copy(w.offsetFreq, zeroLits[:maxNumDist])
 
 	tok.tokens[tok.n] = endBlockMarker
 	tokens := tok.tokens[0 : tok.n+1]
@@ -580,10 +544,7 @@ func (w *huffmanBitWriter) writeBlockDynamic(tok tokens, eof bool, input []byte)
 		return
 	}
 	copy(w.literalFreq, zeroLits[:])
-
-	for i := range w.offsetFreq {
-		w.offsetFreq[i] = 0
-	}
+	copy(w.offsetFreq, zeroLits[:maxNumDist])
 
 	tok.tokens[tok.n] = endBlockMarker
 	tokens := tok.tokens[0 : tok.n+1]
