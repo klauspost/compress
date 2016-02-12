@@ -17,6 +17,9 @@ var (
 	ErrTooLarge = errors.New("snappy: decoded block is too large")
 	// ErrUnsupported reports that the input isn't supported.
 	ErrUnsupported = errors.New("snappy: unsupported input")
+
+	errUnsupportedCopy4Tag      = errors.New("snappy: unsupported COPY_4 tag")
+	errUnsupportedLiteralLength = errors.New("snappy: unsupported literal length")
 )
 
 // DecodedLen returns the length of the decoded block.
@@ -63,32 +66,32 @@ func Decode(dst, src []byte) ([]byte, error) {
 				s++
 			case x == 60:
 				s += 2
-				if s > len(src) {
+				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
 					return nil, ErrCorrupt
 				}
 				x = uint(src[s-1])
 			case x == 61:
 				s += 3
-				if s > len(src) {
+				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
 					return nil, ErrCorrupt
 				}
 				x = uint(src[s-2]) | uint(src[s-1])<<8
 			case x == 62:
 				s += 4
-				if s > len(src) {
+				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
 					return nil, ErrCorrupt
 				}
 				x = uint(src[s-3]) | uint(src[s-2])<<8 | uint(src[s-1])<<16
 			case x == 63:
 				s += 5
-				if s > len(src) {
+				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
 					return nil, ErrCorrupt
 				}
 				x = uint(src[s-4]) | uint(src[s-3])<<8 | uint(src[s-2])<<16 | uint(src[s-1])<<24
 			}
 			length = int(x + 1)
 			if length <= 0 {
-				return nil, errors.New("snappy: unsupported literal length")
+				return nil, errUnsupportedLiteralLength
 			}
 			if length > len(dst)-d || length > len(src)-s {
 				return nil, ErrCorrupt
@@ -115,14 +118,13 @@ func Decode(dst, src []byte) ([]byte, error) {
 			offset = int(src[s-2]) | int(src[s-1])<<8
 
 		case tagCopy4:
-			return nil, errors.New("snappy: unsupported COPY_4 tag")
+			return nil, errUnsupportedCopy4Tag
 		}
 
-		end := d + length
-		if offset > d || end > len(dst) {
+		if offset > d || length > len(dst)-d {
 			return nil, ErrCorrupt
 		}
-		for ; d < end; d++ {
+		for end := d + length; d != end; d++ {
 			dst[d] = dst[d-offset]
 		}
 	}
@@ -143,7 +145,7 @@ func NewReader(r io.Reader) *Reader {
 	}
 }
 
-// Reader is an io.Reader than can read Snappy-compressed bytes.
+// Reader is an io.Reader that can read Snappy-compressed bytes.
 type Reader struct {
 	r       io.Reader
 	err     error

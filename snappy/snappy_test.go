@@ -23,6 +23,14 @@ var (
 	testdata = flag.String("testdata", "testdata", "Directory containing the test data")
 )
 
+func TestMaxEncodedLenOfMaxUncompressedChunkLen(t *testing.T) {
+	got := maxEncodedLenOfMaxUncompressedChunkLen
+	want := MaxEncodedLen(maxUncompressedChunkLen)
+	if got != want {
+		t.Fatalf("got %d, want %d", got, want)
+	}
+}
+
 func roundtrip(b, ebuf, dbuf []byte) error {
 	d, err := Decode(dbuf, Encode(ebuf, b))
 	if err != nil {
@@ -54,7 +62,7 @@ func TestSmallCopy(t *testing.T) {
 }
 
 func TestSmallRand(t *testing.T) {
-	rng := rand.New(rand.NewSource(27354294))
+	rng := rand.New(rand.NewSource(1))
 	for n := 1; n < 20000; n += 23 {
 		b := make([]byte, n)
 		for i := range b {
@@ -95,6 +103,122 @@ func TestInvalidVarint(t *testing.T) {
 	}
 	if _, err := Decode(nil, data); err != ErrCorrupt {
 		t.Errorf("Decode: got %v, want ErrCorrupt", err)
+	}
+}
+
+func TestDecode(t *testing.T) {
+	testCases := []struct {
+		desc    string
+		input   string
+		want    string
+		wantErr error
+	}{{
+		`decodedLen=0x100000000 is too long`,
+		"\x80\x80\x80\x80\x10" + "\x00\x41",
+		"",
+		ErrCorrupt,
+	}, {
+		`decodedLen=3; tagLiteral, 0-byte length; length=3; valid input`,
+		"\x03" + "\x08\xff\xff\xff",
+		"\xff\xff\xff",
+		nil,
+	}, {
+		`decodedLen=1; tagLiteral, 1-byte length; not enough length bytes`,
+		"\x01" + "\xf0",
+		"",
+		ErrCorrupt,
+	}, {
+		`decodedLen=3; tagLiteral, 1-byte length; length=3; valid input`,
+		"\x03" + "\xf0\x02\xff\xff\xff",
+		"\xff\xff\xff",
+		nil,
+	}, {
+		`decodedLen=1; tagLiteral, 2-byte length; not enough length bytes`,
+		"\x01" + "\xf4\x00",
+		"",
+		ErrCorrupt,
+	}, {
+		`decodedLen=3; tagLiteral, 2-byte length; length=3; valid input`,
+		"\x03" + "\xf4\x02\x00\xff\xff\xff",
+		"\xff\xff\xff",
+		nil,
+	}, {
+		`decodedLen=1; tagLiteral, 3-byte length; not enough length bytes`,
+		"\x01" + "\xf8\x00\x00",
+		"",
+		ErrCorrupt,
+	}, {
+		`decodedLen=3; tagLiteral, 3-byte length; length=3; valid input`,
+		"\x03" + "\xf8\x02\x00\x00\xff\xff\xff",
+		"\xff\xff\xff",
+		nil,
+	}, {
+		`decodedLen=1; tagLiteral, 4-byte length; not enough length bytes`,
+		"\x01" + "\xfc\x00\x00\x00",
+		"",
+		ErrCorrupt,
+	}, {
+		`decodedLen=1; tagLiteral, 4-byte length; length=3; not enough dst bytes`,
+		"\x01" + "\xfc\x02\x00\x00\x00\xff\xff\xff",
+		"",
+		ErrCorrupt,
+	}, {
+		`decodedLen=4; tagLiteral, 4-byte length; length=3; not enough src bytes`,
+		"\x04" + "\xfc\x02\x00\x00\x00\xff",
+		"",
+		ErrCorrupt,
+	}, {
+		`decodedLen=3; tagLiteral, 4-byte length; length=3; valid input`,
+		"\x03" + "\xfc\x02\x00\x00\x00\xff\xff\xff",
+		"\xff\xff\xff",
+		nil,
+	}, {
+		`decodedLen=4; tagCopy1, 1 extra length|offset byte; not enough extra bytes`,
+		"\x04" + "\x01",
+		"",
+		ErrCorrupt,
+	}, {
+		`decodedLen=4; tagCopy2, 2 extra length|offset bytes; not enough extra bytes`,
+		"\x04" + "\x02\x00",
+		"",
+		ErrCorrupt,
+	}, {
+		`decodedLen=4; tagCopy4; unsupported COPY_4 tag`,
+		"\x04" + "\x03\x00\x00\x00\x00",
+		"",
+		errUnsupportedCopy4Tag,
+	}, {
+		`decodedLen=4; tagLiteral (4 bytes "abcd"); valid input`,
+		"\x04" + "\x0cabcd",
+		"abcd",
+		nil,
+	}, {
+		`decodedLen=8; tagLiteral (4 bytes "abcd"); tagCopy1; length=4 offset=4; valid input`,
+		"\x08" + "\x0cabcd" + "\x01\x04",
+		"abcdabcd",
+		nil,
+	}, {
+		`decodedLen=9; tagLiteral (4 bytes "abcd"); tagCopy1; length=4 offset=4; inconsistent dLen`,
+		"\x09" + "\x0cabcd" + "\x01\x04",
+		"",
+		ErrCorrupt,
+	}, {
+		`decodedLen=8; tagLiteral (4 bytes "abcd"); tagCopy1; length=4 offset=5; offset too large`,
+		"\x08" + "\x0cabcd" + "\x01\x05",
+		"",
+		ErrCorrupt,
+	}, {
+		`decodedLen=7; tagLiteral (4 bytes "abcd"); tagCopy1; length=4 offset=4; length too large`,
+		"\x07" + "\x0cabcd" + "\x01\x04",
+		"",
+		ErrCorrupt,
+	}}
+
+	for _, tc := range testCases {
+		g, gotErr := Decode(nil, []byte(tc.input))
+		if got := string(g); got != tc.want || gotErr != tc.wantErr {
+			t.Errorf("%s:\ngot  %q, %v\nwant %q, %v", tc.desc, got, gotErr, tc.want, tc.wantErr)
+		}
 	}
 }
 
@@ -141,6 +265,93 @@ func TestFramingFormat(t *testing.T) {
 	}
 }
 
+func TestWriterGoldenOutput(t *testing.T) {
+	buf := new(bytes.Buffer)
+	w := NewBufferedWriter(buf)
+	defer w.Close()
+	w.Write([]byte("abcd")) // Not compressible.
+	w.Flush()
+	w.Write(bytes.Repeat([]byte{'A'}, 100)) // Compressible.
+	w.Flush()
+	got := buf.String()
+	want := strings.Join([]string{
+		magicChunk,
+		"\x01\x08\x00\x00", // Uncompressed chunk, 8 bytes long (including 4 byte checksum).
+		"\x68\x10\xe6\xb6", // Checksum.
+		"\x61\x62\x63\x64", // Uncompressed payload: "abcd".
+		"\x00\x0d\x00\x00", // Compressed chunk, 13 bytes long (including 4 byte checksum).
+		"\x37\xcb\xbc\x9d", // Checksum.
+		"\x64",             // Compressed payload: Uncompressed length (varint encoded): 100.
+		"\x00\x41",         // Compressed payload: tagLiteral, length=1, "A".
+		"\xfe\x01\x00",     // Compressed payload: tagCopy2,   length=64, offset=1.
+		"\x8a\x01\x00",     // Compressed payload: tagCopy2,   length=35, offset=1.
+	}, "")
+	if got != want {
+		t.Fatalf("\ngot:  % x\nwant: % x", got, want)
+	}
+}
+
+func TestNewBufferedWriter(t *testing.T) {
+	// Test all 32 possible sub-sequences of these 5 input slices.
+	//
+	// Their lengths sum to 400,000, which is over 6 times the Writer ibuf
+	// capacity: 6 * maxUncompressedChunkLen is 393,216.
+	inputs := [][]byte{
+		bytes.Repeat([]byte{'a'}, 40000),
+		bytes.Repeat([]byte{'b'}, 150000),
+		bytes.Repeat([]byte{'c'}, 60000),
+		bytes.Repeat([]byte{'d'}, 120000),
+		bytes.Repeat([]byte{'e'}, 30000),
+	}
+loop:
+	for i := 0; i < 1<<uint(len(inputs)); i++ {
+		var want []byte
+		buf := new(bytes.Buffer)
+		w := NewBufferedWriter(buf)
+		for j, input := range inputs {
+			if i&(1<<uint(j)) == 0 {
+				continue
+			}
+			if _, err := w.Write(input); err != nil {
+				t.Errorf("i=%#02x: j=%d: Write: %v", i, j, err)
+				continue loop
+			}
+			want = append(want, input...)
+		}
+		if err := w.Close(); err != nil {
+			t.Errorf("i=%#02x: Close: %v", i, err)
+			continue
+		}
+		got, err := ioutil.ReadAll(NewReader(buf))
+		if err != nil {
+			t.Errorf("i=%#02x: ReadAll: %v", i, err)
+			continue
+		}
+		if err := cmp(got, want); err != nil {
+			t.Errorf("i=%#02x: %v", i, err)
+			continue
+		}
+	}
+}
+
+func TestFlush(t *testing.T) {
+	buf := new(bytes.Buffer)
+	w := NewBufferedWriter(buf)
+	defer w.Close()
+	if _, err := w.Write(bytes.Repeat([]byte{'x'}, 20)); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if n := buf.Len(); n != 0 {
+		t.Fatalf("before Flush: %d bytes were written to the underlying io.Writer, want 0", n)
+	}
+	if err := w.Flush(); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+	if n := buf.Len(); n == 0 {
+		t.Fatalf("after Flush: %d bytes were written to the underlying io.Writer, want non-0", n)
+	}
+}
+
 func TestReaderReset(t *testing.T) {
 	gold := bytes.Repeat([]byte("All that is gold does not glitter,\n"), 10000)
 	buf := new(bytes.Buffer)
@@ -181,33 +392,114 @@ func TestReaderReset(t *testing.T) {
 
 func TestWriterReset(t *testing.T) {
 	gold := bytes.Repeat([]byte("Not all those who wander are lost;\n"), 10000)
-	var gots, wants [][]byte
 	const n = 20
-	w, failed := NewWriter(nil), false
-	for i := 0; i <= n; i++ {
-		buf := new(bytes.Buffer)
-		w.Reset(buf)
-		want := gold[:len(gold)*i/n]
-		if _, err := w.Write(want); err != nil {
+	for _, buffered := range []bool{false, true} {
+		var w *Writer
+		if buffered {
+			w = NewBufferedWriter(nil)
+			defer w.Close()
+		} else {
+			w = NewWriter(nil)
+		}
+
+		var gots, wants [][]byte
+		failed := false
+		for i := 0; i <= n; i++ {
+			buf := new(bytes.Buffer)
+			w.Reset(buf)
+			want := gold[:len(gold)*i/n]
+			if _, err := w.Write(want); err != nil {
+				t.Errorf("#%d: Write: %v", i, err)
+				failed = true
+				continue
+			}
+			if buffered {
+				if err := w.Flush(); err != nil {
+					t.Errorf("#%d: Flush: %v", i, err)
+					failed = true
+					continue
+				}
+			}
+			got, err := ioutil.ReadAll(NewReader(buf))
+			if err != nil {
+				t.Errorf("#%d: ReadAll: %v", i, err)
+				failed = true
+				continue
+			}
+			gots = append(gots, got)
+			wants = append(wants, want)
+		}
+		if failed {
+			continue
+		}
+		for i := range gots {
+			if err := cmp(gots[i], wants[i]); err != nil {
+				t.Errorf("#%d: %v", i, err)
+			}
+		}
+	}
+}
+
+func TestWriterResetWithoutFlush(t *testing.T) {
+	buf0 := new(bytes.Buffer)
+	buf1 := new(bytes.Buffer)
+	w := NewBufferedWriter(buf0)
+	if _, err := w.Write([]byte("xxx")); err != nil {
+		t.Fatalf("Write #0: %v", err)
+	}
+	// Note that we don't Flush the Writer before calling Reset.
+	w.Reset(buf1)
+	if _, err := w.Write([]byte("yyy")); err != nil {
+		t.Fatalf("Write #1: %v", err)
+	}
+	if err := w.Flush(); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+	got, err := ioutil.ReadAll(NewReader(buf1))
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if err := cmp(got, []byte("yyy")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type writeCounter int
+
+func (c *writeCounter) Write(p []byte) (int, error) {
+	*c++
+	return len(p), nil
+}
+
+// TestNumUnderlyingWrites tests that each Writer flush only makes one or two
+// Write calls on its underlying io.Writer, depending on whether or not the
+// flushed buffer was compressible.
+func TestNumUnderlyingWrites(t *testing.T) {
+	testCases := []struct {
+		input []byte
+		want  int
+	}{
+		{bytes.Repeat([]byte{'x'}, 100), 1},
+		{bytes.Repeat([]byte{'y'}, 100), 1},
+		{[]byte("ABCDEFGHIJKLMNOPQRST"), 2},
+	}
+
+	var c writeCounter
+	w := NewBufferedWriter(&c)
+	defer w.Close()
+	for i, tc := range testCases {
+		c = 0
+		if _, err := w.Write(tc.input); err != nil {
 			t.Errorf("#%d: Write: %v", i, err)
-			failed = true
 			continue
 		}
-		got, err := ioutil.ReadAll(NewReader(buf))
-		if err != nil {
-			t.Errorf("#%d: ReadAll: %v", i, err)
-			failed = true
+		if err := w.Flush(); err != nil {
+			t.Errorf("#%d: Flush: %v", i, err)
 			continue
 		}
-		gots = append(gots, got)
-		wants = append(wants, want)
-	}
-	if failed {
-		return
-	}
-	for i := range gots {
-		if err := cmp(gots[i], wants[i]); err != nil {
-			t.Errorf("#%d: %v", i, err)
+		if int(c) != tc.want {
+			t.Errorf("#%d: got %d underlying writes, want %d", i, c, tc.want)
+			continue
 		}
 	}
 }
@@ -264,35 +556,51 @@ func benchWords(b *testing.B, n int, decode bool) {
 	}
 }
 
+func BenchmarkWordsDecode1e1(b *testing.B) { benchWords(b, 1e1, true) }
+func BenchmarkWordsDecode1e2(b *testing.B) { benchWords(b, 1e2, true) }
 func BenchmarkWordsDecode1e3(b *testing.B) { benchWords(b, 1e3, true) }
 func BenchmarkWordsDecode1e4(b *testing.B) { benchWords(b, 1e4, true) }
 func BenchmarkWordsDecode1e5(b *testing.B) { benchWords(b, 1e5, true) }
 func BenchmarkWordsDecode1e6(b *testing.B) { benchWords(b, 1e6, true) }
+func BenchmarkWordsEncode1e1(b *testing.B) { benchWords(b, 1e1, false) }
+func BenchmarkWordsEncode1e2(b *testing.B) { benchWords(b, 1e2, false) }
 func BenchmarkWordsEncode1e3(b *testing.B) { benchWords(b, 1e3, false) }
 func BenchmarkWordsEncode1e4(b *testing.B) { benchWords(b, 1e4, false) }
 func BenchmarkWordsEncode1e5(b *testing.B) { benchWords(b, 1e5, false) }
 func BenchmarkWordsEncode1e6(b *testing.B) { benchWords(b, 1e6, false) }
 
+func BenchmarkRandomEncode(b *testing.B) {
+	rng := rand.New(rand.NewSource(1))
+	data := make([]byte, 1<<20)
+	for i := range data {
+		data[i] = uint8(rng.Intn(256))
+	}
+	benchEncode(b, data)
+}
+
 // testFiles' values are copied directly from
 // https://raw.githubusercontent.com/google/snappy/master/snappy_unittest.cc
 // The label field is unused in snappy-go.
+//
+// If this list changes (due to the upstream C++ list changing), remember to
+// update the .gitignore file in this repository.
 var testFiles = []struct {
-	label    string
-	filename string
+	label     string
+	filename  string
+	sizeLimit int
 }{
-	{"html", "html"},
-	{"urls", "urls.10K"},
-	{"jpg", "fireworks.jpeg"},
-	{"jpg_200", "fireworks.jpeg"},
-	{"pdf", "paper-100k.pdf"},
-	{"html4", "html_x_4"},
-	{"txt1", "alice29.txt"},
-	{"txt2", "asyoulik.txt"},
-	{"txt3", "lcet10.txt"},
-	{"txt4", "plrabn12.txt"},
-	{"pb", "geo.protodata"},
-	{"gaviota", "kppkn.gtb"},
-	{"random", "random"},
+	{"html", "html", 0},
+	{"urls", "urls.10K", 0},
+	{"jpg", "fireworks.jpeg", 0},
+	{"jpg_200", "fireworks.jpeg", 200},
+	{"pdf", "paper-100k.pdf", 0},
+	{"html4", "html_x_4", 0},
+	{"txt1", "alice29.txt", 0},
+	{"txt2", "asyoulik.txt", 0},
+	{"txt3", "lcet10.txt", 0},
+	{"txt4", "plrabn12.txt", 0},
+	{"pb", "geo.protodata", 0},
+	{"gaviota", "kppkn.gtb", 0},
 }
 
 // The test data files are present at this canonical URL.
@@ -323,19 +631,6 @@ func downloadTestdata(b *testing.B, basename string) (errRet error) {
 			os.Remove(filename)
 		}
 	}()
-
-	// Generate random data for Random benchmark
-	if basename == "random" {
-		rng := rand.New(rand.NewSource(27354294))
-		for i := 0; i < 1<<20; i++ {
-			_, err := f.Write([]byte{byte(rng.Intn(256))})
-			if err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-
 	url := baseURL + basename
 	resp, err := http.Get(url)
 	if err != nil {
@@ -357,6 +652,9 @@ func benchFile(b *testing.B, n int, decode bool) {
 		b.Fatalf("failed to download testdata: %s", err)
 	}
 	data := readFile(b, filepath.Join(*testdata, testFiles[n].filename))
+	if n := testFiles[n].sizeLimit; 0 < n && n < len(data) {
+		data = data[:n]
+	}
 	if decode {
 		benchDecode(b, data)
 	} else {
@@ -389,9 +687,6 @@ func Benchmark_ZFlat8(b *testing.B)  { benchFile(b, 8, false) }
 func Benchmark_ZFlat9(b *testing.B)  { benchFile(b, 9, false) }
 func Benchmark_ZFlat10(b *testing.B) { benchFile(b, 10, false) }
 func Benchmark_ZFlat11(b *testing.B) { benchFile(b, 11, false) }
-
-func BenchmarkDecodeRandom(b *testing.B) { benchFile(b, 12, true) }
-func BenchmarkEncodeRandom(b *testing.B) { benchFile(b, 12, false) }
 
 // Prints compression size and ratio.
 func BenchmarkCompressionSize(b *testing.B) {

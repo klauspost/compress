@@ -50,6 +50,15 @@ const (
 	// https://github.com/google/snappy/blob/master/framing_format.txt says
 	// that "the uncompressed data in a chunk must be no longer than 65536 bytes".
 	maxUncompressedChunkLen = 65536
+
+	// maxEncodedLenOfMaxUncompressedChunkLen equals
+	// MaxEncodedLen(maxUncompressedChunkLen), but is hard coded to be a const
+	// instead of a variable, so that obufLen can also be a const. Their
+	// equivalence is confirmed by TestMaxEncodedLenOfMaxUncompressedChunkLen.
+	maxEncodedLenOfMaxUncompressedChunkLen = 76490
+
+	obufHeaderLen = len(magicChunk) + checksumSize + chunkHeaderSize
+	obufLen       = obufHeaderLen + maxEncodedLenOfMaxUncompressedChunkLen
 )
 
 const (
