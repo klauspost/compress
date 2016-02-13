@@ -32,16 +32,10 @@ func newSnappy(level int) snappyEnc {
 	if useSSE42 {
 		e := &snappySSE4{}
 		switch level {
-		case 1:
-			e.enc = e.encodeL1
-		case 2:
-			e.enc = e.encodeL2
 		case 3:
 			e.enc = e.encodeL3
-		default:
-			panic("invalid level specified")
+			return e
 		}
-		return e
 	}
 	e := &snappyGen{}
 	switch level {
@@ -186,9 +180,10 @@ func (e *snappyGen) encodeL2(dst *tokens, src []byte) {
 
 		// If t is positive, the match starts in the current block
 		if t >= 0 {
-			offset := s - t
+
+			offset := uint(s - t - 1)
 			// Check that the offset is valid and that we match at least 4 bytes
-			if offset >= maxOffset || offset == 0 || b0 != src[t] || b1 != src[t+1] || b2 != src[t+2] || b3 != src[t+3] {
+			if offset >= (maxOffset-1) || b0 != src[t] || b1 != src[t+1] || b2 != src[t+2] || b3 != src[t+3] {
 				// Skip 1 byte for 32 consecutive missed.
 				s += 1 + ((s - lit) >> 5)
 				continue
@@ -248,7 +243,6 @@ func (e *snappyGen) encodeL2(dst *tokens, src []byte) {
 		}
 	l:
 		// Emit the copied bytes.
-		// inlined: emitCopy(dst, s-t, s-s0)
 		if t < 0 {
 			t = tp - len(e.prev)
 		}
@@ -299,8 +293,7 @@ func (e *snappyGen) encodeL3(dst *tokens, src []byte) {
 
 	for s+3 < len(src) {
 		// Update the hash table.
-		b0, b1, b2, b3 := src[s], src[s+1], src[s+2], src[s+3]
-		h := uint32(b0) | uint32(b1)<<8 | uint32(b2)<<16 | uint32(b3)<<24
+		h := uint32(src[s]) | uint32(src[s+1])<<8 | uint32(src[s+2])<<16 | uint32(src[s+3])<<24
 		p := &e.table[(h*0x1e35a7bd)>>(32-tableBits)]
 		tmp := *p
 		p1 := int(tmp & 0xffffffff) // Closest match position
@@ -310,21 +303,20 @@ func (e *snappyGen) encodeL3(dst *tokens, src []byte) {
 		// some initialization time, (re)use the table's zero value
 		// and shift the values against this zero: add 1 on writes,
 		// subtract 1 on reads.
-		t1 := int(p1) - 1 - e.cur
+		t1 := p1 - 1 - e.cur
 
 		var l2 int
 		var t2 int
-		l1 := e.matchlen(s, t1, src, b0, b1, b2, b3)
+		l1 := e.matchlen(s, t1, src)
 		// If fist match was ok, don't do the second.
-		if l1 < 24 {
-			t2 = int(p2) - 1 - e.cur
-			l2 = e.matchlen(s, t2, src, b0, b1, b2, b3)
+		if l1 < 16 {
+			t2 = p2 - 1 - e.cur
+			l2 = e.matchlen(s, t2, src)
 
 			// If both are short, continue
 			if l1 < 4 && l2 < 4 {
 				// Update hash table
 				*p = int64(s+1+e.cur) | (int64(p1) << 32)
-				//*p1, *p2 = s+1+e.cur, *p1
 				// Skip 1 byte for 32 consecutive missed.
 				s += 1 + ((s - lit) >> 5)
 				continue
@@ -364,13 +356,15 @@ func (e *snappyGen) encodeL3(dst *tokens, src []byte) {
 	}
 }
 
-func (e *snappyGen) matchlen(s, t int, src []byte, b0, b1, b2, b3 byte) int {
+func (e *snappyGen) matchlen(s, t int, src []byte) int {
 	// If t is invalid or src[s:s+4] differs from src[t:t+4], accumulate a literal byte.
-	offset := s - t
+	offset := uint(s - t - 1)
 
 	// If we are inside the current block
 	if t >= 0 {
-		if offset >= maxOffset || offset <= 0 || b0 != src[t] || b1 != src[t+1] || b2 != src[t+2] || b3 != src[t+3] {
+		if offset >= (maxOffset-1) ||
+			src[s] != src[t] || src[s+1] != src[t+1] ||
+			src[s+2] != src[t+2] || src[s+3] != src[t+3] {
 			return 0
 		}
 		// Extend the match to be as long as possible.
@@ -389,7 +383,9 @@ func (e *snappyGen) matchlen(s, t int, src []byte, b0, b1, b2, b3 byte) int {
 
 	// We found a match in the previous block.
 	tp := len(e.prev) + t
-	if tp < 0 || t > -5 || offset >= maxOffset || b0 != e.prev[tp] || b1 != e.prev[tp+1] || b2 != e.prev[tp+2] || b3 != e.prev[tp+3] {
+	if tp < 0 || offset >= (maxOffset-1) || t > -5 ||
+		src[s] != e.prev[tp] || src[s+1] != e.prev[tp+1] ||
+		src[s+2] != e.prev[tp+2] || src[s+3] != e.prev[tp+3] {
 		return 0
 	}
 
@@ -431,6 +427,7 @@ type snappySSE4 struct {
 	snappyGen
 }
 
+/*
 // EncodeL1 uses Snappy-like compression, but stores as Huffman
 // blocks.
 func (e *snappySSE4) encodeL1(dst *tokens, src []byte) {
@@ -474,9 +471,9 @@ func (e *snappySSE4) encodeL1(dst *tokens, src []byte) {
 			continue
 		}
 
-		length := maxMatchLength
-		if length > len(src)-s {
-			length = len(src) - s
+		length := len(src) - s
+		if length > maxMatchLength {
+			length = maxMatchLength
 		}
 		// Extend the match to be as long as possible.
 		match := matchLenSSE4(src[t:], src[s:], length)
@@ -548,7 +545,7 @@ func (e *snappySSE4) encodeL2(dst *tokens, src []byte) {
 			// If t is invalid or src[s:s+4] differs from src[t:t+4], accumulate a literal byte.
 			if t < 0 || offset >= (maxOffset-1) {
 				// Skip 1 byte for 16 consecutive missed.
-				s += 1 + ((s - lit) >> 4)
+				s += 1 + ((s - lit) >> 5)
 				continue
 			}
 
@@ -561,7 +558,7 @@ func (e *snappySSE4) encodeL2(dst *tokens, src []byte) {
 
 			// Return if short.
 			if match < 4 {
-				s += 1 + (s-lit)>>4
+				s += 1 + (s-lit)>>5
 				continue
 			}
 
@@ -634,6 +631,7 @@ func (e *snappySSE4) encodeL2(dst *tokens, src []byte) {
 		e.prev = nil
 	}
 }
+*/
 
 // EncodeL3 uses a similar algorithm to level 2, but is capable
 // will keep two matches per hash.
@@ -661,9 +659,8 @@ func (e *snappySSE4) encodeL3(dst *tokens, src []byte) {
 	)
 
 	for s+3 < len(src) {
-		// Update the hash table.
-		b0, b1, b2, b3 := src[s], src[s+1], src[s+2], src[s+3]
-		h := uint32(b0) | uint32(b1)<<8 | uint32(b2)<<16 | uint32(b3)<<24
+		// Load potential matches from hash table.
+		h := uint32(src[s]) | uint32(src[s+1])<<8 | uint32(src[s+2])<<16 | uint32(src[s+3])<<24
 		p := &e.table[(h*0x1e35a7bd)>>(32-tableBits)]
 		tmp := *p
 		p1 := int(tmp & 0xffffffff) // Closest match position
@@ -677,11 +674,11 @@ func (e *snappySSE4) encodeL3(dst *tokens, src []byte) {
 
 		var l2 int
 		var t2 int
-		l1 := e.matchlen(s, t1, src, b0, b1, b2, b3)
+		l1 := e.matchlen(s, t1, src)
 		// If fist match was ok, don't do the second.
-		if l1 < 24 {
+		if l1 < 16 {
 			t2 = int(p2) - 1 - e.cur
-			l2 = e.matchlen(s, t2, src, b0, b1, b2, b3)
+			l2 = e.matchlen(s, t2, src)
 
 			// If both are short, continue
 			if l1 < 4 && l2 < 4 {
@@ -726,13 +723,13 @@ func (e *snappySSE4) encodeL3(dst *tokens, src []byte) {
 	}
 }
 
-func (e *snappySSE4) matchlen(s, t int, src []byte, b0, b1, b2, b3 byte) int {
+func (e *snappySSE4) matchlen(s, t int, src []byte) int {
 	// If t is invalid or src[s:s+4] differs from src[t:t+4], accumulate a literal byte.
-	offset := s - t
+	offset := uint(s - t - 1)
 
 	// If we are inside the current block
 	if t >= 0 {
-		if offset >= maxOffset || offset <= 0 {
+		if offset >= (maxOffset - 1) {
 			return 0
 		}
 		length := len(src) - s
@@ -745,7 +742,9 @@ func (e *snappySSE4) matchlen(s, t int, src []byte, b0, b1, b2, b3 byte) int {
 
 	// We found a match in the previous block.
 	tp := len(e.prev) + t
-	if tp < 0 || t > -5 || offset >= maxOffset || b0 != e.prev[tp] || b1 != e.prev[tp+1] || b2 != e.prev[tp+2] || b3 != e.prev[tp+3] {
+	if tp < 0 || offset >= (maxOffset-1) || t > -5 ||
+		src[s] != e.prev[tp] || src[s+1] != e.prev[tp+1] ||
+		src[s+2] != e.prev[tp+2] || src[s+3] != e.prev[tp+3] {
 		return 0
 	}
 
