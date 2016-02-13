@@ -265,34 +265,28 @@ The Snappy package contains some optimizations over the standard package.
 
 This speeds up mainly **hard** and **easy** to compress material.
 
-Here are the "standard" benchmarks, compared to current Snappy master (9 feb 2016).
+Here are the "standard" benchmarks, compared to current Snappy master (13 feb 2016).
 
 ```
-benchmark                      old MB/s     new MB/s     speedup
-Benchmark_ZFlat0-4             260.49       325.37       1.25x
-Benchmark_ZFlat1-4             130.77       127.61       0.98x
-Benchmark_ZFlat2-4             93.96        9878.99      105.14x
-Benchmark_ZFlat3-4             92.89        9964.63      107.27x
-Benchmark_ZFlat4-4             112.50       3946.07      35.08x
-Benchmark_ZFlat5-4             263.54       328.50       1.25x
-Benchmark_ZFlat6-4             109.25       126.24       1.16x
-Benchmark_ZFlat7-4             106.88       115.86       1.08x
-Benchmark_ZFlat8-4             112.86       129.03       1.14x
-Benchmark_ZFlat9-4             100.40       109.11       1.09x
-Benchmark_ZFlat10-4            297.55       389.41       1.31x
-Benchmark_ZFlat11-4            155.24       206.28       1.33x
-Benchmark_Stream_ZFlat0-4      251.58       324.35       1.29x
-Benchmark_Stream_ZFlat1-4      127.35       129.12       1.01x
-Benchmark_Stream_ZFlat2-4      89.23        3907.65      43.79x
-Benchmark_Stream_ZFlat3-4      94.82        3927.62      41.42x
-Benchmark_Stream_ZFlat4-4      106.33       2396.34      22.54x
-Benchmark_Stream_ZFlat5-4      243.73       298.37       1.22x
-Benchmark_Stream_ZFlat6-4      111.55       122.42       1.10x
-Benchmark_Stream_ZFlat7-4      103.23       109.65       1.06x
-Benchmark_Stream_ZFlat8-4      117.06       126.05       1.08x
-Benchmark_Stream_ZFlat9-4      99.01        105.45       1.07x
-Benchmark_Stream_ZFlat10-4     257.45       362.46       1.41x
-Benchmark_Stream_ZFlat11-4     161.51       198.39       1.23x
+name              old speed      new speed       delta
+WordsEncode1e1-8  4.09MB/s ± 1%  91.39MB/s ± 1%  +2136.22%  (p=0.000 n=3+3)
+WordsEncode1e2-8  32.5MB/s ± 0%  144.9MB/s ± 1%   +346.30%  (p=0.000 n=3+3)
+WordsEncode1e3-8   117MB/s ± 2%    167MB/s ± 1%    +43.31%  (p=0.000 n=3+3)
+WordsEncode1e4-8   129MB/s ± 1%    159MB/s ± 2%    +23.10%  (p=0.000 n=3+3)
+WordsEncode1e5-8   113MB/s ± 1%    126MB/s ± 0%    +11.78%  (p=0.002 n=3+3)
+WordsEncode1e6-8   110MB/s ± 0%    122MB/s ± 1%    +10.29%  (p=0.001 n=3+3)
+_ZFlat0-8          255MB/s ± 3%    326MB/s ± 1%    +27.75%  (p=0.002 n=3+3)
+_ZFlat1-8          127MB/s ± 1%    132MB/s ± 1%     +3.93%  (p=0.005 n=3+3)
+_ZFlat2-8         7.83GB/s ± 2%   9.36GB/s ± 0%    +19.59%  (p=0.003 n=3+3)
+_ZFlat3-8         58.6MB/s ± 1%  179.2MB/s ± 1%   +205.60%  (p=0.000 n=3+3)
+_ZFlat4-8         2.04GB/s ± 3%   3.90GB/s ± 4%    +91.51%  (p=0.001 n=3+3)
+_ZFlat5-8          255MB/s ± 1%    324MB/s ± 1%    +27.28%  (p=0.000 n=3+3)
+_ZFlat6-8          110MB/s ± 2%    121MB/s ± 2%    +10.64%  (p=0.001 n=3+3)
+_ZFlat7-8          104MB/s ± 1%    112MB/s ± 3%     +8.25%  (p=0.012 n=3+3)
+_ZFlat8-8          115MB/s ± 1%    129MB/s ± 1%    +12.50%  (p=0.001 n=3+3)
+_ZFlat9-8          101MB/s ± 3%    109MB/s ± 1%     +8.15%  (p=0.018 n=3+3)
+_ZFlat10-8         286MB/s ± 4%    391MB/s ± 2%    +36.98%  (p=0.000 n=3+3)
+_ZFlat11-8         166MB/s ± 1%    205MB/s ± 1%    +23.38%  (p=0.000 n=3+3)
 ```
 
 # license
