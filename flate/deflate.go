@@ -1094,7 +1094,7 @@ func (d *compressor) storeSnappy() {
 	if d.tokens.n == d.windowEnd {
 		d.err = d.writeStoredBlock(d.window[:d.windowEnd])
 		// If we removed less than 10 literals, huffman compress the block.
-	} else if d.tokens.n > d.windowEnd-10 {
+	} else if d.tokens.n > d.windowEnd-(d.windowEnd>>4) {
 		d.w.writeBlockHuff(false, d.window[:d.windowEnd])
 		d.err = d.w.err
 	} else {
