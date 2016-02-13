@@ -259,6 +259,8 @@ BenchmarkGzipL9     9.96         55.90        5.61x
 
 # snappy package
 
+### This is still in development, and should not be used for critical applications.
+
 The Snappy package contains some optimizations over the standard package.
 
 This speeds up mainly **hard** and **easy** to compress material.
