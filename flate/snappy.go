@@ -414,10 +414,6 @@ func (e *snappyGen) matchlen(s, t int, src []byte) int {
 
 // Reset the encoding table.
 func (e *snappyGen) Reset() {
-	for i := range e.table {
-		e.table[i] = 0
-	}
-	e.cur = 0
 	e.prev = nil
 }
 
