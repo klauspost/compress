@@ -34,9 +34,9 @@ type reverseBitsTest struct {
 
 var deflateTests = []*deflateTest{
 	{[]byte{}, 0, []byte{1, 0, 0, 255, 255}},
-	{[]byte{0x11}, -1, []byte{18, 4, 4, 0, 0, 255, 255}},
-	{[]byte{0x11}, DefaultCompression, []byte{18, 4, 4, 0, 0, 255, 255}},
-	{[]byte{0x11}, 4, []byte{18, 4, 4, 0, 0, 255, 255}},
+	{[]byte{0x11}, BestCompression, []byte{18, 4, 4, 0, 0, 255, 255}},
+	{[]byte{0x11}, BestCompression, []byte{18, 4, 4, 0, 0, 255, 255}},
+	{[]byte{0x11}, BestCompression, []byte{18, 4, 4, 0, 0, 255, 255}},
 
 	{[]byte{0x11}, 0, []byte{0, 1, 0, 254, 255, 17, 1, 0, 0, 255, 255}},
 	{[]byte{0x11, 0x12}, 0, []byte{0, 2, 0, 253, 255, 17, 18, 1, 0, 0, 255, 255}},
@@ -44,9 +44,9 @@ var deflateTests = []*deflateTest{
 		[]byte{0, 8, 0, 247, 255, 17, 17, 17, 17, 17, 17, 17, 17, 1, 0, 0, 255, 255},
 	},
 	{[]byte{}, 1, []byte{1, 0, 0, 255, 255}},
-	{[]byte{0x11}, 4, []byte{18, 4, 4, 0, 0, 255, 255}},
-	{[]byte{0x11, 0x12}, 4, []byte{18, 20, 2, 4, 0, 0, 255, 255}},
-	{[]byte{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11}, 4, []byte{18, 132, 2, 64, 0, 0, 0, 255, 255}},
+	{[]byte{0x11}, BestCompression, []byte{18, 4, 4, 0, 0, 255, 255}},
+	{[]byte{0x11, 0x12}, BestCompression, []byte{18, 20, 2, 4, 0, 0, 255, 255}},
+	{[]byte{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11}, BestCompression, []byte{18, 132, 2, 64, 0, 0, 0, 255, 255}},
 	{[]byte{}, 9, []byte{1, 0, 0, 255, 255}},
 	{[]byte{0x11}, 9, []byte{18, 4, 4, 0, 0, 255, 255}},
 	{[]byte{0x11, 0x12}, 9, []byte{18, 20, 2, 4, 0, 0, 255, 255}},
@@ -451,7 +451,7 @@ var deflateInflateStringTests = []deflateInflateStringTest{
 	{
 		"../testdata/Mark.Twain-Tom.Sawyer.txt",
 		"Mark.Twain-Tom.Sawyer",
-		[...]int{407330, 195000, 180361, 172974, 169160, 163476, 160936, 160506, 160295, 160295, 233460 + 100},
+		[...]int{407330, 195000, 185361, 180974, 169160, 164476, 162936, 160506, 160295, 160295, 233460 + 100},
 	},
 }
 
@@ -505,27 +505,32 @@ func TestReaderDict(t *testing.T) {
 
 func TestWriterDict(t *testing.T) {
 	const (
-		dict = "hello world"
-		text = "hello again world"
+		dict = "hello world Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
+		text = "hello world Lorem ipsum dolor sit amet"
 	)
-	var b bytes.Buffer
-	w, err := NewWriter(&b, 5)
-	if err != nil {
-		t.Fatalf("NewWriter: %v", err)
-	}
-	w.Write([]byte(dict))
-	w.Flush()
-	b.Reset()
-	w.Write([]byte(text))
-	w.Close()
+	// This test is sensitive to algorithm changes that skip
+	// data in favour of speed. Higher levels are less prone to this
+	// so we test level 4-9.
+	for l := 4; l < 9; l++ {
+		var b bytes.Buffer
+		w, err := NewWriter(&b, l)
+		if err != nil {
+			t.Fatalf("level %d, NewWriter: %v", l, err)
+		}
+		w.Write([]byte(dict))
+		w.Flush()
+		b.Reset()
+		w.Write([]byte(text))
+		w.Close()
 
-	var b1 bytes.Buffer
-	w, _ = NewWriterDict(&b1, 5, []byte(dict))
-	w.Write([]byte(text))
-	w.Close()
+		var b1 bytes.Buffer
+		w, _ = NewWriterDict(&b1, l, []byte(dict))
+		w.Write([]byte(text))
+		w.Close()
 
-	if !bytes.Equal(b1.Bytes(), b.Bytes()) {
-		t.Fatalf("writer wrote %q want %q", b1.Bytes(), b.Bytes())
+		if !bytes.Equal(b1.Bytes(), b.Bytes()) {
+			t.Errorf("level %d, writer wrote\n%v\n want\n%v", l, b1.Bytes(), b.Bytes())
+		}
 	}
 }
 
@@ -575,6 +580,8 @@ func TestWriterReset(t *testing.T) {
 		w.d.fill, wref.d.fill = nil, nil
 		w.d.step, wref.d.step = nil, nil
 		w.d.bulkHasher, wref.d.bulkHasher = nil, nil
+		w.d.snap, wref.d.snap = nil, nil
+
 		// hashMatch is always overwritten when used.
 		copy(w.d.hashMatch[:], wref.d.hashMatch[:])
 		if w.d.tokens.n != 0 {
