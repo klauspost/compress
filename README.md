@@ -11,6 +11,7 @@ It offers slightly better compression at lower compression settings, and up to 3
 [![Build Status](https://travis-ci.org/klauspost/compress.svg?branch=master)](https://travis-ci.org/klauspost/compress)
 
 # changelog
+* Feb 13, 2016: Fixed assembler problem that could lead to sub-optimal compression.
 * Feb 12, 2016: (Snappy) Added AMD64 SSE 4.2 optimizations to matching, which makes easy to compress material run faster. Typical speedup is around 25%.
 * Feb 9, 2016: Added Snappy package fork. This version is 5-7% faster, much more on hard to compress content.
 * Jan 30, 2016: Optimize level 1 to 3 by not considering static dictionary or storing uncompressed. ~4-5% speedup.
