@@ -396,8 +396,12 @@ func (w *huffmanBitWriter) writeBlock(tok tokens, eof bool, input []byte) {
 		return
 	}
 
-	copy(w.literalFreq, zeroLits[:])
-	copy(w.offsetFreq, zeroLits[:maxNumDist])
+	for i := range w.literalFreq {
+		w.literalFreq[i] = 0
+	}
+	for i := range w.offsetFreq {
+		w.offsetFreq[i] = 0
+	}
 
 	tok.tokens[tok.n] = endBlockMarker
 	tokens := tok.tokens[0 : tok.n+1]
@@ -543,8 +547,12 @@ func (w *huffmanBitWriter) writeBlockDynamic(tok tokens, eof bool, input []byte)
 	if w.err != nil {
 		return
 	}
-	copy(w.literalFreq, zeroLits[:])
-	copy(w.offsetFreq, zeroLits[:maxNumDist])
+	for i := range w.literalFreq {
+		w.literalFreq[i] = 0
+	}
+	for i := range w.offsetFreq {
+		w.offsetFreq[i] = 0
+	}
 
 	tok.tokens[tok.n] = endBlockMarker
 	tokens := tok.tokens[0 : tok.n+1]
@@ -629,7 +637,6 @@ func (w *huffmanBitWriter) writeBlockDynamic(tok tokens, eof bool, input []byte)
 
 // static offset encoder used for huffman only encoding.
 var huffOffset *huffmanEncoder
-var zeroLits [maxNumLit]int32
 
 func init() {
 	var w = newHuffmanBitWriter(nil)
@@ -647,7 +654,9 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
 	}
 
 	// Clear histogram
-	copy(w.literalFreq, zeroLits[:])
+	for i := range w.literalFreq {
+		w.literalFreq[i] = 0
+	}
 
 	// Add everything as literals
 	histogram(input, w.literalFreq)
