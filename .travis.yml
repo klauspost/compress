@@ -13,7 +13,7 @@ go:
   - tip
 
 install:
- - go get ./...
+ - go get -t ./...
  - go get -u golang.org/x/tools/cmd/goimports
 
 script:
