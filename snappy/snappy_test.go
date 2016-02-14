@@ -16,6 +16,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	old "github.com/golang/snappy"
 )
 
 var (
@@ -198,6 +200,21 @@ func TestDecode(t *testing.T) {
 		"abcdabcd",
 		nil,
 	}, {
+		`decodedLen=8; tagLiteral (4 bytes "abcd"); tagCopy1; length=4 offset=2; valid input`,
+		"\x08" + "\x0cabcd" + "\x01\x02",
+		"abcdcdcd",
+		nil,
+	}, {
+		`decodedLen=8; tagLiteral (4 bytes "abcd"); tagCopy1; length=4 offset=1; valid input`,
+		"\x08" + "\x0cabcd" + "\x01\x01",
+		"abcddddd",
+		nil,
+	}, {
+		`decodedLen=8; tagLiteral (4 bytes "abcd"); tagCopy1; length=4 offset=0; zero offset`,
+		"\x08" + "\x0cabcd" + "\x01\x00",
+		"",
+		ErrCorrupt,
+	}, {
 		`decodedLen=9; tagLiteral (4 bytes "abcd"); tagCopy1; length=4 offset=4; inconsistent dLen`,
 		"\x09" + "\x0cabcd" + "\x01\x04",
 		"",
@@ -219,6 +236,46 @@ func TestDecode(t *testing.T) {
 		if got := string(g); got != tc.want || gotErr != tc.wantErr {
 			t.Errorf("%s:\ngot  %q, %v\nwant %q, %v", tc.desc, got, gotErr, tc.want, tc.wantErr)
 		}
+	}
+}
+
+// TestEncodeNoiseThenRepeats encodes a 32K block for which the first half is
+// very incompressible and the second half is very compressible. The encoded
+// form's length should be closer to 50% of the original length than 100%.
+func TestEncodeNoiseThenRepeats(t *testing.T) {
+	const origLen = 32768
+	src := make([]byte, origLen)
+	rng := rand.New(rand.NewSource(1))
+	firstHalf, secondHalf := src[:origLen/2], src[origLen/2:]
+	for i := range firstHalf {
+		firstHalf[i] = uint8(rng.Intn(256))
+	}
+	for i := range secondHalf {
+		secondHalf[i] = uint8(i >> 8)
+	}
+	dst := Encode(nil, src)
+	if got, want := len(dst), origLen*3/4; got >= want {
+		t.Fatalf("got %d encoded bytes, want less than %d", got, want)
+	}
+}
+
+// TestEncodeNoiseThenRepeats encodes a 8GB block for which the first half is
+// very incompressible and the second half is very compressible. The encoded
+// form's length should be closer to 50% of the original length than 100%.
+func TestEncodeNoiseThenRepeatsBig(t *testing.T) {
+	const origLen = 8 << 20
+	src := make([]byte, origLen)
+	rng := rand.New(rand.NewSource(1))
+	firstHalf, secondHalf := src[:origLen/2], src[origLen/2:]
+	for i := range firstHalf {
+		firstHalf[i] = uint8(rng.Intn(256))
+	}
+	for i := range secondHalf {
+		secondHalf[i] = uint8(i >> 8)
+	}
+	dst := Encode(nil, src)
+	if got, want := len(dst), origLen*3/4; got >= want {
+		t.Fatalf("got %d encoded bytes, want less than %d", got, want)
 	}
 }
 
@@ -690,14 +747,18 @@ func Benchmark_ZFlat11(b *testing.B) { benchFile(b, 11, false) }
 
 // Prints compression size and ratio.
 func BenchmarkCompressionSize(b *testing.B) {
-	fmt.Println("\ndata\tinsize\toutsize\treduction")
-	for _, tf := range testFiles {
+	fmt.Println("\ndata\tinsize\toutsize\treference\treduction\tref-red\tr-delta")
+	for i, tf := range testFiles {
 		if err := downloadTestdata(b, tf.filename); err != nil {
 			b.Fatalf("failed to download testdata: %s", err)
 		}
 		src := readFile(b, filepath.Join(*testdata, tf.filename))
 		dst := Encode(nil, src)
-		fmt.Printf("%s\t%d\t%d\t%.2f%%\n", tf.label, len(src), len(dst), 100-float64(len(dst))/float64(len(src))*100)
+		odst := old.Encode(nil, src)
+
+		rthis := 100 - float64(len(dst))/float64(len(src))*100
+		rold := 100 - float64(len(odst))/float64(len(src))*100
+		fmt.Printf("Flat%d:\t%s\t%d\t%d\t%d\t%.2f%%\t%.2f%%\t%.2f%%\n", i, tf.label, len(src), len(dst), len(odst), rthis, rthis, rthis-rold)
 	}
 	// BenchmarkCompressionSize isn't really a benchmark, in the sense of "I
 	// want to run some code b.N times and see how long it takes". Instead, it
@@ -748,6 +809,7 @@ func benchEncodeStream(b *testing.B, src []byte) {
 	}
 }
 
+/*
 func Benchmark_Stream_UFlat0(b *testing.B)  { benchFileStream(b, 0, true) }
 func Benchmark_Stream_UFlat1(b *testing.B)  { benchFileStream(b, 1, true) }
 func Benchmark_Stream_UFlat2(b *testing.B)  { benchFileStream(b, 2, true) }
@@ -772,3 +834,4 @@ func Benchmark_Stream_ZFlat8(b *testing.B)  { benchFileStream(b, 8, false) }
 func Benchmark_Stream_ZFlat9(b *testing.B)  { benchFileStream(b, 9, false) }
 func Benchmark_Stream_ZFlat10(b *testing.B) { benchFileStream(b, 10, false) }
 func Benchmark_Stream_ZFlat11(b *testing.B) { benchFileStream(b, 11, false) }
+*/

@@ -11,8 +11,11 @@ It offers slightly better compression at lower compression settings, and up to 3
 [![Build Status](https://travis-ci.org/klauspost/compress.svg?branch=master)](https://travis-ci.org/klauspost/compress)
 
 # changelog
-* Feb 13, 2016: Fixed assembler problem that could lead to sub-optimal compression.
-* Feb 12, 2016: (Snappy) Added AMD64 SSE 4.2 optimizations to matching, which makes easy to compress material run faster. Typical speedup is around 25%.
+* Feb 14, 2016: Snappy: Merge upstream changes. 
+* Feb 14, 2016: Snappy: Fix aggressive skipping.
+* Feb 14, 2016: Snappy: Update benchmark.
+* Feb 13, 2016: Deflate: Fixed assembler problem that could lead to sub-optimal compression.
+* Feb 12, 2016: Snappy: Added AMD64 SSE 4.2 optimizations to matching, which makes easy to compress material run faster. Typical speedup is around 25%.
 * Feb 9, 2016: Added Snappy package fork. This version is 5-7% faster, much more on hard to compress content.
 * Jan 30, 2016: Optimize level 1 to 3 by not considering static dictionary or storing uncompressed. ~4-5% speedup.
 * Jan 16, 2016: Optimization on deflate level 1,2,3 compression.
@@ -267,27 +270,49 @@ This speeds up mainly **hard** and **easy** to compress material.
 
 Here are the "standard" benchmarks, compared to current Snappy master (13 feb 2016).
 
+## Speed
 ```
 name              old speed      new speed       delta
-WordsEncode1e1-8  4.09MB/s ± 1%  91.39MB/s ± 1%  +2136.22%  (p=0.000 n=3+3)
-WordsEncode1e2-8  32.5MB/s ± 0%  144.9MB/s ± 1%   +346.30%  (p=0.000 n=3+3)
-WordsEncode1e3-8   117MB/s ± 2%    167MB/s ± 1%    +43.31%  (p=0.000 n=3+3)
-WordsEncode1e4-8   129MB/s ± 1%    159MB/s ± 2%    +23.10%  (p=0.000 n=3+3)
-WordsEncode1e5-8   113MB/s ± 1%    126MB/s ± 0%    +11.78%  (p=0.002 n=3+3)
-WordsEncode1e6-8   110MB/s ± 0%    122MB/s ± 1%    +10.29%  (p=0.001 n=3+3)
-_ZFlat0-8          255MB/s ± 3%    326MB/s ± 1%    +27.75%  (p=0.002 n=3+3)
-_ZFlat1-8          127MB/s ± 1%    132MB/s ± 1%     +3.93%  (p=0.005 n=3+3)
-_ZFlat2-8         7.83GB/s ± 2%   9.36GB/s ± 0%    +19.59%  (p=0.003 n=3+3)
-_ZFlat3-8         58.6MB/s ± 1%  179.2MB/s ± 1%   +205.60%  (p=0.000 n=3+3)
-_ZFlat4-8         2.04GB/s ± 3%   3.90GB/s ± 4%    +91.51%  (p=0.001 n=3+3)
-_ZFlat5-8          255MB/s ± 1%    324MB/s ± 1%    +27.28%  (p=0.000 n=3+3)
-_ZFlat6-8          110MB/s ± 2%    121MB/s ± 2%    +10.64%  (p=0.001 n=3+3)
-_ZFlat7-8          104MB/s ± 1%    112MB/s ± 3%     +8.25%  (p=0.012 n=3+3)
-_ZFlat8-8          115MB/s ± 1%    129MB/s ± 1%    +12.50%  (p=0.001 n=3+3)
-_ZFlat9-8          101MB/s ± 3%    109MB/s ± 1%     +8.15%  (p=0.018 n=3+3)
-_ZFlat10-8         286MB/s ± 4%    391MB/s ± 2%    +36.98%  (p=0.000 n=3+3)
-_ZFlat11-8         166MB/s ± 1%    205MB/s ± 1%    +23.38%  (p=0.000 n=3+3)
+WordsDecode1e3-8   405MB/s ± 5%    444MB/s ± 1%     +9.60%  (p=0.045 n=3+3)
+WordsEncode1e1-8  4.55MB/s ± 1%  98.93MB/s ± 2%  +2075.95%  (p=0.000 n=3+3)
+WordsEncode1e2-8  36.4MB/s ± 0%  166.1MB/s ± 3%   +356.03%  (p=0.000 n=3+3)
+WordsEncode1e3-8   129MB/s ± 0%    185MB/s ± 1%    +43.82%  (p=0.000 n=3+3)
+WordsEncode1e5-8   125MB/s ± 1%    140MB/s ± 2%    +11.77%  (p=0.005 n=3+3)
+WordsEncode1e6-8   121MB/s ± 3%    134MB/s ± 0%    +11.15%  (p=0.026 n=3+3)
+RandomEncode-8    2.80GB/s ± 2%   2.68GB/s ± 1%     -4.32%  (p=0.019 n=3+3)
+_UFlat3-8          746MB/s ± 2%    812MB/s ± 1%     +8.90%  (p=0.004 n=3+3)
+_UFlat4-8         2.50GB/s ± 1%   3.06GB/s ± 1%    +22.68%  (p=0.000 n=3+3)
+_ZFlat0-8          284MB/s ± 1%    362MB/s ± 1%    +27.45%  (p=0.000 n=3+3)
+_ZFlat2-8         2.85GB/s ± 0%   3.71GB/s ± 1%    +30.21%  (p=0.000 n=3+3)
+_ZFlat3-8         64.5MB/s ± 1%  216.9MB/s ± 2%   +236.02%  (p=0.000 n=3+3)
+_ZFlat4-8          415MB/s ± 1%   2000MB/s ± 1%   +382.43%  (p=0.000 n=3+3)
+_ZFlat5-8          282MB/s ± 1%    354MB/s ± 2%    +25.67%  (p=0.003 n=3+3)
+_ZFlat6-8          124MB/s ± 1%    136MB/s ± 2%     +9.84%  (p=0.013 n=3+3)
+_ZFlat7-8          116MB/s ± 2%    127MB/s ± 1%    +10.12%  (p=0.002 n=3+3)
+_ZFlat8-8          128MB/s ± 1%    142MB/s ± 1%    +11.38%  (p=0.000 n=3+3)
+_ZFlat9-8          111MB/s ± 2%    120MB/s ± 1%     +8.45%  (p=0.009 n=3+3)
+_ZFlat10-8         318MB/s ± 1%    439MB/s ± 1%    +38.16%  (p=0.000 n=3+3)
+_ZFlat11-8         183MB/s ± 0%    226MB/s ± 3%    +23.53%  (p=0.004 n=3+3)
 ```
+Only significant differences are included.
+
+## Size Comparison:
+```
+name    data    insize  outsize ref     red.    ref-red r-delta
+Flat0:  html    102400  23317   23330   77.23%  77.23%   0.01%
+Flat1:  urls    712086  337290  335282  52.63%  52.63%  -0.28%
+Flat2:  jpg     123093  123035  123032  0.05%   0.05%   -0.00%
+Flat3:  jpg_200 123093  123035  123032  0.05%   0.05%   -0.00%
+Flat4:  pdf     102400  84897   83754   17.09%  17.09%  -1.12%
+Flat5:  html4   409600  92689   92366   77.37%  77.37%  -0.08%
+Flat6:  txt1    152089  89544   89495   41.12%  41.12%  -0.03%
+Flat7:  txt2    129301  80531   80518   37.72%  37.72%  -0.01%
+Flat8:  txt3    426754  238857  238849  44.03%  44.03%  -0.00%
+Flat9:  txt4    481861  324755  325047  32.60%  32.60%   0.06%
+Flat10: pb      118588  24723   23392   79.15%  79.15%  -1.12%
+Flat11: gaviota 184320  73963   73962   59.87%  59.87%  -0.00%
+```
+r-delta is difference in compression. Negative means this package performs worse.
 
 # license
 

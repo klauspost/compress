@@ -84,48 +84,78 @@ var encPool = sync.Pool{New: func() interface{} { return new(encoder) }}
 // slice of dst if dst was large enough to hold the entire encoded block.
 // Otherwise, a newly allocated slice will be returned.
 // It is valid to pass a nil dst.
+//
+// The source may not be larger than 2^32 - 1 bytes (4GB).
+// This is a Snappy format limitation. Use the framing format Writer
+// for larger data sizes.
 func Encode(dst, src []byte) []byte {
 	e := encPool.Get().(*encoder)
-	dst = e.encode(dst, src)
-	encPool.Put(e)
-	return dst
-}
-
-const tableBits = 14             // Bits used in the table
-const tableSize = 1 << tableBits // Size of the table
-var useSSE42 bool
-
-type encoder struct {
-	table [tableSize]int32
-	cur   int
-}
-
-func (e *encoder) encode(dst, src []byte) []byte {
-	if useSSE42 {
-		return e.encSSE4(dst, src)
-	}
-	return e.enc(dst, src)
-}
-
-func (e *encoder) enc(dst, src []byte) []byte {
-	if n := MaxEncodedLen(len(src)); len(dst) < n {
+	if n := MaxEncodedLen(len(src)); n < 0 {
+		panic(ErrTooLarge)
+	} else if len(dst) < n {
 		dst = make([]byte, n)
 	}
 
 	// The block starts with the varint-encoded length of the decompressed bytes.
 	d := binary.PutUvarint(dst, uint64(len(src)))
 
+	for len(src) > 0 {
+		p := src
+		src = nil
+		if len(p) > maxInternalEncodeSrcLen {
+			p, src = p[:maxInternalEncodeSrcLen], p[maxInternalEncodeSrcLen:]
+		}
+		d += e.encode(dst[d:], p)
+	}
+	encPool.Put(e)
+	return dst[:d]
+}
+
+const tableBits = 14             // Bits used in the table
+const tableSize = 1 << tableBits // Size of the table
+var useSSE42 bool
+
+// maxInternalEncodeSrcLen must be less than math.MaxInt32, so that in the
+// (internal) encode function, it is safe to have the s variable (which indexes
+// the src slice), and therefore the hash table entries, to have type int32
+// instead of int.
+const maxInternalEncodeSrcLen = 0x40000000
+
+type encoder struct {
+	table [tableSize]int32
+	cur   int
+}
+
+// encode encodes a non-empty src to a guaranteed-large-enough dst. It assumes
+// that the varint-encoded length of the decompressed bytes has already been
+// written.
+//
+// It also assumes that:
+//	len(dst) >= MaxEncodedLen(len(src)) &&
+// 	0 < len(src) &&
+//	len(src) <= maxInternalEncodeSrcLen &&
+// 	maxInternalEncodeSrcLen < math.MaxInt32.
+func (e *encoder) encode(dst, src []byte) (d int) {
 	// Return early if src is short.
 	if len(src) <= 4 {
 		if len(src) != 0 {
 			d += emitLiteral(dst[d:], src)
 		}
-		e.cur += 4
-		return dst[:d]
+		e.cur += len(src)
+		return d
 	}
+	if useSSE42 {
+		return e.encSSE4(dst, src)
+	}
+	return e.enc(dst, src)
+}
 
+const skipBits = 4
+const maxSkip = (1 << 7) - 1
+
+func (e *encoder) enc(dst, src []byte) (d int) {
 	// Ensure that e.cur doesn't wrap.
-	if e.cur > 1<<30 {
+	if e.cur > maxInternalEncodeSrcLen {
 		e.cur = 0
 	}
 
@@ -155,7 +185,7 @@ func (e *encoder) enc(dst, src []byte) []byte {
 		// If t is invalid or src[s:s+4] differs from src[t:t+4], accumulate a literal byte.
 		if t < 0 || offset >= (maxOffset-1) || b0 != src[t] || b1 != src[t+1] || b2 != src[t+2] || b3 != src[t+3] {
 			// Skip bytes if last match was >= 32 bytes in the past.
-			s += 1 + (s-lit)>>5
+			s += 1 + (((s - lit) >> skipBits) & maxSkip)
 			continue
 		}
 
@@ -181,28 +211,12 @@ func (e *encoder) enc(dst, src []byte) []byte {
 	}
 
 	e.cur += len(src)
-	return dst[:d]
+	return d
 }
 
-func (e *encoder) encSSE4(dst, src []byte) []byte {
-	if n := MaxEncodedLen(len(src)); len(dst) < n {
-		dst = make([]byte, n)
-	}
-
-	// The block starts with the varint-encoded length of the decompressed bytes.
-	d := binary.PutUvarint(dst, uint64(len(src)))
-
-	// Return early if src is short.
-	if len(src) <= 4 {
-		if len(src) != 0 {
-			d += emitLiteral(dst[d:], src)
-		}
-		e.cur += 4
-		return dst[:d]
-	}
-
+func (e *encoder) encSSE4(dst, src []byte) (d int) {
 	// Ensure that e.cur doesn't wrap.
-	if e.cur > 1<<30 {
+	if e.cur > maxInternalEncodeSrcLen {
 		e.cur = 0
 	}
 
@@ -233,7 +247,7 @@ func (e *encoder) encSSE4(dst, src []byte) []byte {
 		// that is a result of e.cur wrapping.
 		if t < 0 || offset >= maxOffset-1 {
 			// Skip bytes if last match was >= 32 bytes in the past.
-			s += 1 + (s-lit)>>5
+			s += 1 + (((s - lit) >> skipBits) & maxSkip)
 			continue
 		}
 
@@ -252,7 +266,7 @@ func (e *encoder) encSSE4(dst, src []byte) []byte {
 		*/
 		// Return if short.
 		if match < 4 {
-			s += 1 + (s-lit)>>5
+			s += 1 + (((s - lit) >> skipBits) & maxSkip)
 			continue
 		}
 
@@ -274,12 +288,18 @@ func (e *encoder) encSSE4(dst, src []byte) []byte {
 	}
 
 	e.cur += len(src)
-	return dst[:d]
+	return d
 }
 
 // MaxEncodedLen returns the maximum length of a snappy block, given its
 // uncompressed length.
+//
+// It will return a negative value if srcLen is too large to encode.
 func MaxEncodedLen(srcLen int) int {
+	n := uint64(srcLen)
+	if n > 0xffffffff {
+		return -1
+	}
 	// Compressed data can be defined as:
 	//    compressed := item* literal*
 	//    item       := literal* copy
@@ -300,7 +320,11 @@ func MaxEncodedLen(srcLen int) int {
 	// That is, 6 bytes of input turn into 7 bytes of "compressed" data.
 	//
 	// This last factor dominates the blowup, so the final estimate is:
-	return 32 + srcLen + srcLen/6
+	n = 32 + n + n/6
+	if n > 0xffffffff {
+		return -1
+	}
+	return int(n)
 }
 
 var errClosed = errors.New("snappy: Writer is closed")
@@ -427,11 +451,15 @@ func (w *Writer) write(p []byte) (nRet int, errRet error) {
 
 		// Compress the buffer, discarding the result if the improvement
 		// isn't at least 12.5%.
-		compressed := w.e.encode(w.obuf[obufHeaderLen:], uncompressed)
+
+		// The block starts with the varint-encoded length of the decompressed bytes.
+		d := binary.PutUvarint(w.obuf[obufHeaderLen:], uint64(len(uncompressed)))
+		d += w.e.encode(w.obuf[obufHeaderLen+d:], uncompressed)
+
 		chunkType := uint8(chunkTypeCompressedData)
-		chunkLen := 4 + len(compressed)
-		obufEnd := obufHeaderLen + len(compressed)
-		if len(compressed) >= len(uncompressed)-len(uncompressed)/8 {
+		chunkLen := 4 + d
+		obufEnd := obufHeaderLen + d
+		if d >= len(uncompressed)-len(uncompressed)/8 {
 			chunkType = chunkTypeUncompressedData
 			chunkLen = 4 + len(uncompressed)
 			obufEnd = obufHeaderLen

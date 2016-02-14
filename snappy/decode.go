@@ -89,10 +89,8 @@ func Decode(dst, src []byte) ([]byte, error) {
 				}
 				x = uint(src[s-4]) | uint(src[s-3])<<8 | uint(src[s-2])<<16 | uint(src[s-1])<<24
 			}
+			// length always > 0
 			length = int(x + 1)
-			if length <= 0 {
-				return nil, errUnsupportedLiteralLength
-			}
 			if length > len(dst)-d || length > len(src)-s {
 				return nil, ErrCorrupt
 			}
@@ -121,7 +119,7 @@ func Decode(dst, src []byte) ([]byte, error) {
 			return nil, errUnsupportedCopy4Tag
 		}
 
-		if offset > d || length > len(dst)-d {
+		if uint(offset-1) >= uint(d) || length > len(dst)-d {
 			return nil, ErrCorrupt
 		}
 		for end := d + length; d != end; d++ {
@@ -141,7 +139,7 @@ func NewReader(r io.Reader) *Reader {
 	return &Reader{
 		r:       r,
 		decoded: make([]byte, maxUncompressedChunkLen),
-		buf:     make([]byte, MaxEncodedLen(maxUncompressedChunkLen)+checksumSize),
+		buf:     make([]byte, maxEncodedLenOfMaxUncompressedChunkLen+checksumSize),
 	}
 }
 
