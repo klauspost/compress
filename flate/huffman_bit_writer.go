@@ -396,6 +396,7 @@ func (w *huffmanBitWriter) writeBlock(tok tokens, eof bool, input []byte) {
 		return
 	}
 
+	//fmt.Printf("tokens: %#v,\n", tok.tokens[:tok.n])
 	for i := range w.literalFreq {
 		w.literalFreq[i] = 0
 	}
