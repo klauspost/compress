@@ -260,30 +260,3 @@ func toTokens(in []token) tokens {
 	copy(t.tokens, in)
 	return t
 }
-
-/*
-func TestGenerateTokens(t *testing.T) {
-	// determine input files
-	match, err := filepath.Glob("testdata/huffman-*.in")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	match = []string{"testdata/null-long-match.in"}
-	for _, in := range match {
-		input, err := ioutil.ReadFile(in)
-		if err != nil {
-			t.Fatal(err)
-		}
-		fmt.Printf("huffTest{\ninput: %q,\n", in)
-		out := in[:len(in)-len(".in")] + ".expect"
-		fmt.Printf("expect: %q,\n", out)
-		fmt.Printf("expectNoInput: %q,\n", out+"-noinput")
-		var buf = bytes.NewBuffer(input)
-		w, _ := NewWriter(ioutil.Discard, BestCompression)
-		io.Copy(w, buf)
-		w.Close()
-		fmt.Println("},")
-	}
-}
-*/
