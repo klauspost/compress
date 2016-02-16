@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-var update = flag.Bool("update", false, "update .golden files")
+var update = flag.Bool("update", false, "update reference files")
 
 func init() {
 	flag.Parse()
@@ -68,18 +68,36 @@ func testBlockHuff(t *testing.T, in, out string) {
 			t.Errorf("WARNING: -update did not rewrite input file %s", in)
 		}
 
-		t.Errorf("%s != %s (see %s.got)", in, out, in)
+		t.Errorf("%q != %q (see %q)", in, out, in+".got")
 		if err := ioutil.WriteFile(in+".got", got, 0666); err != nil {
 			t.Error(err)
 		}
+		return
 	}
+	t.Log("Output ok")
+
+	// Test if the writer produces the same output after reset.
+	buf.Reset()
+	bw.reset(&buf)
+	bw.writeBlockHuff(false, all)
+	bw.flush()
+	got = buf.Bytes()
+	if !bytes.Equal(got, expected) {
+		t.Errorf("after reset %q != %q (see %q)", in, out, in+".reset.got")
+		if err := ioutil.WriteFile(in+".reset.got", got, 0666); err != nil {
+			t.Error(err)
+		}
+		return
+	}
+	t.Log("Reset ok")
+	testWriterEOF(t, "huff", huffTest{input: in})
 }
 
 type huffTest struct {
 	tokens        []token
-	input         string // File name of input data matching the tokens
-	expect        string // File name of data with the expected output.
-	expectNoInput string // File name of the expected output when no input is given.
+	input         string // File name of input data matching the.
+	expect        string // File name of data with the expected output with input available.
+	expectNoInput string // File name of the expected output when no input is available.
 }
 
 var writeBlockTests = []huffTest{
@@ -145,6 +163,7 @@ var writeBlockTests = []huffTest{
 func TestWriteBlock(t *testing.T) {
 	for _, test := range writeBlockTests {
 		testBlock(t, test, "wb")
+		testWriterEOF(t, "wb", test)
 	}
 }
 
@@ -154,9 +173,12 @@ func TestWriteBlock(t *testing.T) {
 func TestWriteBlockDynamic(t *testing.T) {
 	for _, test := range writeBlockTests {
 		testBlock(t, test, "dyn")
+		testWriterEOF(t, "dyn", test)
 	}
 }
 
+// testBlock will test a block against its references,
+// or regenerate the references, if "-update" is set.
 func testBlock(t *testing.T, test huffTest, ttype string) {
 	if test.expect != "" {
 		test.expect = fmt.Sprintf(test.expect, ttype)
@@ -214,6 +236,22 @@ func testBlock(t *testing.T, test huffTest, ttype string) {
 				t.Error(err)
 			}
 		}
+		t.Log("Output ok")
+
+		// Test if the writer produces the same output after reset.
+		buf.Reset()
+		bw.reset(&buf)
+		writeToType(t, ttype, bw, test.tokens, input)
+		bw.flush()
+		got = buf.Bytes()
+		if !bytes.Equal(got, expect) {
+			t.Errorf("reset: writeBlock did not yield expected result for file %q with input. See %q", test.expect, test.expect+".reset.got")
+			if err := ioutil.WriteFile(test.expect+".reset.got", got, 0666); err != nil {
+				t.Error(err)
+			}
+			return
+		}
+		t.Log("Reset ok")
 	}
 	t.Logf("Testing %q", test.expectNoInput)
 	expectN, err := ioutil.ReadFile(test.expectNoInput)
@@ -231,7 +269,27 @@ func testBlock(t *testing.T, test huffTest, ttype string) {
 		if err := ioutil.WriteFile(test.expect+".got", got, 0666); err != nil {
 			t.Error(err)
 		}
+	} else if got[0]&1 == 1 {
+		t.Error("got unexpected EOF")
+		return
 	}
+
+	t.Log("Output ok")
+
+	// Test if the writer produces the same output after reset.
+	buf.Reset()
+	bw.reset(&buf)
+	writeToType(t, ttype, bw, test.tokens, nil)
+	bw.flush()
+	got = buf.Bytes()
+	if !bytes.Equal(got, expectN) {
+		t.Errorf("reset: writeBlock did not yield expected result for file %q without input. See %q", test.expect, test.expect+".reset.got")
+		if err := ioutil.WriteFile(test.expect+".reset.got", got, 0666); err != nil {
+			t.Error(err)
+		}
+		return
+	}
+	t.Log("Reset ok")
 }
 
 func writeToType(t *testing.T, ttype string, bw *huffmanBitWriter, tok []token, input []byte) {
@@ -246,6 +304,7 @@ func writeToType(t *testing.T, ttype string, bw *huffmanBitWriter, tok []token, 
 
 	if bw.err != nil {
 		t.Error(bw.err)
+		return
 	}
 
 	bw.flush()
@@ -259,4 +318,47 @@ func toTokens(in []token) tokens {
 	var t = tokens{n: len(in), tokens: make([]token, maxFlateBlockTokens)}
 	copy(t.tokens, in)
 	return t
+}
+
+// testWriterEOF will test if the written block contains an EOF marker.
+func testWriterEOF(t *testing.T, ttype string, test huffTest) {
+	if test.input == "" {
+		return
+	}
+	input, err := ioutil.ReadFile(test.input)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	var buf bytes.Buffer
+	bw := newHuffmanBitWriter(&buf)
+	switch ttype {
+	case "wb":
+		bw.writeBlock(toTokens(test.tokens), true, input)
+	case "dyn":
+		bw.writeBlockDynamic(toTokens(test.tokens), true, input)
+	case "huff":
+		bw.writeBlockHuff(true, input)
+	default:
+		panic("unknown test type")
+	}
+	if bw.err != nil {
+		t.Error(bw.err)
+		return
+	}
+
+	bw.flush()
+	if bw.err != nil {
+		t.Error(bw.err)
+		return
+	}
+	b := buf.Bytes()
+	if len(b) == 0 {
+		t.Fatal("no output received")
+	}
+	if b[0]&1 != 1 {
+		t.Errorf("block not marked with EOF for input %q", test.input)
+	} else {
+		t.Log("EOF ok")
+	}
 }
