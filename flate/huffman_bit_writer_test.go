@@ -90,7 +90,7 @@ func testBlockHuff(t *testing.T, in, out string) {
 		return
 	}
 	t.Log("Reset ok")
-	testWriterEOF(t, "huff", huffTest{input: in})
+	testWriterEOF(t, "huff", huffTest{input: in}, true)
 }
 
 type huffTest struct {
@@ -163,7 +163,6 @@ var writeBlockTests = []huffTest{
 func TestWriteBlock(t *testing.T) {
 	for _, test := range writeBlockTests {
 		testBlock(t, test, "wb")
-		testWriterEOF(t, "wb", test)
 	}
 }
 
@@ -173,7 +172,6 @@ func TestWriteBlock(t *testing.T) {
 func TestWriteBlockDynamic(t *testing.T) {
 	for _, test := range writeBlockTests {
 		testBlock(t, test, "dyn")
-		testWriterEOF(t, "dyn", test)
 	}
 }
 
@@ -252,6 +250,7 @@ func testBlock(t *testing.T, test huffTest, ttype string) {
 			return
 		}
 		t.Log("Reset ok")
+		testWriterEOF(t, "wb", test, true)
 	}
 	t.Logf("Testing %q", test.expectNoInput)
 	expectN, err := ioutil.ReadFile(test.expectNoInput)
@@ -290,6 +289,7 @@ func testBlock(t *testing.T, test huffTest, ttype string) {
 		return
 	}
 	t.Log("Reset ok")
+	testWriterEOF(t, "wb", test, false)
 }
 
 func writeToType(t *testing.T, ttype string, bw *huffmanBitWriter, tok []token, input []byte) {
@@ -321,14 +321,18 @@ func toTokens(in []token) tokens {
 }
 
 // testWriterEOF will test if the written block contains an EOF marker.
-func testWriterEOF(t *testing.T, ttype string, test huffTest) {
-	if test.input == "" {
+func testWriterEOF(t *testing.T, ttype string, test huffTest, useInput bool) {
+	if useInput && test.input == "" {
 		return
 	}
-	input, err := ioutil.ReadFile(test.input)
-	if err != nil {
-		t.Error(err)
-		return
+	var input []byte
+	if useInput {
+		var err error
+		input, err = ioutil.ReadFile(test.input)
+		if err != nil {
+			t.Error(err)
+			return
+		}
 	}
 	var buf bytes.Buffer
 	bw := newHuffmanBitWriter(&buf)
@@ -358,7 +362,7 @@ func testWriterEOF(t *testing.T, ttype string, test huffTest) {
 	}
 	if b[0]&1 != 1 {
 		t.Errorf("block not marked with EOF for input %q", test.input)
-	} else {
-		t.Log("EOF ok")
+		return
 	}
+	t.Log("EOF ok")
 }
