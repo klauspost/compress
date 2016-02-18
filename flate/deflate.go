@@ -1083,17 +1083,34 @@ func (d *compressor) storeHuff() {
 // Any error that occurred will be in d.err
 func (d *compressor) storeSnappy() {
 	// We only compress if we have maxStoreBlockSize.
-	if d.windowEnd < maxStoreBlockSize && !d.sync {
-		return
+	if d.windowEnd < maxStoreBlockSize {
+		if !d.sync {
+			return
+		}
+		// Handle extremely small sizes.
+		if d.windowEnd < 128 {
+			if d.windowEnd == 0 {
+				return
+			}
+			if d.windowEnd <= 32 {
+				d.err = d.writeStoredBlock(d.window[:d.windowEnd])
+				d.tokens.n = 0
+				d.windowEnd = 0
+			} else {
+				d.w.writeBlockHuff(false, d.window[:d.windowEnd])
+				d.err = d.w.err
+			}
+			d.tokens.n = 0
+			d.windowEnd = 0
+			return
+		}
 	}
-	if d.windowEnd == 0 {
-		return
-	}
+
 	d.snap.Encode(&d.tokens, d.window[:d.windowEnd])
 	// If we made zero matches, store the block as is.
 	if d.tokens.n == d.windowEnd {
 		d.err = d.writeStoredBlock(d.window[:d.windowEnd])
-		// If we removed less than 10 literals, huffman compress the block.
+		// If we removed less than 1/16th, huffman compress the block.
 	} else if d.tokens.n > d.windowEnd-(d.windowEnd>>4) {
 		d.w.writeBlockHuff(false, d.window[:d.windowEnd])
 		d.err = d.w.err
@@ -1190,6 +1207,13 @@ func (d *compressor) reset(w io.Writer) {
 	d.w.reset(w)
 	d.sync = false
 	d.err = nil
+	// We only need to reset a few things for Snappy.
+	if d.snap != nil {
+		d.snap.Reset()
+		d.windowEnd = 0
+		d.tokens.n = 0
+		return
+	}
 	switch d.compressionLevel.chain {
 	case 0:
 		// level was NoCompression or ConstantCompresssion.
@@ -1214,9 +1238,6 @@ func (d *compressor) reset(w io.Writer) {
 		d.hash = 0
 		d.ii = 0
 		d.maxInsertIndex = 0
-	}
-	if d.snap != nil {
-		d.snap.Reset()
 	}
 }
 
