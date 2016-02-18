@@ -629,8 +629,8 @@ func (e *snappySSE4) encodeL2(dst *tokens, src []byte) {
 }
 */
 
-// EncodeL3 uses a similar algorithm to level 2, but is capable
-// will keep two matches per hash.
+// EncodeL3 uses a similar algorithm to level 2,
+// but will keep two matches per hash.
 // Both hashes are checked if the first isn't ok, and the longest is selected.
 func (e *snappySSE4) encodeL3(dst *tokens, src []byte) {
 	// Return early if src is short.
