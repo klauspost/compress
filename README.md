@@ -11,6 +11,9 @@ It offers slightly better compression at lower compression settings, and up to 3
 [![Build Status](https://travis-ci.org/klauspost/compress.svg?branch=master)](https://travis-ci.org/klauspost/compress)
 
 # changelog
+* Feb 19, 2016: Handle small payloads faster in level 1-3.
+* Feb 19, 2016: Added faster level 2 + 3 compression modes.
+* Feb 19, 2016: [Rebalanced compression levels](https://blog.klauspost.com/rebalancing-deflate-compression-levels/), so there is a more even progresssion in terms of compression. New default level is 5.
 * Feb 14, 2016: Snappy: Merge upstream changes. 
 * Feb 14, 2016: Snappy: Fix aggressive skipping.
 * Feb 14, 2016: Snappy: Update benchmark.
