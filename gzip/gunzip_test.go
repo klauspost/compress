@@ -569,3 +569,27 @@ func BenchmarkGunzipStdlib(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkGunzipZero(b *testing.B) {
+	var dat = make([]byte, 10<<20)
+	dst := &bytes.Buffer{}
+	w, _ := NewWriterLevel(dst, 6)
+	_, err := w.Write(dat)
+	if err != nil {
+		b.Fatal(err)
+	}
+	w.Close()
+	input := dst.Bytes()
+	b.SetBytes(int64(len(dat)))
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		r, err := NewReader(bytes.NewBuffer(input))
+		if err != nil {
+			b.Fatal(err)
+		}
+		_, err = io.Copy(ioutil.Discard, r)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
