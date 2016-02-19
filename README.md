@@ -159,7 +159,7 @@ BenchmarkEncodeTwainCompress1e6-4      5.17         8.21         1.59x
 ```
 So even without the assembly optimizations there is a general speedup across the board.
 
-## level 1 "snappy" compression
+## level 1-3 "snappy" compression
 
 Level 1 "BestSpeed" is completely replaced by a converted version of the algorithm found in Snappy.
 This version is considerably faster than the "old" deflate at level 1. It does however come at a compression loss, usually in the order of 3-4% compared to the old level 1. However, the speed is usually 1.75 times that of the fastest deflate mode.
@@ -169,6 +169,8 @@ In my previous experiments the most common case for "level 1" was that it provid
 However, the modified Snappy algorithm provides a very good sweet spot. Usually about 75% faster and with only little compression loss. Therefore I decided to *replace* level 1 with this mode entirely.
 
 Input is split into blocks between 32 and 64kb, and they are encoded independently (no backreferences across blocks) for the best speed. Contrary to Snappy the output is entropy-encoded, so you will almost always see better compression than Snappy. But Snappy is still about twice as fast as Snappy in deflate mode.
+
+Level 2 and 3 have also been replaced. Level 2 is capable is matching between blocks and level 3 checks up to two hashes for matches before choosing the longest for encoding the match.
 
 ## compression levels
 
@@ -189,7 +191,7 @@ at the similar level with the standard library. Compression data is `Twain`, see
 
 To interpret and example, this version of deflate compresses input of 407287 bytes to 161274 bytes at level 5, which is 98.6% of the size of what the standard library produces; 161274 bytes.
 
-This means that from level 2-5 you can expect a compression level increase of a few percent. Level 1 is about 3% worse, as descibed above.
+This means that from level 4 you can expect a compression level increase of a few percent. Level 1 is about 3% worse, as descibed above.
 
 # linear time compression
 
