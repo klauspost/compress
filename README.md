@@ -7,6 +7,7 @@ It offers slightly better compression at lower compression settings, and up to 3
 * [High Throughput Benchmark](http://blog.klauspost.com/go-gzipdeflate-benchmarks/).
 * [Small Payload/Webserver Benchmarks](http://blog.klauspost.com/gzip-performance-for-go-webservers/).
 * [Linear Time Compression](http://blog.klauspost.com/constant-time-gzipzip-compression/).
+* [Re-balancing Deflate Compression Levels](https://blog.klauspost.com/rebalancing-deflate-compression-levels/)
 
 [![Build Status](https://travis-ci.org/klauspost/compress.svg?branch=master)](https://travis-ci.org/klauspost/compress)
 
@@ -48,9 +49,9 @@ The packages are drop-in replacements for standard libraries. Simply replace the
 
 You may also be interested in [pgzip](https://github.com/klauspost/pgzip), which is a drop in replacement for gzip, which support multithreaded compression on big files and the optimized [crc32](https://github.com/klauspost/crc32) package used by these packages.
 
-The packages contains the same as the standard library, so you can use the godoc for that: [gzip](http://golang.org/pkg/compress/gzip/), [zip](http://golang.org/pkg/archive/zip/),  [zlib](http://golang.org/pkg/compress/zlib/), [flate](http://golang.org/pkg/compress/flate/).
+The packages contains the same as the standard library, so you can use the godoc for that: [gzip](http://golang.org/pkg/compress/gzip/), [zip](http://golang.org/pkg/archive/zip/),  [zlib](http://golang.org/pkg/compress/zlib/), [flate](http://golang.org/pkg/compress/flate/), [snappy](http://golang.org/pkg/compress/snappy/).
 
-Currently there is only minor speedup on decompression (primarily CRC32 calculation).
+Currently there is only minor speedup on decompression (mostly CRC32 calculation).
 
 # deflate optimizations
 
@@ -161,14 +162,12 @@ So even without the assembly optimizations there is a general speedup across the
 
 ## level 1-3 "snappy" compression
 
-Level 1 "BestSpeed" is completely replaced by a converted version of the algorithm found in Snappy.
+Level 1 "Best Speed" is completely replaced by a converted version of the algorithm found in Snappy.
 This version is considerably faster than the "old" deflate at level 1. It does however come at a compression loss, usually in the order of 3-4% compared to the old level 1. However, the speed is usually 1.75 times that of the fastest deflate mode.
 
-In my previous experiments the most common case for "level 1" was that it provided no significant speedup, only lower compression compared to level 2 and sometimes even 3.
+In my previous experiments the most common case for "level 1" was that it provided no significant speedup, only lower compression compared to level 2 and sometimes even 3. However, the modified Snappy algorithm provides a very good sweet spot. Usually about 75% faster and with only little compression loss. Therefore I decided to *replace* level 1 with this mode entirely.
 
-However, the modified Snappy algorithm provides a very good sweet spot. Usually about 75% faster and with only little compression loss. Therefore I decided to *replace* level 1 with this mode entirely.
-
-Input is split into blocks between 32 and 64kb, and they are encoded independently (no backreferences across blocks) for the best speed. Contrary to Snappy the output is entropy-encoded, so you will almost always see better compression than Snappy. But Snappy is still about twice as fast as Snappy in deflate mode.
+Input is split into blocks of 64kb of, and they are encoded independently (no backreferences across blocks) for the best speed. Contrary to Snappy the output is entropy-encoded, so you will almost always see better compression than Snappy. But Snappy is still about twice as fast as Snappy in deflate mode.
 
 Level 2 and 3 have also been replaced. Level 2 is capable is matching between blocks and level 3 checks up to two hashes for matches before choosing the longest for encoding the match.
 
@@ -176,6 +175,8 @@ Level 2 and 3 have also been replaced. Level 2 is capable is matching between bl
 
 This table shows the compression at each level, and the percentage of the output size compared to output
 at the similar level with the standard library. Compression data is `Twain`, see above.
+
+(Not up-to-date after rebalancing)
 
 | Level | Bytes  | % size |
 |-------|--------|--------|
@@ -199,7 +200,7 @@ This compression library adds a special compression level, named `ConstantCompre
 
 This means that often used characters, like 'e' and ' ' (space) in text use the fewest bits to represent, and rare characters like '¤' takes more bits to represent. For more information see [wikipedia](https://en.wikipedia.org/wiki/Huffman_coding) or this nice [video](https://youtu.be/ZdooBTdW5bM).
 
-Since this type of compression has much less variance, the compression speed is mostly unaffected by the input data, and is usually more than *150MB/s* for a single core.
+Since this type of compression has much less variance, the compression speed is mostly unaffected by the input data, and is usually more than *180MB/s* for a single core.
 
 The downside is that the compression ratio is usually considerably worse than even the fastest conventional compression. The compression raio can never be better than 8:1 (12.5%). 
 
@@ -211,9 +212,10 @@ For more information see my blog post on [Fast Linear Time Compression](http://b
  * Uses the faster deflate
  * Uses SSE 4.2 CRC32 calculations.
 
-Speed increase is up to 3x of the standard library, but usually around 30%. Without SSE 4.2, speed is roughly equivalent, but compression should be slightly better.
+Speed increase is up to 3x of the standard library, but usually around 2x. 
 
-This is close to a real world benchmark as you will get. A 2.3MB JSON file.
+This is close to a real world benchmark as you will get. A 2.3MB JSON file. (NOTE: not up-to-date)
+
 ```
 benchmark             old ns/op     new ns/op     delta
 BenchmarkGzipL1-4     95212470      59938275      -37.05%
@@ -240,7 +242,7 @@ BenchmarkGzipL9-4     8.81         12.30        1.40x
 
 Multithreaded compression using [pgzip](https://github.com/klauspost/pgzip) comparison, Quadcore, CPU = 8:
 
-(Not updated with new level 1 optimizations)
+(Not updated, old numbers)
 
 ```
 benchmark           old ns/op     new ns/op     delta
