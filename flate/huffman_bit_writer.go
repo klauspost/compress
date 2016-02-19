@@ -197,13 +197,11 @@ func (w *huffmanBitWriter) generateCodegen(numLiterals int, numOffsets int, offe
 	// so far.
 	codegen := w.codegen // cache
 	// Copy the concatenated code sizes to codegen.  Put a marker at the end.
-	//copy(codegen[0:numLiterals], w.literalEncoding.codeBits)
 	cgnl := codegen[0:numLiterals]
 	for i := range cgnl {
 		cgnl[i] = uint8(w.literalEncoding.codes[i].bits())
 	}
 
-	//copy(codegen[numLiterals:numLiterals+numOffsets], w.offsetEncoding.codeBits)
 	cgnl = codegen[numLiterals : numLiterals+numOffsets]
 	for i := range cgnl {
 		cgnl[i] = uint8(offenc.codes[i].bits())
@@ -275,16 +273,6 @@ func (w *huffmanBitWriter) generateCodegen(numLiterals int, numOffsets int, offe
 	// Marker indicating the end of the codegen.
 	codegen[outIndex] = badCode
 }
-
-/* non-inlined:
-func (w *huffmanBitWriter) writeCode(code *huffmanEncoder, literal uint32) {
-	if w.err != nil {
-		return
-	}
-	c := code.codes[literal]
-	w.writeBits(int32(c.code()), int32(c.bits()))
-}
-*/
 
 func (w *huffmanBitWriter) writeCode(c hcode) {
 	if w.err != nil {
@@ -393,7 +381,6 @@ func (w *huffmanBitWriter) writeBlock(tok tokens, eof bool, input []byte) {
 	if w.err != nil {
 		return
 	}
-
 	for i := range w.literalFreq {
 		w.literalFreq[i] = 0
 	}
