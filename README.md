@@ -162,7 +162,8 @@ So even without the assembly optimizations there is a general speedup across the
 
 ## level 1-3 "snappy" compression
 
-Level 1 "Best Speed" is completely replaced by a converted version of the algorithm found in Snappy.
+Level 1 "Best Speed" is completely replaced by a converted version of the algorithm found in Snappy, modified to be fully
+compatible with the deflate bitstream (and thus still compatible with all existing zlib/gzip libraries and tools).
 This version is considerably faster than the "old" deflate at level 1. It does however come at a compression loss, usually in the order of 3-4% compared to the old level 1. However, the speed is usually 1.75 times that of the fastest deflate mode.
 
 In my previous experiments the most common case for "level 1" was that it provided no significant speedup, only lower compression compared to level 2 and sometimes even 3. However, the modified Snappy algorithm provides a very good sweet spot. Usually about 75% faster and with only little compression loss. Therefore I decided to *replace* level 1 with this mode entirely.
