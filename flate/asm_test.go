@@ -48,11 +48,11 @@ func TestCRCBulk(t *testing.T) {
 				copy(test2, y[:j])
 
 				// We allocate one more than we need to test for unintentional overwrites
-				dst := make([]hash, j-3+1)
-				ref := make([]hash, j-3+1)
+				dst := make([]uint32, j-3+1)
+				ref := make([]uint32, j-3+1)
 				for i := range dst {
-					dst[i] = hash(i + 100)
-					ref[i] = hash(i + 101)
+					dst[i] = uint32(i + 100)
+					ref[i] = uint32(i + 101)
 				}
 				// Last entry must NOT be overwritten.
 				dst[j-3] = 0x1234
@@ -71,7 +71,7 @@ func TestCRCBulk(t *testing.T) {
 						continue
 					}
 					expect := crc32sse(y[i : i+4])
-					if got != expect && got == hash(i)+100 {
+					if got != expect && got == uint32(i)+100 {
 						t.Errorf("Len:%d Index:%d, expected 0x%08x but not modified", len(y), i, uint32(expect))
 					} else if got != expect {
 						t.Errorf("Len:%d Index:%d, got 0x%08x expected:0x%08x", len(y), i, uint32(got), uint32(expect))

@@ -88,15 +88,15 @@ func TestCRCBulkOld(t *testing.T) {
 			y = append(y, y...)
 			for j := 4; j < len(y); j++ {
 				y := y[:j]
-				dst := make([]hash, len(y)-minMatchLength+1)
+				dst := make([]uint32, len(y)-minMatchLength+1)
 				for i := range dst {
-					dst[i] = hash(i + 100)
+					dst[i] = uint32(i + 100)
 				}
-				oldBulkHash(y, dst)
+				bulkHash4(y, dst)
 				for i, val := range dst {
-					got := val & hashMask
-					expect := oldHash(y[i:]) & hashMask
-					if got != expect && got == hash(i)+100 {
+					got := val
+					expect := hash4(y[i:])
+					if got != expect && got == uint32(i)+100 {
 						t.Errorf("Len:%d Index:%d, expected 0x%08x but not modified", len(y), i, expect)
 					} else if got != expect {
 						t.Errorf("Len:%d Index:%d, got 0x%08x expected:0x%08x", len(y), i, got, expect)

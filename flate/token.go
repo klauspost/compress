@@ -68,8 +68,8 @@ var offsetCodes = [...]uint32{
 type token uint32
 
 type tokens struct {
-	tokens []token
-	n      int
+	tokens [maxStoreBlockSize + 1]token
+	n      uint16 // Must be able to contain maxStoreBlockSize
 }
 
 // Convert a literal into a literal token.

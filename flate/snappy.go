@@ -10,11 +10,11 @@ const maxOffset = 1 << 15
 
 // emitLiteral writes a literal chunk and returns the number of bytes written.
 func emitLiteral(dst *tokens, lit []byte) {
-	ol := dst.n
+	ol := int(dst.n)
 	for i, v := range lit {
-		dst.tokens[i+ol] = token(v)
+		dst.tokens[(i+ol)&maxStoreBlockSize] = token(v)
 	}
-	dst.n += len(lit)
+	dst.n += uint16(len(lit))
 }
 
 // emitCopy writes a copy chunk and returns the number of bytes written.
@@ -127,7 +127,6 @@ func (e *snappyGen) encodeL1(dst *tokens, src []byte) {
 			t++
 		}
 		// Emit the copied bytes.
-		// inlined: emitCopy(dst, s-t, s-s0)
 
 		dst.tokens[dst.n] = matchToken(uint32(s-s0-3), uint32(s-t-minOffsetSize))
 		dst.n++
