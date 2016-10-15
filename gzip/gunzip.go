@@ -307,8 +307,11 @@ func (z *Reader) WriteTo(w io.Writer) (int64, error) {
 
 		// Finished file; check checksum + size.
 		if _, err := io.ReadFull(z.r, z.buf[0:8]); err != nil {
+			if err == io.EOF {
+				err = io.ErrUnexpectedEOF
+			}
 			z.err = err
-			return 0, err
+			return total, err
 		}
 		z.digest = crcWriter.Sum32()
 		digest := le.Uint32(z.buf[:4])
