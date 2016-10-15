@@ -98,7 +98,7 @@ func TestWriteError(t *testing.T) {
 	}
 	in := buf.Bytes()
 	// We create our own buffer to control number of writes.
-	copyBuffer := make([]byte, 128)
+	copyBuf := make([]byte, 128)
 	for l := 0; l < 10; l++ {
 		for fail := 1; fail <= 256; fail *= 2 {
 			// Fail after 'fail' writes
@@ -107,7 +107,7 @@ func TestWriteError(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewWriter: level %d: %v", l, err)
 			}
-			n, err := io.CopyBuffer(w, bytes.NewBuffer(in), copyBuffer)
+			n, err := copyBuffer(w, bytes.NewBuffer(in), copyBuf)
 			if err == nil {
 				t.Fatalf("Level %d: Expected an error, writer was %#v", l, ew)
 			}
@@ -142,14 +142,17 @@ func TestWriteError(t *testing.T) {
 	}
 }
 
-// Test if two runs produce identical results
-// even when writing different sizes to the Writer.
-func TestDeterministic(t *testing.T) {
-	for i := 0; i <= 9; i++ {
-		t.Run(fmt.Sprint("L", i), func(t *testing.T) { testDeterministic(i, t) })
-	}
-	t.Run("LM2", func(t *testing.T) { testDeterministic(-2, t) })
-}
+func TestDeterministicL1(t *testing.T)  { testDeterministic(1, t) }
+func TestDeterministicL2(t *testing.T)  { testDeterministic(2, t) }
+func TestDeterministicL3(t *testing.T)  { testDeterministic(3, t) }
+func TestDeterministicL4(t *testing.T)  { testDeterministic(4, t) }
+func TestDeterministicL5(t *testing.T)  { testDeterministic(5, t) }
+func TestDeterministicL6(t *testing.T)  { testDeterministic(6, t) }
+func TestDeterministicL7(t *testing.T)  { testDeterministic(7, t) }
+func TestDeterministicL8(t *testing.T)  { testDeterministic(8, t) }
+func TestDeterministicL9(t *testing.T)  { testDeterministic(9, t) }
+func TestDeterministicL0(t *testing.T)  { testDeterministic(0, t) }
+func TestDeterministicLM2(t *testing.T) { testDeterministic(-2, t) }
 
 func testDeterministic(i int, t *testing.T) {
 	// Test so much we cross a good number of block boundaries.
@@ -174,7 +177,7 @@ func testDeterministic(i int, t *testing.T) {
 	}
 	// Use a very small prime sized buffer.
 	cbuf := make([]byte, 787)
-	_, err = io.CopyBuffer(w, br, cbuf)
+	_, err = copyBuffer(w, br, cbuf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +192,7 @@ func testDeterministic(i int, t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = io.CopyBuffer(w2, br2, cbuf)
+	_, err = copyBuffer(w2, br2, cbuf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,4 +204,55 @@ func testDeterministic(i int, t *testing.T) {
 	if !bytes.Equal(b1b, b2b) {
 		t.Errorf("level %d did not produce deterministic result, result mismatch, len(a) = %d, len(b) = %d", i, len(b1b), len(b2b))
 	}
+
+	// Test using io.WriterTo interface.
+	var b3 bytes.Buffer
+	br = bytes.NewBuffer(t1)
+	w, err = NewWriter(&b3, i)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = br.WriteTo(w)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Close()
+
+	b3b := b3.Bytes()
+	if !bytes.Equal(b1b, b3b) {
+		t.Errorf("level %d (io.WriterTo) did not produce deterministic result, result mismatch, len(a) = %d, len(b) = %d", i, len(b1b), len(b3b))
+	}
+}
+
+// copyBuffer is a copy of io.CopyBuffer, since we want to support older go versions.
+// This is modified to never use io.WriterTo or io.ReaderFrom interfaces.
+func copyBuffer(dst io.Writer, src io.Reader, buf []byte) (written int64, err error) {
+	if buf == nil {
+		buf = make([]byte, 32*1024)
+	}
+	for {
+		nr, er := src.Read(buf)
+		if nr > 0 {
+			nw, ew := dst.Write(buf[0:nr])
+			if nw > 0 {
+				written += int64(nw)
+			}
+			if ew != nil {
+				err = ew
+				break
+			}
+			if nr != nw {
+				err = io.ErrShortWrite
+				break
+			}
+		}
+		if er == io.EOF {
+			break
+		}
+		if er != nil {
+			err = er
+			break
+		}
+	}
+	return written, err
 }

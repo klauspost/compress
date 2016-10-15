@@ -1048,22 +1048,16 @@ func (d *compressor) deflateLazySSE() {
 	}
 }
 
-func (d *compressor) fillStore(b []byte) int {
-	n := copy(d.window[d.windowEnd:], b)
-	d.windowEnd += n
-	return n
-}
-
 func (d *compressor) store() {
-	if d.windowEnd > 0 {
+	if d.windowEnd > 0 && (d.windowEnd == maxStoreBlockSize || d.sync) {
 		d.err = d.writeStoredBlock(d.window[:d.windowEnd])
+		d.windowEnd = 0
 	}
-	d.windowEnd = 0
 }
 
-// fillHuff will fill the buffer with data for huffman-only compression.
+// fillWindow will fill the buffer with data for huffman-only compression.
 // The number of bytes copied is returned.
-func (d *compressor) fillHuff(b []byte) int {
+func (d *compressor) fillBlock(b []byte) int {
 	n := copy(d.window[d.windowEnd:], b)
 	d.windowEnd += n
 	return n
@@ -1163,16 +1157,16 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 	switch {
 	case level == NoCompression:
 		d.window = make([]byte, maxStoreBlockSize)
-		d.fill = (*compressor).fillStore
+		d.fill = (*compressor).fillBlock
 		d.step = (*compressor).store
 	case level == ConstantCompression:
 		d.window = make([]byte, maxStoreBlockSize)
-		d.fill = (*compressor).fillHuff
+		d.fill = (*compressor).fillBlock
 		d.step = (*compressor).storeHuff
 	case level >= 1 && level <= 3:
 		d.snap = newSnappy(level)
 		d.window = make([]byte, maxStoreBlockSize)
-		d.fill = (*compressor).fillHuff
+		d.fill = (*compressor).fillBlock
 		d.step = (*compressor).storeSnappy
 	case level == DefaultCompression:
 		level = 5
