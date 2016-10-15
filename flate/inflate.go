@@ -353,6 +353,7 @@ func (f *decompressor) Read(b []byte) (int, error) {
 // Support the io.WriteTo interface for io.Copy and friends.
 func (f *decompressor) WriteTo(w io.Writer) (int64, error) {
 	total := int64(0)
+	flushed := false
 	for {
 		if len(f.toRead) > 0 {
 			n, err := w.Write(f.toRead)
@@ -364,23 +365,20 @@ func (f *decompressor) WriteTo(w io.Writer) (int64, error) {
 			if n != len(f.toRead) {
 				return total, io.ErrShortWrite
 			}
-			if f.err != nil {
-				if f.err == io.EOF {
-					f.err = nil
-				}
-				return total, f.err
-			}
 			f.toRead = f.toRead[:0]
 		}
-		f.step(f)
-		if f.err != nil && len(f.toRead) == 0 {
-			f.toRead = f.dict.readFlush() // Flush what's left in case of error
-			n, _ := w.Write(f.toRead)
-			total += int64(n)
+		if f.err != nil && flushed {
 			if f.err == io.EOF {
-				f.err = nil
+				return total, nil
 			}
 			return total, f.err
+		}
+		if f.err == nil {
+			f.step(f)
+		}
+		if len(f.toRead) == 0 && f.err != nil && !flushed {
+			f.toRead = f.dict.readFlush() // Flush what's left in case of error
+			flushed = true
 		}
 	}
 }
