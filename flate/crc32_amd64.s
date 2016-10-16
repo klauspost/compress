@@ -3,7 +3,7 @@
 
 // Copyright 2015, Klaus Post, see LICENSE for details.
 
-// func crc32sse(a []byte) hash
+// func crc32sse(a []byte) uint32
 TEXT ·crc32sse(SB), 4, $0
 	MOVQ a+0(FP), R10
 	XORQ BX, BX
@@ -15,7 +15,7 @@ TEXT ·crc32sse(SB), 4, $0
 	MOVL BX, ret+24(FP)
 	RET
 
-// func crc32sseAll(a []byte, dst []hash)
+// func crc32sseAll(a []byte, dst []uint32)
 TEXT ·crc32sseAll(SB), 4, $0
 	MOVQ  a+0(FP), R8      // R8: src
 	MOVQ  a_len+8(FP), R10 // input length

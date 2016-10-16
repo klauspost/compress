@@ -88,15 +88,15 @@ func TestCRCBulkOld(t *testing.T) {
 			y = append(y, y...)
 			for j := 4; j < len(y); j++ {
 				y := y[:j]
-				dst := make([]hash, len(y)-minMatchLength+1)
+				dst := make([]uint32, len(y)-minMatchLength+1)
 				for i := range dst {
-					dst[i] = hash(i + 100)
+					dst[i] = uint32(i + 100)
 				}
-				oldBulkHash(y, dst)
+				bulkHash4(y, dst)
 				for i, val := range dst {
-					got := val & hashMask
-					expect := oldHash(y[i:]) & hashMask
-					if got != expect && got == hash(i)+100 {
+					got := val
+					expect := hash4(y[i:])
+					if got != expect && got == uint32(i)+100 {
 						t.Errorf("Len:%d Index:%d, expected 0x%08x but not modified", len(y), i, expect)
 					} else if got != expect {
 						t.Errorf("Len:%d Index:%d, got 0x%08x expected:0x%08x", len(y), i, got, expect)
@@ -565,68 +565,4 @@ func testResetOutput(t *testing.T, newWriter func(w io.Writer) (*Writer, error))
 		}
 	}
 	t.Logf("got %d bytes", len(out1))
-}
-
-// A writer that fails after N writes.
-type errorWriter struct {
-	N int
-}
-
-func (e *errorWriter) Write(b []byte) (int, error) {
-	if e.N <= 0 {
-		return 0, io.ErrClosedPipe
-	}
-	e.N--
-	return len(b), nil
-}
-
-// Test if errors from the underlying writer is passed upwards.
-func TestWriteError(t *testing.T) {
-	buf := new(bytes.Buffer)
-	for i := 0; i < 1024*1024; i++ {
-		buf.WriteString(fmt.Sprintf("asdasfasf%d%dfghfgujyut%dyutyu\n", i, i, i))
-	}
-	in := buf.Bytes()
-	for l := -2; l < 10; l++ {
-		for fail := 1; fail <= 512; fail *= 2 {
-			// Fail after 2 writes
-			ew := &errorWriter{N: fail}
-			w, err := NewWriter(ew, l)
-			if err != nil {
-				t.Errorf("NewWriter: level %d: %v", l, err)
-			}
-			n, err := io.Copy(w, bytes.NewBuffer(in))
-			if err == nil {
-				t.Errorf("Level %d: Expected an error, writer was %#v", l, ew)
-			}
-			n2, err := w.Write([]byte{1, 2, 2, 3, 4, 5})
-			if n2 != 0 {
-				t.Error("Level", l, "Expected 0 length write, got", n)
-			}
-			if err == nil {
-				t.Error("Level", l, "Expected an error")
-			}
-			err = w.Flush()
-			if err == nil {
-				t.Error("Level", l, "Expected an error on close")
-			}
-			err = w.Close()
-			if err == nil {
-				t.Error("Level", l, "Expected an error on close")
-			}
-
-			w.Reset(ioutil.Discard)
-			n2, err = w.Write([]byte{1, 2, 3, 4, 5, 6})
-			if err != nil {
-				t.Error("Level", l, "Got unexpected error after reset:", err)
-			}
-			if n2 == 0 {
-				t.Error("Level", l, "Got 0 length write, expected > 0")
-			}
-			if testing.Short() {
-				return
-			}
-		}
-	}
-
 }
