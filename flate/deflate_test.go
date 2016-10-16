@@ -372,7 +372,7 @@ var deflateInflateStringTests = []deflateInflateStringTest{
 	{
 		"../testdata/Mark.Twain-Tom.Sawyer.txt",
 		"Mark.Twain-Tom.Sawyer",
-		[...]int{407330, 195000, 185361, 180974, 169160, 164476, 162936, 160506, 160295, 160295, 233460 + 100},
+		[...]int{407330, 195000, 185361, 180974, 173886, 168819, 164609, 160506, 160295, 160295, 233460 + 100},
 	},
 }
 

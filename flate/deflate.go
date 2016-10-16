@@ -69,11 +69,11 @@ var levels = []compressionLevel{
 	// Lazy matching is at least 30% slower, with 1.5% increase.
 	{4, 0, 8, 4, 4, 4},
 	{4, 0, 12, 6, 5, 5},
-	{6, 0, 24, 16, 6, 6},
+	{8, 0, 32, 32, 6, 6},
 	// Levels 7-9 use increasingly more lazy matching
 	// and increasingly stringent conditions for "good enough".
-	{4, 8, 16, 16, skipNever, 7},
-	{6, 16, 32, 64, skipNever, 8},
+	{4, 6, 8, 8, skipNever, 7},
+	{6, 16, 16, 32, skipNever, 8},
 	{32, 258, 258, 4096, skipNever, 9},
 }
 
