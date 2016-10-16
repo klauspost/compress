@@ -61,15 +61,15 @@ type compressionLevel struct {
 // See https://blog.klauspost.com/rebalancing-deflate-compression-levels/
 var levels = []compressionLevel{
 	{}, // 0
-	// Level 1+2 uses snappy algorithm - values not used
+	// Level 1-3 uses specialized algorithm - values not used
 	{0, 0, 0, 0, 0, 1},
 	{0, 0, 0, 0, 0, 2},
-	// For levels 3-6 we don't bother trying with lazy matches.
+	{0, 0, 0, 0, 0, 3},
+	// For levels 4-6 we don't bother trying with lazy matches.
 	// Lazy matching is at least 30% slower, with 1.5% increase.
-	{4, 0, 8, 4, 4, 3},
-	{4, 0, 12, 6, 5, 4},
-	{6, 0, 24, 16, 6, 5},
-	{8, 0, 32, 32, 7, 6},
+	{4, 0, 8, 4, 4, 4},
+	{4, 0, 12, 6, 5, 5},
+	{6, 0, 24, 16, 6, 6},
 	// Levels 7-9 use increasingly more lazy matching
 	// and increasingly stringent conditions for "good enough".
 	{4, 8, 16, 16, skipNever, 7},
