@@ -477,13 +477,16 @@ func (e *snappyL3) Encode(dst *tokens, src []byte) {
 					offset > nPrevLen {
 					break
 				}
-			}
-			candidate = candidates.Prev
-			if cv == candidate.val {
-				offset := s - (candidate.offset - e.cur)
-				if offset < maxMatchOffset &&
-					offset > nPrevLen {
-					break
+			} else {
+				// We only check if value mismatches.
+				// Offset will always be invalid in other cases.
+				candidate = candidates.Prev
+				if cv == candidate.val {
+					offset := s - (candidate.offset - e.cur)
+					if offset < maxMatchOffset &&
+						offset > nPrevLen {
+						break
+					}
 				}
 			}
 			cv = now
@@ -551,13 +554,16 @@ func (e *snappyL3) Encode(dst *tokens, src []byte) {
 					offset > nPrevLen {
 					continue
 				}
-			}
-			candidate = candidates.Prev
-			if cv == candidate.val {
-				offset := s - (candidate.offset - e.cur)
-				if offset < maxMatchOffset &&
-					offset > nPrevLen {
-					continue
+			} else {
+				// We only check if value mismatches.
+				// Offset will always be invalid in other cases.
+				candidate = candidates.Prev
+				if cv == candidate.val {
+					offset := s - (candidate.offset - e.cur)
+					if offset < maxMatchOffset &&
+						offset > nPrevLen {
+						continue
+					}
 				}
 			}
 			cv = uint32(x >> 8)
