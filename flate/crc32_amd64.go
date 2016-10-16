@@ -23,7 +23,9 @@ func crc32sseAll(a []byte, dst []uint32)
 // matchLenSSE4 returns the number of matching bytes in a and b
 // up to length 'max'. Both slices must be at least 'max'
 // bytes in size.
-// It uses the PCMPESTRI SSE 4.2 instruction.
+//
+// TODO: drop the "SSE4" name, since it doesn't use any SSE instructions.
+//
 //go:noescape
 func matchLenSSE4(a, b []byte, max int) int
 
