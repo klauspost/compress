@@ -14,6 +14,7 @@ import (
 )
 
 var filenames = []string{
+	"../testdata/gettysburg.txt",
 	"../testdata/e.txt",
 	"../testdata/pi.txt",
 }
@@ -123,11 +124,8 @@ func testFileLevelDictReset(t *testing.T, fn string, level int, dict []byte) {
 	// Reset and compress again.
 	buf2 := new(bytes.Buffer)
 	zlibw.Reset(buf2)
-	n, err := zlibw.Write(b0)
+	_, err = zlibw.Write(b0)
 	if err == nil {
-		if int(n) != len(b0) {
-			t.Fatal("Short write:", n, "!=", len(b0))
-		}
 		err = zlibw.Close()
 	}
 	if err != nil {
@@ -137,7 +135,7 @@ func testFileLevelDictReset(t *testing.T, fn string, level int, dict []byte) {
 	out2 := buf2.String()
 
 	if out2 != out {
-		t.Errorf("%s (level=%d): different output after reset (got %d bytes, expected %d)",
+		t.Errorf("%s (level=%d): different output after reset (got %d bytes, expected %d",
 			fn, level, len(out2), len(out))
 	}
 }
@@ -148,6 +146,7 @@ func TestWriter(t *testing.T) {
 		tag := fmt.Sprintf("#%d", i)
 		testLevelDict(t, tag, b, DefaultCompression, "")
 		testLevelDict(t, tag, b, NoCompression, "")
+		testLevelDict(t, tag, b, HuffmanOnly, "")
 		for level := BestSpeed; level <= BestCompression; level++ {
 			testLevelDict(t, tag, b, level, "")
 		}
@@ -158,6 +157,7 @@ func TestWriterBig(t *testing.T) {
 	for _, fn := range filenames {
 		testFileLevelDict(t, fn, DefaultCompression, "")
 		testFileLevelDict(t, fn, NoCompression, "")
+		testFileLevelDict(t, fn, HuffmanOnly, "")
 		for level := BestSpeed; level <= BestCompression; level++ {
 			testFileLevelDict(t, fn, level, "")
 		}
@@ -169,6 +169,7 @@ func TestWriterDict(t *testing.T) {
 	for _, fn := range filenames {
 		testFileLevelDict(t, fn, DefaultCompression, dictionary)
 		testFileLevelDict(t, fn, NoCompression, dictionary)
+		testFileLevelDict(t, fn, HuffmanOnly, dictionary)
 		for level := BestSpeed; level <= BestCompression; level++ {
 			testFileLevelDict(t, fn, level, dictionary)
 		}
@@ -180,14 +181,15 @@ func TestWriterReset(t *testing.T) {
 	for _, fn := range filenames {
 		testFileLevelDictReset(t, fn, NoCompression, nil)
 		testFileLevelDictReset(t, fn, DefaultCompression, nil)
-		testFileLevelDictReset(t, fn, ConstantCompression, nil)
+		testFileLevelDictReset(t, fn, HuffmanOnly, nil)
 		testFileLevelDictReset(t, fn, NoCompression, []byte(dictionary))
 		testFileLevelDictReset(t, fn, DefaultCompression, []byte(dictionary))
-		testFileLevelDictReset(t, fn, ConstantCompression, []byte(dictionary))
-		if !testing.Short() {
-			for level := BestSpeed; level <= BestCompression; level++ {
-				testFileLevelDictReset(t, fn, level, nil)
-			}
+		testFileLevelDictReset(t, fn, HuffmanOnly, []byte(dictionary))
+		if testing.Short() {
+			break
+		}
+		for level := BestSpeed; level <= BestCompression; level++ {
+			testFileLevelDictReset(t, fn, level, nil)
 		}
 	}
 }
@@ -202,7 +204,7 @@ func TestWriterDictIsUsed(t *testing.T) {
 	}
 	compressor.Write(input)
 	compressor.Close()
-	const expectedMaxSize = 35
+	const expectedMaxSize = 25
 	output := buf.Bytes()
 	if len(output) > expectedMaxSize {
 		t.Errorf("result too large (got %d, want <= %d bytes). Is the dictionary being used?", len(output), expectedMaxSize)
