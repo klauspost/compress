@@ -12,6 +12,7 @@ It offers slightly better compression at lower compression settings, and up to 3
 [![Build Status](https://travis-ci.org/klauspost/compress.svg?branch=master)](https://travis-ci.org/klauspost/compress)
 
 # changelog
+* Oct 16, 2016: Go 1.7 changes merged. Apples to apples this package is a few percent faster, but has a significantly better balance between speed and compression per level. 
 * Mar 24, 2016: Always attempt Huffman encoding on level 4-7. This improves base 64 encoded data compression.
 * Mar 24, 2016: Small speedup for level 1-3.
 * Feb 19, 2016: Faster bit writer, level -2 is 15% faster, level 1 is 4% faster.
@@ -47,26 +48,25 @@ The packages are drop-in replacements for standard libraries. Simply replace the
 | `compress/zlib`    | `github.com/klauspost/compress/zlib`    |
 | `archive/zip`      | `github.com/klauspost/compress/zip`     |
 | `compress/deflate` | `github.com/klauspost/compress/deflate` |
-| `github.com/golang/snappy`    | `github.com/klauspost/compress/snappy`    |
 
 You may also be interested in [pgzip](https://github.com/klauspost/pgzip), which is a drop in replacement for gzip, which support multithreaded compression on big files and the optimized [crc32](https://github.com/klauspost/crc32) package used by these packages.
 
-The packages contains the same as the standard library, so you can use the godoc for that: [gzip](http://golang.org/pkg/compress/gzip/), [zip](http://golang.org/pkg/archive/zip/),  [zlib](http://golang.org/pkg/compress/zlib/), [flate](http://golang.org/pkg/compress/flate/), [snappy](http://golang.org/pkg/compress/snappy/).
+The packages contains the same as the standard library, so you can use the godoc for that: [gzip](http://golang.org/pkg/compress/gzip/), [zip](http://golang.org/pkg/archive/zip/),  [zlib](http://golang.org/pkg/compress/zlib/), [flate](http://golang.org/pkg/compress/flate/).
 
 Currently there is only minor speedup on decompression (mostly CRC32 calculation).
 
 # deflate optimizations
 
-* Minimum matches are 4 bytes, this leads to fewer searches and better compression.
-* Stronger hash (iSCSI CRC32) for matches on x64 with SSE 4.2 support. This leads to fewer hash collisions.
-* Literal byte matching using SSE 4.2 for faster match comparisons.
-* Bulk hashing on matches.
-* Much faster dictionary indexing with `NewWriterDict()`/`Reset()`.
-* Make Bit Coder faster by assuming we are on a 64 bit CPU.
-* Level 1 compression replaced by converted "Snappy" algorithm.
-* Uncompressible content is detected and skipped faster.
-* A lot of branching eliminated by having two encoders for levels 2+3 and 4+.
-* All heap memory allocations eliminated.
+* Minimum matches are 4 bytes, this leads to fewer searches and better compression. (In Go 1.7)
+* Stronger hash (iSCSI CRC32) for matches on x64 with SSE 4.2 support. This leads to fewer hash collisions. (Go 1.7 also has improved hashes)
+* Literal byte matching using SSE 4.2 for faster match comparisons. (not in Go)
+* Bulk hashing on matches. (In Go 1.7)
+* Much faster dictionary indexing with `NewWriterDict()`/`Reset()`. (In Go 1.7)
+* Make Bit Coder faster by assuming we are on a 64 bit CPU. (In Go 1.7)
+* Level 1 compression replaced by converted "Snappy" algorithm. (In Go 1.7)
+* Uncompressible content is detected and skipped faster. (Only in BestSpeed in Go)
+* A lot of branching eliminated by having two encoders for levels 4-6 and 7-9. (not in Go)
+* All heap memory allocations eliminated. (In Go 1.7)
 
 ```
 benchmark                              old ns/op     new ns/op     delta
@@ -164,7 +164,7 @@ So even without the assembly optimizations there is a general speedup across the
 
 ## level 1-3 "snappy" compression
 
-Level 1 "Best Speed" is completely replaced by a converted version of the algorithm found in Snappy, modified to be fully
+Levels 1 "Best Speed", 2 and 3 are completely replaced by a converted version of the algorithm found in Snappy, modified to be fully
 compatible with the deflate bitstream (and thus still compatible with all existing zlib/gzip libraries and tools).
 This version is considerably faster than the "old" deflate at level 1. It does however come at a compression loss, usually in the order of 3-4% compared to the old level 1. However, the speed is usually 1.75 times that of the fastest deflate mode.
 
@@ -172,7 +172,7 @@ In my previous experiments the most common case for "level 1" was that it provid
 
 Input is split into blocks of 64kb of, and they are encoded independently (no backreferences across blocks) for the best speed. Contrary to Snappy the output is entropy-encoded, so you will almost always see better compression than Snappy. But Snappy is still about twice as fast as Snappy in deflate mode.
 
-Level 2 and 3 have also been replaced. Level 2 is capable is matching between blocks and level 3 checks up to two hashes for matches before choosing the longest for encoding the match.
+Level 2 and 3 have also been replaced. Level 2 is capable is matching between blocks and level 3 checks up to two hashes for matches it will try.
 
 ## compression levels
 
@@ -197,7 +197,7 @@ To interpret and example, this version of deflate compresses input of 407287 byt
 
 This means that from level 4 you can expect a compression level increase of a few percent. Level 1 is about 3% worse, as descibed above.
 
-# linear time compression
+# linear time compression (huffman only)
 
 This compression library adds a special compression level, named `ConstantCompression`, which allows near linear time compression. This is done by completely disabling matching of previous data, and only reduce the number of bits to represent each character. 
 
@@ -210,6 +210,9 @@ The downside is that the compression ratio is usually considerably worse than ev
 The linear time compression can be used as a "better than nothing" mode, where you cannot risk the encoder to slow down on some content. For comparison, the size of the "Twain" text is *233460 bytes* (+29% vs. level 1) and encode speed is 144MB/s (4.5x level 1). So in this case you trade a 30% size increase for a 4 times speedup.
 
 For more information see my blog post on [Fast Linear Time Compression](http://blog.klauspost.com/constant-time-gzipzip-compression/).
+
+This is implemented on Go 1.7 as "Huffman Only" mode, though not exposed for gzip.
+
 
 # gzip/zip optimizations
  * Uses the faster deflate
@@ -273,57 +276,10 @@ BenchmarkGzipL9     9.96         55.90        5.61x
 
 # snappy package
 
-### This is still in development, and should not be used for critical applications.
+The standard snappy package has now been improved. This repo contains a copy of the snappy repo.
 
-The Snappy package contains some optimizations over the standard package.
+I would advise to use the standard package: https://github.com/golang/snappy
 
-This speeds up mainly **hard** and **easy** to compress material.
-
-Here are the "standard" benchmarks, compared to current Snappy master (13 feb 2016).
-
-## Speed
-```
-name              old speed      new speed       delta
-WordsDecode1e3-8   405MB/s ± 5%    444MB/s ± 1%     +9.60%  (p=0.045 n=3+3)
-WordsEncode1e1-8  4.55MB/s ± 1%  98.93MB/s ± 2%  +2075.95%  (p=0.000 n=3+3)
-WordsEncode1e2-8  36.4MB/s ± 0%  166.1MB/s ± 3%   +356.03%  (p=0.000 n=3+3)
-WordsEncode1e3-8   129MB/s ± 0%    185MB/s ± 1%    +43.82%  (p=0.000 n=3+3)
-WordsEncode1e5-8   125MB/s ± 1%    140MB/s ± 2%    +11.77%  (p=0.005 n=3+3)
-WordsEncode1e6-8   121MB/s ± 3%    134MB/s ± 0%    +11.15%  (p=0.026 n=3+3)
-RandomEncode-8    2.80GB/s ± 2%   2.68GB/s ± 1%     -4.32%  (p=0.019 n=3+3)
-_UFlat3-8          746MB/s ± 2%    812MB/s ± 1%     +8.90%  (p=0.004 n=3+3)
-_UFlat4-8         2.50GB/s ± 1%   3.06GB/s ± 1%    +22.68%  (p=0.000 n=3+3)
-_ZFlat0-8          284MB/s ± 1%    362MB/s ± 1%    +27.45%  (p=0.000 n=3+3)
-_ZFlat2-8         2.85GB/s ± 0%   3.71GB/s ± 1%    +30.21%  (p=0.000 n=3+3)
-_ZFlat3-8         64.5MB/s ± 1%  216.9MB/s ± 2%   +236.02%  (p=0.000 n=3+3)
-_ZFlat4-8          415MB/s ± 1%   2000MB/s ± 1%   +382.43%  (p=0.000 n=3+3)
-_ZFlat5-8          282MB/s ± 1%    354MB/s ± 2%    +25.67%  (p=0.003 n=3+3)
-_ZFlat6-8          124MB/s ± 1%    136MB/s ± 2%     +9.84%  (p=0.013 n=3+3)
-_ZFlat7-8          116MB/s ± 2%    127MB/s ± 1%    +10.12%  (p=0.002 n=3+3)
-_ZFlat8-8          128MB/s ± 1%    142MB/s ± 1%    +11.38%  (p=0.000 n=3+3)
-_ZFlat9-8          111MB/s ± 2%    120MB/s ± 1%     +8.45%  (p=0.009 n=3+3)
-_ZFlat10-8         318MB/s ± 1%    439MB/s ± 1%    +38.16%  (p=0.000 n=3+3)
-_ZFlat11-8         183MB/s ± 0%    226MB/s ± 3%    +23.53%  (p=0.004 n=3+3)
-```
-Only significant differences are included.
-
-## Size Comparison:
-```
-name    data    insize  outsize ref     red.    ref-red r-delta
-Flat0:  html    102400  23317   23330   77.23%  77.23%   0.01%
-Flat1:  urls    712086  337290  335282  52.63%  52.63%  -0.28%
-Flat2:  jpg     123093  123035  123032  0.05%   0.05%   -0.00%
-Flat3:  jpg_200 123093  123035  123032  0.05%   0.05%   -0.00%
-Flat4:  pdf     102400  84897   83754   17.09%  17.09%  -1.12%
-Flat5:  html4   409600  92689   92366   77.37%  77.37%  -0.08%
-Flat6:  txt1    152089  89544   89495   41.12%  41.12%  -0.03%
-Flat7:  txt2    129301  80531   80518   37.72%  37.72%  -0.01%
-Flat8:  txt3    426754  238857  238849  44.03%  44.03%  -0.00%
-Flat9:  txt4    481861  324755  325047  32.60%  32.60%   0.06%
-Flat10: pb      118588  24723   23392   79.15%  79.15%  -1.12%
-Flat11: gaviota 184320  73963   73962   59.87%  59.87%  -0.00%
-```
-r-delta is difference in compression. Negative means this package performs worse.
 
 # license
 
