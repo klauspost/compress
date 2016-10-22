@@ -30,9 +30,9 @@ func newSnappy(level int) snappyEnc {
 	case 1:
 		return &snappyL1{}
 	case 2:
-		return &snappyL2{snappyGen: snappyGen{cur: 1, prev: make([]byte, 0, maxStoreBlockSize)}}
+		return &snappyL2{snappyGen: snappyGen{cur: maxStoreBlockSize, prev: make([]byte, 0, maxStoreBlockSize)}}
 	case 3:
-		return &snappyL3{snappyGen: snappyGen{cur: 1, prev: make([]byte, 0, maxStoreBlockSize)}}
+		return &snappyL3{snappyGen: snappyGen{cur: maxStoreBlockSize, prev: make([]byte, 0, maxStoreBlockSize)}}
 	default:
 		panic("invalid level specified")
 	}
@@ -249,7 +249,7 @@ func (e *snappyL2) Encode(dst *tokens, src []byte) {
 		for i := range e.table {
 			e.table[i] = tableEntry{}
 		}
-		e.cur = 1
+		e.cur = maxStoreBlockSize
 	}
 
 	// This check isn't in the Snappy implementation, but there, the caller
@@ -308,8 +308,7 @@ func (e *snappyL2) Encode(dst *tokens, src []byte) {
 			nextHash = hash(now)
 
 			offset := s - (candidate.offset - e.cur)
-			if offset >= maxMatchOffset ||
-				cv != candidate.val {
+			if offset >= maxMatchOffset || cv != candidate.val {
 				// Out of range or not matched.
 				cv = now
 				continue
@@ -364,8 +363,7 @@ func (e *snappyL2) Encode(dst *tokens, src []byte) {
 			e.table[currHash&tableMask] = tableEntry{offset: e.cur + s, val: uint32(x)}
 
 			offset := s - (candidate.offset - e.cur)
-			if offset >= maxMatchOffset ||
-				uint32(x) != candidate.val {
+			if offset >= maxMatchOffset || uint32(x) != candidate.val {
 				cv = uint32(x >> 8)
 				nextHash = hash(cv)
 				s++
@@ -406,7 +404,7 @@ func (e *snappyL3) Encode(dst *tokens, src []byte) {
 		for i := range e.table {
 			e.table[i] = tableEntryPrev{}
 		}
-		e.cur = 1
+		e.cur = maxStoreBlockSize
 	}
 
 	// This check isn't in the Snappy implementation, but there, the caller
