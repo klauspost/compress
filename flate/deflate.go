@@ -1099,6 +1099,7 @@ func (d *compressor) storeSnappy() {
 			}
 			d.tokens.n = 0
 			d.windowEnd = 0
+			d.snap.Reset()
 			return
 		}
 	}
