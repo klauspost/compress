@@ -246,6 +246,9 @@ func (e *snappyL2) Encode(dst *tokens, src []byte) {
 
 	// Ensure that e.cur doesn't wrap, mainly an issue on 32 bits.
 	if e.cur > 1<<30 {
+		for i := range e.table {
+			e.table[i] = tableEntry{}
+		}
 		e.cur = 1
 	}
 
@@ -273,7 +276,6 @@ func (e *snappyL2) Encode(dst *tokens, src []byte) {
 	s := int32(1)
 	cv := load3232(src, s)
 	nextHash := hash(cv)
-	prevLen := int32(len(e.prev))
 
 	for {
 		// Copied from the C++ snappy implementation:
@@ -310,8 +312,7 @@ func (e *snappyL2) Encode(dst *tokens, src []byte) {
 
 			offset := s - (candidate.offset - e.cur)
 			if offset >= maxMatchOffset ||
-				cv != candidate.val ||
-				offset-s >= prevLen {
+				cv != candidate.val {
 				// Out of range or not matched.
 				cv = now
 				continue
@@ -367,8 +368,7 @@ func (e *snappyL2) Encode(dst *tokens, src []byte) {
 
 			offset := s - (candidate.offset - e.cur)
 			if offset >= maxMatchOffset ||
-				uint32(x) != candidate.val ||
-				offset-s >= prevLen {
+				uint32(x) != candidate.val {
 				cv = uint32(x >> 8)
 				nextHash = hash(cv)
 				s++
@@ -406,6 +406,9 @@ func (e *snappyL3) Encode(dst *tokens, src []byte) {
 
 	// Ensure that e.cur doesn't wrap, mainly an issue on 32 bits.
 	if e.cur > 1<<30 {
+		for i := range e.table {
+			e.table[i] = tableEntryPrev{}
+		}
 		e.cur = 1
 	}
 
@@ -433,7 +436,6 @@ func (e *snappyL3) Encode(dst *tokens, src []byte) {
 	s := int32(1)
 	cv := load3232(src, s)
 	nextHash := hash(cv)
-	var prevLen = int32(len(e.prev))
 
 	for {
 		// Copied from the C++ snappy implementation:
@@ -472,8 +474,7 @@ func (e *snappyL3) Encode(dst *tokens, src []byte) {
 			candidate = candidates.Cur
 			if cv == candidate.val {
 				offset := s - (candidate.offset - e.cur)
-				if offset < maxMatchOffset &&
-					offset-s < prevLen {
+				if offset < maxMatchOffset {
 					break
 				}
 			} else {
@@ -482,8 +483,7 @@ func (e *snappyL3) Encode(dst *tokens, src []byte) {
 				candidate = candidates.Prev
 				if cv == candidate.val {
 					offset := s - (candidate.offset - e.cur)
-					if offset < maxMatchOffset &&
-						offset-s < prevLen {
+					if offset < maxMatchOffset {
 						break
 					}
 				}
@@ -556,8 +556,7 @@ func (e *snappyL3) Encode(dst *tokens, src []byte) {
 			candidate = candidates.Cur
 			if cv == candidate.val {
 				offset := s - (candidate.offset - e.cur)
-				if offset < maxMatchOffset &&
-					offset-s < prevLen {
+				if offset < maxMatchOffset {
 					continue
 				}
 			} else {
@@ -566,8 +565,7 @@ func (e *snappyL3) Encode(dst *tokens, src []byte) {
 				candidate = candidates.Prev
 				if cv == candidate.val {
 					offset := s - (candidate.offset - e.cur)
-					if offset < maxMatchOffset &&
-						offset-s < prevLen {
+					if offset < maxMatchOffset {
 						continue
 					}
 				}
@@ -606,6 +604,9 @@ func (e *snappyGen) matchlen(s, t int32, src []byte) int32 {
 
 	// We found a match in the previous block.
 	tp := int32(len(e.prev)) + t
+	if tp < 0 {
+		return 0
+	}
 	prevLen := int32(len(e.prev))
 
 	// Extend the match to be as long as possible.
