@@ -525,13 +525,20 @@ func (e *snappyL3) Encode(dst *tokens, src []byte) {
 			}
 
 			// We could immediately start working at s now, but to improve
-			// compression we first update the hash table at s-1 and at s. If
+			// compression we first update the hash table at s-2, s-1 and at s. If
 			// another emitCopy is not our next move, also calculate nextHash
 			// at s+1. At least on GOARCH=amd64, these three hash calculations
 			// are faster as one load64 call (with some shifts) instead of
 			// three load32 calls.
-			x := load6432(src, s-1)
+			x := load6432(src, s-2)
 			prevHash := hash(uint32(x))
+
+			e.table[prevHash&tableMask] = tableEntryPrev{
+				Prev: e.table[prevHash&tableMask].Cur,
+				Cur:  tableEntry{offset: e.cur + s - 2, val: uint32(x)},
+			}
+			x >>= 8
+			prevHash = hash(uint32(x))
 
 			e.table[prevHash&tableMask] = tableEntryPrev{
 				Prev: e.table[prevHash&tableMask].Cur,
