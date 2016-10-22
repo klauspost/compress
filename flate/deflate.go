@@ -67,7 +67,7 @@ var levels = []compressionLevel{
 	{0, 0, 0, 0, 0, 3},
 	// For levels 4-6 we don't bother trying with lazy matches.
 	// Lazy matching is at least 30% slower, with 1.5% increase.
-	{4, 0, 6, 6, 12, 4},
+	{4, 0, 6, 6, 8, 4},
 	{6, 0, 12, 8, 12, 5},
 	{8, 0, 24, 16, 16, 6},
 	// Levels 7-9 use increasingly more lazy matching
@@ -696,7 +696,7 @@ func (d *compressor) deflateLazy() {
 				// If we have a long run of no matches, skip additional bytes
 				// Resets when d.ii overflows after 64KB.
 				if d.ii > 31 {
-					n := int(d.ii >> 6)
+					n := int(d.ii >> 5)
 					for j := 0; j < n; j++ {
 						if d.index >= d.windowEnd-1 {
 							break
@@ -853,7 +853,7 @@ func (d *compressor) deflateSSE() {
 			}
 		} else {
 			d.ii++
-			end := d.index + int(d.ii>>uint(d.fastSkipHashing)) + 1
+			end := d.index + int(d.ii>>5) + 1
 			if end > d.windowEnd {
 				end = d.windowEnd
 			}
