@@ -270,10 +270,7 @@ func (e *snappyL2) Encode(dst *tokens, src []byte) {
 
 	// nextEmit is where in src the next emitLiteral should start from.
 	nextEmit := int32(0)
-
-	// The encoded form must start with a literal, as there are no previous
-	// bytes to copy, so we start looking for hash matches at s == 1.
-	s := int32(1)
+	s := int32(0)
 	cv := load3232(src, s)
 	nextHash := hash(cv)
 
@@ -430,10 +427,7 @@ func (e *snappyL3) Encode(dst *tokens, src []byte) {
 
 	// nextEmit is where in src the next emitLiteral should start from.
 	nextEmit := int32(0)
-
-	// The encoded form must start with a literal, as there are no previous
-	// bytes to copy, so we start looking for hash matches at s == 1.
-	s := int32(1)
+	s := int32(0)
 	cv := load3232(src, s)
 	nextHash := hash(cv)
 
