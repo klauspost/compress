@@ -226,7 +226,6 @@ func load6432(b []byte, i int32) uint64 {
 type snappyGen struct {
 	prev []byte
 	cur  int32
-	enc  func(dst *tokens, src []byte)
 }
 
 // snappyGen maintains the table for matches,
@@ -256,7 +255,7 @@ func (e *snappyL2) Encode(dst *tokens, src []byte) {
 		// We do not fill the token table.
 		// This will be picked up by caller.
 		dst.n = uint16(len(src))
-		e.cur += int32(len(src)) + maxStoreBlockSize
+		e.cur += maxStoreBlockSize
 		e.prev = e.prev[:0]
 		return
 	}
@@ -416,7 +415,7 @@ func (e *snappyL3) Encode(dst *tokens, src []byte) {
 		// We do not fill the token table.
 		// This will be picked up by caller.
 		dst.n = uint16(len(src))
-		e.cur += int32(len(src)) + maxStoreBlockSize
+		e.cur += maxStoreBlockSize
 		e.prev = e.prev[:0]
 		return
 	}
