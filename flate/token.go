@@ -84,7 +84,7 @@ func matchToken(xlength uint32, xoffset uint32) token {
 
 func matchTokend(xlength uint32, xoffset uint32) token {
 	if xlength > maxMatchLength || xoffset > maxMatchOffset {
-		fmt.Printf("Invalid match: len: %d, offset: %d\n", xlength, xoffset)
+		panic(fmt.Sprintf("Invalid match: len: %d, offset: %d\n", xlength, xoffset))
 		return token(matchType)
 	}
 	return token(matchType + xlength<<lengthShift + xoffset)

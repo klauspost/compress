@@ -33,6 +33,8 @@ func newSnappy(level int) snappyEnc {
 		return &snappyL2{snappyGen: snappyGen{cur: maxStoreBlockSize, prev: make([]byte, 0, maxStoreBlockSize)}}
 	case 3:
 		return &snappyL3{snappyGen: snappyGen{cur: maxStoreBlockSize, prev: make([]byte, 0, maxStoreBlockSize)}}
+	case 4:
+		return &snappyL4{snappyL3{snappyGen: snappyGen{cur: maxStoreBlockSize, prev: make([]byte, 0, maxStoreBlockSize)}}}
 	default:
 		panic("invalid level specified")
 	}
@@ -507,7 +509,7 @@ func (e *snappyL3) Encode(dst *tokens, src []byte) {
 			l := e.matchlen(s, t, src)
 
 			// matchToken is flate's equivalent of Snappy's emitCopy. (length,offset)
-			dst.tokens[dst.n] = matchTokend(uint32(l+4-baseMatchLength), uint32(s-t-baseMatchOffset))
+			dst.tokens[dst.n] = matchToken(uint32(l+4-baseMatchLength), uint32(s-t-baseMatchOffset))
 			dst.n++
 			s += l
 			nextEmit = s
@@ -549,6 +551,217 @@ func (e *snappyL3) Encode(dst *tokens, src []byte) {
 			if cv == candidate.val {
 				offset := s - (candidate.offset - e.cur)
 				if offset < maxMatchOffset {
+					continue
+				}
+			} else {
+				// We only check if value mismatches.
+				// Offset will always be invalid in other cases.
+				candidate = candidates.Prev
+				if cv == candidate.val {
+					offset := s - (candidate.offset - e.cur)
+					if offset < maxMatchOffset {
+						continue
+					}
+				}
+			}
+			cv = uint32(x >> 8)
+			nextHash = hash(cv)
+			s++
+			break
+		}
+	}
+
+emitRemainder:
+	if int(nextEmit) < len(src) {
+		emitLiteral(dst, src[nextEmit:])
+	}
+	e.cur += int32(len(src))
+	e.prev = e.prev[:len(src)]
+	copy(e.prev, src)
+}
+
+// snappyL4
+type snappyL4 struct {
+	snappyL3
+}
+
+// Encode uses a similar algorithm to level 3,
+// but will check up to two candidates if first isn't long enough.
+func (e *snappyL4) Encode(dst *tokens, src []byte) {
+	const (
+		inputMargin            = 16 - 1
+		minNonLiteralBlockSize = 1 + 1 + inputMargin
+		matchLenGood           = 12
+	)
+
+	// Ensure that e.cur doesn't wrap, mainly an issue on 32 bits.
+	if e.cur > 1<<30 {
+		for i := range e.table {
+			e.table[i] = tableEntryPrev{}
+		}
+		e.cur = maxStoreBlockSize
+	}
+
+	// This check isn't in the Snappy implementation, but there, the caller
+	// instead of the callee handles this case.
+	if len(src) < minNonLiteralBlockSize {
+		// We do not fill the token table.
+		// This will be picked up by caller.
+		dst.n = uint16(len(src))
+		e.cur += maxStoreBlockSize
+		e.prev = e.prev[:0]
+		return
+	}
+
+	// sLimit is when to stop looking for offset/length copies. The inputMargin
+	// lets us use a fast path for emitLiteral in the main loop, while we are
+	// looking for copies.
+	sLimit := int32(len(src) - inputMargin)
+
+	// nextEmit is where in src the next emitLiteral should start from.
+	nextEmit := int32(0)
+	s := int32(0)
+	cv := load3232(src, s)
+	nextHash := hash(cv)
+
+	for {
+		// Copied from the C++ snappy implementation:
+		//
+		// Heuristic match skipping: If 32 bytes are scanned with no matches
+		// found, start looking only at every other byte. If 32 more bytes are
+		// scanned (or skipped), look at every third byte, etc.. When a match
+		// is found, immediately go back to looking at every byte. This is a
+		// small loss (~5% performance, ~0.1% density) for compressible data
+		// due to more bookkeeping, but for non-compressible data (such as
+		// JPEG) it's a huge win since the compressor quickly "realizes" the
+		// data is incompressible and doesn't bother looking for matches
+		// everywhere.
+		//
+		// The "skip" variable keeps track of how many bytes there are since
+		// the last match; dividing it by 32 (ie. right-shifting by five) gives
+		// the number of bytes to move ahead for each iteration.
+		skip := int32(32)
+
+		nextS := s
+		var candidate tableEntry
+		var candidateAlt tableEntry
+		for {
+			s = nextS
+			bytesBetweenHashLookups := skip >> 5
+			nextS = s + bytesBetweenHashLookups
+			skip += bytesBetweenHashLookups
+			if nextS > sLimit {
+				goto emitRemainder
+			}
+			candidates := e.table[nextHash&tableMask]
+			now := load3232(src, nextS)
+			e.table[nextHash&tableMask] = tableEntryPrev{Prev: candidates.Cur, Cur: tableEntry{offset: s + e.cur, val: cv}}
+			nextHash = hash(now)
+
+			// Check both candidates
+			candidate = candidates.Cur
+			if cv == candidate.val {
+				offset := s - (candidate.offset - e.cur)
+				if offset < maxMatchOffset {
+					offset = s - (candidates.Prev.offset - e.cur)
+					if cv == candidates.Prev.val && offset < maxMatchOffset {
+						candidateAlt = candidates.Prev
+					}
+					break
+				}
+			} else {
+				// We only check if value mismatches.
+				// Offset will always be invalid in other cases.
+				candidate = candidates.Prev
+				if cv == candidate.val {
+					offset := s - (candidate.offset - e.cur)
+					if offset < maxMatchOffset {
+						break
+					}
+				}
+			}
+			cv = now
+		}
+
+		// A 4-byte match has been found. We'll later see if more than 4 bytes
+		// match. But, prior to the match, src[nextEmit:s] are unmatched. Emit
+		// them as literal bytes.
+		emitLiteral(dst, src[nextEmit:s])
+
+		// Call emitCopy, and then see if another emitCopy could be our next
+		// move. Repeat until we find no match for the input immediately after
+		// what was consumed by the last emitCopy call.
+		//
+		// If we exit this loop normally then we need to call emitLiteral next,
+		// though we don't yet know how big the literal will be. We handle that
+		// by proceeding to the next iteration of the main loop. We also can
+		// exit this loop via goto if we get close to exhausting the input.
+		for {
+			// Invariant: we have a 4-byte match at s, and no need to emit any
+			// literal bytes prior to s.
+
+			// Extend the 4-byte match as long as possible.
+			//
+			s += 4
+			t := candidate.offset - e.cur + 4
+			l := e.matchlen(s, t, src)
+			// Try alternative candidate if match length < matchLenGood.
+			if l < matchLenGood-4 && candidateAlt.offset != 0 {
+				t2 := candidateAlt.offset - e.cur + 4
+				l2 := e.matchlen(s, t2, src)
+				if l2 > l {
+					l = l2
+					t = t2
+				}
+			}
+			// matchToken is flate's equivalent of Snappy's emitCopy. (length,offset)
+			dst.tokens[dst.n] = matchToken(uint32(l+4-baseMatchLength), uint32(s-t-baseMatchOffset))
+			dst.n++
+			s += l
+			nextEmit = s
+			if s >= sLimit {
+				goto emitRemainder
+			}
+
+			// We could immediately start working at s now, but to improve
+			// compression we first update the hash table at s-2, s-1 and at s. If
+			// another emitCopy is not our next move, also calculate nextHash
+			// at s+1. At least on GOARCH=amd64, these three hash calculations
+			// are faster as one load64 call (with some shifts) instead of
+			// three load32 calls.
+			x := load6432(src, s-2)
+			prevHash := hash(uint32(x))
+
+			e.table[prevHash&tableMask] = tableEntryPrev{
+				Prev: e.table[prevHash&tableMask].Cur,
+				Cur:  tableEntry{offset: e.cur + s - 2, val: uint32(x)},
+			}
+			x >>= 8
+			prevHash = hash(uint32(x))
+
+			e.table[prevHash&tableMask] = tableEntryPrev{
+				Prev: e.table[prevHash&tableMask].Cur,
+				Cur:  tableEntry{offset: e.cur + s - 1, val: uint32(x)},
+			}
+			x >>= 8
+			currHash := hash(uint32(x))
+			candidates := e.table[currHash&tableMask]
+			cv = uint32(x)
+			e.table[currHash&tableMask] = tableEntryPrev{
+				Prev: candidates.Cur,
+				Cur:  tableEntry{offset: s + e.cur, val: cv},
+			}
+
+			// Check both candidates
+			candidate = candidates.Cur
+			candidateAlt = tableEntry{}
+			if cv == candidate.val {
+				offset := s - (candidate.offset - e.cur)
+				if offset < maxMatchOffset {
+					offset = s - (candidates.Prev.offset - e.cur)
+					if cv == candidates.Prev.val && offset < maxMatchOffset {
+						candidateAlt = candidates.Prev
+					}
 					continue
 				}
 			} else {

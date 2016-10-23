@@ -61,13 +61,13 @@ type compressionLevel struct {
 // See https://blog.klauspost.com/rebalancing-deflate-compression-levels/
 var levels = []compressionLevel{
 	{}, // 0
-	// Level 1-3 uses specialized algorithm - values not used
+	// Level 1-4 uses specialized algorithm - values not used
 	{0, 0, 0, 0, 0, 1},
 	{0, 0, 0, 0, 0, 2},
 	{0, 0, 0, 0, 0, 3},
-	// For levels 4-6 we don't bother trying with lazy matches.
+	{0, 0, 0, 0, 0, 4},
+	// For levels 5-6 we don't bother trying with lazy matches.
 	// Lazy matching is at least 30% slower, with 1.5% increase.
-	{4, 0, 6, 6, 8, 4},
 	{6, 0, 12, 8, 12, 5},
 	{8, 0, 24, 16, 16, 6},
 	// Levels 7-9 use increasingly more lazy matching
@@ -1164,7 +1164,7 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 		d.window = make([]byte, maxStoreBlockSize)
 		d.fill = (*compressor).fillBlock
 		d.step = (*compressor).storeHuff
-	case level >= 1 && level <= 3:
+	case level >= 1 && level <= 4:
 		d.snap = newSnappy(level)
 		d.window = make([]byte, maxStoreBlockSize)
 		d.fill = (*compressor).fillBlock
@@ -1172,7 +1172,7 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 	case level == DefaultCompression:
 		level = 5
 		fallthrough
-	case 4 <= level && level <= 9:
+	case 5 <= level && level <= 9:
 		d.compressionLevel = levels[level]
 		d.initDeflate()
 		d.fill = (*compressor).fillDeflate
