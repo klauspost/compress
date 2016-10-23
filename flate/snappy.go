@@ -168,8 +168,17 @@ func (e *snappyL1) Encode(dst *tokens, src []byte) {
 			if s1 > len(src) {
 				s1 = len(src)
 			}
-			for i := candidate + 4; s < s1 && src[i] == src[s]; i, s = i+1, s+1 {
+			a := src[s:s1]
+			b := src[candidate+4:]
+			b = b[:len(a)]
+			l := len(a)
+			for i := range a {
+				if a[i] != b[i] {
+					l = i
+					break
+				}
 			}
+			s += l
 
 			// matchToken is flate's equivalent of Snappy's emitCopy.
 			dst.tokens[dst.n] = matchToken(uint32(s-base-baseMatchLength), uint32(base-candidate-baseMatchOffset))
@@ -792,19 +801,23 @@ emitRemainder:
 }
 
 func (e *snappyGen) matchlen(s, t int32, src []byte) int32 {
-	s0 := s
-	s1 := s + maxMatchLength - 4
-	if s1 > int32(len(src)) {
-		s1 = int32(len(src))
+	s1 := int(s) + maxMatchLength - 4
+	if s1 > len(src) {
+		s1 = len(src)
 	}
 
 	// If we are inside the current block
 	if t >= 0 {
+		b := src[t:]
+		a := src[s:s1]
+		b = b[:len(a)]
 		// Extend the match to be as long as possible.
-		for s < s1 && src[s] == src[t] {
-			s, t = s+1, t+1
+		for i := range a {
+			if a[i] != b[i] {
+				return int32(i)
+			}
 		}
-		return s - s0
+		return int32(len(a))
 	}
 
 	// We found a match in the previous block.
@@ -812,21 +825,28 @@ func (e *snappyGen) matchlen(s, t int32, src []byte) int32 {
 	if tp < 0 {
 		return 0
 	}
-	prevLen := int32(len(e.prev))
 
 	// Extend the match to be as long as possible.
-	for s < s1 && src[s] == e.prev[tp] {
-		s, tp = s+1, tp+1
-		if tp == prevLen {
-			// continue in current buffer
-			t = 0
-			for s < s1 && src[s] == src[t] {
-				s, t = s+1, t+1
-			}
-			return s - s0
+	a := src[s:s1]
+	b := e.prev[tp:]
+	if len(b) > len(a) {
+		b = b[:len(a)]
+	}
+	a = a[:len(b)]
+	for i := range b {
+		if a[i] != b[i] {
+			return int32(i)
 		}
 	}
-	return s - s0
+	n := int32(len(b))
+	a = src[s+n : s1]
+	b = src[:len(a)]
+	for i := range a {
+		if a[i] != b[i] {
+			return int32(i) + n
+		}
+	}
+	return int32(len(a)) + n
 }
 
 // Reset the encoding table.
