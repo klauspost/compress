@@ -61,19 +61,19 @@ type compressionLevel struct {
 // See https://blog.klauspost.com/rebalancing-deflate-compression-levels/
 var levels = []compressionLevel{
 	{}, // 0
-	// Level 1+2 uses snappy algorithm - values not used
+	// Level 1-4 uses specialized algorithm - values not used
 	{0, 0, 0, 0, 0, 1},
 	{0, 0, 0, 0, 0, 2},
-	// For levels 3-6 we don't bother trying with lazy matches.
+	{0, 0, 0, 0, 0, 3},
+	{0, 0, 0, 0, 0, 4},
+	// For levels 5-6 we don't bother trying with lazy matches.
 	// Lazy matching is at least 30% slower, with 1.5% increase.
-	{4, 0, 8, 4, 4, 3},
-	{4, 0, 12, 6, 5, 4},
-	{6, 0, 24, 16, 6, 5},
-	{8, 0, 32, 32, 7, 6},
+	{6, 0, 12, 8, 12, 5},
+	{8, 0, 24, 16, 16, 6},
 	// Levels 7-9 use increasingly more lazy matching
 	// and increasingly stringent conditions for "good enough".
-	{4, 8, 16, 16, skipNever, 7},
-	{6, 16, 32, 64, skipNever, 8},
+	{8, 8, 24, 16, skipNever, 7},
+	{10, 16, 24, 64, skipNever, 8},
 	{32, 258, 258, 4096, skipNever, 9},
 }
 
@@ -696,7 +696,7 @@ func (d *compressor) deflateLazy() {
 				// If we have a long run of no matches, skip additional bytes
 				// Resets when d.ii overflows after 64KB.
 				if d.ii > 31 {
-					n := int(d.ii >> 6)
+					n := int(d.ii >> 5)
 					for j := 0; j < n; j++ {
 						if d.index >= d.windowEnd-1 {
 							break
@@ -853,7 +853,7 @@ func (d *compressor) deflateSSE() {
 			}
 		} else {
 			d.ii++
-			end := d.index + int(d.ii>>uint(d.fastSkipHashing)) + 1
+			end := d.index + int(d.ii>>5) + 1
 			if end > d.windowEnd {
 				end = d.windowEnd
 			}
@@ -1099,6 +1099,7 @@ func (d *compressor) storeSnappy() {
 			}
 			d.tokens.n = 0
 			d.windowEnd = 0
+			d.snap.Reset()
 			return
 		}
 	}
@@ -1163,7 +1164,7 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 		d.window = make([]byte, maxStoreBlockSize)
 		d.fill = (*compressor).fillBlock
 		d.step = (*compressor).storeHuff
-	case level >= 1 && level <= 3:
+	case level >= 1 && level <= 4:
 		d.snap = newSnappy(level)
 		d.window = make([]byte, maxStoreBlockSize)
 		d.fill = (*compressor).fillBlock
@@ -1171,7 +1172,7 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 	case level == DefaultCompression:
 		level = 5
 		fallthrough
-	case 4 <= level && level <= 9:
+	case 5 <= level && level <= 9:
 		d.compressionLevel = levels[level]
 		d.initDeflate()
 		d.fill = (*compressor).fillDeflate
