@@ -12,6 +12,7 @@ It offers slightly better compression at lower compression settings, and up to 3
 [![Build Status](https://travis-ci.org/klauspost/compress.svg?branch=master)](https://travis-ci.org/klauspost/compress)
 
 # changelog
+* Oct 25, 2016: Level 2-4 have been rewritten and now offers significantly better performance than before.
 * Oct 20, 2016: Port zlib changes from Go 1.7 to fix zlib writer issue. Please update.
 * Oct 16, 2016: Go 1.7 changes merged. Apples to apples this package is a few percent faster, but has a significantly better balance between speed and compression per level. 
 * Mar 24, 2016: Always attempt Huffman encoding on level 4-7. This improves base 64 encoded data compression.
