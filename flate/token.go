@@ -4,6 +4,8 @@
 
 package flate
 
+import "fmt"
+
 const (
 	// 2 bits:   type   0 = literal  1=EOF  2=Match   3=Unused
 	// 8 bits:   xlength = length - MIN_MATCH_LENGTH
@@ -77,6 +79,14 @@ func literalToken(literal uint32) token { return token(literalType + literal) }
 
 // Convert a < xlength, xoffset > pair into a match token.
 func matchToken(xlength uint32, xoffset uint32) token {
+	return token(matchType + xlength<<lengthShift + xoffset)
+}
+
+func matchTokend(xlength uint32, xoffset uint32) token {
+	if xlength > maxMatchLength || xoffset > maxMatchOffset {
+		panic(fmt.Sprintf("Invalid match: len: %d, offset: %d\n", xlength, xoffset))
+		return token(matchType)
+	}
 	return token(matchType + xlength<<lengthShift + xoffset)
 }
 
