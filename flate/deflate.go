@@ -39,7 +39,7 @@ const (
 
 	// The maximum number of tokens we put into a single flat block, just too
 	// stop things from getting too large.
-	maxFlateBlockTokens = 1 << 14
+	maxFlateBlockTokens = 1 << 15
 	maxStoreBlockSize   = 65535
 	hashBits            = 17 // After 17 performance degrades
 	hashSize            = 1 << hashBits
