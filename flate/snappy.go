@@ -7,17 +7,7 @@ package flate
 
 // emitLiteral writes a literal chunk and returns the number of bytes written.
 func emitLiteral(dst *tokens, lit []byte) {
-	ol := int(dst.n)
-	for i, v := range lit {
-		dst.tokens[(i+ol)&maxStoreBlockSize] = token(v)
-	}
-	dst.n += uint16(len(lit))
-}
-
-// emitCopy writes a copy chunk and returns the number of bytes written.
-func emitCopy(dst *tokens, offset, length int) {
-	dst.tokens[dst.n] = matchToken(uint32(length-3), uint32(offset-minOffsetSize))
-	dst.n++
+	dst.AddLiterals(lit)
 }
 
 type snappyEnc interface {
@@ -144,7 +134,7 @@ func (e *snappyL1) Encode(dst *tokens, src []byte) {
 		// A 4-byte match has been found. We'll later see if more than 4 bytes
 		// match. But, prior to the match, src[nextEmit:s] are unmatched. Emit
 		// them as literal bytes.
-		emitLiteral(dst, src[nextEmit:s])
+		dst.AddLiterals(src[nextEmit:s])
 
 		// Call emitCopy, and then see if another emitCopy could be our next
 		// move. Repeat until we find no match for the input immediately after
@@ -181,8 +171,7 @@ func (e *snappyL1) Encode(dst *tokens, src []byte) {
 			s += l
 
 			// matchToken is flate's equivalent of Snappy's emitCopy.
-			dst.tokens[dst.n] = matchToken(uint32(s-base-baseMatchLength), uint32(base-candidate-baseMatchOffset))
-			dst.n++
+			dst.AddMatch(uint32(s-base-baseMatchLength), uint32(base-candidate-baseMatchOffset))
 			nextEmit = s
 			if s >= sLimit {
 				goto emitRemainder
@@ -211,7 +200,7 @@ func (e *snappyL1) Encode(dst *tokens, src []byte) {
 
 emitRemainder:
 	if nextEmit < len(src) {
-		emitLiteral(dst, src[nextEmit:])
+		dst.AddLiterals(src[nextEmit:])
 	}
 }
 
@@ -330,7 +319,7 @@ func (e *snappyL2) Encode(dst *tokens, src []byte) {
 		// A 4-byte match has been found. We'll later see if more than 4 bytes
 		// match. But, prior to the match, src[nextEmit:s] are unmatched. Emit
 		// them as literal bytes.
-		emitLiteral(dst, src[nextEmit:s])
+		dst.AddLiterals(src[nextEmit:s])
 
 		// Call emitCopy, and then see if another emitCopy could be our next
 		// move. Repeat until we find no match for the input immediately after
@@ -351,8 +340,7 @@ func (e *snappyL2) Encode(dst *tokens, src []byte) {
 			l := e.matchlen(s, t, src)
 
 			// matchToken is flate's equivalent of Snappy's emitCopy. (length,offset)
-			dst.tokens[dst.n] = matchToken(uint32(l+4-baseMatchLength), uint32(s-t-baseMatchOffset))
-			dst.n++
+			dst.AddMatch(uint32(l+4-baseMatchLength), uint32(s-t-baseMatchOffset))
 			s += l
 			nextEmit = s
 			if s >= sLimit {
@@ -385,7 +373,7 @@ func (e *snappyL2) Encode(dst *tokens, src []byte) {
 
 emitRemainder:
 	if int(nextEmit) < len(src) {
-		emitLiteral(dst, src[nextEmit:])
+		dst.AddLiterals(src[nextEmit:])
 	}
 	e.cur += int32(len(src))
 	e.prev = e.prev[:len(src)]
@@ -497,7 +485,7 @@ func (e *snappyL3) Encode(dst *tokens, src []byte) {
 		// A 4-byte match has been found. We'll later see if more than 4 bytes
 		// match. But, prior to the match, src[nextEmit:s] are unmatched. Emit
 		// them as literal bytes.
-		emitLiteral(dst, src[nextEmit:s])
+		dst.AddLiterals(src[nextEmit:s])
 
 		// Call emitCopy, and then see if another emitCopy could be our next
 		// move. Repeat until we find no match for the input immediately after
@@ -518,8 +506,7 @@ func (e *snappyL3) Encode(dst *tokens, src []byte) {
 			l := e.matchlen(s, t, src)
 
 			// matchToken is flate's equivalent of Snappy's emitCopy. (length,offset)
-			dst.tokens[dst.n] = matchToken(uint32(l+4-baseMatchLength), uint32(s-t-baseMatchOffset))
-			dst.n++
+			dst.AddMatch(uint32(l+4-baseMatchLength), uint32(s-t-baseMatchOffset))
 			s += l
 			nextEmit = s
 			if s >= sLimit {
@@ -582,7 +569,7 @@ func (e *snappyL3) Encode(dst *tokens, src []byte) {
 
 emitRemainder:
 	if int(nextEmit) < len(src) {
-		emitLiteral(dst, src[nextEmit:])
+		dst.AddLiterals(src[nextEmit:])
 	}
 	e.cur += int32(len(src))
 	e.prev = e.prev[:len(src)]
@@ -695,7 +682,7 @@ func (e *snappyL4) Encode(dst *tokens, src []byte) {
 		// A 4-byte match has been found. We'll later see if more than 4 bytes
 		// match. But, prior to the match, src[nextEmit:s] are unmatched. Emit
 		// them as literal bytes.
-		emitLiteral(dst, src[nextEmit:s])
+		dst.AddLiterals(src[nextEmit:s])
 
 		// Call emitCopy, and then see if another emitCopy could be our next
 		// move. Repeat until we find no match for the input immediately after
@@ -724,8 +711,7 @@ func (e *snappyL4) Encode(dst *tokens, src []byte) {
 				}
 			}
 			// matchToken is flate's equivalent of Snappy's emitCopy. (length,offset)
-			dst.tokens[dst.n] = matchToken(uint32(l+4-baseMatchLength), uint32(s-t-baseMatchOffset))
-			dst.n++
+			dst.AddMatch(uint32(l+4-baseMatchLength), uint32(s-t-baseMatchOffset))
 			s += l
 			nextEmit = s
 			if s >= sLimit {
@@ -793,7 +779,7 @@ func (e *snappyL4) Encode(dst *tokens, src []byte) {
 
 emitRemainder:
 	if int(nextEmit) < len(src) {
-		emitLiteral(dst, src[nextEmit:])
+		dst.AddLiterals(src[nextEmit:])
 	}
 	e.cur += int32(len(src))
 	e.prev = e.prev[:len(src)]

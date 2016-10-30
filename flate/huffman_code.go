@@ -105,7 +105,7 @@ func generateFixedOffsetEncoding() *huffmanEncoder {
 var fixedLiteralEncoding *huffmanEncoder = generateFixedLiteralEncoding()
 var fixedOffsetEncoding *huffmanEncoder = generateFixedOffsetEncoding()
 
-func (h *huffmanEncoder) bitLength(freq []int32) int {
+func (h *huffmanEncoder) bitLength(freq []uint16) int {
 	var total int
 	for i, f := range freq {
 		if f != 0 {
@@ -270,7 +270,7 @@ func (h *huffmanEncoder) assignEncodingAndSize(bitCount []int32, list []literalN
 //
 // freq  An array of frequencies, in which frequency[i] gives the frequency of literal i.
 // maxBits  The maximum number of bits to use for any literal.
-func (h *huffmanEncoder) generate(freq []int32, maxBits int32) {
+func (h *huffmanEncoder) generate(freq []uint16, maxBits int32) {
 	if h.freqcache == nil {
 		// Allocate a reusable buffer with the longest possible frequency table.
 		// Possible lengths are codegenCodeCount, offsetCodeCount and maxNumLit.
@@ -283,7 +283,7 @@ func (h *huffmanEncoder) generate(freq []int32, maxBits int32) {
 	// Set list to be the set of all non-zero literals and their frequencies
 	for i, f := range freq {
 		if f != 0 {
-			list[count] = literalNode{uint16(i), f}
+			list[count] = literalNode{uint16(i), int32(f)}
 			count++
 		} else {
 			list[count] = literalNode{}

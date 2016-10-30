@@ -70,8 +70,77 @@ var offsetCodes = [...]uint32{
 type token uint32
 
 type tokens struct {
-	tokens [maxStoreBlockSize + 1]token
-	n      uint16 // Must be able to contain maxStoreBlockSize
+	tokens  [maxStoreBlockSize + 1]token
+	litHist [maxNumLit]uint16
+	offHist [offsetCodeCount]uint16
+	n       uint16 // Must be able to contain maxStoreBlockSize
+}
+
+func (t *tokens) Reset() {
+	t.n = 0
+	for i := range t.litHist {
+		t.litHist[i] = 0
+	}
+	for i := range t.offHist {
+		t.offHist[i] = 0
+	}
+}
+
+func indexTokens(in []token) tokens {
+	var t tokens
+	for _, tok := range in {
+		if tok < matchType {
+			t.tokens[t.n] = tok
+			t.litHist[tok]++
+			t.n++
+			continue
+		}
+		t.AddMatch(tok.length(), tok.offset())
+	}
+	return t
+}
+
+func (t *tokens) AddLiteral(lit byte) {
+	t.tokens[t.n] = token(lit)
+	t.litHist[lit]++
+	t.n++
+}
+
+func (t *tokens) AddEOB() {
+	t.tokens[t.n] = token(endBlockMarker)
+	t.litHist[endBlockMarker]++
+	t.n++
+}
+
+func (t *tokens) AddLiterals(lits []byte) {
+	for _, lit := range lits {
+		t.AddLiteral(lit)
+	}
+}
+
+func (t *tokens) AddMatch(xlength uint32, xoffset uint32) {
+	t.tokens[t.n] = token(matchType + xlength<<lengthShift + xoffset)
+	t.offHist[offsetCode(xoffset)]++
+	t.litHist[lengthCodesStart+lengthCodes[xlength]]++
+	t.n++
+}
+
+func (t *tokens) Slice() []token {
+	return t.tokens[:t.n]
+}
+
+func (t tokens) Validate() {
+	t2 := indexTokens(t.tokens[:t.n])
+	for i := range t.offHist {
+		if t.offHist[i] != t2.offHist[i] {
+			panic(fmt.Sprintf("offset %v mismatch, %v (t) != %v (t)", i, t.offHist[i], t2.offHist[i]))
+		}
+	}
+	for i := range t.litHist {
+		if t.litHist[i] != t2.litHist[i] {
+			panic(fmt.Sprintf("literal %v mismatch, %v (t) != %v (t)", i, t.litHist[i], t2.litHist[i]))
+		}
+	}
 }
 
 // Convert a literal into a literal token.

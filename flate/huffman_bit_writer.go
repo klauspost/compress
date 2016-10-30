@@ -87,10 +87,8 @@ type huffmanBitWriter struct {
 	bits            uint64
 	nbits           uint
 	bytes           [bufferSize]byte
-	codegenFreq     [codegenCodeCount]int32
+	codegenFreq     [codegenCodeCount]uint16
 	nbytes          int
-	literalFreq     []int32
-	offsetFreq      []int32
 	codegen         []uint8
 	literalEncoding *huffmanEncoder
 	offsetEncoding  *huffmanEncoder
@@ -101,8 +99,6 @@ type huffmanBitWriter struct {
 func newHuffmanBitWriter(w io.Writer) *huffmanBitWriter {
 	return &huffmanBitWriter{
 		writer:          w,
-		literalFreq:     make([]int32, maxNumLit),
-		offsetFreq:      make([]int32, offsetCodeCount),
 		codegen:         make([]uint8, maxNumLit+offsetCodeCount+1),
 		literalEncoding: newHuffmanEncoder(maxNumLit),
 		codegenEncoding: newHuffmanEncoder(codegenCodeCount),
@@ -293,7 +289,7 @@ func (w *huffmanBitWriter) generateCodegen(numLiterals int, numOffsets int, litE
 }
 
 // dynamicSize returns the size of dynamically encoded data in bits.
-func (w *huffmanBitWriter) dynamicSize(litEnc, offEnc *huffmanEncoder, extraBits int) (size, numCodegens int) {
+func (w *huffmanBitWriter) dynamicSize(litHist, offHist []uint16, litEnc, offEnc *huffmanEncoder, extraBits int) (size, numCodegens int) {
 	numCodegens = len(w.codegenFreq)
 	for numCodegens > 4 && w.codegenFreq[codegenOrder[numCodegens-1]] == 0 {
 		numCodegens--
@@ -304,18 +300,18 @@ func (w *huffmanBitWriter) dynamicSize(litEnc, offEnc *huffmanEncoder, extraBits
 		int(w.codegenFreq[17])*3 +
 		int(w.codegenFreq[18])*7
 	size = header +
-		litEnc.bitLength(w.literalFreq) +
-		offEnc.bitLength(w.offsetFreq) +
+		litEnc.bitLength(litHist) +
+		offEnc.bitLength(offHist) +
 		extraBits
 
 	return size, numCodegens
 }
 
 // fixedSize returns the size of dynamically encoded data in bits.
-func (w *huffmanBitWriter) fixedSize(extraBits int) int {
+func (w *huffmanBitWriter) fixedSize(tokens *tokens, extraBits int) int {
 	return 3 +
-		fixedLiteralEncoding.bitLength(w.literalFreq) +
-		fixedOffsetEncoding.bitLength(w.offsetFreq) +
+		fixedLiteralEncoding.bitLength(tokens.litHist[:]) +
+		fixedOffsetEncoding.bitLength(tokens.offHist[:]) +
 		extraBits
 }
 
@@ -439,12 +435,11 @@ func (w *huffmanBitWriter) writeFixedHeader(isEof bool) {
 // is larger than the original bytes, the data will be written as a
 // stored block.
 // If the input is nil, the tokens will always be Huffman encoded.
-func (w *huffmanBitWriter) writeBlock(tokens []token, eof bool, input []byte) {
+func (w *huffmanBitWriter) writeBlock(tokens *tokens, eof bool, input []byte) {
 	if w.err != nil {
 		return
 	}
-
-	tokens = append(tokens, endBlockMarker)
+	tokens.AddEOB()
 	numLiterals, numOffsets := w.indexTokens(tokens)
 
 	var extraBits int
@@ -456,11 +451,11 @@ func (w *huffmanBitWriter) writeBlock(tokens []token, eof bool, input []byte) {
 		// against stored encoding.
 		for lengthCode := lengthCodesStart + 8; lengthCode < numLiterals; lengthCode++ {
 			// First eight length codes have extra size = 0.
-			extraBits += int(w.literalFreq[lengthCode]) * int(lengthExtraBits[lengthCode-lengthCodesStart])
+			extraBits += int(tokens.litHist[lengthCode]) * int(lengthExtraBits[lengthCode-lengthCodesStart])
 		}
 		for offsetCode := 4; offsetCode < numOffsets; offsetCode++ {
 			// First four offset codes have extra size = 0.
-			extraBits += int(w.offsetFreq[offsetCode]) * int(offsetExtraBits[offsetCode])
+			extraBits += int(tokens.offHist[offsetCode]) * int(offsetExtraBits[offsetCode])
 		}
 	}
 
@@ -468,7 +463,7 @@ func (w *huffmanBitWriter) writeBlock(tokens []token, eof bool, input []byte) {
 	// Fixed Huffman baseline.
 	var literalEncoding = fixedLiteralEncoding
 	var offsetEncoding = fixedOffsetEncoding
-	var size = w.fixedSize(extraBits)
+	var size = w.fixedSize(tokens, extraBits)
 
 	// Dynamic Huffman?
 	var numCodegens int
@@ -477,7 +472,7 @@ func (w *huffmanBitWriter) writeBlock(tokens []token, eof bool, input []byte) {
 	// the literalEncoding and the offsetEncoding.
 	w.generateCodegen(numLiterals, numOffsets, w.literalEncoding, w.offsetEncoding)
 	w.codegenEncoding.generate(w.codegenFreq[:], 7)
-	dynamicSize, numCodegens := w.dynamicSize(w.literalEncoding, w.offsetEncoding, extraBits)
+	dynamicSize, numCodegens := w.dynamicSize(tokens.litHist[:], tokens.offHist[:], w.literalEncoding, w.offsetEncoding, extraBits)
 
 	if dynamicSize < size {
 		size = dynamicSize
@@ -500,7 +495,7 @@ func (w *huffmanBitWriter) writeBlock(tokens []token, eof bool, input []byte) {
 	}
 
 	// Write the tokens.
-	w.writeTokens(tokens, literalEncoding.codes, offsetEncoding.codes)
+	w.writeTokens(tokens.Slice(), literalEncoding.codes, offsetEncoding.codes)
 }
 
 // writeBlockDynamic encodes a block using a dynamic Huffman table.
@@ -508,19 +503,19 @@ func (w *huffmanBitWriter) writeBlock(tokens []token, eof bool, input []byte) {
 // histogram distribution.
 // If input is supplied and the compression savings are below 1/16th of the
 // input size the block is stored.
-func (w *huffmanBitWriter) writeBlockDynamic(tokens []token, eof bool, input []byte) {
+func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []byte) {
 	if w.err != nil {
 		return
 	}
 
-	tokens = append(tokens, endBlockMarker)
+	tokens.AddEOB()
 	numLiterals, numOffsets := w.indexTokens(tokens)
 
 	// Generate codegen and codegenFrequencies, which indicates how to encode
 	// the literalEncoding and the offsetEncoding.
 	w.generateCodegen(numLiterals, numOffsets, w.literalEncoding, w.offsetEncoding)
 	w.codegenEncoding.generate(w.codegenFreq[:], 7)
-	size, numCodegens := w.dynamicSize(w.literalEncoding, w.offsetEncoding, 0)
+	size, numCodegens := w.dynamicSize(tokens.litHist[:], tokens.offHist[:], w.literalEncoding, w.offsetEncoding, 0)
 
 	// Store bytes, if we don't get a reasonable improvement.
 	if ssize, storable := w.storedSize(input); storable && ssize < (size+size>>4) {
@@ -533,50 +528,33 @@ func (w *huffmanBitWriter) writeBlockDynamic(tokens []token, eof bool, input []b
 	w.writeDynamicHeader(numLiterals, numOffsets, numCodegens, eof)
 
 	// Write the tokens.
-	w.writeTokens(tokens, w.literalEncoding.codes, w.offsetEncoding.codes)
+	w.writeTokens(tokens.Slice(), w.literalEncoding.codes, w.offsetEncoding.codes)
 }
 
 // indexTokens indexes a slice of tokens, and updates
 // literalFreq and offsetFreq, and generates literalEncoding
 // and offsetEncoding.
 // The number of literal and offset tokens is returned.
-func (w *huffmanBitWriter) indexTokens(tokens []token) (numLiterals, numOffsets int) {
-	for i := range w.literalFreq {
-		w.literalFreq[i] = 0
-	}
-	for i := range w.offsetFreq {
-		w.offsetFreq[i] = 0
-	}
-
-	for _, t := range tokens {
-		if t < matchType {
-			w.literalFreq[t.literal()]++
-			continue
-		}
-		length := t.length()
-		offset := t.offset()
-		w.literalFreq[lengthCodesStart+lengthCode(length)]++
-		w.offsetFreq[offsetCode(offset)]++
-	}
-
+func (w *huffmanBitWriter) indexTokens(tokens *tokens) (numLiterals, numOffsets int) {
 	// get the number of literals
-	numLiterals = len(w.literalFreq)
-	for w.literalFreq[numLiterals-1] == 0 {
+	numLiterals = maxNumLit
+	for tokens.litHist[numLiterals-1] == 0 {
 		numLiterals--
 	}
 	// get the number of offsets
-	numOffsets = len(w.offsetFreq)
-	for numOffsets > 0 && w.offsetFreq[numOffsets-1] == 0 {
+	numOffsets = offsetCodeCount
+	for tokens.offHist[numOffsets-1] == 0 {
 		numOffsets--
+		if numOffsets == 0 {
+			// We haven't found a single match. If we want to go with the dynamic encoding,
+			// we should count at least one offset to be sure that the offset huffman tree could be encoded.
+			tokens.offHist[0] = 1
+			numOffsets = 1
+			break
+		}
 	}
-	if numOffsets == 0 {
-		// We haven't found a single match. If we want to go with the dynamic encoding,
-		// we should count at least one offset to be sure that the offset huffman tree could be encoded.
-		w.offsetFreq[0] = 1
-		numOffsets = 1
-	}
-	w.literalEncoding.generate(w.literalFreq, 15)
-	w.offsetEncoding.generate(w.offsetFreq, 15)
+	w.literalEncoding.generate(tokens.litHist[:numLiterals], 15)
+	w.offsetEncoding.generate(tokens.offHist[:numOffsets], 15)
 	return
 }
 
@@ -615,12 +593,13 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 // huffOffset is a static offset encoder used for huffman only encoding.
 // It can be reused since we will not be encoding offset values.
 var huffOffset *huffmanEncoder
+var huffTokens *tokens
 
 func init() {
-	w := newHuffmanBitWriter(nil)
-	w.offsetFreq[0] = 1
+	huffTokens = &tokens{}
+	huffTokens.offHist[0] = 1
 	huffOffset = newHuffmanEncoder(offsetCodeCount)
-	huffOffset.generate(w.offsetFreq, 15)
+	huffOffset.generate(huffTokens.offHist[:], 15)
 }
 
 // writeBlockHuff encodes a block of bytes as either
@@ -630,21 +609,17 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
 	if w.err != nil {
 		return
 	}
-
-	// Clear histogram
-	for i := range w.literalFreq {
-		w.literalFreq[i] = 0
-	}
+	var literalFreq [endBlockMarker + 1]uint16
 
 	// Add everything as literals
-	histogram(input, w.literalFreq)
+	histogram16(input, literalFreq[:])
 
-	w.literalFreq[endBlockMarker] = 1
+	literalFreq[endBlockMarker] = 1
 
 	const numLiterals = endBlockMarker + 1
 	const numOffsets = 1
 
-	w.literalEncoding.generate(w.literalFreq, 15)
+	w.literalEncoding.generate(literalFreq[:], 15)
 
 	// Figure out smallest code.
 	// Always use dynamic Huffman or Store
@@ -654,7 +629,7 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
 	// the literalEncoding and the offsetEncoding.
 	w.generateCodegen(numLiterals, numOffsets, w.literalEncoding, huffOffset)
 	w.codegenEncoding.generate(w.codegenFreq[:], 7)
-	size, numCodegens := w.dynamicSize(w.literalEncoding, huffOffset, 0)
+	size, numCodegens := w.dynamicSize(literalFreq[:], huffTokens.offHist[:], w.literalEncoding, huffOffset, 0)
 
 	// Store bytes, if we don't get a reasonable improvement.
 	if ssize, storable := w.storedSize(input); storable && ssize < (size+size>>4) {
@@ -698,4 +673,14 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
 	}
 	w.nbytes = n
 	w.writeCode(encoding[endBlockMarker])
+}
+
+// histogram accumulates a histogram of b in h.
+//
+// len(h) must be >= 256, and h's elements must be all zeroes.
+func histogram16(b []byte, h []uint16) {
+	h = h[:256]
+	for _, t := range b {
+		h[t]++
+	}
 }

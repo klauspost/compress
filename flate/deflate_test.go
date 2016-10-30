@@ -500,11 +500,9 @@ func TestWriterReset(t *testing.T) {
 		// DeepEqual doesn't compare functions.
 		w.d.fill, wref.d.fill = nil, nil
 		w.d.step, wref.d.step = nil, nil
-		w.d.bulkHasher, wref.d.bulkHasher = nil, nil
 		w.d.snap, wref.d.snap = nil, nil
 
 		// hashMatch is always overwritten when used.
-		copy(w.d.hashMatch[:], wref.d.hashMatch[:])
 		if w.d.tokens.n != 0 {
 			t.Errorf("level %d Writer not reset after Reset. %d tokens were present", level, w.d.tokens.n)
 		}
