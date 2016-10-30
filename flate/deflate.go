@@ -77,6 +77,14 @@ var levels = []compressionLevel{
 	{32, 258, 258, 4096, skipNever, 9},
 }
 
+type encoder interface {
+	init(w io.Writer, level int) (err error)
+	write(b []byte) (n int, err error)
+	syncFlush() error
+	reset(w io.Writer)
+	close() error
+}
+
 type compressor struct {
 	compressionLevel
 
@@ -99,7 +107,7 @@ type compressor struct {
 
 	// input window: unprocessed data is window[index:windowEnd]
 	index         int
-	window        []byte
+	window        [2 * windowSize]byte
 	windowEnd     int
 	blockStart    int  // window index where current tokens start
 	byteAvailable bool // if true, still need to process window[index-1].
@@ -114,8 +122,6 @@ type compressor struct {
 	maxInsertIndex int
 	err            error
 	ii             uint16 // position of last match, intended to overflow to reset.
-
-	snap snappyEnc
 }
 
 func (d *compressor) fillDeflate(b []byte) int {
@@ -348,7 +354,6 @@ func matchLen(a, b []byte, max int) int {
 }
 
 func (d *compressor) initDeflate() {
-	d.window = make([]byte, 2*windowSize)
 	d.hashOffset = 1
 	d.length = minMatchLength - 1
 	d.offset = 0
@@ -356,7 +361,6 @@ func (d *compressor) initDeflate() {
 	d.index = 0
 	d.hash = 0
 	d.chainHead = -1
-	//d.bulkHasher = bulkHash4
 }
 
 // Assumes that d.fastSkipHashing != skipNever,
@@ -646,76 +650,6 @@ func (d *compressor) deflateLazy() {
 	}
 }
 
-func (d *compressor) store() {
-	if d.windowEnd > 0 && (d.windowEnd == maxStoreBlockSize || d.sync) {
-		d.err = d.writeStoredBlock(d.window[:d.windowEnd])
-		d.windowEnd = 0
-	}
-}
-
-// fillWindow will fill the buffer with data for huffman-only compression.
-// The number of bytes copied is returned.
-func (d *compressor) fillBlock(b []byte) int {
-	n := copy(d.window[d.windowEnd:], b)
-	d.windowEnd += n
-	return n
-}
-
-// storeHuff will compress and store the currently added data,
-// if enough has been accumulated or we at the end of the stream.
-// Any error that occurred will be in d.err
-func (d *compressor) storeHuff() {
-	if d.windowEnd < len(d.window) && !d.sync || d.windowEnd == 0 {
-		return
-	}
-	d.w.writeBlockHuff(false, d.window[:d.windowEnd])
-	d.err = d.w.err
-	d.windowEnd = 0
-}
-
-// storeHuff will compress and store the currently added data,
-// if enough has been accumulated or we at the end of the stream.
-// Any error that occurred will be in d.err
-func (d *compressor) storeSnappy() {
-	// We only compress if we have maxStoreBlockSize.
-	if d.windowEnd < maxStoreBlockSize {
-		if !d.sync {
-			return
-		}
-		// Handle extremely small sizes.
-		if d.windowEnd < 128 {
-			if d.windowEnd == 0 {
-				return
-			}
-			if d.windowEnd <= 32 {
-				d.err = d.writeStoredBlock(d.window[:d.windowEnd])
-				d.windowEnd = 0
-			} else {
-				d.w.writeBlockHuff(false, d.window[:d.windowEnd])
-				d.err = d.w.err
-			}
-			d.windowEnd = 0
-			d.snap.Reset()
-			return
-		}
-	}
-
-	d.snap.Encode(&d.tokens, d.window[:d.windowEnd])
-	// If we made zero matches, store the block as is.
-	if int(d.tokens.n) == d.windowEnd {
-		d.err = d.writeStoredBlock(d.window[:d.windowEnd])
-		// If we removed less than 1/16th, huffman compress the block.
-	} else if int(d.tokens.n) > d.windowEnd-(d.windowEnd>>4) {
-		d.w.writeBlockHuff(false, d.window[:d.windowEnd])
-		d.err = d.w.err
-	} else {
-		d.w.writeBlockDynamic(&d.tokens, false, d.window[:d.windowEnd])
-		d.err = d.w.err
-	}
-	d.tokens.Reset()
-	d.windowEnd = 0
-}
-
 // write will add input byte to the stream.
 // Unless an error occurs all bytes will be consumed.
 func (d *compressor) write(b []byte) (n int, err error) {
@@ -753,19 +687,6 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 	d.w = newHuffmanBitWriter(w)
 
 	switch {
-	case level == NoCompression:
-		d.window = make([]byte, maxStoreBlockSize)
-		d.fill = (*compressor).fillBlock
-		d.step = (*compressor).store
-	case level == ConstantCompression:
-		d.window = make([]byte, maxStoreBlockSize)
-		d.fill = (*compressor).fillBlock
-		d.step = (*compressor).storeHuff
-	case level >= 1 && level <= 4:
-		d.snap = newSnappy(level)
-		d.window = make([]byte, maxStoreBlockSize)
-		d.fill = (*compressor).fillBlock
-		d.step = (*compressor).storeSnappy
 	case level == DefaultCompression:
 		level = 5
 		fallthrough
@@ -789,35 +710,22 @@ func (d *compressor) reset(w io.Writer) {
 	d.w.reset(w)
 	d.sync = false
 	d.err = nil
-	// We only need to reset a few things for Snappy.
-	if d.snap != nil {
-		d.snap.Reset()
-		d.windowEnd = 0
-		d.tokens.Reset()
-		return
+	d.chainHead = -1
+	for i := range d.hashHead {
+		d.hashHead[i] = 0
 	}
-	switch d.compressionLevel.chain {
-	case 0:
-		// level was NoCompression or ConstantCompresssion.
-		d.windowEnd = 0
-	default:
-		d.chainHead = -1
-		for i := range d.hashHead {
-			d.hashHead[i] = 0
-		}
-		for i := range d.hashPrev {
-			d.hashPrev[i] = 0
-		}
-		d.hashOffset = 1
-		d.index, d.windowEnd = 0, 0
-		d.blockStart, d.byteAvailable = 0, false
-		d.tokens.Reset()
-		d.length = minMatchLength - 1
-		d.offset = 0
-		d.hash = 0
-		d.ii = 0
-		d.maxInsertIndex = 0
+	for i := range d.hashPrev {
+		d.hashPrev[i] = 0
 	}
+	d.hashOffset = 1
+	d.index, d.windowEnd = 0, 0
+	d.blockStart, d.byteAvailable = 0, false
+	d.tokens.Reset()
+	d.length = minMatchLength - 1
+	d.offset = 0
+	d.hash = 0
+	d.ii = 0
+	d.maxInsertIndex = 0
 }
 
 func (d *compressor) close() error {
@@ -850,6 +758,14 @@ func (d *compressor) close() error {
 // Otherwise the error returned will be non-nil.
 func NewWriter(w io.Writer, level int) (*Writer, error) {
 	var dw Writer
+	switch {
+	case level == NoCompression, level == ConstantCompression:
+		fallthrough
+	case level >= 1 && level <= 4:
+		dw.d = &deflateFast{}
+	default:
+		dw.d = &compressor{}
+	}
 	if err := dw.d.init(w, level); err != nil {
 		return nil, err
 	}
@@ -868,8 +784,10 @@ func NewWriterDict(w io.Writer, level int, dict []byte) (*Writer, error) {
 	if err != nil {
 		return nil, err
 	}
-	zw.d.fillWindow(dict)
-	zw.dict = append(zw.dict, dict...) // duplicate dictionary for Reset method.
+	if comp, ok := zw.d.(*compressor); ok {
+		comp.fillWindow(dict)
+		zw.dict = append(zw.dict, dict...) // duplicate dictionary for Reset method.
+	}
 	return zw, err
 }
 
@@ -884,7 +802,7 @@ func (w *dictWriter) Write(b []byte) (n int, err error) {
 // A Writer takes data written to it and writes the compressed
 // form of that data to an underlying writer (see NewWriter).
 type Writer struct {
-	d    compressor
+	d    encoder
 	dict []byte
 }
 
@@ -918,15 +836,17 @@ func (w *Writer) Close() error {
 // the result of NewWriter or NewWriterDict called with dst
 // and w's level and dictionary.
 func (w *Writer) Reset(dst io.Writer) {
-	if dw, ok := w.d.w.writer.(*dictWriter); ok {
-		// w was created with NewWriterDict
-		dw.w = dst
-		w.d.reset(dw)
-		w.d.fillWindow(w.dict)
-	} else {
-		// w was created with NewWriter
-		w.d.reset(dst)
+	if comp, ok := w.d.(*compressor); ok {
+		if dw, ok := comp.w.writer.(*dictWriter); ok {
+			// w was created with NewWriterDict
+			dw.w = dst
+			w.d.reset(dw)
+			comp.fillWindow(w.dict)
+			return
+		}
 	}
+	// w was created with NewWriter
+	w.d.reset(dst)
 }
 
 // ResetDict discards the writer's state and makes it equivalent to
@@ -935,5 +855,7 @@ func (w *Writer) Reset(dst io.Writer) {
 func (w *Writer) ResetDict(dst io.Writer, dict []byte) {
 	w.dict = dict
 	w.d.reset(dst)
-	w.d.fillWindow(w.dict)
+	if comp, ok := w.d.(*compressor); ok {
+		comp.fillWindow(w.dict)
+	}
 }
