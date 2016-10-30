@@ -184,6 +184,7 @@ func testBlock(t *testing.T, test huffTest, ttype string) {
 	}
 	test.wantNoInput = fmt.Sprintf(test.wantNoInput, ttype)
 	if *update {
+		tokens := indexTokens(test.tokens)
 		if test.input != "" {
 			t.Logf("Updating %q", test.want)
 			input, err := ioutil.ReadFile(test.input)
@@ -199,7 +200,7 @@ func testBlock(t *testing.T, test huffTest, ttype string) {
 			}
 			defer f.Close()
 			bw := newHuffmanBitWriter(f)
-			writeToType(t, ttype, bw, test.tokens, input)
+			writeToType(t, ttype, bw, tokens, input)
 		}
 
 		t.Logf("Updating %q", test.wantNoInput)
@@ -210,10 +211,11 @@ func testBlock(t *testing.T, test huffTest, ttype string) {
 		}
 		defer f.Close()
 		bw := newHuffmanBitWriter(f)
-		writeToType(t, ttype, bw, test.tokens, nil)
+		writeToType(t, ttype, bw, tokens, nil)
 		return
 	}
 
+	tokens := indexTokens(test.tokens)
 	if test.input != "" {
 		t.Logf("Testing %q", test.want)
 		input, err := ioutil.ReadFile(test.input)
@@ -228,7 +230,7 @@ func testBlock(t *testing.T, test huffTest, ttype string) {
 		}
 		var buf bytes.Buffer
 		bw := newHuffmanBitWriter(&buf)
-		writeToType(t, ttype, bw, test.tokens, input)
+		writeToType(t, ttype, bw, tokens, input)
 
 		got := buf.Bytes()
 		if !bytes.Equal(got, want) {
@@ -242,7 +244,7 @@ func testBlock(t *testing.T, test huffTest, ttype string) {
 		// Test if the writer produces the same output after reset.
 		buf.Reset()
 		bw.reset(&buf)
-		writeToType(t, ttype, bw, test.tokens, input)
+		writeToType(t, ttype, bw, tokens, input)
 		bw.flush()
 		got = buf.Bytes()
 		if !bytes.Equal(got, want) {
@@ -263,7 +265,7 @@ func testBlock(t *testing.T, test huffTest, ttype string) {
 	}
 	var buf bytes.Buffer
 	bw := newHuffmanBitWriter(&buf)
-	writeToType(t, ttype, bw, test.tokens, nil)
+	writeToType(t, ttype, bw, tokens, nil)
 
 	got := buf.Bytes()
 	if !bytes.Equal(got, wantNI) {
@@ -281,7 +283,7 @@ func testBlock(t *testing.T, test huffTest, ttype string) {
 	// Test if the writer produces the same output after reset.
 	buf.Reset()
 	bw.reset(&buf)
-	writeToType(t, ttype, bw, test.tokens, nil)
+	writeToType(t, ttype, bw, tokens, nil)
 	bw.flush()
 	got = buf.Bytes()
 	if !bytes.Equal(got, wantNI) {
@@ -295,12 +297,12 @@ func testBlock(t *testing.T, test huffTest, ttype string) {
 	testWriterEOF(t, "wb", test, false)
 }
 
-func writeToType(t *testing.T, ttype string, bw *huffmanBitWriter, tok []token, input []byte) {
+func writeToType(t *testing.T, ttype string, bw *huffmanBitWriter, tok tokens, input []byte) {
 	switch ttype {
 	case "wb":
-		bw.writeBlock(tok, false, input)
+		bw.writeBlock(&tok, false, input)
 	case "dyn":
-		bw.writeBlockDynamic(tok, false, input)
+		bw.writeBlockDynamic(&tok, false, input)
 	default:
 		panic("unknown test type")
 	}
@@ -335,9 +337,11 @@ func testWriterEOF(t *testing.T, ttype string, test huffTest, useInput bool) {
 	bw := newHuffmanBitWriter(&buf)
 	switch ttype {
 	case "wb":
-		bw.writeBlock(test.tokens, true, input)
+		tok := indexTokens(test.tokens)
+		bw.writeBlock(&tok, true, input)
 	case "dyn":
-		bw.writeBlockDynamic(test.tokens, true, input)
+		tok := indexTokens(test.tokens)
+		bw.writeBlockDynamic(&tok, true, input)
 	case "huff":
 		bw.writeBlockHuff(true, input)
 	default:
