@@ -101,13 +101,10 @@ type compressor struct {
 	// hashPrev[hashHead[hashValue] & windowMask] contains the previous index
 	// with the same hash value.
 	chainHead  int
-	hashHead   [hashSize]uint32
-	hashPrev   [windowSize]uint32
 	hashOffset int
 
 	// input window: unprocessed data is window[index:windowEnd]
 	index         int
-	window        [2 * windowSize]byte
 	windowEnd     int
 	blockStart    int  // window index where current tokens start
 	byteAvailable bool // if true, still need to process window[index-1].
@@ -122,6 +119,10 @@ type compressor struct {
 	maxInsertIndex int
 	err            error
 	ii             uint16 // position of last match, intended to overflow to reset.
+
+	window   [2 * windowSize]byte
+	hashHead [hashSize]uint32
+	hashPrev [windowSize]uint32
 }
 
 func (d *compressor) fillDeflate(b []byte) int {

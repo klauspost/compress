@@ -86,20 +86,19 @@ type huffmanBitWriter struct {
 	// and then the low nbits of bits.
 	bits            uint64
 	nbits           uint
-	bytes           [bufferSize]byte
-	codegenFreq     [codegenCodeCount]uint16
 	nbytes          int
-	codegen         []uint8
 	literalEncoding *huffmanEncoder
 	offsetEncoding  *huffmanEncoder
 	codegenEncoding *huffmanEncoder
 	err             error
+	bytes           [bufferSize]byte
+	codegenFreq     [codegenCodeCount]uint16
+	codegen         [maxNumLit + offsetCodeCount + 1]uint8
 }
 
 func newHuffmanBitWriter(w io.Writer) *huffmanBitWriter {
 	return &huffmanBitWriter{
 		writer:          w,
-		codegen:         make([]uint8, maxNumLit+offsetCodeCount+1),
 		literalEncoding: newHuffmanEncoder(maxNumLit),
 		codegenEncoding: newHuffmanEncoder(codegenCodeCount),
 		offsetEncoding:  newHuffmanEncoder(offsetCodeCount),
@@ -209,7 +208,7 @@ func (w *huffmanBitWriter) generateCodegen(numLiterals int, numOffsets int, litE
 	// a copy of the frequencies, and as the place where we put the result.
 	// This is fine because the output is always shorter than the input used
 	// so far.
-	codegen := w.codegen // cache
+	codegen := w.codegen[:] // cache
 	// Copy the concatenated code sizes to codegen. Put a marker at the end.
 	cgnl := codegen[:numLiterals]
 	for i := range cgnl {
