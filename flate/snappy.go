@@ -255,7 +255,7 @@ func (e *snappyL2) Encode(dst *tokens, src []byte) {
 
 	// Protect against e.cur wraparound.
 	if e.cur > 1<<30 {
-		for i := range e.table {
+		for i := range e.table[:] {
 			e.table[i] = tableEntry{}
 		}
 		e.cur = maxStoreBlockSize
@@ -416,7 +416,7 @@ func (e *snappyL3) Encode(dst *tokens, src []byte) {
 
 	// Protect against e.cur wraparound.
 	if e.cur > 1<<30 {
-		for i := range e.table {
+		for i := range e.table[:] {
 			e.table[i] = tableEntryPrev{}
 		}
 		e.snappyGen = snappyGen{cur: maxStoreBlockSize, prev: e.prev[:0]}
@@ -625,7 +625,7 @@ func (e *snappyL4) Encode(dst *tokens, src []byte) {
 
 	// Protect against e.cur wraparound.
 	if e.cur > 1<<30 {
-		for i := range e.table {
+		for i := range e.table[:] {
 			e.table[i] = tableEntryPrev{}
 		}
 		e.snappyGen = snappyGen{cur: maxStoreBlockSize, prev: e.prev[:0]}
