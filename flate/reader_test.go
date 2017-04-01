@@ -101,6 +101,6 @@ func BenchmarkDecodeTwainDefault1e6(b *testing.B)   { benchmarkDecode(b, twain, 
 func BenchmarkDecodeTwainCompress1e4(b *testing.B)  { benchmarkDecode(b, twain, compress, 1e4) }
 func BenchmarkDecodeTwainCompress1e5(b *testing.B)  { benchmarkDecode(b, twain, compress, 1e5) }
 func BenchmarkDecodeTwainCompress1e6(b *testing.B)  { benchmarkDecode(b, twain, compress, 1e6) }
-func BenchmarkDecodeRandomSpeed1e4(b *testing.B)     { benchmarkDecode(b, random, speed, 1e4) }
-func BenchmarkDecodeRandomSpeed1e5(b *testing.B)     { benchmarkDecode(b, random, speed, 1e5) }
-func BenchmarkDecodeRandomSpeed1e6(b *testing.B)     { benchmarkDecode(b, random, speed, 1e6) }
+func BenchmarkDecodeRandomSpeed1e4(b *testing.B)    { benchmarkDecode(b, random, speed, 1e4) }
+func BenchmarkDecodeRandomSpeed1e5(b *testing.B)    { benchmarkDecode(b, random, speed, 1e5) }
+func BenchmarkDecodeRandomSpeed1e6(b *testing.B)    { benchmarkDecode(b, random, speed, 1e6) }
