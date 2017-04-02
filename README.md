@@ -51,7 +51,7 @@ The packages are drop-in replacements for standard libraries. Simply replace the
 | `compress/gzip`    | `github.com/klauspost/compress/gzip`    |
 | `compress/zlib`    | `github.com/klauspost/compress/zlib`    |
 | `archive/zip`      | `github.com/klauspost/compress/zip`     |
-| `compress/deflate` | `github.com/klauspost/compress/deflate` |
+| `compress/flate`   | `github.com/klauspost/compress/flate`   |
 
 You may also be interested in [pgzip](https://github.com/klauspost/pgzip), which is a drop in replacement for gzip, which support multithreaded compression on big files and the optimized [crc32](https://github.com/klauspost/crc32) package used by these packages.
 
