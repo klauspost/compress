@@ -15,7 +15,8 @@ import (
 )
 
 const (
-	maxCodeLen = 16 // max length of Huffman code
+	maxCodeLen     = 16 // max length of Huffman code
+	maxCodeLenMask = 15 // mask for max length of Huffman code
 	// The next three numbers come from the RFC section 3.2.7, with the
 	// additional proviso in section 3.2.5 which implies that distance codes
 	// 30 and 31 should never occur in compressed data.
@@ -139,7 +140,7 @@ func (h *huffmanDecoder) init(bits []int) bool {
 		if n > max {
 			max = n
 		}
-		count[n]++
+		count[n&maxCodeLenMask]++
 	}
 
 	// Empty tree. The decompressor.huffSym function will fail later if the tree
@@ -157,8 +158,8 @@ func (h *huffmanDecoder) init(bits []int) bool {
 	var nextcode [maxCodeLen]int
 	for i := min; i <= max; i++ {
 		code <<= 1
-		nextcode[i] = code
-		code += count[i]
+		nextcode[i&maxCodeLenMask] = code
+		code += count[i&maxCodeLenMask]
 	}
 
 	// Check that the coding is complete (i.e., that we've
