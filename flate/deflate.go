@@ -39,7 +39,8 @@ const (
 
 	// The maximum number of tokens we put into a single flat block, just too
 	// stop things from getting too large.
-	maxFlateBlockTokens = 1 << 14
+	maxFlateBlockTokens = 1 << 15
+	maxFlateLazyTokens  = 1 << 14
 	maxStoreBlockSize   = 65535
 	hashBits            = 17 // After 17 performance degrades
 	hashSize            = 1 << hashBits
@@ -637,7 +638,7 @@ func (d *compressor) deflateLazy() {
 			d.index = newIndex
 			d.byteAvailable = false
 			d.length = minMatchLength - 1
-			if d.tokens.n == maxFlateBlockTokens {
+			if d.tokens.n == maxFlateLazyTokens {
 				// The block includes the current character
 				if d.err = d.writeBlock(&d.tokens, d.index, false); d.err != nil {
 					return
@@ -668,7 +669,7 @@ func (d *compressor) deflateLazy() {
 					d.index = end + 1
 				}
 				d.tokens.AddLiterals(d.window[start:end])
-				if d.tokens.n >= maxFlateBlockTokens {
+				if d.tokens.n >= maxFlateLazyTokens {
 					if d.err = d.writeBlock(&d.tokens, end, false); d.err != nil {
 						return
 					}
@@ -906,7 +907,7 @@ func (d *compressor) deflateLazySSE() {
 			d.index = newIndex
 			d.byteAvailable = false
 			d.length = minMatchLength - 1
-			if d.tokens.n == maxFlateBlockTokens {
+			if d.tokens.n == maxFlateLazyTokens {
 				// The block includes the current character
 				if d.err = d.writeBlock(&d.tokens, d.index, false); d.err != nil {
 					return
@@ -937,7 +938,7 @@ func (d *compressor) deflateLazySSE() {
 					d.index = end + 1
 				}
 				d.tokens.AddLiterals(d.window[start:end])
-				if d.tokens.n >= maxFlateBlockTokens {
+				if d.tokens.n >= maxFlateLazyTokens {
 					if d.err = d.writeBlock(&d.tokens, end, false); d.err != nil {
 						return
 					}
