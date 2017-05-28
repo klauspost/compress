@@ -181,12 +181,8 @@ func (d *compressor) writeBlockSkip(tok *tokens, index int, eof bool) error {
 			window := d.window[d.blockStart:index]
 			// If we removed less than a 64th of all literals
 			// we huffman compress the block.
-			if int(tok.n) > len(window)-int(tok.n>>6) {
-				d.w.writeBlockHuff(eof, window)
-			} else {
-				// Write a dynamic huffman block.
-				d.w.writeBlockDynamic(tok, eof, window)
-			}
+			// Write a dynamic huffman block.
+			d.w.writeBlockDynamic(tok, eof, window)
 		} else {
 			d.w.writeBlock(tok, eof, nil)
 		}
@@ -530,14 +526,12 @@ func (d *compressor) deflate() {
 			if end > d.windowEnd {
 				end = d.windowEnd
 			}
-			for i := d.index; i < end; i++ {
-				d.tokens.AddLiteral(d.window[i])
-				if d.tokens.n == maxFlateBlockTokens {
-					if d.err = d.writeBlockSkip(&d.tokens, i+1, false); d.err != nil {
-						return
-					}
-					d.tokens.Reset()
+			d.tokens.AddLiterals(d.window[d.index:end])
+			if d.tokens.n >= maxFlateBlockTokens {
+				if d.err = d.writeBlockSkip(&d.tokens, end, false); d.err != nil {
+					return
 				}
+				d.tokens.Reset()
 			}
 			d.index = end
 		}
@@ -658,43 +652,27 @@ func (d *compressor) deflateLazy() {
 			// We have a byte waiting. Emit it.
 			if d.byteAvailable {
 				d.ii++
-				d.tokens.AddLiteral(d.window[d.index-1])
-				if d.tokens.n == maxFlateBlockTokens {
-					if d.err = d.writeBlock(&d.tokens, d.index, false); d.err != nil {
-						return
-					}
-					d.tokens.Reset()
-				}
-				d.index++
+				start := d.index - 1
+				end := d.index
 
 				// If we have a long run of no matches, skip additional bytes
 				// Resets when d.ii overflows after 64KB.
 				if d.ii > 31 {
-					n := int(d.ii >> 5)
-					for j := 0; j < n; j++ {
-						if d.index >= d.windowEnd-1 {
-							break
-						}
-
-						d.tokens.AddLiteral(d.window[d.index-1])
-						if d.tokens.n == maxFlateBlockTokens {
-							if d.err = d.writeBlock(&d.tokens, d.index, false); d.err != nil {
-								return
-							}
-							d.tokens.Reset()
-						}
-						d.index++
+					end += int(d.ii>>5) + 1
+					if end > d.windowEnd {
+						end = d.windowEnd
 					}
-					// Flush last byte
-					d.tokens.AddLiteral(d.window[d.index-1])
 					d.byteAvailable = false
-					// d.length = minMatchLength - 1 // not needed, since d.ii is reset above, so it should never be > minMatchLength
-					if d.tokens.n == maxFlateBlockTokens {
-						if d.err = d.writeBlock(&d.tokens, d.index, false); d.err != nil {
-							return
-						}
-						d.tokens.Reset()
+					d.index = end
+				} else {
+					d.index = end + 1
+				}
+				d.tokens.AddLiterals(d.window[start:end])
+				if d.tokens.n >= maxFlateBlockTokens {
+					if d.err = d.writeBlock(&d.tokens, end, false); d.err != nil {
+						return
 					}
+					d.tokens.Reset()
 				}
 			} else {
 				d.index++
@@ -817,14 +795,12 @@ func (d *compressor) deflateSSE() {
 			if end > d.windowEnd {
 				end = d.windowEnd
 			}
-			for i := d.index; i < end; i++ {
-				d.tokens.AddLiteral(d.window[i])
-				if d.tokens.n == maxFlateBlockTokens {
-					if d.err = d.writeBlockSkip(&d.tokens, i+1, false); d.err != nil {
-						return
-					}
-					d.tokens.Reset()
+			d.tokens.AddLiterals(d.window[d.index:end])
+			if d.tokens.n >= maxFlateBlockTokens {
+				if d.err = d.writeBlockSkip(&d.tokens, end, false); d.err != nil {
+					return
 				}
+				d.tokens.Reset()
 			}
 			d.index = end
 		}
@@ -945,43 +921,27 @@ func (d *compressor) deflateLazySSE() {
 			// We have a byte waiting. Emit it.
 			if d.byteAvailable {
 				d.ii++
-				d.tokens.AddLiteral(d.window[d.index-1])
-				if d.tokens.n == maxFlateBlockTokens {
-					if d.err = d.writeBlock(&d.tokens, d.index, false); d.err != nil {
-						return
-					}
-					d.tokens.Reset()
-				}
-				d.index++
+				start := d.index - 1
+				end := d.index
 
 				// If we have a long run of no matches, skip additional bytes
 				// Resets when d.ii overflows after 64KB.
 				if d.ii > 31 {
-					n := int(d.ii >> 6)
-					for j := 0; j < n; j++ {
-						if d.index >= d.windowEnd-1 {
-							break
-						}
-
-						d.tokens.AddLiteral(d.window[d.index-1])
-						if d.tokens.n == maxFlateBlockTokens {
-							if d.err = d.writeBlock(&d.tokens, d.index, false); d.err != nil {
-								return
-							}
-							d.tokens.Reset()
-						}
-						d.index++
+					end += int(d.ii>>6) + 1
+					if end > d.windowEnd {
+						end = d.windowEnd
 					}
-					// Flush last byte
-					d.tokens.AddLiteral(d.window[d.index-1])
 					d.byteAvailable = false
-					// d.length = minMatchLength - 1 // not needed, since d.ii is reset above, so it should never be > minMatchLength
-					if d.tokens.n == maxFlateBlockTokens {
-						if d.err = d.writeBlock(&d.tokens, d.index, false); d.err != nil {
-							return
-						}
-						d.tokens.Reset()
+					d.index = end
+				} else {
+					d.index = end + 1
+				}
+				d.tokens.AddLiterals(d.window[start:end])
+				if d.tokens.n >= maxFlateBlockTokens {
+					if d.err = d.writeBlock(&d.tokens, end, false); d.err != nil {
+						return
 					}
+					d.tokens.Reset()
 				}
 			} else {
 				d.index++
@@ -1049,10 +1009,6 @@ func (d *compressor) storeSnappy() {
 	// If we made zero matches, store the block as is.
 	if int(d.tokens.n) == d.windowEnd {
 		d.err = d.writeStoredBlock(d.window[:d.windowEnd])
-		// If we removed less than 1/16th, huffman compress the block.
-	} else if int(d.tokens.n) > d.windowEnd-(d.windowEnd>>4) {
-		d.w.writeBlockHuff(false, d.window[:d.windowEnd])
-		d.err = d.w.err
 	} else {
 		d.w.writeBlockDynamic(&d.tokens, false, d.window[:d.windowEnd])
 		d.err = d.w.err
