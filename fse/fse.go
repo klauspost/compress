@@ -180,6 +180,106 @@ func (s *Scratch) normalizeCount() error {
 	return nil
 }
 
+// Secondary normalization method.
+// To be used when primary method fails.
+func (s *Scratch) normalizeCount2() error {
+
+	const NOT_YET_ASSIGNED = -2
+	var (
+		distributed  uint32
+		toDistribute uint32
+
+		// Init
+		total        = uint32(s.length)
+		tableLog     = s.actualTableLog
+		lowThreshold = uint32(total >> tableLog)
+		lowOne       = uint32((total * 3) >> (tableLog + 1))
+	)
+	for i, cnt := range s.count[:s.actualMaxSymbol] {
+		if cnt == 0 {
+			s.norm[i] = 0
+			continue
+		}
+		if cnt <= lowThreshold {
+			s.norm[i] = -1
+			distributed++
+			total -= cnt
+			continue
+		}
+		if cnt <= lowOne {
+			s.norm[i] = 1
+			distributed++
+			total -= cnt
+			continue
+		}
+		s.norm[i] = NOT_YET_ASSIGNED
+	}
+	toDistribute = (1 << tableLog) - distributed
+
+	if (total / toDistribute) > lowOne {
+		// risk of rounding to zero
+		lowOne = uint32((total * 3) / (toDistribute * 2))
+		for i, cnt := range s.count[:s.actualMaxSymbol] {
+			if (s.norm[i] == NOT_YET_ASSIGNED) && (cnt <= lowOne) {
+				s.norm[i] = 1
+				distributed++
+				total -= cnt
+				continue
+			}
+		}
+		toDistribute = (1 << tableLog) - distributed
+	}
+	if distributed == uint32(s.actualMaxSymbol)+1 {
+		// all values are pretty poor;
+		//   probably incompressible data (should have already been detected);
+		//   find max, then give all remaining points to max
+		var maxV int
+		var maxC uint32
+		for i, cnt := range s.count[:s.actualMaxSymbol] {
+			if cnt > maxC {
+				maxV = i
+				maxC = cnt
+			}
+		}
+		s.norm[maxV] += int16(toDistribute)
+		return nil
+	}
+
+	if total == 0 {
+		// all of the symbols were low enough for the lowOne or lowThreshold
+		for i := uint32(0); toDistribute > 0; i = (i + 1) % (uint32(s.actualMaxSymbol) + 1) {
+			if s.norm[i] > 0 {
+				toDistribute--
+				s.norm[i]++
+			}
+		}
+		return nil
+	}
+
+	var (
+		vStepLog = 62 - uint64(tableLog)
+		mid      = uint64((1 << (vStepLog - 1)) - 1)
+		rStep    = (((1 << vStepLog) * uint64(toDistribute)) + mid) / uint64(total) // scale on remaining
+		tmpTotal = mid
+	)
+	for i, cnt := range s.count[:s.actualMaxSymbol] {
+		if s.norm[i] == NOT_YET_ASSIGNED {
+			var (
+				end    = tmpTotal + uint64(cnt)*rStep
+				sStart = uint32(tmpTotal >> vStepLog)
+				sEnd   = uint32(end >> vStepLog)
+				weight = sEnd - sStart
+			)
+			if weight < 1 {
+				return errors.New("weight < 1")
+			}
+			s.norm[i] = int16(weight)
+			tmpTotal = end
+		}
+	}
+	return nil
+}
+
 func Compress(in []byte, s *Scratch) ([]byte, error) {
 	if len(in) <= 1 {
 		return nil, nil
