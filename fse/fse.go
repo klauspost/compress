@@ -27,13 +27,13 @@ const (
 
 type Scratch struct {
 	// Private
-	count           [maxSymbolValue + 1]uint32
-	norm            [maxSymbolValue + 1]int16
-	cTable          []uint32 // May contain values from last run.
-	clearCount      bool     // clear count
-	length          int      // input length
-	actualMaxSymbol uint8
-	actualTableLog  uint8
+	count          [maxSymbolValue + 1]uint32
+	norm           [maxSymbolValue + 1]int16
+	cTable         []uint32 // May contain values from last run.
+	clearCount     bool     // clear count
+	length         int      // input length
+	symbolLen      uint16
+	actualTableLog uint8
 
 	// Out is output buffer
 	Out []byte
@@ -87,7 +87,7 @@ func (s *Scratch) countSimple(in []byte) (max int) {
 			m = v
 		}
 		if v > 0 {
-			s.actualMaxSymbol = uint8(i)
+			s.symbolLen = uint16(i) + 1
 		}
 	}
 	return int(m)
@@ -96,7 +96,7 @@ func (s *Scratch) countSimple(in []byte) (max int) {
 // minTableLog provides the minimum logSize to safely represent a distribution.
 func (s *Scratch) minTableLog() uint8 {
 	minBitsSrc := bits.Len32(uint32(s.length-1)) + 1
-	minBitsSymbols := bits.Len32(uint32(s.actualMaxSymbol)) + 2
+	minBitsSymbols := bits.Len32(uint32(s.symbolLen-1)) + 2
 	if minBitsSrc < minBitsSymbols {
 		return uint8(minBitsSrc)
 	}
@@ -128,9 +128,8 @@ func (s *Scratch) optimalTableLog() {
 var rtbTable = [...]uint32{0, 473195, 504333, 520860, 550000, 700000, 750000, 830000}
 
 func (s *Scratch) normalizeCount() error {
-	tableLog := s.actualTableLog
-
 	var (
+		tableLog          = s.actualTableLog
 		scale             = 62 - uint64(tableLog)
 		step              = (1 << 62) / uint64(s.length)
 		vStep             = uint64(1) << (scale - 20)
@@ -140,7 +139,7 @@ func (s *Scratch) normalizeCount() error {
 		lowThreshold      = (uint32)(s.length >> tableLog)
 	)
 
-	for i, cnt := range s.count[:s.actualMaxSymbol] {
+	for i, cnt := range s.count[:s.symbolLen] {
 		// already handled
 		// if (count[s] == s.length) return 0;   /* rle special case */
 
@@ -171,31 +170,126 @@ func (s *Scratch) normalizeCount() error {
 
 	if -stillToDistribute >= (s.norm[largest] >> 1) {
 		// corner case, need another normalization method
-		// FIXME:
-		//return s.normalizeM2()
+		return s.normalizeCount2()
 	} else {
 		s.norm[largest] += stillToDistribute
 	}
-	// TODO: Print stuff
+	return nil
+}
+
+// writeCount will write the count to header.
+func (s *Scratch) writeCount() error {
+	var (
+		tableLog  = s.actualTableLog
+		tableSize = 1 << tableLog
+		previous0 bool
+		charnum   uint8
+
+		maxHeaderSize = ((int(s.symbolLen) * int(tableLog)) >> 3) + 3
+
+		// Write Table Size
+		bitStream = uint32(tableLog - minTablelog)
+		bitCount  = uint(4)
+		remaining = int16(tableSize + 1) /* +1 for extra accuracy */
+		threshold = int16(tableSize)
+		nbBits    = uint(tableLog + 1)
+	)
+	if cap(s.Out) < maxHeaderSize {
+		s.Out = make([]byte, 0, s.length+maxHeaderSize)
+	}
+	outP := uint(0)
+	out := s.Out[:maxHeaderSize]
+
+	for remaining > 1 { /* stops at 1 */
+		if previous0 {
+			start := charnum
+			for s.norm[charnum] == 0 {
+				charnum++
+			}
+			for charnum >= start+24 {
+				start += 24
+				bitStream += uint32(0xFFFF) << bitCount
+				out[outP] = byte(bitStream)
+				out[outP+1] = byte(bitStream >> 8)
+				outP += 2
+				bitStream >>= 16
+			}
+			for charnum >= start+3 {
+				start += 3
+				bitStream += 3 << bitCount
+				bitCount += 2
+			}
+			bitStream += uint32(charnum-start) << bitCount
+			bitCount += 2
+			if bitCount > 16 {
+				out[outP] = byte(bitStream)
+				out[outP+1] = byte(bitStream >> 8)
+				outP += 2
+				bitStream >>= 16
+				bitCount -= 16
+			}
+		}
+
+		count := s.norm[charnum]
+		charnum++
+		max := (2*threshold - 1) - remaining
+		if count < 0 {
+			remaining += count
+		} else {
+			remaining -= count
+		}
+		count++ // +1 for extra accuracy
+		if count >= threshold {
+			count += max // [0..max[ [max..threshold[ (...) [threshold+max 2*threshold[
+		}
+		bitStream += uint32(count) << bitCount
+		bitCount += nbBits
+		if count < max {
+			bitCount--
+		}
+
+		previous0 = count == 1
+		if remaining < 1 {
+			return errors.New("internal error: remaining<1")
+		}
+		for remaining < threshold {
+			nbBits--
+			threshold >>= 1
+		}
+
+		if bitCount > 16 {
+			out[outP] = byte(bitStream)
+			out[outP+1] = byte(bitStream >> 8)
+			outP += 2
+			bitStream >>= 16
+			bitCount -= 16
+		}
+	}
+
+	out[outP] = byte(bitStream)
+	out[outP+1] = byte(bitStream >> 8)
+	outP += (bitCount + 7) / 8
+
+	if uint16(charnum) > s.symbolLen {
+		return errors.New("internal error: charnum > s.symbolLen")
+	}
+	s.Out = out[:outP]
 	return nil
 }
 
 // Secondary normalization method.
 // To be used when primary method fails.
+// TODO: Find data that triggers this.
 func (s *Scratch) normalizeCount2() error {
-
-	const NOT_YET_ASSIGNED = -2
+	const notYetAssigned = -2
 	var (
 		distributed  uint32
-		toDistribute uint32
-
-		// Init
 		total        = uint32(s.length)
 		tableLog     = s.actualTableLog
 		lowThreshold = uint32(total >> tableLog)
 		lowOne       = uint32((total * 3) >> (tableLog + 1))
 	)
-	for i, cnt := range s.count[:s.actualMaxSymbol] {
+	for i, cnt := range s.count[:s.symbolLen] {
 		if cnt == 0 {
 			s.norm[i] = 0
 			continue
@@ -212,15 +306,15 @@ func (s *Scratch) normalizeCount2() error {
 			total -= cnt
 			continue
 		}
-		s.norm[i] = NOT_YET_ASSIGNED
+		s.norm[i] = notYetAssigned
 	}
-	toDistribute = (1 << tableLog) - distributed
+	toDistribute := (1 << tableLog) - distributed
 
 	if (total / toDistribute) > lowOne {
 		// risk of rounding to zero
 		lowOne = uint32((total * 3) / (toDistribute * 2))
-		for i, cnt := range s.count[:s.actualMaxSymbol] {
-			if (s.norm[i] == NOT_YET_ASSIGNED) && (cnt <= lowOne) {
+		for i, cnt := range s.count[:s.symbolLen] {
+			if (s.norm[i] == notYetAssigned) && (cnt <= lowOne) {
 				s.norm[i] = 1
 				distributed++
 				total -= cnt
@@ -229,13 +323,13 @@ func (s *Scratch) normalizeCount2() error {
 		}
 		toDistribute = (1 << tableLog) - distributed
 	}
-	if distributed == uint32(s.actualMaxSymbol)+1 {
+	if distributed == uint32(s.symbolLen)+1 {
 		// all values are pretty poor;
 		//   probably incompressible data (should have already been detected);
 		//   find max, then give all remaining points to max
 		var maxV int
 		var maxC uint32
-		for i, cnt := range s.count[:s.actualMaxSymbol] {
+		for i, cnt := range s.count[:s.symbolLen] {
 			if cnt > maxC {
 				maxV = i
 				maxC = cnt
@@ -247,7 +341,7 @@ func (s *Scratch) normalizeCount2() error {
 
 	if total == 0 {
 		// all of the symbols were low enough for the lowOne or lowThreshold
-		for i := uint32(0); toDistribute > 0; i = (i + 1) % (uint32(s.actualMaxSymbol) + 1) {
+		for i := uint32(0); toDistribute > 0; i = (i + 1) % (uint32(s.symbolLen)) {
 			if s.norm[i] > 0 {
 				toDistribute--
 				s.norm[i]++
@@ -262,8 +356,8 @@ func (s *Scratch) normalizeCount2() error {
 		rStep    = (((1 << vStepLog) * uint64(toDistribute)) + mid) / uint64(total) // scale on remaining
 		tmpTotal = mid
 	)
-	for i, cnt := range s.count[:s.actualMaxSymbol] {
-		if s.norm[i] == NOT_YET_ASSIGNED {
+	for i, cnt := range s.count[:s.symbolLen] {
+		if s.norm[i] == notYetAssigned {
 			var (
 				end    = tmpTotal + uint64(cnt)*rStep
 				sStart = uint32(tmpTotal >> vStepLog)
@@ -275,6 +369,28 @@ func (s *Scratch) normalizeCount2() error {
 			}
 			s.norm[i] = int16(weight)
 			tmpTotal = end
+		}
+	}
+	return nil
+}
+
+func (s *Scratch) log() error {
+	var total int
+	fmt.Printf("selected TableLog: %d, Symbol length: %d\n", s.actualTableLog, s.symbolLen)
+	for i, v := range s.norm[:s.symbolLen] {
+		if v >= 0 {
+			total += int(v)
+		} else {
+			total -= int(v)
+		}
+		fmt.Printf("%3d: %5d -> %4d \n", i, s.count[i], v)
+	}
+	if total != (1 << s.actualTableLog) {
+		return fmt.Errorf("warning: Total == %d != %d", total, 1<<s.actualTableLog)
+	}
+	for i, v := range s.count[s.symbolLen:] {
+		if v != 0 {
+			return fmt.Errorf("warning: Found symbol out of range, %d after cut", i)
 		}
 	}
 	return nil
@@ -296,12 +412,22 @@ func Compress(in []byte, s *Scratch) ([]byte, error) {
 	maxCount := s.countSimple(in)
 	if maxCount == len(in) {
 		// One symbol, use RLE
+		// TODO: ???
 	}
 	if maxCount == 1 || maxCount < (len(in)>>7) {
 		// Each symbol present maximum once or too well distributed.
 		// Uncompressible.
 		return nil, nil
 	}
+	s.optimalTableLog()
+	err = s.normalizeCount()
+	if err != nil {
+		return nil, err
+	}
+	err = s.writeCount()
+	if err != nil {
+		return nil, err
+	}
 
-	return nil, nil
+	return s.Out, s.log()
 }
