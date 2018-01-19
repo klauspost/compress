@@ -2,9 +2,10 @@ package fse
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"math"
 	"math/bits"
+
+	"github.com/pkg/errors"
 )
 
 const (
