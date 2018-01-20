@@ -3,6 +3,7 @@ package fse
 import (
 	"errors"
 	"fmt"
+	"math/bits"
 )
 
 const (
@@ -124,10 +125,84 @@ func (s *Scratch) readNCount() error {
 	return nil
 }
 
+type decSymbol struct {
+	newState uint16
+	symbol   uint8
+	nbBits   uint8
+}
+
+func (s *Scratch) allocDtable() {
+	tableSize := 1 << s.actualTableLog
+	if cap(s.decTable) < int(tableSize) {
+		s.decTable = make([]decSymbol, tableSize)
+	}
+	s.decTable = s.decTable[:tableSize]
+}
+
+func (s *Scratch) buildDtable() error {
+	tableSize := uint32(1 << s.actualTableLog)
+	highThreshold := tableSize - 1
+	s.allocDtable()
+	var symbolNext [maxSymbolValue + 1]uint16
+	// Init, lay down lowprob symbols
+	//fastMode := true
+	{
+		//largeLimit := int16(1 << (s.actualTableLog - 1))
+		for i, v := range s.norm[:s.symbolLen] {
+			if v == -1 {
+				s.decTable[highThreshold].symbol = uint8(i)
+				highThreshold--
+				symbolNext[i] = 1
+			} else {
+				/*			if v >= largeLimit {
+							fastMode = false
+						}*/
+				symbolNext[i] = uint16(v)
+			}
+		}
+	}
+	// Spread symbols
+	{
+		tableMask := tableSize - 1
+		step := tableStep(tableSize)
+		position := uint32(0)
+		for ss, v := range s.norm[:s.symbolLen] {
+			for i := 0; i < int(v); i++ {
+				s.decTable[position].symbol = uint8(ss)
+				position = (position + step) & tableMask
+				for position > highThreshold {
+					// lowprob area
+					position = (position + step) & tableMask
+				}
+			}
+		}
+		if position != 0 {
+			return errors.New("corrupted input (position != 0)")
+		} /* position must reach all cells once, otherwise normalizedCounter is incorrect */
+	}
+
+	// Build Decoding table
+	{
+		for u, v := range s.decTable {
+			symbol := v.symbol
+			nextState := symbolNext[symbol]
+			symbolNext[symbol] = nextState + 1
+			nBits := s.actualTableLog - uint8(bits.Len16(nextState))
+			s.decTable[u].nbBits = nBits
+			s.decTable[u].newState = uint16((nextState << nBits) - uint16(tableSize))
+		}
+	}
+	return nil
+}
+
 func Decompress(b []byte, s *Scratch) ([]byte, error) {
 	s, err := s.prepare(b)
 	if err != nil {
 		return nil, err
 	}
-	return nil, s.readNCount()
+	err = s.readNCount()
+	if err != nil {
+		return nil, err
+	}
+	return nil, s.buildDtable()
 }

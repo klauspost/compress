@@ -28,14 +28,16 @@ const (
 
 type Scratch struct {
 	// Private
-	count          [maxSymbolValue + 1]uint32
+	count          [maxSymbolValue + 1]uint32 // EXPOSE
 	norm           [maxSymbolValue + 1]int16
 	clearCount     bool // clear count
 	length         int  // input length
 	symbolLen      uint16
 	actualTableLog uint8
 	br             byteReader
+	bw             bitWriter
 	ct             cTable
+	decTable       []decSymbol
 
 	// Out is output buffer
 	Out []byte
@@ -374,19 +376,19 @@ func (s *Scratch) normalizeCount2() error {
 	return nil
 }
 
-type symbolsTransform struct {
+type symbolTransform struct {
 	deltaFindState int32
 	deltaNbBits    uint32
 }
 
-func (s symbolsTransform) String() string {
+func (s symbolTransform) String() string {
 	return fmt.Sprintf("dnbits: %08x, fs:%d", s.deltaNbBits, s.deltaFindState)
 }
 
 type cTable struct {
 	tableSymbol []byte
-	ct          []uint16
-	symbolTT    []symbolsTransform
+	stateTable  []uint16
+	symbolTT    []symbolTransform
 }
 
 func (s *Scratch) allocCtable() {
@@ -398,13 +400,13 @@ func (s *Scratch) allocCtable() {
 	s.ct.tableSymbol = s.ct.tableSymbol[:tableSize]
 
 	ctSize := 1 + tableSize
-	if cap(s.ct.ct) < ctSize {
-		s.ct.ct = make([]uint16, ctSize)
+	if cap(s.ct.stateTable) < ctSize {
+		s.ct.stateTable = make([]uint16, ctSize)
 	}
-	s.ct.ct = s.ct.ct[:ctSize]
+	s.ct.stateTable = s.ct.stateTable[:ctSize]
 
 	if cap(s.ct.symbolTT) < int(s.symbolLen) {
-		s.ct.symbolTT = make([]symbolsTransform, s.symbolLen)
+		s.ct.symbolTT = make([]symbolTransform, s.symbolLen)
 	}
 	s.ct.symbolTT = s.ct.symbolTT[:s.symbolLen]
 }
@@ -454,7 +456,7 @@ func (s *Scratch) buildCTable() error {
 	}
 
 	/* Build table */
-	table := s.ct.ct
+	table := s.ct.stateTable
 	{
 		tsi := int(tableSize)
 		for u, v := range tableSymbol {
@@ -475,20 +477,18 @@ func (s *Scratch) buildCTable() error {
 		for i, v := range s.norm[:s.symbolLen] {
 			switch v {
 			case 0:
-			case -1:
-				fallthrough
-			case 1:
+			case -1, 1:
 				symbolTT[i].deltaNbBits = tl
 				symbolTT[i].deltaFindState = int32(total - 1)
 				total++
-				//fmt.Println(i, symbolTT[i])
+				fmt.Println(i, symbolTT[i])
 			default:
 				maxBitsOut := uint32(tableLog) - uint32(bits.Len16(uint16(v-1)))
 				minStatePlus := uint32(v) << maxBitsOut
 				symbolTT[i].deltaNbBits = (maxBitsOut << 16) - minStatePlus
 				symbolTT[i].deltaFindState = int32(total - v)
 				total += v
-				//fmt.Println(i, symbolTT[i])
+				fmt.Println(i, symbolTT[i])
 			}
 		}
 		if total != int16(tableSize) {
@@ -500,6 +500,75 @@ func (s *Scratch) buildCTable() error {
 
 func tableStep(tableSize uint32) uint32 {
 	return (tableSize >> 1) + (tableSize >> 3) + 3
+}
+
+type cState struct {
+	state      uint16 // Maybe int?
+	bw         *bitWriter
+	stateTable []uint16
+	symbolTT   []symbolTransform
+}
+
+func (c *cState) init(bw *bitWriter, ct *cTable, tableLog, firstSymbol byte) {
+	c.bw = bw
+	c.stateTable = ct.stateTable
+	c.symbolTT = ct.symbolTT
+	symbolTT := ct.symbolTT[firstSymbol]
+
+	nbBitsOut := (symbolTT.deltaNbBits + (1 << 15)) >> 16
+	im := int32((nbBitsOut << 16) - symbolTT.deltaNbBits)
+	lu := (im >> nbBitsOut) + symbolTT.deltaFindState
+	c.state = c.stateTable[lu]
+}
+
+func (c *cState) encode(symbol byte) {
+	symbolTT := c.symbolTT[symbol]
+	nbBitsOut := (uint32(c.state) + symbolTT.deltaNbBits) >> 16
+	c.bw.addBits16NC(c.state, uint(nbBitsOut))
+	c.state = c.stateTable[int32(c.state>>nbBitsOut)+symbolTT.deltaFindState]
+}
+
+func (c *cState) flush(tableLog uint) {
+	c.bw.flush()
+	c.bw.addBits16NC(c.state, tableLog)
+	c.bw.flushAlign()
+}
+
+func (s *Scratch) compress(src []byte) error {
+	if len(src) <= 2 {
+		return errors.New("compress: src too small")
+	}
+	s.bw.reset(s.Out)
+	var c1, c2 cState
+	ip := len(src) - 1
+	if len(src)&1 == 1 {
+		c1.init(&s.bw, &s.ct, s.actualTableLog, src[ip])
+		c2.init(&s.bw, &s.ct, s.actualTableLog, src[ip-1])
+		c1.encode(src[ip-2])
+		ip -= 3
+	} else {
+		c2.init(&s.bw, &s.ct, s.actualTableLog, src[ip])
+		c1.init(&s.bw, &s.ct, s.actualTableLog, src[ip-1])
+		ip -= 2
+	}
+	if ip&2 != 0 {
+		c2.encode(src[ip])
+		c1.encode(src[ip-1])
+		ip -= 2
+	}
+
+	for ip >= 4 {
+		s.bw.flush()
+		c2.encode(src[ip])
+		c1.encode(src[ip-1])
+		s.bw.flush()
+		c2.encode(src[ip-2])
+		c1.encode(src[ip-3])
+		ip -= 4
+	}
+	c2.flush(uint(s.actualTableLog))
+	c1.flush(uint(s.actualTableLog))
+	return s.bw.close()
 }
 
 func (s *Scratch) validateNorm() (err error) {
@@ -569,5 +638,15 @@ func Compress(in []byte, s *Scratch) ([]byte, error) {
 		return nil, err
 	}
 
-	return s.Out, s.buildCTable()
+	err = s.buildCTable()
+	if err != nil {
+		return nil, err
+	}
+	err = s.compress(in)
+	if err != nil {
+		return nil, err
+	}
+	s.Out = s.bw.out
+
+	return s.Out, nil
 }
