@@ -35,6 +35,7 @@ type Scratch struct {
 	length         int      // input length
 	symbolLen      uint16
 	actualTableLog uint8
+	br             byteReader
 
 	// Out is output buffer
 	Out []byte
@@ -67,6 +68,9 @@ func (s *Scratch) prepare(in []byte) (*Scratch, error) {
 		}
 		s.clearCount = false
 	}
+	s.br.b = in
+	s.br.off = 0
+
 	cTableSize := 1 + (1 << (uint(s.TableLog) - 1)) + ((int(s.MaxSymbolValue) + 1) * 2)
 	if cap(s.cTable) < cTableSize {
 		s.cTable = make([]uint32, 0, cTableSize)
@@ -375,17 +379,24 @@ func (s *Scratch) normalizeCount2() error {
 	return nil
 }
 
-func (s *Scratch) log() error {
+func (s *Scratch) validateNorm() (err error) {
 	var total int
-	fmt.Printf("selected TableLog: %d, Symbol length: %d\n", s.actualTableLog, s.symbolLen)
-	for i, v := range s.norm[:s.symbolLen] {
+	for _, v := range s.norm[:s.symbolLen] {
 		if v >= 0 {
 			total += int(v)
 		} else {
 			total -= int(v)
 		}
-		fmt.Printf("%3d: %5d -> %4d \n", i, s.count[i], v)
 	}
+	defer func() {
+		if err == nil {
+			return
+		}
+		fmt.Printf("selected TableLog: %d, Symbol length: %d\n", s.actualTableLog, s.symbolLen)
+		for i, v := range s.norm[:s.symbolLen] {
+			fmt.Printf("%3d: %5d -> %4d \n", i, s.count[i], v)
+		}
+	}()
 	if total != (1 << s.actualTableLog) {
 		return fmt.Errorf("warning: Total == %d != %d", total, 1<<s.actualTableLog)
 	}
@@ -430,5 +441,5 @@ func Compress(in []byte, s *Scratch) ([]byte, error) {
 		return nil, err
 	}
 
-	return s.Out, s.log()
+	return s.Out, s.validateNorm()
 }
