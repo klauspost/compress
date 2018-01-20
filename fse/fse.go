@@ -30,12 +30,12 @@ type Scratch struct {
 	// Private
 	count          [maxSymbolValue + 1]uint32
 	norm           [maxSymbolValue + 1]int16
-	cTable         []uint32 // May contain values from last run.
-	clearCount     bool     // clear count
-	length         int      // input length
+	clearCount     bool // clear count
+	length         int  // input length
 	symbolLen      uint16
 	actualTableLog uint8
 	br             byteReader
+	ct             cTable
 
 	// Out is output buffer
 	Out []byte
@@ -71,11 +71,6 @@ func (s *Scratch) prepare(in []byte) (*Scratch, error) {
 	s.br.b = in
 	s.br.off = 0
 
-	cTableSize := 1 + (1 << (uint(s.TableLog) - 1)) + ((int(s.MaxSymbolValue) + 1) * 2)
-	if cap(s.cTable) < cTableSize {
-		s.cTable = make([]uint32, 0, cTableSize)
-	}
-	s.cTable = s.cTable[:cTableSize]
 	return s, nil
 }
 
@@ -379,6 +374,134 @@ func (s *Scratch) normalizeCount2() error {
 	return nil
 }
 
+type symbolsTransform struct {
+	deltaFindState int32
+	deltaNbBits    uint32
+}
+
+func (s symbolsTransform) String() string {
+	return fmt.Sprintf("dnbits: %08x, fs:%d", s.deltaNbBits, s.deltaFindState)
+}
+
+type cTable struct {
+	tableSymbol []byte
+	ct          []uint16
+	symbolTT    []symbolsTransform
+}
+
+func (s *Scratch) allocCtable() {
+	tableSize := 1 << s.actualTableLog
+	// get tableSymbol that is big enough.
+	if cap(s.ct.tableSymbol) < int(tableSize) {
+		s.ct.tableSymbol = make([]byte, tableSize)
+	}
+	s.ct.tableSymbol = s.ct.tableSymbol[:tableSize]
+
+	ctSize := 1 + tableSize
+	if cap(s.ct.ct) < ctSize {
+		s.ct.ct = make([]uint16, ctSize)
+	}
+	s.ct.ct = s.ct.ct[:ctSize]
+
+	if cap(s.ct.symbolTT) < int(s.symbolLen) {
+		s.ct.symbolTT = make([]symbolsTransform, s.symbolLen)
+	}
+	s.ct.symbolTT = s.ct.symbolTT[:s.symbolLen]
+}
+
+func (s *Scratch) buildCTable() error {
+	tableSize := uint32(1 << s.actualTableLog)
+	highThreshold := tableSize - 1
+	var cumul [maxSymbolValue + 2]int16
+
+	s.allocCtable()
+	tableSymbol := s.ct.tableSymbol[:tableSize]
+	// symbol start positions
+	{
+		cumul[0] = 0
+		for ui, v := range s.norm[:s.symbolLen] {
+			u := byte(ui)
+			if v == -1 { /* Low proba symbol */
+				cumul[u+1] = cumul[u] + 1
+				tableSymbol[highThreshold] = u
+				highThreshold--
+			} else {
+				cumul[u+1] = cumul[u] + v
+			}
+		}
+		cumul[s.symbolLen] = int16(tableSize) + 1
+	}
+	// Spread symbols
+	{
+		step := tableStep(tableSize)
+		tableMask := tableSize - 1
+		var position uint32
+		for ui, v := range s.norm[:s.symbolLen] {
+			symbol := byte(ui)
+			for nbOccurrences := int16(0); nbOccurrences < v; nbOccurrences++ {
+				tableSymbol[position] = symbol
+				position = (position + step) & tableMask
+				for position > highThreshold {
+					position = (position + step) & tableMask
+				} /* Low proba area */
+			}
+		}
+
+		// Check if we have gone through all positions
+		if position != 0 {
+			return errors.New("position!=0")
+		}
+	}
+
+	/* Build table */
+	table := s.ct.ct
+	{
+		tsi := int(tableSize)
+		for u, v := range tableSymbol {
+			// TableU16 : sorted by symbol order; gives next state value
+			// TODO: we could make table so big that table can never overflow,
+			// but very likely trading bigger alloc for that.
+			table[cumul[v]] = uint16(tsi + u)
+			cumul[v]++
+		}
+	}
+
+	// Build Symbol Transformation Table
+	{
+		total := int16(0)
+		symbolTT := s.ct.symbolTT
+		tableLog := s.actualTableLog
+		tl := (uint32(tableLog) << 16) - (1 << tableLog)
+		for i, v := range s.norm[:s.symbolLen] {
+			switch v {
+			case 0:
+			case -1:
+				fallthrough
+			case 1:
+				symbolTT[i].deltaNbBits = tl
+				symbolTT[i].deltaFindState = int32(total - 1)
+				total++
+				//fmt.Println(i, symbolTT[i])
+			default:
+				maxBitsOut := uint32(tableLog) - uint32(bits.Len16(uint16(v-1)))
+				minStatePlus := uint32(v) << maxBitsOut
+				symbolTT[i].deltaNbBits = (maxBitsOut << 16) - minStatePlus
+				symbolTT[i].deltaFindState = int32(total - v)
+				total += v
+				//fmt.Println(i, symbolTT[i])
+			}
+		}
+		if total != int16(tableSize) {
+			return fmt.Errorf("total mismatch %d (got) != %d (want)", total, tableSize)
+		}
+	}
+	return nil
+}
+
+func tableStep(tableSize uint32) uint32 {
+	return (tableSize >> 1) + (tableSize >> 3) + 3
+}
+
 func (s *Scratch) validateNorm() (err error) {
 	var total int
 	for _, v := range s.norm[:s.symbolLen] {
@@ -441,5 +564,10 @@ func Compress(in []byte, s *Scratch) ([]byte, error) {
 		return nil, err
 	}
 
-	return s.Out, s.validateNorm()
+	err = s.validateNorm()
+	if err != nil {
+		return nil, err
+	}
+
+	return s.Out, s.buildCTable()
 }
