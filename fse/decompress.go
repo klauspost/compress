@@ -195,6 +195,20 @@ func (s *Scratch) buildDtable() error {
 	return nil
 }
 
+func (s *Scratch) decompress() error {
+	return nil
+}
+
+type decoder struct {
+	state uint16
+	br    *bitReader
+	dt    []decSymbol
+}
+
+func (d *decoder) init(in *bitReader) {
+	d.br = in
+}
+
 func Decompress(b []byte, s *Scratch) ([]byte, error) {
 	s, err := s.prepare(b)
 	if err != nil {

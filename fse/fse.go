@@ -35,6 +35,7 @@ type Scratch struct {
 	bw             bitWriter
 	ct             cTable
 	decTable       []decSymbol
+	decFast        bool // no bits has prob > 50%.
 
 	// Out is output buffer
 	Out []byte
