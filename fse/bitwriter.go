@@ -37,16 +37,42 @@ func (b *bitWriter) addBits16NC(value uint16, bits uint8) {
 	b.nBits += bits
 }
 
+// flush will
 func (b *bitWriter) flush() {
-	if b.nBits >= 32 {
-		b.flush32()
-	}
-}
-
-func (b *bitWriter) flushAll() {
 	v := b.nBits >> 3
 	switch v {
-	case 8:
+	case 0:
+	case 1:
+		b.out = append(b.out,
+			byte(b.bitContainer),
+		)
+	case 2:
+		b.out = append(b.out,
+			byte(b.bitContainer),
+			byte(b.bitContainer>>8),
+		)
+	case 3:
+		b.out = append(b.out,
+			byte(b.bitContainer),
+			byte(b.bitContainer>>8),
+			byte(b.bitContainer>>16),
+		)
+	case 4:
+		b.out = append(b.out,
+			byte(b.bitContainer),
+			byte(b.bitContainer>>8),
+			byte(b.bitContainer>>16),
+			byte(b.bitContainer>>24),
+		)
+	case 5:
+		b.out = append(b.out,
+			byte(b.bitContainer),
+			byte(b.bitContainer>>8),
+			byte(b.bitContainer>>16),
+			byte(b.bitContainer>>24),
+			byte(b.bitContainer>>32),
+		)
+	case 6:
 		b.out = append(b.out,
 			byte(b.bitContainer),
 			byte(b.bitContainer>>8),
@@ -54,8 +80,6 @@ func (b *bitWriter) flushAll() {
 			byte(b.bitContainer>>24),
 			byte(b.bitContainer>>32),
 			byte(b.bitContainer>>40),
-			byte(b.bitContainer>>48),
-			byte(b.bitContainer>>56),
 		)
 	case 7:
 		b.out = append(b.out,
@@ -67,7 +91,7 @@ func (b *bitWriter) flushAll() {
 			byte(b.bitContainer>>40),
 			byte(b.bitContainer>>48),
 		)
-	case 6:
+	case 8:
 		b.out = append(b.out,
 			byte(b.bitContainer),
 			byte(b.bitContainer>>8),
@@ -75,48 +99,21 @@ func (b *bitWriter) flushAll() {
 			byte(b.bitContainer>>24),
 			byte(b.bitContainer>>32),
 			byte(b.bitContainer>>40),
-		)
-	case 5:
-		b.out = append(b.out,
-			byte(b.bitContainer),
-			byte(b.bitContainer>>8),
-			byte(b.bitContainer>>16),
-			byte(b.bitContainer>>24),
-			byte(b.bitContainer>>32),
-		)
-	case 4:
-		b.out = append(b.out,
-			byte(b.bitContainer),
-			byte(b.bitContainer>>8),
-			byte(b.bitContainer>>16),
-			byte(b.bitContainer>>24),
-		)
-	case 3:
-		b.out = append(b.out,
-			byte(b.bitContainer),
-			byte(b.bitContainer>>8),
-			byte(b.bitContainer>>16),
-		)
-	case 2:
-		b.out = append(b.out,
-			byte(b.bitContainer),
-			byte(b.bitContainer>>8),
-		)
-	case 1:
-		b.out = append(b.out,
-			byte(b.bitContainer),
+			byte(b.bitContainer>>48),
+			byte(b.bitContainer>>56),
 		)
 	default:
 		panic(fmt.Errorf("bits (%d) > 64", b.nBits))
-	case 0:
 	}
 	b.bitContainer >>= v << 3
 	b.nBits &= 7
 }
 
-// flush32 will flush out 32 bits.
-// There must be at least 32 bits stored.
+// flush32 will flush out, so there are at least 32 bits available for writing.
 func (b *bitWriter) flush32() {
+	if b.nBits < 32 {
+		return
+	}
 	b.out = append(b.out,
 		byte(b.bitContainer),
 		byte(b.bitContainer>>8),

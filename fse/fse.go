@@ -526,7 +526,7 @@ func (c *cState) encode(symbolTT symbolTransform) {
 }
 
 func (c *cState) flush(tableLog uint8) {
-	c.bw.flush()
+	c.bw.flush32()
 	c.bw.addBits16NC(c.state, tableLog)
 	c.bw.flushAlign()
 }
@@ -556,9 +556,10 @@ func (s *Scratch) compress(src []byte) error {
 	}
 
 	for ip >= 4 {
-		s.bw.flushAll()
+		s.bw.flush32()
 		c2.encode(tt[src[ip]])
 		c1.encode(tt[src[ip-1]])
+		s.bw.flush32()
 		c2.encode(tt[src[ip-2]])
 		c1.encode(tt[src[ip-3]])
 		ip -= 4
