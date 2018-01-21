@@ -4,7 +4,7 @@ import "fmt"
 
 type bitWriter struct {
 	bitContainer uint64
-	nBits        uint
+	nBits        uint8
 	out          []byte
 }
 
@@ -24,16 +24,16 @@ var bitMask16 = [32]uint16{
 	0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 	0xFFFF, 0xFFFF} /* up to 16 bits */
 
-func (b *bitWriter) addBits(value uint32, bits uint) {
+func (b *bitWriter) addBits(value uint32, bits uint8) {
 	if b.nBits+bits >= 64 {
 		b.flush32()
 	}
-	b.bitContainer |= uint64(value&bitMask32[bits]) << b.nBits
+	b.bitContainer |= uint64(value&bitMask32[bits]) << (b.nBits & 63)
 	b.nBits += bits
 }
 
-func (b *bitWriter) addBits16NC(value uint16, bits uint) {
-	b.bitContainer |= uint64(value&bitMask16[bits&31]) << b.nBits
+func (b *bitWriter) addBits16NC(value uint16, bits uint8) {
+	b.bitContainer |= uint64(value&bitMask16[bits&31]) << (b.nBits & 63)
 	b.nBits += bits
 }
 
@@ -130,7 +130,7 @@ func (b *bitWriter) flush32() {
 // May leave bits.
 func (b *bitWriter) flushAlign() {
 	nbBytes := b.nBits >> 3
-	for i := uint(0); i < nbBytes; i++ {
+	for i := uint8(0); i < nbBytes; i++ {
 		b.out = append(b.out, byte(b.bitContainer))
 	}
 	b.nBits &= 7

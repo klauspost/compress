@@ -482,14 +482,12 @@ func (s *Scratch) buildCTable() error {
 				symbolTT[i].deltaNbBits = tl
 				symbolTT[i].deltaFindState = int32(total - 1)
 				total++
-				//fmt.Println(i, symbolTT[i])
 			default:
 				maxBitsOut := uint32(tableLog) - highBits(uint32(v-1))
 				minStatePlus := uint32(v) << maxBitsOut
 				symbolTT[i].deltaNbBits = (maxBitsOut << 16) - minStatePlus
 				symbolTT[i].deltaFindState = int32(total - v)
 				total += v
-				//fmt.Println(i, symbolTT[i])
 			}
 		}
 		if total != int16(tableSize) {
@@ -510,11 +508,11 @@ type cState struct {
 	state      uint16
 }
 
-func (c *cState) init(bw *bitWriter, ct *cTable, tableLog, firstSymbol byte) {
+func (c *cState) init(bw *bitWriter, ct *cTable, tableLog, first byte) {
 	c.bw = bw
 	c.stateTable = ct.stateTable
 	c.symbolTT = ct.symbolTT
-	symbolTT := ct.symbolTT[firstSymbol]
+	symbolTT := ct.symbolTT[first]
 
 	nbBitsOut := (symbolTT.deltaNbBits + (1 << 15)) >> 16
 	im := int32((nbBitsOut << 16) - symbolTT.deltaNbBits)
@@ -526,20 +524,12 @@ func (c *cState) init(bw *bitWriter, ct *cTable, tableLog, firstSymbol byte) {
 func (c *cState) encode(symbol byte) {
 	symbolTT := c.symbolTT[symbol]
 	nbBitsOut := (uint32(c.state) + symbolTT.deltaNbBits) >> 16
-	dstState := int32(c.state>>nbBitsOut) + symbolTT.deltaFindState
-	c.bw.addBits16NC(c.state, uint(nbBitsOut))
+	dstState := int32(c.state>>(nbBitsOut&15)) + symbolTT.deltaFindState
+	c.bw.addBits16NC(c.state, uint8(nbBitsOut))
 	c.state = c.stateTable[dstState]
-
-	/*
-		if c.cheatTS != nil && c.cheatTS[c.state&uint16(c.mask)] != symbol {
-			fmt.Println("instate:", inState, "symbol:", symbol, "symbolTT:", symbolTT, "nbitsOut:", nbBitsOut, "dst:", c.state)
-			fmt.Printf("ERROR: new state does not give expected symbol (got %d, want %d)\n", c.cheatTS[c.state&uint16(c.mask)], symbol)
-		}
-	*/
-	return
 }
 
-func (c *cState) flush(tableLog uint) {
+func (c *cState) flush(tableLog uint8) {
 	c.bw.flush()
 	c.bw.addBits16NC(c.state, tableLog)
 	c.bw.flushAlign()
@@ -576,8 +566,8 @@ func (s *Scratch) compress(src []byte) error {
 		c1.encode(src[ip-3])
 		ip -= 4
 	}
-	c2.flush(uint(s.actualTableLog))
-	c1.flush(uint(s.actualTableLog))
+	c2.flush(s.actualTableLog)
+	c1.flush(s.actualTableLog)
 	return s.bw.close()
 }
 
