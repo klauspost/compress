@@ -403,9 +403,9 @@ func (s *Scratch) allocCtable() {
 	s.ct.stateTable = s.ct.stateTable[:ctSize]
 
 	if cap(s.ct.symbolTT) < int(s.symbolLen) {
-		s.ct.symbolTT = make([]symbolTransform, s.symbolLen)
+		s.ct.symbolTT = make([]symbolTransform, 256)
 	}
-	s.ct.symbolTT = s.ct.symbolTT[:s.symbolLen]
+	s.ct.symbolTT = s.ct.symbolTT[:256]
 }
 
 func (s *Scratch) buildCTable() error {
@@ -472,7 +472,7 @@ func (s *Scratch) buildCTable() error {
 	// Build Symbol Transformation Table
 	{
 		total := int16(0)
-		symbolTT := s.ct.symbolTT
+		symbolTT := s.ct.symbolTT[:s.symbolLen]
 		tableLog := s.actualTableLog
 		tl := (uint32(tableLog) << 16) - (1 << tableLog)
 		for i, v := range s.norm[:s.symbolLen] {
@@ -504,25 +504,21 @@ func tableStep(tableSize uint32) uint32 {
 type cState struct {
 	bw         *bitWriter
 	stateTable []uint16
-	symbolTT   []symbolTransform
 	state      uint16
 }
 
-func (c *cState) init(bw *bitWriter, ct *cTable, tableLog, first byte) {
+func (c *cState) init(bw *bitWriter, ct *cTable, tableLog uint8, first symbolTransform) {
 	c.bw = bw
 	c.stateTable = ct.stateTable
-	c.symbolTT = ct.symbolTT
-	symbolTT := ct.symbolTT[first]
 
-	nbBitsOut := (symbolTT.deltaNbBits + (1 << 15)) >> 16
-	im := int32((nbBitsOut << 16) - symbolTT.deltaNbBits)
-	lu := (im >> nbBitsOut) + symbolTT.deltaFindState
+	nbBitsOut := (first.deltaNbBits + (1 << 15)) >> 16
+	im := int32((nbBitsOut << 16) - first.deltaNbBits)
+	lu := (im >> nbBitsOut) + first.deltaFindState
 	c.state = c.stateTable[lu]
 	return
 }
 
-func (c *cState) encode(symbol byte) {
-	symbolTT := c.symbolTT[symbol]
+func (c *cState) encode(symbolTT symbolTransform) {
 	nbBitsOut := (uint32(c.state) + symbolTT.deltaNbBits) >> 16
 	dstState := int32(c.state>>(nbBitsOut&15)) + symbolTT.deltaFindState
 	c.bw.addBits16NC(c.state, uint8(nbBitsOut))
@@ -539,31 +535,32 @@ func (s *Scratch) compress(src []byte) error {
 	if len(src) <= 2 {
 		return errors.New("compress: src too small")
 	}
+	tt := s.ct.symbolTT[:256]
 	s.bw.reset(s.Out)
 	var c1, c2 cState
 	ip := len(src) - 1
 	if len(src)&1 == 1 {
-		c1.init(&s.bw, &s.ct, s.actualTableLog, src[ip])
-		c2.init(&s.bw, &s.ct, s.actualTableLog, src[ip-1])
-		c1.encode(src[ip-2])
+		c1.init(&s.bw, &s.ct, s.actualTableLog, tt[src[ip]])
+		c2.init(&s.bw, &s.ct, s.actualTableLog, tt[src[ip-1]])
+		c1.encode(tt[src[ip-2]])
 		ip -= 3
 	} else {
-		c2.init(&s.bw, &s.ct, s.actualTableLog, src[ip])
-		c1.init(&s.bw, &s.ct, s.actualTableLog, src[ip-1])
+		c2.init(&s.bw, &s.ct, s.actualTableLog, tt[src[ip]])
+		c1.init(&s.bw, &s.ct, s.actualTableLog, tt[src[ip-1]])
 		ip -= 2
 	}
 	if ip&2 != 0 {
-		c2.encode(src[ip])
-		c1.encode(src[ip-1])
+		c2.encode(tt[src[ip]])
+		c1.encode(tt[src[ip-1]])
 		ip -= 2
 	}
 
 	for ip >= 4 {
 		s.bw.flushAll()
-		c2.encode(src[ip])
-		c1.encode(src[ip-1])
-		c2.encode(src[ip-2])
-		c1.encode(src[ip-3])
+		c2.encode(tt[src[ip]])
+		c1.encode(tt[src[ip-1]])
+		c2.encode(tt[src[ip-2]])
+		c1.encode(tt[src[ip-3]])
 		ip -= 4
 	}
 	c2.flush(s.actualTableLog)
