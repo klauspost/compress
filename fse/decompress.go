@@ -187,7 +187,7 @@ func (s *Scratch) buildDtable() error {
 			symbol := v.symbol
 			nextState := symbolNext[symbol]
 			symbolNext[symbol] = nextState + 1
-			nBits := s.actualTableLog - uint8(bits.Len16(nextState))
+			nBits := s.actualTableLog - uint8(bits.Len16(nextState)) - 1
 			s.decTable[u].nbBits = nBits
 			s.decTable[u].newState = uint16((nextState << nBits) - uint16(tableSize))
 		}

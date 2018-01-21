@@ -2,15 +2,10 @@ package fse
 
 import (
 	"io/ioutil"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-)
-
-const (
-	digits = iota
-	twain
-	random
 )
 
 type inputFn func() ([]byte, error)
@@ -19,24 +14,29 @@ var testfiles = []struct {
 	name string
 	fn   inputFn
 }{
+	// gettysburg.txt is a small plain text.
+	{name: "gettysburg", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/gettysburg.txt") }},
 	// Digits is the digits of the irrational number e. Its decimal representation
 	// does not repeat, but there are only 10 possible digits, so it should be
 	// reasonably compressible.
-	digits: {name: "numbers", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/e.txt") }},
+	{name: "numbers", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/e.txt") }},
 	// Twain is Project Gutenberg's edition of Mark Twain's classic English novel.
-	twain: {name: "twain", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/Mark.Twain-Tom.Sawyer.txt") }},
+	{name: "twain", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/Mark.Twain-Tom.Sawyer.txt") }},
 	// Random bytes
-	random: {name: "random", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/sharnd.out") }},
+	{name: "random", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/sharnd.out") }},
+	// Low entropy
+	{name: "low-ent", fn: func() ([]byte, error) { return []byte(strings.Repeat("1221", 10000)), nil }},
+	// Super Low entropy
+	{name: "superlow-ent", fn: func() ([]byte, error) { return []byte(strings.Repeat("1", 10000) + strings.Repeat("2", 500)), nil }},
+	// Zero bytes
+	{name: "zeroes", fn: func() ([]byte, error) { return make([]byte, 10000), nil }},
 }
 
 func TestCompress(t *testing.T) {
-	for i := range testfiles {
-		var s Scratch
-		t.Run(testfiles[i].name, func(t *testing.T) {
-			if i == 0 {
-				return
-			}
-			buf0, err := testfiles[i].fn()
+	for _, test := range testfiles {
+		t.Run(test.name, func(t *testing.T) {
+			var s Scratch
+			buf0, err := test.fn()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -45,11 +45,10 @@ func TestCompress(t *testing.T) {
 				t.Error(err)
 			}
 			if b == nil {
-				t.Log("not compressible")
+				t.Log(test.name + ": not compressible")
 				return
 			}
-			t.Logf("%d -> %d bytes", len(buf0), len(b))
-			t.Logf("%v", b)
+			t.Logf("%s: %d -> %d bytes (%.2f:1)", test.name, len(buf0), len(b), float64(len(buf0))/float64(len(b)))
 		})
 	}
 }

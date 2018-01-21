@@ -1,5 +1,7 @@
 package fse
 
+import "fmt"
+
 type bitWriter struct {
 	bitContainer uint64
 	nBits        uint
@@ -39,6 +41,77 @@ func (b *bitWriter) flush() {
 	if b.nBits >= 32 {
 		b.flush32()
 	}
+}
+
+func (b *bitWriter) flushAll() {
+	v := b.nBits >> 3
+	switch v {
+	case 8:
+		b.out = append(b.out,
+			byte(b.bitContainer),
+			byte(b.bitContainer>>8),
+			byte(b.bitContainer>>16),
+			byte(b.bitContainer>>24),
+			byte(b.bitContainer>>32),
+			byte(b.bitContainer>>40),
+			byte(b.bitContainer>>48),
+			byte(b.bitContainer>>56),
+		)
+	case 7:
+		b.out = append(b.out,
+			byte(b.bitContainer),
+			byte(b.bitContainer>>8),
+			byte(b.bitContainer>>16),
+			byte(b.bitContainer>>24),
+			byte(b.bitContainer>>32),
+			byte(b.bitContainer>>40),
+			byte(b.bitContainer>>48),
+		)
+	case 6:
+		b.out = append(b.out,
+			byte(b.bitContainer),
+			byte(b.bitContainer>>8),
+			byte(b.bitContainer>>16),
+			byte(b.bitContainer>>24),
+			byte(b.bitContainer>>32),
+			byte(b.bitContainer>>40),
+		)
+	case 5:
+		b.out = append(b.out,
+			byte(b.bitContainer),
+			byte(b.bitContainer>>8),
+			byte(b.bitContainer>>16),
+			byte(b.bitContainer>>24),
+			byte(b.bitContainer>>32),
+		)
+	case 4:
+		b.out = append(b.out,
+			byte(b.bitContainer),
+			byte(b.bitContainer>>8),
+			byte(b.bitContainer>>16),
+			byte(b.bitContainer>>24),
+		)
+	case 3:
+		b.out = append(b.out,
+			byte(b.bitContainer),
+			byte(b.bitContainer>>8),
+			byte(b.bitContainer>>16),
+		)
+	case 2:
+		b.out = append(b.out,
+			byte(b.bitContainer),
+			byte(b.bitContainer>>8),
+		)
+	case 1:
+		b.out = append(b.out,
+			byte(b.bitContainer),
+		)
+	default:
+		panic(fmt.Errorf("bits (%d) > 64", b.nBits))
+	case 0:
+	}
+	b.bitContainer >>= v << 3
+	b.nBits &= 7
 }
 
 // flush32 will flush out 32 bits.

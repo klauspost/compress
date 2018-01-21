@@ -1,11 +1,10 @@
 package fse
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/bits"
-
-	"github.com/pkg/errors"
 )
 
 const (
@@ -17,13 +16,11 @@ const (
 	maxMemoryUsage     = 14
 	defaultMemoryUsage = 13
 
-	maxTableLog      = maxMemoryUsage - 2
-	maxTablesize     = 1 << maxTableLog
-	maxtablesizeMask = maxTablesize - 1
-	defaultTablelog  = defaultMemoryUsage - 2
-	minTablelog      = 5
-	maxSymbolValue   = 255
-	ctableSize       = 1 + (1 << (maxTableLog - 1)) + (maxSymbolValue + 1)
+	maxTableLog     = maxMemoryUsage - 2
+	maxTablesize    = 1 << maxTableLog
+	defaultTablelog = defaultMemoryUsage - 2
+	minTablelog     = 5
+	maxSymbolValue  = 255
 )
 
 type Scratch struct {
@@ -97,8 +94,8 @@ func (s *Scratch) countSimple(in []byte) (max int) {
 
 // minTableLog provides the minimum logSize to safely represent a distribution.
 func (s *Scratch) minTableLog() uint8 {
-	minBitsSrc := bits.Len32(uint32(s.length-1)) + 1
-	minBitsSymbols := bits.Len32(uint32(s.symbolLen-1)) + 2
+	minBitsSrc := highBits(uint32(s.length-1)) + 1
+	minBitsSymbols := highBits(uint32(s.symbolLen-1)) + 2
 	if minBitsSrc < minBitsSymbols {
 		return uint8(minBitsSrc)
 	}
@@ -109,7 +106,7 @@ func (s *Scratch) minTableLog() uint8 {
 func (s *Scratch) optimalTableLog() {
 	tableLog := s.TableLog
 	minBits := s.minTableLog()
-	maxBitsSrc := uint8(bits.Len32(uint32(s.length - 2)))
+	maxBitsSrc := uint8(highBits(uint32(s.length-1))) - 2
 	if maxBitsSrc < s.actualTableLog {
 		// Accuracy can be reduced
 		s.actualTableLog = maxBitsSrc
@@ -399,7 +396,7 @@ func (s *Scratch) allocCtable() {
 	}
 	s.ct.tableSymbol = s.ct.tableSymbol[:tableSize]
 
-	ctSize := 1 + tableSize
+	ctSize := tableSize
 	if cap(s.ct.stateTable) < ctSize {
 		s.ct.stateTable = make([]uint16, ctSize)
 	}
@@ -414,7 +411,7 @@ func (s *Scratch) allocCtable() {
 func (s *Scratch) buildCTable() error {
 	tableSize := uint32(1 << s.actualTableLog)
 	highThreshold := tableSize - 1
-	var cumul [maxSymbolValue + 2]int16
+	var cumul [maxSymbolValue + 1]int16
 
 	s.allocCtable()
 	tableSymbol := s.ct.tableSymbol[:tableSize]
@@ -422,14 +419,18 @@ func (s *Scratch) buildCTable() error {
 	{
 		cumul[0] = 0
 		for ui, v := range s.norm[:s.symbolLen] {
-			u := byte(ui)
-			if v == -1 { /* Low proba symbol */
+			u := byte(ui) // one less than reference
+			if v == -1 {
+				// Low proba symbol
 				cumul[u+1] = cumul[u] + 1
 				tableSymbol[highThreshold] = u
 				highThreshold--
 			} else {
 				cumul[u+1] = cumul[u] + v
 			}
+		}
+		if uint32(cumul[s.symbolLen]) != tableSize {
+			return fmt.Errorf("expected cumul[s.symbolLen-1] (%d) == tableSize-1 (%d)", cumul[s.symbolLen], tableSize)
 		}
 		cumul[s.symbolLen] = int16(tableSize) + 1
 	}
@@ -481,14 +482,14 @@ func (s *Scratch) buildCTable() error {
 				symbolTT[i].deltaNbBits = tl
 				symbolTT[i].deltaFindState = int32(total - 1)
 				total++
-				fmt.Println(i, symbolTT[i])
+				//fmt.Println(i, symbolTT[i])
 			default:
-				maxBitsOut := uint32(tableLog) - uint32(bits.Len16(uint16(v-1)))
+				maxBitsOut := uint32(tableLog) - highBits(uint32(v-1))
 				minStatePlus := uint32(v) << maxBitsOut
 				symbolTT[i].deltaNbBits = (maxBitsOut << 16) - minStatePlus
 				symbolTT[i].deltaFindState = int32(total - v)
 				total += v
-				fmt.Println(i, symbolTT[i])
+				//fmt.Println(i, symbolTT[i])
 			}
 		}
 		if total != int16(tableSize) {
@@ -503,10 +504,10 @@ func tableStep(tableSize uint32) uint32 {
 }
 
 type cState struct {
-	state      uint16 // Maybe int?
 	bw         *bitWriter
 	stateTable []uint16
 	symbolTT   []symbolTransform
+	state      uint16
 }
 
 func (c *cState) init(bw *bitWriter, ct *cTable, tableLog, firstSymbol byte) {
@@ -519,13 +520,23 @@ func (c *cState) init(bw *bitWriter, ct *cTable, tableLog, firstSymbol byte) {
 	im := int32((nbBitsOut << 16) - symbolTT.deltaNbBits)
 	lu := (im >> nbBitsOut) + symbolTT.deltaFindState
 	c.state = c.stateTable[lu]
+	return
 }
 
 func (c *cState) encode(symbol byte) {
 	symbolTT := c.symbolTT[symbol]
 	nbBitsOut := (uint32(c.state) + symbolTT.deltaNbBits) >> 16
+	dstState := int32(c.state>>nbBitsOut) + symbolTT.deltaFindState
 	c.bw.addBits16NC(c.state, uint(nbBitsOut))
-	c.state = c.stateTable[int32(c.state>>nbBitsOut)+symbolTT.deltaFindState]
+	c.state = c.stateTable[dstState]
+
+	/*
+		if c.cheatTS != nil && c.cheatTS[c.state&uint16(c.mask)] != symbol {
+			fmt.Println("instate:", inState, "symbol:", symbol, "symbolTT:", symbolTT, "nbitsOut:", nbBitsOut, "dst:", c.state)
+			fmt.Printf("ERROR: new state does not give expected symbol (got %d, want %d)\n", c.cheatTS[c.state&uint16(c.mask)], symbol)
+		}
+	*/
+	return
 }
 
 func (c *cState) flush(tableLog uint) {
@@ -558,10 +569,9 @@ func (s *Scratch) compress(src []byte) error {
 	}
 
 	for ip >= 4 {
-		s.bw.flush()
+		s.bw.flushAll()
 		c2.encode(src[ip])
 		c1.encode(src[ip-1])
-		s.bw.flush()
 		c2.encode(src[ip-2])
 		c1.encode(src[ip-3])
 		ip -= 4
@@ -569,6 +579,10 @@ func (s *Scratch) compress(src []byte) error {
 	c2.flush(uint(s.actualTableLog))
 	c1.flush(uint(s.actualTableLog))
 	return s.bw.close()
+}
+
+func highBits(val uint32) (n uint32) {
+	return uint32(bits.Len32(val) - 1)
 }
 
 func (s *Scratch) validateNorm() (err error) {
@@ -616,7 +630,8 @@ func Compress(in []byte, s *Scratch) ([]byte, error) {
 	maxCount := s.countSimple(in)
 	if maxCount == len(in) {
 		// One symbol, use RLE
-		// TODO: ???
+		// TODO: Indicate
+		return nil, nil
 	}
 	if maxCount == 1 || maxCount < (len(in)>>7) {
 		// Each symbol present maximum once or too well distributed.
