@@ -557,11 +557,12 @@ func (s *Scratch) compress(src []byte) error {
 
 	for ip >= 4 {
 		s.bw.flush32()
-		c2.encode(tt[src[ip]])
-		c1.encode(tt[src[ip-1]])
+		v3, v2, v1, v0 := src[ip-3], src[ip-2], src[ip-1], src[ip]
+		c2.encode(tt[v0])
+		c1.encode(tt[v1])
 		s.bw.flush32()
-		c2.encode(tt[src[ip-2]])
-		c1.encode(tt[src[ip-3]])
+		c2.encode(tt[v2])
+		c1.encode(tt[v3])
 		ip -= 4
 	}
 	c2.flush(s.actualTableLog)
