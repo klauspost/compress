@@ -506,6 +506,7 @@ type cState struct {
 	bw         *bitWriter
 	stateTable []uint16
 	state      uint16
+	debug      bool
 }
 
 func (c *cState) init(bw *bitWriter, ct *cTable, tableLog uint8, first symbolTransform) {
@@ -522,6 +523,9 @@ func (c *cState) init(bw *bitWriter, ct *cTable, tableLog uint8, first symbolTra
 func (c *cState) encode(symbolTT symbolTransform) {
 	nbBitsOut := (uint32(c.state) + symbolTT.deltaNbBits) >> 16
 	dstState := int32(c.state>>(nbBitsOut&15)) + symbolTT.deltaFindState
+	if c.debug {
+		fmt.Println(c.state&bitMask16[nbBitsOut], uint8(nbBitsOut))
+	}
 	c.bw.addBits16NC(c.state, uint8(nbBitsOut))
 	c.state = c.stateTable[dstState]
 }
@@ -529,7 +533,8 @@ func (c *cState) encode(symbolTT symbolTransform) {
 func (c *cState) flush(tableLog uint8) {
 	c.bw.flush32()
 	c.bw.addBits16NC(c.state, tableLog)
-	c.bw.flushAlign()
+	fmt.Println("final state: ", c.state&bitMask16[tableLog], tableLog)
+	c.bw.flush()
 }
 
 func (s *Scratch) compress(src []byte) error {
@@ -652,6 +657,9 @@ func Compress(in []byte, s *Scratch) ([]byte, error) {
 		return nil, err
 	}
 	s.Out = s.bw.out
-
+	// Check if we compressed.
+	if len(s.Out) > len(in) {
+		return nil, nil
+	}
 	return s.Out, nil
 }

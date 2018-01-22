@@ -128,7 +128,7 @@ func (b *bitWriter) flush32() {
 func (b *bitWriter) flushAlign() {
 	nbBytes := b.nBits >> 3
 	for i := uint8(0); i < nbBytes; i++ {
-		b.out = append(b.out, byte(b.bitContainer))
+		b.out = append(b.out, byte(b.bitContainer>>(i*8)))
 	}
 	b.nBits &= 7
 	b.bitContainer >>= nbBytes * 8

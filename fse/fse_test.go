@@ -102,7 +102,7 @@ func TestReadNCount(t *testing.T) {
 			t.Logf(name+"%d -> %d bytes", len(buf0), len(b))
 			//t.Logf("%v", b)
 			var s2 Scratch
-			_, err = Decompress(b, &s2)
+			dc, err := Decompress(b, &s2)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -117,6 +117,23 @@ func TestReadNCount(t *testing.T) {
 				}
 				t.Errorf(name+"norm table, got delta: \n%s", cmp.Diff(want, got))
 				return
+			}
+			if dc != nil {
+				if len(buf0) != len(dc) {
+					t.Errorf(name+"decompressed, want size: %d, got %d", len(buf0), len(dc))
+					if len(buf0) > len(dc) {
+						buf0 = buf0[:len(dc)]
+					} else {
+						dc = dc[:len(buf0)]
+					}
+					if !cmp.Equal(buf0[:256], dc[:256]) {
+						t.Errorf(name+"decompressed, got delta: \n%s", cmp.Diff(buf0[:256], dc[:256]))
+					}
+					return
+				}
+				if !cmp.Equal(buf0, dc) {
+					t.Errorf(name+"decompressed, got delta: \n%s", cmp.Diff(buf0, dc))
+				}
 			}
 		})
 	}

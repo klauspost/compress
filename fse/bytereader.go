@@ -17,6 +17,11 @@ func (b byteReader) Int32() int32 {
 	return (v3 << 24) | (v2 << 16) | (v1 << 8) | v0
 }
 
+// unread() returns the unread portion of the input.
+func (b byteReader) unread() []byte {
+	return b.b[b.off:]
+}
+
 func (b byteReader) remain() int {
 	return len(b.b) - b.off
 }

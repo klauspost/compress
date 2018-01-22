@@ -3,7 +3,6 @@ package fse
 import (
 	"errors"
 	"fmt"
-	"math/bits"
 )
 
 const (
@@ -145,18 +144,18 @@ func (s *Scratch) buildDtable() error {
 	s.allocDtable()
 	var symbolNext [maxSymbolValue + 1]uint16
 	// Init, lay down lowprob symbols
-	//fastMode := true
+	s.decFast = true
 	{
-		//largeLimit := int16(1 << (s.actualTableLog - 1))
+		largeLimit := int16(1 << (s.actualTableLog - 1))
 		for i, v := range s.norm[:s.symbolLen] {
 			if v == -1 {
 				s.decTable[highThreshold].symbol = uint8(i)
 				highThreshold--
 				symbolNext[i] = 1
 			} else {
-				/*			if v >= largeLimit {
-							fastMode = false
-						}*/
+				if v >= largeLimit {
+					s.decFast = false
+				}
 				symbolNext[i] = uint16(v)
 			}
 		}
@@ -177,8 +176,9 @@ func (s *Scratch) buildDtable() error {
 			}
 		}
 		if position != 0 {
+			// position must reach all cells once, otherwise normalizedCounter is incorrect
 			return errors.New("corrupted input (position != 0)")
-		} /* position must reach all cells once, otherwise normalizedCounter is incorrect */
+		}
 	}
 
 	// Build Decoding table
@@ -187,15 +187,35 @@ func (s *Scratch) buildDtable() error {
 			symbol := v.symbol
 			nextState := symbolNext[symbol]
 			symbolNext[symbol] = nextState + 1
-			nBits := s.actualTableLog - uint8(bits.Len16(nextState)) - 1
+			nBits := s.actualTableLog - byte(highBits(uint32(nextState)))
 			s.decTable[u].nbBits = nBits
-			s.decTable[u].newState = uint16((nextState << nBits) - uint16(tableSize))
+			s.decTable[u].newState = (nextState << nBits) - uint16(tableSize)
 		}
 	}
 	return nil
 }
 
 func (s *Scratch) decompress() error {
+	// TODO: add version with fast bit getter.
+	// We lose inlining, if we do it dynamically
+
+	var br bitReader
+	br.init(s.br.unread())
+
+	var s1, s2 decoder
+	s1.init(&br, s.decTable, s.actualTableLog)
+	s2.init(&br, s.decTable, s.actualTableLog)
+
+	// Main part
+	for br.off != 0 {
+		br.fill()
+		s.Out = append(s.Out, s1.next(), s2.next())
+	}
+	// Final bits, a bit more expensive check
+	for !br.finished() {
+		br.fill()
+		s.Out = append(s.Out, s1.next(), s2.next())
+	}
 	return nil
 }
 
@@ -205,8 +225,18 @@ type decoder struct {
 	dt    []decSymbol
 }
 
-func (d *decoder) init(in *bitReader) {
+func (d *decoder) init(in *bitReader, dt []decSymbol, tableLog uint8) {
+	d.dt = dt
 	d.br = in
+	d.state = uint16(in.getBits(tableLog))
+	fmt.Println("first state: ", d.state&bitMask16[tableLog], tableLog)
+}
+
+func (d *decoder) next() uint8 {
+	n := d.dt[d.state]
+	lowBits := d.br.getBits(n.nbBits)
+	d.state = n.newState + lowBits
+	return n.symbol
 }
 
 func Decompress(b []byte, s *Scratch) ([]byte, error) {
@@ -214,9 +244,19 @@ func Decompress(b []byte, s *Scratch) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.Out = s.Out[:0]
 	err = s.readNCount()
 	if err != nil {
 		return nil, err
 	}
-	return nil, s.buildDtable()
+	err = s.buildDtable()
+	if err != nil {
+		return nil, err
+	}
+	err = s.decompress()
+	if err != nil {
+		return nil, err
+	}
+
+	return s.Out, nil
 }
