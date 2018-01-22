@@ -24,14 +24,6 @@ var bitMask16 = [32]uint16{
 	0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 	0xFFFF, 0xFFFF} /* up to 16 bits */
 
-func (b *bitWriter) addBits(value uint32, bits uint8) {
-	if b.nBits+bits >= 64 {
-		b.flush32()
-	}
-	b.bitContainer |= uint64(value&bitMask32[bits]) << (b.nBits & 63)
-	b.nBits += bits
-}
-
 func (b *bitWriter) addBits16NC(value uint16, bits uint8) {
 	b.bitContainer |= uint64(value&bitMask16[bits&31]) << (b.nBits & 63)
 	b.nBits += bits
@@ -124,19 +116,19 @@ func (b *bitWriter) flush32() {
 }
 
 // flushAlign will flush remaining full bytes and align to byte boundary.
-// May leave bits.
 func (b *bitWriter) flushAlign() {
-	nbBytes := b.nBits >> 3
+	nbBytes := (b.nBits + 7) >> 3
 	for i := uint8(0); i < nbBytes; i++ {
 		b.out = append(b.out, byte(b.bitContainer>>(i*8)))
 	}
-	b.nBits &= 7
-	b.bitContainer >>= nbBytes * 8
+	b.nBits = 0
+	b.bitContainer = 0
 }
 
 func (b *bitWriter) close() error {
 	// End mark
-	b.addBits(1, 1)
+	b.addBits16NC(1, 1)
+	// flush until next byte.
 	b.flushAlign()
 	return nil
 }

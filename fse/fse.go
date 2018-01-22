@@ -533,7 +533,6 @@ func (c *cState) encode(symbolTT symbolTransform) {
 func (c *cState) flush(tableLog uint8) {
 	c.bw.flush32()
 	c.bw.addBits16NC(c.state, tableLog)
-	fmt.Println("final state: ", c.state&bitMask16[tableLog], tableLog)
 	c.bw.flush()
 }
 

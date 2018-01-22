@@ -1,8 +1,9 @@
 package fse
 
 import (
-	"fmt"
+	"errors"
 	"io"
+	"math/bits"
 )
 
 // bitReader reads a bitstream in reverse.
@@ -15,14 +16,23 @@ type bitReader struct {
 
 // init initializes and resets the bitreader.
 //
-func (b *bitReader) init(in []byte) {
+func (b *bitReader) init(in []byte) error {
+	if len(in) < 1 {
+		return errors.New("corrupt stream: too short")
+	}
 	b.in = in
 	b.off = uint(len(in))
+	// The highest bit of the last byte indicates where to start
+	v := in[len(in)-1]
+	if v == 0 {
+		return errors.New("corrupt stream, did not find end of stream")
+	}
 	b.bitsRead = 64
 	b.value = 0
 	b.fill()
 	b.fill()
-	fmt.Println("first bytes: ", uint8(b.value<<56), uint8(b.value<<48))
+	b.bitsRead += 9 - uint8(bits.Len32(uint32(v)))
+	return nil
 }
 
 // getBits will return n bits.
@@ -39,7 +49,6 @@ func (b *bitReader) getBits(n uint8) uint16 {
 func (b *bitReader) getBitsFast(n uint8) uint16 {
 	const regMask = 64 - 1
 	v := uint16((b.value << (b.bitsRead & regMask)) >> (((regMask + 1) - n) & regMask))
-	//v := uint16((b.value << (b.bitsRead)) >> (((regMask + 1) - n)))
 	b.bitsRead += n
 	return v
 }
@@ -50,8 +59,8 @@ func (b *bitReader) fill() {
 		return
 	}
 	if b.off > 4 {
-		b.value = (b.value << 32) | (uint64(b.in[b.off-1]) << 24) | (uint64(b.in[b.off-2]) << 16) | (uint64(b.in[b.off-3]) << 8) | (uint64(b.in[b.off-4]) << 8)
-		b.bitsRead &= 31
+		b.value = (b.value << 32) | (uint64(b.in[b.off-1]) << 24) | (uint64(b.in[b.off-2]) << 16) | (uint64(b.in[b.off-3]) << 8) | uint64(b.in[b.off-4])
+		b.bitsRead -= 32
 		b.off -= 4
 		return
 	}

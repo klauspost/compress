@@ -198,7 +198,6 @@ func (s *Scratch) buildDtable() error {
 func (s *Scratch) decompress() error {
 	// TODO: add version with fast bit getter.
 	// We lose inlining, if we do it dynamically
-
 	var br bitReader
 	br.init(s.br.unread())
 
@@ -229,7 +228,6 @@ func (d *decoder) init(in *bitReader, dt []decSymbol, tableLog uint8) {
 	d.dt = dt
 	d.br = in
 	d.state = uint16(in.getBits(tableLog))
-	fmt.Println("first state: ", d.state&bitMask16[tableLog], tableLog)
 }
 
 func (d *decoder) next() uint8 {

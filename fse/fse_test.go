@@ -118,6 +118,14 @@ func TestReadNCount(t *testing.T) {
 				t.Errorf(name+"norm table, got delta: \n%s", cmp.Diff(want, got))
 				return
 			}
+			for i, dec := range s2.decTable {
+				dd := dec.symbol
+				ee := s.ct.tableSymbol[i]
+				if dd != ee {
+					t.Errorf("table symbol mismatch. idx %d, enc: %v, dec:%v", i, ee, dd)
+					break
+				}
+			}
 			if dc != nil {
 				if len(buf0) != len(dc) {
 					t.Errorf(name+"decompressed, want size: %d, got %d", len(buf0), len(dc))
@@ -126,8 +134,8 @@ func TestReadNCount(t *testing.T) {
 					} else {
 						dc = dc[:len(buf0)]
 					}
-					if !cmp.Equal(buf0[:256], dc[:256]) {
-						t.Errorf(name+"decompressed, got delta: \n%s", cmp.Diff(buf0[:256], dc[:256]))
+					if !cmp.Equal(buf0[:16], dc[:16]) {
+						t.Errorf(name+"decompressed, got delta: %v != %v\n", buf0[:16], dc[:16])
 					}
 					return
 				}
