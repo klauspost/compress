@@ -32,6 +32,7 @@ type Scratch struct {
 	symbolLen      uint16
 	actualTableLog uint8
 	br             byteReader
+	bits           bitReader
 	bw             bitWriter
 	ct             cTable
 	decTable       []decSymbol

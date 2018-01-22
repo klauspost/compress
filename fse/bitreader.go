@@ -48,7 +48,7 @@ func (b *bitReader) getBits(n uint8) uint16 {
 // getBitsFast requires that at least one bit is requested every time.
 func (b *bitReader) getBitsFast(n uint8) uint16 {
 	const regMask = 64 - 1
-	v := uint16((b.value << (b.bitsRead & regMask)) >> (((regMask + 1) - n) & regMask))
+	v := uint16((b.value << (b.bitsRead & regMask)) >> ((regMask + 1 - n) & regMask))
 	b.bitsRead += n
 	return v
 }

@@ -196,24 +196,34 @@ func (s *Scratch) buildDtable() error {
 }
 
 func (s *Scratch) decompress() error {
-	// TODO: add version with fast bit getter.
-	// We lose inlining, if we do it dynamically
-	var br bitReader
+	br := &s.bits
 	br.init(s.br.unread())
 
 	var s1, s2 decoder
-	s1.init(&br, s.decTable, s.actualTableLog)
-	s2.init(&br, s.decTable, s.actualTableLog)
+	s1.init(br, s.decTable, s.actualTableLog)
+	s2.init(br, s.decTable, s.actualTableLog)
 
 	// Main part
-	for br.off >= 8 {
-		br.fillFast()
-		v0 := s1.next()
-		v1 := s2.next()
-		br.fillFast()
-		v2 := s1.next()
-		v3 := s2.next()
-		s.Out = append(s.Out, v0, v1, v2, v3)
+	if s.decFast {
+		for br.off >= 8 {
+			br.fillFast()
+			v0 := s1.nextFast()
+			v1 := s2.nextFast()
+			br.fillFast()
+			v2 := s1.nextFast()
+			v3 := s2.nextFast()
+			s.Out = append(s.Out, v0, v1, v2, v3)
+		}
+	} else {
+		for br.off >= 8 {
+			br.fillFast()
+			v0 := s1.next()
+			v1 := s2.next()
+			br.fillFast()
+			v2 := s1.next()
+			v3 := s2.next()
+			s.Out = append(s.Out, v0, v1, v2, v3)
+		}
 	}
 	// Final bits, a bit more expensive check
 	for {
@@ -231,6 +241,7 @@ func (s *Scratch) decompress() error {
 			}
 		}
 	}
+	br.in = nil
 	return nil
 }
 
@@ -249,6 +260,13 @@ func (d *decoder) init(in *bitReader, dt []decSymbol, tableLog uint8) {
 func (d *decoder) next() uint8 {
 	n := &d.dt[d.state]
 	lowBits := d.br.getBits(n.nbBits)
+	d.state = n.newState + lowBits
+	return n.symbol
+}
+
+func (d *decoder) nextFast() uint8 {
+	n := &d.dt[d.state]
+	lowBits := d.br.getBitsFast(n.nbBits)
 	d.state = n.newState + lowBits
 	return n.symbol
 }
