@@ -39,7 +39,7 @@ func (b *bitReader) init(in []byte) error {
 func (b *bitReader) getBits(n uint8) uint16 {
 	const regMask = 64 - 1
 	// attempt using Go built-in shift check.... Probably slower.
-	// return uint16((b.value << (b.bitsRead & regMask)) >> (regMask - n))
+	//v := uint16((b.value << (b.bitsRead & regMask)) >> ((regMask + 1) - n))
 	v := uint16(((b.value << (b.bitsRead & regMask)) >> 1) >> ((regMask - n) & regMask))
 	b.bitsRead += n
 	return v
@@ -51,6 +51,17 @@ func (b *bitReader) getBitsFast(n uint8) uint16 {
 	v := uint16((b.value << (b.bitsRead & regMask)) >> (((regMask + 1) - n) & regMask))
 	b.bitsRead += n
 	return v
+}
+
+// fillFast() will make sure at least 32 bits are available.
+// There must be at least 4 bytes available.
+func (b *bitReader) fillFast() {
+	if b.bitsRead < 32 {
+		return
+	}
+	b.value = (b.value << 32) | (uint64(b.in[b.off-1]) << 24) | (uint64(b.in[b.off-2]) << 16) | (uint64(b.in[b.off-3]) << 8) | uint64(b.in[b.off-4])
+	b.bitsRead -= 32
+	b.off -= 4
 }
 
 // fill() will make sure at least 32 bits are available.

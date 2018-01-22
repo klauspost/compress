@@ -206,12 +206,18 @@ func (s *Scratch) decompress() error {
 	s2.init(&br, s.decTable, s.actualTableLog)
 
 	// Main part
-	for br.off != 0 {
-		br.fill()
-		s.Out = append(s.Out, s1.next(), s2.next())
+	for br.off >= 8 {
+		br.fillFast()
+		v0 := s1.next()
+		v1 := s2.next()
+		br.fillFast()
+		v2 := s1.next()
+		v3 := s2.next()
+		s.Out = append(s.Out, v0, v1, v2, v3)
 	}
 	// Final bits, a bit more expensive check
 	for {
+		br.fill()
 		s.Out = append(s.Out, s1.next())
 		if br.finished() {
 			s.Out = append(s.Out, s2.next(), s1.next())
@@ -241,7 +247,7 @@ func (d *decoder) init(in *bitReader, dt []decSymbol, tableLog uint8) {
 }
 
 func (d *decoder) next() uint8 {
-	n := d.dt[d.state]
+	n := &d.dt[d.state]
 	lowBits := d.br.getBits(n.nbBits)
 	d.state = n.newState + lowBits
 	return n.symbol

@@ -149,3 +149,31 @@ func TestReadNCount(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkDecompress(b *testing.B) {
+	for _, tt := range testfiles {
+		test := tt
+		b.Run(test.name, func(b *testing.B) {
+			var s, s2 Scratch
+			buf0, err := test.fn()
+			if err != nil {
+				b.Fatal(err)
+			}
+			out, err := Compress(buf0, &s)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if out == nil {
+				b.Skip(test.name + ": not compressible")
+				return
+			}
+			_, _ = Decompress(out, &s2)
+			b.ResetTimer()
+			b.ReportAllocs()
+			b.SetBytes(int64(len(buf0)))
+			for i := 0; i < b.N; i++ {
+				_, _ = Decompress(buf0, &s2)
+			}
+		})
+	}
+}
