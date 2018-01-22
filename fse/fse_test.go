@@ -99,7 +99,7 @@ func TestReadNCount(t *testing.T) {
 				t.Log(name + "not compressible")
 				return
 			}
-			t.Logf(name+"%d -> %d bytes", len(buf0), len(b))
+			t.Logf("%s: %d -> %d bytes (%.2f:1)", testfiles[i].name, len(buf0), len(b), float64(len(buf0))/float64(len(b)))
 			//t.Logf("%v", b)
 			var s2 Scratch
 			dc, err := Decompress(b, &s2)
@@ -135,12 +135,15 @@ func TestReadNCount(t *testing.T) {
 						dc = dc[:len(buf0)]
 					}
 					if !cmp.Equal(buf0[:16], dc[:16]) {
-						t.Errorf(name+"decompressed, got delta: %v != %v\n", buf0[:16], dc[:16])
+						t.Errorf(name+"decompressed, got delta: (in) %v != (out) %v\n", buf0[:16], dc[:16])
 					}
 					return
 				}
 				if !cmp.Equal(buf0, dc) {
 					t.Errorf(name+"decompressed, got delta: \n%s", cmp.Diff(buf0, dc))
+				}
+				if !t.Failed() {
+					t.Log("... roundtrip ok!")
 				}
 			}
 		})

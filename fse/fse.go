@@ -506,7 +506,6 @@ type cState struct {
 	bw         *bitWriter
 	stateTable []uint16
 	state      uint16
-	debug      bool
 }
 
 func (c *cState) init(bw *bitWriter, ct *cTable, tableLog uint8, first symbolTransform) {
@@ -523,9 +522,6 @@ func (c *cState) init(bw *bitWriter, ct *cTable, tableLog uint8, first symbolTra
 func (c *cState) encode(symbolTT symbolTransform) {
 	nbBitsOut := (uint32(c.state) + symbolTT.deltaNbBits) >> 16
 	dstState := int32(c.state>>(nbBitsOut&15)) + symbolTT.deltaFindState
-	if c.debug {
-		fmt.Println(c.state&bitMask16[nbBitsOut], uint8(nbBitsOut))
-	}
 	c.bw.addBits16NC(c.state, uint8(nbBitsOut))
 	c.state = c.stateTable[dstState]
 }
@@ -543,26 +539,26 @@ func (s *Scratch) compress(src []byte) error {
 	tt := s.ct.symbolTT[:256]
 	s.bw.reset(s.Out)
 	var c1, c2 cState
-	ip := len(src) - 1
-	if len(src)&1 == 1 {
-		c1.init(&s.bw, &s.ct, s.actualTableLog, tt[src[ip]])
-		c2.init(&s.bw, &s.ct, s.actualTableLog, tt[src[ip-1]])
-		c1.encode(tt[src[ip-2]])
+	ip := len(src)
+	if ip&1 == 1 {
+		c1.init(&s.bw, &s.ct, s.actualTableLog, tt[src[ip-1]])
+		c2.init(&s.bw, &s.ct, s.actualTableLog, tt[src[ip-2]])
+		c1.encode(tt[src[ip-3]])
 		ip -= 3
 	} else {
-		c2.init(&s.bw, &s.ct, s.actualTableLog, tt[src[ip]])
-		c1.init(&s.bw, &s.ct, s.actualTableLog, tt[src[ip-1]])
+		c2.init(&s.bw, &s.ct, s.actualTableLog, tt[src[ip-1]])
+		c1.init(&s.bw, &s.ct, s.actualTableLog, tt[src[ip-2]])
 		ip -= 2
 	}
 	if ip&2 != 0 {
-		c2.encode(tt[src[ip]])
-		c1.encode(tt[src[ip-1]])
+		c2.encode(tt[src[ip-1]])
+		c1.encode(tt[src[ip-2]])
 		ip -= 2
 	}
 
 	for ip >= 4 {
 		s.bw.flush32()
-		v3, v2, v1, v0 := src[ip-3], src[ip-2], src[ip-1], src[ip]
+		v3, v2, v1, v0 := src[ip-4], src[ip-3], src[ip-2], src[ip-1]
 		c2.encode(tt[v0])
 		c1.encode(tt[v1])
 		s.bw.flush32()
@@ -570,6 +566,7 @@ func (s *Scratch) compress(src []byte) error {
 		c1.encode(tt[v3])
 		ip -= 4
 	}
+
 	c2.flush(s.actualTableLog)
 	c1.flush(s.actualTableLog)
 	return s.bw.close()

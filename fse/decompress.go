@@ -211,9 +211,19 @@ func (s *Scratch) decompress() error {
 		s.Out = append(s.Out, s1.next(), s2.next())
 	}
 	// Final bits, a bit more expensive check
-	for !br.finished() {
-		br.fill()
-		s.Out = append(s.Out, s1.next(), s2.next())
+	for {
+		s.Out = append(s.Out, s1.next())
+		if br.finished() {
+			s.Out = append(s.Out, s2.next(), s1.next())
+			break
+		}
+		if !br.finished() {
+			s.Out = append(s.Out, s2.next())
+			if br.finished() {
+				s.Out = append(s.Out, s1.next(), s2.next())
+				break
+			}
+		}
 	}
 	return nil
 }
