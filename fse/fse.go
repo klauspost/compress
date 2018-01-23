@@ -109,14 +109,14 @@ func (s *Scratch) optimalTableLog() {
 	tableLog := s.TableLog
 	minBits := s.minTableLog()
 	maxBitsSrc := uint8(highBits(uint32(s.length-1))) - 2
-	if maxBitsSrc < s.actualTableLog {
+	if maxBitsSrc < tableLog {
 		// Accuracy can be reduced
-		s.actualTableLog = maxBitsSrc
+		tableLog = maxBitsSrc
 	}
 	if minBits > tableLog {
 		tableLog = minBits
 	}
-	/* Need a minimum to safely represent all symbol values */
+	// Need a minimum to safely represent all symbol values
 	if tableLog < minTablelog {
 		tableLog = minTablelog
 	}
