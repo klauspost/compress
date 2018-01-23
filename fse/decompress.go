@@ -136,13 +136,24 @@ func (s *Scratch) allocDtable() {
 		s.decTable = make([]decSymbol, tableSize)
 	}
 	s.decTable = s.decTable[:tableSize]
+
+	if cap(s.ct.tableSymbol) < 256 {
+		s.ct.tableSymbol = make([]byte, 256)
+	}
+	s.ct.tableSymbol = s.ct.tableSymbol[:256]
+
+	if cap(s.ct.stateTable) < 256 {
+		s.ct.stateTable = make([]uint16, 256)
+	}
+	s.ct.stateTable = s.ct.stateTable[:256]
 }
 
 func (s *Scratch) buildDtable() error {
 	tableSize := uint32(1 << s.actualTableLog)
 	highThreshold := tableSize - 1
 	s.allocDtable()
-	var symbolNext [maxSymbolValue + 1]uint16
+	symbolNext := s.ct.stateTable[:256]
+
 	// Init, lay down lowprob symbols
 	s.decFast = true
 	{
@@ -203,28 +214,41 @@ func (s *Scratch) decompress() error {
 	s1.init(br, s.decTable, s.actualTableLog)
 	s2.init(br, s.decTable, s.actualTableLog)
 
+	// Use temp table to avoid bound checks/append penalty.
+	var tmp = s.ct.tableSymbol[:256]
+	var off uint8
+
 	// Main part
 	if s.decFast {
 		for br.off >= 8 {
 			br.fillFast()
-			v0 := s1.nextFast()
-			v1 := s2.nextFast()
+			tmp[off+0] = s1.nextFast()
+			tmp[off+1] = s2.nextFast()
 			br.fillFast()
-			v2 := s1.nextFast()
-			v3 := s2.nextFast()
-			s.Out = append(s.Out, v0, v1, v2, v3)
+			tmp[off+2] = s1.nextFast()
+			tmp[off+3] = s2.nextFast()
+			off += 4
+			if off == 0 {
+				s.Out = append(s.Out, tmp...)
+			}
 		}
 	} else {
 		for br.off >= 8 {
 			br.fillFast()
-			v0 := s1.next()
-			v1 := s2.next()
+			tmp[off+0] = s1.next()
+			tmp[off+1] = s2.next()
 			br.fillFast()
-			v2 := s1.next()
-			v3 := s2.next()
-			s.Out = append(s.Out, v0, v1, v2, v3)
+			tmp[off+2] = s1.next()
+			tmp[off+3] = s2.next()
+			off += 4
+			if off == 0 {
+				s.Out = append(s.Out, tmp...)
+				off = 0
+			}
 		}
 	}
+	s.Out = append(s.Out, tmp[:off]...)
+
 	// Final bits, a bit more expensive check
 	for {
 		br.fill()

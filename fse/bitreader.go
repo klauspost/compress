@@ -59,7 +59,8 @@ func (b *bitReader) fillFast() {
 	if b.bitsRead < 32 {
 		return
 	}
-	b.value = (b.value << 32) | (uint64(b.in[b.off-1]) << 24) | (uint64(b.in[b.off-2]) << 16) | (uint64(b.in[b.off-3]) << 8) | uint64(b.in[b.off-4])
+	v := b.in[b.off-4 : b.off]
+	b.value = (b.value << 32) | (uint64(v[3]) << 24) | (uint64(v[2]) << 16) | (uint64(v[1]) << 8) | uint64(v[0])
 	b.bitsRead -= 32
 	b.off -= 4
 }
