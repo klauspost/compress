@@ -3,7 +3,6 @@ package fse
 import (
 	"errors"
 	"io"
-	"math/bits"
 )
 
 // bitReader reads a bitstream in reverse.
@@ -31,7 +30,7 @@ func (b *bitReader) init(in []byte) error {
 	b.value = 0
 	b.fill()
 	b.fill()
-	b.bitsRead += 9 - uint8(bits.Len32(uint32(v)))
+	b.bitsRead += 8 - uint8(highBits(uint32(v)))
 	return nil
 }
 
