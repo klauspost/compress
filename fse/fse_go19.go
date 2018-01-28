@@ -1,4 +1,5 @@
-//+build go1.9
+// +build go1.9
+
 package fse
 
 import "math/bits"
