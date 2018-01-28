@@ -125,6 +125,8 @@ func (b *bitWriter) flushAlign() {
 	b.bitContainer = 0
 }
 
+// close will write the alignment bit and write the final byte(s)
+// to the output.
 func (b *bitWriter) close() error {
 	// End mark
 	b.addBits16NC(1, 1)

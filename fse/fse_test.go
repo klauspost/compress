@@ -13,6 +13,7 @@ type inputFn func() ([]byte, error)
 var testfiles = []struct {
 	name string
 	fn   inputFn
+	err  error
 }{
 	// gettysburg.txt is a small plain text.
 	{name: "gettysburg", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/gettysburg.txt") }},
@@ -23,13 +24,13 @@ var testfiles = []struct {
 	// Twain is Project Gutenberg's edition of Mark Twain's classic English novel.
 	{name: "twain", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/Mark.Twain-Tom.Sawyer.txt") }},
 	// Random bytes
-	{name: "random", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/sharnd.out") }},
+	{name: "random", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/sharnd.out") }, err: ErrIncompressible},
 	// Low entropy
 	{name: "low-ent", fn: func() ([]byte, error) { return []byte(strings.Repeat("1221", 10000)), nil }},
 	// Super Low entropy
 	{name: "superlow-ent", fn: func() ([]byte, error) { return []byte(strings.Repeat("1", 10000) + strings.Repeat("2", 500)), nil }},
 	// Zero bytes
-	{name: "zeroes", fn: func() ([]byte, error) { return make([]byte, 10000), nil }},
+	{name: "zeroes", fn: func() ([]byte, error) { return make([]byte, 10000), nil }, err: ErrUseRLE},
 }
 
 func TestCompress(t *testing.T) {
@@ -41,8 +42,8 @@ func TestCompress(t *testing.T) {
 				t.Fatal(err)
 			}
 			b, err := Compress(buf0, &s)
-			if err != nil {
-				t.Error(err)
+			if err != test.err {
+				t.Errorf("want error %v (%T), got %v (%T)", test.err, test.err, err, err)
 			}
 			if b == nil {
 				t.Log(test.name + ": not compressible")
@@ -83,23 +84,23 @@ func BenchmarkCompress(b *testing.B) {
 func TestReadNCount(t *testing.T) {
 	for i := range testfiles {
 		var s Scratch
-		name := testfiles[i].name
-		t.Run(name, func(t *testing.T) {
-			name += ": "
+		test := testfiles[i]
+		t.Run(test.name, func(t *testing.T) {
+			name := test.name + ": "
 			buf0, err := testfiles[i].fn()
 			if err != nil {
 				t.Fatal(err)
 			}
 			b, err := Compress(buf0, &s)
-			if err != nil {
+			if err != test.err {
 				t.Error(err)
 				return
 			}
-			if b == nil {
-				t.Log(name + "not compressible")
+			if err != nil {
+				t.Skip(name + err.Error())
 				return
 			}
-			t.Logf("%s: %d -> %d bytes (%.2f:1)", testfiles[i].name, len(buf0), len(b), float64(len(buf0))/float64(len(b)))
+			t.Logf("%s: %d -> %d bytes (%.2f:1)", test.name, len(buf0), len(b), float64(len(buf0))/float64(len(b)))
 			//t.Logf("%v", b)
 			var s2 Scratch
 			dc, err := Decompress(b, &s2)
@@ -160,11 +161,11 @@ func BenchmarkDecompress(b *testing.B) {
 				b.Fatal(err)
 			}
 			out, err := Compress(buf0, &s)
-			if err != nil {
+			if err != test.err {
 				b.Fatal(err)
 			}
-			if out == nil {
-				b.Skip(test.name + ": not compressible")
+			if err != nil {
+				b.Skip(test.name + ": " + err.Error())
 				return
 			}
 			_, _ = Decompress(out, &s2)

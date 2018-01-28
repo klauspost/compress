@@ -9,6 +9,35 @@ const (
 	tablelogAbsoluteMax = 15
 )
 
+// Decompress a block of data.
+// You can provide a scratch buffer to avoid allocations.
+// If nil is provided a temporary one will be allocated.
+// It is possible, but by no way guaranteed that corrupt data will
+// return an error.
+// It is up to the caller to verify integrity of the returned data.
+func Decompress(b []byte, s *Scratch) ([]byte, error) {
+	s, err := s.prepare(b)
+	if err != nil {
+		return nil, err
+	}
+	s.Out = s.Out[:0]
+	err = s.readNCount()
+	if err != nil {
+		return nil, err
+	}
+	err = s.buildDtable()
+	if err != nil {
+		return nil, err
+	}
+	err = s.decompress()
+	if err != nil {
+		return nil, err
+	}
+
+	return s.Out, nil
+}
+
+// readNCount will read the symbol distribution so decoding tables can be constructed.
 func (s *Scratch) readNCount() error {
 	var (
 		charnum   byte
@@ -124,12 +153,16 @@ func (s *Scratch) readNCount() error {
 	return nil
 }
 
+// decSymbol contains information about a state entry,
+// Including the state offset base, the output symbol and
+// the number of bits to read for the low part of the destination state.
 type decSymbol struct {
 	newState uint16
 	symbol   uint8
 	nbBits   uint8
 }
 
+// allocDtable will allocate decoding tables if they are not big enough.
 func (s *Scratch) allocDtable() {
 	tableSize := 1 << s.actualTableLog
 	if cap(s.decTable) < int(tableSize) {
@@ -148,6 +181,7 @@ func (s *Scratch) allocDtable() {
 	s.ct.stateTable = s.ct.stateTable[:256]
 }
 
+// buildDtable will build the decoding table.
 func (s *Scratch) buildDtable() error {
 	tableSize := uint32(1 << s.actualTableLog)
 	highThreshold := tableSize - 1
@@ -206,6 +240,8 @@ func (s *Scratch) buildDtable() error {
 	return nil
 }
 
+// decompress will decompress the bitstream.
+// If the buffer is over-read an error is returned.
 func (s *Scratch) decompress() error {
 	br := &s.bits
 	br.init(s.br.unread())
@@ -254,19 +290,19 @@ func (s *Scratch) decompress() error {
 		br.fill()
 		s.Out = append(s.Out, s1.next())
 		if br.finished() {
-			s.Out = append(s.Out, s2.next(), s1.next())
+			s.Out = append(s.Out, s2.final(), s1.final())
 			break
 		}
 		if !br.finished() {
 			s.Out = append(s.Out, s2.next())
 			if br.finished() {
-				s.Out = append(s.Out, s1.next(), s2.next())
+				s.Out = append(s.Out, s1.final(), s2.final())
 				break
 			}
 		}
 	}
 	br.in = nil
-	return nil
+	return br.close()
 }
 
 type decoder struct {
@@ -275,12 +311,15 @@ type decoder struct {
 	dt    []decSymbol
 }
 
+// init will initialize the decoder and read the first state from the stream.
 func (d *decoder) init(in *bitReader, dt []decSymbol, tableLog uint8) {
 	d.dt = dt
 	d.br = in
 	d.state = uint16(in.getBits(tableLog))
 }
 
+// next returns the next symbol and sets the next state.
+// At least tablelog bits must be available in the bit reader.
 func (d *decoder) next() uint8 {
 	n := &d.dt[d.state]
 	lowBits := d.br.getBits(n.nbBits)
@@ -288,31 +327,17 @@ func (d *decoder) next() uint8 {
 	return n.symbol
 }
 
+// final returns the current state symbol and
+func (d *decoder) final() uint8 {
+	return d.dt[d.state].symbol
+}
+
+// nextFast returns the next symbol and sets the next state.
+// This can only be used if no symbols are 0 bits.
+// At least tablelog bits must be available in the bit reader.
 func (d *decoder) nextFast() uint8 {
-	n := &d.dt[d.state]
+	n := d.dt[d.state]
 	lowBits := d.br.getBitsFast(n.nbBits)
 	d.state = n.newState + lowBits
 	return n.symbol
-}
-
-func Decompress(b []byte, s *Scratch) ([]byte, error) {
-	s, err := s.prepare(b)
-	if err != nil {
-		return nil, err
-	}
-	s.Out = s.Out[:0]
-	err = s.readNCount()
-	if err != nil {
-		return nil, err
-	}
-	err = s.buildDtable()
-	if err != nil {
-		return nil, err
-	}
-	err = s.decompress()
-	if err != nil {
-		return nil, err
-	}
-
-	return s.Out, nil
 }
