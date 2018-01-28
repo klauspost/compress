@@ -3,7 +3,6 @@ package fse
 import (
 	"errors"
 	"fmt"
-	"math/bits"
 )
 
 const (
@@ -109,10 +108,7 @@ func (s *Scratch) prepare(in []byte) (*Scratch, error) {
 	return s, nil
 }
 
+// tableStep returns the next table index.
 func tableStep(tableSize uint32) uint32 {
 	return (tableSize >> 1) + (tableSize >> 3) + 3
-}
-
-func highBits(val uint32) (n uint32) {
-	return uint32(bits.Len32(val) - 1)
 }
