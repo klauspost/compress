@@ -2,7 +2,7 @@
 
 package fse
 
-const DeBruijnClz = [...]uint8{0, 9, 1, 10, 13, 21, 2, 29,
+var deBruijnClz = [...]uint8{0, 9, 1, 10, 13, 21, 2, 29,
 	11, 14, 16, 18, 22, 25, 3, 30,
 	8, 12, 20, 28, 15, 17, 24, 7,
 	19, 27, 23, 6, 26, 5, 4, 31}
@@ -14,5 +14,5 @@ func highBits(v uint32) (n uint32) {
 	v |= v >> 4
 	v |= v >> 8
 	v |= v >> 16
-	return uint32(DeBruijnClz[(v*0x07C4ACDD)>>27])
+	return uint32(deBruijnClz[(v*0x07C4ACDD)>>27])
 }
