@@ -64,12 +64,12 @@ func BenchmarkCompress(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			out, err := Compress(buf0, &s)
-			if err != nil {
-				b.Fatal(err)
+			_, err = Compress(buf0, &s)
+			if err != test.err {
+				b.Fatal("unexpected error:", err)
 			}
-			if out == nil {
-				b.Skip(test.name + ": not compressible")
+			if err != nil {
+				b.Skip("skipping benchmark: ", err)
 				return
 			}
 			b.ResetTimer()
