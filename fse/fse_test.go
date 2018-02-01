@@ -1,6 +1,7 @@
 package fse
 
 import (
+	"bytes"
 	"io/ioutil"
 	"strings"
 	"testing"
@@ -168,7 +169,13 @@ func BenchmarkDecompress(b *testing.B) {
 				b.Skip(test.name + ": " + err.Error())
 				return
 			}
-			_, _ = Decompress(out, &s2)
+			got, err := Decompress(out, &s2)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if !bytes.Equal(buf0, got) {
+				b.Fatal("output mismatch")
+			}
 			b.ResetTimer()
 			b.ReportAllocs()
 			b.SetBytes(int64(len(buf0)))
