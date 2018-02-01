@@ -173,7 +173,10 @@ func BenchmarkDecompress(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(buf0)))
 			for i := 0; i < b.N; i++ {
-				_, _ = Decompress(buf0, &s2)
+				_, err = Decompress(out, &s2)
+				if err != nil {
+					b.Fatal(err)
+				}
 			}
 		})
 	}
