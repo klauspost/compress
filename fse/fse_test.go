@@ -3,11 +3,10 @@ package fse
 import (
 	"bytes"
 	"io/ioutil"
-	"strings"
-	"testing"
-
 	"os"
 	"path/filepath"
+	"strings"
+	"testing"
 
 	"github.com/google/go-cmp/cmp"
 )
@@ -46,6 +45,18 @@ var testfiles = []struct {
 	{name: "pngdata.001", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/pngdata.bin") }, err: nil},
 }
 
+var decTestfiles = []struct {
+	name string
+	fn   inputFn
+	err  string
+}{
+	// gettysburg.txt is a small plain text.
+	{name: "hang1", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/dec-hang1.bin") }, err: "corruption detected (bitCount 252 > 32)"},
+	{name: "hang2", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/dec-hang2.bin") }, err: "newState (0) == oldState (0) and no bits"},
+	{name: "hang3", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/dec-hang3.bin") }, err: "maxSymbolValue too small"},
+	{name: "symlen1", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/dec-symlen1.bin") }, err: "symbolLen (257) too big"},
+}
+
 func TestCompress(t *testing.T) {
 	for _, test := range testfiles {
 		t.Run(test.name, func(t *testing.T) {
@@ -63,6 +74,31 @@ func TestCompress(t *testing.T) {
 				return
 			}
 			t.Logf("%s: %d -> %d bytes (%.2f:1)", test.name, len(buf0), len(b), float64(len(buf0))/float64(len(b)))
+		})
+	}
+}
+
+func TestDecompress(t *testing.T) {
+	for _, test := range decTestfiles {
+		t.Run(test.name, func(t *testing.T) {
+			var s Scratch
+			buf0, err := test.fn()
+			if err != nil {
+				t.Fatal(err)
+			}
+			b, err := Decompress(buf0, &s)
+			if err.Error() != test.err {
+				t.Errorf("want error %q (%T), got %q (%T)", test.err, test.err, err, err)
+				return
+			}
+			if err != nil {
+				return
+			}
+			if len(b) == 0 {
+				t.Error(test.name + ": no output")
+				return
+			}
+			t.Logf("%s: %d -> %d bytes (1:%.2f)", test.name, len(buf0), len(b), float64(len(buf0))/float64(len(b)))
 		})
 	}
 }

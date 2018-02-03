@@ -3,6 +3,7 @@ package fse
 import (
 	"errors"
 	"fmt"
+	"math"
 )
 
 const (
@@ -62,6 +63,11 @@ type Scratch struct {
 
 	// TableLog will attempt to override the tablelog for the next block.
 	TableLog uint8
+
+	// DecompressLimit limits the maximum decoded size acceptable.
+	// If > 0 decompression will stop when approximately this many bytes
+	// has been decoded.
+	DecompressLimit int
 }
 
 // Histogram allows to populate the histogram and skip that step in the compression,
@@ -104,6 +110,9 @@ func (s *Scratch) prepare(in []byte) (*Scratch, error) {
 	}
 	s.br.b = in
 	s.br.off = 0
+	if s.DecompressLimit == 0 {
+		s.DecompressLimit = math.MaxUint32
+	}
 
 	return s, nil
 }

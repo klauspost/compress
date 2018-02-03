@@ -40,7 +40,7 @@ func Decompress(b []byte, s *Scratch) ([]byte, error) {
 // readNCount will read the symbol distribution so decoding tables can be constructed.
 func (s *Scratch) readNCount() error {
 	var (
-		charnum   byte
+		charnum   uint16
 		previous0 bool
 		b         = s.br
 	)
@@ -48,7 +48,7 @@ func (s *Scratch) readNCount() error {
 	if iend < 4 {
 		return errors.New("input too small")
 	}
-	bitStream := b.Int32()
+	bitStream := b.Uint32()
 	nbBits := uint((bitStream & 0xF) + minTablelog) // extract tableLog
 	if nbBits > tablelogAbsoluteMax {
 		return errors.New("tableLog too large")
@@ -69,7 +69,7 @@ func (s *Scratch) readNCount() error {
 				n0 += 24
 				if b.off < iend-5 {
 					b.advance(2)
-					bitStream = b.Int32() >> bitCount
+					bitStream = b.Uint32() >> bitCount
 				} else {
 					bitStream >>= 16
 					bitCount += 16
@@ -80,20 +80,20 @@ func (s *Scratch) readNCount() error {
 				bitStream >>= 2
 				bitCount += 2
 			}
-			n0 += byte(bitStream & 3)
+			n0 += uint16(bitStream & 3)
 			bitCount += 2
 			if n0 > maxSymbolValue {
 				return errors.New("maxSymbolValue too small")
 			}
 			for charnum < n0 {
-				s.norm[charnum] = 0
+				s.norm[charnum&0xff] = 0
 				charnum++
 			}
 
 			if b.off <= iend-7 || b.off+int(bitCount>>3) <= iend-4 {
 				b.advance(bitCount >> 3)
 				bitCount &= 7
-				bitStream = b.Int32() >> bitCount
+				bitStream = b.Uint32() >> bitCount
 			} else {
 				bitStream >>= 2
 			}
@@ -102,11 +102,11 @@ func (s *Scratch) readNCount() error {
 		max := (2*(threshold) - 1) - (remaining)
 		var count int32
 
-		if (bitStream & (threshold - 1)) < max {
-			count = bitStream & (threshold - 1)
+		if (int32(bitStream) & (threshold - 1)) < max {
+			count = int32(bitStream) & (threshold - 1)
 			bitCount += nbBits - 1
 		} else {
-			count = bitStream & (2*threshold - 1)
+			count = int32(bitStream) & (2*threshold - 1)
 			if count >= threshold {
 				count -= max
 			}
@@ -122,7 +122,7 @@ func (s *Scratch) readNCount() error {
 			remaining -= count
 			gotTotal += count
 		}
-		s.norm[charnum] = int16(count)
+		s.norm[charnum&0xff] = int16(count)
 		charnum++
 		previous0 = count == 0
 		for remaining < threshold {
@@ -136,13 +136,12 @@ func (s *Scratch) readNCount() error {
 			bitCount -= (uint)(8 * (iend - 4 - b.off))
 			b.off = iend - 4
 		}
-		bitStream = b.Int32() >> (bitCount & 31)
+		bitStream = b.Uint32() >> (bitCount & 31)
 	}
-	s.symbolLen = uint16(charnum)
+	s.symbolLen = charnum
 
-	// Since we post-increment charnum, it may have overflowed on last value.
-	if charnum == 0 {
-		s.symbolLen = 256
+	if s.symbolLen > maxSymbolValue+1 {
+		return fmt.Errorf("symbolLen (%d) too big", s.symbolLen)
 	}
 	if remaining != 1 {
 		return fmt.Errorf("corruption detected (remaining %d != 1)", remaining)
@@ -244,6 +243,10 @@ func (s *Scratch) buildDtable() error {
 			if newState > tableSize {
 				return fmt.Errorf("newState (%d) outside table size (%d)", newState, tableSize)
 			}
+			if newState == uint16(u) && nBits == 0 {
+				// Seems weird that this is possible with nbits > 0.
+				return fmt.Errorf("newState (%d) == oldState (%d) and no bits", newState, u)
+			}
 			s.decTable[u].newState = newState
 		}
 	}
@@ -290,6 +293,9 @@ func (s *Scratch) decompress() error {
 			if off == 0 {
 				s.Out = append(s.Out, tmp...)
 				off = 0
+				if len(s.Out) >= s.DecompressLimit {
+					return fmt.Errorf("output size (%d) > DecompressLimit (%d)", len(s.Out), s.DecompressLimit)
+				}
 			}
 		}
 	}
@@ -308,6 +314,9 @@ func (s *Scratch) decompress() error {
 			break
 		}
 		s.Out = append(s.Out, s2.next())
+		if len(s.Out) >= s.DecompressLimit {
+			return fmt.Errorf("output size (%d) > DecompressLimit (%d)", len(s.Out), s.DecompressLimit)
+		}
 	}
 	br.in = nil
 	return br.close()
