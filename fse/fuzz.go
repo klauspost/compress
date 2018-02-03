@@ -7,19 +7,26 @@ import (
 )
 
 func Fuzz(data []byte) int {
-	comp, err := Compress(data, nil)
-	if err == ErrIncompressible || err == ErrUseRLE {
-		return 0
-	}
-	if err != nil {
-		panic(err)
+	if false {
+		comp, err := Compress(data, nil)
+		if err == ErrIncompressible || err == ErrUseRLE {
+			return 0
+		}
+		if err != nil {
+			panic(err)
+		}
+		dec, err := Decompress(comp, nil)
+		if err != nil {
+			panic(err)
+		}
+		if !bytes.Equal(data, dec) {
+			panic("decoder mismatch")
+		}
+		return 1
 	}
 	dec, err := Decompress(comp, nil)
 	if err != nil {
-		panic(err)
-	}
-	if !bytes.Equal(data, dec) {
-		panic("decoder mismatch")
+		return 0
 	}
 	return 1
 }

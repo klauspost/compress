@@ -6,6 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"os"
+	"path/filepath"
+
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -62,6 +65,28 @@ func TestCompress(t *testing.T) {
 			t.Logf("%s: %d -> %d bytes (%.2f:1)", test.name, len(buf0), len(b), float64(len(buf0))/float64(len(b)))
 		})
 	}
+}
+
+func TestGenCorpus(t *testing.T) {
+	t.Skip("only for generating decompress corpus")
+	filepath.Walk("fuzz/compress/corpus", func(path string, info os.FileInfo, err error) error {
+		t.Run(path, func(t *testing.T) {
+			var s Scratch
+			buf0, err := ioutil.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			b, err := Compress(buf0, &s)
+			if err != nil {
+				t.Skip("skipping")
+				return
+			}
+			t.Logf("%s: %d -> %d bytes (%.2f:1)", path, len(buf0), len(b), float64(len(buf0))/float64(len(b)))
+			dstP := strings.Replace(path, "compress", "decompress", 1)
+			ioutil.WriteFile(dstP, b, os.ModePerm)
+		})
+		return nil
+	})
 }
 
 func BenchmarkCompress(b *testing.B) {
