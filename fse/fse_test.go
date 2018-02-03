@@ -32,6 +32,15 @@ var testfiles = []struct {
 	{name: "superlow-ent", fn: func() ([]byte, error) { return []byte(strings.Repeat("1", 10000) + strings.Repeat("2", 500)), nil }},
 	// Zero bytes
 	{name: "zeroes", fn: func() ([]byte, error) { return make([]byte, 10000), nil }, err: ErrUseRLE},
+	{name: "crash1", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/crash1.bin") }, err: ErrIncompressible},
+	{name: "crash2", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/crash2.bin") }, err: ErrIncompressible},
+	{name: "crash3", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/crash3.bin") }, err: ErrIncompressible},
+	{name: "endzerobits", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/endzerobits.bin") }, err: nil},
+	{name: "endnonzero", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/endnonzero.bin") }, err: ErrIncompressible},
+	{name: "case1", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/case1.bin") }, err: ErrIncompressible},
+	{name: "case2", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/case2.bin") }, err: ErrIncompressible},
+	{name: "case3", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/case3.bin") }, err: ErrIncompressible},
+	{name: "pngdata.001", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/pngdata.bin") }, err: nil},
 }
 
 func TestCompress(t *testing.T) {
@@ -136,8 +145,8 @@ func TestReadNCount(t *testing.T) {
 					} else {
 						dc = dc[:len(buf0)]
 					}
-					if !cmp.Equal(buf0[:16], dc[:16]) {
-						t.Errorf(name+"decompressed, got delta: (in) %v != (out) %v\n", buf0[:16], dc[:16])
+					if !cmp.Equal(buf0, dc) {
+						t.Errorf(name+"decompressed, got delta: (in) %v != (out) %v\n", buf0, dc)
 					}
 					return
 				}

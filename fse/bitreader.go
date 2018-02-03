@@ -36,7 +36,7 @@ func (b *bitReader) init(in []byte) error {
 
 // getBits will return n bits.
 func (b *bitReader) getBits(n uint8) uint16 {
-	if n == 0 {
+	if n == 0 || b.bitsRead >= 64 {
 		return 0
 	}
 	return b.getBitsFast(n)

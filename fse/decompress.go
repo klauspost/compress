@@ -139,6 +139,11 @@ func (s *Scratch) readNCount() error {
 		bitStream = b.Int32() >> (bitCount & 31)
 	}
 	s.symbolLen = uint16(charnum)
+
+	// Since we post-increment charnum, it may have overflowed on last value.
+	if charnum == 0 {
+		s.symbolLen = 256
+	}
 	if remaining != 1 {
 		return fmt.Errorf("corruption detected (remaining %d != 1)", remaining)
 	}
@@ -228,13 +233,18 @@ func (s *Scratch) buildDtable() error {
 
 	// Build Decoding table
 	{
+		tableSize := uint16(1 << s.actualTableLog)
 		for u, v := range s.decTable {
 			symbol := v.symbol
 			nextState := symbolNext[symbol]
 			symbolNext[symbol] = nextState + 1
 			nBits := s.actualTableLog - byte(highBits(uint32(nextState)))
 			s.decTable[u].nbBits = nBits
-			s.decTable[u].newState = (nextState << nBits) - uint16(tableSize)
+			newState := (nextState << nBits) - tableSize
+			if newState > tableSize {
+				return fmt.Errorf("newState (%d) outside table size (%d)", newState, tableSize)
+			}
+			s.decTable[u].newState = newState
 		}
 	}
 	return nil
@@ -287,19 +297,17 @@ func (s *Scratch) decompress() error {
 
 	// Final bits, a bit more expensive check
 	for {
+		if s1.finished() {
+			s.Out = append(s.Out, s1.final(), s2.final())
+			break
+		}
 		br.fill()
 		s.Out = append(s.Out, s1.next())
-		if br.finished() {
+		if s2.finished() {
 			s.Out = append(s.Out, s2.final(), s1.final())
 			break
 		}
-		if !br.finished() {
-			s.Out = append(s.Out, s2.next())
-			if br.finished() {
-				s.Out = append(s.Out, s1.final(), s2.final())
-				break
-			}
-		}
+		s.Out = append(s.Out, s2.next())
 	}
 	br.in = nil
 	return br.close()
@@ -325,6 +333,10 @@ func (d *decoder) next() uint8 {
 	lowBits := d.br.getBits(n.nbBits)
 	d.state = n.newState + lowBits
 	return n.symbol
+}
+
+func (d *decoder) finished() bool {
+	return d.br.finished() && d.dt[d.state].nbBits > 0
 }
 
 // final returns the current state symbol and

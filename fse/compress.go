@@ -66,7 +66,7 @@ func Compress(in []byte, s *Scratch) ([]byte, error) {
 	}
 	s.Out = s.bw.out
 	// Check if we compressed.
-	if len(s.Out) > len(in) {
+	if len(s.Out) >= len(in) {
 		return nil, ErrIncompressible
 	}
 	return s.Out, nil
@@ -154,7 +154,7 @@ func (s *Scratch) writeCount() error {
 		tableLog  = s.actualTableLog
 		tableSize = 1 << tableLog
 		previous0 bool
-		charnum   uint8
+		charnum   uint16
 
 		maxHeaderSize = ((int(s.symbolLen) * int(tableLog)) >> 3) + 3
 
@@ -293,14 +293,14 @@ func (s *Scratch) allocCtable() {
 func (s *Scratch) buildCTable() error {
 	tableSize := uint32(1 << s.actualTableLog)
 	highThreshold := tableSize - 1
-	var cumul [maxSymbolValue + 1]int16
+	var cumul [maxSymbolValue + 2]int16
 
 	s.allocCtable()
 	tableSymbol := s.ct.tableSymbol[:tableSize]
 	// symbol start positions
 	{
 		cumul[0] = 0
-		for ui, v := range s.norm[:s.symbolLen] {
+		for ui, v := range s.norm[:s.symbolLen-1] {
 			u := byte(ui) // one less than reference
 			if v == -1 {
 				// Low proba symbol
@@ -311,8 +311,19 @@ func (s *Scratch) buildCTable() error {
 				cumul[u+1] = cumul[u] + v
 			}
 		}
+		// Encode last symbol separately to avoid overflowing u
+		u := int(s.symbolLen - 1)
+		v := s.norm[s.symbolLen-1]
+		if v == -1 {
+			// Low proba symbol
+			cumul[u+1] = cumul[u] + 1
+			tableSymbol[highThreshold] = byte(u)
+			highThreshold--
+		} else {
+			cumul[u+1] = cumul[u] + v
+		}
 		if uint32(cumul[s.symbolLen]) != tableSize {
-			return fmt.Errorf("expected cumul[s.symbolLen-1] (%d) == tableSize-1 (%d)", cumul[s.symbolLen], tableSize)
+			return fmt.Errorf("internal error: expected cumul[s.symbolLen] (%d) == tableSize (%d)", cumul[s.symbolLen], tableSize)
 		}
 		cumul[s.symbolLen] = int16(tableSize) + 1
 	}
