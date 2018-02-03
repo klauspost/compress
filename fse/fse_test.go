@@ -43,6 +43,7 @@ var testfiles = []struct {
 	{name: "case2", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/case2.bin") }, err: ErrIncompressible},
 	{name: "case3", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/case3.bin") }, err: ErrIncompressible},
 	{name: "pngdata.001", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/pngdata.bin") }, err: nil},
+	{name: "normcount2", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/normcount2.bin") }, err: nil},
 }
 
 var decTestfiles = []struct {

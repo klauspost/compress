@@ -3,7 +3,6 @@ package fse
 import (
 	"errors"
 	"fmt"
-	"math"
 )
 
 const (
@@ -67,6 +66,7 @@ type Scratch struct {
 	// DecompressLimit limits the maximum decoded size acceptable.
 	// If > 0 decompression will stop when approximately this many bytes
 	// has been decoded.
+	// If 0, maximum size will be 2GB.
 	DecompressLimit int
 }
 
@@ -111,7 +111,7 @@ func (s *Scratch) prepare(in []byte) (*Scratch, error) {
 	s.br.b = in
 	s.br.off = 0
 	if s.DecompressLimit == 0 {
-		s.DecompressLimit = math.MaxUint32
+		s.DecompressLimit = 2 << 30
 	}
 
 	return s, nil

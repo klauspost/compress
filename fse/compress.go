@@ -3,10 +3,9 @@ package fse
 import (
 	"errors"
 	"fmt"
-	"math"
 )
 
-// Compress the input bytes.
+// Compress the input bytes. Input must be < 2GB.
 // Provide a Scratch buffer to avoid memory allocations.
 // Note that the output is also kept in the scratch buffer.
 // If input is too hard to compress, ErrIncompressible is returned.
@@ -15,7 +14,7 @@ func Compress(in []byte, s *Scratch) ([]byte, error) {
 	if len(in) <= 1 {
 		return nil, ErrIncompressible
 	}
-	if len(in) > math.MaxUint32 {
+	if len(in) >= 2<<30 {
 		return nil, errors.New("input too big, must be < 2GB")
 	}
 	s, err := s.prepare(in)
@@ -493,7 +492,6 @@ func (s *Scratch) normalizeCount() error {
 
 // Secondary normalization method.
 // To be used when primary method fails.
-// TODO: Find data that triggers this.
 func (s *Scratch) normalizeCount2() error {
 	const notYetAssigned = -2
 	var (
