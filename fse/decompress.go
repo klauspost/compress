@@ -319,7 +319,6 @@ func (s *Scratch) decompress() error {
 			return fmt.Errorf("output size (%d) > DecompressLimit (%d)", len(s.Out), s.DecompressLimit)
 		}
 	}
-	br.in = nil
 	return br.close()
 }
 

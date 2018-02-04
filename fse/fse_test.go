@@ -7,6 +7,7 @@ package fse
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -28,7 +29,7 @@ var testfiles = []struct {
 	// Digits is the digits of the irrational number e. Its decimal representation
 	// does not repeat, but there are only 10 possible digits, so it should be
 	// reasonably compressible.
-	{name: "numbers", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/e.txt") }},
+	{name: "digits", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/e.txt") }},
 	// Twain is Project Gutenberg's edition of Mark Twain's classic English novel.
 	{name: "twain", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/Mark.Twain-Tom.Sawyer.txt") }},
 	// Random bytes
@@ -84,6 +85,23 @@ func TestCompress(t *testing.T) {
 	}
 }
 
+func ExampleCompress() {
+	// Read data
+	data, err := ioutil.ReadFile("../testdata/e.txt")
+	if err != nil {
+		panic(err)
+	}
+
+	// Create re-usable scratch buffer.
+	var s Scratch
+	b, err := Compress(data, &s)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("Compress: %d -> %d bytes (%.2f:1)\n", len(data), len(b), float64(len(data))/float64(len(b)))
+	// OUTPUT: Compress: 100003 -> 41564 bytes (2.41:1)
+}
+
 func TestDecompress(t *testing.T) {
 	for _, test := range decTestfiles {
 		t.Run(test.name, func(t *testing.T) {
@@ -107,6 +125,30 @@ func TestDecompress(t *testing.T) {
 			t.Logf("%s: %d -> %d bytes (1:%.2f)", test.name, len(buf0), len(b), float64(len(buf0))/float64(len(b)))
 		})
 	}
+}
+
+func ExampleDecompress() {
+	// Read data
+	data, err := ioutil.ReadFile("../testdata/e.txt")
+	if err != nil {
+		panic(err)
+	}
+
+	// Create re-usable scratch buffer.
+	var s Scratch
+	b, err := Compress(data, &s)
+	if err != nil {
+		panic(err)
+	}
+
+	// Since we use the output of compression, it cannot be used as output for decompression.
+	s.Out = make([]byte, 0, len(data))
+	d, err := Decompress(b, &s)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("Input matches: %t\n", bytes.Equal(d, data))
+	// OUTPUT: Input matches: true
 }
 
 func TestGenCorpus(t *testing.T) {
