@@ -1,3 +1,8 @@
+// Copyright 2018 Klaus Post. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+// Based on work Copyright (c) 2013, Yann Collet, released under BSD License.
+
 package fse
 
 import (
@@ -112,7 +117,12 @@ func (s *Scratch) compress(src []byte) error {
 	}
 	tt := s.ct.symbolTT[:256]
 	s.bw.reset(s.Out)
+
+	// Our two states each encodes every second byte.
+	// Last byte encoded (first byte decoded) will always be encoded by c1.
 	var c1, c2 cState
+
+	// Encode so remaining size is divisible by 4.
 	ip := len(src)
 	if ip&1 == 1 {
 		c1.init(&s.bw, &s.ct, s.actualTableLog, tt[src[ip-1]])
@@ -130,6 +140,7 @@ func (s *Scratch) compress(src []byte) error {
 		ip -= 2
 	}
 
+	// Main compression loop.
 	for ip >= 4 {
 		s.bw.flush32()
 		v3, v2, v1, v0 := src[ip-4], src[ip-3], src[ip-2], src[ip-1]
@@ -141,8 +152,11 @@ func (s *Scratch) compress(src []byte) error {
 		ip -= 4
 	}
 
+	// Flush final state.
+	// Used to initialize state when decoding.
 	c2.flush(s.actualTableLog)
 	c1.flush(s.actualTableLog)
+
 	return s.bw.close()
 }
 
@@ -254,7 +268,7 @@ type symbolTransform struct {
 	deltaNbBits    uint32
 }
 
-// String prints values as a human readble string.
+// String prints values as a human readable string.
 func (s symbolTransform) String() string {
 	return fmt.Sprintf("dnbits: %08x, fs:%d", s.deltaNbBits, s.deltaFindState)
 }
@@ -387,7 +401,7 @@ func (s *Scratch) buildCTable() error {
 	return nil
 }
 
-// countSimple will create a simple histogram in s.count
+// countSimple will create a simple histogram in s.count.
 // Returns the biggest count.
 // Does not update s.clearCount.
 func (s *Scratch) countSimple(in []byte) (max int) {
@@ -440,6 +454,8 @@ func (s *Scratch) optimalTableLog() {
 
 var rtbTable = [...]uint32{0, 473195, 504333, 520860, 550000, 700000, 750000, 830000}
 
+// normalizeCount will normalize the count of the symbols so
+// the total is equal to the table size.
 func (s *Scratch) normalizeCount() error {
 	var (
 		tableLog          = s.actualTableLog
@@ -484,9 +500,8 @@ func (s *Scratch) normalizeCount() error {
 	if -stillToDistribute >= (s.norm[largest] >> 1) {
 		// corner case, need another normalization method
 		return s.normalizeCount2()
-	} else {
-		s.norm[largest] += stillToDistribute
 	}
+	s.norm[largest] += stillToDistribute
 	return nil
 }
 

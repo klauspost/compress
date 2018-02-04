@@ -1,20 +1,19 @@
+// Copyright 2018 Klaus Post. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+// Based on work Copyright (c) 2013, Yann Collet, released under BSD License.
+
 package fse
 
 import "fmt"
 
+// bitWriter will write bits.
+// First bit will be LSB of the first byte of output.
 type bitWriter struct {
 	bitContainer uint64
 	nBits        uint8
 	out          []byte
 }
-
-var bitMask32 = [32]uint32{
-	0, 1, 3, 7, 0xF, 0x1F,
-	0x3F, 0x7F, 0xFF, 0x1FF, 0x3FF, 0x7FF,
-	0xFFF, 0x1FFF, 0x3FFF, 0x7FFF, 0xFFFF, 0x1FFFF,
-	0x3FFFF, 0x7FFFF, 0xFFFFF, 0x1FFFFF, 0x3FFFFF, 0x7FFFFF,
-	0xFFFFFF, 0x1FFFFFF, 0x3FFFFFF, 0x7FFFFFF, 0xFFFFFFF, 0x1FFFFFFF,
-	0x3FFFFFFF, 0x7FFFFFFF}
 
 // bitMask16 is bitmasks. Has extra to avoid bounds check.
 var bitMask16 = [32]uint16{
@@ -24,12 +23,17 @@ var bitMask16 = [32]uint16{
 	0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 	0xFFFF, 0xFFFF} /* up to 16 bits */
 
+// addBits16NC will add up to 16 bits.
+// It will not check if there is space for them,
+// so the caller must ensure that it has flushed recently.
 func (b *bitWriter) addBits16NC(value uint16, bits uint8) {
 	b.bitContainer |= uint64(value&bitMask16[bits&31]) << (b.nBits & 63)
 	b.nBits += bits
 }
 
-// flush will
+// flush will flush all pending full bytes.
+// There will be at least 56 bits available for writing when this has been called.
+// Using flush32 is faster, but leaves less space for writing.
 func (b *bitWriter) flush() {
 	v := b.nBits >> 3
 	switch v {
@@ -115,7 +119,7 @@ func (b *bitWriter) flush32() {
 	b.bitContainer >>= 32
 }
 
-// flushAlign will flush remaining full bytes and align to byte boundary.
+// flushAlign will flush remaining full bytes and align to next byte boundary.
 func (b *bitWriter) flushAlign() {
 	nbBytes := (b.nBits + 7) >> 3
 	for i := uint8(0); i < nbBytes; i++ {

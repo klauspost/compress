@@ -1,3 +1,14 @@
+// Copyright 2018 Klaus Post. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+// Based on work Copyright (c) 2013, Yann Collet, released under BSD License.
+
+// Package fse provides Finite State Entropy encoding and decoding.
+//
+// Finite State Entropy encoding provides a fast near-optimal symbol encoding/decoding
+// for byte blocks as implemented in zstd.
+//
+// See https://github.com/klauspost/compress/tree/master/fse for more information.
 package fse
 
 import (
@@ -32,19 +43,23 @@ var (
 // Scratch provides temporary storage for compression and decompression.
 type Scratch struct {
 	// Private
-	count          [maxSymbolValue + 1]uint32 // EXPOSE
+	count          [maxSymbolValue + 1]uint32
 	norm           [maxSymbolValue + 1]int16
-	length         int // input length
-	symbolLen      uint16
-	actualTableLog uint8
+	length         int    // input length
+	symbolLen      uint16 // Length of active part of the symbol table.
+	actualTableLog uint8  // Selected tablelog.
 	br             byteReader
 	bits           bitReader
 	bw             bitWriter
-	ct             cTable
-	decTable       []decSymbol
-	decFast        bool // no bits has prob > 50%.
-	clearCount     bool // clear count
-	maxCount       int
+	ct             cTable      // Compression tables.
+	decTable       []decSymbol // Decompression table.
+	decFast        bool        // no bits has prob > 50%.
+	clearCount     bool        // clear count
+	maxCount       int         // count of the most probable symbol
+
+	// Per block parameters.
+	// These can be used to override compression parameters of the block.
+	// Do not touch, unless you know what you are doing.
 
 	// Out is output buffer.
 	// If the scratch is re-used before the caller is done processing the output,
@@ -52,10 +67,6 @@ type Scratch struct {
 	// Otherwise the output buffer will be re-used for next Compression/Decompression step
 	// and allocation will be avoided.
 	Out []byte
-
-	// Per block parameters.
-	// These can be used to override compression parameters of the block.
-	// Do not touch, unless you know what you are doing.
 
 	// MaxSymbolValue will override the maximum symbol value of the next block.
 	MaxSymbolValue uint8
@@ -71,16 +82,17 @@ type Scratch struct {
 }
 
 // Histogram allows to populate the histogram and skip that step in the compression,
-// Ot otherwise allows to inspect the histogram when compression is done.
+// It otherwise allows to inspect the histogram when compression is done.
 // To indicate that you have populated the histogram call the returned function
 // with the value of the highest populated symbol, as well as the number of entries
 // in the most populated entry. These are accepted at face value.
 // The returned slice will always be length 256.
+// If you have *not* populated the histogram, send 0 as maxCount before next compression cycle.
 func (s *Scratch) Histogram() ([]uint32, func(maxSymbol uint8, maxCount int)) {
 	return s.count[:], func(maxSymbol uint8, maxCount int) {
 		s.maxCount = maxCount
 		s.symbolLen = uint16(maxSymbol) + 1
-		s.clearCount = false
+		s.clearCount = maxCount != 0
 	}
 }
 
@@ -108,9 +120,9 @@ func (s *Scratch) prepare(in []byte) (*Scratch, error) {
 		}
 		s.clearCount = false
 	}
-	s.br.b = in
-	s.br.off = 0
+	s.br.init(in)
 	if s.DecompressLimit == 0 {
+		// Max size 2GB.
 		s.DecompressLimit = 2 << 30
 	}
 

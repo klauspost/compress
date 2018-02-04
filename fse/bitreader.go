@@ -1,3 +1,8 @@
+// Copyright 2018 Klaus Post. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+// Based on work Copyright (c) 2013, Yann Collet, released under BSD License.
+
 package fse
 
 import (
@@ -6,6 +11,8 @@ import (
 )
 
 // bitReader reads a bitstream in reverse.
+// The last set bit indicates the start of the stream and is used
+// for aligning the input.
 type bitReader struct {
 	in       []byte
 	off      uint // next byte to read is at in[off - 1]
@@ -13,8 +20,7 @@ type bitReader struct {
 	bitsRead uint8
 }
 
-// init initializes and resets the bitreader.
-//
+// init initializes and resets the bit reader.
 func (b *bitReader) init(in []byte) error {
 	if len(in) < 1 {
 		return errors.New("corrupt stream: too short")
@@ -34,7 +40,7 @@ func (b *bitReader) init(in []byte) error {
 	return nil
 }
 
-// getBits will return n bits.
+// getBits will return n bits. n can be 0.
 func (b *bitReader) getBits(n uint8) uint16 {
 	if n == 0 || b.bitsRead >= 64 {
 		return 0
@@ -43,6 +49,7 @@ func (b *bitReader) getBits(n uint8) uint16 {
 }
 
 // getBitsFast requires that at least one bit is requested every time.
+// There are no checks if the buffer is filled.
 func (b *bitReader) getBitsFast(n uint8) uint16 {
 	const regMask = 64 - 1
 	v := uint16((b.value << (b.bitsRead & regMask)) >> ((regMask + 1 - n) & regMask))
@@ -56,6 +63,7 @@ func (b *bitReader) fillFast() {
 	if b.bitsRead < 32 {
 		return
 	}
+	// Do single re-slice to avoid bounds checks.
 	v := b.in[b.off-4 : b.off]
 	b.value = (b.value << 32) | (uint64(v[3]) << 24) | (uint64(v[2]) << 16) | (uint64(v[1]) << 8) | uint64(v[0])
 	b.bitsRead -= 32
@@ -80,6 +88,7 @@ func (b *bitReader) fill() {
 	}
 }
 
+// finished returns true if all bits have been read from the bit stream.
 func (b *bitReader) finished() bool {
 	return b.off == 0 && b.bitsRead >= 64
 }

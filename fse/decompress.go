@@ -15,6 +15,7 @@ const (
 // It is possible, but by no way guaranteed that corrupt data will
 // return an error.
 // It is up to the caller to verify integrity of the returned data.
+// Use a predefined Scrach to set maximum acceptable output size.
 func Decompress(b []byte, s *Scratch) ([]byte, error) {
 	s, err := s.prepare(b)
 	if err != nil {
@@ -42,7 +43,7 @@ func (s *Scratch) readNCount() error {
 	var (
 		charnum   uint16
 		previous0 bool
-		b         = s.br
+		b         = &s.br
 	)
 	iend := b.remain()
 	if iend < 4 {
@@ -153,7 +154,6 @@ func (s *Scratch) readNCount() error {
 		return fmt.Errorf("corruption detected (total %d != %d)", gotTotal, 1<<s.actualTableLog)
 	}
 	b.advance((bitCount + 7) >> 3)
-	s.br = b
 	return nil
 }
 
@@ -260,6 +260,7 @@ func (s *Scratch) decompress() error {
 	br.init(s.br.unread())
 
 	var s1, s2 decoder
+	// Initialize and decode first state and symbol.
 	s1.init(br, s.decTable, s.actualTableLog)
 	s2.init(br, s.decTable, s.actualTableLog)
 
@@ -322,6 +323,7 @@ func (s *Scratch) decompress() error {
 	return br.close()
 }
 
+// decoder keeps track of the current state and updates it from the bitstream.
 type decoder struct {
 	state uint16
 	br    *bitReader
@@ -344,11 +346,13 @@ func (d *decoder) next() uint8 {
 	return n.symbol
 }
 
+// finished returns true if all bits have been read from the bitstream
+// and the next state would require reading bits from the input.
 func (d *decoder) finished() bool {
 	return d.br.finished() && d.dt[d.state].nbBits > 0
 }
 
-// final returns the current state symbol and
+// final returns the current state symbol without decoding the next.
 func (d *decoder) final() uint8 {
 	return d.dt[d.state].symbol
 }
