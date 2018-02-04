@@ -51,7 +51,7 @@ your input was likely corrupted.
 It is important to note that a successful decoding does *not* mean your output matches your original input. 
 There are no integrity checks, so relying on errors from the decompressor does not assure your data is valid.
 
-For more detailed usage, see examples in the [godoc documentation](https://godoc.org/github.com/klauspost/compress/fse#Examples).
+For more detailed usage, see examples in the [godoc documentation](https://godoc.org/github.com/klauspost/compress/fse#pkg-examples).
 
 # Performance
 
