@@ -20,7 +20,7 @@ type bitReader struct {
 	bitsRead uint8
 }
 
-// init initializes and resets the bit reader.
+// init initializes and resets the bit Reader.
 func (b *bitReader) init(in []byte) error {
 	if len(in) < 1 {
 		return errors.New("corrupt stream: too short")

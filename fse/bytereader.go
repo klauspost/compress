@@ -5,16 +5,16 @@
 
 package fse
 
-// byteReader provides a byte reader that reads
+// byteReader provides a byte Reader that reads
 // little endian values from a byte stream.
 // The input stream is manually advanced.
-// The reader performs no bounds checks.
+// The Reader performs no bounds checks.
 type byteReader struct {
 	b   []byte
 	off int
 }
 
-// init will initialize the reader and set the input.
+// init will initialize the Reader and set the input.
 func (b *byteReader) init(in []byte) {
 	b.b = in
 	b.off = 0

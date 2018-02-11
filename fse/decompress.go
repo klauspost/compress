@@ -337,7 +337,7 @@ func (d *decoder) init(in *bitReader, dt []decSymbol, tableLog uint8) {
 }
 
 // next returns the next symbol and sets the next state.
-// At least tablelog bits must be available in the bit reader.
+// At least tablelog bits must be available in the bit Reader.
 func (d *decoder) next() uint8 {
 	n := &d.dt[d.state]
 	lowBits := d.br.getBits(n.nbBits)
@@ -358,7 +358,7 @@ func (d *decoder) final() uint8 {
 
 // nextFast returns the next symbol and sets the next state.
 // This can only be used if no symbols are 0 bits.
-// At least tablelog bits must be available in the bit reader.
+// At least tablelog bits must be available in the bit Reader.
 func (d *decoder) nextFast() uint8 {
 	n := d.dt[d.state]
 	lowBits := d.br.getBitsFast(n.nbBits)
