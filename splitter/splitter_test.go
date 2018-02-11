@@ -45,7 +45,7 @@ func TestFixedFragment(t *testing.T) {
 		count <- n
 	}()
 	input = bytes.NewBuffer(b)
-	w, err := New(out, ModeFixed, size)
+	w, err := New(out, With.Mode(ModeFixed).MaxBlockSize(size))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestPredictionFragment(t *testing.T) {
 		count <- n
 	}()
 	input = bytes.NewBuffer(b)
-	w, err := New(out, ModePrediction, size)
+	w, err := New(out, With.Mode(ModePrediction).MaxBlockSize(size))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestEntropyFragment(t *testing.T) {
 		count <- n
 	}()
 	input = bytes.NewBuffer(b)
-	w, err := New(out, ModeEntropy, size)
+	w, err := New(out, With.Mode(ModeEntropy).MaxBlockSize(size))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +174,7 @@ func BenchmarkDynamicFragments64K(t *testing.B) {
 			}
 		}()
 		input = bytes.NewBuffer(b)
-		w, _ := New(out, ModePrediction, size)
+		w, _ := New(out, With.Mode(ModePrediction).MaxBlockSize(size))
 		io.Copy(w, input)
 		err := w.Close()
 		if err != nil {
@@ -207,7 +207,7 @@ func BenchmarkDynamicEntropyFragments256K(t *testing.B) {
 			}
 		}()
 		input = bytes.NewBuffer(b)
-		w, _ := New(out, ModeEntropy, size)
+		w, _ := New(out, With.Mode(ModeEntropy).MaxBlockSize(size))
 		io.Copy(w, input)
 		err := w.Close()
 		if err != nil {
@@ -240,7 +240,7 @@ func BenchmarkDynamicEntropyFragments64K(t *testing.B) {
 			}
 		}()
 		input = bytes.NewBuffer(b)
-		w, _ := New(out, ModeEntropy, size)
+		w, _ := New(out, With.Mode(ModeEntropy).MaxBlockSize(size))
 		io.Copy(w, input)
 		err := w.Close()
 		if err != nil {
@@ -273,7 +273,7 @@ func BenchmarkDynamicEntropyFragments4K(t *testing.B) {
 			}
 		}()
 		input = bytes.NewBuffer(b)
-		w, _ := New(out, ModeEntropy, size)
+		w, _ := New(out, With.Mode(ModeEntropy).MaxBlockSize(size))
 		io.Copy(w, input)
 		err := w.Close()
 		if err != nil {

@@ -5,6 +5,7 @@ type fixedWriter struct {
 	out     chan<- []byte
 	off     int
 	maxSize int
+	sb      sendBack
 }
 
 func newFixedWriter(maxSize uint, out chan<- []byte) *fixedWriter {
@@ -37,7 +38,7 @@ func (f *fixedWriter) split() {
 	if f.off == 0 {
 		return
 	}
-	out := make([]byte, f.off)
+	out := f.sb.getBuffer(f.off)
 	copy(out, f.buffer[:f.off])
 	f.out <- out
 	f.off = 0

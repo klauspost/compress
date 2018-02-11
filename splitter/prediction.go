@@ -13,6 +13,7 @@ type prediction struct {
 	buffer      []byte
 	off         int
 	out         chan<- []byte
+	sb          sendBack
 }
 
 // Split blocks. Typically block size will be maxSize / 4
@@ -70,7 +71,7 @@ func (z *prediction) split() {
 	if z.off == 0 {
 		return
 	}
-	out := make([]byte, z.off)
+	out := z.sb.getBuffer(z.off)
 	copy(out, z.buffer[:z.off])
 	z.out <- out
 	z.off = 0

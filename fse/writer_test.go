@@ -20,7 +20,7 @@ func TestWriter(t *testing.T) {
 			}
 			buf0 = buf.Bytes()
 			wrt := &bytes.Buffer{}
-			enc, err := NewWriter(wrt, WithWriterOption.CRC(true))
+			enc, err := NewWriter(wrt, WriterWith.CRC(true))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -69,14 +69,15 @@ func BenchmarkWriter(b *testing.B) {
 				b.Fatal(err)
 			}
 			buf := bytes.NewBuffer(buf0)
-			for buf.Len() < 10<<20 {
+			for buf.Len() < 1<<20 {
 				buf.Write(buf0)
 			}
 			buf0 = buf.Bytes()
-			w, err := NewWriter(ioutil.Discard, WithWriterOption.CRC(false))
+			w, err := NewWriter(ioutil.Discard, WriterWith.CRC(false))
 			if err != nil {
 				b.Fatal("unexpected error:", err)
 			}
+			_, _ = w.Write(buf0)
 			b.ResetTimer()
 			b.ReportAllocs()
 			b.SetBytes(int64(buf.Len()))

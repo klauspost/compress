@@ -7,6 +7,81 @@ import (
 	"io"
 )
 
+type Option func(o *options) error
+
+var With = Option(nil)
+
+func (w Option) parent(o *options) error {
+	if w != nil {
+		return w(o)
+	}
+	return nil
+}
+
+func (w Option) MaxBlockSize(n uint) Option {
+	return func(o *options) error {
+		if err := w.parent(o); err != nil {
+			return err
+		}
+		if n < MinBlockSize {
+			return ErrSizeTooSmall
+		}
+		o.maxBlockSize = n
+		return nil
+	}
+}
+
+func (w Option) Mode(m Mode) Option {
+	return func(o *options) error {
+		if err := w.parent(o); err != nil {
+			return err
+		}
+		o.mode = m
+		return nil
+	}
+}
+
+func (w Option) BackChannel(ch <-chan []byte) Option {
+	return func(o *options) error {
+		if err := w.parent(o); err != nil {
+			return err
+		}
+		o.sendBack = ch
+		return nil
+	}
+}
+
+func (w Option) SendBack(size int) (Option, func([]byte)) {
+	ch := make(chan []byte, size)
+	return func(o *options) error {
+			if err := w.parent(o); err != nil {
+				return err
+			}
+			o.sendBack = ch
+			return nil
+		}, func(b []byte) {
+			select {
+			case ch <- b:
+			default:
+			}
+		}
+}
+
+func defaultOptions() options {
+	return options{
+		maxBlockSize: 256 << 10,
+		minBlockSize: 64 << 10,
+		mode:         ModeEntropy,
+	}
+}
+
+type options struct {
+	minBlockSize uint
+	maxBlockSize uint
+	sendBack     <-chan []byte
+	mode         Mode
+}
+
 // Mode used to determine how input is split.
 type Mode int
 
@@ -48,6 +123,7 @@ type writer struct {
 	maxSize int                       // Maximum block size
 	writer  func([]byte) (int, error) // Writes are forwarded here.
 	split   func()                    // Called when Split is called.
+	opts    options
 }
 
 // New will return a writer you can write data to,
@@ -59,30 +135,41 @@ type writer struct {
 //
 // When you call Close on the returned Writer, the final fragments
 // will be sent and the channel will be closed.
-func New(fragments chan<- []byte, mode Mode, maxSize uint) (io.WriteCloser, error) {
+func New(fragments chan<- []byte, opts ...Option) (io.WriteCloser, error) {
+	o := defaultOptions()
+	for _, opt := range opts {
+		err := opt(&o)
+		if err != nil {
+			return nil, err
+		}
+	}
 	// For small block sizes we need to keep a pretty big buffer to keep input fed.
 	// Constant below appears to be sweet spot measured with 4K blocks.
-	var bufmul = 256 << 10 / int(maxSize)
+	var bufmul = 256 << 10 / int(o.maxBlockSize)
 	if bufmul < 2 {
 		bufmul = 2
 	}
 
 	w := &writer{
 		frags:   fragments,
-		maxSize: int(maxSize),
+		maxSize: int(o.maxBlockSize),
+		opts:    o,
 	}
 
-	switch mode {
+	switch o.mode {
 	case ModeFixed:
-		fw := newFixedWriter(maxSize, fragments)
+		fw := newFixedWriter(o.maxBlockSize, fragments)
+		fw.sb = w.opts.sendBack
 		w.writer = fw.write
 		w.split = fw.split
 	case ModePrediction:
-		zw := newPredictionWriter(maxSize, fragments)
+		zw := newPredictionWriter(o.maxBlockSize, fragments)
+		zw.sb = w.opts.sendBack
 		w.writer = zw.write
 		w.split = zw.split
 	case ModeEntropy:
-		zw := newEntropyWriter(maxSize, fragments)
+		zw := newEntropyWriter(o.maxBlockSize, fragments)
+		zw.sb = w.opts.sendBack
 		w.writer = zw.write
 		w.split = zw.split
 	default:
@@ -110,4 +197,17 @@ func (w *writer) Close() (err error) {
 	close(w.frags)
 	w.frags = nil
 	return nil
+}
+
+type sendBack <-chan []byte
+
+func (s sendBack) getBuffer(size int) []byte {
+	select {
+	case b := <-s:
+		if cap(b) >= size {
+			return b[:size]
+		}
+	default:
+	}
+	return make([]byte, size)
 }

@@ -13,6 +13,7 @@ type entropy struct {
 	avgHist     uint16
 	buffer      []byte
 	off         int
+	sb          sendBack
 	out         chan<- []byte
 }
 
@@ -94,7 +95,8 @@ func (e *entropy) split() {
 	if e.off == 0 {
 		return
 	}
-	out := make([]byte, e.off)
+
+	out := e.sb.getBuffer(e.off)
 	copy(out, e.buffer[:e.off])
 	e.out <- out
 	e.off = 0

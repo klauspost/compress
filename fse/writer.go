@@ -9,12 +9,11 @@ import (
 
 	"github.com/OneOfOne/xxhash"
 	"github.com/klauspost/compress/splitter"
-	"github.com/klauspost/dedup"
 )
 
 type WriterOption func(o *wOptions) error
 
-var WithWriterOption = WriterOption(nil)
+var WriterWith = WriterOption(nil)
 
 const (
 	streamBlockSizeLimit = 10 << 20
@@ -28,8 +27,18 @@ const (
 	blockTypeEOS
 )
 
+func (w WriterOption) parent(o *wOptions) error {
+	if w != nil {
+		return w(o)
+	}
+	return nil
+}
 func (w WriterOption) MaxBlockSize(n uint) WriterOption {
 	return func(o *wOptions) error {
+		if err := w.parent(o); err != nil {
+			return err
+		}
+
 		if n >= streamBlockSizeLimit {
 			return fmt.Errorf("max block size must <= %d bytes", streamBlockSizeLimit)
 		}
@@ -40,6 +49,9 @@ func (w WriterOption) MaxBlockSize(n uint) WriterOption {
 
 func (w WriterOption) CRC(b bool) WriterOption {
 	return func(o *wOptions) error {
+		if err := w.parent(o); err != nil {
+			return err
+		}
 		o.withCRC = b
 		return nil
 	}
@@ -64,9 +76,11 @@ type Writer struct {
 	errMu sync.Mutex
 	h     xxhash.XXHash64
 
-	splitter io.WriteCloser
-	f        chan []byte
-	wg       sync.WaitGroup
+	splitter  io.WriteCloser
+	fragments chan []byte
+	sendBack  func([]byte)
+	wg        sync.WaitGroup
+	scr       Scratch
 }
 
 func NewWriter(w io.Writer, opts ...WriterOption) (*Writer, error) {
@@ -118,17 +132,13 @@ func (w *Writer) write(p []byte) {
 
 func (w *Writer) compressor() {
 	defer w.wg.Done()
-	var scr Scratch
-	defer w.splitter.Close()
-	bw := w.bw
-	defer bw.Flush()
 	var tmp [1 + 2*binary.MaxVarintLen32]byte
-	for frag := range w.f {
+	for frag := range w.fragments {
 		if len(frag) == 0 {
 			continue
 		}
 		headerSize := 0
-		b, err := Compress(frag, &scr)
+		b, err := Compress(frag, &w.scr)
 		switch err {
 		case nil:
 			tmp[0] = blockTypeCompressed
@@ -149,6 +159,7 @@ func (w *Writer) compressor() {
 		default:
 			w.setErr(err)
 		}
+		w.sendBack(frag)
 	}
 	if w.o.withCRC {
 		buf := tmp[:1]
@@ -181,9 +192,9 @@ func (w *Writer) Write(p []byte) (n int, err error) {
 }
 
 func (w *Writer) Close() error {
-	w.setErr(w.bw.Flush())
 	w.setErr(w.splitter.Close())
 	w.wg.Wait()
+	w.setErr(w.bw.Flush())
 	return w.err
 }
 
@@ -191,8 +202,10 @@ func (w *Writer) Reset(wr io.Writer) error {
 	if w.bw != nil {
 		w.Close()
 	}
-	w.f = make(chan []byte, 5)
-	s, err := splitter.New(w.f, dedup.ModeDynamicEntropy, w.o.maxBlockSize)
+	w.fragments = make(chan []byte, 1)
+	var opt splitter.Option
+	opt, w.sendBack = splitter.With.SendBack(2)
+	s, err := splitter.New(w.fragments, splitter.With.Mode(splitter.ModeEntropy).MaxBlockSize(w.o.maxBlockSize), opt)
 	if err != nil {
 		return err
 	}
