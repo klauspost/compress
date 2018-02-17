@@ -141,6 +141,9 @@ func (s *Scratch) readNCount() error {
 	}
 	s.symbolLen = charnum
 
+	if s.symbolLen <= 1 {
+		return fmt.Errorf("symbolLen (%d) too small", s.symbolLen)
+	}
 	if s.symbolLen > maxSymbolValue+1 {
 		return fmt.Errorf("symbolLen (%d) too big", s.symbolLen)
 	}
