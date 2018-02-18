@@ -65,7 +65,9 @@ func (b *bitReader) fillFast() {
 	}
 	// Do single re-slice to avoid bounds checks.
 	v := b.in[b.off-4 : b.off]
-	b.value = (b.value << 32) | (uint64(v[3]) << 24) | (uint64(v[2]) << 16) | (uint64(v[1]) << 8) | uint64(v[0])
+	// Split to load words.
+	high := (uint64(v[3]) << 8) | (uint64(v[2]))
+	b.value = (b.value << 32) | ((uint64(v[1]) << 8) | uint64(v[0])) | high<<16
 	b.bitsRead -= 32
 	b.off -= 4
 }
@@ -76,7 +78,10 @@ func (b *bitReader) fill() {
 		return
 	}
 	if b.off > 4 {
-		b.value = (b.value << 32) | (uint64(b.in[b.off-1]) << 24) | (uint64(b.in[b.off-2]) << 16) | (uint64(b.in[b.off-3]) << 8) | uint64(b.in[b.off-4])
+		v := b.in[b.off-4 : b.off]
+		// Split to load words.
+		high := (uint64(v[3]) << 8) | (uint64(v[2]))
+		b.value = (b.value << 32) | ((uint64(v[1]) << 8) | uint64(v[0])) | high<<16
 		b.bitsRead -= 32
 		b.off -= 4
 		return

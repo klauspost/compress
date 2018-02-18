@@ -45,7 +45,6 @@ type Scratch struct {
 	// Private
 	count          [maxSymbolValue + 1]uint32
 	norm           [maxSymbolValue + 1]int16
-	length         int    // input length
 	symbolLen      uint16 // Length of active part of the symbol table.
 	actualTableLog uint8  // Selected tablelog.
 	br             byteReader
@@ -101,7 +100,6 @@ func (s *Scratch) prepare(in []byte) (*Scratch, error) {
 	if s == nil {
 		s = &Scratch{}
 	}
-	s.length = len(in)
 	if s.MaxSymbolValue == 0 {
 		s.MaxSymbolValue = 255
 	}

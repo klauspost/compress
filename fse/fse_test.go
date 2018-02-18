@@ -113,8 +113,8 @@ func TestDecompress(t *testing.T) {
 				t.Fatal(err)
 			}
 			b, err := Decompress(buf0, &s)
-			if err.Error() != test.err {
-				t.Errorf("want error %q (%T), got %q (%T)", test.err, test.err, err, err)
+			if fmt.Sprint(err) != test.err {
+				t.Errorf("want error %q, got %q (%T)", test.err, err, err)
 				return
 			}
 			if err != nil {
