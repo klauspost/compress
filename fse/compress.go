@@ -200,7 +200,7 @@ func (s *Scratch) writeCount() error {
 		nbBits    = uint(tableLog + 1)
 	)
 	if cap(s.Out) < maxHeaderSize {
-		s.Out = make([]byte, 0, s.length+maxHeaderSize)
+		s.Out = make([]byte, 0, s.br.remain()+maxHeaderSize)
 	}
 	outP := uint(0)
 	out := s.Out[:maxHeaderSize]
@@ -449,7 +449,7 @@ func (s *Scratch) countSimple(in []byte) (max int) {
 
 // minTableLog provides the minimum logSize to safely represent a distribution.
 func (s *Scratch) minTableLog() uint8 {
-	minBitsSrc := highBits(uint32(s.length-1)) + 1
+	minBitsSrc := highBits(uint32(s.br.remain()-1)) + 1
 	minBitsSymbols := highBits(uint32(s.symbolLen-1)) + 2
 	if minBitsSrc < minBitsSymbols {
 		return uint8(minBitsSrc)
@@ -461,7 +461,7 @@ func (s *Scratch) minTableLog() uint8 {
 func (s *Scratch) optimalTableLog() {
 	tableLog := s.TableLog
 	minBits := s.minTableLog()
-	maxBitsSrc := uint8(highBits(uint32(s.length-1))) - 2
+	maxBitsSrc := uint8(highBits(uint32(s.br.remain()-1))) - 2
 	if maxBitsSrc < tableLog {
 		// Accuracy can be reduced
 		tableLog = maxBitsSrc
@@ -487,12 +487,12 @@ func (s *Scratch) normalizeCount() error {
 	var (
 		tableLog          = s.actualTableLog
 		scale             = 62 - uint64(tableLog)
-		step              = (1 << 62) / uint64(s.length)
+		step              = (1 << 62) / uint64(s.br.remain())
 		vStep             = uint64(1) << (scale - 20)
 		stillToDistribute = int16(1 << tableLog)
 		largest           int
 		largestP          int16
-		lowThreshold      = (uint32)(s.length >> tableLog)
+		lowThreshold      = (uint32)(s.br.remain() >> tableLog)
 	)
 
 	for i, cnt := range s.count[:s.symbolLen] {
@@ -538,7 +538,7 @@ func (s *Scratch) normalizeCount2() error {
 	const notYetAssigned = -2
 	var (
 		distributed  uint32
-		total        = uint32(s.length)
+		total        = uint32(s.br.remain())
 		tableLog     = s.actualTableLog
 		lowThreshold = uint32(total >> tableLog)
 		lowOne       = uint32((total * 3) >> (tableLog + 1))
