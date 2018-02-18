@@ -41,7 +41,6 @@ func (b byteReader) Uint32() uint32 {
 	v1 := uint32(b2[1])
 	v0 := uint32(b2[0])
 	return (v3 << 16) | ((v1 << 8) | v0)
-
 }
 
 // unread returns the unread portion of the input.
