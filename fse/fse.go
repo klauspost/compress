@@ -53,7 +53,7 @@ type Scratch struct {
 	bw             bitWriter
 	ct             cTable      // Compression tables.
 	decTable       []decSymbol // Decompression table.
-	decFast        bool        // no bits has prob > 50%.
+	zeroBits       bool        // no bits has prob > 50%.
 	clearCount     bool        // clear count
 	maxCount       int         // count of the most probable symbol
 

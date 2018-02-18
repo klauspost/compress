@@ -103,6 +103,14 @@ func (c *cState) encode(symbolTT symbolTransform) {
 	c.state = c.stateTable[dstState]
 }
 
+// encode the output symbol provided and write it to the bitstream.
+func (c *cState) encodeZero(symbolTT symbolTransform) {
+	nbBitsOut := (uint32(c.state) + symbolTT.deltaNbBits) >> 16
+	dstState := int32(c.state>>(nbBitsOut&15)) + symbolTT.deltaFindState
+	c.bw.addBits16ZeroNC(c.state, uint8(nbBitsOut))
+	c.state = c.stateTable[dstState]
+}
+
 // flush will write the tablelog to the output and flush the remaining full bytes.
 func (c *cState) flush(tableLog uint8) {
 	c.bw.flush32()
@@ -127,7 +135,7 @@ func (s *Scratch) compress(src []byte) error {
 	if ip&1 == 1 {
 		c1.init(&s.bw, &s.ct, s.actualTableLog, tt[src[ip-1]])
 		c2.init(&s.bw, &s.ct, s.actualTableLog, tt[src[ip-2]])
-		c1.encode(tt[src[ip-3]])
+		c1.encodeZero(tt[src[ip-3]])
 		ip -= 3
 	} else {
 		c2.init(&s.bw, &s.ct, s.actualTableLog, tt[src[ip-1]])
@@ -135,21 +143,34 @@ func (s *Scratch) compress(src []byte) error {
 		ip -= 2
 	}
 	if ip&2 != 0 {
-		c2.encode(tt[src[ip-1]])
-		c1.encode(tt[src[ip-2]])
+		c2.encodeZero(tt[src[ip-1]])
+		c1.encodeZero(tt[src[ip-2]])
 		ip -= 2
 	}
 
 	// Main compression loop.
-	for ip >= 4 {
-		s.bw.flush32()
-		v3, v2, v1, v0 := src[ip-4], src[ip-3], src[ip-2], src[ip-1]
-		c2.encode(tt[v0])
-		c1.encode(tt[v1])
-		s.bw.flush32()
-		c2.encode(tt[v2])
-		c1.encode(tt[v3])
-		ip -= 4
+	if !s.zeroBits {
+		for ip >= 4 {
+			s.bw.flush32()
+			v3, v2, v1, v0 := src[ip-4], src[ip-3], src[ip-2], src[ip-1]
+			c2.encode(tt[v0])
+			c1.encode(tt[v1])
+			s.bw.flush32()
+			c2.encode(tt[v2])
+			c1.encode(tt[v3])
+			ip -= 4
+		}
+	} else {
+		for ip >= 4 {
+			s.bw.flush32()
+			v3, v2, v1, v0 := src[ip-4], src[ip-3], src[ip-2], src[ip-1]
+			c2.encodeZero(tt[v0])
+			c1.encodeZero(tt[v1])
+			s.bw.flush32()
+			c2.encodeZero(tt[v2])
+			c1.encodeZero(tt[v3])
+			ip -= 4
+		}
 	}
 
 	// Flush final state.
@@ -341,12 +362,18 @@ func (s *Scratch) buildCTable() error {
 		cumul[s.symbolLen] = int16(tableSize) + 1
 	}
 	// Spread symbols
+	s.zeroBits = false
 	{
 		step := tableStep(tableSize)
 		tableMask := tableSize - 1
 		var position uint32
+		// if any symbol > largeLimit, we may have 0 bits output.
+		largeLimit := int16(1 << (s.actualTableLog - 1))
 		for ui, v := range s.norm[:s.symbolLen] {
 			symbol := byte(ui)
+			if v > largeLimit {
+				s.zeroBits = true
+			}
 			for nbOccurrences := int16(0); nbOccurrences < v; nbOccurrences++ {
 				tableSymbol[position] = symbol
 				position = (position + step) & tableMask

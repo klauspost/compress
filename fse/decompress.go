@@ -196,7 +196,7 @@ func (s *Scratch) buildDtable() error {
 	symbolNext := s.ct.stateTable[:256]
 
 	// Init, lay down lowprob symbols
-	s.decFast = true
+	s.zeroBits = false
 	{
 		largeLimit := int16(1 << (s.actualTableLog - 1))
 		for i, v := range s.norm[:s.symbolLen] {
@@ -206,7 +206,7 @@ func (s *Scratch) buildDtable() error {
 				symbolNext[i] = 1
 			} else {
 				if v >= largeLimit {
-					s.decFast = false
+					s.zeroBits = true
 				}
 				symbolNext[i] = uint16(v)
 			}
@@ -272,7 +272,7 @@ func (s *Scratch) decompress() error {
 	var off uint8
 
 	// Main part
-	if s.decFast {
+	if !s.zeroBits {
 		for br.off >= 8 {
 			br.fillFast()
 			tmp[off+0] = s1.nextFast()

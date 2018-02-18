@@ -31,6 +31,20 @@ func (b *bitWriter) addBits16NC(value uint16, bits uint8) {
 	b.nBits += bits
 }
 
+// addBits16ZeroNC will add up to 16 bits.
+// It will not check if there is space for them,
+// so the caller must ensure that it has flushed recently.
+// This is fastest if bits can be zero.
+func (b *bitWriter) addBits16ZeroNC(value uint16, bits uint8) {
+	if bits == 0 {
+		return
+	}
+	value <<= (16 - bits) & 15
+	value >>= (16 - bits) & 15
+	b.bitContainer |= uint64(value) << (b.nBits & 63)
+	b.nBits += bits
+}
+
 // flush will flush all pending full bytes.
 // There will be at least 56 bits available for writing when this has been called.
 // Using flush32 is faster, but leaves less space for writing.
