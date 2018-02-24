@@ -75,8 +75,8 @@ func (s *Scratch) prepare(in []byte) (*Scratch, error) {
 	if cap(s.cTable) < maxSymbolValue+1 {
 		s.cTable = make([]cTableEntry, 0, maxSymbolValue+1)
 	}
-	if cap(s.nodes) < huffNodesLen {
-		s.nodes = make([]nodeElt, 0, huffNodesLen)
+	if cap(s.nodes) < huffNodesLen+1 {
+		s.nodes = make([]nodeElt, 0, huffNodesLen+1)
 	}
 	s.nodes = s.nodes[:0]
 	s.br.init(in)
