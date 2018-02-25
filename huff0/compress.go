@@ -1,12 +1,14 @@
 package huff0
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
-func Compress(in []byte, s *Scratch) ([]byte, error) {
-	var err error
+func Compress(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
 	s, err = s.prepare(in)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if s.allowReuse {
 		// TODO: See if we can reuse
@@ -17,30 +19,131 @@ func Compress(in []byte, s *Scratch) ([]byte, error) {
 	var reuse = false
 	if maxCount == 0 {
 		maxCount, reuse = s.countSimple(in)
-	} else {
-		reuse = s.canReuseCTable()
 	}
+
+	reuse = s.canReuseCTable()
+	// Place old table in prevtable
+
 	// Reset for next run.
 	s.clearCount = true
 	s.maxCount = 0
 	if maxCount == len(in) {
 		// One symbol, use RLE
-		return nil, ErrUseRLE
+		return nil, false, ErrUseRLE
 	}
 	if maxCount == 1 || maxCount < (len(in)>>7) {
 		// Each symbol present maximum once or too well distributed.
-		return nil, ErrIncompressible
+		return nil, false, ErrIncompressible
 	}
 	if reuse {
 		// TODO:
+
 	}
 	s.optimalTableLog()
 	err = s.buildCTable()
 	if err != nil {
-		return nil, err
+		return nil, false, err
+	}
+	s.cTable.write(s)
+	if reuse && s.prevTable != nil {
+		hSize := len(s.Out)
+		oldSize := s.prevTable.estimateSize(s.count[:s.symbolLen])
+		newSize := s.cTable.estimateSize(s.count[:s.symbolLen])
+		if oldSize <= hSize+newSize || hSize+12 >= len(in) {
+			// Remove header
+			s.Out = s.Out[:0]
+			// TODO:
+			// compress using old table
+			s.cTable = s.prevTable
+			return s.Out, true, nil
+		}
+	}
+	// Compress using new table
+	if s.bw[0] == nil {
+		s.bw[0] = &bitWriter{}
+	}
+	s.Out, err = s.compress1X(s.bw[0], s.Out, in)
+	if len(s.Out) >= len(in) {
+		return nil, false, ErrIncompressible
+	}
+	return s.Out, false, err
+}
+
+func (s *Scratch) compress1X(bw *bitWriter, dst, src []byte) ([]byte, error) {
+	bw.reset(dst)
+	// N is length divisible by 4.
+	n := len(src)
+	n = n - (n & 3)
+	cTable := s.cTable[:256]
+
+	// encode a symbol
+	encode := func(symbol byte) {
+		enc := cTable[symbol]
+		bw.addBits16Clean(enc.val, enc.nBits)
 	}
 
-	return nil, nil
+	// Encode last bytes.
+	for i := len(src) & 3; i > 0; i-- {
+		encode(src[n+i-1])
+	}
+
+	if s.actualTableLog <= 8 {
+		for ; n > 0; n -= 4 {
+			v3, v2, v1, v0 := src[n-4], src[n-3], src[n-2], src[n-1]
+			bw.flush32()
+			encode(v0)
+			encode(v1)
+			encode(v2)
+			encode(v3)
+		}
+	} else {
+		for ; n > 0; n -= 4 {
+			v3, v2, v1, v0 := src[n-4], src[n-3], src[n-2], src[n-1]
+			bw.flush32()
+			encode(v0)
+			encode(v1)
+			encode(v2)
+			encode(v3)
+		}
+	}
+	err := bw.close()
+	return bw.out, err
+}
+
+func (s *Scratch) compress4X(src []byte) ([]byte, error) {
+	if len(src) < 12 {
+		return nil, ErrIncompressible
+	}
+	segmentSize := (len(src) + 3) / 4
+	var wg sync.WaitGroup
+	var errs [4]error
+	wg.Add(4)
+	for i := 0; i < 4; i++ {
+		if s.bw[i] == nil {
+			s.bw[i] = &bitWriter{}
+		}
+		toDo := src
+		if len(toDo) > segmentSize {
+			toDo = toDo[:segmentSize]
+		}
+		src = src[len(toDo):]
+		go func(i int) {
+			s.tmpOut[i], errs[i] = s.compress1X(s.bw[i], s.tmpOut[i][:0], toDo)
+			wg.Done()
+		}(i)
+	}
+	wg.Wait()
+	for i := 0; i < 4; i++ {
+		if errs[i] != nil {
+			return nil, errs[i]
+		}
+		o := s.tmpOut[i]
+		// Write compressed length as little endian.
+		s.Out = append(s.Out, byte(len(o)), byte(len(o)>>8))
+		// Write output.
+		s.Out = append(s.Out, o...)
+	}
+	return s.Out, nil
 }
 
 // countSimple will create a simple histogram in s.count.
@@ -82,11 +185,11 @@ func (s *Scratch) countSimple(in []byte) (max int, reuse bool) {
 }
 
 func (s *Scratch) canReuseCTable() bool {
-	if len(s.cTable) < int(s.symbolLen) {
+	if len(s.prevTable) < int(s.symbolLen) {
 		return false
 	}
 	for i, v := range s.count[:s.symbolLen] {
-		if v != 0 && s.cTable[i].nBits == 0 {
+		if v != 0 && s.prevTable[i].nBits == 0 {
 			return false
 		}
 	}
@@ -142,6 +245,7 @@ func (s *Scratch) buildCTable() error {
 	for s.nodes[nonNullRank].count == 0 {
 		nonNullRank--
 	}
+	//FIXME: this relies on indexing "-1". Go doesn't allow that.
 	nodeNb := uint16(startNode)
 	huffNode := s.nodes[1:huffNodesLen]
 	huffNode0 := &s.nodes[0]
@@ -236,6 +340,7 @@ func (s *Scratch) huffSort() {
 
 	// Clear nodes
 	nodes := s.nodes[:huffNodesLen+1]
+	s.nodes = nodes
 	nodes = nodes[1 : huffNodesLen+1]
 
 	// Sort into buckets based on length of symbol count.
@@ -255,7 +360,8 @@ func (s *Scratch) huffSort() {
 		pos := rank[r].current
 		rank[r].current++
 		prev := nodes[(pos-1)&huffNodesMask]
-		for (pos > rank[r].base) && (c > prev.count) {
+		base := rank[r].base
+		for (pos > base) && (c > prev.count) {
 			nodes[pos&huffNodesMask] = prev
 			pos--
 		}

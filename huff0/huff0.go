@@ -3,6 +3,8 @@ package huff0
 import (
 	"errors"
 	"fmt"
+
+	"github.com/klauspost/compress/fse"
 )
 
 const (
@@ -51,9 +53,12 @@ type Scratch struct {
 	maxCount       int    // count of the most probable symbol
 	clearCount     bool   // clear count
 	actualTableLog uint8  // Selected tablelog.
-	prevTable      []cTableEntry
-	cTable         []cTableEntry
+	prevTable      cTable
+	cTable         cTable
 	nodes          []nodeElt
+	bw             [4]*bitWriter
+	tmpOut         [4][]byte
+	fse            *fse.Scratch
 }
 
 func (s *Scratch) prepare(in []byte) (*Scratch, error) {
@@ -78,8 +83,89 @@ func (s *Scratch) prepare(in []byte) (*Scratch, error) {
 	if cap(s.nodes) < huffNodesLen+1 {
 		s.nodes = make([]nodeElt, 0, huffNodesLen+1)
 	}
+	if s.fse == nil {
+		s.fse = &fse.Scratch{}
+	}
 	s.nodes = s.nodes[:0]
 	s.br.init(in)
 
 	return s, nil
+}
+
+type cTable []cTableEntry
+
+func (c cTable) write(s *Scratch) error {
+	var (
+		// precomputed conversion table
+		bitsToWeight   [tableLogMax + 1]byte
+		huffWeight     [maxSymbolValue]byte // TODO: Move to scratch?
+		huffLog        = s.actualTableLog
+		maxSymbolValue = uint8(s.symbolLen - 1)
+	)
+	const (
+		maxFSETableLog = 6
+	)
+	// convert to weight
+	bitsToWeight[0] = 0
+	for n := uint8(1); n < huffLog+1; n++ {
+		bitsToWeight[n] = huffLog + 1 - n
+	}
+
+	// Acquire histogram for FSE.
+	hist, finished := s.fse.Histogram()
+	hist = hist[:256]
+	for i := range hist {
+		hist[i] = 0
+	}
+	huffMax := uint8(0)
+	for n := uint8(0); n < maxSymbolValue; n++ {
+		v := bitsToWeight[c[n].nBits]
+		huffWeight[n] = v
+		hist[v]++
+		if v > huffMax {
+			huffMax = v
+		}
+	}
+	// FSE compress if feasible.
+	if maxSymbolValue >= 2 {
+		huffMaxCnt := uint32(0)
+		for _, v := range hist[:int(huffMax+1)] {
+			if v > huffMaxCnt {
+				huffMaxCnt = v
+			}
+		}
+		finished(huffMax, int(huffMaxCnt))
+		s.fse.TableLog = maxFSETableLog
+		b, err := fse.Compress(huffWeight[:maxSymbolValue], s.fse)
+		if err == nil && len(b) < int(s.symbolLen>>1) {
+			s.Out = append(s.Out, uint8(len(b)))
+			s.Out = append(s.Out, b...)
+			return nil
+		}
+	}
+	// write raw values as 4-bits (max : 15)
+	if maxSymbolValue > (256 - 128) {
+		// should not happen : likely means source cannot be compressed
+		return ErrIncompressible
+	}
+	op := s.Out
+	// special case, pack weights 4 bits/weight.
+	op = append(op, 128|(maxSymbolValue-1))
+	// be sure it doesn't cause msan issue in final combination
+	huffWeight[maxSymbolValue] = 0
+	for n := uint16(0); n < uint16(maxSymbolValue); n += 2 {
+		op = append(op, (huffWeight[n]<<4)|huffWeight[n+1])
+	}
+	s.Out = op
+	return nil
+}
+
+// estimateSize returns the estimated size in bytes of the input represented in the
+// histogram supplied.
+func (c cTable) estimateSize(hist []uint32) int {
+	nbBits := uint32(7)
+	for i, v := range c[:len(hist)] {
+		nbBits += uint32(v.nBits) * hist[i]
+	}
+	return int(nbBits >> 3)
 }
