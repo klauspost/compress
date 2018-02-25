@@ -31,6 +31,13 @@ func (b *bitWriter) addBits16NC(value uint16, bits uint8) {
 	b.nBits += bits
 }
 
+// addBits16Clean will add up to 16 bits. value may not contain more set bits than indicated.
+// It will not check if there is space for them, so the caller must ensure that it has flushed recently.
+func (b *bitWriter) addBits16Clean(value uint16, bits uint8) {
+	b.bitContainer |= uint64(value) << (b.nBits & 63)
+	b.nBits += bits
+}
+
 // addBits16ZeroNC will add up to 16 bits.
 // It will not check if there is space for them,
 // so the caller must ensure that it has flushed recently.
@@ -147,7 +154,7 @@ func (b *bitWriter) flushAlign() {
 // to the output.
 func (b *bitWriter) close() error {
 	// End mark
-	b.addBits16NC(1, 1)
+	b.addBits16Clean(1, 1)
 	// flush until next byte.
 	b.flushAlign()
 	return nil
