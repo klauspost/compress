@@ -2,10 +2,14 @@ package huff0
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
 )
 
 func Compress(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
+	if len(in) > BlockSizeMax {
+		return nil, false, ErrIncompressible
+	}
 	s, err = s.prepare(in)
 	if err != nil {
 		return nil, false, err
@@ -21,7 +25,9 @@ func Compress(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
 		maxCount, reuse = s.countSimple(in)
 	}
 
-	reuse = s.canReuseCTable()
+	if false {
+		reuse = s.canUseTable(s.prevTable)
+	}
 	// Place old table in prevtable
 
 	// Reset for next run.
@@ -55,7 +61,16 @@ func Compress(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
 			// TODO:
 			// compress using old table
 			s.cTable = s.prevTable
+			s.Out, err = s.compress1X(s.bw[0], s.Out, in)
+			if len(s.Out) >= len(in) {
+				return nil, false, ErrIncompressible
+			}
 			return s.Out, true, nil
+		}
+	}
+	if true {
+		if !s.canUseTable(s.cTable) {
+			panic("invalid cTable")
 		}
 	}
 	// Compress using new table
@@ -73,7 +88,7 @@ func (s *Scratch) compress1X(bw *bitWriter, dst, src []byte) ([]byte, error) {
 	bw.reset(dst)
 	// N is length divisible by 4.
 	n := len(src)
-	n = n - (n & 3)
+	n -= n & 3
 	cTable := s.cTable[:256]
 
 	// encode a symbol
@@ -102,6 +117,7 @@ func (s *Scratch) compress1X(bw *bitWriter, dst, src []byte) ([]byte, error) {
 			bw.flush32()
 			encode(v0)
 			encode(v1)
+			bw.flush32()
 			encode(v2)
 			encode(v3)
 		}
@@ -127,10 +143,31 @@ func (s *Scratch) compress4X(src []byte) ([]byte, error) {
 			toDo = toDo[:segmentSize]
 		}
 		src = src[len(toDo):]
+
+		// If one one processor, output directly.
+		if runtime.GOMAXPROCS(0) == 1 {
+			var err error
+			// Add placeholder for length.
+			idx := len(s.Out)
+			s.Out = append(s.Out, 0, 0)
+			s.Out, err = s.compress1X(s.bw[i], s.Out, toDo)
+			if err != nil {
+				return nil, err
+			}
+			// Write compressed length as little endian before block.
+			length := len(s.Out) - idx - 2
+			s.Out[idx] = byte(length)
+			s.Out[idx+1] = byte(length >> 8)
+			continue
+		}
+		// Separate goroutine for each block.
 		go func(i int) {
 			s.tmpOut[i], errs[i] = s.compress1X(s.bw[i], s.tmpOut[i][:0], toDo)
 			wg.Done()
 		}(i)
+	}
+	if runtime.GOMAXPROCS(0) == 1 {
+		return s.Out, nil
 	}
 	wg.Wait()
 	for i := 0; i < 4; i++ {
@@ -184,12 +221,12 @@ func (s *Scratch) countSimple(in []byte) (max int, reuse bool) {
 	return int(m), false
 }
 
-func (s *Scratch) canReuseCTable() bool {
-	if len(s.prevTable) < int(s.symbolLen) {
+func (s *Scratch) canUseTable(c cTable) bool {
+	if len(c) < int(s.symbolLen) {
 		return false
 	}
 	for i, v := range s.count[:s.symbolLen] {
-		if v != 0 && s.prevTable[i].nBits == 0 {
+		if v != 0 && c[i].nBits == 0 {
 			return false
 		}
 	}
@@ -238,42 +275,46 @@ const huffNodesMask = huffNodesLen - 1
 
 func (s *Scratch) buildCTable() error {
 	s.huffSort()
+	s.cTable = s.cTable[:s.symbolLen]
 
-	var startNode = s.symbolLen
+	var startNode = int16(s.symbolLen)
 	nonNullRank := s.symbolLen - 1
 
 	for s.nodes[nonNullRank].count == 0 {
 		nonNullRank--
 	}
 	//FIXME: this relies on indexing "-1". Go doesn't allow that.
-	nodeNb := uint16(startNode)
-	huffNode := s.nodes[1:huffNodesLen]
-	huffNode0 := &s.nodes[0]
+	nodeNb := int16(startNode)
+	huffNode := s.nodes[1 : huffNodesLen+1]
 
-	lowS := uint16(nonNullRank)
+	// This overlays the slice above, but allows "-1" index lookups.
+	// Different from reference implementation.
+	huffNode0 := s.nodes[0 : huffNodesLen+1]
+
+	lowS := int16(nonNullRank)
 	nodeRoot := nodeNb + lowS - 1
 	lowN := nodeNb
 	huffNode[nodeNb].count = huffNode[lowS].count + huffNode[lowS-1].count
-	huffNode[lowS].parent, huffNode[lowS-1].parent = nodeNb, nodeNb
+	huffNode[lowS].parent, huffNode[lowS-1].parent = uint16(nodeNb), uint16(nodeNb)
 	nodeNb++
 	lowS -= 2
 	for n := nodeNb; n <= nodeRoot; n++ {
 		huffNode[n].count = 1 << 30
 	}
 	// fake entry, strong barrier
-	huffNode0.count = 1 << 31
+	huffNode0[0].count = 1 << 31
 
 	// create parents
 	for nodeNb <= nodeRoot {
-		var n1, n2 uint16
-		if huffNode[lowS].count < huffNode[lowN].count {
+		var n1, n2 int16
+		if huffNode0[lowS+1].count < huffNode0[lowN+1].count {
 			n1 = lowS
 			lowS--
 		} else {
 			n1 = lowN
 			lowN++
 		}
-		if huffNode[lowS].count < huffNode[lowN].count {
+		if huffNode0[lowS+1].count < huffNode0[lowN+1].count {
 			n2 = lowS
 			lowS--
 		} else {
@@ -281,8 +322,8 @@ func (s *Scratch) buildCTable() error {
 			lowN++
 		}
 
-		huffNode[nodeNb].count = huffNode[n1].count + huffNode[n2].count
-		huffNode[n1].parent, huffNode[n2].parent = nodeNb, nodeNb
+		huffNode[nodeNb].count = huffNode0[n1+1].count + huffNode0[n2+1].count
+		huffNode0[n1+1].parent, huffNode0[n2+1].parent = uint16(nodeNb), uint16(nodeNb)
 		nodeNb++
 	}
 

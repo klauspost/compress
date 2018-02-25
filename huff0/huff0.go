@@ -15,7 +15,7 @@ const (
 	cTableBound     = 129
 	huffNodesLen    = 512
 
-	// BlockSizeMax is maximum input size for a single block compressed.
+	// BlockSizeMax is maximum input size for a single block uncompressed.
 	BlockSizeMax = 128 << 10
 )
 
@@ -25,6 +25,9 @@ var (
 
 	// ErrUseRLE is returned from the compressor when the input is a single byte value repeated.
 	ErrUseRLE = errors.New("input is single value repeated")
+
+	// ErrTooBig is return if input is too large for a single block.
+	ErrTooBig = errors.New("input too big")
 )
 
 type Scratch struct {
@@ -77,6 +80,7 @@ func (s *Scratch) prepare(in []byte) (*Scratch, error) {
 	if cap(s.Out) == 0 {
 		s.Out = make([]byte, 0, len(in))
 	}
+	s.Out = s.Out[:0]
 	if cap(s.cTable) < maxSymbolValue+1 {
 		s.cTable = make([]cTableEntry, 0, maxSymbolValue+1)
 	}
