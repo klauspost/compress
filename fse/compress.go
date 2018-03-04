@@ -149,7 +149,21 @@ func (s *Scratch) compress(src []byte) error {
 	}
 
 	// Main compression loop.
-	if !s.zeroBits {
+	switch {
+	case !s.zeroBits && s.actualTableLog <= 8:
+		// We can encode 4 symbols without requiring a flush.
+		// We do not need to check if any output is 0 bits.
+		for ip >= 4 {
+			s.bw.flush32()
+			v3, v2, v1, v0 := src[ip-4], src[ip-3], src[ip-2], src[ip-1]
+			c2.encode(tt[v0])
+			c1.encode(tt[v1])
+			c2.encode(tt[v2])
+			c1.encode(tt[v3])
+			ip -= 4
+		}
+	case !s.zeroBits:
+		// We do not need to check if any output is 0 bits.
 		for ip >= 4 {
 			s.bw.flush32()
 			v3, v2, v1, v0 := src[ip-4], src[ip-3], src[ip-2], src[ip-1]
@@ -160,7 +174,18 @@ func (s *Scratch) compress(src []byte) error {
 			c1.encode(tt[v3])
 			ip -= 4
 		}
-	} else {
+	case s.actualTableLog <= 8:
+		// We can encode 4 symbols without requiring a flush
+		for ip >= 4 {
+			s.bw.flush32()
+			v3, v2, v1, v0 := src[ip-4], src[ip-3], src[ip-2], src[ip-1]
+			c2.encodeZero(tt[v0])
+			c1.encodeZero(tt[v1])
+			c2.encodeZero(tt[v2])
+			c1.encodeZero(tt[v3])
+			ip -= 4
+		}
+	default:
 		for ip >= 4 {
 			s.bw.flush32()
 			v3, v2, v1, v0 := src[ip-4], src[ip-3], src[ip-2], src[ip-1]
