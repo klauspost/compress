@@ -6,34 +6,45 @@ import (
 	"sync"
 )
 
-func Compress(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
-	if len(in) > BlockSizeMax {
-		return nil, false, ErrIncompressible
-	}
+func Compress1X(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
 	s, err = s.prepare(in)
 	if err != nil {
 		return nil, false, err
 	}
-	if s.allowReuse {
-		// TODO: See if we can reuse
-	}
+	s.compress = s.compress1X
+	return compress(in, s)
+}
 
+func Compress4X(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
+	s, err = s.prepare(in)
+	if err != nil {
+		return nil, false, err
+	}
+	s.compress = s.compress4X
+	return compress(in, s)
+}
+
+func compress(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
+	// Nuke previous table if we cannot reuse anyway.
+	if s.Reuse == ReusePolicyNone {
+		s.prevTable = s.prevTable[:0]
+	}
 	// Create histogram, if none was provided.
 	maxCount := s.maxCount
-	var reuse = false
+	var canReuse = false
 	if maxCount == 0 {
-		maxCount, reuse = s.countSimple(in)
+		maxCount, canReuse = s.countSimple(in)
+	} else {
+		canReuse = s.canUseTable(s.prevTable)
 	}
-
-	if false {
-		reuse = s.canUseTable(s.prevTable)
-	}
-	// Place old table in prevtable
 
 	// Reset for next run.
 	s.clearCount = true
 	s.maxCount = 0
-	if maxCount == len(in) {
+	if maxCount >= len(in) {
+		if maxCount > len(in) {
+			return nil, false, fmt.Errorf("maxCount (%d) > length (%d)", maxCount, len(in))
+		}
 		// One symbol, use RLE
 		return nil, false, ErrUseRLE
 	}
@@ -41,50 +52,80 @@ func Compress(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
 		// Each symbol present maximum once or too well distributed.
 		return nil, false, ErrIncompressible
 	}
-	if reuse {
-		// TODO:
 
+	if s.Reuse == ReusePolicyPrefer && canReuse {
+		keepTable := s.cTable
+		s.cTable = s.prevTable
+		s.Out, err = s.compress(in)
+		s.cTable = keepTable
+		if err == nil && len(s.Out) < len(in) {
+			s.OutData = s.Out
+			return s.Out, true, nil
+		}
+		// Do not attempt to re-use later.
+		s.prevTable = s.prevTable[:0]
 	}
+
+	// Calculate new table.
 	s.optimalTableLog()
 	err = s.buildCTable()
 	if err != nil {
 		return nil, false, err
 	}
-	s.cTable.write(s)
-	if reuse && s.prevTable != nil {
+
+	if !s.canUseTable(s.cTable) {
+		// TODO: Not needed.
+		panic("invalid table generated")
+	}
+
+	if s.Reuse == ReusePolicyAllow && canReuse {
 		hSize := len(s.Out)
 		oldSize := s.prevTable.estimateSize(s.count[:s.symbolLen])
 		newSize := s.cTable.estimateSize(s.count[:s.symbolLen])
 		if oldSize <= hSize+newSize || hSize+12 >= len(in) {
 			// Remove header
 			s.Out = s.Out[:0]
-			// TODO:
-			// compress using old table
+			// Retain cTable even if we re-use.
+			keepTable := s.cTable
 			s.cTable = s.prevTable
-			s.Out, err = s.compress1X(s.bw[0], s.Out, in)
+			s.Out, err = s.compress(in)
+			s.cTable = keepTable
 			if len(s.Out) >= len(in) {
 				return nil, false, ErrIncompressible
 			}
+			s.OutData = s.Out
 			return s.Out, true, nil
 		}
 	}
-	if true {
-		if !s.canUseTable(s.cTable) {
-			panic("invalid cTable")
-		}
-	}
+
+	// Use new table
+	s.cTable.write(s)
+	s.OutTable = s.Out
+
 	// Compress using new table
+	s.Out, err = s.compress(in)
+	if err != nil {
+		s.OutTable = nil
+		return nil, false, err
+	}
+	if len(s.Out) >= len(in) {
+		s.OutTable = nil
+		return nil, false, ErrIncompressible
+	}
+	// Move current table into previous.
+	s.prevTable, s.cTable = s.cTable, s.prevTable[:0]
+	s.OutData = s.Out[len(s.OutTable):]
+	return s.Out, false, nil
+}
+
+func (s *Scratch) compress1X(src []byte) ([]byte, error) {
 	if s.bw[0] == nil {
 		s.bw[0] = &bitWriter{}
 	}
-	s.Out, err = s.compress1X(s.bw[0], s.Out, in)
-	if len(s.Out) >= len(in) {
-		return nil, false, ErrIncompressible
-	}
-	return s.Out, false, err
+	return s.compress1xBW(s.bw[0], s.Out, src)
 }
 
-func (s *Scratch) compress1X(bw *bitWriter, dst, src []byte) ([]byte, error) {
+func (s *Scratch) compress1xBW(bw *bitWriter, dst, src []byte) ([]byte, error) {
 	bw.reset(dst)
 	// N is length divisible by 4.
 	n := len(src)
@@ -150,7 +191,7 @@ func (s *Scratch) compress4X(src []byte) ([]byte, error) {
 			// Add placeholder for length.
 			idx := len(s.Out)
 			s.Out = append(s.Out, 0, 0)
-			s.Out, err = s.compress1X(s.bw[i], s.Out, toDo)
+			s.Out, err = s.compress1xBW(s.bw[i], s.Out, toDo)
 			if err != nil {
 				return nil, err
 			}
@@ -162,7 +203,7 @@ func (s *Scratch) compress4X(src []byte) ([]byte, error) {
 		}
 		// Separate goroutine for each block.
 		go func(i int) {
-			s.tmpOut[i], errs[i] = s.compress1X(s.bw[i], s.tmpOut[i][:0], toDo)
+			s.tmpOut[i], errs[i] = s.compress1xBW(s.bw[i], s.tmpOut[i][:0], toDo)
 			wg.Done()
 		}(i)
 	}
@@ -192,17 +233,17 @@ func (s *Scratch) countSimple(in []byte) (max int, reuse bool) {
 		s.count[v]++
 	}
 	m := uint32(0)
-	if len(s.cTable) > 0 {
+	if len(s.prevTable) > 0 {
 		for i, v := range s.count[:] {
 			if v > m {
 				m = v
 			}
 			if v > 0 {
 				s.symbolLen = uint16(i) + 1
-				if i >= len(s.cTable) {
+				if i >= len(s.prevTable) {
 					reuse = false
 				} else {
-					if s.cTable[i].nBits == 0 {
+					if s.prevTable[i].nBits == 0 {
 						reuse = false
 					}
 				}
@@ -283,7 +324,6 @@ func (s *Scratch) buildCTable() error {
 	for s.nodes[nonNullRank].count == 0 {
 		nonNullRank--
 	}
-	//FIXME: this relies on indexing "-1". Go doesn't allow that.
 	nodeNb := int16(startNode)
 	huffNode := s.nodes[1 : huffNodesLen+1]
 
@@ -397,14 +437,14 @@ func (s *Scratch) huffSort() {
 		rank[n].current = rank[n].base
 	}
 	for n, c := range s.count[:s.symbolLen] {
-		r := highBits(c+1) + 1
+		r := (highBits(c+1) + 1) & 31
 		pos := rank[r].current
 		rank[r].current++
 		prev := nodes[(pos-1)&huffNodesMask]
-		base := rank[r].base
-		for (pos > base) && (c > prev.count) {
+		for pos > rank[r].base && c > prev.count {
 			nodes[pos&huffNodesMask] = prev
 			pos--
+			prev = nodes[(pos-1)&huffNodesMask]
 		}
 		nodes[pos&huffNodesMask] = nodeElt{count: c, symbol: byte(n)}
 	}

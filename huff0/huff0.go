@@ -30,6 +30,23 @@ var (
 	ErrTooBig = errors.New("input too big")
 )
 
+type ReusePolicy uint8
+
+const (
+	// ReusePolicyAllow will allow reuse if it produces smaller output.
+	ReusePolicyAllow ReusePolicy = iota
+
+	// ReusePolicyPrefer will re-use aggressively if possible.
+	// This will not check if a new table will produce smaller output,
+	// except if the current table is impossible to use or
+	// compressed output is bigger than input.
+	ReusePolicyPrefer
+
+	// ReusePolicyNone will disable re-use of tables.
+	// This is slightly faster than ReusePolicyAllow but may produce larger output.
+	ReusePolicyNone
+)
+
 type Scratch struct {
 	count [maxSymbolValue + 1]uint32
 
@@ -44,27 +61,41 @@ type Scratch struct {
 	// and allocation will be avoided.
 	Out []byte
 
+	// OutTable will contain the table data only, if a new table has been generated.
+	// Slice of the returned data.
+	OutTable []byte
+
+	// OutData will contain the compressed data.
+	// Slice of the returned data.
+	OutData []byte
+
 	// MaxSymbolValue will override the maximum symbol value of the next block.
 	MaxSymbolValue uint8
 
 	// TableLog will attempt to override the tablelog for the next block.
 	TableLog uint8
 
-	allowReuse     bool
+	// Reuse will specify the reuse policy
+	Reuse ReusePolicy
+
 	br             byteReader
 	symbolLen      uint16 // Length of active part of the symbol table.
 	maxCount       int    // count of the most probable symbol
 	clearCount     bool   // clear count
 	actualTableLog uint8  // Selected tablelog.
-	prevTable      cTable
+	prevTable      cTable // Table used for previous compression.
 	cTable         cTable
 	nodes          []nodeElt
 	bw             [4]*bitWriter
 	tmpOut         [4][]byte
 	fse            *fse.Scratch
+	compress       func(src []byte) ([]byte, error)
 }
 
 func (s *Scratch) prepare(in []byte) (*Scratch, error) {
+	if len(in) > BlockSizeMax {
+		return nil, ErrTooBig
+	}
 	if s == nil {
 		s = &Scratch{}
 	}
@@ -77,6 +108,12 @@ func (s *Scratch) prepare(in []byte) (*Scratch, error) {
 	if s.TableLog > tableLogMax {
 		return nil, fmt.Errorf("tableLog (%d) > maxTableLog (%d)", s.TableLog, tableLogMax)
 	}
+	if s.clearCount && s.maxCount == 0 {
+		for i := range s.count {
+			s.count[i] = 0
+		}
+		s.clearCount = false
+	}
 	if cap(s.Out) == 0 {
 		s.Out = make([]byte, 0, len(in))
 	}
@@ -84,6 +121,12 @@ func (s *Scratch) prepare(in []byte) (*Scratch, error) {
 	if cap(s.cTable) < maxSymbolValue+1 {
 		s.cTable = make([]cTableEntry, 0, maxSymbolValue+1)
 	}
+	s.cTable = s.cTable[:0]
+	if cap(s.prevTable) < maxSymbolValue+1 {
+		s.prevTable = make([]cTableEntry, 0, maxSymbolValue+1)
+	}
+	s.OutTable = nil
+	s.OutData = nil
 	if cap(s.nodes) < huffNodesLen+1 {
 		s.nodes = make([]nodeElt, 0, huffNodesLen+1)
 	}

@@ -1,0 +1,165 @@
+package huff0
+
+import (
+	"io/ioutil"
+	"strings"
+	"testing"
+)
+
+type inputFn func() ([]byte, error)
+
+var testfiles = []struct {
+	name  string
+	fn    inputFn
+	err1X error
+	err4X error
+}{
+	// Digits is the digits of the irrational number e. Its decimal representation
+	// does not repeat, but there are only 10 possible digits, so it should be
+	// reasonably compressible.
+	{name: "digits", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/e.txt") }},
+	// gettysburg.txt is a small plain text.
+	{name: "gettysburg", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/gettysburg.txt") }},
+	// Twain is Project Gutenberg's edition of Mark Twain's classic English novel.
+	{name: "twain", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/Mark.Twain-Tom.Sawyer.txt") }},
+	// Random bytes
+	{name: "random", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/sharnd.out") }, err1X: ErrIncompressible, err4X: ErrIncompressible},
+	// Low entropy
+	{name: "low-ent", fn: func() ([]byte, error) { return []byte(strings.Repeat("1221", 10000)), nil }},
+	// Super Low entropy
+	{name: "superlow-ent", fn: func() ([]byte, error) { return []byte(strings.Repeat("1", 10000) + strings.Repeat("2", 500)), nil }},
+	// Zero bytes
+	{name: "zeroes", fn: func() ([]byte, error) { return make([]byte, 10000), nil }, err1X: ErrUseRLE, err4X: ErrUseRLE},
+	{name: "crash1", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/crash1.bin") }, err1X: ErrIncompressible, err4X: ErrIncompressible},
+	{name: "crash2", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/crash2.bin") }, err1X: ErrIncompressible, err4X: ErrIncompressible},
+	{name: "crash3", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/crash3.bin") }, err1X: ErrIncompressible, err4X: ErrIncompressible},
+	{name: "endzerobits", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/endzerobits.bin") }, err1X: nil, err4X: ErrIncompressible},
+	{name: "endnonzero", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/endnonzero.bin") }, err1X: ErrIncompressible, err4X: ErrIncompressible},
+	{name: "case1", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/case1.bin") }, err1X: nil},
+	{name: "case2", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/case2.bin") }, err1X: nil},
+	{name: "case3", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/case3.bin") }, err1X: nil},
+	{name: "pngdata.001", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/pngdata.bin") }, err1X: nil},
+	{name: "normcount2", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/normcount2.bin") }, err1X: nil},
+}
+
+func TestCompress1X(t *testing.T) {
+	for _, test := range testfiles {
+		t.Run(test.name, func(t *testing.T) {
+			var s Scratch
+			buf0, err := test.fn()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(buf0) > BlockSizeMax {
+				buf0 = buf0[:BlockSizeMax]
+			}
+			b, re, err := Compress1X(buf0, &s)
+			if err != test.err1X {
+				t.Errorf("want error %v (%T), got %v (%T)", test.err1X, test.err1X, err, err)
+			}
+			if err != nil {
+				t.Log(test.name, err.Error())
+				return
+			}
+			if b == nil {
+				t.Error("got no output")
+				return
+			}
+			if len(s.OutTable) == 0 {
+				t.Error("got no table definition")
+			}
+			if re {
+				t.Error("claimed to have re-used.")
+			}
+			if len(s.OutData) == 0 {
+				t.Error("got no data output")
+			}
+			t.Logf("%s: %d -> %d bytes (%.2f:1) %t (table: %d bytes)", test.name, len(buf0), len(b), float64(len(buf0))/float64(len(b)), re, len(s.OutTable))
+		})
+	}
+}
+
+func TestCompress4X(t *testing.T) {
+	for _, test := range testfiles {
+		t.Run(test.name, func(t *testing.T) {
+			var s Scratch
+			buf0, err := test.fn()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(buf0) > BlockSizeMax {
+				buf0 = buf0[:BlockSizeMax]
+			}
+			b, re, err := Compress4X(buf0, &s)
+			if err != test.err4X {
+				t.Errorf("want error %v (%T), got %v (%T)", test.err1X, test.err4X, err, err)
+			}
+			if err != nil {
+				t.Log(test.name, err.Error())
+				return
+			}
+			if b == nil {
+				t.Error("got no output")
+				return
+			}
+			if len(s.OutTable) == 0 {
+				t.Error("got no table definition")
+			}
+			if re {
+				t.Error("claimed to have re-used.")
+			}
+			if len(s.OutData) == 0 {
+				t.Error("got no data output")
+			}
+
+			t.Logf("%s: %d -> %d bytes (%.2f:1) %t (table: %d bytes)", test.name, len(buf0), len(b), float64(len(buf0))/float64(len(b)), re, len(s.OutTable))
+		})
+	}
+}
+
+func TestCompress1XReuse(t *testing.T) {
+	for _, test := range testfiles {
+		t.Run(test.name, func(t *testing.T) {
+			var s Scratch
+			buf0, err := test.fn()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(buf0) > BlockSizeMax {
+				buf0 = buf0[:BlockSizeMax]
+			}
+			b, re, err := Compress1X(buf0, &s)
+			if err != test.err1X {
+				t.Errorf("want error %v (%T), got %v (%T)", test.err1X, test.err1X, err, err)
+			}
+			if err != nil {
+				t.Log(test.name, err.Error())
+				return
+			}
+			if b == nil {
+				t.Error("got no output")
+				return
+			}
+			firstData := len(s.OutData)
+			s.Reuse = ReusePolicyAllow
+			b, re, err = Compress1X(buf0, &s)
+			if err != nil {
+				t.Errorf("got secondary error %v (%T)", err, err)
+				return
+			}
+			if !re {
+				t.Error("Didn't re-use even if data was the same")
+			}
+			if len(s.OutTable) != 0 {
+				t.Error("got table definition, don't want any")
+			}
+			if len(s.OutData) == 0 {
+				t.Error("got no data output")
+			}
+			if len(b) != firstData {
+				t.Errorf("data length did not match first: %d, second:%d", firstData, len(b))
+			}
+			t.Logf("%s: %d -> %d bytes (%.2f:1) %t", test.name, len(buf0), len(b), float64(len(buf0))/float64(len(b)), re)
+		})
+	}
+}
