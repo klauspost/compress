@@ -38,6 +38,14 @@ func (b *bitWriter) addBits16Clean(value uint16, bits uint8) {
 	b.nBits += bits
 }
 
+// addBits16Clean will add up to 16 bits. value may not contain more set bits than indicated.
+// It will not check if there is space for them, so the caller must ensure that it has flushed recently.
+func (b *bitWriter) encSymbol(ct cTable, symbol byte) {
+	enc := ct[symbol]
+	b.bitContainer |= uint64(enc.val) << (b.nBits & 63)
+	b.nBits += enc.nBits
+}
+
 // addBits16ZeroNC will add up to 16 bits.
 // It will not check if there is space for them,
 // so the caller must ensure that it has flushed recently.

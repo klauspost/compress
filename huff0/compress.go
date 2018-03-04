@@ -89,8 +89,6 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 		oldSize := s.prevTable.estimateSize(s.count[:s.symbolLen])
 		newSize := s.cTable.estimateSize(s.count[:s.symbolLen])
 		if oldSize <= hSize+newSize || hSize+12 >= len(in) {
-			// Remove header
-			s.Out = s.Out[:0]
 			// Retain cTable even if we re-use.
 			keepTable := s.cTable
 			s.cTable = s.prevTable
@@ -136,35 +134,32 @@ func (s *Scratch) compress1xDo(dst, src []byte) ([]byte, error) {
 	n -= n & 3
 	cTable := s.cTable[:256]
 
-	// encode a symbol
-	encode := func(symbol byte) {
-		enc := cTable[symbol]
-		bw.addBits16Clean(enc.val, enc.nBits)
-	}
-
 	// Encode last bytes.
 	for i := len(src) & 3; i > 0; i-- {
-		encode(src[n+i-1])
+		bw.encSymbol(cTable, src[n+i-1])
 	}
-
 	if s.actualTableLog <= 8 {
-		for ; n > 0; n -= 4 {
-			v3, v2, v1, v0 := src[n-4], src[n-3], src[n-2], src[n-1]
+		n -= 4
+		for ; n >= 0; n -= 4 {
+			tmp := src[n : n+4]
+			// tmp should be len 4
 			bw.flush32()
-			encode(v0)
-			encode(v1)
-			encode(v2)
-			encode(v3)
+			bw.encSymbol(cTable, tmp[3])
+			bw.encSymbol(cTable, tmp[2])
+			bw.encSymbol(cTable, tmp[1])
+			bw.encSymbol(cTable, tmp[0])
 		}
 	} else {
-		for ; n > 0; n -= 4 {
-			v3, v2, v1, v0 := src[n-4], src[n-3], src[n-2], src[n-1]
+		n -= 4
+		for ; n >= 0; n -= 4 {
+			tmp := src[n : n+4]
+			// tmp should be len 4
 			bw.flush32()
-			encode(v0)
-			encode(v1)
+			bw.encSymbol(cTable, tmp[3])
+			bw.encSymbol(cTable, tmp[2])
 			bw.flush32()
-			encode(v2)
-			encode(v3)
+			bw.encSymbol(cTable, tmp[1])
+			bw.encSymbol(cTable, tmp[0])
 		}
 	}
 	err := bw.close()
