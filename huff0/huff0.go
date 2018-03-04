@@ -160,22 +160,23 @@ func (c cTable) write(s *Scratch) error {
 	// Acquire histogram for FSE.
 	hist := s.fse.Histogram()
 	hist = hist[:256]
-	for i := range hist {
+	for i := range hist[:16] {
 		hist[i] = 0
 	}
-	huffMax := uint8(0)
 	for n := uint8(0); n < maxSymbolValue; n++ {
-		v := bitsToWeight[c[n].nBits]
+		v := bitsToWeight[c[n].nBits] & 15
 		huffWeight[n] = v
 		hist[v]++
-		if v > huffMax {
-			huffMax = v
-		}
 	}
 	// FSE compress if feasible.
 	if maxSymbolValue >= 2 {
 		huffMaxCnt := uint32(0)
-		for _, v := range hist[:int(huffMax+1)] {
+		huffMax := uint8(0)
+		for i, v := range hist[:16] {
+			if v == 0 {
+				continue
+			}
+			huffMax = byte(i)
 			if v > huffMaxCnt {
 				huffMaxCnt = v
 			}
