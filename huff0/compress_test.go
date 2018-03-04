@@ -25,9 +25,9 @@ var testfiles = []struct {
 	// Random bytes
 	{name: "random", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/sharnd.out") }, err1X: ErrIncompressible, err4X: ErrIncompressible},
 	// Low entropy
-	{name: "low-ent", fn: func() ([]byte, error) { return []byte(strings.Repeat("1221", 10000)), nil }},
+	{name: "low-ent.10k", fn: func() ([]byte, error) { return []byte(strings.Repeat("1221", 10000)), nil }},
 	// Super Low entropy
-	{name: "superlow-ent", fn: func() ([]byte, error) { return []byte(strings.Repeat("1", 10000) + strings.Repeat("2", 500)), nil }},
+	{name: "superlow-ent-10k", fn: func() ([]byte, error) { return []byte(strings.Repeat("1", 10000) + strings.Repeat("2", 500)), nil }},
 	// Zero bytes
 	{name: "zeroes", fn: func() ([]byte, error) { return make([]byte, 10000), nil }, err1X: ErrUseRLE, err4X: ErrUseRLE},
 	{name: "crash1", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/crash1.bin") }, err1X: ErrIncompressible, err4X: ErrIncompressible},
@@ -160,6 +160,204 @@ func TestCompress1XReuse(t *testing.T) {
 				t.Errorf("data length did not match first: %d, second:%d", firstData, len(b))
 			}
 			t.Logf("%s: %d -> %d bytes (%.2f:1) %t", test.name, len(buf0), len(b), float64(len(buf0))/float64(len(b)), re)
+		})
+	}
+}
+
+func BenchmarkCompress1XReuseNone(b *testing.B) {
+	for _, tt := range testfiles {
+		test := tt
+		if test.err1X != nil {
+			continue
+		}
+		b.Run(test.name, func(b *testing.B) {
+			var s Scratch
+			s.Reuse = ReusePolicyNone
+			buf0, err := test.fn()
+			if err != nil {
+				b.Fatal(err)
+			}
+			if len(buf0) > BlockSizeMax {
+				buf0 = buf0[:BlockSizeMax]
+			}
+			_, re, err := Compress1X(buf0, &s)
+			if err != test.err1X {
+				b.Fatal("unexpected error:", err)
+			}
+			b.ResetTimer()
+			b.ReportAllocs()
+			b.SetBytes(int64(len(buf0)))
+			for i := 0; i < b.N; i++ {
+				_, re, _ = Compress1X(buf0, &s)
+				if re {
+					b.Fatal("reused")
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkCompress1XReuseAllow(b *testing.B) {
+	for _, tt := range testfiles {
+		test := tt
+		if test.err1X != nil {
+			continue
+		}
+		b.Run(test.name, func(b *testing.B) {
+			var s Scratch
+			s.Reuse = ReusePolicyAllow
+			buf0, err := test.fn()
+			if err != nil {
+				b.Fatal(err)
+			}
+			if len(buf0) > BlockSizeMax {
+				buf0 = buf0[:BlockSizeMax]
+			}
+			_, re, err := Compress1X(buf0, &s)
+			if err != test.err1X {
+				b.Fatal("unexpected error:", err)
+			}
+			b.ResetTimer()
+			b.ReportAllocs()
+			b.SetBytes(int64(len(buf0)))
+			for i := 0; i < b.N; i++ {
+				_, re, _ = Compress1X(buf0, &s)
+				if !re {
+					b.Fatal("not reused")
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkCompress1XReusePrefer(b *testing.B) {
+	for _, tt := range testfiles {
+		test := tt
+		if test.err1X != nil {
+			continue
+		}
+		b.Run(test.name, func(b *testing.B) {
+			var s Scratch
+			s.Reuse = ReusePolicyPrefer
+			buf0, err := test.fn()
+			if err != nil {
+				b.Fatal(err)
+			}
+			if len(buf0) > BlockSizeMax {
+				buf0 = buf0[:BlockSizeMax]
+			}
+			_, re, err := Compress1X(buf0, &s)
+			if err != test.err1X {
+				b.Fatal("unexpected error:", err)
+			}
+			b.ResetTimer()
+			b.ReportAllocs()
+			b.SetBytes(int64(len(buf0)))
+			for i := 0; i < b.N; i++ {
+				_, re, _ = Compress1X(buf0, &s)
+				if !re {
+					b.Fatal("not reused")
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkCompress4XReuseNone(b *testing.B) {
+	for _, tt := range testfiles {
+		test := tt
+		if test.err4X != nil {
+			continue
+		}
+		b.Run(test.name, func(b *testing.B) {
+			var s Scratch
+			s.Reuse = ReusePolicyNone
+			buf0, err := test.fn()
+			if err != nil {
+				b.Fatal(err)
+			}
+			if len(buf0) > BlockSizeMax {
+				buf0 = buf0[:BlockSizeMax]
+			}
+			_, re, err := Compress4X(buf0, &s)
+			if err != test.err1X {
+				b.Fatal("unexpected error:", err)
+			}
+			b.ResetTimer()
+			b.ReportAllocs()
+			b.SetBytes(int64(len(buf0)))
+			for i := 0; i < b.N; i++ {
+				_, re, _ = Compress4X(buf0, &s)
+				if re {
+					b.Fatal("reused")
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkCompress4XReuseAllow(b *testing.B) {
+	for _, tt := range testfiles {
+		test := tt
+		if test.err4X != nil {
+			continue
+		}
+		b.Run(test.name, func(b *testing.B) {
+			var s Scratch
+			s.Reuse = ReusePolicyAllow
+			buf0, err := test.fn()
+			if err != nil {
+				b.Fatal(err)
+			}
+			if len(buf0) > BlockSizeMax {
+				buf0 = buf0[:BlockSizeMax]
+			}
+			_, re, err := Compress4X(buf0, &s)
+			if err != test.err1X {
+				b.Fatal("unexpected error:", err)
+			}
+			b.ResetTimer()
+			b.ReportAllocs()
+			b.SetBytes(int64(len(buf0)))
+			for i := 0; i < b.N; i++ {
+				_, re, _ = Compress4X(buf0, &s)
+				if !re {
+					b.Fatal("not reused")
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkCompress4XReusePrefer(b *testing.B) {
+	for _, tt := range testfiles {
+		test := tt
+		if test.err4X != nil {
+			continue
+		}
+		b.Run(test.name, func(b *testing.B) {
+			var s Scratch
+			s.Reuse = ReusePolicyPrefer
+			buf0, err := test.fn()
+			if err != nil {
+				b.Fatal(err)
+			}
+			if len(buf0) > BlockSizeMax {
+				buf0 = buf0[:BlockSizeMax]
+			}
+			_, re, err := Compress4X(buf0, &s)
+			if err != test.err4X {
+				b.Fatal("unexpected error:", err)
+			}
+			b.ResetTimer()
+			b.ReportAllocs()
+			b.SetBytes(int64(len(buf0)))
+			for i := 0; i < b.N; i++ {
+				_, re, _ = Compress4X(buf0, &s)
+				if !re {
+					b.Fatal("not reused")
+				}
+			}
 		})
 	}
 }

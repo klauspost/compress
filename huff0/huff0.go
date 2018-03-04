@@ -86,10 +86,9 @@ type Scratch struct {
 	prevTable      cTable // Table used for previous compression.
 	cTable         cTable
 	nodes          []nodeElt
-	bw             [4]*bitWriter
 	tmpOut         [4][]byte
 	fse            *fse.Scratch
-	compress       func(src []byte) ([]byte, error)
+	huffWeight     [maxSymbolValue + 1]byte
 }
 
 func (s *Scratch) prepare(in []byte) (*Scratch, error) {
@@ -145,9 +144,9 @@ func (c cTable) write(s *Scratch) error {
 	var (
 		// precomputed conversion table
 		bitsToWeight   [tableLogMax + 1]byte
-		huffWeight     [maxSymbolValue]byte // TODO: Move to scratch?
 		huffLog        = s.actualTableLog
 		maxSymbolValue = uint8(s.symbolLen - 1)
+		huffWeight     = s.huffWeight[:256]
 	)
 	const (
 		maxFSETableLog = 6
@@ -159,7 +158,7 @@ func (c cTable) write(s *Scratch) error {
 	}
 
 	// Acquire histogram for FSE.
-	hist, finished := s.fse.Histogram()
+	hist := s.fse.Histogram()
 	hist = hist[:256]
 	for i := range hist {
 		hist[i] = 0
@@ -181,7 +180,7 @@ func (c cTable) write(s *Scratch) error {
 				huffMaxCnt = v
 			}
 		}
-		finished(huffMax, int(huffMaxCnt))
+		s.fse.HistogramFinished(huffMax, int(huffMaxCnt))
 		s.fse.TableLog = maxFSETableLog
 		b, err := fse.Compress(huffWeight[:maxSymbolValue], s.fse)
 		if err == nil && len(b) < int(s.symbolLen>>1) {

@@ -11,8 +11,7 @@ func Compress1X(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
 	if err != nil {
 		return nil, false, err
 	}
-	s.compress = s.compress1X
-	return compress(in, s)
+	return compress(in, s, s.compress1X)
 }
 
 func Compress4X(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
@@ -20,11 +19,18 @@ func Compress4X(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
 	if err != nil {
 		return nil, false, err
 	}
-	s.compress = s.compress4X
-	return compress(in, s)
+	if false {
+		// TODO: compress4Xp only slightly faster.
+		const parallelThreshold = 8 << 10
+		if len(in) < parallelThreshold || runtime.GOMAXPROCS(0) == 1 {
+			return compress(in, s, s.compress4X)
+		}
+		return compress(in, s, s.compress4Xp)
+	}
+	return compress(in, s, s.compress4X)
 }
 
-func compress(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
+func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)) (out []byte, reUsed bool, err error) {
 	// Nuke previous table if we cannot reuse anyway.
 	if s.Reuse == ReusePolicyNone {
 		s.prevTable = s.prevTable[:0]
@@ -56,7 +62,7 @@ func compress(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
 	if s.Reuse == ReusePolicyPrefer && canReuse {
 		keepTable := s.cTable
 		s.cTable = s.prevTable
-		s.Out, err = s.compress(in)
+		s.Out, err = compressor(in)
 		s.cTable = keepTable
 		if err == nil && len(s.Out) < len(in) {
 			s.OutData = s.Out
@@ -88,7 +94,7 @@ func compress(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
 			// Retain cTable even if we re-use.
 			keepTable := s.cTable
 			s.cTable = s.prevTable
-			s.Out, err = s.compress(in)
+			s.Out, err = compressor(in)
 			s.cTable = keepTable
 			if len(s.Out) >= len(in) {
 				return nil, false, ErrIncompressible
@@ -103,7 +109,7 @@ func compress(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
 	s.OutTable = s.Out
 
 	// Compress using new table
-	s.Out, err = s.compress(in)
+	s.Out, err = compressor(in)
 	if err != nil {
 		s.OutTable = nil
 		return nil, false, err
@@ -119,14 +125,12 @@ func compress(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
 }
 
 func (s *Scratch) compress1X(src []byte) ([]byte, error) {
-	if s.bw[0] == nil {
-		s.bw[0] = &bitWriter{}
-	}
-	return s.compress1xBW(s.bw[0], s.Out, src)
+	return s.compress1xDo(s.Out, src)
 }
 
-func (s *Scratch) compress1xBW(bw *bitWriter, dst, src []byte) ([]byte, error) {
-	bw.reset(dst)
+func (s *Scratch) compress1xDo(dst, src []byte) ([]byte, error) {
+	var bw = bitWriter{out: dst}
+
 	// N is length divisible by 4.
 	n := len(src)
 	n -= n & 3
@@ -172,43 +176,51 @@ func (s *Scratch) compress4X(src []byte) ([]byte, error) {
 		return nil, ErrIncompressible
 	}
 	segmentSize := (len(src) + 3) / 4
-	var wg sync.WaitGroup
-	var errs [4]error
-	wg.Add(4)
+
 	for i := 0; i < 4; i++ {
-		if s.bw[i] == nil {
-			s.bw[i] = &bitWriter{}
-		}
 		toDo := src
 		if len(toDo) > segmentSize {
 			toDo = toDo[:segmentSize]
 		}
 		src = src[len(toDo):]
 
-		// If one one processor, output directly.
-		if runtime.GOMAXPROCS(0) == 1 {
-			var err error
-			// Add placeholder for length.
-			idx := len(s.Out)
-			s.Out = append(s.Out, 0, 0)
-			s.Out, err = s.compress1xBW(s.bw[i], s.Out, toDo)
-			if err != nil {
-				return nil, err
-			}
-			// Write compressed length as little endian before block.
-			length := len(s.Out) - idx - 2
-			s.Out[idx] = byte(length)
-			s.Out[idx+1] = byte(length >> 8)
-			continue
+		var err error
+		// Add placeholder for length.
+		idx := len(s.Out)
+		s.Out = append(s.Out, 0, 0)
+		s.Out, err = s.compress1xDo(s.Out, toDo)
+		if err != nil {
+			return nil, err
 		}
+		// Write compressed length as little endian before block.
+		length := len(s.Out) - idx - 2
+		s.Out[idx] = byte(length)
+		s.Out[idx+1] = byte(length >> 8)
+	}
+	return s.Out, nil
+}
+
+// compress4Xp will compress 4 streams using separate goroutines.
+func (s *Scratch) compress4Xp(src []byte) ([]byte, error) {
+	if len(src) < 12 {
+		return nil, ErrIncompressible
+	}
+	segmentSize := (len(src) + 3) / 4
+	var wg sync.WaitGroup
+	var errs [4]error
+	wg.Add(4)
+	for i := 0; i < 4; i++ {
+		toDo := src
+		if len(toDo) > segmentSize {
+			toDo = toDo[:segmentSize]
+		}
+		src = src[len(toDo):]
+
 		// Separate goroutine for each block.
 		go func(i int) {
-			s.tmpOut[i], errs[i] = s.compress1xBW(s.bw[i], s.tmpOut[i][:0], toDo)
+			s.tmpOut[i], errs[i] = s.compress1xDo(s.tmpOut[i][:0], toDo)
 			wg.Done()
 		}(i)
-	}
-	if runtime.GOMAXPROCS(0) == 1 {
-		return s.Out, nil
 	}
 	wg.Wait()
 	for i := 0; i < 4; i++ {

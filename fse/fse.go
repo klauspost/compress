@@ -82,17 +82,22 @@ type Scratch struct {
 
 // Histogram allows to populate the histogram and skip that step in the compression,
 // It otherwise allows to inspect the histogram when compression is done.
-// To indicate that you have populated the histogram call the returned function
+// To indicate that you have populated the histogram call HistogramFinished
 // with the value of the highest populated symbol, as well as the number of entries
 // in the most populated entry. These are accepted at face value.
 // The returned slice will always be length 256.
-// If you have *not* populated the histogram, send 0 as maxCount before next compression cycle.
-func (s *Scratch) Histogram() ([]uint32, func(maxSymbol uint8, maxCount int)) {
-	return s.count[:], func(maxSymbol uint8, maxCount int) {
-		s.maxCount = maxCount
-		s.symbolLen = uint16(maxSymbol) + 1
-		s.clearCount = maxCount != 0
-	}
+func (s *Scratch) Histogram() []uint32 {
+	return s.count[:]
+}
+
+// HistogramFinished can be called to indicate that the histogram has been populated.
+// maxSymbol is the index of the highest set symbol of the next data segment.
+// maxCount is the number of entries in the most populated entry.
+// These are accepted at face value.
+func (s *Scratch) HistogramFinished(maxSymbol uint8, maxCount int) {
+	s.maxCount = maxCount
+	s.symbolLen = uint16(maxSymbol) + 1
+	s.clearCount = maxCount != 0
 }
 
 // prepare will prepare and allocate scratch tables used for both compression and decompression.
