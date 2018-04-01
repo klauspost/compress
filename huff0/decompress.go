@@ -55,7 +55,7 @@ func (s *Scratch) ReadTable(in []byte) (s2 *Scratch, remain []byte, err error) {
 			return s, nil, errors.New("input too small for table")
 		}
 		// FSE compressed weights
-		s.fse.DecompressLimit = 256
+		s.fse.DecompressLimit = 255
 		hw := s.huffWeight[:]
 		s.fse.Out = hw
 		b, err := fse.Decompress(in[:iSize], s.fse)
@@ -63,7 +63,7 @@ func (s *Scratch) ReadTable(in []byte) (s2 *Scratch, remain []byte, err error) {
 		if err != nil {
 			return s, nil, err
 		}
-		if len(b) > 256 {
+		if len(b) > 255 {
 			return s, nil, errors.New("corrupt input: output table too large")
 		}
 		s.symbolLen = uint16(len(b))
