@@ -2,6 +2,8 @@ package huff0
 
 import (
 	"io/ioutil"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -42,6 +44,28 @@ var testfiles = []struct {
 	{name: "case3", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/case3.bin") }, err1X: nil},
 	{name: "pngdata.001", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/pngdata.bin") }, err1X: nil},
 	{name: "normcount2", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/normcount2.bin") }, err1X: nil},
+}
+
+type fuzzInput struct {
+	name string
+	fn   inputFn
+}
+
+var testfilesExtended []fuzzInput
+
+func init() {
+	filepath.Walk("./fuzz/compress/corpus", func(path string, info os.FileInfo, err error) error {
+		if info.Size() == 0 || info.IsDir() {
+			return nil
+		}
+		testfilesExtended = append(testfilesExtended, fuzzInput{
+			name: filepath.Base(path),
+			fn: func() ([]byte, error) {
+				return ioutil.ReadFile(path)
+			},
+		})
+		return nil
+	})
 }
 
 func TestCompress1X(t *testing.T) {
