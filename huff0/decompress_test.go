@@ -200,7 +200,7 @@ func TestDecompress1XFuzz(t *testing.T) {
 			}
 			b, re, err := Compress1X(buf0, s)
 			if err != nil {
-				if err == ErrIncompressible || err == ErrUseRLE {
+				if err == ErrIncompressible || err == ErrUseRLE || err == ErrTooBig {
 					t.Log(test.name, err.Error())
 					return
 				}
@@ -291,7 +291,7 @@ func TestDecompress4XFuzz(t *testing.T) {
 			}
 			b, re, err := Compress4X(buf0, s)
 			if err != nil {
-				if err == ErrIncompressible || err == ErrUseRLE {
+				if err == ErrIncompressible || err == ErrUseRLE || err == ErrTooBig {
 					t.Log(test.name, err.Error())
 					return
 				}

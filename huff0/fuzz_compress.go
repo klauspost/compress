@@ -6,7 +6,7 @@ import "bytes"
 
 func Fuzz(data []byte) int {
 	comp, _, err := Compress1X(data, nil)
-	if err == ErrIncompressible || err == ErrUseRLE {
+	if err == ErrIncompressible || err == ErrUseRLE || err == ErrTooBig {
 		return 0
 	}
 	if err != nil {

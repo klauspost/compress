@@ -197,7 +197,7 @@ func (s *Scratch) Decompress4X(in []byte, dstSize int) (out []byte, err error) {
 	if len(s.dt.single) == 0 {
 		return nil, errors.New("no table loaded")
 	}
-	if len(in) <= 6+(4*1) {
+	if len(in) < 6+(4*1) {
 		return nil, errors.New("input too small")
 	}
 	// TODO: We do not detect when we overrun a buffer, except if the last one does.
