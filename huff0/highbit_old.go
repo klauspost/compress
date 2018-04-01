@@ -7,8 +7,8 @@ var deBruijnClz = [...]uint8{0, 9, 1, 10, 13, 21, 2, 29,
 	8, 12, 20, 28, 15, 17, 24, 7,
 	19, 27, 23, 6, 26, 5, 4, 31}
 
-// highBits returns the highest set bit
-func highBits(v uint32) (n uint32) {
+// highBit32 returns the highest set bit
+func highBit32(v uint32) (n uint32) {
 	v |= v >> 1
 	v |= v >> 2
 	v |= v >> 4

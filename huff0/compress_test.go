@@ -4,6 +4,8 @@ import (
 	"io/ioutil"
 	"strings"
 	"testing"
+
+	"github.com/klauspost/compress/flate"
 )
 
 type inputFn func() ([]byte, error)
@@ -31,10 +33,10 @@ var testfiles = []struct {
 	// Zero bytes
 	{name: "zeroes", fn: func() ([]byte, error) { return make([]byte, 10000), nil }, err1X: ErrUseRLE, err4X: ErrUseRLE},
 	{name: "crash1", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/crash1.bin") }, err1X: ErrIncompressible, err4X: ErrIncompressible},
-	{name: "crash2", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/crash2.bin") }, err1X: ErrIncompressible, err4X: ErrIncompressible},
+	{name: "crash2", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/crash2.bin") }, err4X: ErrIncompressible},
 	{name: "crash3", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/crash3.bin") }, err1X: ErrIncompressible, err4X: ErrIncompressible},
 	{name: "endzerobits", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/endzerobits.bin") }, err1X: nil, err4X: ErrIncompressible},
-	{name: "endnonzero", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/endnonzero.bin") }, err1X: ErrIncompressible, err4X: ErrIncompressible},
+	{name: "endnonzero", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/endnonzero.bin") }, err4X: ErrIncompressible},
 	{name: "case1", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/case1.bin") }, err1X: nil},
 	{name: "case2", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/case2.bin") }, err1X: nil},
 	{name: "case3", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/case3.bin") }, err1X: nil},
@@ -65,6 +67,10 @@ func TestCompress1X(t *testing.T) {
 				t.Error("got no output")
 				return
 			}
+			min := s.minSize(len(buf0))
+			if len(s.OutData) < min {
+				t.Errorf("output data length (%d) below shannon limit (%d)", len(s.OutData), min)
+			}
 			if len(s.OutTable) == 0 {
 				t.Error("got no table definition")
 			}
@@ -74,7 +80,12 @@ func TestCompress1X(t *testing.T) {
 			if len(s.OutData) == 0 {
 				t.Error("got no data output")
 			}
-			t.Logf("%s: %d -> %d bytes (%.2f:1) %t (table: %d bytes)", test.name, len(buf0), len(b), float64(len(buf0))/float64(len(b)), re, len(s.OutTable))
+			t.Logf("%s: %d -> %d bytes (%.2f:1) re:%t (table: %d bytes)", test.name, len(buf0), len(b), float64(len(buf0))/float64(len(b)), re, len(s.OutTable))
+			s.Out = nil
+			bRe, _, err := Compress1X(b, &s)
+			if err == nil {
+				t.Log("Could re-compress to", len(bRe))
+			}
 		})
 	}
 }
@@ -160,6 +171,45 @@ func TestCompress1XReuse(t *testing.T) {
 				t.Errorf("data length did not match first: %d, second:%d", firstData, len(b))
 			}
 			t.Logf("%s: %d -> %d bytes (%.2f:1) %t", test.name, len(buf0), len(b), float64(len(buf0))/float64(len(b)), re)
+		})
+	}
+}
+
+func BenchmarkDeflate(b *testing.B) {
+	for _, tt := range testfiles {
+		test := tt
+		if test.err1X != nil {
+			continue
+		}
+		b.Run(test.name, func(b *testing.B) {
+			dec, err := flate.NewWriter(ioutil.Discard, flate.HuffmanOnly)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if test.err1X != nil {
+				b.Skip("skipping")
+			}
+			buf0, err := test.fn()
+			if err != nil {
+				b.Fatal(err)
+			}
+			if len(buf0) > BlockSizeMax {
+				buf0 = buf0[:BlockSizeMax]
+			}
+			b.ResetTimer()
+			b.ReportAllocs()
+			b.SetBytes(int64(len(buf0)))
+			for i := 0; i < b.N; i++ {
+				dec.Reset(ioutil.Discard)
+				n, err := dec.Write(buf0)
+				if err != nil {
+					b.Fatal(err)
+				}
+				if n != len(buf0) {
+					b.Fatal("mismatch", n, len(buf0))
+				}
+				dec.Close()
+			}
 		})
 	}
 }

@@ -172,6 +172,9 @@ func (s *Scratch) compress4X(src []byte) ([]byte, error) {
 	}
 	segmentSize := (len(src) + 3) / 4
 
+	// Add placeholder for output length
+	s.Out = s.Out[:6]
+
 	for i := 0; i < 4; i++ {
 		toDo := src
 		if len(toDo) > segmentSize {
@@ -180,17 +183,18 @@ func (s *Scratch) compress4X(src []byte) ([]byte, error) {
 		src = src[len(toDo):]
 
 		var err error
-		// Add placeholder for length.
 		idx := len(s.Out)
-		s.Out = append(s.Out, 0, 0)
 		s.Out, err = s.compress1xDo(s.Out, toDo)
 		if err != nil {
 			return nil, err
 		}
 		// Write compressed length as little endian before block.
-		length := len(s.Out) - idx - 2
-		s.Out[idx] = byte(length)
-		s.Out[idx+1] = byte(length >> 8)
+		if i < 3 {
+			// Last length is not written.
+			length := len(s.Out) - idx
+			s.Out[i*2] = byte(length)
+			s.Out[i*2+1] = byte(length >> 8)
+		}
 	}
 	return s.Out, nil
 }
@@ -200,6 +204,9 @@ func (s *Scratch) compress4Xp(src []byte) ([]byte, error) {
 	if len(src) < 12 {
 		return nil, ErrIncompressible
 	}
+	// Add placeholder for output length
+	s.Out = s.Out[:6]
+
 	segmentSize := (len(src) + 3) / 4
 	var wg sync.WaitGroup
 	var errs [4]error
@@ -223,8 +230,13 @@ func (s *Scratch) compress4Xp(src []byte) ([]byte, error) {
 			return nil, errs[i]
 		}
 		o := s.tmpOut[i]
-		// Write compressed length as little endian.
-		s.Out = append(s.Out, byte(len(o)), byte(len(o)>>8))
+		// Write compressed length as little endian before block.
+		if i < 3 {
+			// Last length is not written.
+			s.Out[i*2] = byte(len(o))
+			s.Out[i*2+1] = byte(len(o) >> 8)
+		}
+
 		// Write output.
 		s.Out = append(s.Out, o...)
 	}
@@ -283,8 +295,8 @@ func (s *Scratch) canUseTable(c cTable) bool {
 
 // minTableLog provides the minimum logSize to safely represent a distribution.
 func (s *Scratch) minTableLog() uint8 {
-	minBitsSrc := highBits(uint32(s.br.remain()-1)) + 1
-	minBitsSymbols := highBits(uint32(s.symbolLen-1)) + 2
+	minBitsSrc := highBit32(uint32(s.br.remain()-1)) + 1
+	minBitsSymbols := highBit32(uint32(s.symbolLen-1)) + 2
 	if minBitsSrc < minBitsSymbols {
 		return uint8(minBitsSrc)
 	}
@@ -295,7 +307,7 @@ func (s *Scratch) minTableLog() uint8 {
 func (s *Scratch) optimalTableLog() {
 	tableLog := s.TableLog
 	minBits := s.minTableLog()
-	maxBitsSrc := uint8(highBits(uint32(s.br.remain()-1))) - 2
+	maxBitsSrc := uint8(highBit32(uint32(s.br.remain()-1))) - 2
 	if maxBitsSrc < tableLog {
 		// Accuracy can be reduced
 		tableLog = maxBitsSrc
@@ -328,15 +340,16 @@ func (s *Scratch) buildCTable() error {
 	var startNode = int16(s.symbolLen)
 	nonNullRank := s.symbolLen - 1
 
-	for s.nodes[nonNullRank].count == 0 {
-		nonNullRank--
-	}
 	nodeNb := int16(startNode)
 	huffNode := s.nodes[1 : huffNodesLen+1]
 
 	// This overlays the slice above, but allows "-1" index lookups.
 	// Different from reference implementation.
 	huffNode0 := s.nodes[0 : huffNodesLen+1]
+
+	for huffNode[nonNullRank].count == 0 {
+		nonNullRank--
+	}
 
 	lowS := int16(nonNullRank)
 	nodeRoot := nodeNb + lowS - 1
@@ -391,7 +404,7 @@ func (s *Scratch) buildCTable() error {
 	}
 	var nbPerRank [tableLogMax + 1]uint16
 	var valPerRank [tableLogMax + 1]uint16
-	for _, v := range huffNode[:nonNullRank] {
+	for _, v := range huffNode[:nonNullRank+1] {
 		nbPerRank[v.nbBits]++
 	}
 	// determine stating value per rank
@@ -406,14 +419,16 @@ func (s *Scratch) buildCTable() error {
 	}
 
 	// push nbBits per symbol, symbol order
-	for _, v := range huffNode[:s.symbolLen] {
+	// TODO: changed `s.symbolLen` -> `nonNullRank+1` (micro-opt)
+	for _, v := range huffNode[:nonNullRank+1] {
 		s.cTable[v.symbol].nBits = v.nbBits
 	}
 
 	// assign value within rank, symbol order
-	for n := range s.cTable[:s.symbolLen] {
-		v := valPerRank[s.cTable[n].nBits]
-		s.cTable[n].val = v + 1
+	for n, val := range s.cTable[:s.symbolLen] {
+		v := valPerRank[val.nBits]
+		s.cTable[n].val = v
+		valPerRank[val.nBits] = v + 1
 	}
 
 	return nil
@@ -434,7 +449,7 @@ func (s *Scratch) huffSort() {
 	// Sort into buckets based on length of symbol count.
 	var rank [32]rankPos
 	for _, v := range s.count[:s.symbolLen] {
-		r := highBits(v+1) & 31
+		r := highBit32(v+1) & 31
 		rank[r].base++
 	}
 	for n := 30; n > 0; n-- {
@@ -444,7 +459,7 @@ func (s *Scratch) huffSort() {
 		rank[n].current = rank[n].base
 	}
 	for n, c := range s.count[:s.symbolLen] {
-		r := (highBits(c+1) + 1) & 31
+		r := (highBit32(c+1) + 1) & 31
 		pos := rank[r].current
 		rank[r].current++
 		prev := nodes[(pos-1)&huffNodesMask]
@@ -455,6 +470,7 @@ func (s *Scratch) huffSort() {
 		}
 		nodes[pos&huffNodesMask] = nodeElt{count: c, symbol: byte(n)}
 	}
+	return
 }
 
 func (s *Scratch) setMaxHeight(lastNonNull int) uint8 {
@@ -509,7 +525,7 @@ func (s *Scratch) setMaxHeight(lastNonNull int) uint8 {
 		}
 
 		for totalCost > 0 {
-			nBitsToDecrease := uint8(highBits(uint32(totalCost))) + 1
+			nBitsToDecrease := uint8(highBit32(uint32(totalCost))) + 1
 
 			for ; nBitsToDecrease > 1; nBitsToDecrease-- {
 				highPos := rankLast[nBitsToDecrease]

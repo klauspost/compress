@@ -3,6 +3,7 @@ package huff0
 import (
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/klauspost/compress/fse"
 )
@@ -84,7 +85,8 @@ type Scratch struct {
 	clearCount     bool   // clear count
 	actualTableLog uint8  // Selected tablelog.
 	prevTable      cTable // Table used for previous compression.
-	cTable         cTable
+	cTable         cTable // compression table
+	dt             dTable // decompression table
 	nodes          []nodeElt
 	tmpOut         [4][]byte
 	fse            *fse.Scratch
@@ -143,8 +145,9 @@ type cTable []cTableEntry
 func (c cTable) write(s *Scratch) error {
 	var (
 		// precomputed conversion table
-		bitsToWeight   [tableLogMax + 1]byte
-		huffLog        = s.actualTableLog
+		bitsToWeight [tableLogMax + 1]byte
+		huffLog      = s.actualTableLog
+		// last weight is not saved.
 		maxSymbolValue = uint8(s.symbolLen - 1)
 		huffWeight     = s.huffWeight[:256]
 	)
@@ -168,6 +171,7 @@ func (c cTable) write(s *Scratch) error {
 		huffWeight[n] = v
 		hist[v]++
 	}
+
 	// FSE compress if feasible.
 	if maxSymbolValue >= 2 {
 		huffMaxCnt := uint32(0)
@@ -215,4 +219,17 @@ func (c cTable) estimateSize(hist []uint32) int {
 		nbBits += uint32(v.nBits) * hist[i]
 	}
 	return int(nbBits >> 3)
+}
+
+// minSize returns the minimum possible size considering the shannon limit.
+func (s *Scratch) minSize(total int) int {
+	nbBits := float64(7)
+	fTotal := float64(total)
+	for _, v := range s.count[:s.symbolLen] {
+		n := float64(v)
+		if n > 0 {
+			nbBits += math.Log2(fTotal/n) * n
+		}
+	}
+	return int(nbBits) >> 3
 }
