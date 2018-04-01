@@ -241,8 +241,12 @@ func (s *Scratch) Decompress4X(in []byte, dstSize int) (out []byte, err error) {
 
 	// Decode 2 values from each decoder/loop.
 	const bufoff = 256 / 4
-	for br[0].off >= 4 && br[1].off >= 4 && br[2].off >= 4 && br[3].off >= 4 {
+bigloop:
+	for {
 		for i := range br {
+			if br[i].off < 4 {
+				break bigloop
+			}
 			br[i].fillFast()
 		}
 		tmp[off] = decode(&br[0])
@@ -262,13 +266,16 @@ func (s *Scratch) Decompress4X(in []byte, dstSize int) (out []byte, err error) {
 			off = 0
 			dstOut = dstOut[bufoff:]
 			// There must at least be 3 buffers left.
-			if len(dstOut) < (dstEvery*3)-3 {
+			if len(dstOut) < dstEvery*3+3 {
 				return nil, errors.New("corruption detected: stream overrun")
 			}
 		}
 	}
 	if off > 0 {
 		ioff := int(off)
+		if len(dstOut) < dstEvery*3-ioff {
+			return nil, errors.New("corruption detected: stream overrun")
+		}
 		copy(dstOut, tmp[:off])
 		copy(dstOut[dstEvery:dstEvery+ioff], tmp[bufoff:bufoff*2])
 		copy(dstOut[dstEvery*2:dstEvery*2+ioff], tmp[bufoff*2:bufoff*3])
@@ -282,7 +289,7 @@ func (s *Scratch) Decompress4X(in []byte, dstSize int) (out []byte, err error) {
 		for !br.finished() {
 			br.fill()
 			if offset >= len(dstOut) {
-				return nil, errors.New("corruption detected: stream overrun.")
+				return nil, errors.New("corruption detected: stream overrun")
 			}
 			dstOut[offset] = decode(br)
 			offset++
