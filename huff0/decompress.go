@@ -145,6 +145,8 @@ func (s *Scratch) ReadTable(in []byte) (s2 *Scratch, remain []byte, err error) {
 	return s, in, nil
 }
 
+// Decompress1X will decompress a 1X encoded stream.
+// Before this is called, the table must be initialized with ReadTable.
 func (s *Scratch) Decompress1X(in []byte) (out []byte, err error) {
 	if len(s.dt.single) == 0 {
 		return nil, errors.New("no table loaded")
@@ -188,6 +190,115 @@ func (s *Scratch) Decompress1X(in []byte) (out []byte, err error) {
 	return s.Out, br.close()
 }
 
+// Decompress4X will decompress a 4X encoded stream.
+// Before this is called, the table must be initialized with ReadTable.
+// The destination size of the uncompressed data must be known and provided.
+func (s *Scratch) Decompress4X(in []byte, dstSize int) (out []byte, err error) {
+	if len(s.dt.single) == 0 {
+		return nil, errors.New("no table loaded")
+	}
+	if len(in) <= 6+(4*1) {
+		return nil, errors.New("input too small")
+	}
+	// TODO: We do not detect when we overrun a buffer, except if the last one does.
+
+	var br [4]bitReader
+	start := 6
+	for i := 0; i < 3; i++ {
+		length := int(in[i*2]) | (int(in[i*2+1]) << 8)
+		if start+length >= len(in) {
+			return nil, errors.New("truncated input (or invalid offset)")
+		}
+		err = br[i].init(in[start : start+length])
+		if err != nil {
+			return nil, err
+		}
+		start += length
+	}
+	err = br[3].init(in[start:])
+	if err != nil {
+		return nil, err
+	}
+
+	// Prepare output
+	if cap(s.Out) < dstSize {
+		s.Out = make([]byte, 0, dstSize)
+	}
+	s.Out = s.Out[:dstSize]
+	// destination, offset to match first output
+	dstOut := s.Out
+	dstEvery := (dstSize + 3) / 4
+
+	decode := func(br *bitReader) byte {
+		val := br.peekBitsFast(s.actualTableLog) /* note : actualTableLog >= 1 */
+		v := s.dt.single[val]
+		br.bitsRead += v.nBits
+		return v.byte
+	}
+	// Use temp table to avoid bound checks/append penalty.
+	var tmp = s.huffWeight[:256]
+	var off uint8
+
+	// Decode 2 values from each decoder/loop.
+	const bufoff = 256 / 4
+	for br[0].off >= 4 && br[1].off >= 4 && br[2].off >= 4 && br[3].off >= 4 {
+		for i := range br {
+			br[i].fillFast()
+		}
+		tmp[off] = decode(&br[0])
+		tmp[off+bufoff] = decode(&br[1])
+		tmp[off+bufoff*2] = decode(&br[2])
+		tmp[off+bufoff*3] = decode(&br[3])
+		tmp[off+1] = decode(&br[0])
+		tmp[off+1+bufoff] = decode(&br[1])
+		tmp[off+1+bufoff*2] = decode(&br[2])
+		tmp[off+1+bufoff*3] = decode(&br[3])
+		off += 2
+		if off == bufoff {
+			copy(dstOut, tmp[:bufoff])
+			copy(dstOut[dstEvery:], tmp[bufoff:bufoff*2])
+			copy(dstOut[dstEvery*2:], tmp[bufoff*2:bufoff*3])
+			copy(dstOut[dstEvery*3:], tmp[bufoff*3:bufoff*4])
+			off = 0
+			dstOut = dstOut[bufoff:]
+			// There must at least be 3 buffers left.
+			if len(dstOut) < (dstEvery*3)-3 {
+				return nil, errors.New("corruption detected: stream overrun")
+			}
+		}
+	}
+	if off > 0 {
+		ioff := int(off)
+		copy(dstOut, tmp[:off])
+		copy(dstOut[dstEvery:dstEvery+ioff], tmp[bufoff:bufoff*2])
+		copy(dstOut[dstEvery*2:dstEvery*2+ioff], tmp[bufoff*2:bufoff*3])
+		copy(dstOut[dstEvery*3:dstEvery*3+ioff], tmp[bufoff*3:bufoff*4])
+		dstOut = dstOut[off:]
+	}
+
+	for i := range br {
+		offset := dstEvery * i
+		br := &br[i]
+		for !br.finished() {
+			br.fill()
+			if offset >= len(dstOut) {
+				return nil, errors.New("corruption detected: stream overrun.")
+			}
+			dstOut[offset] = decode(br)
+			offset++
+		}
+		err = br.close()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return s.Out, nil
+}
+
+// matches will compare a decoding table to a coding table.
+// Errors are written to the writer.
+// Nothing will be written if table is ok.
 func (d dTable) matches(ct cTable, w io.Writer) {
 	if d.single == nil {
 		return

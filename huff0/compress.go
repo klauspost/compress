@@ -166,6 +166,8 @@ func (s *Scratch) compress1xDo(dst, src []byte) ([]byte, error) {
 	return bw.out, err
 }
 
+var sixZeros [6]byte
+
 func (s *Scratch) compress4X(src []byte) ([]byte, error) {
 	if len(src) < 12 {
 		return nil, ErrIncompressible
@@ -173,7 +175,8 @@ func (s *Scratch) compress4X(src []byte) ([]byte, error) {
 	segmentSize := (len(src) + 3) / 4
 
 	// Add placeholder for output length
-	s.Out = s.Out[:6]
+	offsetIdx := len(s.Out)
+	s.Out = append(s.Out, sixZeros[:]...)
 
 	for i := 0; i < 4; i++ {
 		toDo := src
@@ -192,10 +195,11 @@ func (s *Scratch) compress4X(src []byte) ([]byte, error) {
 		if i < 3 {
 			// Last length is not written.
 			length := len(s.Out) - idx
-			s.Out[i*2] = byte(length)
-			s.Out[i*2+1] = byte(length >> 8)
+			s.Out[i*2+offsetIdx] = byte(length)
+			s.Out[i*2+offsetIdx+1] = byte(length >> 8)
 		}
 	}
+
 	return s.Out, nil
 }
 
