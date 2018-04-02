@@ -45,7 +45,7 @@ func TestDecompress1X(t *testing.T) {
 
 			s.Out = nil
 			var remain []byte
-			s, remain, err = s.ReadTable(b)
+			s, remain, err = ReadTable(b, s)
 			if err != nil {
 				t.Error(err)
 				return
@@ -135,7 +135,7 @@ func TestDecompress4X(t *testing.T) {
 
 			s.Out = nil
 			var remain []byte
-			s, remain, err = s.ReadTable(b)
+			s, remain, err = ReadTable(b, s)
 			if err != nil {
 				t.Error(err)
 				return
@@ -226,7 +226,7 @@ func TestDecompress1XFuzz(t *testing.T) {
 
 			s.Out = nil
 			var remain []byte
-			s, remain, err = s.ReadTable(b)
+			s, remain, err = ReadTable(b, s)
 			if err != nil {
 				t.Error(err)
 				return
@@ -317,7 +317,7 @@ func TestDecompress4XFuzz(t *testing.T) {
 
 			s.Out = nil
 			var remain []byte
-			s, remain, err = s.ReadTable(b)
+			s, remain, err = ReadTable(b, s)
 			if err != nil {
 				t.Error(err)
 				return
@@ -390,13 +390,13 @@ func BenchmarkDecompress1XTable(b *testing.B) {
 				b.Fatal("unexpected error:", err)
 			}
 			s.Out = nil
-			s, remain, _ := s.ReadTable(compressed)
+			s, remain, _ := ReadTable(compressed, s)
 			s.Decompress1X(remain)
 			b.ResetTimer()
 			b.ReportAllocs()
 			b.SetBytes(int64(len(buf0)))
 			for i := 0; i < b.N; i++ {
-				s, remain, err := s.ReadTable(compressed)
+				s, remain, err := ReadTable(compressed, s)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -430,7 +430,7 @@ func BenchmarkDecompress1XNoTable(b *testing.B) {
 				b.Fatal("unexpected error:", err)
 			}
 			s.Out = nil
-			s, remain, _ := s.ReadTable(compressed)
+			s, remain, _ := ReadTable(compressed, s)
 			s.Decompress1X(remain)
 			b.ResetTimer()
 			b.ReportAllocs()
@@ -466,7 +466,7 @@ func BenchmarkDecompress4XNoTable(b *testing.B) {
 				b.Fatal("unexpected error:", err)
 			}
 			s.Out = nil
-			s, remain, _ := s.ReadTable(compressed)
+			s, remain, _ := ReadTable(compressed, s)
 			s.Decompress4X(remain, len(buf0))
 			b.ResetTimer()
 			b.ReportAllocs()

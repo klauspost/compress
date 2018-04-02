@@ -12,8 +12,7 @@ func Fuzz(data []byte) int {
 	if err != nil {
 		panic(err)
 	}
-	var s = &Scratch{}
-	s, remain, err := s.ReadTable(comp)
+	s, remain, err := ReadTable(comp, nil)
 	if err != nil {
 		panic(err)
 	}

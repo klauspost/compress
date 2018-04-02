@@ -3,8 +3,7 @@
 package huff0
 
 func Fuzz(data []byte) int {
-	var s = &Scratch{}
-	s, rem, err := s.ReadTable(data)
+	s, rem, err := ReadTable(data, nil)
 	if err != nil {
 		return 0
 	}
