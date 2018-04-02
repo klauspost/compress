@@ -35,6 +35,7 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 	if s.Reuse == ReusePolicyNone {
 		s.prevTable = s.prevTable[:0]
 	}
+
 	// Create histogram, if none was provided.
 	maxCount := s.maxCount
 	var canReuse = false
@@ -338,6 +339,10 @@ type cTableEntry struct {
 const huffNodesMask = huffNodesLen - 1
 
 func (s *Scratch) buildCTable() error {
+	if cap(s.cTable) < maxSymbolValue+1 {
+		s.cTable = make([]cTableEntry, 0, maxSymbolValue+1)
+	}
+
 	s.huffSort()
 	s.cTable = s.cTable[:s.symbolLen]
 

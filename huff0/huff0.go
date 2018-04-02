@@ -122,22 +122,16 @@ func (s *Scratch) prepare(in []byte) (*Scratch, error) {
 		s.Out = make([]byte, 0, len(in))
 	}
 	s.Out = s.Out[:0]
-	if cap(s.cTable) < maxSymbolValue+1 {
-		s.cTable = make([]cTableEntry, 0, maxSymbolValue+1)
-	}
-	s.cTable = s.cTable[:0]
-	if cap(s.prevTable) < maxSymbolValue+1 {
-		s.prevTable = make([]cTableEntry, 0, maxSymbolValue+1)
-	}
+
 	s.OutTable = nil
 	s.OutData = nil
 	if cap(s.nodes) < huffNodesLen+1 {
 		s.nodes = make([]nodeElt, 0, huffNodesLen+1)
 	}
+	s.nodes = s.nodes[:0]
 	if s.fse == nil {
 		s.fse = &fse.Scratch{}
 	}
-	s.nodes = s.nodes[:0]
 	s.br.init(in)
 
 	return s, nil
