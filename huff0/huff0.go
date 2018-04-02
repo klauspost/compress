@@ -9,11 +9,13 @@ import (
 )
 
 const (
-	maxSymbolValue  = 255
-	tableLogMax     = 12
+	maxSymbolValue = 255
+
+	// zstandard limits tablelog to 11, see:
+	// https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#huffman-tree-description
+	tableLogMax     = 11
 	tableLogDefault = 11
 	minTablelog     = 5
-	cTableBound     = 129
 	huffNodesLen    = 512
 
 	// BlockSizeMax is maximum input size for a single block uncompressed.
@@ -74,6 +76,7 @@ type Scratch struct {
 	MaxSymbolValue uint8
 
 	// TableLog will attempt to override the tablelog for the next block.
+	// Must be <= 11.
 	TableLog uint8
 
 	// Reuse will specify the reuse policy

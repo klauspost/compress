@@ -51,7 +51,7 @@ func TestDecompress1X(t *testing.T) {
 				return
 			}
 			var buf bytes.Buffer
-			if s.dt.matches(s.prevTable, &buf); buf.Len() > 0 {
+			if s.matches(s.prevTable, &buf); buf.Len() > 0 {
 				t.Error(buf.String())
 			}
 			if len(remain) != wantRemain {
@@ -141,7 +141,7 @@ func TestDecompress4X(t *testing.T) {
 				return
 			}
 			var buf bytes.Buffer
-			if s.dt.matches(s.prevTable, &buf); buf.Len() > 0 {
+			if s.matches(s.prevTable, &buf); buf.Len() > 0 {
 				t.Error(buf.String())
 			}
 			if len(remain) != wantRemain {
@@ -232,7 +232,7 @@ func TestDecompress1XFuzz(t *testing.T) {
 				return
 			}
 			var buf bytes.Buffer
-			if s.dt.matches(s.prevTable, &buf); buf.Len() > 0 {
+			if s.matches(s.prevTable, &buf); buf.Len() > 0 {
 				t.Error(buf.String())
 			}
 			if len(remain) != wantRemain {
@@ -323,7 +323,7 @@ func TestDecompress4XFuzz(t *testing.T) {
 				return
 			}
 			var buf bytes.Buffer
-			if s.dt.matches(s.prevTable, &buf); buf.Len() > 0 {
+			if s.matches(s.prevTable, &buf); buf.Len() > 0 {
 				t.Error(buf.String())
 			}
 			if len(remain) != wantRemain {

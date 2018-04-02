@@ -79,7 +79,7 @@ func ReadTable(in []byte, s *Scratch) (s2 *Scratch, remain []byte, err error) {
 	var rankStats [tableLogMax + 1]uint32
 	weightTotal := uint32(0)
 	for _, v := range s.huffWeight[:s.symbolLen] {
-		if v >= tableLogMax {
+		if v > tableLogMax {
 			return s, nil, errors.New("corrupt input: weight too large")
 		}
 		rankStats[v]++
@@ -129,12 +129,11 @@ func ReadTable(in []byte, s *Scratch) (s2 *Scratch, remain []byte, err error) {
 		}
 	}
 
-	// fill DTable
-	tSize := 1 << s.actualTableLog
-	if cap(s.dt.single) < tSize {
+	// fill DTable (always full size)
+	tSize := 1 << tableLogMax
+	if len(s.dt.single) != tSize {
 		s.dt.single = make([]dEntrySingle, tSize)
 	}
-	s.dt.single = s.dt.single[:tSize]
 
 	for n, w := range s.huffWeight[:s.symbolLen] {
 		length := (uint32(1) << w) >> 1
@@ -170,17 +169,27 @@ func (s *Scratch) Decompress1X(in []byte) (out []byte, err error) {
 		br.bitsRead += v.nBits
 		return v.byte
 	}
+	hasDec := func(v dEntrySingle) byte {
+		br.bitsRead += v.nBits
+		return v.byte
+	}
+
+	// Avoid bounds check by always having full sized table.
+	const tlSize = 1 << tableLogMax
+	const tlMask = tlSize - 1
+	dt := s.dt.single[:tlSize]
+
 	// Use temp table to avoid bound checks/append penalty.
 	var tmp = s.huffWeight[:256]
 	var off uint8
 
 	for br.off >= 8 {
 		br.fillFast()
-		tmp[off+0] = decode()
-		tmp[off+1] = decode()
+		tmp[off+0] = hasDec(dt[br.peekBitsFast(s.actualTableLog)&tlMask])
+		tmp[off+1] = hasDec(dt[br.peekBitsFast(s.actualTableLog)&tlMask])
 		br.fillFast()
-		tmp[off+2] = decode()
-		tmp[off+3] = decode()
+		tmp[off+2] = hasDec(dt[br.peekBitsFast(s.actualTableLog)&tlMask])
+		tmp[off+3] = hasDec(dt[br.peekBitsFast(s.actualTableLog)&tlMask])
 		off += 4
 		if off == 0 {
 			s.Out = append(s.Out, tmp...)
@@ -242,6 +251,7 @@ func (s *Scratch) Decompress4X(in []byte, dstSize int) (out []byte, err error) {
 		br.bitsRead += v.nBits
 		return v.byte
 	}
+
 	// Use temp table to avoid bound checks/append penalty.
 	var tmp = s.huffWeight[:256]
 	var off uint8
@@ -313,18 +323,19 @@ bigloop:
 // matches will compare a decoding table to a coding table.
 // Errors are written to the writer.
 // Nothing will be written if table is ok.
-func (d dTable) matches(ct cTable, w io.Writer) {
-	if d.single == nil {
+func (s *Scratch) matches(ct cTable, w io.Writer) {
+	if s == nil || len(s.dt.single) == 0 {
 		return
 	}
-	tablelog := uint8(highBit32(uint32(len(d.single))))
+	dt := s.dt.single[:1<<s.actualTableLog]
+	tablelog := s.actualTableLog
 	ok := 0
 	broken := 0
 	for sym, enc := range ct {
 		errs := 0
 		broken++
 		if enc.nBits == 0 {
-			for _, dec := range d.single {
+			for _, dec := range dt {
 				if dec.byte == byte(sym) {
 					fmt.Fprintf(w, "symbol %x has decoder, but no encoder\n", sym)
 					errs++
@@ -340,7 +351,7 @@ func (d dTable) matches(ct cTable, w io.Writer) {
 		ub := tablelog - enc.nBits
 		top := enc.val << ub
 		// decoder looks at top bits.
-		dec := d.single[top]
+		dec := dt[top]
 		if dec.nBits != enc.nBits {
 			fmt.Fprintf(w, "symbol 0x%x bit size mismatch (enc: %d, dec:%d).\n", sym, enc.nBits, dec.nBits)
 			errs++
@@ -356,7 +367,7 @@ func (d dTable) matches(ct cTable, w io.Writer) {
 		// Ensure that all combinations are covered.
 		for i := uint16(0); i < (1 << ub); i++ {
 			vval := top | i
-			dec := d.single[vval]
+			dec := dt[vval]
 			if dec.nBits != enc.nBits {
 				fmt.Fprintf(w, "symbol 0x%x bit size mismatch (enc: %d, dec:%d).\n", vval, enc.nBits, dec.nBits)
 				errs++
