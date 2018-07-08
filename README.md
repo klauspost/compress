@@ -14,7 +14,7 @@ It offers slightly better compression at lower compression settings, and up to 3
 
 # changelog
 
-* Jul 8, 2018: Added "Performance Update 2018" below.
+* Jul 8, 2018: Added [Performance Update 2018](#performance-update-2018) below.
 * Jun 23, 2018: Merged [Go 1.11 inflate optimizations](https://go-review.googlesource.com/c/go/+/102235). Go 1.9 is now required. Backwards compatible version tagged with [v1.3.0](https://github.com/klauspost/compress/releases/tag/v1.3.0).
 * Apr 2, 2018: Added [huff0](https://godoc.org/github.com/klauspost/compress/huff0) en/decoder. Experimental for now, API may change.
 * Mar 4, 2018: Added [FSE Entropy](https://godoc.org/github.com/klauspost/compress/fse) en/decoder. Experimental for now, API may change.
@@ -69,9 +69,9 @@ Currently there is only minor speedup on decompression (mostly CRC32 calculation
 
 # Performance Update 2018
 
-It has been a while since we have been looking at the speed of this package compared to the standard libary, so I thought I would re-do my tests and give some overall recommendations based on the current state. All benchmarks have been performed with Go 1.10 on my Desktop Intel(R) Core(TM) i7-2600 CPU @3.40GHz. Since I last ran the tests, I have gotten more RAM, which means tests with big files are no longer limited by my SSD.
+It has been a while since we have been looking at the speed of this package compared to the standard library, so I thought I would re-do my tests and give some overall recommendations based on the current state. All benchmarks have been performed with Go 1.10 on my Desktop Intel(R) Core(TM) i7-2600 CPU @3.40GHz. Since I last ran the tests, I have gotten more RAM, which means tests with big files are no longer limited by my SSD.
 
-The raw results are in my [updated speadsheet](https://docs.google.com/spreadsheets/d/1nuNE2nPfuINCZJRMt6wFWhKpToF95I47XjSsc-1rbPQ/edit?usp=sharing). Due to cgo changes and upstream updates i could not get the cgo version of gzip to compile. Instead I included the [zstd](https://github.com/datadog/zstd) cgo implementation. If I get cgo gzip to work again, I might replace the results in the sheet.
+The raw results are in my [updated spreadsheet](https://docs.google.com/spreadsheets/d/1nuNE2nPfuINCZJRMt6wFWhKpToF95I47XjSsc-1rbPQ/edit?usp=sharing). Due to cgo changes and upstream updates i could not get the cgo version of gzip to compile. Instead I included the [zstd](https://github.com/datadog/zstd) cgo implementation. If I get cgo gzip to work again, I might replace the results in the sheet.
 
 The columns to take note of are: *MB/s* - the throughput. *Reduction* - the data size reduction in percent of the original. *Rel Speed* relative speed compared to the standard libary at the same level. *Smaller* - how many percent smaller is the compressed output compared to stdlib. Negative means the output was bigger. *Loss* means the loss (or gain) in compression as a percentage difference of the input.
 
@@ -82,17 +82,17 @@ The `gzstd` (standard library gzip) and `gzkp` (this package gzip) only uses one
 
 There appears to be a roughly 5-10% speed advantage over the standard library when comparing at similar compression levels.
 
-The biggest difference you will see is the result of [rebalancing](https://blog.klauspost.com/rebalancing-deflate-compression-levels/) the compression levels. I wanted by library to give a smoother transition between the compression levels than the standard library.
+The biggest difference you will see is the result of [re-balancing](https://blog.klauspost.com/rebalancing-deflate-compression-levels/) the compression levels. I wanted by library to give a smoother transition between the compression levels than the standard library.
 
-This package attempts to provide a more smooth transition, where "1" is taking a lot of shortcuts, "5" is the reasonable tradeoff and "9" is the "give me the best compression", and the values in between gives something reasonable in between. The standard library has big differences in levels 1-4, but levels 5-9 having no significant gains - often spending a lot more time than can be justified by the achieved compression.
+This package attempts to provide a more smooth transition, where "1" is taking a lot of shortcuts, "5" is the reasonable trade-off and "9" is the "give me the best compression", and the values in between gives something reasonable in between. The standard library has big differences in levels 1-4, but levels 5-9 having no significant gains - often spending a lot more time than can be justified by the achieved compression.
 
 There are links to all the test data in the [spreadsheet](https://docs.google.com/spreadsheets/d/1nuNE2nPfuINCZJRMt6wFWhKpToF95I47XjSsc-1rbPQ/edit?usp=sharing) in the top left field on each tab.
 
 ## Web Content
 
-This test set aims to emulate typical use in a webserver. The testset is 4GB data in 53k files, and is a mixture of (mostly) HTML, JS, CSS.
+This test set aims to emulate typical use in a web server. The test-set is 4GB data in 53k files, and is a mixture of (mostly) HTML, JS, CSS.
 
-Since level 1 and 9 are close to being the same code, they are quite close. But looking at the levels inbetween the differences are quite big.
+Since level 1 and 9 are close to being the same code, they are quite close. But looking at the levels in-between the differences are quite big.
 
 Looking at level 6, this package is 88% faster, but will output about 6% more data. For a web server, this means you can serve 88% more data, but have to pay for 6% more bandwidth. You can draw your own conclusions on what would be the most expensive for your case.
 
@@ -102,7 +102,7 @@ This test is for typical data files stored on a server. In this case it is a col
 
 The picture is similar to the web content, but with small differences since this is very compressible. Levels 2-3 offer good speed, but is sacrificing quite a bit of compression. 
 
-The standard libaray seems suboptimal on level 3 and 4 - offering both worse compression and speed than level 6 & 7 of this package respectively.
+The standard library seems suboptimal on level 3 and 4 - offering both worse compression and speed than level 6 & 7 of this package respectively.
 
 ## Highly Compressible File
 
@@ -110,13 +110,13 @@ This is a JSON file with very high redundancy. The reduction starts at 95% on le
 
 It is definitely visible that we are dealing with specialized content here, so the results are very scattered. This package does not do very well at levels 1-4, but picks up significantly at level 5 and levels 7 and 8 offering great speed for the achieved compression.
 
-So if you know you content is extremely compressible you might want to go slightly higher than the defaults. The standard libary has a huge gap between levels 3 and 4 in terms of speed (2.75x slowdown), so it offers little "middle ground".
+So if you know you content is extremely compressible you might want to go slightly higher than the defaults. The standard library has a huge gap between levels 3 and 4 in terms of speed (2.75x slowdown), so it offers little "middle ground".
 
 ## Medium-High Compressible
 
 This is a pretty common test corpus: [enwik9](http://mattmahoney.net/dc/textdata.html). It contains the first 10^9 bytes of the English Wikipedia dump on Mar. 3, 2006. This is a very good test of typical text based compression and more data heavy streams.
 
-We see a similar picture here as in "Web Content". On equal levels some compression is sacrificed for more speed. Level 5 seems to be the best tradeoff between speed and size, beating stdlib level 3 in both.
+We see a similar picture here as in "Web Content". On equal levels some compression is sacrificed for more speed. Level 5 seems to be the best trade-off between speed and size, beating stdlib level 3 in both.
 
 ## Medium Compressible
 
@@ -127,21 +127,8 @@ The most notable thing is how quickly the standard libary drops to very low comp
 
 ## Un-compressible Content
 
-This is mainly a test of how good the algorithms are at detecting uncompressible input. The standard library only offers this feature with very conservative settings at level 1. Obviously there is no reason for the algorithms to try to compress input that cannot be compressed.  The only downside is that it might skip some compressible data on false detections.
+This is mainly a test of how good the algorithms are at detecting un-compressible input. The standard library only offers this feature with very conservative settings at level 1. Obviously there is no reason for the algorithms to try to compress input that cannot be compressed.  The only downside is that it might skip some compressible data on false detections.
 
-
-# deflate optimizations
-
-* Minimum matches are 4 bytes, this leads to fewer searches and better compression. (In Go 1.7)
-* Stronger hash (iSCSI CRC32) for matches on x64 with SSE 4.2 support. This leads to fewer hash collisions. (Go 1.7 also has improved hashes)
-* Literal byte matching using SSE 4.2 for faster match comparisons. (not in Go)
-* Bulk hashing on matches. (In Go 1.7)
-* Much faster dictionary indexing with `NewWriterDict()`/`Reset()`. (In Go 1.7)
-* Make Bit Coder faster by assuming we are on a 64 bit CPU. (In Go 1.7)
-* Level 1 compression replaced by converted "Snappy" algorithm. (In Go 1.7)
-* Uncompressible content is detected and skipped faster. (Only in BestSpeed in Go)
-* A lot of branching eliminated by having two encoders for levels 4-6 and 7-9. (not in Go)
-* All heap memory allocations eliminated. (In Go 1.7)
 
 # linear time compression (huffman only)
 
