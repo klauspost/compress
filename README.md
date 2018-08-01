@@ -14,7 +14,7 @@ It offers slightly better compression at lower compression settings, and up to 3
 
 # changelog
 
-* Aug 1, 2018: Added [huff0 README](https://github.com/klauspost/compress/tree/master/huff0).
+* Aug 1, 2018: Added [huff0 README](https://github.com/klauspost/compress/tree/master/huff0#huff0-entropy-compression).
 * Jul 8, 2018: Added [Performance Update 2018](#performance-update-2018) below.
 * Jun 23, 2018: Merged [Go 1.11 inflate optimizations](https://go-review.googlesource.com/c/go/+/102235). Go 1.9 is now required. Backwards compatible version tagged with [v1.3.0](https://github.com/klauspost/compress/releases/tag/v1.3.0).
 * Apr 2, 2018: Added [huff0](https://godoc.org/github.com/klauspost/compress/huff0) en/decoder. Experimental for now, API may change.

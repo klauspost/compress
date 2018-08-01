@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/bits"
 
 	"github.com/klauspost/compress/fse"
 )
@@ -232,4 +233,8 @@ func (s *Scratch) minSize(total int) int {
 		}
 	}
 	return int(nbBits) >> 3
+}
+
+func highBit32(val uint32) (n uint32) {
+	return uint32(bits.Len32(val) - 1)
 }

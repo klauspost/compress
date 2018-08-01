@@ -2,7 +2,8 @@
 
 This package provides Huff0 encoding and decoding as used in zstd.
             
-Huff0, a Huffman codec designed for modern CPU, featuring OoO (Out of Order) operations on multiple ALU 
+[Huff0](https://github.com/Cyan4973/FiniteStateEntropy#new-generation-entropy-coders), 
+a Huffman codec designed for modern CPU, featuring OoO (Out of Order) operations on multiple ALU 
 (Arithmetic Logic Unit), achieving extremely fast compression and decompression speeds.
 
 This can be used for compressing input with a lot of similar input values to the smallest number of bytes.
@@ -11,7 +12,7 @@ but it can be used as a secondary step to compressors (like Snappy) that does no
 
 * [Godoc documentation](https://godoc.org/github.com/klauspost/compress/huff0)
 
-THIS PACKAGE IS NOT CONSIDERED STABLE AND API MAY CHANGE IN THE FUTURE.
+THIS PACKAGE IS NOT CONSIDERED STABLE AND API OR ENCODING MAY CHANGE IN THE FUTURE.
 
 ## News
 
@@ -41,7 +42,7 @@ These error values can be returned:
 
 As can be seen above some of there are errors that will be returned even under normal operation so it is important to handle these.
 
-To reduce allocations you can provide a [`Scratch`](https://godoc.org/github.com/klauspost/compress/fse#Scratch) object 
+To reduce allocations you can provide a [`Scratch`](https://godoc.org/github.com/klauspost/compress/huff0#Scratch) object 
 that can be re-used for successive calls. Both compression and decompression accepts a `Scratch` object, and the same 
 object can be used for both.   
 
@@ -54,7 +55,7 @@ The `Scratch` object will retain state that allows to re-use previous tables for
 
 Huff0 allows for reusing tables from the previous block to save space if that is expected to give better/faster results. 
 
-The Scratch object allows you to set a [`https://godoc.org/github.com/klauspost/compress/huff0#ReusePolicy`](ReusePolicy) 
+The Scratch object allows you to set a [`ReusePolicy`](https://godoc.org/github.com/klauspost/compress/huff0#ReusePolicy) 
 that controls this behaviour. See the documentation for details. This can be altered between each block.
 
 Do however note that this information is *not* stored in the output block and it is up to the users of the package to
