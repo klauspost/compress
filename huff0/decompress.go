@@ -29,7 +29,7 @@ type dEntryDouble struct {
 // ReadTable will read a table from the input.
 // The size of the input may be larger than the table definition.
 // Any content remaining after the table definition will be returned.
-// if no Scratch is provided a new one is allocated.
+// If no Scratch is provided a new one is allocated.
 // The returned Scratch can be used for decoding input using this table.
 func ReadTable(in []byte, s *Scratch) (s2 *Scratch, remain []byte, err error) {
 	s, err = s.prepare(in)
@@ -150,8 +150,9 @@ func ReadTable(in []byte, s *Scratch) (s2 *Scratch, remain []byte, err error) {
 }
 
 // Decompress1X will decompress a 1X encoded stream.
-// The supplied input must match the end of a block exactly.
-// Before this is called, the table must be initialized with ReadTable.
+// The length of the supplied input must match the end of a block exactly.
+// Before this is called, the table must be initialized with ReadTable unless
+// the encoder re-used the table.
 func (s *Scratch) Decompress1X(in []byte) (out []byte, err error) {
 	if len(s.dt.single) == 0 {
 		return nil, errors.New("no table loaded")
@@ -206,8 +207,9 @@ func (s *Scratch) Decompress1X(in []byte) (out []byte, err error) {
 }
 
 // Decompress4X will decompress a 4X encoded stream.
-// Before this is called, the table must be initialized with ReadTable.
-// The supplied input must match the end of a block exactly.
+// Before this is called, the table must be initialized with ReadTable unless
+// the encoder re-used the table.
+// The length of the supplied input must match the end of a block exactly.
 // The destination size of the uncompressed data must be known and provided.
 func (s *Scratch) Decompress4X(in []byte, dstSize int) (out []byte, err error) {
 	if len(s.dt.single) == 0 {
