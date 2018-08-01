@@ -6,6 +6,10 @@ import (
 	"sync"
 )
 
+// Compress1X will compress the input.
+// The output can be decoded using Decompress1X.
+// Supply a Scratch object. The scratch object contains state about re-use,
+// So when sharing across independent encodes, be sure to set the re-use policy.
 func Compress1X(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
 	s, err = s.prepare(in)
 	if err != nil {
@@ -14,6 +18,11 @@ func Compress1X(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
 	return compress(in, s, s.compress1X)
 }
 
+// Compress4X will compress the input. The input is split into 4 independent blocks
+// and compressed similar to Compress1X.
+// The output can be decoded using Decompress4X.
+// Supply a Scratch object. The scratch object contains state about re-use,
+// So when sharing across independent encodes, be sure to set the re-use policy.
 func Compress4X(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
 	s, err = s.prepare(in)
 	if err != nil {
@@ -80,8 +89,7 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 		return nil, false, err
 	}
 
-	if !s.canUseTable(s.cTable) {
-		// TODO: Not needed.
+	if false && !s.canUseTable(s.cTable) {
 		panic("invalid table generated")
 	}
 
@@ -512,7 +520,7 @@ func (s *Scratch) setMaxHeight(lastNonNull int) uint8 {
 	// renorm totalCost
 	totalCost >>= largestBits - maxNbBits /* note : totalCost is necessarily a multiple of baseCost */
 
-	/* repay normalized cost */
+	// repay normalized cost
 	{
 		const noSymbol = 0xF0F0F0F0
 		var rankLast [tableLogMax + 2]uint32
@@ -528,7 +536,7 @@ func (s *Scratch) setMaxHeight(lastNonNull int) uint8 {
 				if huffNode[pos].nbBits >= currentNbBits {
 					continue
 				}
-				currentNbBits = huffNode[pos].nbBits /* < maxNbBits */
+				currentNbBits = huffNode[pos].nbBits // < maxNbBits
 				rankLast[maxNbBits-currentNbBits] = uint32(pos)
 			}
 		}

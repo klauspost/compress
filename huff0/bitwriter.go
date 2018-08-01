@@ -67,21 +67,25 @@ func (b *bitWriter) flush() {
 	v := b.nBits >> 3
 	switch v {
 	case 0:
+		return
 	case 1:
 		b.out = append(b.out,
 			byte(b.bitContainer),
 		)
+		b.bitContainer >>= 1 << 3
 	case 2:
 		b.out = append(b.out,
 			byte(b.bitContainer),
 			byte(b.bitContainer>>8),
 		)
+		b.bitContainer >>= 2 << 3
 	case 3:
 		b.out = append(b.out,
 			byte(b.bitContainer),
 			byte(b.bitContainer>>8),
 			byte(b.bitContainer>>16),
 		)
+		b.bitContainer >>= 3 << 3
 	case 4:
 		b.out = append(b.out,
 			byte(b.bitContainer),
@@ -89,6 +93,7 @@ func (b *bitWriter) flush() {
 			byte(b.bitContainer>>16),
 			byte(b.bitContainer>>24),
 		)
+		b.bitContainer >>= 4 << 3
 	case 5:
 		b.out = append(b.out,
 			byte(b.bitContainer),
@@ -97,6 +102,7 @@ func (b *bitWriter) flush() {
 			byte(b.bitContainer>>24),
 			byte(b.bitContainer>>32),
 		)
+		b.bitContainer >>= 5 << 3
 	case 6:
 		b.out = append(b.out,
 			byte(b.bitContainer),
@@ -106,6 +112,7 @@ func (b *bitWriter) flush() {
 			byte(b.bitContainer>>32),
 			byte(b.bitContainer>>40),
 		)
+		b.bitContainer >>= 6 << 3
 	case 7:
 		b.out = append(b.out,
 			byte(b.bitContainer),
@@ -116,6 +123,7 @@ func (b *bitWriter) flush() {
 			byte(b.bitContainer>>40),
 			byte(b.bitContainer>>48),
 		)
+		b.bitContainer >>= 7 << 3
 	case 8:
 		b.out = append(b.out,
 			byte(b.bitContainer),
@@ -127,10 +135,12 @@ func (b *bitWriter) flush() {
 			byte(b.bitContainer>>48),
 			byte(b.bitContainer>>56),
 		)
+		b.bitContainer = 0
+		b.nBits = 0
+		return
 	default:
 		panic(fmt.Errorf("bits (%d) > 64", b.nBits))
 	}
-	b.bitContainer >>= v << 3
 	b.nBits &= 7
 }
 
