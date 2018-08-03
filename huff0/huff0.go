@@ -1,9 +1,13 @@
+// Package huff0 provides fast huffman encoding as used in zstd.
+//
+// See README.md at https://github.com/klauspost/compress/tree/master/huff0 for details.
 package huff0
 
 import (
 	"errors"
 	"fmt"
 	"math"
+	"math/bits"
 
 	"github.com/klauspost/compress/fse"
 )
@@ -229,4 +233,8 @@ func (s *Scratch) minSize(total int) int {
 		}
 	}
 	return int(nbBits) >> 3
+}
+
+func highBit32(val uint32) (n uint32) {
+	return uint32(bits.Len32(val) - 1)
 }
