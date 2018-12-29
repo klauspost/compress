@@ -3,12 +3,19 @@ package zstd
 import (
 	"bufio"
 	"bytes"
+	"encoding/hex"
 	"errors"
+	"fmt"
+	"hash"
 	"io"
+	"io/ioutil"
+
+	"github.com/cespare/xxhash"
 )
 
 type dFrame struct {
-	br *bufio.Reader
+	br  *bufio.Reader
+	crc hash.Hash64
 
 	WindowSize       uint64
 	DictionaryID     uint32
@@ -27,6 +34,12 @@ type dWindow struct {
 	doffset int
 }
 
+const (
+	// The minimum Window_Size is 1 KB.
+	minWindowSize = 1 << 10
+	debug         = true
+)
+
 var (
 	// ErrMagicMismatch is returned when a "magic" number isn't what is expected.
 	// Typically this indicates wrong or corrupted input.
@@ -40,27 +53,50 @@ var (
 	// Typically this indicates wrong or corrupted input.
 	ErrWindowSizeTooSmall = errors.New("invalid input: window size was too small")
 
-	frameMagic = []byte{0xfd, 0x2f, 0xb5, 0x28}
+	errNotimplemented = errors.New("not implemented")
+
+	frameMagic          = []byte{0x28, 0xb5, 0x2f, 0xfd}
+	skippableFrameMagic = []byte{0x18, 0x4d, 0x2a}
 )
 
 func newDFrame(r io.Reader) (*dFrame, error) {
 	d := dFrame{maxWindowSize: 1 << 30}
-	d.reset(r)
-	return &d, nil
+	err := d.reset(r)
+	return &d, err
 }
 
 func (d *dFrame) reset(r io.Reader) error {
 	if d.br == nil {
-		d.br = bufio.NewReader(r)
+		d.br = bufio.NewReaderSize(r, maxCompressedBlockSize)
 	} else {
 		d.br.Reset(r)
 	}
 	var tmp [8]byte
-	_, err := io.ReadFull(d.br, tmp[:4])
-	if err != nil {
-		return err
+	for {
+		_, err := io.ReadFull(d.br, tmp[:4])
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(tmp[:3], skippableFrameMagic) || tmp[3]&0xf0 != 0x50 {
+			// Break if not skippable frame.
+			break
+		}
+		// Read size to skip
+		_, err = io.ReadFull(d.br, tmp[:4])
+		if err != nil {
+			return err
+		}
+		n := uint32(tmp[0]) | (uint32(tmp[1]) << 8) | (uint32(tmp[2]) << 16) | (uint32(tmp[3]) << 24)
+		if debug {
+			fmt.Println("Skipping frame with", n, "bytes.")
+		}
+		_, err = io.CopyN(ioutil.Discard, d.br, int64(n))
+		if err != nil {
+			return err
+		}
 	}
 	if !bytes.Equal(tmp[:4], frameMagic) {
+		fmt.Println("Got magic numbers: ", tmp[:4], "want:", frameMagic)
 		return ErrMagicMismatch
 	}
 
@@ -74,16 +110,20 @@ func (d *dFrame) reset(r io.Reader) error {
 	// Read Window_Descriptor
 	// https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#window_descriptor
 	d.WindowSize = 0
-	if fc := fhd & (1 << 5); fc != 0 {
+	if !d.SingleSegment {
 		wd, err := d.br.ReadByte()
 		if err != nil {
 			return err
+		}
+		if debug {
+			fmt.Printf("raw: %x, mantissa: %d, exponent: %d\n", wd, wd&7, wd>>3)
 		}
 		windowLog := 10 + (wd >> 3)
 		windowBase := uint64(1) << windowLog
 		windowAdd := (windowBase / 8) * uint64(wd&0x7)
 		d.WindowSize = windowBase + windowAdd
 	}
+
 	// Read Dictionary_ID
 	// https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#dictionary_id
 	d.DictionaryID = 0
@@ -103,17 +143,22 @@ func (d *dFrame) reset(r io.Reader) error {
 		case 4:
 			d.DictionaryID = uint32(tmp[0]) | (uint32(tmp[1]) << 8) | (uint32(tmp[2]) << 16) | (uint32(tmp[3]) << 24)
 		}
+		if debug {
+			fmt.Println("Dict size", size, "ID:", d.DictionaryID)
+		}
 	}
 
 	// Read Frame_Content_Size
 	// https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#frame_content_size
-	fcsSize := fhd >> 6
-	if fcsSize == 0 {
-		if fhd&(1<<5) != 0 {
+	var fcsSize int
+	v := fhd >> 6
+	switch v {
+	case 0:
+		if d.SingleSegment {
 			fcsSize = 1
 		}
-	} else {
-		fcsSize = 1 << fcsSize
+	default:
+		fcsSize = 1 << v
 	}
 	d.FrameContentSize = 0
 	if fcsSize > 0 {
@@ -126,25 +171,45 @@ func (d *dFrame) reset(r io.Reader) error {
 			d.FrameContentSize = uint64(tmp[0])
 		case 2:
 			// When FCS_Field_Size is 2, the offset of 256 is added.
-			d.FrameContentSize = uint64(tmp[0]) | uint64(tmp[1]<<8) + 256
+			d.FrameContentSize = uint64(tmp[0]) | (uint64(tmp[1]) << 8) + 256
 		case 4:
-			d.FrameContentSize = uint64(tmp[0]) | uint64(tmp[1]<<8) | uint64(tmp[2]<<16) | uint64(tmp[3]<<24)
+			d.FrameContentSize = uint64(tmp[0]) | (uint64(tmp[1]) << 8) | (uint64(tmp[2]) << 16) | (uint64(tmp[3] << 24))
 		case 8:
 			d1 := uint32(tmp[0]) | (uint32(tmp[1]) << 8) | (uint32(tmp[2]) << 16) | (uint32(tmp[3]) << 24)
 			d2 := uint32(tmp[4]) | (uint32(tmp[5]) << 8) | (uint32(tmp[6]) << 16) | (uint32(tmp[7]) << 24)
 			d.FrameContentSize = uint64(d1) | (uint64(d2) << 32)
 		}
+		if debug {
+			fmt.Println("field size bits:", v, "fcsSize:", fcsSize, "FrameContentSize:", d.FrameContentSize, hex.EncodeToString(tmp[:fcsSize]))
+		}
 	}
 	d.HasCheckSum = fhd&(1<<2) != 0
+	if d.HasCheckSum {
+		if d.crc == nil {
+			d.crc = xxhash.New()
+		}
+		d.crc.Reset()
+	}
+
 	if d.WindowSize == 0 && d.SingleSegment {
 		// We may not need window in this case.
 		d.WindowSize = d.FrameContentSize
+		if d.WindowSize < minWindowSize {
+			d.WindowSize = minWindowSize
+		}
 	}
+
 	if d.WindowSize > d.maxWindowSize {
+		if debug {
+			fmt.Printf("window size %d > max %d\n", d.WindowSize, d.maxWindowSize)
+		}
 		return ErrWindowSizeExceeded
 	}
 	// The minimum Window_Size is 1 KB.
-	if d.WindowSize < (1 << 10) {
+	if d.WindowSize < minWindowSize {
+		if debug {
+			fmt.Println("got window size: ", d.WindowSize)
+		}
 		return ErrWindowSizeTooSmall
 	}
 	if cap(d.w.w) > 0 {
@@ -155,4 +220,17 @@ func (d *dFrame) reset(r io.Reader) error {
 	}
 	d.w.w = d.w.w[:d.WindowSize]
 	return nil
+}
+
+func (d *dFrame) next() (*dBlock, error) {
+	return newDBlock(d.br, d.WindowSize)
+}
+
+func (d *dFrame) decodeTo(w io.Writer) error {
+	for {
+		b, err := newDBlock(d.br, d.WindowSize)
+		if err != nil {
+			return err
+		}
+	}
 }
