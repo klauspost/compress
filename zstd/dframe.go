@@ -9,6 +9,7 @@ import (
 	"hash"
 	"io"
 	"io/ioutil"
+	"runtime"
 
 	"github.com/cespare/xxhash"
 )
@@ -27,6 +28,14 @@ type dFrame struct {
 	// should never be bigger than max-int.
 	maxWindowSize uint64
 	w             dWindow
+
+	// In order queue of blocks being decoded.
+	decoding chan *dBlock
+
+	// Use as little memory as possible.
+	lowMem bool
+	// Number of in-flight decoders
+	concurrent int
 }
 
 type dWindow struct {
@@ -53,16 +62,21 @@ var (
 	// Typically this indicates wrong or corrupted input.
 	ErrWindowSizeTooSmall = errors.New("invalid input: window size was too small")
 
+	// ErrCRCMismatch is returned if CRC mismatches.
+	ErrCRCMismatch = errors.New("CRC check failed")
+
 	errNotimplemented = errors.New("not implemented")
 
 	frameMagic          = []byte{0x28, 0xb5, 0x2f, 0xfd}
 	skippableFrameMagic = []byte{0x18, 0x4d, 0x2a}
 )
 
-func newDFrame(r io.Reader) (*dFrame, error) {
-	d := dFrame{maxWindowSize: 1 << 30}
-	err := d.reset(r)
-	return &d, err
+func newDFrame() *dFrame {
+	d := dFrame{
+		maxWindowSize: 1 << 30,
+		concurrent:    runtime.GOMAXPROCS(0),
+	}
+	return &d
 }
 
 func (d *dFrame) reset(r io.Reader) error {
@@ -70,6 +84,9 @@ func (d *dFrame) reset(r io.Reader) error {
 		d.br = bufio.NewReaderSize(r, maxCompressedBlockSize)
 	} else {
 		d.br.Reset(r)
+	}
+	if cap(d.decoding) < d.concurrent {
+		d.decoding = make(chan *dBlock, d.concurrent)
 	}
 	var tmp [8]byte
 	for {
@@ -222,15 +239,106 @@ func (d *dFrame) reset(r io.Reader) error {
 	return nil
 }
 
-func (d *dFrame) next() (*dBlock, error) {
-	return newDBlock(d.br, d.WindowSize)
+// next will start decoding the next block from stream.
+func (d *dFrame) next(block *dBlock) error {
+	fmt.Println("decoding new block")
+	err := block.reset(d.br, d.WindowSize)
+	if err != nil {
+		fmt.Println("block error:", err)
+		return err
+	}
+	fmt.Println("next block:", block)
+	d.decoding <- block
+	if block.Last {
+		// FIXME: While this is true for this frame, we cannot rely on this for the stream.
+		return io.EOF
+	}
+	return nil
 }
 
-func (d *dFrame) decodeTo(w io.Writer) error {
+// addDecoder will add another decoder.
+// If io.EOF is returned, the added decoder is the last of the frame.
+func (d *dFrame) addDecoder(dec *dBlock) error {
+	// TODO: We should probably not accept a decoder if we are at end of stream.
+	err := dec.reset(d.br, d.WindowSize)
+	if err != nil {
+		return err
+	}
+	fmt.Println("added decoder to frame")
+	d.decoding <- dec
+	if dec.Last {
+		return io.EOF
+	}
+	return nil
+}
+
+// checkCRC will check the checksum if the frame has one.
+// Will return ErrCRCMismatch if crc check failed, otherwise io.EOF
+func (d *dFrame) checkCRC() error {
+	if !d.HasCheckSum {
+		return io.EOF
+	}
+
+	var want [4]byte
+	_, err := io.ReadFull(d.br, want[:])
+	if err != nil && err != io.EOF {
+		return err
+	}
+	var got [8]byte
+	gotB := d.crc.Sum(got[:0])
+	// Flip to match file order.
+	gotB[0] = gotB[7]
+	gotB[1] = gotB[6]
+	gotB[2] = gotB[5]
+	gotB[3] = gotB[4]
+	if !bytes.Equal(gotB[:4], want[:]) {
+		fmt.Println(gotB[:4], "!=", want)
+		return ErrCRCMismatch
+	}
+	fmt.Println("CRC ok")
+	return io.EOF
+}
+
+func (d *dFrame) Close() {
+	// TODO: Find some way to signal we are done to startDecoder
+}
+
+func (d *dFrame) startDecoder(writer chan decodeOutput) {
+	// TODO: Init to dictionary
+	history := &buffer{}
+	// Get first block
+	block := <-d.decoding
+	block.history <- history
 	for {
-		b, err := newDBlock(d.br, d.WindowSize)
-		if err != nil {
-			return err
+		var next *dBlock
+		// Get result
+		r := <-block.result
+		if r.err != nil {
+			writer <- r
 		}
+		if !block.Last {
+			// Send history to next block
+			next = <-d.decoding
+			next.history <- history
+		}
+
+		// Add checksum
+		if d.HasCheckSum {
+			n, err := d.crc.Write(r.b)
+			if err != nil {
+				r.err = err
+				if n != len(r.b) {
+					r.err = io.ErrShortWrite
+				}
+				writer <- r
+			}
+		}
+		if block.Last {
+			r.err = d.checkCRC()
+			writer <- r
+			return
+		}
+		writer <- r
+		block = next
 	}
 }

@@ -2,7 +2,7 @@ package zstd
 
 import (
 	"bytes"
-	"io"
+	"fmt"
 	"io/ioutil"
 	"strings"
 	"testing"
@@ -29,27 +29,17 @@ func TestNewDecoder(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			for {
-				got, err := NewDecoder(r)
-				if err != nil {
-					t.Error(err)
-					return
-				}
-				t.Logf("%+v", *got)
-				for {
-					b, err := got.frame.next()
-					if err != nil {
-						t.Fatal(err)
-					}
-					t.Logf("%+v", b)
-					if b.Last {
-						break
-					}
-				}
-				if _, err := r.Read(nil); err == io.EOF {
-					break
-				}
+			dec, err := NewDecoder(r)
+			if err != nil {
+				t.Error(err)
+				return
 			}
+			got, err := ioutil.ReadAll(dec)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			fmt.Println(len(got), "bytes returned")
 		})
 	}
 }
@@ -73,27 +63,17 @@ func TestNewDecoderGood(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			for {
-				got, err := NewDecoder(r)
-				if err != nil {
-					t.Error(err)
-					return
-				}
-				t.Logf("%+v", *got)
-				for {
-					b, err := got.frame.next()
-					if err != nil {
-						t.Fatal(err)
-					}
-					t.Logf("%+v", b)
-					if b.Last {
-						break
-					}
-				}
-				if _, err := r.Read([]byte{}); err == io.EOF {
-					break
-				}
+			dec, err := NewDecoder(r)
+			if err != nil {
+				t.Error(err)
+				return
 			}
+			got, err := ioutil.ReadAll(dec)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			fmt.Println(got)
 		})
 	}
 }
