@@ -42,7 +42,7 @@ type dBlock struct {
 	Last       bool
 	// Use less memory
 	lowMem  bool
-	history chan *buffer
+	history chan *history
 	input   chan struct{}
 	result  chan decodeOutput
 }
@@ -59,7 +59,7 @@ func newDBlock(lowMem bool) *dBlock {
 		lowMem:  lowMem,
 		result:  make(chan decodeOutput, 1),
 		input:   make(chan struct{}, 1),
-		history: make(chan *buffer, 1),
+		history: make(chan *history, 1),
 	}
 	go b.startDecoder()
 	return &b
@@ -173,6 +173,7 @@ func (b *dBlock) startDecoder() {
 			// TODO: add block to history.
 			b.result <- o
 		case BlockTypeCompressed:
+			// Read literal section
 			_ = <-b.history
 			o := decodeOutput{
 				d:   b,
@@ -185,4 +186,20 @@ func (b *dBlock) startDecoder() {
 		}
 		fmt.Println("dBlock: Finished block")
 	}
+}
+
+type literalSection struct {
+}
+
+const (
+	// Literal types as defined in
+	// https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#literals_section_header
+	LiteralsRaw        = 0
+	LiteralsRLE        = 1
+	LiteralsCompressed = 2
+	LiteralsTreeless   = 3
+)
+
+func (b *dBlock) literals() error {
+	return nil
 }

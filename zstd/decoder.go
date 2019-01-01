@@ -1,6 +1,7 @@
 package zstd
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -11,19 +12,23 @@ type Decoder struct {
 	concurrent int
 	lowMem     bool
 
-	frame *dFrame
-
 	// Unreferenced decoders, ready for use
 	decoders chan *dBlock
-
-	// Blocks ready to be written to output.
-	output chan decodeOutput
 
 	// Streams ready to be decoded.
 	stream chan decodeStream
 
 	// Current read position
-	current decodeOutput
+	current decoderState
+
+	// Custom dictionaries
+	dicts map[uint32]struct{}
+}
+
+type decoderState struct {
+	decodeOutput
+	// finished
+	output chan decodeOutput
 }
 
 var (
@@ -39,8 +44,24 @@ func NewDecoder(r io.Reader, opts ...interface{}) (*Decoder, error) {
 		concurrent: runtime.GOMAXPROCS(0),
 		stream:     make(chan decodeStream, 1),
 	}
-	d.output = make(chan decodeOutput, d.concurrent)
-	go d.startDecoders()
+
+	d.current.output = make(chan decodeOutput, d.concurrent)
+	fmt.Println("startDecoders")
+
+	// Create decoders
+	d.decoders = make(chan *dBlock, d.concurrent)
+	for i := 0; i < d.concurrent; i++ {
+		d.decoders <- newDBlock(d.lowMem)
+	}
+
+	// Start stream decoders.
+	nStreamDecs := d.concurrent
+	if d.lowMem {
+		nStreamDecs = 1
+	}
+	for i := 0; i < nStreamDecs; i++ {
+		go d.startStreamDecoder()
+	}
 	return &d, d.Reset(r)
 }
 
@@ -82,19 +103,22 @@ func (d *Decoder) Reset(r io.Reader) error {
 	if d.current.d != nil {
 		d.decoders <- d.current.d
 	}
-drainDecoders:
+	// Remove current block.
+	d.current.decodeOutput = decodeOutput{}
+
+	// Drain output
+drainOutput:
 	for {
 		select {
-		case o := <-d.output:
-			d.decoders <- o.d
+		case <-d.current.output:
 		default:
-			break drainDecoders
+			break drainOutput
 		}
 	}
-	d.current = decodeOutput{}
 	fmt.Println("Sending stream")
 	d.stream <- decodeStream{
-		r: r,
+		r:      r,
+		output: d.current.output,
 	}
 	return nil
 }
@@ -119,6 +143,35 @@ func (d *Decoder) WriteTo(w io.Writer) (int64, error) {
 	return n, err
 }
 
+// DecodeAll allows stateless decoding of a blob of bytes.
+// Output will be appended to dst, so if the destination size is known
+// you can pre-allocate the destination slice to avoid allocations.
+// DecodeAll can be used concurrently. If you plan to, do not use the low memory option.
+// The Decoder concurrency limits will be respected.
+func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
+	output := make(chan decodeOutput, d.concurrent)
+	// TODO: Store this to avoid allocation
+	d.stream <- decodeStream{
+		r:      bytes.NewBuffer(input),
+		output: output,
+	}
+	if cap(dst) == 0 {
+		// Allocate a reasonable buffer if nothing was provided.
+		dst = make([]byte, 0, len(input))
+	}
+	for {
+		o := <-output
+		dst = append(dst, o.b...)
+		d.decoders <- o.d
+		if o.err != nil {
+			if o.err == io.EOF {
+				o.err = nil
+			}
+			return dst, o.err
+		}
+	}
+}
+
 // nextBlock returns the next block.
 // If an error occurs d.err will be set.
 func (d *Decoder) nextBlock() {
@@ -130,7 +183,7 @@ func (d *Decoder) nextBlock() {
 		// Keep error state.
 		return
 	}
-	d.current = <-d.output
+	d.current.decodeOutput = <-d.current.output
 	fmt.Println("got", len(d.current.b), "bytes, error:", d.current.err)
 }
 
@@ -144,12 +197,12 @@ func (d *Decoder) Close() error {
 	if d.stream != nil {
 		close(d.stream)
 	}
-	if d.frame != nil {
-		d.frame.Close()
-		d.frame = nil
-	}
-	for dec := range d.decoders {
-		dec.Close()
+	if d.decoders != nil {
+		close(d.decoders)
+		for dec := range d.decoders {
+			dec.Close()
+		}
+		d.decoders = nil
 	}
 	if d.current.d != nil {
 		d.current.d.Close()
@@ -167,6 +220,9 @@ type decodeOutput struct {
 
 type decodeStream struct {
 	r io.Reader
+
+	// Blocks ready to be written to output.
+	output chan decodeOutput
 }
 
 // Create Decoder:
@@ -179,45 +235,35 @@ type decodeStream struct {
 // 		c) return data to WRITER.
 // 		d) wait for next block to return data.
 // Once WRITTEN, the decoders reused by the writer frame decoder for re-use.
-func (d *Decoder) startDecoders() {
-	fmt.Println("startDecoders")
-	if d.frame == nil {
-		d.frame = newDFrame()
-	}
-	frame := d.frame
+func (d *Decoder) startStreamDecoder() {
+	fmt.Println("creating stream decoder")
+	frame := newDFrame()
 	frame.concurrent = d.concurrent
 	frame.lowMem = d.lowMem
 
-	// Create decoders
-	d.decoders = make(chan *dBlock, d.concurrent)
-	for i := 0; i < d.concurrent; i++ {
-		d.decoders <- newDBlock(d.lowMem)
-	}
-	fmt.Println("decoders ready")
 	for {
 		in, ok := <-d.stream
 		fmt.Println("got stream")
 		if !ok {
 			d.stream = nil
-			close(d.output)
 			return
 		}
 		for {
 			err := frame.reset(in.r)
 			if err != nil {
-				d.output <- decodeOutput{
+				in.output <- decodeOutput{
 					err: err,
 				}
 				continue
 			}
 			fmt.Println("started frame")
-			go frame.startDecoder(d.output)
+			go frame.startDecoder(in.output)
 		decodeFrame:
 			for dec := range d.decoders {
 				// TODO: Racing on shutdown on frame.
 				fmt.Println("starting decoder")
 				err := frame.next(dec)
-				fmt.Println("decoder resturned", err)
+				fmt.Println("decoder returned", err)
 				switch err {
 				case io.EOF:
 					// End of current block, no error
@@ -225,7 +271,7 @@ func (d *Decoder) startDecoders() {
 				case nil:
 					continue
 				default:
-					d.output <- decodeOutput{err: err}
+					in.output <- decodeOutput{err: err}
 				}
 			}
 			if _, err := in.r.Read([]byte{}); err == io.EOF {

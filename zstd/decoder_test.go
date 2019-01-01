@@ -34,8 +34,13 @@ func TestNewDecoder(t *testing.T) {
 				t.Error(err)
 				return
 			}
+			defer dec.Close()
 			got, err := ioutil.ReadAll(dec)
 			if err != nil {
+				if err == errNotimplemented {
+					t.Skip(err)
+					return
+				}
 				t.Error(err)
 				return
 			}
@@ -65,9 +70,14 @@ func TestNewDecoderGood(t *testing.T) {
 			}
 			dec, err := NewDecoder(r)
 			if err != nil {
+				if err == errNotimplemented {
+					t.Skip(err)
+					return
+				}
 				t.Error(err)
 				return
 			}
+			defer dec.Close()
 			got, err := ioutil.ReadAll(dec)
 			if err != nil {
 				t.Error(err)

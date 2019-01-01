@@ -36,6 +36,8 @@ type dFrame struct {
 	lowMem bool
 	// Number of in-flight decoders
 	concurrent int
+
+	history history
 }
 
 type dWindow struct {
@@ -305,10 +307,10 @@ func (d *dFrame) Close() {
 
 func (d *dFrame) startDecoder(writer chan decodeOutput) {
 	// TODO: Init to dictionary
-	history := &buffer{}
+	d.history = history{}
 	// Get first block
 	block := <-d.decoding
-	block.history <- history
+	block.history <- &d.history
 	for {
 		var next *dBlock
 		// Get result
@@ -319,7 +321,7 @@ func (d *dFrame) startDecoder(writer chan decodeOutput) {
 		if !block.Last {
 			// Send history to next block
 			next = <-d.decoding
-			next.history <- history
+			next.history <- &d.history
 		}
 
 		// Add checksum
