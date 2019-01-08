@@ -11,7 +11,7 @@ import (
 
 type BlockType uint8
 
-//go:generate stringer -type=BlockType
+//go:generate stringer -type=BlockType,LiteralsBlockType,seqCompMode
 
 const (
 	BlockTypeRaw BlockType = iota
@@ -24,7 +24,9 @@ const (
 
 	// Maximum possible block size (all Raw+Uncompressed).
 	maxBlockSize = (1 << 21) - 1
+)
 
+const (
 	LiteralsBlockRaw LiteralsBlockType = iota
 	LiteralsBlockRLE
 	LiteralsBlockCompressed
@@ -66,35 +68,6 @@ type dBlock struct {
 	result      chan decodeOutput
 	sequenceBuf []seq
 }
-
-type sequenceDecoder struct {
-	// decoder keeps track of the current state and updates it from the bitstream.
-	rle    *uint8
-	fse    *fseDecoder
-	state  fseState
-	repeat bool
-}
-
-type sequenceDecoders struct {
-	litLengths   sequenceDecoder
-	offsets      sequenceDecoder
-	matchLengths sequenceDecoder
-}
-
-type seq struct {
-	literals    uint32
-	matchLen    uint32
-	matchOffset uint32
-}
-
-type seqCompMode uint8
-
-const (
-	compModePredefined seqCompMode = iota
-	compModeRLE
-	compModeFSE
-	compModeRepeat
-)
 
 func (b *dBlock) String() string {
 	if b == nil {
@@ -252,6 +225,7 @@ func (b *dBlock) decodeCompressed() error {
 	var litCompSize int
 	sizeFormat := (in[0] >> 2) & 3
 	var fourStreams bool
+	fmt.Println("Literals type:", litType, "sizeFormat:", sizeFormat)
 	switch litType {
 	case LiteralsBlockRaw, LiteralsBlockRLE:
 		switch sizeFormat {
@@ -317,6 +291,7 @@ func (b *dBlock) decodeCompressed() error {
 		}
 		literals = in[:litRegenSize]
 		in = in[litRegenSize:]
+		fmt.Printf("Found %d uncompressed literals\n", litRegenSize)
 	case LiteralsBlockRLE:
 		if len(in) < 1 {
 			fmt.Println("too small: litType:", litType, " sizeFormat", sizeFormat, "remain:", len(in), "want:", 1)
@@ -330,10 +305,12 @@ func (b *dBlock) decodeCompressed() error {
 			}
 		}
 		literals = b.literalBuf[:litRegenSize]
+		v := in[0]
 		for i := range literals {
-			literals[i] = in[0]
+			literals[i] = v
 		}
 		in = in[1:]
+		fmt.Printf("Found %d RLE compressed literals\n", litRegenSize)
 	case LiteralsBlockTreeless:
 		if len(in) < litCompSize {
 			fmt.Println("too small: litType:", litType, " sizeFormat", sizeFormat, "remain:", len(in), "want:", litCompSize)
@@ -342,6 +319,7 @@ func (b *dBlock) decodeCompressed() error {
 		// Store compressed literals, so we defer decoding until we get history.
 		literals = in[:litCompSize]
 		in = in[litCompSize:]
+		fmt.Printf("Found %d compressed literals\n", litCompSize)
 	case LiteralsBlockCompressed:
 		if len(in) < litCompSize {
 			fmt.Println("too small: litType:", litType, " sizeFormat", sizeFormat, "remain:", len(in), "want:", litCompSize)
@@ -377,6 +355,7 @@ func (b *dBlock) decodeCompressed() error {
 		if len(literals) != litRegenSize {
 			return fmt.Errorf("literal output size mismatch want %d, got %d", litRegenSize, len(literals))
 		}
+		fmt.Printf("Decompressed %d literals into %d bytes\n", litCompSize, litRegenSize)
 	}
 
 	// Decode Sequences
@@ -418,7 +397,7 @@ func (b *dBlock) decodeCompressed() error {
 		// Reuse buffer
 		b.sequenceBuf = b.sequenceBuf[:nSeqs]
 	}
-	var seqs sequenceDecoders
+	var seqs = &sequenceDecoders{}
 	if nSeqs > 0 {
 		if len(in) < 1 {
 			return ErrBlockTooSmall
@@ -426,7 +405,8 @@ func (b *dBlock) decodeCompressed() error {
 		br := byteReader{b: in, off: 0}
 		compMode := br.Uint8()
 		for i := uint(0); i < 3; i++ {
-			mode := seqCompMode((compMode >> (6 - (i * 2))) & 3)
+			mode := seqCompMode((compMode >> (6 - i*2)) & 3)
+			fmt.Println("Sequence", i, "Comp mode", mode)
 			var seq *sequenceDecoder
 			switch i {
 			case 0:
@@ -438,20 +418,30 @@ func (b *dBlock) decodeCompressed() error {
 			}
 			switch mode {
 			case compModePredefined:
-				seq.fse = fsePredef[i]
+				seq.fse = &fsePredef[i]
 			case compModeRLE:
 				if br.remain() < 1 {
 					return ErrBlockTooSmall
 				}
 				v := br.Uint8()
-				seq.rle = &v
+				dec, err := decSymbolValue(v, symbolTableX[i])
+				if err != nil {
+					return err
+				}
+				seq.rle = dec
 			case compModeFSE:
 				dec := fseDecoderPool.Get().(*fseDecoder)
 				err := dec.readNCount(&br)
 				if err != nil {
+					fmt.Println("Read table error", err)
 					return err
 				}
 				fmt.Println("Read table ok")
+				err = dec.transform(symbolTableX[i])
+				if err != nil {
+					fmt.Println("Transform table error", err)
+					return err
+				}
 				seq.fse = dec
 			case compModeRepeat:
 				seq.repeat = true
@@ -502,14 +492,144 @@ func (b *dBlock) decodeCompressed() error {
 		huff.Out = nil
 	}
 	hist.huffTree = huff
+	fmt.Println("Final literals:", len(literals))
 
 	if nSeqs == 0 {
 		// Decompressed content is defined entirely as Literals Section content.
 		b.dst = append(b.dst, literals...)
 		return nil
 	}
-	fmt.Println("Literals:", len(literals))
+
+	seqs, err := seqs.mergeHistory(&hist.decoders)
+	if err != nil {
+		return err
+	}
+
+	br := &bitReader{}
+	if err := br.init(in); err != nil {
+		return err
+	}
+
+	if err := seqs.initialize(br); err != nil {
+		return err
+	}
+	for i := 0; i < nSeqs; i++ {
+		if br.finished() {
+			return io.ErrUnexpectedEOF
+		}
+		litLen, matchOff, matchLen := seqs.next(br)
+		fmt.Printf("Seq %d: Litlen: %d, matchOff: %d, matchLen: %d\n", i, litLen, matchOff, matchLen)
+	}
+
+	fmt.Println("History merged ok")
 	return errNotimplemented
 }
 
-var fsePredef [3]*fseDecoder
+type sequenceDecoder struct {
+	// decoder keeps track of the current state and updates it from the bitstream.
+	rle    *decSymbol
+	fse    *fseDecoder
+	state  fseState
+	repeat bool
+}
+
+func (s *sequenceDecoder) init(br *bitReader) error {
+	if s.fse != nil {
+		s.state.init(br, s.fse.actualTableLog, s.fse.dt[:1<<s.fse.actualTableLog])
+	} else {
+		if s.rle == nil {
+			return errors.New("neither FSE nor RLE defined")
+		}
+	}
+	return nil
+}
+
+type sequenceDecoders struct {
+	litLengths   sequenceDecoder
+	offsets      sequenceDecoder
+	matchLengths sequenceDecoder
+}
+
+func (s *sequenceDecoders) initialize(br *bitReader) error {
+	if err := s.litLengths.init(br); err != nil {
+		return errors.New("litLengths:" + err.Error())
+	}
+	if err := s.offsets.init(br); err != nil {
+		return errors.New("litLengths:" + err.Error())
+	}
+	if err := s.matchLengths.init(br); err != nil {
+		return errors.New("matchLengths:" + err.Error())
+	}
+	return nil
+}
+
+func (s *sequenceDecoders) next(br *bitReader) (ll, mo, ml uint32) {
+	br.fill()
+	if rle := s.litLengths.rle; rle != nil {
+		ll = rle.baseline + br.getBits(rle.addBits)
+	} else {
+		ll = s.litLengths.state.next(br)
+	}
+	br.fill()
+	if rle := s.offsets.rle; rle != nil {
+		mo = rle.baseline + br.getBits(rle.addBits)
+	} else {
+		mo = s.offsets.state.next(br)
+	}
+	br.fill()
+	if rle := s.matchLengths.rle; rle != nil {
+		ml = rle.baseline + br.getBits(rle.addBits)
+	} else {
+		ml = s.matchLengths.state.next(br)
+	}
+	return
+}
+
+// mergeHistory will merge history.
+func (s *sequenceDecoders) mergeHistory(hist *sequenceDecoders) (*sequenceDecoders, error) {
+	for i := uint(0); i < 3; i++ {
+		var sNew, sHist *sequenceDecoder
+		switch i {
+		case 0:
+			sNew = &s.litLengths
+			sHist = &hist.litLengths
+		case 1:
+			sNew = &s.offsets
+			sHist = &hist.offsets
+		case 2:
+			sNew = &s.matchLengths
+			sHist = &hist.matchLengths
+		}
+		if sNew.repeat {
+			if sHist.rle == nil && sHist.fse == nil {
+				return nil, fmt.Errorf("sequence stream %d, repeat requested, but no history", i)
+			}
+			continue
+		}
+		if sNew.fse != nil {
+			sHist.fse = sNew.fse
+		}
+		if sNew.rle != nil {
+			sHist.rle = sNew.rle
+		}
+		if sHist.rle == nil && sHist.fse == nil {
+			return nil, fmt.Errorf("sequence stream %d, repeat requested, but no history", i)
+		}
+	}
+	return hist, nil
+}
+
+type seq struct {
+	literals    uint32
+	matchLen    uint32
+	matchOffset uint32
+}
+
+type seqCompMode uint8
+
+const (
+	compModePredefined seqCompMode = iota
+	compModeRLE
+	compModeFSE
+	compModeRepeat
+)
