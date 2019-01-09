@@ -51,13 +51,13 @@ func init() {
 
 	// Offset codes
 	tmp = make([]baseOffset, 32)
-	for i := range tmp[:32] {
-		tmp[i] = baseOffset{
-			baseLine: 1 << uint(i),
-			addBits:  uint8(i),
-		}
+	tmp[1] = baseOffset{
+		baseLine: 1,
+		addBits:  1,
 	}
+	fillBase(tmp[2:], 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31)
 	symbolTableX[2] = tmp
+	fmt.Println(tmp)
 
 	for i := range fsePredef[:] {
 		f := &fsePredef[i]
@@ -88,6 +88,9 @@ func init() {
 		}
 		if err := f.transform(symbolTableX[i]); err != nil {
 			panic(fmt.Errorf("building table %d: %v", i, err))
+		}
+		if true {
+			fmt.Printf("%+v\n", f.dt[:1<<f.actualTableLog])
 		}
 	}
 }

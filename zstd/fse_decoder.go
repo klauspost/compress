@@ -290,12 +290,11 @@ func (s *fseState) init(br *bitReader, tableLog uint8, dt []decSymbol) {
 
 // next returns the next symbol and sets the next state.
 // At least tablelog bits must be available in the bit reader.
-func (s *fseState) next(br *bitReader) uint32 {
+func (s *fseState) next(br *bitReader) (uint32, uint8) {
 	n := &s.dt[s.state]
-	// TODO: Read all bits at once.
 	lowBits := uint16(br.getBits(n.nbBits))
 	s.state = n.newState + lowBits
-	return n.baseline + br.getBits(n.addBits)
+	return n.baseline, n.addBits
 }
 
 // finished returns true if all bits have been read from the bitstream
@@ -312,9 +311,9 @@ func (s *fseState) final() uint8 {
 // nextFast returns the next symbol and sets the next state.
 // This can only be used if no symbols are 0 bits.
 // At least tablelog bits must be available in the bit reader.
-func (s *fseState) nextFast(br *bitReader) uint32 {
-	n := s.dt[s.state&maxTableMask]
+func (s *fseState) nextFast(br *bitReader) (uint32, uint8) {
+	n := s.dt[s.state]
 	lowBits := uint16(br.getBitsFast(n.nbBits))
 	s.state = n.newState + lowBits
-	return n.baseline + br.getBits(n.addBits)
+	return n.baseline, n.addBits
 }

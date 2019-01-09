@@ -433,13 +433,13 @@ func (b *dBlock) decodeCompressed() error {
 				dec := fseDecoderPool.Get().(*fseDecoder)
 				err := dec.readNCount(&br)
 				if err != nil {
-					fmt.Println("Read table error", err)
+					fmt.Println("Read table error:", err)
 					return err
 				}
 				fmt.Println("Read table ok")
 				err = dec.transform(symbolTableX[i])
 				if err != nil {
-					fmt.Println("Transform table error", err)
+					fmt.Println("Transform table error:", err)
 					return err
 				}
 				seq.fse = dec
@@ -520,9 +520,12 @@ func (b *dBlock) decodeCompressed() error {
 		litLen, matchOff, matchLen := seqs.next(br)
 		fmt.Printf("Seq %d: Litlen: %d, matchOff: %d, matchLen: %d\n", i, litLen, matchOff, matchLen)
 	}
+	if !br.finished() {
+		return fmt.Errorf("%d extra bits on block, should be 0", br.remain())
+	}
 
 	fmt.Println("History merged ok")
-	return errNotimplemented
+	return br.close()
 }
 
 type sequenceDecoder struct {
@@ -548,6 +551,7 @@ type sequenceDecoders struct {
 	litLengths   sequenceDecoder
 	offsets      sequenceDecoder
 	matchLengths sequenceDecoder
+	prevOffset   [3]uint32
 }
 
 func (s *sequenceDecoders) initialize(br *bitReader) error {
@@ -564,24 +568,35 @@ func (s *sequenceDecoders) initialize(br *bitReader) error {
 }
 
 func (s *sequenceDecoders) next(br *bitReader) (ll, mo, ml uint32) {
+	var llB, moB, mlB uint8
 	br.fill()
+	// Max 8 bits
 	if rle := s.litLengths.rle; rle != nil {
-		ll = rle.baseline + br.getBits(rle.addBits)
+		ll = rle.baseline
+		llB = rle.addBits
 	} else {
-		ll = s.litLengths.state.next(br)
+		ll, llB = s.litLengths.state.next(br)
 	}
-	br.fill()
-	if rle := s.offsets.rle; rle != nil {
-		mo = rle.baseline + br.getBits(rle.addBits)
-	} else {
-		mo = s.offsets.state.next(br)
-	}
-	br.fill()
+	// Max 9 bits
 	if rle := s.matchLengths.rle; rle != nil {
-		ml = rle.baseline + br.getBits(rle.addBits)
+		ml = rle.baseline
+		mlB = rle.addBits
 	} else {
-		ml = s.matchLengths.state.next(br)
+		ml, mlB = s.matchLengths.state.next(br)
 	}
+	// Max 8 bits
+	if rle := s.offsets.rle; rle != nil {
+		mo = rle.baseline
+		moB = rle.addBits
+	} else {
+		mo, moB = s.offsets.state.next(br)
+	}
+	br.fill()
+
+	// extra bits are stored in reverse order.
+	mo += br.getBits(moB)
+	ml += br.getBits(mlB)
+	ll += br.getBits(llB)
 	return
 }
 

@@ -97,6 +97,11 @@ func (b *bitReader) finished() bool {
 	return b.off == 0 && b.bitsRead >= 64
 }
 
+// finished returns true if all bits have been read from the bit stream.
+func (b *bitReader) remain() uint {
+	return b.off*8 + 64 - uint(b.bitsRead)
+}
+
 // close the bitstream and returns an error if out-of-buffer reads occurred.
 func (b *bitReader) close() error {
 	// Release reference.
