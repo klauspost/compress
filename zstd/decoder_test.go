@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -19,6 +20,7 @@ func TestNewDecoder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	runtime.GOMAXPROCS(2)
 	for _, tt := range zr.File {
 		if !strings.HasSuffix(tt.Name, ".zst") {
 			continue
@@ -46,6 +48,7 @@ func TestNewDecoder(t *testing.T) {
 			}
 			fmt.Println(len(got), "bytes returned")
 		})
+		break
 	}
 }
 

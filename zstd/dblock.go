@@ -404,6 +404,7 @@ func (b *dBlock) decodeCompressed() error {
 		}
 		br := byteReader{b: in, off: 0}
 		compMode := br.Uint8()
+		br.advance(1)
 		for i := uint(0); i < 3; i++ {
 			mode := seqCompMode((compMode >> (6 - i*2)) & 3)
 			fmt.Println("Sequence", i, "Comp mode", mode)
@@ -424,11 +425,16 @@ func (b *dBlock) decodeCompressed() error {
 					return ErrBlockTooSmall
 				}
 				v := br.Uint8()
-				dec, err := decSymbolValue(v, symbolTableX[i])
+				br.advance(1)
+				dec := fseDecoderPool.Get().(*fseDecoder)
+				symb, err := decSymbolValue(v, symbolTableX[i])
 				if err != nil {
+					fmt.Println("RLE Transform table error:", err)
 					return err
 				}
-				seq.rle = dec
+				dec.setRLE(symb)
+				seq.fse = dec
+				fmt.Println("RLE set to ", *symb)
 			case compModeFSE:
 				dec := fseDecoderPool.Get().(*fseDecoder)
 				err := dec.readNCount(&br)
@@ -530,20 +536,16 @@ func (b *dBlock) decodeCompressed() error {
 
 type sequenceDecoder struct {
 	// decoder keeps track of the current state and updates it from the bitstream.
-	rle    *decSymbol
 	fse    *fseDecoder
 	state  fseState
 	repeat bool
 }
 
 func (s *sequenceDecoder) init(br *bitReader) error {
-	if s.fse != nil {
-		s.state.init(br, s.fse.actualTableLog, s.fse.dt[:1<<s.fse.actualTableLog])
-	} else {
-		if s.rle == nil {
-			return errors.New("neither FSE nor RLE defined")
-		}
+	if s.fse == nil {
+		return errors.New("neither FSE nor RLE defined")
 	}
+	s.state.init(br, s.fse.actualTableLog, s.fse.dt[:1<<s.fse.actualTableLog])
 	return nil
 }
 
@@ -568,29 +570,13 @@ func (s *sequenceDecoders) initialize(br *bitReader) error {
 }
 
 func (s *sequenceDecoders) next(br *bitReader) (ll, mo, ml uint32) {
-	var llB, moB, mlB uint8
 	br.fill()
 	// Max 8 bits
-	if rle := s.litLengths.rle; rle != nil {
-		ll = rle.baseline
-		llB = rle.addBits
-	} else {
-		ll, llB = s.litLengths.state.next(br)
-	}
+	ll, llB := s.litLengths.state.next(br)
 	// Max 9 bits
-	if rle := s.matchLengths.rle; rle != nil {
-		ml = rle.baseline
-		mlB = rle.addBits
-	} else {
-		ml, mlB = s.matchLengths.state.next(br)
-	}
+	ml, mlB := s.matchLengths.state.next(br)
 	// Max 8 bits
-	if rle := s.offsets.rle; rle != nil {
-		mo = rle.baseline
-		moB = rle.addBits
-	} else {
-		mo, moB = s.offsets.state.next(br)
-	}
+	mo, moB := s.offsets.state.next(br)
 	br.fill()
 
 	// extra bits are stored in reverse order.
@@ -616,20 +602,18 @@ func (s *sequenceDecoders) mergeHistory(hist *sequenceDecoders) (*sequenceDecode
 			sHist = &hist.matchLengths
 		}
 		if sNew.repeat {
-			if sHist.rle == nil && sHist.fse == nil {
+			if sHist.fse == nil {
 				return nil, fmt.Errorf("sequence stream %d, repeat requested, but no history", i)
 			}
 			continue
 		}
-		if sNew.fse != nil {
-			sHist.fse = sNew.fse
+		if sNew.fse == nil {
+			return nil, fmt.Errorf("sequence stream %d, no fse found", i)
 		}
-		if sNew.rle != nil {
-			sHist.rle = sNew.rle
+		if sHist.fse != nil {
+			fseDecoderPool.Put(sHist.fse)
 		}
-		if sHist.rle == nil && sHist.fse == nil {
-			return nil, fmt.Errorf("sequence stream %d, repeat requested, but no history", i)
-		}
+		sHist.fse = sNew.fse
 	}
 	return hist, nil
 }

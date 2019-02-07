@@ -191,6 +191,12 @@ func decSymbolValue(symb uint8, t []baseOffset) (*decSymbol, error) {
 	}, nil
 }
 
+// setRLE will set the decoder til RLE mode.
+func (s *fseDecoder) setRLE(symbol *decSymbol) {
+	s.actualTableLog = 0
+	s.dt[0] = *symbol
+}
+
 // buildDtable will build the decoding table.
 func (s *fseDecoder) buildDtable() error {
 	tableSize := uint32(1 << s.actualTableLog)

@@ -38,7 +38,6 @@ func (b byteReader) Int32() int32 {
 // Uint8 returns the next byte
 func (b *byteReader) Uint8() uint8 {
 	v := b.b[b.off]
-	b.off++
 	return v
 }
 
