@@ -34,12 +34,14 @@ var (
 
 // fseDecoder provides temporary storage for compression and decompression.
 type fseDecoder struct {
-	norm           [maxSymbolValue + 1]int16
+	dt             [maxTablesize]decSymbol // Decompression table.
 	symbolLen      uint16                  // Length of active part of the symbol table.
 	actualTableLog uint8                   // Selected tablelog.
 	zeroBits       bool                    // no bits has prob > 50%.
-	dt             [maxTablesize]decSymbol // Decompression table.
-	stateTable     [256]uint16
+
+	// used for table creation to avoid allocations.
+	stateTable [256]uint16
+	norm       [maxSymbolValue + 1]int16
 }
 
 // tableStep returns the next table index.
@@ -174,8 +176,8 @@ func (s *fseDecoder) readNCount(b *byteReader) error {
 // the number of bits to read for the low part of the destination state.
 type decSymbol struct {
 	newState uint16
-	nbBits   uint8
 	addBits  uint8 // Used for symbols until transformed.
+	nbBits   uint8
 	baseline uint32
 }
 
@@ -265,6 +267,8 @@ func (s *fseDecoder) buildDtable() error {
 }
 
 // transform will transform the decoder table into a table usable for
+// decoding without having to apply the transformation while decoding.
+// The state will contain the base value and the number of bits to read.
 func (s *fseDecoder) transform(t []baseOffset) error {
 	tableSize := uint16(1 << s.actualTableLog)
 	for i, v := range s.dt[:tableSize] {
@@ -297,11 +301,11 @@ func (s *fseState) init(br *bitReader, tableLog uint8, dt []decSymbol) {
 
 // next returns the current symbol and sets the next state.
 // At least tablelog bits must be available in the bit reader.
-func (s *fseState) next(br *bitReader) (uint32, uint8) {
+func (s *fseState) next(br *bitReader) (int, uint8) {
 	n := s.dt[s.state]
 	lowBits := uint16(br.getBits(n.nbBits))
 	s.state = n.newState + lowBits
-	return n.baseline, n.addBits
+	return int(n.baseline), n.addBits
 }
 
 // finished returns true if all bits have been read from the bitstream
@@ -311,9 +315,9 @@ func (s *fseState) finished(br *bitReader) bool {
 }
 
 // final returns the current state symbol without decoding the next.
-func (s *fseState) final() (uint32, uint8) {
+func (s *fseState) final() (int, uint8) {
 	n := s.dt[s.state]
-	return n.baseline, n.addBits
+	return int(n.baseline), n.addBits
 }
 
 // nextFast returns the next symbol and sets the next state.

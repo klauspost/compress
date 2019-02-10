@@ -315,7 +315,7 @@ func (d *dFrame) startDecoder(writer chan decodeOutput) {
 	}
 	d.history = history{
 		b:             make([]byte, 0, ws),
-		recentOffsets: [3]uint32{1, 4, 8},
+		recentOffsets: [3]int{1, 4, 8},
 	}
 	// Get first block
 	block := <-d.decoding
@@ -326,6 +326,7 @@ func (d *dFrame) startDecoder(writer chan decodeOutput) {
 		r := <-block.result
 		if r.err != nil {
 			writer <- r
+			return
 		}
 		if !block.Last {
 			// Send history to next block

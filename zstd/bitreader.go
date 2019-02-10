@@ -16,8 +16,8 @@ import (
 // for aligning the input.
 type bitReader struct {
 	in       []byte
-	off      uint // next byte to read is at in[off - 1]
-	value    uint64
+	off      uint   // next byte to read is at in[off - 1]
+	value    uint64 // Maybe use [16]byte, but shifting is awkward.
 	bitsRead uint8
 }
 
@@ -42,7 +42,7 @@ func (b *bitReader) init(in []byte) error {
 }
 
 // getBits will return n bits. n can be 0.
-func (b *bitReader) getBits(n uint8) uint32 {
+func (b *bitReader) getBits(n uint8) int {
 	if n == 0 || b.bitsRead >= 64 {
 		return 0
 	}
@@ -51,11 +51,11 @@ func (b *bitReader) getBits(n uint8) uint32 {
 
 // getBitsFast requires that at least one bit is requested every time.
 // There are no checks if the buffer is filled.
-func (b *bitReader) getBitsFast(n uint8) uint32 {
+func (b *bitReader) getBitsFast(n uint8) int {
 	const regMask = 64 - 1
 	v := uint32((b.value << (b.bitsRead & regMask)) >> ((regMask + 1 - n) & regMask))
 	b.bitsRead += n
-	return v
+	return int(v)
 }
 
 // fillFast() will make sure at least 32 bits are available.
