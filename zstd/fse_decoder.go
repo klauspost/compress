@@ -291,13 +291,14 @@ type fseState struct {
 // Initialize and decode first state and symbol.
 func (s *fseState) init(br *bitReader, tableLog uint8, dt []decSymbol) {
 	s.dt = dt
+	br.fill()
 	s.state = uint16(br.getBits(tableLog))
 }
 
-// next returns the next symbol and sets the next state.
+// next returns the current symbol and sets the next state.
 // At least tablelog bits must be available in the bit reader.
 func (s *fseState) next(br *bitReader) (uint32, uint8) {
-	n := &s.dt[s.state]
+	n := s.dt[s.state]
 	lowBits := uint16(br.getBits(n.nbBits))
 	s.state = n.newState + lowBits
 	return n.baseline, n.addBits
@@ -310,8 +311,9 @@ func (s *fseState) finished(br *bitReader) bool {
 }
 
 // final returns the current state symbol without decoding the next.
-func (s *fseState) final() uint8 {
-	return s.dt[s.state].addBits
+func (s *fseState) final() (uint32, uint8) {
+	n := s.dt[s.state]
+	return n.baseline, n.addBits
 }
 
 // nextFast returns the next symbol and sets the next state.

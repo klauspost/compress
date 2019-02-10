@@ -294,7 +294,7 @@ func (d *dFrame) checkCRC() error {
 	gotB[2] = gotB[5]
 	gotB[3] = gotB[4]
 	if !bytes.Equal(gotB[:4], want[:]) {
-		fmt.Println(gotB[:4], "!=", want)
+		fmt.Println("CRC Check Failed:", gotB[:4], "!=", want)
 		return ErrCRCMismatch
 	}
 	fmt.Println("CRC ok")
@@ -307,7 +307,16 @@ func (d *dFrame) Close() {
 
 func (d *dFrame) startDecoder(writer chan decodeOutput) {
 	// TODO: Init to dictionary
-	d.history = history{}
+	ws := int(d.WindowSize)
+	if !d.lowMem {
+		if maxBlockSize < ws {
+			ws = maxBlockSize
+		}
+	}
+	d.history = history{
+		b:             make([]byte, 0, ws),
+		recentOffsets: [3]uint32{1, 4, 8},
+	}
 	// Get first block
 	block := <-d.decoding
 	block.history <- &d.history

@@ -6,6 +6,12 @@ import "fmt"
 // https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#default-distributions
 var fsePredef [3]fseDecoder
 
+const (
+	tableLiteralLengths = 0
+	tableOffsets        = 1
+	tableMatchLengths   = 2
+)
+
 type baseOffset struct {
 	baseLine uint32
 	addBits  uint8
@@ -36,7 +42,7 @@ func init() {
 		}
 	}
 	fillBase(tmp[16:], 16, 1, 1, 1, 1, 2, 2, 3, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16)
-	symbolTableX[0] = tmp
+	symbolTableX[tableLiteralLengths] = tmp
 
 	// Match length codes
 	tmp = make([]baseOffset, 53)
@@ -47,7 +53,7 @@ func init() {
 		}
 	}
 	fillBase(tmp[32:], 35, 1, 1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16)
-	symbolTableX[1] = tmp
+	symbolTableX[tableMatchLengths] = tmp
 
 	// Offset codes
 	tmp = make([]baseOffset, 32)
@@ -56,18 +62,18 @@ func init() {
 		addBits:  1,
 	}
 	fillBase(tmp[2:], 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31)
-	symbolTableX[2] = tmp
+	symbolTableX[tableOffsets] = tmp
 
 	for i := range fsePredef[:] {
 		f := &fsePredef[i]
 		switch i {
-		case 0:
+		case tableLiteralLengths:
 			f.actualTableLog = 6
 			copy(f.norm[:], []int16{4, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1,
 				2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 2, 1, 1, 1, 1, 1,
 				-1, -1, -1, -1})
 			f.symbolLen = 36
-		case 1:
+		case tableMatchLengths:
 			f.actualTableLog = 6
 			copy(f.norm[:], []int16{
 				1, 4, 3, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1,
@@ -75,7 +81,7 @@ func init() {
 				1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -1, -1,
 				-1, -1, -1, -1, -1})
 			f.symbolLen = 53
-		case 2:
+		case tableOffsets:
 			f.actualTableLog = 5
 			copy(f.norm[:], []int16{
 				1, 1, 1, 1, 1, 1, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1,
