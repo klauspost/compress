@@ -42,6 +42,7 @@ type fseDecoder struct {
 	// used for table creation to avoid allocations.
 	stateTable [256]uint16
 	norm       [maxSymbolValue + 1]int16
+	preDefined bool
 }
 
 // tableStep returns the next table index.
@@ -83,6 +84,7 @@ func (s *fseDecoder) readNCount(b *byteReader) error {
 					b.advance(2)
 					bitStream = b.Uint32() >> bitCount
 				} else {
+					// end of bit stream
 					bitStream >>= 16
 					bitCount += 16
 				}
@@ -111,10 +113,10 @@ func (s *fseDecoder) readNCount(b *byteReader) error {
 			}
 		}
 
-		max := (2*(threshold) - 1) - (remaining)
+		max := (2*threshold - 1) - remaining
 		var count int32
 
-		if (int32(bitStream) & (threshold - 1)) < max {
+		if int32(bitStream)&(threshold-1) < max {
 			count = int32(bitStream) & (threshold - 1)
 			bitCount += nbBits - 1
 		} else {
@@ -125,7 +127,8 @@ func (s *fseDecoder) readNCount(b *byteReader) error {
 			bitCount += nbBits
 		}
 
-		count-- // extra accuracy
+		// extra accuracy
+		count--
 		if count < 0 {
 			// -1 means +1
 			remaining += count

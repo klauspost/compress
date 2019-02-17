@@ -331,6 +331,7 @@ func (d *dFrame) startDecoder(writer chan decodeOutput) {
 		if !block.Last {
 			// Send history to next block
 			next = <-d.decoding
+			fmt.Println("Sending ", len(d.history.b), " bytes as history")
 			next.history <- &d.history
 		}
 

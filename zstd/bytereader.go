@@ -25,6 +25,11 @@ func (b *byteReader) advance(n uint) {
 	b.off += int(n)
 }
 
+// overread returns whether we have advanced too far.
+func (b *byteReader) overread() bool {
+	return b.off > len(b.b)
+}
+
 // Int32 returns a little endian int32 starting at current offset.
 func (b byteReader) Int32() int32 {
 	b2 := b.b[b.off : b.off+4 : b.off+4]

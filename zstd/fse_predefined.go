@@ -16,11 +16,13 @@ var (
 	symbolTableX [3][]baseOffset
 )
 
+type tableIndex uint8
+
 const (
 	// indexes for fsePredef and symbolTableX
-	tableLiteralLengths = 0
-	tableOffsets        = 1
-	tableMatchLengths   = 2
+	tableLiteralLengths tableIndex = 0
+	tableOffsets        tableIndex = 1
+	tableMatchLengths   tableIndex = 2
 )
 
 // baseOffset is used for calculating transformations.
@@ -84,7 +86,7 @@ func init() {
 	// https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#default-distributions
 	for i := range fsePredef[:] {
 		f := &fsePredef[i]
-		switch i {
+		switch tableIndex(i) {
 		case tableLiteralLengths:
 			// https://github.com/facebook/zstd/blob/ededcfca57366461021c922720878c81a5854a0a/lib/decompress/zstd_decompress_block.c#L243
 			f.actualTableLog = 6
@@ -110,13 +112,14 @@ func init() {
 			f.symbolLen = 53
 		}
 		if err := f.buildDtable(); err != nil {
-			panic(fmt.Errorf("building table %d: %v", i, err))
+			panic(fmt.Errorf("building table %v: %v", tableIndex(i), err))
 		}
 		if err := f.transform(symbolTableX[i]); err != nil {
-			panic(fmt.Errorf("building table %d: %v", i, err))
+			panic(fmt.Errorf("building table %v: %v", tableIndex(i), err))
 		}
 		if false {
-			fmt.Printf("%d: %v\n", i, f.dt[:1<<f.actualTableLog])
+			fmt.Printf("%v: %v\n", tableIndex(i), f.dt[:1<<f.actualTableLog])
 		}
+		f.preDefined = true
 	}
 }

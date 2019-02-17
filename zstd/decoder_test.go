@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"reflect"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -21,7 +20,18 @@ func TestNewDecoder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime.GOMAXPROCS(2)
+	var want = make(map[string][]byte)
+	for _, tt := range zr.File {
+		if strings.HasSuffix(tt.Name, ".zst") {
+			continue
+		}
+		r, err := tt.Open()
+		if err != nil {
+			t.Fatal(err)
+			return
+		}
+		want[tt.Name+".zst"], _ = ioutil.ReadAll(r)
+	}
 	for _, tt := range zr.File {
 		if !strings.HasSuffix(tt.Name, ".zst") {
 			continue
@@ -47,9 +57,14 @@ func TestNewDecoder(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			fmt.Println(len(got), "bytes returned")
+			wantB := want[tt.Name]
+			if !bytes.Equal(wantB, got) {
+				t.Logf(" got: %v/nwant: %v", got, wantB)
+				t.Logf("Length, want: %d, got: %d", len(wantB), len(got))
+				t.Error("Output mismatch")
+			}
+			t.Log(len(got), "bytes returned, matches input, ok!")
 		})
-		break
 	}
 }
 
@@ -98,7 +113,7 @@ func TestNewDecoderGood(t *testing.T) {
 func TestPredefTables(t *testing.T) {
 	for i := range fsePredef[:] {
 		var want []decSymbol
-		switch i {
+		switch tableIndex(i) {
 		case tableLiteralLengths:
 			want = []decSymbol{
 				/* nextState, nbAddBits, nbBits, baseVal */

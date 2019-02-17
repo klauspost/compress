@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+
+	"github.com/klauspost/compress/huff0"
 )
 
 type Decoder struct {
@@ -29,6 +31,14 @@ type decoderState struct {
 	decodeOutput
 	// finished
 	output chan decodeOutput
+}
+
+type history struct {
+	b             []byte
+	writePos      int
+	huffTree      *huff0.Scratch
+	recentOffsets [3]int
+	decoders      sequenceDecoders
 }
 
 var (
@@ -251,10 +261,11 @@ func (d *Decoder) startStreamDecoder() {
 		for {
 			err := frame.reset(in.r)
 			if err != nil {
+				fmt.Println("Frame decoder returned", err)
 				in.output <- decodeOutput{
 					err: err,
 				}
-				continue
+				break
 			}
 			fmt.Println("started frame")
 			go frame.startDecoder(in.output)

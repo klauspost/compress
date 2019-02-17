@@ -11,7 +11,7 @@ import (
 
 type BlockType uint8
 
-//go:generate stringer -type=BlockType,LiteralsBlockType,seqCompMode
+//go:generate stringer -type=BlockType,LiteralsBlockType,seqCompMode,tableIndex
 
 const (
 	BlockTypeRaw BlockType = iota
@@ -198,8 +198,10 @@ func (b *dBlock) startDecoder() {
 				b:   b.data,
 				err: nil,
 			}
-			<-b.history
-			// TODO: add block to history.
+			hist := <-b.history
+			// TODO: Check size.
+			hist.b = append(hist.b, o.b...)
+			// TODO: We should check if result is closed.
 			b.result <- o
 		case BlockTypeCompressed:
 			err := b.decodeCompressed()
@@ -383,7 +385,7 @@ func (b *dBlock) decodeCompressed() error {
 		if len(in) < 2 {
 			return ErrBlockTooSmall
 		}
-		nSeqs = int(seqHeader)<<8 | int(in[1])
+		nSeqs = int(seqHeader-128)<<8 | int(in[1])
 		in = in[2:]
 	case seqHeader == 255:
 		if len(in) < 3 {
@@ -415,9 +417,9 @@ func (b *dBlock) decodeCompressed() error {
 		br.advance(1)
 		for i := uint(0); i < 3; i++ {
 			mode := seqCompMode((compMode >> (6 - i*2)) & 3)
-			fmt.Println("Sequence", i, "Comp mode", mode)
+			fmt.Println("Table", tableIndex(i), "is", mode)
 			var seq *sequenceDecoder
-			switch i {
+			switch tableIndex(i) {
 			case tableLiteralLengths:
 				seq = &seqs.litLengths
 			case tableOffsets:
@@ -444,6 +446,7 @@ func (b *dBlock) decodeCompressed() error {
 				seq.fse = dec
 				fmt.Println("RLE set to ", *symb)
 			case compModeFSE:
+				fmt.Println("Reading table for", tableIndex(i))
 				dec := fseDecoderPool.Get().(*fseDecoder)
 				err := dec.readNCount(&br)
 				if err != nil {
@@ -459,6 +462,9 @@ func (b *dBlock) decodeCompressed() error {
 				seq.fse = dec
 			case compModeRepeat:
 				seq.repeat = true
+			}
+			if br.overread() {
+				return io.ErrUnexpectedEOF
 			}
 		}
 		in = br.unread()
@@ -498,16 +504,16 @@ func (b *dBlock) decodeCompressed() error {
 			return fmt.Errorf("literal output size mismatch want %d, got %d", litRegenSize, len(literals))
 		}
 	} else {
-		if hist.huffTree != nil {
+		if hist.huffTree != nil && huff != nil {
 			huffDecoderPool.Put(hist.huffTree)
 			hist.huffTree = nil
 		}
 	}
 	if huff != nil {
 		huff.Out = nil
+		hist.huffTree = huff
 	}
-	hist.huffTree = huff
-	fmt.Println("Final literals:", len(literals))
+	fmt.Println("Final literals:", len(literals), "and", nSeqs, "sequences.")
 
 	if nSeqs == 0 {
 		// Decompressed content is defined entirely as Literals Section content.
@@ -550,17 +556,20 @@ func (b *dBlock) decodeCompressed() error {
 
 	if b.Last {
 		// if last block we don't care about history.
+		fmt.Println("Last block, no history returned")
 		hist.b = hist.b[:0]
 		return nil
 	}
 	ws := int(b.WindowSize)
-	if len(seqs.out) >= ws {
+	if len(b.dst) >= ws {
 		// Discard all history
 		hist.b = hist.b[:ws]
-		copy(hist.b, seqs.out[len(seqs.out)-ws:])
+		copy(hist.b, b.dst[len(b.dst)-ws:])
+		fmt.Println("Truncated and returned", len(hist.b), "history")
 	} else {
 		// TODO: Truncate history when needed.
-		hist.b = append(hist.b, seqs.out...)
+		hist.b = append(hist.b, b.dst...)
+		fmt.Println("Appended and returned", len(hist.b), "history")
 	}
 	hist.recentOffsets = seqs.prevOffset
 	return nil
@@ -604,24 +613,22 @@ func (s *sequenceDecoders) initialize(br *bitReader, hist *history, literals, ou
 	s.literals = literals
 	s.hist = hist.b
 	s.prevOffset = hist.recentOffsets
-
+	//fmt.Println("litLengths index:", s.litLengths.state.state, "state:", s.litLengths.state.dt[s.litLengths.state.state])
+	//fmt.Println("offsets index:", s.offsets.state.state, "state:", s.offsets.state.dt[s.offsets.state.state])
+	//fmt.Println("matchLengths index:", s.matchLengths.state.state, "state:", s.matchLengths.state.dt[s.matchLengths.state.state])
 	s.out = out
 	return nil
 }
 
 func (s *sequenceDecoders) decode(seqs int, br *bitReader, hist []byte) error {
 	for i := seqs - 1; i >= 0; i-- {
-		if br.finished() {
-			fmt.Printf("reading sequence %d, no more data\n", seqs-i)
+		if br.overread() {
+			fmt.Printf("reading sequence %d, exceeded available data\n", seqs-i)
 			return io.ErrUnexpectedEOF
 		}
-		var litLen, matchOff, matchLen int
-		if i > 0 {
-			litLen, matchOff, matchLen = s.next(br)
-		} else {
-			litLen, matchOff, matchLen = s.final(br)
-		}
-		fmt.Printf("Seq %d: Litlen: %d, matchOff: %d, matchLen: %d\n", seqs-i, litLen, matchOff, matchLen)
+		litLen, matchOff, matchLen := s.next(br)
+
+		//		fmt.Printf("Seq %d: Litlen: %d, matchOff: %d, matchLen: %d\n", seqs-i, litLen, matchOff, matchLen)
 
 		if litLen > len(s.literals) {
 			return fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available", litLen, len(s.literals))
@@ -632,7 +639,7 @@ func (s *sequenceDecoders) decode(seqs int, br *bitReader, hist []byte) error {
 		if matchLen > maxMatchLen {
 			return fmt.Errorf("match len (%d) bigger than max allowed length", matchLen)
 		}
-		if matchOff-len(s.out)+len(hist) > litLen {
+		if matchOff > len(s.out)+len(hist)+litLen {
 			return fmt.Errorf("match offset (%d) bigger than current history (%d)", matchOff, len(s.out)+len(hist)+litLen)
 		}
 		if matchOff == 0 && matchLen > 0 {
@@ -641,13 +648,55 @@ func (s *sequenceDecoders) decode(seqs int, br *bitReader, hist []byte) error {
 
 		s.out = append(s.out, s.literals[:litLen]...)
 		s.literals = s.literals[litLen:]
+		out := s.out
 
 		// Copy from history
 		if v := matchOff - len(s.out); v > 0 {
-			// v is number of bytes to copy from history.
+			//fmt.Println("Grabbing", v, "bytes from history")
+			// v is the start position in history from end.
+			if matchLen > v {
+				// Some goes into current block.
+				// Copy remainder of history
+				out = append(out, s.hist[len(s.hist)-v:]...)
+				matchOff -= v
+				matchLen -= v
+			} else {
+				start := len(s.hist) - v
+				out = append(out, s.hist[start:start+matchLen]...)
+				matchLen = 0
+			}
 		}
-		// obv wrong.
-		s.out = append(s.out, make([]byte, matchLen)...)
+		// We must be in current buffer now
+		if matchLen > 0 {
+			start := len(s.out) - matchOff
+			//fmt.Println("Copying", matchLen, "bytes from buffer at offset", start, "Size before:", len(s.out))
+			if matchLen <= len(s.out)-start {
+				// No overlap
+				out = append(out, s.out[start:start+matchLen]...)
+			} else {
+				// Overlapping copy
+				// Create destination
+				// FIXME: Should be done by extending slice.
+				out = append(out, make([]byte, matchLen)...)
+				//d := len(out) - len(s.out)
+				//fmt.Println("Overlapping. len(out):", len(out), "dst:", len(out)-matchLen, "start:", start)
+				src := out[start : start+matchLen]
+				dst := out[len(out)-matchLen:]
+				if len(dst) != len(src) {
+					return fmt.Errorf("SIZE: %d != %d", len(dst), len(src))
+				}
+				dst = dst[:len(src)]
+				for i := range src {
+					dst[i] = src[i]
+				}
+				//fmt.Println(out)
+			}
+		}
+		s.out = out
+		if i == 0 {
+			break
+		}
+		s.update(br)
 	}
 
 	// Add final literals
@@ -655,33 +704,26 @@ func (s *sequenceDecoders) decode(seqs int, br *bitReader, hist []byte) error {
 	return nil
 }
 
-func (s *sequenceDecoders) next(br *bitReader) (ll, mo, ml int) {
-	// Make 32 bits available.
+func (s *sequenceDecoders) update(br *bitReader) {
 	br.fill()
 	// Max 8 bits
-	ll, llB := s.litLengths.state.next(br)
+	s.litLengths.state.next(br)
 	// Max 9 bits
-	ml, mlB := s.matchLengths.state.next(br)
+	s.matchLengths.state.next(br)
 	// Max 8 bits
-	mo, moB := s.offsets.state.next(br)
-
-	// extra bits are stored in reverse order.
-	br.fill()
-	mo += br.getBits(moB)
-	br.fill()
-	ml += br.getBits(mlB)
-	br.fill()
-	ll += br.getBits(llB)
-	mo = s.adjustOffset(mo, ll, moB)
-	return
+	s.offsets.state.next(br)
 }
 
-func (s *sequenceDecoders) final(br *bitReader) (ll, mo, ml int) {
+func (s *sequenceDecoders) next(br *bitReader) (ll, mo, ml int) {
 	// Final will not read from stream.
 	ll, llB := s.litLengths.state.final()
 	ml, mlB := s.matchLengths.state.final()
 	mo, moB := s.offsets.state.final()
 
+	//fmt.Println("ll, ll bits", ll, llB)
+	//fmt.Println("ml, ml bits", ml, mlB)
+	//fmt.Println("mo, moB bits", mo, moB)
+
 	// extra bits are stored in reverse order.
 	br.fill()
 	mo += br.getBits(moB)
@@ -690,6 +732,7 @@ func (s *sequenceDecoders) final(br *bitReader) (ll, mo, ml int) {
 	br.fill()
 	ll += br.getBits(llB)
 	mo = s.adjustOffset(mo, ll, moB)
+	//fmt.Println("mo, adjusted", mo)
 	return
 }
 
@@ -720,6 +763,7 @@ func (s *sequenceDecoders) adjustOffset(offset, litLen int, offsetB uint8) int {
 
 	if temp == 0 {
 		// 0 is not valid; input is corrupted; force offset to 1
+		fmt.Println("temp was 0")
 		temp = 1
 	}
 
@@ -755,7 +799,7 @@ func (s *sequenceDecoders) mergeHistory(hist *sequenceDecoders) (*sequenceDecode
 		if sNew.fse == nil {
 			return nil, fmt.Errorf("sequence stream %d, no fse found", i)
 		}
-		if sHist.fse != nil {
+		if sHist.fse != nil && !sHist.fse.preDefined {
 			fseDecoderPool.Put(sHist.fse)
 		}
 		sHist.fse = sNew.fse

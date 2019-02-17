@@ -55,6 +55,7 @@ func (b *bitReader) getBitsFast(n uint8) int {
 	const regMask = 64 - 1
 	v := uint32((b.value << (b.bitsRead & regMask)) >> ((regMask + 1 - n) & regMask))
 	b.bitsRead += n
+	//fmt.Println(n, "bits, value:", v)
 	return int(v)
 }
 
@@ -95,6 +96,11 @@ func (b *bitReader) fill() {
 // finished returns true if all bits have been read from the bit stream.
 func (b *bitReader) finished() bool {
 	return b.off == 0 && b.bitsRead >= 64
+}
+
+// overread returns true if more bits have been requested than is on the stream.
+func (b *bitReader) overread() bool {
+	return b.bitsRead > 64
 }
 
 // finished returns true if all bits have been read from the bit stream.
