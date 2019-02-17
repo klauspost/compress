@@ -448,7 +448,7 @@ func (b *dBlock) decodeCompressed() error {
 			case compModeFSE:
 				fmt.Println("Reading table for", tableIndex(i))
 				dec := fseDecoderPool.Get().(*fseDecoder)
-				err := dec.readNCount(&br)
+				err := dec.readNCount(&br, uint16(maxTableSymbol[i]))
 				if err != nil {
 					fmt.Println("Read table error:", err)
 					return err

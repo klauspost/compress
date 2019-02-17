@@ -14,6 +14,10 @@ var (
 	// symbolTableX contain the transformations needed for each type as defined in
 	// https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#the-codes-for-literals-lengths-match-lengths-and-offsets
 	symbolTableX [3][]baseOffset
+
+	// maxTableSymbol is the biggest supported symbol for each table type
+	// https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#the-codes-for-literals-lengths-match-lengths-and-offsets
+	maxTableSymbol = [3]uint8{tableLiteralLengths: 35, tableOffsets: 30, tableMatchLengths: 52}
 )
 
 type tableIndex uint8

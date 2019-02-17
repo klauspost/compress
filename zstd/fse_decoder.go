@@ -51,7 +51,7 @@ func tableStep(tableSize uint32) uint32 {
 }
 
 // readNCount will read the symbol distribution so decoding tables can be constructed.
-func (s *fseDecoder) readNCount(b *byteReader) error {
+func (s *fseDecoder) readNCount(b *byteReader, maxSymbol uint16) error {
 	var (
 		charnum   uint16
 		previous0 bool
@@ -75,12 +75,12 @@ func (s *fseDecoder) readNCount(b *byteReader) error {
 	gotTotal := int32(0)
 	nbBits++
 
-	for remaining > 1 {
+	for remaining > 1 && charnum <= maxSymbol {
 		if previous0 {
 			n0 := charnum
 			for (bitStream & 0xFFFF) == 0xFFFF {
 				n0 += 24
-				if b.off < iend-5 {
+				if r := b.remain(); r > 5 {
 					b.advance(2)
 					bitStream = b.Uint32() >> bitCount
 				} else {
@@ -96,6 +96,7 @@ func (s *fseDecoder) readNCount(b *byteReader) error {
 			}
 			n0 += uint16(bitStream & 3)
 			bitCount += 2
+
 			if n0 > maxSymbolValue {
 				return errors.New("maxSymbolValue too small")
 			}
@@ -104,7 +105,7 @@ func (s *fseDecoder) readNCount(b *byteReader) error {
 				charnum++
 			}
 
-			if b.off <= iend-7 || b.off+int(bitCount>>3) <= iend-4 {
+			if r := b.remain(); r >= 7 || r+int(bitCount>>3) >= 4 {
 				b.advance(bitCount >> 3)
 				bitCount &= 7
 				bitStream = b.Uint32() >> bitCount
@@ -144,17 +145,18 @@ func (s *fseDecoder) readNCount(b *byteReader) error {
 			nbBits--
 			threshold >>= 1
 		}
-		if b.off <= iend-7 || b.off+int(bitCount>>3) <= iend-4 {
+
+		if r := b.remain(); r >= 7 || r+int(bitCount>>3) >= 4 {
 			b.advance(bitCount >> 3)
 			bitCount &= 7
 		} else {
 			bitCount -= (uint)(8 * (iend - 4 - b.off))
 			b.off = iend - 4
 		}
-		bitStream = b.Uint32() >> (bitCount & 31)
+		v := b.Uint32()
+		bitStream = v >> (bitCount & 31)
 	}
 	s.symbolLen = charnum
-
 	if s.symbolLen <= 1 {
 		return fmt.Errorf("symbolLen (%d) too small", s.symbolLen)
 	}
