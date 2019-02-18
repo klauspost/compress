@@ -56,7 +56,7 @@ func NewDecoder(r io.Reader, opts ...interface{}) (*Decoder, error) {
 	}
 
 	d.current.output = make(chan decodeOutput, d.concurrent)
-	fmt.Println("startDecoders")
+	//fmt.Println("startDecoders")
 
 	// Create decoders
 	d.decoders = make(chan *dBlock, d.concurrent)
@@ -93,14 +93,14 @@ func (d *Decoder) Read(p []byte) (int, error) {
 				break
 			}
 			d.nextBlock()
-			fmt.Println("current error", d.current.err)
+			//fmt.Println("current error", d.current.err)
 		}
 	}
 	if len(d.current.b) > 0 {
 		// Only return error at end of block
 		return n, nil
 	}
-	fmt.Println("returning", n, d.current.err)
+	//fmt.Println("returning", n, d.current.err)
 	return n, d.current.err
 }
 
@@ -125,7 +125,7 @@ drainOutput:
 			break drainOutput
 		}
 	}
-	fmt.Println("Sending stream")
+	//fmt.Println("Sending stream")
 	d.stream <- decodeStream{
 		r:      r,
 		output: d.current.output,
@@ -194,7 +194,7 @@ func (d *Decoder) nextBlock() {
 		return
 	}
 	d.current.decodeOutput = <-d.current.output
-	fmt.Println("got", len(d.current.b), "bytes, error:", d.current.err)
+	//fmt.Println("got", len(d.current.b), "bytes, error:", d.current.err)
 }
 
 // Close will release all resources.
@@ -246,14 +246,14 @@ type decodeStream struct {
 // 		d) wait for next block to return data.
 // Once WRITTEN, the decoders reused by the writer frame decoder for re-use.
 func (d *Decoder) startStreamDecoder() {
-	fmt.Println("creating stream decoder")
+	//fmt.Println("creating stream decoder")
 	frame := newDFrame()
 	frame.concurrent = d.concurrent
 	frame.lowMem = d.lowMem
 
 	for {
 		in, ok := <-d.stream
-		fmt.Println("got stream")
+		//fmt.Println("got stream")
 		if !ok {
 			d.stream = nil
 			return
@@ -261,20 +261,23 @@ func (d *Decoder) startStreamDecoder() {
 		for {
 			err := frame.reset(in.r)
 			if err != nil {
+				if err == io.EOF {
+					break
+				}
 				fmt.Println("Frame decoder returned", err)
 				in.output <- decodeOutput{
 					err: err,
 				}
 				break
 			}
-			fmt.Println("started frame")
+			//fmt.Println("started frame")
 			go frame.startDecoder(in.output)
 		decodeFrame:
 			for dec := range d.decoders {
 				// TODO: Racing on shutdown on frame.
-				fmt.Println("starting decoder")
+				//fmt.Println("starting decoder")
 				err := frame.next(dec)
-				fmt.Println("decoder returned", err)
+				//fmt.Println("decoder returned", err)
 				switch err {
 				case io.EOF:
 					// End of current block, no error
@@ -286,7 +289,7 @@ func (d *Decoder) startStreamDecoder() {
 				}
 			}
 			if _, err := in.r.Read([]byte{}); err == io.EOF {
-				fmt.Println("Stream ended", err)
+				//fmt.Println("Stream ended", err)
 				// No more data
 				break
 			}

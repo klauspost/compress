@@ -2,8 +2,9 @@ package zstd
 
 import (
 	"bytes"
-	"fmt"
 	"io/ioutil"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -12,7 +13,7 @@ import (
 )
 
 func TestNewDecoder(t *testing.T) {
-	data, err := ioutil.ReadFile("testdata/decoder.zip")
+	data, err := ioutil.ReadFile("testdata/testfiles.zip")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,13 +56,28 @@ func TestNewDecoder(t *testing.T) {
 					return
 				}
 				t.Error(err)
-				return
+				if err != ErrCRCMismatch {
+					return
+				}
 			}
 			wantB := want[tt.Name]
 			if !bytes.Equal(wantB, got) {
-				t.Logf(" got: %v/nwant: %v", got, wantB)
+				if len(wantB)+len(got) < 1000 {
+					t.Logf(" got: %v/nwant: %v", got, wantB)
+				} else {
+					fileName, _ := filepath.Abs(filepath.Join("testdata", t.Name()+"-want.bin"))
+					_ = os.MkdirAll(filepath.Dir(fileName), os.ModePerm)
+					err := ioutil.WriteFile(fileName, wantB, os.ModePerm)
+					t.Log("Wrote file", fileName, err)
+
+					fileName, _ = filepath.Abs(filepath.Join("testdata", t.Name()+"-got.bin"))
+					_ = os.MkdirAll(filepath.Dir(fileName), os.ModePerm)
+					err = ioutil.WriteFile(fileName, got, os.ModePerm)
+					t.Log("Wrote file", fileName, err)
+				}
 				t.Logf("Length, want: %d, got: %d", len(wantB), len(got))
 				t.Error("Output mismatch")
+				return
 			}
 			t.Log(len(got), "bytes returned, matches input, ok!")
 		})
@@ -97,12 +113,11 @@ func TestNewDecoderGood(t *testing.T) {
 				return
 			}
 			defer dec.Close()
-			got, err := ioutil.ReadAll(dec)
+			_, err = ioutil.ReadAll(dec)
 			if err != nil {
 				t.Error(err)
 				return
 			}
-			fmt.Println(got)
 		})
 	}
 }

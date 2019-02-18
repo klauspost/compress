@@ -168,7 +168,7 @@ func (b *dBlock) startDecoder() {
 		if !ok {
 			return
 		}
-		fmt.Println("dBlock: Got block input")
+		//fmt.Println("dBlock: Got block input")
 		switch b.Type {
 		case BlockTypeRLE:
 			if cap(b.dst) < int(b.RLESize) {
@@ -210,12 +210,12 @@ func (b *dBlock) startDecoder() {
 				b:   b.dst,
 				err: err,
 			}
-			fmt.Println("Decompressed to ", len(b.dst), "bytes, error:", err)
+			//fmt.Println("Decompressed to ", len(b.dst), "bytes, error:", err)
 			b.result <- o
 		default:
 			panic("Invalid block type")
 		}
-		fmt.Println("dBlock: Finished block")
+		//fmt.Println("dBlock: Finished block")
 	}
 }
 
@@ -234,7 +234,7 @@ func (b *dBlock) decodeCompressed() error {
 	var litCompSize int
 	sizeFormat := (in[0] >> 2) & 3
 	var fourStreams bool
-	fmt.Println("Literals type:", litType, "sizeFormat:", sizeFormat)
+	//fmt.Println("Literals type:", litType, "sizeFormat:", sizeFormat)
 	switch litType {
 	case LiteralsBlockRaw, LiteralsBlockRLE:
 		switch sizeFormat {
@@ -300,7 +300,7 @@ func (b *dBlock) decodeCompressed() error {
 		}
 		literals = in[:litRegenSize]
 		in = in[litRegenSize:]
-		fmt.Printf("Found %d uncompressed literals\n", litRegenSize)
+		//fmt.Printf("Found %d uncompressed literals\n", litRegenSize)
 	case LiteralsBlockRLE:
 		if len(in) < 1 {
 			fmt.Println("too small: litType:", litType, " sizeFormat", sizeFormat, "remain:", len(in), "want:", 1)
@@ -319,7 +319,7 @@ func (b *dBlock) decodeCompressed() error {
 			literals[i] = v
 		}
 		in = in[1:]
-		fmt.Printf("Found %d RLE compressed literals\n", litRegenSize)
+		//fmt.Printf("Found %d RLE compressed literals\n", litRegenSize)
 	case LiteralsBlockTreeless:
 		if len(in) < litCompSize {
 			fmt.Println("too small: litType:", litType, " sizeFormat", sizeFormat, "remain:", len(in), "want:", litCompSize)
@@ -328,7 +328,7 @@ func (b *dBlock) decodeCompressed() error {
 		// Store compressed literals, so we defer decoding until we get history.
 		literals = in[:litCompSize]
 		in = in[litCompSize:]
-		fmt.Printf("Found %d compressed literals\n", litCompSize)
+		//fmt.Printf("Found %d compressed literals\n", litCompSize)
 	case LiteralsBlockCompressed:
 		if len(in) < litCompSize {
 			fmt.Println("too small: litType:", litType, " sizeFormat", sizeFormat, "remain:", len(in), "want:", litCompSize)
@@ -365,7 +365,7 @@ func (b *dBlock) decodeCompressed() error {
 		if len(literals) != litRegenSize {
 			return fmt.Errorf("literal output size mismatch want %d, got %d", litRegenSize, len(literals))
 		}
-		fmt.Printf("Decompressed %d literals into %d bytes\n", litCompSize, litRegenSize)
+		//fmt.Printf("Decompressed %d literals into %d bytes\n", litCompSize, litRegenSize)
 	}
 
 	// Decode Sequences
@@ -417,7 +417,7 @@ func (b *dBlock) decodeCompressed() error {
 		br.advance(1)
 		for i := uint(0); i < 3; i++ {
 			mode := seqCompMode((compMode >> (6 - i*2)) & 3)
-			fmt.Println("Table", tableIndex(i), "is", mode)
+			//fmt.Println("Table", tableIndex(i), "is", mode)
 			var seq *sequenceDecoder
 			switch tableIndex(i) {
 			case tableLiteralLengths:
@@ -444,16 +444,16 @@ func (b *dBlock) decodeCompressed() error {
 				}
 				dec.setRLE(symb)
 				seq.fse = dec
-				fmt.Println("RLE set to ", *symb)
+				//fmt.Println("RLE set to ", *symb)
 			case compModeFSE:
-				fmt.Println("Reading table for", tableIndex(i))
+				//fmt.Println("Reading table for", tableIndex(i))
 				dec := fseDecoderPool.Get().(*fseDecoder)
 				err := dec.readNCount(&br, uint16(maxTableSymbol[i]))
 				if err != nil {
 					fmt.Println("Read table error:", err)
 					return err
 				}
-				fmt.Println("Read table ok")
+				//fmt.Println("Read table ok")
 				err = dec.transform(symbolTableX[i])
 				if err != nil {
 					fmt.Println("Transform table error:", err)
@@ -513,11 +513,12 @@ func (b *dBlock) decodeCompressed() error {
 		huff.Out = nil
 		hist.huffTree = huff
 	}
-	fmt.Println("Final literals:", len(literals), "and", nSeqs, "sequences.")
+	//fmt.Println("Final literals:", len(literals), "and", nSeqs, "sequences.")
 
 	if nSeqs == 0 {
 		// Decompressed content is defined entirely as Literals Section content.
 		b.dst = append(b.dst, literals...)
+		hist.b = append(hist.b, literals...)
 		return nil
 	}
 
@@ -525,7 +526,7 @@ func (b *dBlock) decodeCompressed() error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("History merged ok")
+	//fmt.Println("History merged ok")
 
 	br := &bitReader{}
 	if err := br.init(in); err != nil {
@@ -556,7 +557,7 @@ func (b *dBlock) decodeCompressed() error {
 
 	if b.Last {
 		// if last block we don't care about history.
-		fmt.Println("Last block, no history returned")
+		//fmt.Println("Last block, no history returned")
 		hist.b = hist.b[:0]
 		return nil
 	}
@@ -565,11 +566,11 @@ func (b *dBlock) decodeCompressed() error {
 		// Discard all history
 		hist.b = hist.b[:ws]
 		copy(hist.b, b.dst[len(b.dst)-ws:])
-		fmt.Println("Truncated and returned", len(hist.b), "history")
+		//fmt.Println("Truncated and returned", len(hist.b), "history")
 	} else {
 		// TODO: Truncate history when needed.
 		hist.b = append(hist.b, b.dst...)
-		fmt.Println("Appended and returned", len(hist.b), "history")
+		//fmt.Println("Appended and returned", len(hist.b), "history")
 	}
 	hist.recentOffsets = seqs.prevOffset
 	return nil
@@ -647,21 +648,24 @@ func (s *sequenceDecoders) decode(seqs int, br *bitReader, hist []byte) error {
 		}
 
 		s.out = append(s.out, s.literals[:litLen]...)
+		//fmt.Println("Added literals", hex.EncodeToString(s.literals[:litLen]))
 		s.literals = s.literals[litLen:]
 		out := s.out
 
 		// Copy from history
 		if v := matchOff - len(s.out); v > 0 {
-			//fmt.Println("Grabbing", v, "bytes from history")
 			// v is the start position in history from end.
+			start := len(s.hist) - v
+			//fmt.Println("Grabbing", matchLen, "bytes from history starting history pos", start)
 			if matchLen > v {
 				// Some goes into current block.
 				// Copy remainder of history
-				out = append(out, s.hist[len(s.hist)-v:]...)
+				out = append(out, s.hist[start:]...)
 				matchOff -= v
 				matchLen -= v
+				//fmt.Println("partial grab", matchLen, "left at offset", matchOff, hex.EncodeToString(s.hist[start:]))
 			} else {
-				start := len(s.hist) - v
+				//fmt.Println("full grab", hex.EncodeToString(s.hist[start:start+matchLen]))
 				out = append(out, s.hist[start:start+matchLen]...)
 				matchLen = 0
 			}
@@ -673,6 +677,7 @@ func (s *sequenceDecoders) decode(seqs int, br *bitReader, hist []byte) error {
 			if matchLen <= len(s.out)-start {
 				// No overlap
 				out = append(out, s.out[start:start+matchLen]...)
+				//fmt.Println("added", hex.EncodeToString(s.out[start:start+matchLen]))
 			} else {
 				// Overlapping copy
 				// Create destination
@@ -681,15 +686,16 @@ func (s *sequenceDecoders) decode(seqs int, br *bitReader, hist []byte) error {
 				//d := len(out) - len(s.out)
 				//fmt.Println("Overlapping. len(out):", len(out), "dst:", len(out)-matchLen, "start:", start)
 				src := out[start : start+matchLen]
+				// Destination is the space we just added.
 				dst := out[len(out)-matchLen:]
-				if len(dst) != len(src) {
+				if debug && len(dst) != len(src) {
 					return fmt.Errorf("SIZE: %d != %d", len(dst), len(src))
 				}
 				dst = dst[:len(src)]
 				for i := range src {
 					dst[i] = src[i]
 				}
-				//fmt.Println(out)
+				//fmt.Println("Added", hex.EncodeToString(dst))
 			}
 		}
 		s.out = out
@@ -701,6 +707,7 @@ func (s *sequenceDecoders) decode(seqs int, br *bitReader, hist []byte) error {
 
 	// Add final literals
 	s.out = append(s.out, s.literals...)
+	//fmt.Println("Added literals", hex.EncodeToString(s.literals))
 	return nil
 }
 

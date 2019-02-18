@@ -48,6 +48,14 @@ func (b *byteReader) Uint8() uint8 {
 
 // Uint32 returns a little endian uint32 starting at current offset.
 func (b byteReader) Uint32() uint32 {
+	if r := b.remain(); r < 4 {
+		// Very rare
+		v := uint32(0)
+		for i := 1; i <= r; i++ {
+			v = (v << 8) | uint32(b.b[len(b.b)-i])
+		}
+		return v
+	}
 	b2 := b.b[b.off : b.off+4 : b.off+4]
 	v3 := uint32(b2[3])
 	v2 := uint32(b2[2])

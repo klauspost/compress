@@ -27,7 +27,6 @@ type dFrame struct {
 	// maxWindowSize is the maximum windows size to support.
 	// should never be bigger than max-int.
 	maxWindowSize uint64
-	w             dWindow
 
 	// In order queue of blocks being decoded.
 	decoding chan *dBlock
@@ -40,15 +39,10 @@ type dFrame struct {
 	history history
 }
 
-type dWindow struct {
-	w       []byte
-	doffset int
-}
-
 const (
 	// The minimum Window_Size is 1 KB.
 	minWindowSize = 1 << 10
-	debug         = true
+	debug         = false
 )
 
 var (
@@ -90,10 +84,18 @@ func (d *dFrame) reset(r io.Reader) error {
 	if cap(d.decoding) < d.concurrent {
 		d.decoding = make(chan *dBlock, d.concurrent)
 	}
+	d.HasCheckSum = false
+	d.WindowSize = 0
 	var tmp [8]byte
 	for {
 		_, err := io.ReadFull(d.br, tmp[:4])
 		if err != nil {
+			if err == io.ErrUnexpectedEOF {
+				return io.EOF
+			}
+			if debug {
+				fmt.Println("Reading Frame Magic", err)
+			}
 			return err
 		}
 		if !bytes.Equal(tmp[:3], skippableFrameMagic) || tmp[3]&0xf0 != 0x50 {
@@ -103,6 +105,9 @@ func (d *dFrame) reset(r io.Reader) error {
 		// Read size to skip
 		_, err = io.ReadFull(d.br, tmp[:4])
 		if err != nil {
+			if debug {
+				fmt.Println("Reading Frame Size", err)
+			}
 			return err
 		}
 		n := uint32(tmp[0]) | (uint32(tmp[1]) << 8) | (uint32(tmp[2]) << 16) | (uint32(tmp[3]) << 24)
@@ -111,6 +116,9 @@ func (d *dFrame) reset(r io.Reader) error {
 		}
 		_, err = io.CopyN(ioutil.Discard, d.br, int64(n))
 		if err != nil {
+			if debug {
+				fmt.Println("Reading discarded frame", err)
+			}
 			return err
 		}
 	}
@@ -122,6 +130,9 @@ func (d *dFrame) reset(r io.Reader) error {
 	// Read Frame_Header_Descriptor
 	fhd, err := d.br.ReadByte()
 	if err != nil {
+		if debug {
+			fmt.Println("Reading Frame_Header_Descriptor", err)
+		}
 		return err
 	}
 	d.SingleSegment = fhd&(1<<5) != 0
@@ -132,6 +143,9 @@ func (d *dFrame) reset(r io.Reader) error {
 	if !d.SingleSegment {
 		wd, err := d.br.ReadByte()
 		if err != nil {
+			if debug {
+				fmt.Println("Reading Window_Descriptor", err)
+			}
 			return err
 		}
 		if debug {
@@ -152,6 +166,9 @@ func (d *dFrame) reset(r io.Reader) error {
 		}
 		_, err := io.ReadFull(d.br, tmp[:size])
 		if err != nil {
+			if debug {
+				fmt.Println("Reading Dictionary_ID", err)
+			}
 			return err
 		}
 		switch size {
@@ -183,6 +200,9 @@ func (d *dFrame) reset(r io.Reader) error {
 	if fcsSize > 0 {
 		_, err := io.ReadFull(d.br, tmp[:fcsSize])
 		if err != nil {
+			if debug {
+				fmt.Println("Reading Frame content", err)
+			}
 			return err
 		}
 		switch fcsSize {
@@ -231,25 +251,18 @@ func (d *dFrame) reset(r io.Reader) error {
 		}
 		return ErrWindowSizeTooSmall
 	}
-	if cap(d.w.w) > 0 {
-		d.w.w = d.w.w[:0]
-	}
-	if cap(d.w.w) < int(d.WindowSize) {
-		d.w.w = make([]byte, 0, d.WindowSize)
-	}
-	d.w.w = d.w.w[:d.WindowSize]
 	return nil
 }
 
 // next will start decoding the next block from stream.
 func (d *dFrame) next(block *dBlock) error {
-	fmt.Println("decoding new block")
+	//fmt.Println("decoding new block")
 	err := block.reset(d.br, d.WindowSize)
 	if err != nil {
-		fmt.Println("block error:", err)
+		//fmt.Println("block error:", err)
 		return err
 	}
-	fmt.Println("next block:", block)
+	//fmt.Println("next block:", block)
 	d.decoding <- block
 	if block.Last {
 		// FIXME: While this is true for this frame, we cannot rely on this for the stream.
@@ -266,7 +279,7 @@ func (d *dFrame) addDecoder(dec *dBlock) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("added decoder to frame")
+	//fmt.Println("added decoder to frame")
 	d.decoding <- dec
 	if dec.Last {
 		return io.EOF
@@ -297,7 +310,7 @@ func (d *dFrame) checkCRC() error {
 		fmt.Println("CRC Check Failed:", gotB[:4], "!=", want)
 		return ErrCRCMismatch
 	}
-	fmt.Println("CRC ok")
+	//fmt.Println("CRC ok")
 	return io.EOF
 }
 
@@ -331,7 +344,7 @@ func (d *dFrame) startDecoder(writer chan decodeOutput) {
 		if !block.Last {
 			// Send history to next block
 			next = <-d.decoding
-			fmt.Println("Sending ", len(d.history.b), " bytes as history")
+			//fmt.Println("Sending ", len(d.history.b), " bytes as history")
 			next.history <- &d.history
 		}
 
