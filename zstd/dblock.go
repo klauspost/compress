@@ -607,9 +607,6 @@ func (s *sequenceDecoders) initialize(br *bitReader, hist *history, literals, ou
 	s.hist = hist.b
 	s.prevOffset = hist.recentOffsets
 	s.maxBits = s.litLengths.fse.maxBits + s.offsets.fse.maxBits + s.matchLengths.fse.maxBits
-	//fmt.Println("litLengths index:", s.litLengths.state.state, "state:", s.litLengths.state.dt[s.litLengths.state.state])
-	//fmt.Println("offsets index:", s.offsets.state.state, "state:", s.offsets.state.dt[s.offsets.state.state])
-	//fmt.Println("matchLengths index:", s.matchLengths.state.state, "state:", s.matchLengths.state.dt[s.matchLengths.state.state])
 	s.out = out
 	return nil
 }
@@ -648,7 +645,6 @@ func (s *sequenceDecoders) decode(seqs int, br *bitReader, hist []byte) error {
 		}
 
 		s.out = append(s.out, s.literals[:litLen]...)
-		//fmt.Println("Added literals", hex.EncodeToString(s.literals[:litLen]))
 		s.literals = s.literals[litLen:]
 		out := s.out
 
@@ -656,16 +652,13 @@ func (s *sequenceDecoders) decode(seqs int, br *bitReader, hist []byte) error {
 		if v := matchOff - len(s.out); v > 0 {
 			// v is the start position in history from end.
 			start := len(s.hist) - v
-			//fmt.Println("Grabbing", matchLen, "bytes from history starting history pos", start)
 			if matchLen > v {
 				// Some goes into current block.
 				// Copy remainder of history
 				out = append(out, s.hist[start:]...)
 				matchOff -= v
 				matchLen -= v
-				//fmt.Println("partial grab", matchLen, "left at offset", matchOff, hex.EncodeToString(s.hist[start:]))
 			} else {
-				//fmt.Println("full grab", hex.EncodeToString(s.hist[start:start+matchLen]))
 				out = append(out, s.hist[start:start+matchLen]...)
 				matchLen = 0
 			}
@@ -673,30 +666,20 @@ func (s *sequenceDecoders) decode(seqs int, br *bitReader, hist []byte) error {
 		// We must be in current buffer now
 		if matchLen > 0 {
 			start := len(s.out) - matchOff
-			//fmt.Println("Copying", matchLen, "bytes from buffer at offset", start, "Size before:", len(s.out))
 			if matchLen <= len(s.out)-start {
 				// No overlap
 				out = append(out, s.out[start:start+matchLen]...)
-				//fmt.Println("added", hex.EncodeToString(s.out[start:start+matchLen]))
 			} else {
 				// Overlapping copy
-				// Create destination
-				// FIXME: Should be done by extending slice.
-				//out = append(out, make([]byte, matchLen)...)
+				// Extend destination slice and copy one byte at the time.
 				out = out[:len(out)+matchLen]
-				//d := len(out) - len(s.out)
-				//fmt.Println("Overlapping. len(out):", len(out), "dst:", len(out)-matchLen, "start:", start)
 				src := out[start : start+matchLen]
 				// Destination is the space we just added.
 				dst := out[len(out)-matchLen:]
-				if debug && len(dst) != len(src) {
-					return fmt.Errorf("SIZE: %d != %d", len(dst), len(src))
-				}
 				dst = dst[:len(src)]
 				for i := range src {
 					dst[i] = src[i]
 				}
-				//fmt.Println("Added", hex.EncodeToString(dst))
 			}
 		}
 		s.out = out
@@ -708,7 +691,6 @@ func (s *sequenceDecoders) decode(seqs int, br *bitReader, hist []byte) error {
 
 	// Add final literals
 	s.out = append(s.out, s.literals...)
-	//fmt.Println("Added literals", hex.EncodeToString(s.literals))
 	return nil
 }
 
@@ -831,8 +813,8 @@ func (s *sequenceDecoders) next(br *bitReader) (ll, mo, ml int) {
 	} else {
 		mo += br.getBits(moB)
 		br.fill()
+		// matchlength+literal length, max 32 bits
 		ml += br.getBits(mlB)
-		br.fill()
 		ll += br.getBits(llB)
 
 	}
