@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"io"
 	"runtime"
-
-	"github.com/klauspost/compress/huff0"
 )
 
 type Decoder struct {
@@ -33,14 +31,6 @@ type decoderState struct {
 	output chan decodeOutput
 }
 
-type history struct {
-	b             []byte
-	writePos      int
-	huffTree      *huff0.Scratch
-	recentOffsets [3]int
-	decoders      sequenceDecoders
-}
-
 var (
 	// Check the interfaces we want to support.
 	_ = io.WriterTo(&Decoder{})
@@ -49,6 +39,8 @@ var (
 	ErrDecoderClosed = errors.New("decoder used after Close")
 )
 
+// NewDecoder creates a new decoder.
+// A nil Reader can be provided in which case Reset can be used to start a decode.
 func NewDecoder(r io.Reader, opts ...interface{}) (*Decoder, error) {
 	d := Decoder{
 		concurrent: runtime.GOMAXPROCS(0),
@@ -71,6 +63,9 @@ func NewDecoder(r io.Reader, opts ...interface{}) (*Decoder, error) {
 	}
 	for i := 0; i < nStreamDecs; i++ {
 		go d.startStreamDecoder()
+	}
+	if r == nil {
+		return &d, nil
 	}
 	return &d, d.Reset(r)
 }
@@ -109,6 +104,9 @@ func (d *Decoder) Read(p []byte) (int, error) {
 func (d *Decoder) Reset(r io.Reader) error {
 	if d.current.err == ErrDecoderClosed {
 		return d.current.err
+	}
+	if r == nil {
+		return errors.New("nil Reader sent as input")
 	}
 	if d.current.d != nil {
 		d.decoders <- d.current.d

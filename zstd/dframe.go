@@ -36,6 +36,7 @@ type dFrame struct {
 	// Number of in-flight decoders
 	concurrent int
 
+	// Frame history passed between blocks
 	history history
 }
 
@@ -251,6 +252,19 @@ func (d *dFrame) reset(r io.Reader) error {
 		}
 		return ErrWindowSizeTooSmall
 	}
+	d.history.windowSize = int(d.WindowSize)
+	d.history.maxSize = d.history.windowSize + maxBlockSize
+	if !d.lowMem && !d.SingleSegment {
+		// set max extra size history to 20MB.
+		d.history.maxSize = d.history.windowSize + maxBlockSize*10
+	}
+	// re-alloc if more than one extra block size.
+	if d.lowMem && cap(d.history.b) > d.history.maxSize+maxBlockSize {
+		d.history.b = make([]byte, 0, d.history.maxSize)
+	}
+	if cap(d.history.b) < d.history.maxSize {
+		d.history.b = make([]byte, 0, d.history.maxSize)
+	}
 	return nil
 }
 
@@ -320,16 +334,8 @@ func (d *dFrame) Close() {
 
 func (d *dFrame) startDecoder(writer chan decodeOutput) {
 	// TODO: Init to dictionary
-	ws := int(d.WindowSize)
-	if !d.lowMem {
-		if maxBlockSize < ws {
-			ws = maxBlockSize
-		}
-	}
-	d.history = history{
-		b:             make([]byte, 0, ws),
-		recentOffsets: [3]int{1, 4, 8},
-	}
+	d.history.reset()
+
 	// Get first block
 	block := <-d.decoding
 	block.history <- &d.history

@@ -13,7 +13,27 @@ import (
 )
 
 func TestNewDecoder(t *testing.T) {
-	data, err := ioutil.ReadFile("testdata/testfiles.zip")
+	testDecoderFile(t, "testdata/decoder.zip")
+}
+
+func TestNewDecoderGood(t *testing.T) {
+	testDecoderFile(t, "testdata/good.zip")
+}
+
+func TestNewDecoderBig(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
+	file := "testdata/zstd-10kfiles.zip"
+	if _, err := os.Stat(file); os.IsNotExist(err) {
+		t.Skip("To run extended tests, download https://files.klauspost.com/compress/zstd-10kfiles.zip \n" +
+			"and place it in " + file + "\n" + "Running it requires about 5GB of RAM")
+	}
+	testDecoderFile(t, file)
+}
+
+func testDecoderFile(t *testing.T, fn string) {
+	data, err := ioutil.ReadFile(fn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,6 +53,13 @@ func TestNewDecoder(t *testing.T) {
 		}
 		want[tt.Name+".zst"], _ = ioutil.ReadAll(r)
 	}
+
+	dec, err := NewDecoder(nil)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	defer dec.Close()
 	for _, tt := range zr.File {
 		if !strings.HasSuffix(tt.Name, ".zst") {
 			continue
@@ -43,12 +70,11 @@ func TestNewDecoder(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			dec, err := NewDecoder(r)
+			err = dec.Reset(r)
 			if err != nil {
 				t.Error(err)
 				return
 			}
-			defer dec.Close()
 			got, err := ioutil.ReadAll(dec)
 			if err != nil {
 				if err == errNotimplemented {
@@ -80,44 +106,6 @@ func TestNewDecoder(t *testing.T) {
 				return
 			}
 			t.Log(len(got), "bytes returned, matches input, ok!")
-		})
-	}
-}
-
-func TestNewDecoderGood(t *testing.T) {
-	data, err := ioutil.ReadFile("testdata/good.zip")
-	if err != nil {
-		t.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, tt := range zr.File {
-		if !strings.HasSuffix(tt.Name, ".zst") {
-			continue
-		}
-		t.Run(tt.Name, func(t *testing.T) {
-			r, err := tt.Open()
-			if err != nil {
-				t.Error(err)
-				return
-			}
-			dec, err := NewDecoder(r)
-			if err != nil {
-				if err == errNotimplemented {
-					t.Skip(err)
-					return
-				}
-				t.Error(err)
-				return
-			}
-			defer dec.Close()
-			_, err = ioutil.ReadAll(dec)
-			if err != nil {
-				t.Error(err)
-				return
-			}
 		})
 	}
 }

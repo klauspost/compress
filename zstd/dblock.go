@@ -188,8 +188,7 @@ func (b *dBlock) startDecoder() {
 				o.b[i] = v
 			}
 			hist := <-b.history
-			// TODO: Checksize.
-			hist.b = append(hist.b, o.b...)
+			hist.append(o.b)
 			// TODO: We should check if result is closed.
 			b.result <- o
 		case BlockTypeRaw:
@@ -199,8 +198,7 @@ func (b *dBlock) startDecoder() {
 				err: nil,
 			}
 			hist := <-b.history
-			// TODO: Check size.
-			hist.b = append(hist.b, o.b...)
+			hist.append(o.b)
 			// TODO: We should check if result is closed.
 			b.result <- o
 		case BlockTypeCompressed:
@@ -518,7 +516,7 @@ func (b *dBlock) decodeCompressed() error {
 	if nSeqs == 0 {
 		// Decompressed content is defined entirely as Literals Section content.
 		b.dst = append(b.dst, literals...)
-		hist.b = append(hist.b, literals...)
+		hist.append(literals)
 		return nil
 	}
 
@@ -561,17 +559,7 @@ func (b *dBlock) decodeCompressed() error {
 		hist.b = hist.b[:0]
 		return nil
 	}
-	ws := int(b.WindowSize)
-	if len(b.dst) >= ws {
-		// Discard all history
-		hist.b = hist.b[:ws]
-		copy(hist.b, b.dst[len(b.dst)-ws:])
-		//fmt.Println("Truncated and returned", len(hist.b), "history")
-	} else {
-		// TODO: Truncate history when needed.
-		hist.b = append(hist.b, b.dst...)
-		//fmt.Println("Appended and returned", len(hist.b), "history")
-	}
+	hist.append(b.dst)
 	hist.recentOffsets = seqs.prevOffset
 	return nil
 }

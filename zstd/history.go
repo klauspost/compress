@@ -1,0 +1,45 @@
+package zstd
+
+import "github.com/klauspost/compress/huff0"
+
+type history struct {
+	b             []byte
+	huffTree      *huff0.Scratch
+	recentOffsets [3]int
+	decoders      sequenceDecoders
+	windowSize    int
+	maxSize       int
+}
+
+// reset will reset the history to initial state of a frame.
+// The history must already have been initialized to the desired size.
+func (h *history) reset() {
+	h.b = h.b[:0]
+	h.recentOffsets = [3]int{1, 4, 8}
+	h.decoders = sequenceDecoders{}
+}
+
+// append bytes to history.
+// This function will make sure there is space for it,
+// if the buffer has been allocated with enough extra space.
+func (h *history) append(b []byte) {
+	if len(b) >= h.windowSize {
+		// Discard all history by simply overwriting
+		h.b = h.b[:h.windowSize]
+		copy(h.b, b[len(b)-h.windowSize:])
+		return
+	}
+
+	// If there is space, append it.
+	if len(b) < cap(h.b)-len(h.b) {
+		h.b = append(h.b, b...)
+		return
+	}
+
+	// Move data down so we only have window size left.
+	// We know we have less than window size input at this point.
+	discard := len(b) + len(h.b) - h.windowSize
+	copy(h.b, h.b[discard:])
+	h.b = h.b[:h.windowSize]
+	copy(h.b[discard:], b)
+}
