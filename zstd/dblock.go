@@ -769,13 +769,50 @@ func (s *sequenceDecoders) nextFast(br *bitReader) (ll, mo, ml int) {
 	} else {
 		mo += br.getBits(moB)
 		br.fillFast()
+		// matchlength+literal length, max 32 bits
 		ml += br.getBits(mlB)
-		br.fillFast()
 		ll += br.getBits(llB)
-
 	}
-	mo = s.adjustOffset(mo, ll, moB)
-	//fmt.Println("mo, adjusted", mo)
+
+	// mo = s.adjustOffset(mo, ll, moB)
+	// Inlined for rather big speedup
+	if moB > 1 {
+		s.prevOffset[2] = s.prevOffset[1]
+		s.prevOffset[1] = s.prevOffset[0]
+		s.prevOffset[0] = mo
+		return
+	}
+
+	if ll == 0 {
+		// There is an exception though, when current sequence's literals_length = 0.
+		// In this case, repeated offsets are shifted by one, so an offset_value of 1 means Repeated_Offset2,
+		// an offset_value of 2 means Repeated_Offset3, and an offset_value of 3 means Repeated_Offset1 - 1_byte.
+		mo++
+	}
+
+	if mo == 0 {
+		mo = s.prevOffset[0]
+		return
+	}
+	var temp int
+	if mo == 3 {
+		temp = s.prevOffset[0] - 1
+	} else {
+		temp = s.prevOffset[mo]
+	}
+
+	if temp == 0 {
+		// 0 is not valid; input is corrupted; force offset to 1
+		fmt.Println("temp was 0")
+		temp = 1
+	}
+
+	if mo != 1 {
+		s.prevOffset[2] = s.prevOffset[1]
+	}
+	s.prevOffset[1] = s.prevOffset[0]
+	s.prevOffset[0] = temp
+	mo = temp
 	return
 }
 
@@ -800,7 +837,6 @@ func (s *sequenceDecoders) next(br *bitReader) (ll, mo, ml int) {
 
 	}
 	mo = s.adjustOffset(mo, ll, moB)
-	//fmt.Println("mo, adjusted", mo)
 	return
 }
 
