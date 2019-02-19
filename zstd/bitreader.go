@@ -43,7 +43,7 @@ func (b *bitReader) init(in []byte) error {
 
 // getBits will return n bits. n can be 0.
 func (b *bitReader) getBits(n uint8) int {
-	if n == 0 || b.bitsRead >= 64 {
+	if n == 0 /*|| b.bitsRead >= 64 */ {
 		return 0
 	}
 	return b.getBitsFast(n)
@@ -55,7 +55,6 @@ func (b *bitReader) getBitsFast(n uint8) int {
 	const regMask = 64 - 1
 	v := uint32((b.value << (b.bitsRead & regMask)) >> ((regMask + 1 - n) & regMask))
 	b.bitsRead += n
-	//fmt.Println(n, "bits, value:", v)
 	return int(v)
 }
 

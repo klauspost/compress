@@ -37,7 +37,7 @@ type fseDecoder struct {
 	dt             [maxTablesize]decSymbol // Decompression table.
 	symbolLen      uint16                  // Length of active part of the symbol table.
 	actualTableLog uint8                   // Selected tablelog.
-	zeroBits       bool                    // no bits has prob > 50%.
+	maxBits        uint8                   // Maximum number of additional bits
 
 	// used for table creation to avoid allocations.
 	stateTable [256]uint16
@@ -201,6 +201,7 @@ func decSymbolValue(symb uint8, t []baseOffset) (*decSymbol, error) {
 // setRLE will set the decoder til RLE mode.
 func (s *fseDecoder) setRLE(symbol *decSymbol) {
 	s.actualTableLog = 0
+	s.maxBits = 0
 	s.dt[0] = *symbol
 }
 
@@ -211,18 +212,13 @@ func (s *fseDecoder) buildDtable() error {
 	symbolNext := s.stateTable[:256]
 
 	// Init, lay down lowprob symbols
-	s.zeroBits = false
 	{
-		largeLimit := int16(1 << (s.actualTableLog - 1))
 		for i, v := range s.norm[:s.symbolLen] {
 			if v == -1 {
 				s.dt[highThreshold].addBits = uint8(i)
 				highThreshold--
 				symbolNext[i] = 1
 			} else {
-				if v >= largeLimit {
-					s.zeroBits = true
-				}
 				symbolNext[i] = uint16(v)
 			}
 		}
@@ -276,11 +272,15 @@ func (s *fseDecoder) buildDtable() error {
 // The state will contain the base value and the number of bits to read.
 func (s *fseDecoder) transform(t []baseOffset) error {
 	tableSize := uint16(1 << s.actualTableLog)
+	s.maxBits = 0
 	for i, v := range s.dt[:tableSize] {
 		if int(v.addBits) >= len(t) {
 			return fmt.Errorf("invalid decoding table entry %d, symbol %d >= max (%d)", i, v.addBits, len(t))
 		}
 		lu := t[v.addBits]
+		if lu.addBits > s.maxBits {
+			s.maxBits = lu.addBits
+		}
 		s.dt[i&maxTableMask] = decSymbol{
 			newState: v.newState,
 			nbBits:   v.nbBits,
@@ -306,11 +306,10 @@ func (s *fseState) init(br *bitReader, tableLog uint8, dt []decSymbol) {
 
 // next returns the current symbol and sets the next state.
 // At least tablelog bits must be available in the bit reader.
-func (s *fseState) next(br *bitReader) (int, uint8) {
+func (s *fseState) next(br *bitReader) {
 	n := s.dt[s.state]
 	lowBits := uint16(br.getBits(n.nbBits))
 	s.state = n.newState + lowBits
-	return int(n.baseline), n.addBits
 }
 
 // finished returns true if all bits have been read from the bitstream

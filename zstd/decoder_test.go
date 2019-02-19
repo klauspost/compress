@@ -2,12 +2,14 @@ package zstd
 
 import (
 	"bytes"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/klauspost/compress/zip"
 )
@@ -30,6 +32,34 @@ func TestNewDecoderBig(t *testing.T) {
 			"and place it in " + file + "\n" + "Running it requires about 5GB of RAM")
 	}
 	testDecoderFile(t, file)
+}
+
+func TestNewDecoderBigFile(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
+	file := "testdata/klauspost-paranoid-passwords.zst"
+	if _, err := os.Stat(file); os.IsNotExist(err) {
+		t.Skip("To run extended tests, download https://files.klauspost.com/compress/klauspost-paranoid-passwords.zst \n" +
+			"and place it in " + file)
+	}
+	f, err := os.Open(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	start := time.Now()
+	dec, err := NewDecoder(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := io.Copy(ioutil.Discard, dec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	elapsed := time.Since(start)
+	mbpersec := (float64(n) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
+	t.Logf("Decoded %d bytes with %f.2 MB/s", n, mbpersec)
 }
 
 func testDecoderFile(t *testing.T, fn string) {
@@ -89,7 +119,7 @@ func testDecoderFile(t *testing.T, fn string) {
 			wantB := want[tt.Name]
 			if !bytes.Equal(wantB, got) {
 				if len(wantB)+len(got) < 1000 {
-					t.Logf(" got: %v/nwant: %v", got, wantB)
+					t.Logf(" got: %v\nwant: %v", got, wantB)
 				} else {
 					fileName, _ := filepath.Abs(filepath.Join("testdata", t.Name()+"-want.bin"))
 					_ = os.MkdirAll(filepath.Dir(fileName), os.ModePerm)

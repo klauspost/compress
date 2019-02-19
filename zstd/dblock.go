@@ -139,6 +139,9 @@ func (b *dBlock) reset(br io.Reader, windowSize uint64) error {
 			b.data = make([]byte, 0, cSize)
 		}
 	}
+	if cap(b.dst) <= maxBlockSize {
+		b.dst = make([]byte, 0, maxBlockSize+1)
+	}
 	b.data = b.data[:cSize]
 	// Read all.
 	_, err = io.ReadFull(br, b.data)
@@ -587,6 +590,7 @@ type sequenceDecoders struct {
 	hist         []byte
 	literals     []byte
 	out          []byte
+	maxBits      uint8
 }
 
 func (s *sequenceDecoders) initialize(br *bitReader, hist *history, literals, out []byte) error {
@@ -602,6 +606,7 @@ func (s *sequenceDecoders) initialize(br *bitReader, hist *history, literals, ou
 	s.literals = literals
 	s.hist = hist.b
 	s.prevOffset = hist.recentOffsets
+	s.maxBits = s.litLengths.fse.maxBits + s.offsets.fse.maxBits + s.matchLengths.fse.maxBits
 	//fmt.Println("litLengths index:", s.litLengths.state.state, "state:", s.litLengths.state.dt[s.litLengths.state.state])
 	//fmt.Println("offsets index:", s.offsets.state.state, "state:", s.offsets.state.dt[s.offsets.state.state])
 	//fmt.Println("matchLengths index:", s.matchLengths.state.state, "state:", s.matchLengths.state.dt[s.matchLengths.state.state])
@@ -615,7 +620,14 @@ func (s *sequenceDecoders) decode(seqs int, br *bitReader, hist []byte) error {
 			fmt.Printf("reading sequence %d, exceeded available data\n", seqs-i)
 			return io.ErrUnexpectedEOF
 		}
-		litLen, matchOff, matchLen := s.next(br)
+		var litLen, matchOff, matchLen int
+		if br.off > 4+((maxOffsetBits+16+16)>>3) {
+			litLen, matchOff, matchLen = s.nextFast(br)
+			br.fillFast()
+		} else {
+			litLen, matchOff, matchLen = s.next(br)
+			br.fill()
+		}
 
 		//		fmt.Printf("Seq %d: Litlen: %d, matchOff: %d, matchLen: %d\n", seqs-i, litLen, matchOff, matchLen)
 
@@ -670,7 +682,8 @@ func (s *sequenceDecoders) decode(seqs int, br *bitReader, hist []byte) error {
 				// Overlapping copy
 				// Create destination
 				// FIXME: Should be done by extending slice.
-				out = append(out, make([]byte, matchLen)...)
+				//out = append(out, make([]byte, matchLen)...)
+				out = out[:len(out)+matchLen]
 				//d := len(out) - len(s.out)
 				//fmt.Println("Overlapping. len(out):", len(out), "dst:", len(out)-matchLen, "start:", start)
 				src := out[start : start+matchLen]
@@ -690,7 +703,7 @@ func (s *sequenceDecoders) decode(seqs int, br *bitReader, hist []byte) error {
 		if i == 0 {
 			break
 		}
-		s.update(br)
+		s.updateAlt(br)
 	}
 
 	// Add final literals
@@ -699,8 +712,8 @@ func (s *sequenceDecoders) decode(seqs int, br *bitReader, hist []byte) error {
 	return nil
 }
 
+// update states, at least 27 bits must be available.
 func (s *sequenceDecoders) update(br *bitReader) {
-	br.fill()
 	// Max 8 bits
 	s.litLengths.state.next(br)
 	// Max 9 bits
@@ -709,23 +722,83 @@ func (s *sequenceDecoders) update(br *bitReader) {
 	s.offsets.state.next(br)
 }
 
+var bitMask [16]uint16
+
+func init() {
+	for i := range bitMask[:] {
+		bitMask[i] = uint16((1 << uint(i)) - 1)
+	}
+}
+
+// update states, at least 27 bits must be available.
+func (s *sequenceDecoders) updateAlt(br *bitReader) {
+	// Update all 3 states at once. Approx 20% faster.
+	a, b, c := s.litLengths.state.dt[s.litLengths.state.state], s.matchLengths.state.dt[s.matchLengths.state.state], s.offsets.state.dt[s.offsets.state.state]
+
+	nBits := a.nbBits + b.nbBits + c.nbBits
+	if nBits == 0 {
+		s.litLengths.state.state = a.newState
+		s.matchLengths.state.state = b.newState
+		s.offsets.state.state = c.newState
+		return
+	}
+	bits := br.getBitsFast(nBits)
+	lowBits := uint16(bits >> ((c.nbBits + b.nbBits) & 31))
+	s.litLengths.state.state = a.newState + lowBits
+
+	lowBits = uint16(bits >> (c.nbBits & 31))
+	lowBits &= bitMask[b.nbBits&15]
+	s.matchLengths.state.state = b.newState + lowBits
+
+	lowBits = uint16(bits) & bitMask[c.nbBits&15]
+	s.offsets.state.state = c.newState + lowBits
+}
+
+func (s *sequenceDecoders) nextFast(br *bitReader) (ll, mo, ml int) {
+	// Final will not read from stream.
+	ll, llB := s.litLengths.state.final()
+	ml, mlB := s.matchLengths.state.final()
+	mo, moB := s.offsets.state.final()
+
+	// extra bits are stored in reverse order.
+	br.fillFast()
+	if s.maxBits <= 32 {
+		mo += br.getBits(moB)
+		ml += br.getBits(mlB)
+		ll += br.getBits(llB)
+	} else {
+		mo += br.getBits(moB)
+		br.fillFast()
+		ml += br.getBits(mlB)
+		br.fillFast()
+		ll += br.getBits(llB)
+
+	}
+	mo = s.adjustOffset(mo, ll, moB)
+	//fmt.Println("mo, adjusted", mo)
+	return
+}
+
 func (s *sequenceDecoders) next(br *bitReader) (ll, mo, ml int) {
 	// Final will not read from stream.
 	ll, llB := s.litLengths.state.final()
 	ml, mlB := s.matchLengths.state.final()
 	mo, moB := s.offsets.state.final()
 
-	//fmt.Println("ll, ll bits", ll, llB)
-	//fmt.Println("ml, ml bits", ml, mlB)
-	//fmt.Println("mo, moB bits", mo, moB)
-
 	// extra bits are stored in reverse order.
 	br.fill()
-	mo += br.getBits(moB)
-	br.fill()
-	ml += br.getBits(mlB)
-	br.fill()
-	ll += br.getBits(llB)
+	if s.maxBits <= 32 {
+		mo += br.getBits(moB)
+		ml += br.getBits(mlB)
+		ll += br.getBits(llB)
+	} else {
+		mo += br.getBits(moB)
+		br.fill()
+		ml += br.getBits(mlB)
+		br.fill()
+		ll += br.getBits(llB)
+
+	}
 	mo = s.adjustOffset(mo, ll, moB)
 	//fmt.Println("mo, adjusted", mo)
 	return

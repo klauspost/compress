@@ -354,7 +354,7 @@ func (d *dFrame) startDecoder(writer chan decodeOutput) {
 			next.history <- &d.history
 		}
 
-		// Add checksum
+		// Add checksum, async to decoding.
 		if d.HasCheckSum {
 			n, err := d.crc.Write(r.b)
 			if err != nil {

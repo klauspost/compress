@@ -41,5 +41,5 @@ func (h *history) append(b []byte) {
 	discard := len(b) + len(h.b) - h.windowSize
 	copy(h.b, h.b[discard:])
 	h.b = h.b[:h.windowSize]
-	copy(h.b[discard:], b)
+	copy(h.b[h.windowSize-len(b):], b)
 }
