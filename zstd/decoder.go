@@ -1,7 +1,6 @@
 package zstd
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
 	"io"
@@ -34,8 +33,7 @@ type Decoder struct {
 type decoderState struct {
 	decodeOutput
 	// output in order
-	output    chan decodeOutput
-	frameDone chan *bufio.Reader
+	output chan decodeOutput
 }
 
 var (
@@ -55,7 +53,6 @@ func NewDecoder(r io.Reader, opts ...interface{}) (*Decoder, error) {
 	}
 
 	d.current.output = make(chan decodeOutput, d.concurrent)
-	d.current.frameDone = make(chan *bufio.Reader, 0)
 
 	// Create decoders
 	d.decoders = make(chan *dBlock, d.concurrent)
@@ -177,7 +174,9 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 	for {
 		o := <-output
 		dst = append(dst, o.b...)
-		d.decoders <- o.d
+		if o.d != nil {
+			d.decoders <- o.d
+		}
 		if o.err != nil {
 			if o.err == io.EOF {
 				o.err = nil
@@ -260,7 +259,7 @@ func (d *Decoder) startStreamDecoder() {
 	frame := newDFrame()
 	frame.concurrent = d.concurrent
 	frame.lowMem = d.lowMem
-	var done chan *bufio.Reader
+	done := frame.frameDone
 
 	for {
 		in, ok := <-d.stream
@@ -280,8 +279,7 @@ func (d *Decoder) startStreamDecoder() {
 				break
 			}
 			println("starting frame")
-			done = d.current.frameDone
-			go frame.startDecoder(in.output, done)
+			go frame.startDecoder(in.output)
 		decodeFrame:
 			// Go through all blocks of the frame.
 			for dec := range d.decoders {

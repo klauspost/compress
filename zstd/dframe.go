@@ -17,6 +17,7 @@ type dFrame struct {
 	br           *bufio.Reader
 	crc          hash.Hash64
 	stopDecoding chan struct{}
+	frameDone    chan *bufio.Reader
 
 	WindowSize       uint64
 	DictionaryID     uint32
@@ -72,6 +73,7 @@ func newDFrame() *dFrame {
 		maxWindowSize: 1 << 30,
 		concurrent:    runtime.GOMAXPROCS(0),
 		stopDecoding:  make(chan struct{}, 0),
+		frameDone:     make(chan *bufio.Reader, 0),
 	}
 	return &d
 }
@@ -267,15 +269,16 @@ func (d *dFrame) next(block *dBlock) error {
 		return err
 	}
 	println("next block:", block)
-	d.decoding <- block
 	if block.Last {
 		// We indicate the frame is done by sending io.EOF
+		d.decoding <- block
 		return io.EOF
 	}
+	d.decoding <- block
 	return nil
 }
 
-// addDecoder will add another decoder.
+// addDecoder will add another decoder that is decoding the next block.
 // If io.EOF is returned, the added decoder is decoding
 // the last block of the frame.
 func (d *dFrame) addDecoder(dec *dBlock) error {
@@ -329,15 +332,15 @@ func (d *dFrame) Close() {
 // startDecoder will start decoding blocks and write them to the writer.
 // The decoder will stop as soon as an error occurs or at end of frame.
 // When the frame has finished decoding the *bufio.Reader
-// containing the remaining input will be returned.
-func (d *dFrame) startDecoder(writer chan<- decodeOutput, done chan<- *bufio.Reader) {
+// containing the remaining input will be sent on dFrame.frameDone.
+func (d *dFrame) startDecoder(writer chan<- decodeOutput) {
 	// TODO: Init to dictionary
 	d.history.reset()
 	defer func() {
 		println("frame decoder done, sending remaining bit stream")
-		done <- d.br
+		d.frameDone <- d.br
 	}()
-	// Get first block
+	// Get decoder for first block.
 	block := <-d.decoding
 	block.history <- &d.history
 	for {
@@ -351,9 +354,15 @@ func (d *dFrame) startDecoder(writer chan<- decodeOutput, done chan<- *bufio.Rea
 		}
 		if !block.Last {
 			// Send history to next block
-			next = <-d.decoding
-			println("Sending ", len(d.history.b), " bytes as history")
-			next.history <- &d.history
+			select {
+			case next = <-d.decoding:
+				println("Sending ", len(d.history.b), " bytes as history")
+				next.history <- &d.history
+			default:
+				// Wait until we have sent the block, so
+				// other decoders can potentially get the decoder.
+				next = nil
+			}
 		}
 
 		// Add checksum, async to decoding.
@@ -373,6 +382,12 @@ func (d *dFrame) startDecoder(writer chan<- decodeOutput, done chan<- *bufio.Rea
 			return
 		}
 		writer <- r
+		if next == nil {
+			// There was no decoder available, we wait for one now that we have sent to the writer.
+			println("Sending ", len(d.history.b), " bytes as history")
+			next = <-d.decoding
+			next.history <- &d.history
+		}
 		block = next
 	}
 }

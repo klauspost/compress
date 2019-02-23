@@ -16,10 +16,20 @@ import (
 
 func TestNewDecoder(t *testing.T) {
 	testDecoderFile(t, "testdata/decoder.zip")
+	dec, err := NewDecoder(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testDecoderDecodeAll(t, "testdata/decoder.zip", dec)
 }
 
 func TestNewDecoderGood(t *testing.T) {
 	testDecoderFile(t, "testdata/good.zip")
+	dec, err := NewDecoder(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testDecoderDecodeAll(t, "testdata/good.zip", dec)
 }
 
 func TestNewDecoderBig(t *testing.T) {
@@ -32,6 +42,11 @@ func TestNewDecoderBig(t *testing.T) {
 			"and place it in " + file + "\n" + "Running it requires about 5GB of RAM")
 	}
 	testDecoderFile(t, file)
+	dec, err := NewDecoder(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testDecoderDecodeAll(t, file, dec)
 }
 
 func TestNewDecoderBigFile(t *testing.T) {
@@ -94,7 +109,7 @@ func testDecoderFile(t *testing.T, fn string) {
 		if !strings.HasSuffix(tt.Name, ".zst") {
 			continue
 		}
-		t.Run(tt.Name, func(t *testing.T) {
+		t.Run("Reader:"+tt.Name, func(t *testing.T) {
 			r, err := tt.Open()
 			if err != nil {
 				t.Error(err)
@@ -116,6 +131,68 @@ func testDecoderFile(t *testing.T, fn string) {
 					return
 				}
 			}
+			wantB := want[tt.Name]
+			if !bytes.Equal(wantB, got) {
+				if len(wantB)+len(got) < 1000 {
+					t.Logf(" got: %v\nwant: %v", got, wantB)
+				} else {
+					fileName, _ := filepath.Abs(filepath.Join("testdata", t.Name()+"-want.bin"))
+					_ = os.MkdirAll(filepath.Dir(fileName), os.ModePerm)
+					err := ioutil.WriteFile(fileName, wantB, os.ModePerm)
+					t.Log("Wrote file", fileName, err)
+
+					fileName, _ = filepath.Abs(filepath.Join("testdata", t.Name()+"-got.bin"))
+					_ = os.MkdirAll(filepath.Dir(fileName), os.ModePerm)
+					err = ioutil.WriteFile(fileName, got, os.ModePerm)
+					t.Log("Wrote file", fileName, err)
+				}
+				t.Logf("Length, want: %d, got: %d", len(wantB), len(got))
+				t.Error("Output mismatch")
+				return
+			}
+			t.Log(len(got), "bytes returned, matches input, ok!")
+		})
+	}
+}
+
+func testDecoderDecodeAll(t *testing.T, fn string, dec *Decoder) {
+	data, err := ioutil.ReadFile(fn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want = make(map[string][]byte)
+	for _, tt := range zr.File {
+		if strings.HasSuffix(tt.Name, ".zst") {
+			continue
+		}
+		r, err := tt.Open()
+		if err != nil {
+			t.Fatal(err)
+			return
+		}
+		want[tt.Name+".zst"], _ = ioutil.ReadAll(r)
+	}
+
+	for _, tt := range zr.File {
+		tt := tt
+		if !strings.HasSuffix(tt.Name, ".zst") {
+			continue
+		}
+		t.Run("ReadAll:"+tt.Name, func(t *testing.T) {
+			t.Parallel()
+			r, err := tt.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			in, err := ioutil.ReadAll(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := dec.DecodeAll(in, nil)
 			wantB := want[tt.Name]
 			if !bytes.Equal(wantB, got) {
 				if len(wantB)+len(got) < 1000 {
