@@ -122,7 +122,7 @@ func init() {
 			panic(fmt.Errorf("building table %v: %v", tableIndex(i), err))
 		}
 		if false {
-			fmt.Printf("%v: %v\n", tableIndex(i), f.dt[:1<<f.actualTableLog])
+			printf("%v: %v\n", tableIndex(i), f.dt[:1<<f.actualTableLog])
 		}
 		f.preDefined = true
 	}

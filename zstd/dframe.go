@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"hash"
 	"io"
 	"io/ioutil"
@@ -15,8 +14,9 @@ import (
 )
 
 type dFrame struct {
-	br  *bufio.Reader
-	crc hash.Hash64
+	br           *bufio.Reader
+	crc          hash.Hash64
+	stopDecoding chan struct{}
 
 	WindowSize       uint64
 	DictionaryID     uint32
@@ -43,7 +43,6 @@ type dFrame struct {
 const (
 	// The minimum Window_Size is 1 KB.
 	minWindowSize = 1 << 10
-	debug         = false
 )
 
 var (
@@ -72,15 +71,24 @@ func newDFrame() *dFrame {
 	d := dFrame{
 		maxWindowSize: 1 << 30,
 		concurrent:    runtime.GOMAXPROCS(0),
+		stopDecoding:  make(chan struct{}, 0),
 	}
 	return &d
 }
 
+// reset will read the frame header and prepare for block decoding.
+// If nothing can be read from the input, io.EOF will be returned.
+// Any other error indicated that the stream contained data, but
+// there was a problem.
 func (d *dFrame) reset(r io.Reader) error {
-	if d.br == nil {
-		d.br = bufio.NewReaderSize(r, maxCompressedBlockSize)
+	if br, ok := r.(*bufio.Reader); ok {
+		d.br = br
 	} else {
-		d.br.Reset(r)
+		if d.br == nil {
+			d.br = bufio.NewReaderSize(r, maxCompressedBlockSize)
+		} else {
+			d.br.Reset(r)
+		}
 	}
 	if cap(d.decoding) < d.concurrent {
 		d.decoding = make(chan *dBlock, d.concurrent)
@@ -94,9 +102,7 @@ func (d *dFrame) reset(r io.Reader) error {
 			if err == io.ErrUnexpectedEOF {
 				return io.EOF
 			}
-			if debug {
-				fmt.Println("Reading Frame Magic", err)
-			}
+			println("Reading Frame Magic", err)
 			return err
 		}
 		if !bytes.Equal(tmp[:3], skippableFrameMagic) || tmp[3]&0xf0 != 0x50 {
@@ -106,34 +112,28 @@ func (d *dFrame) reset(r io.Reader) error {
 		// Read size to skip
 		_, err = io.ReadFull(d.br, tmp[:4])
 		if err != nil {
-			if debug {
-				fmt.Println("Reading Frame Size", err)
-			}
+			println("Reading Frame Size", err)
 			return err
 		}
 		n := uint32(tmp[0]) | (uint32(tmp[1]) << 8) | (uint32(tmp[2]) << 16) | (uint32(tmp[3]) << 24)
-		if debug {
-			fmt.Println("Skipping frame with", n, "bytes.")
-		}
+		println("Skipping frame with", n, "bytes.")
 		_, err = io.CopyN(ioutil.Discard, d.br, int64(n))
 		if err != nil {
 			if debug {
-				fmt.Println("Reading discarded frame", err)
+				println("Reading discarded frame", err)
 			}
 			return err
 		}
 	}
 	if !bytes.Equal(tmp[:4], frameMagic) {
-		fmt.Println("Got magic numbers: ", tmp[:4], "want:", frameMagic)
+		println("Got magic numbers: ", tmp[:4], "want:", frameMagic)
 		return ErrMagicMismatch
 	}
 
 	// Read Frame_Header_Descriptor
 	fhd, err := d.br.ReadByte()
 	if err != nil {
-		if debug {
-			fmt.Println("Reading Frame_Header_Descriptor", err)
-		}
+		println("Reading Frame_Header_Descriptor", err)
 		return err
 	}
 	d.SingleSegment = fhd&(1<<5) != 0
@@ -144,14 +144,10 @@ func (d *dFrame) reset(r io.Reader) error {
 	if !d.SingleSegment {
 		wd, err := d.br.ReadByte()
 		if err != nil {
-			if debug {
-				fmt.Println("Reading Window_Descriptor", err)
-			}
+			println("Reading Window_Descriptor", err)
 			return err
 		}
-		if debug {
-			fmt.Printf("raw: %x, mantissa: %d, exponent: %d\n", wd, wd&7, wd>>3)
-		}
+		printf("raw: %x, mantissa: %d, exponent: %d\n", wd, wd&7, wd>>3)
 		windowLog := 10 + (wd >> 3)
 		windowBase := uint64(1) << windowLog
 		windowAdd := (windowBase / 8) * uint64(wd&0x7)
@@ -168,7 +164,7 @@ func (d *dFrame) reset(r io.Reader) error {
 		_, err := io.ReadFull(d.br, tmp[:size])
 		if err != nil {
 			if debug {
-				fmt.Println("Reading Dictionary_ID", err)
+				println("Reading Dictionary_ID", err)
 			}
 			return err
 		}
@@ -181,7 +177,7 @@ func (d *dFrame) reset(r io.Reader) error {
 			d.DictionaryID = uint32(tmp[0]) | (uint32(tmp[1]) << 8) | (uint32(tmp[2]) << 16) | (uint32(tmp[3]) << 24)
 		}
 		if debug {
-			fmt.Println("Dict size", size, "ID:", d.DictionaryID)
+			println("Dict size", size, "ID:", d.DictionaryID)
 		}
 	}
 
@@ -201,9 +197,7 @@ func (d *dFrame) reset(r io.Reader) error {
 	if fcsSize > 0 {
 		_, err := io.ReadFull(d.br, tmp[:fcsSize])
 		if err != nil {
-			if debug {
-				fmt.Println("Reading Frame content", err)
-			}
+			println("Reading Frame content", err)
 			return err
 		}
 		switch fcsSize {
@@ -220,7 +214,7 @@ func (d *dFrame) reset(r io.Reader) error {
 			d.FrameContentSize = uint64(d1) | (uint64(d2) << 32)
 		}
 		if debug {
-			fmt.Println("field size bits:", v, "fcsSize:", fcsSize, "FrameContentSize:", d.FrameContentSize, hex.EncodeToString(tmp[:fcsSize]))
+			println("field size bits:", v, "fcsSize:", fcsSize, "FrameContentSize:", d.FrameContentSize, hex.EncodeToString(tmp[:fcsSize]))
 		}
 	}
 	d.HasCheckSum = fhd&(1<<2) != 0
@@ -240,16 +234,12 @@ func (d *dFrame) reset(r io.Reader) error {
 	}
 
 	if d.WindowSize > d.maxWindowSize {
-		if debug {
-			fmt.Printf("window size %d > max %d\n", d.WindowSize, d.maxWindowSize)
-		}
+		printf("window size %d > max %d\n", d.WindowSize, d.maxWindowSize)
 		return ErrWindowSizeExceeded
 	}
 	// The minimum Window_Size is 1 KB.
 	if d.WindowSize < minWindowSize {
-		if debug {
-			fmt.Println("got window size: ", d.WindowSize)
-		}
+		println("got window size: ", d.WindowSize)
 		return ErrWindowSizeTooSmall
 	}
 	d.history.windowSize = int(d.WindowSize)
@@ -270,30 +260,31 @@ func (d *dFrame) reset(r io.Reader) error {
 
 // next will start decoding the next block from stream.
 func (d *dFrame) next(block *dBlock) error {
-	//fmt.Println("decoding new block")
+	println("decoding new block")
 	err := block.reset(d.br, d.WindowSize)
 	if err != nil {
-		//fmt.Println("block error:", err)
+		println("block error:", err)
 		return err
 	}
-	//fmt.Println("next block:", block)
+	println("next block:", block)
 	d.decoding <- block
 	if block.Last {
-		// FIXME: While this is true for this frame, we cannot rely on this for the stream.
+		// We indicate the frame is done by sending io.EOF
 		return io.EOF
 	}
 	return nil
 }
 
 // addDecoder will add another decoder.
-// If io.EOF is returned, the added decoder is the last of the frame.
+// If io.EOF is returned, the added decoder is decoding
+// the last block of the frame.
 func (d *dFrame) addDecoder(dec *dBlock) error {
-	// TODO: We should probably not accept a decoder if we are at end of stream.
 	err := dec.reset(d.br, d.WindowSize)
 	if err != nil {
+		d.stopDecoding <- struct{}{}
 		return err
 	}
-	//fmt.Println("added decoder to frame")
+	println("added decoder to frame")
 	d.decoding <- dec
 	if dec.Last {
 		return io.EOF
@@ -302,15 +293,18 @@ func (d *dFrame) addDecoder(dec *dBlock) error {
 }
 
 // checkCRC will check the checksum if the frame has one.
-// Will return ErrCRCMismatch if crc check failed, otherwise io.EOF
+// Will return ErrCRCMismatch if crc check failed, otherwise nil.
 func (d *dFrame) checkCRC() error {
 	if !d.HasCheckSum {
-		return io.EOF
+		return nil
 	}
 
 	var want [4]byte
 	_, err := io.ReadFull(d.br, want[:])
-	if err != nil && err != io.EOF {
+	if err != nil {
+		if err == io.EOF {
+			return io.ErrUnexpectedEOF
+		}
 		return err
 	}
 	var got [8]byte
@@ -321,21 +315,28 @@ func (d *dFrame) checkCRC() error {
 	gotB[2] = gotB[5]
 	gotB[3] = gotB[4]
 	if !bytes.Equal(gotB[:4], want[:]) {
-		fmt.Println("CRC Check Failed:", gotB[:4], "!=", want)
+		println("CRC Check Failed:", gotB[:4], "!=", want)
 		return ErrCRCMismatch
 	}
-	//fmt.Println("CRC ok")
-	return io.EOF
+	println("CRC ok")
+	return nil
 }
 
 func (d *dFrame) Close() {
 	// TODO: Find some way to signal we are done to startDecoder
 }
 
-func (d *dFrame) startDecoder(writer chan decodeOutput) {
+// startDecoder will start decoding blocks and write them to the writer.
+// The decoder will stop as soon as an error occurs or at end of frame.
+// When the frame has finished decoding the *bufio.Reader
+// containing the remaining input will be returned.
+func (d *dFrame) startDecoder(writer chan<- decodeOutput, done chan<- *bufio.Reader) {
 	// TODO: Init to dictionary
 	d.history.reset()
-
+	defer func() {
+		println("frame decoder done, sending remaining bit stream")
+		done <- d.br
+	}()
 	// Get first block
 	block := <-d.decoding
 	block.history <- &d.history
@@ -344,13 +345,14 @@ func (d *dFrame) startDecoder(writer chan decodeOutput) {
 		// Get result
 		r := <-block.result
 		if r.err != nil {
+			println("Result contained error", r.err)
 			writer <- r
 			return
 		}
 		if !block.Last {
 			// Send history to next block
 			next = <-d.decoding
-			//fmt.Println("Sending ", len(d.history.b), " bytes as history")
+			println("Sending ", len(d.history.b), " bytes as history")
 			next.history <- &d.history
 		}
 

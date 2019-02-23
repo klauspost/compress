@@ -63,7 +63,7 @@ func (s *fseDecoder) readNCount(b *byteReader, maxSymbol uint16) error {
 	bitStream := b.Uint32()
 	nbBits := uint((bitStream & 0xF) + minTablelog) // extract tableLog
 	if nbBits > tablelogAbsoluteMax {
-		fmt.Println("Invalid tablelog:", nbBits)
+		println("Invalid tablelog:", nbBits)
 		return errors.New("tableLog too large")
 	}
 	bitStream >>= 4

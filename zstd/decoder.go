@@ -1,11 +1,12 @@
 package zstd
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"runtime"
+	"sync"
 )
 
 type Decoder struct {
@@ -23,12 +24,18 @@ type Decoder struct {
 
 	// Custom dictionaries
 	dicts map[uint32]struct{}
+
+	// streamWg is the waitgroup for all streams
+	streamWg sync.WaitGroup
 }
 
+// decoderState is used for maintaining state when the decoder
+// is used for streaming.
 type decoderState struct {
 	decodeOutput
-	// finished
-	output chan decodeOutput
+	// output in order
+	output    chan decodeOutput
+	frameDone chan *bufio.Reader
 }
 
 var (
@@ -48,7 +55,7 @@ func NewDecoder(r io.Reader, opts ...interface{}) (*Decoder, error) {
 	}
 
 	d.current.output = make(chan decodeOutput, d.concurrent)
-	//fmt.Println("startDecoders")
+	d.current.frameDone = make(chan *bufio.Reader, 0)
 
 	// Create decoders
 	d.decoders = make(chan *dBlock, d.concurrent)
@@ -88,14 +95,14 @@ func (d *Decoder) Read(p []byte) (int, error) {
 				break
 			}
 			d.nextBlock()
-			//fmt.Println("current error", d.current.err)
+			//println("current error", d.current.err)
 		}
 	}
 	if len(d.current.b) > 0 {
 		// Only return error at end of block
 		return n, nil
 	}
-	//fmt.Println("returning", n, d.current.err)
+	//println("returning", n, d.current.err)
 	return n, d.current.err
 }
 
@@ -123,7 +130,7 @@ drainOutput:
 			break drainOutput
 		}
 	}
-	//fmt.Println("Sending stream")
+	//println("Sending stream")
 	d.stream <- decodeStream{
 		r:      r,
 		output: d.current.output,
@@ -192,7 +199,7 @@ func (d *Decoder) nextBlock() {
 		return
 	}
 	d.current.decodeOutput = <-d.current.output
-	//fmt.Println("got", len(d.current.b), "bytes, error:", d.current.err)
+	//println("got", len(d.current.b), "bytes, error:", d.current.err)
 }
 
 // Close will release all resources.
@@ -204,6 +211,8 @@ func (d *Decoder) Close() error {
 
 	if d.stream != nil {
 		close(d.stream)
+		d.streamWg.Wait()
+		d.stream = nil
 	}
 	if d.decoders != nil {
 		close(d.decoders)
@@ -244,53 +253,66 @@ type decodeStream struct {
 // 		d) wait for next block to return data.
 // Once WRITTEN, the decoders reused by the writer frame decoder for re-use.
 func (d *Decoder) startStreamDecoder() {
-	//fmt.Println("creating stream decoder")
+	//println("creating stream decoder")
+	d.streamWg.Add(1)
+	defer d.streamWg.Done()
+
 	frame := newDFrame()
 	frame.concurrent = d.concurrent
 	frame.lowMem = d.lowMem
+	var done chan *bufio.Reader
 
 	for {
 		in, ok := <-d.stream
-		//fmt.Println("got stream")
 		if !ok {
-			d.stream = nil
 			return
 		}
 		for {
 			err := frame.reset(in.r)
+			println("Frame decoder returned", err)
 			if err != nil {
 				if err == io.EOF {
 					break
 				}
-				fmt.Println("Frame decoder returned", err)
 				in.output <- decodeOutput{
 					err: err,
 				}
 				break
 			}
-			//fmt.Println("started frame")
-			go frame.startDecoder(in.output)
+			println("starting frame")
+			done = d.current.frameDone
+			go frame.startDecoder(in.output, done)
 		decodeFrame:
+			// Go through all blocks of the frame.
 			for dec := range d.decoders {
-				// TODO: Racing on shutdown on frame.
-				//fmt.Println("starting decoder")
+				//println("starting decoder")
 				err := frame.next(dec)
-				//fmt.Println("decoder returned", err)
+				println("block decoder returned", err)
 				switch err {
 				case io.EOF:
-					// End of current block, no error
+					// End of current frame, no error
 					break decodeFrame
 				case nil:
 					continue
 				default:
+					// FIXME: currently does nothing
+					frame.Close()
+					in.r = <-done
 					in.output <- decodeOutput{err: err}
 				}
 			}
-			if _, err := in.r.Read([]byte{}); err == io.EOF {
-				//fmt.Println("Stream ended", err)
-				// No more data
+			// All blocks have started decoding, check if there are more frames.
+			br := <-done
+			if b, err := br.Peek(4); err == io.EOF || !bytes.Equal(frameMagic, b) {
+				println("No data left on stream, or not frame magic")
+
+				// No more data.
+				in.output <- decodeOutput{
+					err: io.EOF,
+				}
 				break
 			}
+			in.r = br
 		}
 	}
 }
