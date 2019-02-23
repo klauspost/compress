@@ -32,6 +32,15 @@ func TestNewDecoderGood(t *testing.T) {
 	testDecoderDecodeAll(t, "testdata/good.zip", dec)
 }
 
+func TestNewDecoderLarge(t *testing.T) {
+	testDecoderFile(t, "testdata/large.zip")
+	dec, err := NewDecoder(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testDecoderDecodeAll(t, "testdata/large.zip", dec)
+}
+
 func TestNewDecoderBig(t *testing.T) {
 	if testing.Short() {
 		t.SkipNow()
@@ -113,7 +122,7 @@ func testDecoderFile(t *testing.T, fn string) {
 		if !strings.HasSuffix(tt.Name, ".zst") {
 			continue
 		}
-		t.Run("Reader:"+tt.Name, func(t *testing.T) {
+		t.Run("Reader-"+tt.Name, func(t *testing.T) {
 			r, err := tt.Open()
 			if err != nil {
 				t.Error(err)
@@ -229,7 +238,7 @@ func testDecoderDecodeAll(t *testing.T, fn string, dec *Decoder) {
 		if !strings.HasSuffix(tt.Name, ".zst") {
 			continue
 		}
-		t.Run("ReadAll:"+tt.Name, func(t *testing.T) {
+		t.Run("ReadAll-"+tt.Name, func(t *testing.T) {
 			t.Parallel()
 			r, err := tt.Open()
 			if err != nil {
