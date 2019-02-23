@@ -292,44 +292,41 @@ func (s *fseDecoder) transform(t []baseOffset) error {
 }
 
 type fseState struct {
-	// TODO: Check if *[maxtableSize]decSymbol is faster.
+	// TODO: Check if *[1 << maxTablelog]decSymbol is faster.
 	dt    []decSymbol
-	state uint16
+	state decSymbol
 }
 
 // Initialize and decode first state and symbol.
 func (s *fseState) init(br *bitReader, tableLog uint8, dt []decSymbol) {
 	s.dt = dt
 	br.fill()
-	s.state = uint16(br.getBits(tableLog))
+	s.state = dt[br.getBits(tableLog)]
 }
 
 // next returns the current symbol and sets the next state.
 // At least tablelog bits must be available in the bit reader.
 func (s *fseState) next(br *bitReader) {
-	n := s.dt[s.state]
-	lowBits := uint16(br.getBits(n.nbBits))
-	s.state = n.newState + lowBits
+	lowBits := uint16(br.getBits(s.state.nbBits))
+	s.state = s.dt[s.state.newState+lowBits]
 }
 
 // finished returns true if all bits have been read from the bitstream
 // and the next state would require reading bits from the input.
 func (s *fseState) finished(br *bitReader) bool {
-	return br.finished() && s.dt[s.state].nbBits > 0
+	return br.finished() && s.state.nbBits > 0
 }
 
 // final returns the current state symbol without decoding the next.
 func (s *fseState) final() (int, uint8) {
-	n := s.dt[s.state]
-	return int(n.baseline), n.addBits
+	return int(s.state.baseline), s.state.addBits
 }
 
 // nextFast returns the next symbol and sets the next state.
 // This can only be used if no symbols are 0 bits.
 // At least tablelog bits must be available in the bit reader.
 func (s *fseState) nextFast(br *bitReader) (uint32, uint8) {
-	n := s.dt[s.state]
-	lowBits := uint16(br.getBitsFast(n.nbBits))
-	s.state = n.newState + lowBits
-	return n.baseline, n.addBits
+	lowBits := uint16(br.getBitsFast(s.state.nbBits))
+	s.state = s.dt[s.state.newState+lowBits]
+	return s.state.baseline, s.state.addBits
 }

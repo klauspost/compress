@@ -53,11 +53,11 @@ func TestNewDecoderBigFile(t *testing.T) {
 	if testing.Short() {
 		t.SkipNow()
 	}
-	file := "testdata/klauspost-paranoid-passwords.zst"
-	const wantSize = 14651071758
+	file := "testdata/enwik9.zst"
+	const wantSize = 1000000000
 	if _, err := os.Stat(file); os.IsNotExist(err) {
-		t.Skip("To run extended tests, download https://files.klauspost.com/compress/klauspost-paranoid-passwords.zst \n" +
-			"and place it in " + file)
+		t.Skip("To run extended tests, download http://mattmahoney.net/dc/textdata unzip it \n" +
+			"compress it with 'zstd -15 -T0 enwik9' and place it in " + file)
 	}
 	f, err := os.Open(file)
 	if err != nil {

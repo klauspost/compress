@@ -740,25 +740,25 @@ func init() {
 // update states, at least 27 bits must be available.
 func (s *sequenceDecoders) updateAlt(br *bitReader) {
 	// Update all 3 states at once. Approx 20% faster.
-	a, b, c := s.litLengths.state.dt[s.litLengths.state.state], s.matchLengths.state.dt[s.matchLengths.state.state], s.offsets.state.dt[s.offsets.state.state]
+	a, b, c := s.litLengths.state.state, s.matchLengths.state.state, s.offsets.state.state
 
 	nBits := a.nbBits + b.nbBits + c.nbBits
 	if nBits == 0 {
-		s.litLengths.state.state = a.newState
-		s.matchLengths.state.state = b.newState
-		s.offsets.state.state = c.newState
+		s.litLengths.state.state = s.litLengths.state.dt[a.newState]
+		s.matchLengths.state.state = s.matchLengths.state.dt[b.newState]
+		s.offsets.state.state = s.offsets.state.dt[c.newState]
 		return
 	}
 	bits := br.getBitsFast(nBits)
 	lowBits := uint16(bits >> ((c.nbBits + b.nbBits) & 31))
-	s.litLengths.state.state = a.newState + lowBits
+	s.litLengths.state.state = s.litLengths.state.dt[a.newState+lowBits]
 
 	lowBits = uint16(bits >> (c.nbBits & 31))
 	lowBits &= bitMask[b.nbBits&15]
-	s.matchLengths.state.state = b.newState + lowBits
+	s.matchLengths.state.state = s.matchLengths.state.dt[b.newState+lowBits]
 
 	lowBits = uint16(bits) & bitMask[c.nbBits&15]
-	s.offsets.state.state = c.newState + lowBits
+	s.offsets.state.state = s.offsets.state.dt[c.newState+lowBits]
 }
 
 func (s *sequenceDecoders) nextFast(br *bitReader) (ll, mo, ml int) {

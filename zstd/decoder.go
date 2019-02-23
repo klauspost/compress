@@ -54,7 +54,6 @@ func NewDecoder(r io.Reader, opts ...interface{}) (*Decoder, error) {
 		concurrent: runtime.GOMAXPROCS(0),
 		stream:     make(chan decodeStream, 1),
 	}
-
 	d.decOut = make(chan chan decodeOutput, d.concurrent)
 	d.current.output = make(chan decodeOutput, d.concurrent)
 
@@ -199,7 +198,10 @@ func (d *Decoder) DecodeBuffer(input *bytes.Buffer, dst []byte) ([]byte, error) 
 			if o.err == io.EOF {
 				o.err = nil
 			}
-			d.decOut <- output
+			select {
+			case d.decOut <- output:
+			default:
+			}
 			return dst, o.err
 		}
 	}
