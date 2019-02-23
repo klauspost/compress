@@ -18,6 +18,7 @@ type dFrame struct {
 	crc          hash.Hash64
 	stopDecoding chan struct{}
 	frameDone    chan *bufio.Reader
+	tmp          [8]byte
 
 	WindowSize       uint64
 	DictionaryID     uint32
@@ -97,9 +98,8 @@ func (d *dFrame) reset(r io.Reader) error {
 	}
 	d.HasCheckSum = false
 	d.WindowSize = 0
-	var tmp [8]byte
 	for {
-		_, err := io.ReadFull(d.br, tmp[:4])
+		_, err := io.ReadFull(d.br, d.tmp[:4])
 		if err != nil {
 			if err == io.ErrUnexpectedEOF {
 				return io.EOF
@@ -107,17 +107,17 @@ func (d *dFrame) reset(r io.Reader) error {
 			println("Reading Frame Magic", err)
 			return err
 		}
-		if !bytes.Equal(tmp[:3], skippableFrameMagic) || tmp[3]&0xf0 != 0x50 {
+		if !bytes.Equal(d.tmp[:3], skippableFrameMagic) || d.tmp[3]&0xf0 != 0x50 {
 			// Break if not skippable frame.
 			break
 		}
 		// Read size to skip
-		_, err = io.ReadFull(d.br, tmp[:4])
+		_, err = io.ReadFull(d.br, d.tmp[:4])
 		if err != nil {
 			println("Reading Frame Size", err)
 			return err
 		}
-		n := uint32(tmp[0]) | (uint32(tmp[1]) << 8) | (uint32(tmp[2]) << 16) | (uint32(tmp[3]) << 24)
+		n := uint32(d.tmp[0]) | (uint32(d.tmp[1]) << 8) | (uint32(d.tmp[2]) << 16) | (uint32(d.tmp[3]) << 24)
 		println("Skipping frame with", n, "bytes.")
 		_, err = io.CopyN(ioutil.Discard, d.br, int64(n))
 		if err != nil {
@@ -127,8 +127,8 @@ func (d *dFrame) reset(r io.Reader) error {
 			return err
 		}
 	}
-	if !bytes.Equal(tmp[:4], frameMagic) {
-		println("Got magic numbers: ", tmp[:4], "want:", frameMagic)
+	if !bytes.Equal(d.tmp[:4], frameMagic) {
+		println("Got magic numbers: ", d.tmp[:4], "want:", frameMagic)
 		return ErrMagicMismatch
 	}
 
@@ -163,7 +163,7 @@ func (d *dFrame) reset(r io.Reader) error {
 		if size == 3 {
 			size = 4
 		}
-		_, err := io.ReadFull(d.br, tmp[:size])
+		_, err := io.ReadFull(d.br, d.tmp[:size])
 		if err != nil {
 			if debug {
 				println("Reading Dictionary_ID", err)
@@ -172,11 +172,11 @@ func (d *dFrame) reset(r io.Reader) error {
 		}
 		switch size {
 		case 1:
-			d.DictionaryID = uint32(tmp[0])
+			d.DictionaryID = uint32(d.tmp[0])
 		case 2:
-			d.DictionaryID = uint32(tmp[0]) | (uint32(tmp[1]) << 8)
+			d.DictionaryID = uint32(d.tmp[0]) | (uint32(d.tmp[1]) << 8)
 		case 4:
-			d.DictionaryID = uint32(tmp[0]) | (uint32(tmp[1]) << 8) | (uint32(tmp[2]) << 16) | (uint32(tmp[3]) << 24)
+			d.DictionaryID = uint32(d.tmp[0]) | (uint32(d.tmp[1]) << 8) | (uint32(d.tmp[2]) << 16) | (uint32(d.tmp[3]) << 24)
 		}
 		if debug {
 			println("Dict size", size, "ID:", d.DictionaryID)
@@ -197,26 +197,26 @@ func (d *dFrame) reset(r io.Reader) error {
 	}
 	d.FrameContentSize = 0
 	if fcsSize > 0 {
-		_, err := io.ReadFull(d.br, tmp[:fcsSize])
+		_, err := io.ReadFull(d.br, d.tmp[:fcsSize])
 		if err != nil {
 			println("Reading Frame content", err)
 			return err
 		}
 		switch fcsSize {
 		case 1:
-			d.FrameContentSize = uint64(tmp[0])
+			d.FrameContentSize = uint64(d.tmp[0])
 		case 2:
 			// When FCS_Field_Size is 2, the offset of 256 is added.
-			d.FrameContentSize = uint64(tmp[0]) | (uint64(tmp[1]) << 8) + 256
+			d.FrameContentSize = uint64(d.tmp[0]) | (uint64(d.tmp[1]) << 8) + 256
 		case 4:
-			d.FrameContentSize = uint64(tmp[0]) | (uint64(tmp[1]) << 8) | (uint64(tmp[2]) << 16) | (uint64(tmp[3] << 24))
+			d.FrameContentSize = uint64(d.tmp[0]) | (uint64(d.tmp[1]) << 8) | (uint64(d.tmp[2]) << 16) | (uint64(d.tmp[3] << 24))
 		case 8:
-			d1 := uint32(tmp[0]) | (uint32(tmp[1]) << 8) | (uint32(tmp[2]) << 16) | (uint32(tmp[3]) << 24)
-			d2 := uint32(tmp[4]) | (uint32(tmp[5]) << 8) | (uint32(tmp[6]) << 16) | (uint32(tmp[7]) << 24)
+			d1 := uint32(d.tmp[0]) | (uint32(d.tmp[1]) << 8) | (uint32(d.tmp[2]) << 16) | (uint32(d.tmp[3]) << 24)
+			d2 := uint32(d.tmp[4]) | (uint32(d.tmp[5]) << 8) | (uint32(d.tmp[6]) << 16) | (uint32(d.tmp[7]) << 24)
 			d.FrameContentSize = uint64(d1) | (uint64(d2) << 32)
 		}
 		if debug {
-			println("field size bits:", v, "fcsSize:", fcsSize, "FrameContentSize:", d.FrameContentSize, hex.EncodeToString(tmp[:fcsSize]))
+			println("field size bits:", v, "fcsSize:", fcsSize, "FrameContentSize:", d.FrameContentSize, hex.EncodeToString(d.tmp[:fcsSize]))
 		}
 	}
 	d.HasCheckSum = fhd&(1<<2) != 0
@@ -302,23 +302,24 @@ func (d *dFrame) checkCRC() error {
 		return nil
 	}
 
-	var want [4]byte
-	_, err := io.ReadFull(d.br, want[:])
+	gotB := d.crc.Sum(d.tmp[:0])
+	// Flip to match file order.
+	gotB[0] = gotB[7]
+	gotB[1] = gotB[6]
+	gotB[2] = gotB[5]
+	gotB[3] = gotB[4]
+
+	// We can overwrite upper tmp now
+	_, err := io.ReadFull(d.br, d.tmp[4:])
 	if err != nil {
 		if err == io.EOF {
 			return io.ErrUnexpectedEOF
 		}
 		return err
 	}
-	var got [8]byte
-	gotB := d.crc.Sum(got[:0])
-	// Flip to match file order.
-	gotB[0] = gotB[7]
-	gotB[1] = gotB[6]
-	gotB[2] = gotB[5]
-	gotB[3] = gotB[4]
-	if !bytes.Equal(gotB[:4], want[:]) {
-		println("CRC Check Failed:", gotB[:4], "!=", want)
+
+	if !bytes.Equal(gotB[:4], d.tmp[4:]) {
+		println("CRC Check Failed:", gotB[:4], "!=", d.tmp[4:])
 		return ErrCRCMismatch
 	}
 	println("CRC ok")
@@ -356,7 +357,9 @@ func (d *dFrame) startDecoder(writer chan<- decodeOutput) {
 			// Send history to next block
 			select {
 			case next = <-d.decoding:
-				println("Sending ", len(d.history.b), " bytes as history")
+				if debug {
+					println("Sending ", len(d.history.b), " bytes as history")
+				}
 				next.history <- &d.history
 			default:
 				// Wait until we have sent the block, so
@@ -384,7 +387,9 @@ func (d *dFrame) startDecoder(writer chan<- decodeOutput) {
 		writer <- r
 		if next == nil {
 			// There was no decoder available, we wait for one now that we have sent to the writer.
-			println("Sending ", len(d.history.b), " bytes as history")
+			if debug {
+				println("Sending ", len(d.history.b), " bytes as history")
+			}
 			next = <-d.decoding
 			next.history <- &d.history
 		}

@@ -187,22 +187,22 @@ type decSymbol struct {
 }
 
 // decSymbolValue returns the transformed decSymbol for the given symbol.
-func decSymbolValue(symb uint8, t []baseOffset) (*decSymbol, error) {
+func decSymbolValue(symb uint8, t []baseOffset) (decSymbol, error) {
 	if int(symb) >= len(t) {
-		return nil, fmt.Errorf("rle symbol %d >= max %d", symb, len(t))
+		return decSymbol{}, fmt.Errorf("rle symbol %d >= max %d", symb, len(t))
 	}
 	lu := t[symb]
-	return &decSymbol{
+	return decSymbol{
 		addBits:  lu.addBits,
 		baseline: lu.baseLine,
 	}, nil
 }
 
 // setRLE will set the decoder til RLE mode.
-func (s *fseDecoder) setRLE(symbol *decSymbol) {
+func (s *fseDecoder) setRLE(symbol decSymbol) {
 	s.actualTableLog = 0
 	s.maxBits = 0
-	s.dt[0] = *symbol
+	s.dt[0] = symbol
 }
 
 // buildDtable will build the decoding table.

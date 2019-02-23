@@ -54,6 +54,7 @@ func TestNewDecoderBigFile(t *testing.T) {
 		t.SkipNow()
 	}
 	file := "testdata/klauspost-paranoid-passwords.zst"
+	const wantSize = 14651071758
 	if _, err := os.Stat(file); os.IsNotExist(err) {
 		t.Skip("To run extended tests, download https://files.klauspost.com/compress/klauspost-paranoid-passwords.zst \n" +
 			"and place it in " + file)
@@ -71,6 +72,9 @@ func TestNewDecoderBigFile(t *testing.T) {
 	n, err := io.Copy(ioutil.Discard, dec)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if n != wantSize {
+		t.Errorf("want size %d, got size %d", wantSize, n)
 	}
 	elapsed := time.Since(start)
 	mbpersec := (float64(n) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
@@ -151,6 +155,49 @@ func testDecoderFile(t *testing.T, fn string) {
 				return
 			}
 			t.Log(len(got), "bytes returned, matches input, ok!")
+		})
+	}
+}
+
+func BenchmarkDecoder_DecodeAll(b *testing.B) {
+	fn := "testdata/decoder.zip"
+	data, err := ioutil.ReadFile(fn)
+	if err != nil {
+		b.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		b.Fatal(err)
+	}
+	dec, err := NewDecoder(nil)
+	if err != nil {
+		b.Fatal(err)
+		return
+	}
+	defer dec.Close()
+	for _, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, ".zst") {
+			continue
+		}
+		b.Run("ReadAll:"+tt.Name, func(b *testing.B) {
+			r, err := tt.Open()
+			if err != nil {
+				b.Fatal(err)
+			}
+			in, err := ioutil.ReadAll(r)
+			if err != nil {
+				b.Fatal(err)
+			}
+			got, err := dec.DecodeAll(in, nil)
+			b.SetBytes(int64(len(got)))
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_, err = dec.DecodeAll(in, got)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
 		})
 	}
 }

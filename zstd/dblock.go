@@ -73,6 +73,7 @@ type dBlock struct {
 	input       chan struct{}
 	result      chan decodeOutput
 	sequenceBuf []seq
+	tmp         [3]byte
 }
 
 func (b *dBlock) String() string {
@@ -97,15 +98,14 @@ func newDBlock(lowMem bool) *dBlock {
 // Input must be a start of a block and will be at the end of the block when returned.
 func (b *dBlock) reset(br io.Reader, windowSize uint64) error {
 	b.WindowSize = windowSize
-	var tmp [4]byte
-	_, err := io.ReadFull(br, tmp[:3])
+	_, err := io.ReadFull(br, b.tmp[:])
 	if err != nil {
 		if debug {
 			println("Reading block header:", err)
 		}
 		return err
 	}
-	bh := uint32(tmp[0]) | (uint32(tmp[1]) << 8) | (uint32(tmp[2]) << 16)
+	bh := uint32(b.tmp[0]) | (uint32(b.tmp[1]) << 8) | (uint32(b.tmp[2]) << 16)
 	b.Last = bh&1 != 0
 	b.Type = BlockType((bh >> 1) & 3)
 	// find size.
@@ -211,12 +211,16 @@ func (b *dBlock) startDecoder() {
 				b:   b.dst,
 				err: err,
 			}
-			println("Decompressed to ", len(b.dst), "bytes, error:", err)
+			if debug {
+				println("Decompressed to ", len(b.dst), "bytes, error:", err)
+			}
 			b.result <- o
 		default:
 			panic("Invalid block type")
 		}
-		println("dBlock: Finished block")
+		if debug {
+			println("dBlock: Finished block")
+		}
 	}
 }
 
@@ -320,7 +324,9 @@ func (b *dBlock) decodeCompressed() error {
 			literals[i] = v
 		}
 		in = in[1:]
-		printf("Found %d RLE compressed literals\n", litRegenSize)
+		if debug {
+			printf("Found %d RLE compressed literals\n", litRegenSize)
+		}
 	case LiteralsBlockTreeless:
 		if len(in) < litCompSize {
 			println("too small: litType:", litType, " sizeFormat", sizeFormat, "remain:", len(in), "want:", litCompSize)
@@ -329,7 +335,9 @@ func (b *dBlock) decodeCompressed() error {
 		// Store compressed literals, so we defer decoding until we get history.
 		literals = in[:litCompSize]
 		in = in[litCompSize:]
-		printf("Found %d compressed literals\n", litCompSize)
+		if debug {
+			printf("Found %d compressed literals\n", litCompSize)
+		}
 	case LiteralsBlockCompressed:
 		if len(in) < litCompSize {
 			println("too small: litType:", litType, " sizeFormat", sizeFormat, "remain:", len(in), "want:", litCompSize)
@@ -340,14 +348,6 @@ func (b *dBlock) decodeCompressed() error {
 
 		huff = huffDecoderPool.Get().(*huff0.Scratch)
 		var err error
-		if huff != nil {
-			huff.Out = b.literalBuf[:0]
-		}
-		huff, literals, err = huff0.ReadTable(literals, huff)
-		if err != nil {
-			println("reading huffman table:", err)
-			return err
-		}
 		// Ensure we have space to store it.
 		if cap(b.literalBuf) < litRegenSize {
 			if b.lowMem {
@@ -355,6 +355,15 @@ func (b *dBlock) decodeCompressed() error {
 			} else {
 				b.literalBuf = make([]byte, 0, 1<<18)
 			}
+		}
+		if huff == nil {
+			huff = &huff0.Scratch{}
+		}
+		huff.Out = b.literalBuf[:0]
+		huff, literals, err = huff0.ReadTable(literals, huff)
+		if err != nil {
+			println("reading huffman table:", err)
+			return err
 		}
 		// Use our out buffer.
 		huff.Out = b.literalBuf[:0]
@@ -366,10 +375,14 @@ func (b *dBlock) decodeCompressed() error {
 		if err != nil {
 			return err
 		}
+		// Make sure we don't leak our literals buffer
+		huff.Out = nil
 		if len(literals) != litRegenSize {
 			return fmt.Errorf("literal output size mismatch want %d, got %d", litRegenSize, len(literals))
 		}
-		printf("Decompressed %d literals into %d bytes\n", litCompSize, litRegenSize)
+		if debug {
+			printf("Decompressed %d literals into %d bytes\n", litCompSize, litRegenSize)
+		}
 	}
 
 	// Decode Sequences
@@ -448,7 +461,9 @@ func (b *dBlock) decodeCompressed() error {
 				}
 				dec.setRLE(symb)
 				seq.fse = dec
-				println("RLE set to ", *symb)
+				if debug {
+					println("RLE set to ", symb)
+				}
 			case compModeFSE:
 				println("Reading table for", tableIndex(i))
 				dec := fseDecoderPool.Get().(*fseDecoder)
@@ -500,6 +515,8 @@ func (b *dBlock) decodeCompressed() error {
 		} else {
 			literals, err = huff.Decompress1X(literals)
 		}
+		// Make sure we don't leak our literals buffer
+		huff.Out = nil
 		if err != nil {
 			println("decompressing literals:", err)
 			return err
@@ -517,7 +534,9 @@ func (b *dBlock) decodeCompressed() error {
 		huff.Out = nil
 		hist.huffTree = huff
 	}
-	println("Final literals:", len(literals), "and", nSeqs, "sequences.")
+	if debug {
+		println("Final literals:", len(literals), "and", nSeqs, "sequences.")
+	}
 
 	if nSeqs == 0 {
 		// Decompressed content is defined entirely as Literals Section content.
@@ -530,8 +549,9 @@ func (b *dBlock) decodeCompressed() error {
 	if err != nil {
 		return err
 	}
-	println("History merged ok")
-
+	if debug {
+		println("History merged ok")
+	}
 	br := &bitReader{}
 	if err := br.init(in); err != nil {
 		return err

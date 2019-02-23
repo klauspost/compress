@@ -1,6 +1,8 @@
 package zstd
 
-import "github.com/klauspost/compress/huff0"
+import (
+	"github.com/klauspost/compress/huff0"
+)
 
 type history struct {
 	b             []byte
@@ -16,7 +18,20 @@ type history struct {
 func (h *history) reset() {
 	h.b = h.b[:0]
 	h.recentOffsets = [3]int{1, 4, 8}
+	if f := h.decoders.litLengths.fse; f != nil && !f.preDefined {
+		fseDecoderPool.Put(f)
+	}
+	if f := h.decoders.offsets.fse; f != nil && !f.preDefined {
+		fseDecoderPool.Put(f)
+	}
+	if f := h.decoders.matchLengths.fse; f != nil && !f.preDefined {
+		fseDecoderPool.Put(f)
+	}
 	h.decoders = sequenceDecoders{}
+	if h.huffTree != nil {
+		huffDecoderPool.Put(h.huffTree)
+	}
+	h.huffTree = nil
 }
 
 // append bytes to history.

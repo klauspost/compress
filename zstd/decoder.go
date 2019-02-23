@@ -24,6 +24,9 @@ type Decoder struct {
 	// Custom dictionaries
 	dicts map[uint32]struct{}
 
+	// decode output for DecodeAll
+	decOut chan chan decodeOutput
+
 	// streamWg is the waitgroup for all streams
 	streamWg sync.WaitGroup
 }
@@ -52,6 +55,7 @@ func NewDecoder(r io.Reader, opts ...interface{}) (*Decoder, error) {
 		stream:     make(chan decodeStream, 1),
 	}
 
+	d.decOut = make(chan chan decodeOutput, d.concurrent)
 	d.current.output = make(chan decodeOutput, d.concurrent)
 
 	// Create decoders
@@ -161,16 +165,30 @@ func (d *Decoder) WriteTo(w io.Writer) (int64, error) {
 // DecodeAll can be used concurrently. If you plan to, do not use the low memory option.
 // The Decoder concurrency limits will be respected.
 func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
-	output := make(chan decodeOutput, d.concurrent)
-	// TODO: Store this to avoid allocation
-	d.stream <- decodeStream{
-		r:      bytes.NewBuffer(input),
-		output: output,
+	return d.DecodeBuffer(bytes.NewBuffer(input), dst)
+}
+
+// DecodeBuffer allows stateless decoding of a blob of bytes.
+// Output will be appended to dst, so if the destination size is known
+// you can pre-allocate the destination slice to avoid allocations.
+// DecodeAll can be used concurrently. If you plan to, do not use the low memory option.
+// The Decoder concurrency limits will be respected.
+func (d *Decoder) DecodeBuffer(input *bytes.Buffer, dst []byte) ([]byte, error) {
+	var output chan decodeOutput
+	select {
+	case output = <-d.decOut:
+	default:
+		output = make(chan decodeOutput, d.concurrent)
 	}
 	if cap(dst) == 0 {
 		// Allocate a reasonable buffer if nothing was provided.
-		dst = make([]byte, 0, len(input))
+		dst = make([]byte, 0, input.Len())
 	}
+	d.stream <- decodeStream{
+		r:      input,
+		output: output,
+	}
+	dst = dst[:0]
 	for {
 		o := <-output
 		dst = append(dst, o.b...)
@@ -181,6 +199,7 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 			if o.err == io.EOF {
 				o.err = nil
 			}
+			d.decOut <- output
 			return dst, o.err
 		}
 	}
