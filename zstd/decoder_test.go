@@ -211,6 +211,45 @@ func BenchmarkDecoder_DecodeAll(b *testing.B) {
 	}
 }
 
+func BenchmarkDecoderSilesia(b *testing.B) {
+	fn := "testdata/silesia.tar.zst"
+	data, err := ioutil.ReadFile(fn)
+	if err != nil {
+		if os.IsNotExist(err) {
+			b.Skip("Missing testdata/silesia.tar.zst")
+			return
+		}
+		b.Fatal(err)
+	}
+	dec, err := NewDecoder(nil)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer dec.Close()
+	err = dec.Reset(bytes.NewBuffer(data))
+	if err != nil {
+		b.Fatal(err)
+	}
+	n, err := io.Copy(ioutil.Discard, dec)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.SetBytes(n)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		err = dec.Reset(bytes.NewBuffer(data))
+		if err != nil {
+			b.Fatal(err)
+		}
+		_, err := io.Copy(ioutil.Discard, dec)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func testDecoderDecodeAll(t *testing.T, fn string, dec *Decoder) {
 	data, err := ioutil.ReadFile(fn)
 	if err != nil {

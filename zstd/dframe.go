@@ -88,7 +88,12 @@ func (d *dFrame) reset(r io.Reader) error {
 		d.br = br
 	} else {
 		if d.br == nil {
-			d.br = bufio.NewReaderSize(r, maxCompressedBlockSize)
+			if d.lowMem {
+				// Use 4K default.
+				d.br = bufio.NewReader(r)
+			} else {
+				d.br = bufio.NewReaderSize(r, maxCompressedBlockSize)
+			}
 		} else {
 			d.br.Reset(r)
 		}

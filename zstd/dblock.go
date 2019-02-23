@@ -25,6 +25,10 @@ const (
 	// Maximum possible block size (all Raw+Uncompressed).
 	maxBlockSize = (1 << 21) - 1
 
+	// https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#literals_section_header
+	maxCompressedLiteralSize = 1 << 18
+	maxRLELiteralSize        = 1 << 20
+
 	maxMatchLen = 131074
 
 	// We support slightly less than the reference decoder to be able to
@@ -134,9 +138,9 @@ func (b *dBlock) reset(br io.Reader, windowSize uint64) error {
 	// Read block data.
 	if cap(b.data) < cSize {
 		if b.lowMem {
-			b.data = make([]byte, 0, maxBlockSize)
-		} else {
 			b.data = make([]byte, 0, cSize)
+		} else {
+			b.data = make([]byte, 0, maxBlockSize)
 		}
 	}
 	if cap(b.dst) <= maxBlockSize {
@@ -315,7 +319,13 @@ func (b *dBlock) decodeCompressed() error {
 			if b.lowMem {
 				b.literalBuf = make([]byte, litRegenSize)
 			} else {
-				b.literalBuf = make([]byte, litRegenSize, 1<<18)
+				if litRegenSize > maxCompressedLiteralSize {
+					// Exceptional
+					b.literalBuf = make([]byte, litRegenSize)
+				} else {
+					b.literalBuf = make([]byte, litRegenSize, maxCompressedLiteralSize)
+
+				}
 			}
 		}
 		literals = b.literalBuf[:litRegenSize]
@@ -353,7 +363,7 @@ func (b *dBlock) decodeCompressed() error {
 			if b.lowMem {
 				b.literalBuf = make([]byte, 0, litRegenSize)
 			} else {
-				b.literalBuf = make([]byte, 0, 1<<18)
+				b.literalBuf = make([]byte, 0, maxCompressedLiteralSize)
 			}
 		}
 		if huff == nil {
@@ -503,7 +513,7 @@ func (b *dBlock) decodeCompressed() error {
 			if b.lowMem {
 				b.literalBuf = make([]byte, 0, litRegenSize)
 			} else {
-				b.literalBuf = make([]byte, 0, 1<<18)
+				b.literalBuf = make([]byte, 0, maxCompressedLiteralSize)
 			}
 		}
 		var err error
