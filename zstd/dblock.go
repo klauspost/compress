@@ -721,7 +721,31 @@ func (s *sequenceDecoders) decode(seqs int, br *bitReader, hist []byte) error {
 		if i == 0 {
 			break
 		}
-		s.updateAlt(br)
+		if true {
+			// Manually inlined, ~ 5-20% faster
+			// Update all 3 states at once. Approx 20% faster.
+			a, b, c := s.litLengths.state.state, s.matchLengths.state.state, s.offsets.state.state
+
+			nBits := a.nbBits + b.nbBits + c.nbBits
+			if nBits == 0 {
+				s.litLengths.state.state = s.litLengths.state.dt[a.newState]
+				s.matchLengths.state.state = s.matchLengths.state.dt[b.newState]
+				s.offsets.state.state = s.offsets.state.dt[c.newState]
+			} else {
+				bits := br.getBitsFast(nBits)
+				lowBits := uint16(bits >> ((c.nbBits + b.nbBits) & 31))
+				s.litLengths.state.state = s.litLengths.state.dt[a.newState+lowBits]
+
+				lowBits = uint16(bits >> (c.nbBits & 31))
+				lowBits &= bitMask[b.nbBits&15]
+				s.matchLengths.state.state = s.matchLengths.state.dt[b.newState+lowBits]
+
+				lowBits = uint16(bits) & bitMask[c.nbBits&15]
+				s.offsets.state.state = s.offsets.state.dt[c.newState+lowBits]
+			}
+		} else {
+			s.updateAlt(br)
+		}
 	}
 
 	// Add final literals
