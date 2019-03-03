@@ -4,4 +4,4 @@ go-fuzz-build -tags=decompress github.com/klauspost/compress/zstd
 cd fuzz
 del /Q decompress\crashers\*.*
 del /Q decompress\suppressions\*.*
-go-fuzz -bin=../zstd-fuzz.zip -workdir=decompress -procs=8
+go-fuzz -bin=../zstd-fuzz.zip -workdir=decompress -procs=16
