@@ -4,19 +4,23 @@ import (
 	"bytes"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/DataDog/zstd"
 	"github.com/klauspost/compress/zip"
 )
 
 func TestNewDecoder(t *testing.T) {
+	defer timeout(10 * time.Second)()
 	testDecoderFile(t, "testdata/decoder.zip")
-	dec, err := NewDecoder(nil)
+	dec, err := NewReader(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,8 +28,9 @@ func TestNewDecoder(t *testing.T) {
 }
 
 func TestNewDecoderGood(t *testing.T) {
+	defer timeout(10 * time.Second)()
 	testDecoderFile(t, "testdata/good.zip")
-	dec, err := NewDecoder(nil)
+	dec, err := NewReader(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +39,7 @@ func TestNewDecoderGood(t *testing.T) {
 
 func TestNewDecoderLarge(t *testing.T) {
 	testDecoderFile(t, "testdata/large.zip")
-	dec, err := NewDecoder(nil)
+	dec, err := NewReader(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +56,7 @@ func TestNewDecoderBig(t *testing.T) {
 			"and place it in " + file + "\n" + "Running it requires about 5GB of RAM")
 	}
 	testDecoderFile(t, file)
-	dec, err := NewDecoder(nil)
+	dec, err := NewReader(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +79,7 @@ func TestNewDecoderBigFile(t *testing.T) {
 	}
 	defer f.Close()
 	start := time.Now()
-	dec, err := NewDecoder(f)
+	dec, err := NewReader(f)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +117,7 @@ func testDecoderFile(t *testing.T, fn string) {
 		want[tt.Name+".zst"], _ = ioutil.ReadAll(r)
 	}
 
-	dec, err := NewDecoder(nil)
+	dec, err := NewReader(nil)
 	if err != nil {
 		t.Error(err)
 		return
@@ -178,7 +183,7 @@ func BenchmarkDecoder_DecodeAll(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	dec, err := NewDecoder(nil)
+	dec, err := NewReader(nil)
 	if err != nil {
 		b.Fatal(err)
 		return
@@ -188,7 +193,7 @@ func BenchmarkDecoder_DecodeAll(b *testing.B) {
 		if !strings.HasSuffix(tt.Name, ".zst") {
 			continue
 		}
-		b.Run("ReadAll:"+tt.Name, func(b *testing.B) {
+		b.Run(tt.Name, func(b *testing.B) {
 			r, err := tt.Open()
 			if err != nil {
 				b.Fatal(err)
@@ -211,6 +216,47 @@ func BenchmarkDecoder_DecodeAll(b *testing.B) {
 	}
 }
 
+func BenchmarkDecoder_DecodeAllCgo(b *testing.B) {
+	fn := "testdata/decoder.zip"
+	data, err := ioutil.ReadFile(fn)
+	if err != nil {
+		b.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		b.Fatal(err)
+	}
+	for _, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, ".zst") {
+			continue
+		}
+		b.Run(tt.Name, func(b *testing.B) {
+			tt := tt
+			r, err := tt.Open()
+			if err != nil {
+				b.Fatal(err)
+			}
+			in, err := ioutil.ReadAll(r)
+			if err != nil {
+				b.Fatal(err)
+			}
+			got, err := zstd.Decompress(nil, in)
+			if err != nil {
+				b.Fatal(err)
+			}
+			b.SetBytes(int64(len(got)))
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				got, err = zstd.Decompress(got[:0], in)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
 func BenchmarkDecoderSilesia(b *testing.B) {
 	fn := "testdata/silesia.tar.zst"
 	data, err := ioutil.ReadFile(fn)
@@ -221,7 +267,7 @@ func BenchmarkDecoderSilesia(b *testing.B) {
 		}
 		b.Fatal(err)
 	}
-	dec, err := NewDecoder(nil)
+	dec, err := NewReader(nil)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -243,6 +289,34 @@ func BenchmarkDecoderSilesia(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
+		_, err := io.Copy(ioutil.Discard, dec)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkDecoderSilesiaCgo(b *testing.B) {
+	fn := "testdata/silesia.tar.zst"
+	data, err := ioutil.ReadFile(fn)
+	if err != nil {
+		if os.IsNotExist(err) {
+			b.Skip("Missing testdata/silesia.tar.zst")
+			return
+		}
+		b.Fatal(err)
+	}
+	dec := zstd.NewReader(bytes.NewBuffer(data))
+	n, err := io.Copy(ioutil.Discard, dec)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.SetBytes(n)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dec := zstd.NewReader(bytes.NewBuffer(data))
 		_, err := io.Copy(ioutil.Discard, dec)
 		if err != nil {
 			b.Fatal(err)
@@ -415,5 +489,24 @@ func TestPredefTables(t *testing.T) {
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("Predefined table %d incorrect, len(got) = %d, len(want) = %d", i, len(got), len(want))
 		}
+	}
+}
+
+func timeout(after time.Duration) (cancel func()) {
+	c := time.After(after)
+	cc := make(chan struct{})
+	go func() {
+		select {
+		case <-cc:
+			return
+		case <-c:
+			buf := make([]byte, 1<<20)
+			stacklen := runtime.Stack(buf, true)
+			log.Printf("=== Timeout, assuming deadlock ===\n*** goroutine dump...\n%s\n*** end\n", string(buf[:stacklen]))
+			os.Exit(2)
+		}
+	}()
+	return func() {
+		close(cc)
 	}
 }

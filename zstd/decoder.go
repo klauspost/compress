@@ -4,13 +4,11 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"runtime"
 	"sync"
 )
 
 type Decoder struct {
-	concurrent int
-	lowMem     bool
+	o decoderOptions
 
 	// Unreferenced decoders, ready for use
 	decoders chan *dBlock
@@ -47,28 +45,43 @@ var (
 	ErrDecoderClosed = errors.New("decoder used after Close")
 )
 
-// NewDecoder creates a new decoder.
+// NewReader creates a new decoder.
 // A nil Reader can be provided in which case Reset can be used to start a decode.
-func NewDecoder(r io.Reader, opts ...interface{}) (*Decoder, error) {
+//
+// A Decoder can be used in two modes:
+//
+// 1) As a stream, or
+// 2) For stateless decoding using DecodeAll or DecodeBuffer.
+//
+// Only a single stream can be decoded concurrently, but the same decoder
+// can run multiple concurrent stateless decodes. It is even possible to
+// use stateless decodes while a stream is being decoded.
+// For best speed it is recommended to keep track of
+//
+// The Reset function can be used to initiate a new stream, which is will considerably
+// reduce the allocations normally caused by NewReader.
+func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
 	d := Decoder{
-		concurrent: runtime.GOMAXPROCS(0),
-		stream:     make(chan decodeStream, 1),
+		stream: make(chan decodeStream, 1),
 	}
-	d.decOut = make(chan chan decodeOutput, d.concurrent)
-	d.current.output = make(chan decodeOutput, d.concurrent)
+	d.o.setDefault()
+	for _, o := range opts {
+		err := o(&d.o)
+		if err != nil {
+			return nil, err
+		}
+	}
+	d.decOut = make(chan chan decodeOutput, d.o.concurrent)
+	d.current.output = make(chan decodeOutput, d.o.concurrent)
 
 	// Create decoders
-	d.decoders = make(chan *dBlock, d.concurrent)
-	for i := 0; i < d.concurrent; i++ {
-		d.decoders <- newDBlock(d.lowMem)
+	d.decoders = make(chan *dBlock, d.o.concurrent)
+	for i := 0; i < d.o.concurrent; i++ {
+		d.decoders <- newDBlock(d.o.lowMem)
 	}
 
 	// Start stream decoders.
-	nStreamDecs := d.concurrent
-	if d.lowMem {
-		nStreamDecs = 1
-	}
-	for i := 0; i < nStreamDecs; i++ {
+	for i := 0; i < d.o.concurrent; i++ {
 		go d.startStreamDecoder()
 	}
 	if r == nil {
@@ -177,7 +190,7 @@ func (d *Decoder) DecodeBuffer(input *bytes.Buffer, dst []byte) ([]byte, error) 
 	select {
 	case output = <-d.decOut:
 	default:
-		output = make(chan decodeOutput, d.concurrent)
+		output = make(chan decodeOutput, d.o.concurrent)
 	}
 	if cap(dst) == 0 {
 		// Allocate a reasonable buffer if nothing was provided.
@@ -277,9 +290,7 @@ func (d *Decoder) startStreamDecoder() {
 	d.streamWg.Add(1)
 	defer d.streamWg.Done()
 
-	frame := newDFrame()
-	frame.concurrent = d.concurrent
-	frame.lowMem = d.lowMem
+	frame := newDFrame(d.o)
 	done := frame.frameDone
 
 	for {

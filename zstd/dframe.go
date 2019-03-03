@@ -8,12 +8,12 @@ import (
 	"hash"
 	"io"
 	"io/ioutil"
-	"runtime"
 
 	"github.com/cespare/xxhash"
 )
 
 type dFrame struct {
+	o            decoderOptions
 	br           *bufio.Reader
 	crc          hash.Hash64
 	stopDecoding chan struct{}
@@ -32,11 +32,6 @@ type dFrame struct {
 
 	// In order queue of blocks being decoded.
 	decoding chan *dBlock
-
-	// Use as little memory as possible.
-	lowMem bool
-	// Number of in-flight decoders
-	concurrent int
 
 	// Frame history passed between blocks
 	history history
@@ -69,10 +64,10 @@ var (
 	skippableFrameMagic = []byte{0x18, 0x4d, 0x2a}
 )
 
-func newDFrame() *dFrame {
+func newDFrame(o decoderOptions) *dFrame {
 	d := dFrame{
+		o:             o,
 		maxWindowSize: 1 << 30,
-		concurrent:    runtime.GOMAXPROCS(0),
 		stopDecoding:  make(chan struct{}, 0),
 		frameDone:     make(chan *bufio.Reader, 0),
 	}
@@ -88,7 +83,7 @@ func (d *dFrame) reset(r io.Reader) error {
 		d.br = br
 	} else {
 		if d.br == nil {
-			if d.lowMem {
+			if d.o.lowMem {
 				// Use 4K default.
 				d.br = bufio.NewReader(r)
 			} else {
@@ -98,8 +93,8 @@ func (d *dFrame) reset(r io.Reader) error {
 			d.br.Reset(r)
 		}
 	}
-	if cap(d.decoding) < d.concurrent {
-		d.decoding = make(chan *dBlock, d.concurrent)
+	if cap(d.decoding) < d.o.concurrent {
+		d.decoding = make(chan *dBlock, d.o.concurrent)
 	}
 	d.HasCheckSum = false
 	d.WindowSize = 0
@@ -251,12 +246,12 @@ func (d *dFrame) reset(r io.Reader) error {
 	}
 	d.history.windowSize = int(d.WindowSize)
 	d.history.maxSize = d.history.windowSize + maxBlockSize
-	if !d.lowMem && !d.SingleSegment {
+	if !d.o.lowMem && !d.SingleSegment {
 		// set max extra size history to 20MB.
 		d.history.maxSize = d.history.windowSize + maxBlockSize*10
 	}
 	// re-alloc if more than one extra block size.
-	if d.lowMem && cap(d.history.b) > d.history.maxSize+maxBlockSize {
+	if d.o.lowMem && cap(d.history.b) > d.history.maxSize+maxBlockSize {
 		d.history.b = make([]byte, 0, d.history.maxSize)
 	}
 	if cap(d.history.b) < d.history.maxSize {

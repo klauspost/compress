@@ -77,7 +77,7 @@ type dBlock struct {
 	input       chan struct{}
 	result      chan decodeOutput
 	sequenceBuf []seq
-	tmp         [3]byte
+	tmp         [4]byte
 }
 
 func (b *dBlock) String() string {
@@ -102,7 +102,7 @@ func newDBlock(lowMem bool) *dBlock {
 // Input must be a start of a block and will be at the end of the block when returned.
 func (b *dBlock) reset(br io.Reader, windowSize uint64) error {
 	b.WindowSize = windowSize
-	_, err := io.ReadFull(br, b.tmp[:])
+	_, err := io.ReadFull(br, b.tmp[:3])
 	if err != nil {
 		if debug {
 			println("Reading block header:", err)
