@@ -160,6 +160,12 @@ func (b *dBlock) reset(br io.Reader, windowSize uint64) error {
 	return nil
 }
 
+func (b *dBlock) sendEOS() {
+	b.Last = true
+	b.Type = BlockTypeReserved
+	b.input <- struct{}{}
+}
+
 // Close will release resources.
 // Closed dBlock cannot be reset.
 func (b *dBlock) Close() {
@@ -196,7 +202,6 @@ func (b *dBlock) startDecoder() {
 			}
 			hist := <-b.history
 			hist.append(o.b)
-			// TODO: We should check if result is closed.
 			b.result <- o
 		case BlockTypeRaw:
 			o := decodeOutput{
@@ -206,7 +211,6 @@ func (b *dBlock) startDecoder() {
 			}
 			hist := <-b.history
 			hist.append(o.b)
-			// TODO: We should check if result is closed.
 			b.result <- o
 		case BlockTypeCompressed:
 			err := b.decodeCompressed()
@@ -219,6 +223,14 @@ func (b *dBlock) startDecoder() {
 				println("Decompressed to ", len(b.dst), "bytes, error:", err)
 			}
 			b.result <- o
+		case BlockTypeReserved:
+			// Used for returning EOS.
+			<-b.history
+			b.result <- decodeOutput{
+				d:   nil,
+				b:   nil,
+				err: io.EOF,
+			}
 		default:
 			panic("Invalid block type")
 		}

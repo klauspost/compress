@@ -13,12 +13,12 @@ import (
 )
 
 type dFrame struct {
-	o            decoderOptions
-	br           *bufio.Reader
-	crc          hash.Hash64
-	stopDecoding chan struct{}
-	frameDone    chan *bufio.Reader
-	tmp          [8]byte
+	o   decoderOptions
+	br  *bufio.Reader
+	crc hash.Hash64
+	//stopDecoding chan struct{}
+	frameDone chan *bufio.Reader
+	tmp       [8]byte
 
 	WindowSize       uint64
 	DictionaryID     uint32
@@ -68,8 +68,8 @@ func newDFrame(o decoderOptions) *dFrame {
 	d := dFrame{
 		o:             o,
 		maxWindowSize: 1 << 30,
-		stopDecoding:  make(chan struct{}, 0),
-		frameDone:     make(chan *bufio.Reader, 0),
+		//	stopDecoding:  make(chan struct{}, 0),
+		frameDone: make(chan *bufio.Reader, 0),
 	}
 	return &d
 }
@@ -278,6 +278,13 @@ func (d *dFrame) next(block *dBlock) error {
 	return nil
 }
 
+func (d *dFrame) sendEOS(block *dBlock) {
+	println("sending EOS")
+	block.sendEOS()
+	d.decoding <- block
+}
+
+/*
 // addDecoder will add another decoder that is decoding the next block.
 // If io.EOF is returned, the added decoder is decoding
 // the last block of the frame.
@@ -294,6 +301,7 @@ func (d *dFrame) addDecoder(dec *dBlock) error {
 	}
 	return nil
 }
+*/
 
 // checkCRC will check the checksum if the frame has one.
 // Will return ErrCRCMismatch if crc check failed, otherwise nil.
@@ -334,7 +342,7 @@ func (d *dFrame) Close() {
 // The decoder will stop as soon as an error occurs or at end of frame.
 // When the frame has finished decoding the *bufio.Reader
 // containing the remaining input will be sent on dFrame.frameDone.
-func (d *dFrame) startDecoder(writer chan<- decodeOutput) {
+func (d *dFrame) startDecoder(stream decodeStream) {
 	// TODO: Init to dictionary
 	d.history.reset()
 	defer func() {
@@ -350,7 +358,7 @@ func (d *dFrame) startDecoder(writer chan<- decodeOutput) {
 		r := <-block.result
 		if r.err != nil {
 			println("Result contained error", r.err)
-			writer <- r
+			stream.output <- r
 			return
 		}
 		if !block.Last {
@@ -376,15 +384,15 @@ func (d *dFrame) startDecoder(writer chan<- decodeOutput) {
 				if n != len(r.b) {
 					r.err = io.ErrShortWrite
 				}
-				writer <- r
+				stream.output <- r
 			}
 		}
 		if block.Last {
 			r.err = d.checkCRC()
-			writer <- r
+			stream.output <- r
 			return
 		}
-		writer <- r
+		stream.output <- r
 		if next == nil {
 			// There was no decoder available, we wait for one now that we have sent to the writer.
 			if debug {
