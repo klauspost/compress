@@ -83,7 +83,7 @@ func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
 	// Create decoders
 	d.decoders = make(chan *blockDec, d.o.concurrent)
 	for i := 0; i < d.o.concurrent; i++ {
-		d.decoders <- newDBlock(d.o.lowMem)
+		d.decoders <- newBlockDec(d.o.lowMem)
 	}
 
 	// Start stream decoders.
@@ -332,7 +332,7 @@ func (d *Decoder) startStreamDecoder() {
 	//println("creating stream decoder")
 	d.streamWg.Add(1)
 	defer d.streamWg.Done()
-	frame := newDFrame(d.o)
+	frame := newFrameDec(d.o)
 	done := frame.frameDone
 
 	for {

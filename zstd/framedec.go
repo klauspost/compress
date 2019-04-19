@@ -64,7 +64,7 @@ var (
 	skippableFrameMagic = []byte{0x18, 0x4d, 0x2a}
 )
 
-func newDFrame(o decoderOptions) *frameDec {
+func newFrameDec(o decoderOptions) *frameDec {
 	d := frameDec{
 		o:             o,
 		maxWindowSize: 1 << 30,

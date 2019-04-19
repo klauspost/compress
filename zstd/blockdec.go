@@ -97,7 +97,7 @@ func (b *blockDec) String() string {
 	return fmt.Sprintf("Steam Size: %d, Type: %v, Last: %t, Window: %d", len(b.data), b.Type, b.Last, b.WindowSize)
 }
 
-func newDBlock(lowMem bool) *blockDec {
+func newBlockDec(lowMem bool) *blockDec {
 	b := blockDec{
 		lowMem:  lowMem,
 		result:  make(chan decodeOutput, 1),
