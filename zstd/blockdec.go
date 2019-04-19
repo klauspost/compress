@@ -63,14 +63,24 @@ var (
 	}}
 )
 
-type dBlock struct {
-	data       []byte
-	dst        []byte
+type blockDec struct {
+	// Raw source data of the block.
+	data []byte
+
+	// Destination of the decoded data.
+	dst []byte
+
+	// Buffer for literals data.
 	literalBuf []byte
+
+	// Window size of the block.
 	WindowSize uint64
 	Type       BlockType
 	RLESize    uint32
-	Last       bool
+
+	// Is this the last block of a frame?
+	Last bool
+
 	// Use less memory
 	lowMem      bool
 	history     chan *history
@@ -80,15 +90,15 @@ type dBlock struct {
 	tmp         [4]byte
 }
 
-func (b *dBlock) String() string {
+func (b *blockDec) String() string {
 	if b == nil {
 		return "<nil>"
 	}
 	return fmt.Sprintf("Steam Size: %d, Type: %v, Last: %t, Window: %d", len(b.data), b.Type, b.Last, b.WindowSize)
 }
 
-func newDBlock(lowMem bool) *dBlock {
-	b := dBlock{
+func newDBlock(lowMem bool) *blockDec {
+	b := blockDec{
 		lowMem:  lowMem,
 		result:  make(chan decodeOutput, 1),
 		input:   make(chan struct{}, 1),
@@ -100,7 +110,7 @@ func newDBlock(lowMem bool) *dBlock {
 
 // reset will reset the block.
 // Input must be a start of a block and will be at the end of the block when returned.
-func (b *dBlock) reset(br io.Reader, windowSize uint64) error {
+func (b *blockDec) reset(br io.Reader, windowSize uint64) error {
 	b.WindowSize = windowSize
 	_, err := io.ReadFull(br, b.tmp[:3])
 	if err != nil {
@@ -160,90 +170,105 @@ func (b *dBlock) reset(br io.Reader, windowSize uint64) error {
 	return nil
 }
 
-func (b *dBlock) sendEOS() {
+// sendEOF will make the decoder send EOF on this frame.
+func (b *blockDec) sendEOF() {
 	b.Last = true
 	b.Type = BlockTypeReserved
 	b.input <- struct{}{}
 }
 
 // Close will release resources.
-// Closed dBlock cannot be reset.
-func (b *dBlock) Close() {
+// Closed blockDec cannot be reset.
+func (b *blockDec) Close() {
 	close(b.input)
 	close(b.history)
 	close(b.result)
 }
 
-// decode will prepare decoding the block when it receives the history.
-func (b *dBlock) startDecoder() {
+// decode will prepare decoding the block when it receives input.
+func (b *blockDec) startDecoder() {
 	for {
 		_, ok := <-b.input
 		if !ok {
 			return
 		}
-		//println("dBlock: Got block input")
-		switch b.Type {
-		case BlockTypeRLE:
-			if cap(b.dst) < int(b.RLESize) {
-				if b.lowMem {
-					b.dst = make([]byte, b.RLESize)
-				} else {
-					b.dst = make([]byte, maxBlockSize)
-				}
+		b.decode(nil)
+	}
+}
+
+// decode will prepare decoding the block when it receives the history.
+// If history is provided, it will not fetch it from the channel.
+func (b *blockDec) decode(hist *history) {
+	//println("blockDec: Got block input")
+	switch b.Type {
+	case BlockTypeRLE:
+		if cap(b.dst) < int(b.RLESize) {
+			if b.lowMem {
+				b.dst = make([]byte, b.RLESize)
+			} else {
+				b.dst = make([]byte, maxBlockSize)
 			}
-			o := decodeOutput{
-				d:   b,
-				b:   b.dst[:b.RLESize],
-				err: nil,
-			}
-			v := b.data[0]
-			for i := range o.b {
-				o.b[i] = v
-			}
-			hist := <-b.history
-			hist.append(o.b)
-			b.result <- o
-		case BlockTypeRaw:
-			o := decodeOutput{
-				d:   b,
-				b:   b.data,
-				err: nil,
-			}
-			hist := <-b.history
-			hist.append(o.b)
-			b.result <- o
-		case BlockTypeCompressed:
-			err := b.decodeCompressed()
-			o := decodeOutput{
-				d:   b,
-				b:   b.dst,
-				err: err,
-			}
-			if debug {
-				println("Decompressed to ", len(b.dst), "bytes, error:", err)
-			}
-			b.result <- o
-		case BlockTypeReserved:
-			// Used for returning EOS.
-			<-b.history
-			b.result <- decodeOutput{
-				d:   nil,
-				b:   nil,
-				err: io.EOF,
-			}
-		default:
-			panic("Invalid block type")
+		}
+		o := decodeOutput{
+			d:   b,
+			b:   b.dst[:b.RLESize],
+			err: nil,
+		}
+		v := b.data[0]
+		for i := range o.b {
+			o.b[i] = v
+		}
+		if hist == nil {
+			hist = <-b.history
+		}
+		hist.append(o.b)
+		b.result <- o
+	case BlockTypeRaw:
+		o := decodeOutput{
+			d:   b,
+			b:   b.data,
+			err: nil,
+		}
+		if hist == nil {
+			hist = <-b.history
+		}
+		hist.append(o.b)
+		b.result <- o
+	case BlockTypeCompressed:
+		err := b.decodeCompressed(hist)
+		o := decodeOutput{
+			d:   b,
+			b:   b.dst,
+			err: err,
 		}
 		if debug {
-			println("dBlock: Finished block")
+			println("Decompressed to ", len(b.dst), "bytes, error:", err)
 		}
+		b.result <- o
+	case BlockTypeReserved:
+		// Used for returning EOS.
+		if hist == nil {
+			<-b.history
+		}
+		b.result <- decodeOutput{
+			d:   nil,
+			b:   nil,
+			err: io.EOF,
+		}
+	default:
+		panic("Invalid block type")
+	}
+	if debug {
+		println("blockDec: Finished block")
 	}
 }
 
 var ErrBlockTooSmall = errors.New("block too small")
 
-// decodeCompressed ...
-func (b *dBlock) decodeCompressed() error {
+// decodeCompressed will start decompressing a block.
+// If no history is supplied the decoder will decode as much as possible
+// before fetching from blockDec.history
+func (b *blockDec) decodeCompressed(hist *history) error {
 	b.dst = b.dst[:0]
 	in := b.data
 	// There must be at least one byte for Literals_Block_Type and one for Sequences_Section_Header
@@ -513,7 +538,9 @@ func (b *dBlock) decodeCompressed() error {
 
 	// Wait for history.
 	// All time spent after this is critical since it is strictly sequential.
-	hist := <-b.history
+	if hist == nil {
+		hist = <-b.history
+	}
 
 	// Decode treeless literal block.
 	if litType == LiteralsBlockTreeless {
@@ -672,7 +699,7 @@ func (s *sequenceDecoders) decode(seqs int, br *bitReader, hist []byte) error {
 		}
 
 		if debug {
-			println("Seq", seqs-i, "Litlen:", litLen, "matchOff:", matchOff, "matchLen:", matchLen)
+			//println("Seq", seqs-i, "Litlen:", litLen, "matchOff:", matchOff, "matchLen:", matchLen)
 		}
 
 		if litLen > len(s.literals) {

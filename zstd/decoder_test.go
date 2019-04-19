@@ -2,6 +2,7 @@ package zstd
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -18,7 +19,7 @@ import (
 )
 
 func TestNewDecoder(t *testing.T) {
-	defer timeout(1 * time.Second)()
+	defer timeout(10 * time.Second)()
 	testDecoderFile(t, "testdata/decoder.zip")
 	dec, err := NewReader(nil)
 	if err != nil {
@@ -28,7 +29,7 @@ func TestNewDecoder(t *testing.T) {
 }
 
 func TestNewDecoderGood(t *testing.T) {
-	defer timeout(30 * time.Second)()
+	defer timeout(10 * time.Second)()
 	testDecoderFile(t, "testdata/good.zip")
 	dec, err := NewReader(nil)
 	if err != nil {
@@ -93,6 +94,43 @@ func TestNewDecoderBigFile(t *testing.T) {
 	elapsed := time.Since(start)
 	mbpersec := (float64(n) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
 	t.Logf("Decoded %d bytes with %f.2 MB/s", n, mbpersec)
+}
+
+func TestDecoderRegression(t *testing.T) {
+	defer timeout(1 * time.Second)()
+	data, err := ioutil.ReadFile("testdata/regression.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range zr.File {
+		dec, err := NewReader(nil, WithDecoderConcurrency(1))
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer dec.Close()
+		t.Run("Reader-"+tt.Name, func(t *testing.T) {
+			if !strings.HasSuffix(t.Name(), "") {
+				return
+			}
+			r, err := tt.Open()
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			err = dec.Reset(r)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			got, err := ioutil.ReadAll(dec)
+			fmt.Println("Received:", len(got), err)
+		})
+	}
 }
 
 func testDecoderFile(t *testing.T, fn string) {

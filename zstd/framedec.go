@@ -12,7 +12,7 @@ import (
 	"github.com/cespare/xxhash"
 )
 
-type dFrame struct {
+type frameDec struct {
 	o   decoderOptions
 	br  *bufio.Reader
 	crc hash.Hash64
@@ -31,7 +31,7 @@ type dFrame struct {
 	maxWindowSize uint64
 
 	// In order queue of blocks being decoded.
-	decoding chan *dBlock
+	decoding chan *blockDec
 
 	// Frame history passed between blocks
 	history history
@@ -64,8 +64,8 @@ var (
 	skippableFrameMagic = []byte{0x18, 0x4d, 0x2a}
 )
 
-func newDFrame(o decoderOptions) *dFrame {
-	d := dFrame{
+func newDFrame(o decoderOptions) *frameDec {
+	d := frameDec{
 		o:             o,
 		maxWindowSize: 1 << 30,
 		//	stopDecoding:  make(chan struct{}, 0),
@@ -78,7 +78,7 @@ func newDFrame(o decoderOptions) *dFrame {
 // If nothing can be read from the input, io.EOF will be returned.
 // Any other error indicated that the stream contained data, but
 // there was a problem.
-func (d *dFrame) reset(r io.Reader) error {
+func (d *frameDec) reset(r io.Reader) error {
 	if br, ok := r.(*bufio.Reader); ok {
 		d.br = br
 	} else {
@@ -94,7 +94,7 @@ func (d *dFrame) reset(r io.Reader) error {
 		}
 	}
 	if cap(d.decoding) < d.o.concurrent {
-		d.decoding = make(chan *dBlock, d.o.concurrent)
+		d.decoding = make(chan *blockDec, d.o.concurrent)
 	}
 	d.HasCheckSum = false
 	d.WindowSize = 0
@@ -261,11 +261,12 @@ func (d *dFrame) reset(r io.Reader) error {
 }
 
 // next will start decoding the next block from stream.
-func (d *dFrame) next(block *dBlock) error {
+func (d *frameDec) next(block *blockDec) error {
 	println("decoding new block")
 	err := block.reset(d.br, d.WindowSize)
 	if err != nil {
 		println("block error:", err)
+		d.sendEOF(block)
 		return err
 	}
 	println("next block:", block)
@@ -278,9 +279,11 @@ func (d *dFrame) next(block *dBlock) error {
 	return nil
 }
 
-func (d *dFrame) sendEOS(block *dBlock) {
-	println("sending EOS")
-	block.sendEOS()
+// sendEOF will queue an EOF block on the frame.
+// This will cause the frame decoder to return when it encounters the block.
+func (d *frameDec) sendEOF(block *blockDec) {
+	println("sending EOF")
+	block.sendEOF()
 	d.decoding <- block
 }
 
@@ -288,7 +291,7 @@ func (d *dFrame) sendEOS(block *dBlock) {
 // addDecoder will add another decoder that is decoding the next block.
 // If io.EOF is returned, the added decoder is decoding
 // the last block of the frame.
-func (d *dFrame) addDecoder(dec *dBlock) error {
+func (d *frameDec) addDecoder(dec *blockDec) error {
 	err := dec.reset(d.br, d.WindowSize)
 	if err != nil {
 		d.stopDecoding <- struct{}{}
@@ -305,7 +308,7 @@ func (d *dFrame) addDecoder(dec *dBlock) error {
 
 // checkCRC will check the checksum if the frame has one.
 // Will return ErrCRCMismatch if crc check failed, otherwise nil.
-func (d *dFrame) checkCRC() error {
+func (d *frameDec) checkCRC() error {
 	if !d.HasCheckSum {
 		return nil
 	}
@@ -334,26 +337,23 @@ func (d *dFrame) checkCRC() error {
 	return nil
 }
 
-func (d *dFrame) Close() {
-	// TODO: Find some way to signal we are done to startDecoder
-}
-
 // startDecoder will start decoding blocks and write them to the writer.
 // The decoder will stop as soon as an error occurs or at end of frame.
 // When the frame has finished decoding the *bufio.Reader
-// containing the remaining input will be sent on dFrame.frameDone.
-func (d *dFrame) startDecoder(stream decodeStream) {
+// containing the remaining input will be sent on frameDec.frameDone.
+func (d *frameDec) startDecoder(stream decodeStream) {
 	// TODO: Init to dictionary
 	d.history.reset()
 	defer func() {
 		println("frame decoder done, sending remaining bit stream")
 		d.frameDone <- d.br
+		println("remaining bit stream sent")
 	}()
 	// Get decoder for first block.
 	block := <-d.decoding
 	block.history <- &d.history
 	for {
-		var next *dBlock
+		var next *blockDec
 		// Get result
 		r := <-block.result
 		if r.err != nil {

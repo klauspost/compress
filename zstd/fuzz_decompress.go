@@ -4,28 +4,27 @@ package zstd
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"io/ioutil"
-	"runtime"
-	"time"
 )
 
 func Fuzz(data []byte) int {
-	cc := make(chan struct{})
-	defer close(cc)
-	go func() {
-		c := time.After(5 * time.Second)
-		select {
-		case <-cc:
-			return
-		case <-c:
-			buf := make([]byte, 1<<20)
-			stacklen := runtime.Stack(buf, true)
-			msg := fmt.Sprintf("=== Timeout, assuming deadlock ===\n*** goroutine dump...\n%s\n*** end\n", string(buf[:stacklen]))
-			panic(msg)
-		}
-	}()
+	/*
+		cc := make(chan struct{})
+		defer close(cc)
+		go func() {
+			c := time.After(5 * time.Second)
+			select {
+			case <-cc:
+				return
+			case <-c:
+				buf := make([]byte, 1<<20)
+				stacklen := runtime.Stack(buf, true)
+				msg := fmt.Sprintf("=== Timeout, assuming deadlock ===\n*** goroutine dump...\n%s\n*** end\n", string(buf[:stacklen]))
+				panic(msg)
+			}
+		}()
+	*/
 	dec, err := NewReader(bytes.NewBuffer(data))
 	if err != nil {
 		return 0
