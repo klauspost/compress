@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"sync"
 )
 
 type Decoder struct {
@@ -14,19 +13,13 @@ type Decoder struct {
 	decoders chan *blockDec
 
 	// Streams ready to be decoded.
-	stream chan decodeStream
+	//stream chan decodeStream
 
 	// Current read position used for Reader functionality.
 	current decoderState
 
 	// Custom dictionaries
 	dicts map[uint32]struct{}
-
-	// decode output for DecodeAll
-	decOut chan chan decodeOutput
-
-	// streamWg is the waitgroup for all streams
-	streamWg sync.WaitGroup
 }
 
 // decoderState is used for maintaining state when the decoder
@@ -36,9 +29,7 @@ type decoderState struct {
 	// output in order
 	output chan decodeOutput
 
-	// cancel remaining output.
-	cancel chan struct{}
-
+	frame   *frameDec
 	flushed bool
 }
 
@@ -66,9 +57,7 @@ var (
 // The Reset function can be used to initiate a new stream, which is will considerably
 // reduce the allocations normally caused by NewReader.
 func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
-	d := Decoder{
-		stream: make(chan decodeStream, 1),
-	}
+	d := Decoder{}
 	d.o.setDefault()
 	for _, o := range opts {
 		err := o(&d.o)
@@ -76,7 +65,6 @@ func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
 			return nil, err
 		}
 	}
-	d.decOut = make(chan chan decodeOutput, d.o.concurrent)
 	d.current.output = make(chan decodeOutput, d.o.concurrent)
 	d.current.flushed = true
 
@@ -88,7 +76,7 @@ func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
 
 	// Start stream decoders.
 	//for i := 0; i < d.o.concurrent; i++ {
-	go d.startStreamDecoder()
+	//go d.startStreamDecoder()
 	//}
 	if r == nil {
 		return &d, nil
@@ -131,6 +119,9 @@ func (d *Decoder) Reset(r io.Reader) error {
 	if d.current.err == ErrDecoderClosed {
 		return d.current.err
 	}
+	if d.current.frame == nil {
+		d.current.frame = newFrameDec(d.o)
+	}
 	if r == nil {
 		return errors.New("nil Reader sent as input")
 	}
@@ -140,29 +131,25 @@ func (d *Decoder) Reset(r io.Reader) error {
 	}
 	d.drainOutput()
 
+	err := d.current.frame.reset(r)
+	if err != nil {
+		return err
+	}
+
 	// Remove current block.
 	d.current.decodeOutput = decodeOutput{}
 	d.current.err = nil
-	d.current.cancel = make(chan struct{})
 	d.current.flushed = false
 	d.current.d = nil
 
-	//println("Sending stream")
-	d.stream <- decodeStream{
-		r:      r,
-		output: d.current.output,
-		cancel: d.current.cancel,
-	}
+	d.current.frame.frameDone.Add(1)
+	go d.current.frame.startDecoder(d.current.output)
+
 	return nil
 }
 
 // drainOutput will drain the output until errEndOfStream is sent.
 func (d *Decoder) drainOutput() {
-	if d.current.cancel != nil {
-		println("cancelling current")
-		close(d.current.cancel)
-		d.current.cancel = nil
-	}
 	if d.current.output == nil || d.current.flushed {
 		println("current already flushed")
 		return
@@ -209,58 +196,50 @@ func (d *Decoder) WriteTo(w io.Writer) (int64, error) {
 // DecodeAll can be used concurrently. If you plan to, do not use the low memory option.
 // The Decoder concurrency limits will be respected.
 func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
-	return d.DecodeBuffer(bytes.NewBuffer(input), dst)
-}
-
-// DecodeBuffer allows stateless decoding of a blob of bytes.
-// Output will be appended to dst, so if the destination size is known
-// you can pre-allocate the destination slice to avoid allocations.
-// DecodeAll can be used concurrently. If you plan to, do not use the low memory option.
-// The Decoder concurrency limits will be respected.
-func (d *Decoder) DecodeBuffer(input *bytes.Buffer, dst []byte) ([]byte, error) {
-	var output chan decodeOutput
-	select {
-	case output = <-d.decOut:
-	default:
-		output = make(chan decodeOutput, d.o.concurrent)
+	if d.current.frame == nil {
+		// FIXME - we need a safe frame.
+		d.current.frame = newFrameDec(d.o)
 	}
+	f := d.current.frame
+	dec := <-d.decoders
+	defer func() {
+		d.decoders <- dec
+	}()
 	if cap(dst) == 0 {
-		// Allocate a reasonable buffer if nothing was provided.
-		dst = make([]byte, 0, input.Len())
+		dst = make([]byte, 0, 2<<20)
 	}
-	d.stream <- decodeStream{
-		r:      input,
-		output: output,
-	}
-	dst = dst[:0]
+
 	for {
-		o := <-output
-		dst = append(dst, o.b...)
-		if o.d != nil {
-			d.decoders <- o.d
+		err := f.resetBuf(input)
+		if err == io.EOF {
+			return dst, nil
 		}
-		if o.err != nil {
-			if o.err == io.EOF {
-				o.err = nil
+		if err != nil {
+			return dst, err
+		}
+		if f.FrameContentSize > 0 {
+			if uint64(cap(dst)) < f.FrameContentSize {
+				dst2 := make([]byte, len(dst), len(dst)+int(f.FrameContentSize))
+				copy(dst2, dst)
+				dst = dst2
 			}
-			// Drain stream
-			for v := range output {
-				if v.err == errEndOfStream {
-					break
-				}
-			}
-			select {
-			case d.decOut <- output:
-			default:
-			}
-			return dst, o.err
+		}
+		dst, err = f.runDecoder(dst, dec)
+		if err != nil {
+			return dst, err
+		}
+		input = f.rawInput.remain()
+		if len(input) == 0 {
+			break
 		}
 	}
+	return dst, nil
 }
 
 // nextBlock returns the next block.
 // If an error occurs d.err will be set.
 func (d *Decoder) nextBlock() {
+	dec := d.current.d
 	if d.current.d != nil {
 		d.decoders <- d.current.d
 		d.current.d = nil
@@ -269,8 +248,46 @@ func (d *Decoder) nextBlock() {
 		// Keep error state.
 		return
 	}
+	if dec == nil {
+		dec = <-d.decoders
+	}
+
+	err := d.current.frame.next(dec)
+	// grab next output.
 	d.current.decodeOutput = <-d.current.output
-	//println("got", len(d.current.b), "bytes, error:", d.current.err)
+	if err == nil {
+		return
+	}
+	// Handle error
+	d.current.frame.frameDone.Wait()
+	switch err {
+	case io.EOF:
+		// Probably end of frame.
+		// Grab remaining stream and see if there are more frames.
+		br := d.current.frame.br
+		if b, err := br.Peek(4); err == io.EOF || !bytes.Equal(frameMagic, b) {
+			println("No data left on stream, or not frame magic")
+
+			// Queue an EOF
+			d.current.output <- decodeOutput{
+				err: io.EOF,
+			}
+			d.decoders <- dec
+			return
+		}
+		err = d.current.frame.reset(br)
+		if err != nil {
+			d.current.output <- decodeOutput{
+				err: err,
+			}
+			// Maybe signal we have a problem?
+		} else {
+			d.current.frame.frameDone.Add(1)
+			go d.current.frame.startDecoder(d.current.output)
+		}
+	default:
+		// The error should be queued.
+	}
 }
 
 // Close will release all resources.
@@ -280,11 +297,7 @@ func (d *Decoder) Close() {
 		return
 	}
 	d.drainOutput()
-	if d.stream != nil {
-		close(d.stream)
-		d.streamWg.Wait()
-		d.stream = nil
-	}
+
 	if d.decoders != nil {
 		close(d.decoders)
 		for dec := range d.decoders {
@@ -318,6 +331,7 @@ type decodeStream struct {
 // errEndOfStream indicates that everything from the stream was read.
 var errEndOfStream = errors.New("end-of-stream")
 
+/*
 // Create Decoder:
 // Spawn n block decoders. These accept tasks to decode a block.
 // Create goroutine that handles stream processing, this will send history to decoders as they are available.
@@ -407,3 +421,4 @@ func (d *Decoder) startStreamDecoder() {
 		stream.output <- decodeOutput{err: errEndOfStream}
 	}
 }
+*/

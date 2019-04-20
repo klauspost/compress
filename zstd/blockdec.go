@@ -88,6 +88,7 @@ type blockDec struct {
 	result      chan decodeOutput
 	sequenceBuf []seq
 	tmp         [4]byte
+	err         error
 }
 
 func (b *blockDec) String() string {
@@ -170,10 +171,69 @@ func (b *blockDec) reset(br io.Reader, windowSize uint64) error {
 	return nil
 }
 
+// reset will reset the block.
+// Input must be a start of a block and will be at the end of the block when returned.
+func (b *blockDec) resetBuf(br *byteBuf, windowSize uint64) error {
+	b.WindowSize = windowSize
+	tmp := br.readN(3)
+	if tmp == nil {
+		if debug {
+			println("Reading block header:", io.ErrUnexpectedEOF)
+		}
+		return io.ErrUnexpectedEOF
+	}
+	bh := uint32(tmp[0]) | (uint32(tmp[1]) << 8) | (uint32(tmp[2]) << 16)
+	b.Last = bh&1 != 0
+	b.Type = BlockType((bh >> 1) & 3)
+	// find size.
+	cSize := int(bh >> 3)
+	switch b.Type {
+	case BlockTypeReserved:
+		return ErrReservedBlockType
+	case BlockTypeRLE:
+		b.RLESize = uint32(cSize)
+		cSize = 1
+	case BlockTypeCompressed:
+		if debug {
+			println("Data size on stream:", cSize)
+		}
+		b.RLESize = 0
+		if cSize > maxCompressedBlockSize || uint64(cSize) > b.WindowSize {
+			if debug {
+				printf("compressed block too big: %+v\n", b)
+			}
+			return ErrCompressedSizeTooBig
+		}
+	default:
+		b.RLESize = 0
+	}
+
+	// Read block data.
+	if cap(b.data) < cSize {
+		if b.lowMem {
+			b.data = make([]byte, 0, cSize)
+		} else {
+			b.data = make([]byte, 0, maxBlockSize)
+		}
+	}
+	if cap(b.dst) <= maxBlockSize {
+		b.dst = make([]byte, 0, maxBlockSize+1)
+	}
+	b.data = br.readN(cSize)
+	if b.data == nil {
+		if debug {
+			println("Reading block:", io.ErrUnexpectedEOF)
+		}
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+
 // sendEOF will make the decoder send EOF on this frame.
-func (b *blockDec) sendEOF() {
+func (b *blockDec) sendErr(err error) {
 	b.Last = true
 	b.Type = BlockTypeReserved
+	b.err = err
 	b.input <- struct{}{}
 }
 
@@ -192,13 +252,13 @@ func (b *blockDec) startDecoder() {
 		if !ok {
 			return
 		}
-		b.decode(nil)
+		b.decode()
 	}
 }
 
 // decode will prepare decoding the block when it receives the history.
 // If history is provided, it will not fetch it from the channel.
-func (b *blockDec) decode(hist *history) {
+func (b *blockDec) decode() {
 	//println("blockDec: Got block input")
 	switch b.Type {
 	case BlockTypeRLE:
@@ -218,9 +278,7 @@ func (b *blockDec) decode(hist *history) {
 		for i := range o.b {
 			o.b[i] = v
 		}
-		if hist == nil {
-			hist = <-b.history
-		}
+		hist := <-b.history
 		hist.append(o.b)
 		b.result <- o
 	case BlockTypeRaw:
@@ -229,13 +287,12 @@ func (b *blockDec) decode(hist *history) {
 			b:   b.data,
 			err: nil,
 		}
-		if hist == nil {
-			hist = <-b.history
-		}
+		hist := <-b.history
 		hist.append(o.b)
 		b.result <- o
 	case BlockTypeCompressed:
-		err := b.decodeCompressed(hist)
+		b.dst = b.dst[:0]
+		err := b.decodeCompressed(nil)
 		o := decodeOutput{
 			d:   b,
 			b:   b.dst,
@@ -246,14 +303,12 @@ func (b *blockDec) decode(hist *history) {
 		}
 		b.result <- o
 	case BlockTypeReserved:
-		// Used for returning EOS.
-		if hist == nil {
-			<-b.history
-		}
+		// Used for returning erors.
+		<-b.history
 		b.result <- decodeOutput{
-			d:   nil,
+			d:   b,
 			b:   nil,
-			err: io.EOF,
+			err: b.err,
 		}
 	default:
 		panic("Invalid block type")
@@ -263,14 +318,61 @@ func (b *blockDec) decode(hist *history) {
 	}
 }
 
+// decode will prepare decoding the block when it receives the history.
+// If history is provided, it will not fetch it from the channel.
+func (b *blockDec) decodeBuf(hist *history) error {
+	//println("blockDec: Got block input")
+	switch b.Type {
+	case BlockTypeRLE:
+		if cap(b.dst) < int(b.RLESize) {
+			if b.lowMem {
+				b.dst = make([]byte, b.RLESize)
+			} else {
+				b.dst = make([]byte, maxBlockSize)
+			}
+		}
+		b.dst = b.dst[:b.RLESize]
+		v := b.data[0]
+		for i := range b.dst {
+			b.dst[i] = v
+		}
+		hist.appendKeep(b.dst)
+		return nil
+	case BlockTypeRaw:
+		hist.appendKeep(b.data)
+		return nil
+	case BlockTypeCompressed:
+		saved := b.dst
+		b.dst = hist.b
+		hist.b = nil
+		err := b.decodeCompressed(hist)
+		if debug {
+			println("Decompressed to total", len(b.dst), "bytes, error:", err)
+		}
+		hist.b = b.dst
+		b.dst = saved
+		return err
+	case BlockTypeReserved:
+		// Used for returning errors.
+		return b.err
+	default:
+		panic("Invalid block type")
+	}
+	if debug {
+		println("blockDec: Finished block")
+	}
+	return nil
+}
+
 var ErrBlockTooSmall = errors.New("block too small")
 
 // decodeCompressed will start decompressing a block.
 // If no history is supplied the decoder will decode as much as possible
 // before fetching from blockDec.history
 func (b *blockDec) decodeCompressed(hist *history) error {
-	b.dst = b.dst[:0]
 	in := b.data
+	delayedHistory := hist == nil
+
 	// There must be at least one byte for Literals_Block_Type and one for Sequences_Section_Header
 	if len(in) < 2 {
 		return ErrBlockTooSmall
@@ -590,7 +692,9 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 	if nSeqs == 0 {
 		// Decompressed content is defined entirely as Literals Section content.
 		b.dst = append(b.dst, literals...)
-		hist.append(literals)
+		if delayedHistory {
+			hist.append(literals)
+		}
 		return nil
 	}
 
@@ -606,7 +710,7 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		return err
 	}
 
-	if err := seqs.initialize(br, hist, literals, b.dst[:0]); err != nil {
+	if err := seqs.initialize(br, hist, literals, b.dst); err != nil {
 		println("initializing sequences:", err)
 		return err
 	}
@@ -628,6 +732,11 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 	b.dst = seqs.out
 	seqs.out, seqs.literals, seqs.hist = nil, nil, nil
 
+	if !delayedHistory {
+		// If we don't have delayed history, no need to update.
+		hist.recentOffsets = seqs.prevOffset
+		return nil
+	}
 	if b.Last {
 		// if last block we don't care about history.
 		println("Last block, no history returned")

@@ -8,16 +8,16 @@ import (
 	"hash"
 	"io"
 	"io/ioutil"
+	"sync"
 
 	"github.com/cespare/xxhash"
 )
 
 type frameDec struct {
-	o   decoderOptions
-	br  *bufio.Reader
-	crc hash.Hash64
-	//stopDecoding chan struct{}
-	frameDone chan *bufio.Reader
+	o         decoderOptions
+	br        *bufio.Reader
+	crc       hash.Hash64
+	frameDone sync.WaitGroup
 	tmp       [8]byte
 
 	WindowSize       uint64
@@ -35,6 +35,8 @@ type frameDec struct {
 
 	// Frame history passed between blocks
 	history history
+
+	rawInput *byteBuf
 }
 
 const (
@@ -68,8 +70,6 @@ func newFrameDec(o decoderOptions) *frameDec {
 	d := frameDec{
 		o:             o,
 		maxWindowSize: 1 << 30,
-		//	stopDecoding:  make(chan struct{}, 0),
-		frameDone: make(chan *bufio.Reader, 0),
 	}
 	return &d
 }
@@ -260,13 +260,173 @@ func (d *frameDec) reset(r io.Reader) error {
 	return nil
 }
 
+// reset will read the frame header and prepare for block decoding.
+// If nothing can be read from the input, io.EOF will be returned.
+// Any other error indicated that the stream contained data, but
+// there was a problem.
+func (d *frameDec) resetBuf(in []byte) error {
+	br := byteBuf(in)
+	d.HasCheckSum = false
+	d.WindowSize = 0
+	var b []byte
+	for {
+		b = br.readN(4)
+		if b == nil {
+			return io.EOF
+		}
+		if !bytes.Equal(b[:3], skippableFrameMagic) || b[3]&0xf0 != 0x50 {
+			// Break if not skippable frame.
+			break
+		}
+		// Read size to skip
+		b = br.readN(4)
+		if b == nil {
+			println("Reading Frame Size EOF")
+			return io.ErrUnexpectedEOF
+		}
+		n := uint32(b[0]) | (uint32(b[1]) << 8) | (uint32(b[2]) << 16) | (uint32(b[3]) << 24)
+		println("Skipping frame with", n, "bytes.")
+		err := br.skipN(int(n))
+		if err != nil {
+			if debug {
+				println("Reading discarded frame", err)
+			}
+			return err
+		}
+	}
+	if !bytes.Equal(b, frameMagic) {
+		println("Got magic numbers: ", b, "want:", frameMagic)
+		return ErrMagicMismatch
+	}
+
+	// Read Frame_Header_Descriptor
+	fhd, err := br.readByte()
+	if err != nil {
+		println("Reading Frame_Header_Descriptor", err)
+		return err
+	}
+	d.SingleSegment = fhd&(1<<5) != 0
+
+	// Read Window_Descriptor
+	// https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#window_descriptor
+	d.WindowSize = 0
+	if !d.SingleSegment {
+		wd, err := br.readByte()
+		if err != nil {
+			println("Reading Window_Descriptor", err)
+			return err
+		}
+		printf("raw: %x, mantissa: %d, exponent: %d\n", wd, wd&7, wd>>3)
+		windowLog := 10 + (wd >> 3)
+		windowBase := uint64(1) << windowLog
+		windowAdd := (windowBase / 8) * uint64(wd&0x7)
+		d.WindowSize = windowBase + windowAdd
+	}
+
+	// Read Dictionary_ID
+	// https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#dictionary_id
+	d.DictionaryID = 0
+	if size := fhd & 3; size != 0 {
+		if size == 3 {
+			size = 4
+		}
+		b = br.readN(int(size))
+		if b == nil {
+			if debug {
+				println("Reading Dictionary_ID", io.ErrUnexpectedEOF)
+			}
+			return io.ErrUnexpectedEOF
+		}
+		switch size {
+		case 1:
+			d.DictionaryID = uint32(b[0])
+		case 2:
+			d.DictionaryID = uint32(b[0]) | (uint32(b[1]) << 8)
+		case 4:
+			d.DictionaryID = uint32(b[0]) | (uint32(b[1]) << 8) | (uint32(b[2]) << 16) | (uint32(b[3]) << 24)
+		}
+		if debug {
+			println("Dict size", size, "ID:", d.DictionaryID)
+		}
+	}
+
+	// Read Frame_Content_Size
+	// https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#frame_content_size
+	var fcsSize int
+	v := fhd >> 6
+	switch v {
+	case 0:
+		if d.SingleSegment {
+			fcsSize = 1
+		}
+	default:
+		fcsSize = 1 << v
+	}
+	d.FrameContentSize = 0
+	if fcsSize > 0 {
+		b := br.readN(fcsSize)
+		if b == nil {
+			println("Reading Frame content", io.ErrUnexpectedEOF)
+			return io.ErrUnexpectedEOF
+		}
+		switch fcsSize {
+		case 1:
+			d.FrameContentSize = uint64(b[0])
+		case 2:
+			// When FCS_Field_Size is 2, the offset of 256 is added.
+			d.FrameContentSize = uint64(b[0]) | (uint64(b[1]) << 8) + 256
+		case 4:
+			d.FrameContentSize = uint64(b[0]) | (uint64(b[1]) << 8) | (uint64(b[2]) << 16) | (uint64(b[3] << 24))
+		case 8:
+			d1 := uint32(b[0]) | (uint32(b[1]) << 8) | (uint32(b[2]) << 16) | (uint32(b[3]) << 24)
+			d2 := uint32(b[4]) | (uint32(b[5]) << 8) | (uint32(b[6]) << 16) | (uint32(b[7]) << 24)
+			d.FrameContentSize = uint64(d1) | (uint64(d2) << 32)
+		}
+		if debug {
+			println("field size bits:", v, "fcsSize:", fcsSize, "FrameContentSize:", d.FrameContentSize, hex.EncodeToString(d.tmp[:fcsSize]))
+		}
+	}
+	// Move this to shared.
+	d.HasCheckSum = fhd&(1<<2) != 0
+	if d.HasCheckSum {
+		if d.crc == nil {
+			d.crc = xxhash.New()
+		}
+		d.crc.Reset()
+	}
+
+	if d.WindowSize == 0 && d.SingleSegment {
+		// We may not need window in this case.
+		d.WindowSize = d.FrameContentSize
+		if d.WindowSize < minWindowSize {
+			d.WindowSize = minWindowSize
+		}
+	}
+
+	if d.WindowSize > d.maxWindowSize {
+		printf("window size %d > max %d\n", d.WindowSize, d.maxWindowSize)
+		return ErrWindowSizeExceeded
+	}
+	// The minimum Window_Size is 1 KB.
+	if d.WindowSize < minWindowSize {
+		println("got window size: ", d.WindowSize)
+		return ErrWindowSizeTooSmall
+	}
+	d.history.windowSize = int(d.WindowSize)
+	d.history.maxSize = d.history.windowSize + maxBlockSize
+	// history contains input - maybe we do something
+	d.rawInput = &br
+	return nil
+}
+
 // next will start decoding the next block from stream.
 func (d *frameDec) next(block *blockDec) error {
 	println("decoding new block")
 	err := block.reset(d.br, d.WindowSize)
 	if err != nil {
 		println("block error:", err)
-		d.sendEOF(block)
+		// Signal the frame decoder we have a problem.
+		d.sendErr(block, err)
 		return err
 	}
 	println("next block:", block)
@@ -279,32 +439,13 @@ func (d *frameDec) next(block *blockDec) error {
 	return nil
 }
 
-// sendEOF will queue an EOF block on the frame.
+// sendEOF will queue an error block on the frame.
 // This will cause the frame decoder to return when it encounters the block.
-func (d *frameDec) sendEOF(block *blockDec) {
-	println("sending EOF")
-	block.sendEOF()
+func (d *frameDec) sendErr(block *blockDec, err error) {
+	println("sending error")
+	block.sendErr(err)
 	d.decoding <- block
 }
-
-/*
-// addDecoder will add another decoder that is decoding the next block.
-// If io.EOF is returned, the added decoder is decoding
-// the last block of the frame.
-func (d *frameDec) addDecoder(dec *blockDec) error {
-	err := dec.reset(d.br, d.WindowSize)
-	if err != nil {
-		d.stopDecoding <- struct{}{}
-		return err
-	}
-	println("added decoder to frame")
-	d.decoding <- dec
-	if dec.Last {
-		return io.EOF
-	}
-	return nil
-}
-*/
 
 // checkCRC will check the checksum if the frame has one.
 // Will return ErrCRCMismatch if crc check failed, otherwise nil.
@@ -321,16 +462,24 @@ func (d *frameDec) checkCRC() error {
 	gotB[3] = gotB[4]
 
 	// We can overwrite upper tmp now
-	_, err := io.ReadFull(d.br, d.tmp[4:])
-	if err != nil {
-		if err == io.EOF {
+	want := d.tmp[4:]
+	if d.br != nil {
+		_, err := io.ReadFull(d.br, d.tmp[4:])
+		if err != nil {
+			if err == io.EOF {
+				return io.ErrUnexpectedEOF
+			}
+			return err
+		}
+	} else {
+		want = d.rawInput.readN(4)
+		if want == nil {
 			return io.ErrUnexpectedEOF
 		}
-		return err
 	}
 
-	if !bytes.Equal(gotB[:4], d.tmp[4:]) {
-		println("CRC Check Failed:", gotB[:4], "!=", d.tmp[4:])
+	if !bytes.Equal(gotB[:4], want) {
+		println("CRC Check Failed:", gotB[:4], "!=", want)
 		return ErrCRCMismatch
 	}
 	println("CRC ok")
@@ -341,13 +490,12 @@ func (d *frameDec) checkCRC() error {
 // The decoder will stop as soon as an error occurs or at end of frame.
 // When the frame has finished decoding the *bufio.Reader
 // containing the remaining input will be sent on frameDec.frameDone.
-func (d *frameDec) startDecoder(stream decodeStream) {
+func (d *frameDec) startDecoder(output chan decodeOutput) {
 	// TODO: Init to dictionary
 	d.history.reset()
 	defer func() {
-		println("frame decoder done, sending remaining bit stream")
-		d.frameDone <- d.br
-		println("remaining bit stream sent")
+		println("frame decoder done, signalling done")
+		d.frameDone.Done()
 	}()
 	// Get decoder for first block.
 	block := <-d.decoding
@@ -358,7 +506,7 @@ func (d *frameDec) startDecoder(stream decodeStream) {
 		r := <-block.result
 		if r.err != nil {
 			println("Result contained error", r.err)
-			stream.output <- r
+			output <- r
 			return
 		}
 		if !block.Last {
@@ -384,15 +532,15 @@ func (d *frameDec) startDecoder(stream decodeStream) {
 				if n != len(r.b) {
 					r.err = io.ErrShortWrite
 				}
-				stream.output <- r
+				output <- r
 			}
 		}
 		if block.Last {
 			r.err = d.checkCRC()
-			stream.output <- r
+			output <- r
 			return
 		}
-		stream.output <- r
+		output <- r
 		if next == nil {
 			// There was no decoder available, we wait for one now that we have sent to the writer.
 			if debug {
@@ -403,4 +551,37 @@ func (d *frameDec) startDecoder(stream decodeStream) {
 		}
 		block = next
 	}
+}
+
+func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {
+	// TODO: Init to dictionary
+	d.history.reset()
+	saved := d.history.b
+	d.history.b = dst
+	var err error
+	for {
+		err = dec.resetBuf(d.rawInput, d.WindowSize)
+		if err != nil {
+			break
+		}
+		err = dec.decodeBuf(&d.history)
+		if err != nil || dec.Last {
+			break
+		}
+	}
+	dst = d.history.b
+	if err == nil {
+		if d.HasCheckSum {
+			var n int
+			n, err = d.crc.Write(dst)
+			if err == nil {
+				if n != len(dst) {
+					err = io.ErrShortWrite
+				}
+			}
+			err = d.checkCRC()
+		}
+	}
+	d.history.b = saved
+	return dst, err
 }

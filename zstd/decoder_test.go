@@ -20,7 +20,7 @@ import (
 
 func TestNewDecoder(t *testing.T) {
 	defer timeout(10 * time.Second)()
-	testDecoderFile(t, "testdata/decoder.zip")
+	//testDecoderFile(t, "testdata/decoder.zip")
 	dec, err := NewReader(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -231,6 +231,9 @@ func BenchmarkDecoder_DecodeAll(b *testing.B) {
 		if !strings.HasSuffix(tt.Name, ".zst") {
 			continue
 		}
+		if strings.HasSuffix(tt.Name, "0005.zst") {
+			break
+		}
 		b.Run(tt.Name, func(b *testing.B) {
 			r, err := tt.Open()
 			if err != nil {
@@ -245,7 +248,7 @@ func BenchmarkDecoder_DecodeAll(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_, err = dec.DecodeAll(in, got)
+				_, err = dec.DecodeAll(in, got[:0])
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -267,6 +270,9 @@ func BenchmarkDecoder_DecodeAllCgo(b *testing.B) {
 	for _, tt := range zr.File {
 		if !strings.HasSuffix(tt.Name, ".zst") {
 			continue
+		}
+		if strings.HasSuffix(tt.Name, "0005.zst") {
+			break
 		}
 		b.Run(tt.Name, func(b *testing.B) {
 			tt := tt
@@ -390,7 +396,7 @@ func testDecoderDecodeAll(t *testing.T, fn string, dec *Decoder) {
 			continue
 		}
 		t.Run("ReadAll-"+tt.Name, func(t *testing.T) {
-			t.Parallel()
+			//t.Parallel()
 			r, err := tt.Open()
 			if err != nil {
 				t.Fatal(err)
@@ -399,8 +405,11 @@ func testDecoderDecodeAll(t *testing.T, fn string, dec *Decoder) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			got, err := dec.DecodeAll(in, nil)
 			wantB := want[tt.Name]
+			got, err := dec.DecodeAll(in, make([]byte, 0, len(wantB)))
+			if err != nil {
+				t.Error(err)
+			}
 			if !bytes.Equal(wantB, got) {
 				if len(wantB)+len(got) < 1000 {
 					t.Logf(" got: %v\nwant: %v", got, wantB)

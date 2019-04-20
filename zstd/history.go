@@ -58,3 +58,8 @@ func (h *history) append(b []byte) {
 	h.b = h.b[:h.windowSize]
 	copy(h.b[h.windowSize-len(b):], b)
 }
+
+// append bytes to history without ever discarding anything.
+func (h *history) appendKeep(b []byte) {
+	h.b = append(h.b, b...)
+}
