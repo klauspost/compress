@@ -297,7 +297,7 @@ type fseState struct {
 	state decSymbol
 }
 
-// Initialize and decode first state and symbol.
+// Initialize and decodeAsync first state and symbol.
 func (s *fseState) init(br *bitReader, tableLog uint8, dt []decSymbol) {
 	s.dt = dt
 	br.fill()

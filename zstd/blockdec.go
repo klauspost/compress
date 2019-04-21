@@ -184,80 +184,71 @@ func (b *blockDec) Close() {
 	close(b.result)
 }
 
-// decode will prepare decoding the block when it receives input.
+// decodeAsync will prepare decoding the block when it receives input.
+// This will separate output and history.
 func (b *blockDec) startDecoder() {
-	for {
-		_, ok := <-b.input
-		if !ok {
-			return
-		}
-		b.decode()
-	}
-}
-
-// decode will prepare decoding the block when it receives the history.
-// If history is provided, it will not fetch it from the channel.
-func (b *blockDec) decode() {
-	//println("blockDec: Got block input")
-	switch b.Type {
-	case BlockTypeRLE:
-		if cap(b.dst) < int(b.RLESize) {
-			if b.lowMem {
-				b.dst = make([]byte, b.RLESize)
-			} else {
-				b.dst = make([]byte, maxBlockSize)
+	for range b.input {
+		//println("blockDec: Got block input")
+		switch b.Type {
+		case BlockTypeRLE:
+			if cap(b.dst) < int(b.RLESize) {
+				if b.lowMem {
+					b.dst = make([]byte, b.RLESize)
+				} else {
+					b.dst = make([]byte, maxBlockSize)
+				}
 			}
-		}
-		o := decodeOutput{
-			d:   b,
-			b:   b.dst[:b.RLESize],
-			err: nil,
-		}
-		v := b.data[0]
-		for i := range o.b {
-			o.b[i] = v
-		}
-		hist := <-b.history
-		hist.append(o.b)
-		b.result <- o
-	case BlockTypeRaw:
-		o := decodeOutput{
-			d:   b,
-			b:   b.data,
-			err: nil,
-		}
-		hist := <-b.history
-		hist.append(o.b)
-		b.result <- o
-	case BlockTypeCompressed:
-		b.dst = b.dst[:0]
-		err := b.decodeCompressed(nil)
-		o := decodeOutput{
-			d:   b,
-			b:   b.dst,
-			err: err,
+			o := decodeOutput{
+				d:   b,
+				b:   b.dst[:b.RLESize],
+				err: nil,
+			}
+			v := b.data[0]
+			for i := range o.b {
+				o.b[i] = v
+			}
+			hist := <-b.history
+			hist.append(o.b)
+			b.result <- o
+		case BlockTypeRaw:
+			o := decodeOutput{
+				d:   b,
+				b:   b.data,
+				err: nil,
+			}
+			hist := <-b.history
+			hist.append(o.b)
+			b.result <- o
+		case BlockTypeCompressed:
+			b.dst = b.dst[:0]
+			err := b.decodeCompressed(nil)
+			o := decodeOutput{
+				d:   b,
+				b:   b.dst,
+				err: err,
+			}
+			if debug {
+				println("Decompressed to ", len(b.dst), "bytes, error:", err)
+			}
+			b.result <- o
+		case BlockTypeReserved:
+			// Used for returning errors.
+			<-b.history
+			b.result <- decodeOutput{
+				d:   b,
+				b:   nil,
+				err: b.err,
+			}
+		default:
+			panic("Invalid block type")
 		}
 		if debug {
-			println("Decompressed to ", len(b.dst), "bytes, error:", err)
+			println("blockDec: Finished block")
 		}
-		b.result <- o
-	case BlockTypeReserved:
-		// Used for returning erors.
-		<-b.history
-		b.result <- decodeOutput{
-			d:   b,
-			b:   nil,
-			err: b.err,
-		}
-	default:
-		panic("Invalid block type")
-	}
-	if debug {
-		println("blockDec: Finished block")
 	}
 }
 
-// decode will prepare decoding the block when it receives the history.
+// decodeAsync will prepare decoding the block when it receives the history.
 // If history is provided, it will not fetch it from the channel.
 func (b *blockDec) decodeBuf(hist *history) error {
 	//println("blockDec: Got block input")
@@ -306,7 +297,7 @@ func (b *blockDec) decodeBuf(hist *history) error {
 var ErrBlockTooSmall = errors.New("block too small")
 
 // decodeCompressed will start decompressing a block.
-// If no history is supplied the decoder will decode as much as possible
+// If no history is supplied the decoder will decodeAsync as much as possible
 // before fetching from blockDec.history
 func (b *blockDec) decodeCompressed(hist *history) error {
 	in := b.data
@@ -753,8 +744,16 @@ func (s *sequenceDecoders) decode(seqs int, br *bitReader, hist []byte) error {
 		if litLen > len(s.literals) {
 			return fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available", litLen, len(s.literals))
 		}
-		if litLen+matchLen+len(s.out) > maxBlockSize {
-			return fmt.Errorf("output (%d) bigger than max block size", litLen+matchLen+len(s.out))
+		size := litLen + matchLen + len(s.out)
+		if size > maxBlockSize {
+			return fmt.Errorf("output (%d) bigger than max block size", size)
+		}
+		if size > cap(s.out) {
+			// Not enough size, will be extremely rarely triggered,
+			// but could be if destination slice is too small for sync operations.
+			// We add maxBlockSize to the capacity.
+			s.out = append(s.out, make([]byte, maxBlockSize)...)
+			s.out = s.out[:len(s.out)-maxBlockSize]
 		}
 		if matchLen > maxMatchLen {
 			return fmt.Errorf("match len (%d) bigger than max allowed length", matchLen)
@@ -882,6 +881,7 @@ func (s *sequenceDecoders) updateAlt(br *bitReader) {
 	s.offsets.state.state = s.offsets.state.dt[c.newState+lowBits]
 }
 
+// nextFast will return new states when there are at least 4 unused bytes left on the stream when done.
 func (s *sequenceDecoders) nextFast(br *bitReader) (ll, mo, ml int) {
 	// Final will not read from stream.
 	ll, llB := s.litLengths.state.final()

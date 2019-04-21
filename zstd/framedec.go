@@ -352,7 +352,7 @@ func (d *frameDec) startDecoder(output chan decodeOutput) {
 	}
 }
 
-// runDecoder will create a sync decoder that will decode a block of data.
+// runDecoder will create a sync decoder that will decodeAsync a block of data.
 func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {
 	// TODO: Init to dictionary
 	d.history.reset()

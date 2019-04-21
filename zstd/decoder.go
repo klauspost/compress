@@ -42,7 +42,7 @@ var (
 )
 
 // NewReader creates a new decoder.
-// A nil Reader can be provided in which case Reset can be used to start a decode,
+// A nil Reader can be provided in which case Reset can be used to start a decodeAsync,
 // or DecodeAll can be used.
 //
 // A Decoder can be used in two modes:
@@ -329,9 +329,9 @@ type decodeStream struct {
 
 
 // Create Decoder:
-// Spawn n block decoders. These accept tasks to decode a block.
+// Spawn n block decoders. These accept tasks to decodeAsync a block.
 // Create goroutine that handles stream processing, this will send history to decoders as they are available.
-// Decoders update the history as they decode.
+// Decoders update the history as they decodeAsync.
 // When a block is returned:
 // 		a) history is sent to the next decoder,
 // 		b) content written to CRC.

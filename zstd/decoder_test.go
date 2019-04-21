@@ -406,7 +406,8 @@ func testDecoderDecodeAll(t *testing.T, fn string, dec *Decoder) {
 				t.Fatal(err)
 			}
 			wantB := want[tt.Name]
-			got, err := dec.DecodeAll(in, make([]byte, 0, len(wantB)))
+			// make a buffer that is too small.
+			got, err := dec.DecodeAll(in, make([]byte, 0, 200))
 			if err != nil {
 				t.Error(err)
 			}
