@@ -357,6 +357,8 @@ func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {
 	// TODO: Init to dictionary
 	d.history.reset()
 	saved := d.history.b
+
+	// We use the history for output to avoid copying it.
 	d.history.b = dst
 	var err error
 	for {

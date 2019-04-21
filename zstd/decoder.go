@@ -198,6 +198,7 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 	block, frame := <-d.decoders, <-d.frames
 	defer func() {
 		d.decoders <- block
+		frame.rawInput = nil
 		d.frames <- frame
 	}()
 	if cap(dst) == 0 {
