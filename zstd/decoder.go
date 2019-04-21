@@ -12,8 +12,8 @@ type Decoder struct {
 	// Unreferenced decoders, ready for use.
 	decoders chan *blockDec
 
-	// Streams ready to be decoded.
-	//stream chan decodeStream
+	// Unreferenced decoders, ready for use.
+	frames chan *frameDec
 
 	// Current read position used for Reader functionality.
 	current decoderState
@@ -42,12 +42,13 @@ var (
 )
 
 // NewReader creates a new decoder.
-// A nil Reader can be provided in which case Reset can be used to start a decode.
+// A nil Reader can be provided in which case Reset can be used to start a decode,
+// or DecodeAll can be used.
 //
 // A Decoder can be used in two modes:
 //
 // 1) As a stream, or
-// 2) For stateless decoding using DecodeAll or DecodeBuffer.
+// 2) For stateless decoding using DecodeAll.
 //
 // Only a single stream can be decoded concurrently, but the same decoder
 // can run multiple concurrent stateless decodes. It is even possible to
@@ -70,14 +71,12 @@ func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
 
 	// Create decoders
 	d.decoders = make(chan *blockDec, d.o.concurrent)
+	d.frames = make(chan *frameDec, d.o.concurrent)
 	for i := 0; i < d.o.concurrent; i++ {
+		d.frames <- newFrameDec(d.o)
 		d.decoders <- newBlockDec(d.o.lowMem)
 	}
 
-	// Start stream decoders.
-	//for i := 0; i < d.o.concurrent; i++ {
-	//go d.startStreamDecoder()
-	//}
 	if r == nil {
 		return &d, nil
 	}
@@ -131,7 +130,7 @@ func (d *Decoder) Reset(r io.Reader) error {
 	}
 	d.drainOutput()
 
-	err := d.current.frame.reset(r)
+	err := d.current.frame.reset(&readerWrapper{r: r})
 	if err != nil {
 		return err
 	}
@@ -196,40 +195,35 @@ func (d *Decoder) WriteTo(w io.Writer) (int64, error) {
 // DecodeAll can be used concurrently. If you plan to, do not use the low memory option.
 // The Decoder concurrency limits will be respected.
 func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
-	if d.current.frame == nil {
-		// FIXME - we need a safe frame.
-		d.current.frame = newFrameDec(d.o)
-	}
-	f := d.current.frame
-	dec := <-d.decoders
+	block, frame := <-d.decoders, <-d.frames
 	defer func() {
-		d.decoders <- dec
+		d.decoders <- block
+		d.frames <- frame
 	}()
 	if cap(dst) == 0 {
 		dst = make([]byte, 0, 2<<20)
 	}
-
+	br := byteBuf(input)
 	for {
-		err := f.resetBuf(input)
+		err := frame.reset(&br)
 		if err == io.EOF {
 			return dst, nil
 		}
 		if err != nil {
 			return dst, err
 		}
-		if f.FrameContentSize > 0 {
-			if uint64(cap(dst)) < f.FrameContentSize {
-				dst2 := make([]byte, len(dst), len(dst)+int(f.FrameContentSize))
+		if frame.FrameContentSize > 0 {
+			if uint64(cap(dst)) < frame.FrameContentSize {
+				dst2 := make([]byte, len(dst), len(dst)+int(frame.FrameContentSize))
 				copy(dst2, dst)
 				dst = dst2
 			}
 		}
-		dst, err = f.runDecoder(dst, dec)
+		dst, err = frame.runDecoder(dst, block)
 		if err != nil {
 			return dst, err
 		}
-		input = f.rawInput.remain()
-		if len(input) == 0 {
+		if len(br) == 0 {
 			break
 		}
 	}
@@ -264,8 +258,8 @@ func (d *Decoder) nextBlock() {
 	case io.EOF:
 		// Probably end of frame.
 		// Grab remaining stream and see if there are more frames.
-		br := d.current.frame.br
-		if b, err := br.Peek(4); err == io.EOF || !bytes.Equal(frameMagic, b) {
+		br := d.current.frame.rawInput
+		if b := br.readSmall(4); b == nil || !bytes.Equal(frameMagic, b) {
 			println("No data left on stream, or not frame magic")
 
 			// Queue an EOF
@@ -318,6 +312,11 @@ type decodeOutput struct {
 	err error
 }
 
+// errEndOfStream indicates that everything from the stream was read.
+var errEndOfStream = errors.New("end-of-stream")
+
+/*
+
 type decodeStream struct {
 	r io.Reader
 
@@ -328,10 +327,7 @@ type decodeStream struct {
 	cancel chan struct{}
 }
 
-// errEndOfStream indicates that everything from the stream was read.
-var errEndOfStream = errors.New("end-of-stream")
 
-/*
 // Create Decoder:
 // Spawn n block decoders. These accept tasks to decode a block.
 // Create goroutine that handles stream processing, this will send history to decoders as they are available.

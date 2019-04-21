@@ -111,71 +111,9 @@ func newBlockDec(lowMem bool) *blockDec {
 
 // reset will reset the block.
 // Input must be a start of a block and will be at the end of the block when returned.
-func (b *blockDec) reset(br io.Reader, windowSize uint64) error {
+func (b *blockDec) reset(br byteBuffer, windowSize uint64) error {
 	b.WindowSize = windowSize
-	_, err := io.ReadFull(br, b.tmp[:3])
-	if err != nil {
-		if debug {
-			println("Reading block header:", err)
-		}
-		return err
-	}
-	bh := uint32(b.tmp[0]) | (uint32(b.tmp[1]) << 8) | (uint32(b.tmp[2]) << 16)
-	b.Last = bh&1 != 0
-	b.Type = BlockType((bh >> 1) & 3)
-	// find size.
-	cSize := int(bh >> 3)
-	switch b.Type {
-	case BlockTypeReserved:
-		return ErrReservedBlockType
-	case BlockTypeRLE:
-		b.RLESize = uint32(cSize)
-		cSize = 1
-	case BlockTypeCompressed:
-		if debug {
-			println("Data size on stream:", cSize)
-		}
-		b.RLESize = 0
-		if cSize > maxCompressedBlockSize || uint64(cSize) > b.WindowSize {
-			if debug {
-				printf("compressed block too big: %+v\n", b)
-			}
-			return ErrCompressedSizeTooBig
-		}
-	default:
-		b.RLESize = 0
-	}
-
-	// Read block data.
-	if cap(b.data) < cSize {
-		if b.lowMem {
-			b.data = make([]byte, 0, cSize)
-		} else {
-			b.data = make([]byte, 0, maxBlockSize)
-		}
-	}
-	if cap(b.dst) <= maxBlockSize {
-		b.dst = make([]byte, 0, maxBlockSize+1)
-	}
-	b.data = b.data[:cSize]
-	// Read all.
-	_, err = io.ReadFull(br, b.data)
-	if err != nil {
-		if debug {
-			println("Reading block:", err)
-		}
-		return err
-	}
-	// Start decoding
-	b.input <- struct{}{}
-	return nil
-}
-
-// reset will reset the block.
-// Input must be a start of a block and will be at the end of the block when returned.
-func (b *blockDec) resetBuf(br *byteBuf, windowSize uint64) error {
-	b.WindowSize = windowSize
-	tmp := br.readN(3)
+	tmp := br.readSmall(3)
 	if tmp == nil {
 		if debug {
 			println("Reading block header:", io.ErrUnexpectedEOF)
@@ -219,12 +157,13 @@ func (b *blockDec) resetBuf(br *byteBuf, windowSize uint64) error {
 	if cap(b.dst) <= maxBlockSize {
 		b.dst = make([]byte, 0, maxBlockSize+1)
 	}
-	b.data = br.readN(cSize)
-	if b.data == nil {
+	var err error
+	b.data, err = br.readBig(cSize, b.data[:0])
+	if err != nil {
 		if debug {
-			println("Reading block:", io.ErrUnexpectedEOF)
+			println("Reading block:", err)
 		}
-		return io.ErrUnexpectedEOF
+		return err
 	}
 	return nil
 }

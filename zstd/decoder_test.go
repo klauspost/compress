@@ -396,7 +396,7 @@ func testDecoderDecodeAll(t *testing.T, fn string, dec *Decoder) {
 			continue
 		}
 		t.Run("ReadAll-"+tt.Name, func(t *testing.T) {
-			//t.Parallel()
+			t.Parallel()
 			r, err := tt.Open()
 			if err != nil {
 				t.Fatal(err)
