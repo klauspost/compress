@@ -18,7 +18,7 @@ import (
 )
 
 func TestNewDecoder(t *testing.T) {
-	defer timeout(10 * time.Second)()
+	defer timeout(60 * time.Second)()
 	testDecoderFile(t, "testdata/decoder.zip")
 	dec, err := NewReader(nil)
 	if err != nil {
@@ -28,7 +28,7 @@ func TestNewDecoder(t *testing.T) {
 }
 
 func TestNewDecoderGood(t *testing.T) {
-	defer timeout(10 * time.Second)()
+	defer timeout(30 * time.Second)()
 	testDecoderFile(t, "testdata/good.zip")
 	dec, err := NewReader(nil)
 	if err != nil {
