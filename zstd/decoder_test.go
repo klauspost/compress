@@ -377,6 +377,73 @@ func BenchmarkDecoderSilesiaCgo(b *testing.B) {
 	}
 }
 
+func BenchmarkDecoderEnwik9(b *testing.B) {
+	fn := "testdata/enwik9-1.zst"
+	data, err := ioutil.ReadFile(fn)
+	if err != nil {
+		if os.IsNotExist(err) {
+			b.Skip("Missing " + fn)
+			return
+		}
+		b.Fatal(err)
+	}
+	dec, err := NewReader(nil, WithDecoderLowmem(false))
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer dec.Close()
+	err = dec.Reset(bytes.NewBuffer(data))
+	if err != nil {
+		b.Fatal(err)
+	}
+	n, err := io.Copy(ioutil.Discard, dec)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.SetBytes(n)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		err = dec.Reset(bytes.NewBuffer(data))
+		if err != nil {
+			b.Fatal(err)
+		}
+		_, err := io.CopyN(ioutil.Discard, dec, n)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkDecoderEnwik9Cgo(b *testing.B) {
+	fn := "testdata/enwik9-1.zst"
+	data, err := ioutil.ReadFile(fn)
+	if err != nil {
+		if os.IsNotExist(err) {
+			b.Skip("Missing " + fn)
+			return
+		}
+		b.Fatal(err)
+	}
+	dec := zstd.NewReader(bytes.NewBuffer(data))
+	n, err := io.Copy(ioutil.Discard, dec)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.SetBytes(n)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dec := zstd.NewReader(bytes.NewBuffer(data))
+		_, err := io.CopyN(ioutil.Discard, dec, n)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func testDecoderDecodeAll(t *testing.T, fn string, dec *Decoder) {
 	data, err := ioutil.ReadFile(fn)
 	if err != nil {

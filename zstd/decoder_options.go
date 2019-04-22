@@ -10,7 +10,6 @@ import (
 type DOption func(*decoderOptions) error
 
 // options retains accumulated state of multiple options.
-// See https://wiki.vivino.com/dev/server-side/api/elements/coupondefinition
 type decoderOptions struct {
 	lowMem         bool
 	concurrent     int
@@ -22,9 +21,6 @@ func (o *decoderOptions) setDefault() {
 		// use less ram: true for now, but may change.
 		lowMem:     true,
 		concurrent: runtime.GOMAXPROCS(0),
-	}
-	if o.concurrent > 4 {
-		o.concurrent = 4
 	}
 	o.maxDecodedSize = 1 << 63
 }
@@ -39,7 +35,6 @@ func WithDecoderLowmem(b bool) DOption {
 // meaning the maximum number of decoders to run concurrently.
 // The value supplied must be at least 1.
 // By default this will be set to GOMAXPROCS.
-// In memory constrained systems, this
 func WithDecoderConcurrency(n int) DOption {
 	return func(o *decoderOptions) error {
 		if n <= 0 {
