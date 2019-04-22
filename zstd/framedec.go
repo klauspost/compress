@@ -240,7 +240,9 @@ func (d *frameDec) next(block *blockDec) error {
 		return err
 	}
 	block.input <- struct{}{}
-	println("next block:", block)
+	if debug {
+		println("next block:", block)
+	}
 	if block.Last {
 		// We indicate the frame is done by sending io.EOF
 		d.decoding <- block
@@ -304,7 +306,7 @@ func (d *frameDec) initAsync() {
 	}
 	if debug {
 		h := d.history
-		printf("history init: %+v (l: %d, c: %d)", h, len(h.b), cap(h.b))
+		printf("history init. len: %d, cap: %d", len(h.b), cap(h.b))
 	}
 }
 
@@ -331,7 +333,9 @@ func (d *frameDec) startDecoder(output chan decodeOutput) {
 			output <- r
 			return
 		}
-		println("got result")
+		if debug {
+			println("got result")
+		}
 		if !block.Last {
 			// Send history to next block
 			select {
@@ -356,6 +360,7 @@ func (d *frameDec) startDecoder(output chan decodeOutput) {
 					r.err = io.ErrShortWrite
 				}
 				output <- r
+				return
 			}
 		}
 		if block.Last {
@@ -391,6 +396,9 @@ func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {
 		err = dec.reset(d.rawInput, d.WindowSize)
 		if err != nil {
 			break
+		}
+		if debug {
+			println("next block:", dec)
 		}
 		err = dec.decodeBuf(&d.history)
 		if err != nil || dec.Last {

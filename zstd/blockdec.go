@@ -217,7 +217,6 @@ func (b *blockDec) startDecoder() {
 				err: nil,
 			}
 			hist := <-b.history
-			println("hist:", len(hist.b), cap(hist.b))
 			hist.append(o.b)
 			b.result <- o
 		case BlockTypeCompressed:

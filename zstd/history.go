@@ -32,7 +32,7 @@ func (h *history) reset() {
 		huffDecoderPool.Put(h.huffTree)
 	}
 	h.huffTree = nil
-	printf("history created: %+v (l: %d, c: %d)", *h, len(h.b), cap(h.b))
+	//printf("history created: %+v (l: %d, c: %d)", *h, len(h.b), cap(h.b))
 }
 
 // append bytes to history.
