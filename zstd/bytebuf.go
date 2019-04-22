@@ -81,8 +81,9 @@ func (r *readerWrapper) readSmall(n int) []byte {
 	if debug && n > 8 {
 		panic(fmt.Errorf("small read > 8 (%d). use readBig", n))
 	}
-	n2, err := r.r.Read(r.tmp[:n])
-	if err != nil || n2 != n {
+	n2, _ := r.r.Read(r.tmp[:n])
+	// We only really care about the actual bytes read.
+	if n2 != n {
 		return nil
 	}
 	return r.tmp[:n]

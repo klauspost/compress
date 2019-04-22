@@ -20,7 +20,7 @@ import (
 
 func TestNewDecoder(t *testing.T) {
 	defer timeout(10 * time.Second)()
-	//testDecoderFile(t, "testdata/decoder.zip")
+	testDecoderFile(t, "testdata/decoder.zip")
 	dec, err := NewReader(nil)
 	if err != nil {
 		t.Fatal(err)

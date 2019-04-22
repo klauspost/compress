@@ -239,6 +239,7 @@ func (d *frameDec) next(block *blockDec) error {
 		d.sendErr(block, err)
 		return err
 	}
+	block.input <- struct{}{}
 	println("next block:", block)
 	if block.Last {
 		// We indicate the frame is done by sending io.EOF
@@ -274,6 +275,7 @@ func (d *frameDec) checkCRC() error {
 	// We can overwrite upper tmp now
 	want := d.rawInput.readSmall(4)
 	if want == nil {
+		println("CRC missing?")
 		return io.ErrUnexpectedEOF
 	}
 
@@ -283,6 +285,27 @@ func (d *frameDec) checkCRC() error {
 	}
 	println("CRC ok")
 	return nil
+}
+
+func (d *frameDec) initAsync() {
+	if !d.o.lowMem && !d.SingleSegment {
+		// set max extra size history to 20MB.
+		d.history.maxSize = d.history.windowSize + maxBlockSize*10
+	}
+	// re-alloc if more than one extra block size.
+	if d.o.lowMem && cap(d.history.b) > d.history.maxSize+maxBlockSize {
+		d.history.b = make([]byte, 0, d.history.maxSize)
+	}
+	if cap(d.history.b) < d.history.maxSize {
+		d.history.b = make([]byte, 0, d.history.maxSize)
+	}
+	if cap(d.decoding) < d.o.concurrent {
+		d.decoding = make(chan *blockDec, d.o.concurrent)
+	}
+	if debug {
+		h := d.history
+		printf("history init: %+v (l: %d, c: %d)", h, len(h.b), cap(h.b))
+	}
 }
 
 // startDecoder will start decoding blocks and write them to the writer.
@@ -308,6 +331,7 @@ func (d *frameDec) startDecoder(output chan decodeOutput) {
 			output <- r
 			return
 		}
+		println("got result")
 		if !block.Last {
 			// Send history to next block
 			select {
