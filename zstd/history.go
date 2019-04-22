@@ -11,12 +11,14 @@ type history struct {
 	decoders      sequenceDecs
 	windowSize    int
 	maxSize       int
+	error         bool
 }
 
 // reset will reset the history to initial state of a frame.
 // The history must already have been initialized to the desired size.
 func (h *history) reset() {
 	h.b = h.b[:0]
+	h.error = false
 	h.recentOffsets = [3]int{1, 4, 8}
 	if f := h.decoders.litLengths.fse; f != nil && !f.preDefined {
 		fseDecoderPool.Put(f)

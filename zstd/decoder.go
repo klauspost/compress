@@ -115,14 +115,18 @@ func (d *Decoder) Read(p []byte) (int, error) {
 				break
 			}
 			d.nextBlock()
-			//println("current error", d.current.err)
 		}
 	}
 	if len(d.current.b) > 0 {
 		// Only return error at end of block
 		return n, nil
 	}
-	//println("returning", n, d.current.err)
+	if d.current.err != nil {
+		d.drainOutput()
+	}
+	if debug {
+		println("returning", n, d.current.err, len(d.decoders))
+	}
 	return n, d.current.err
 }
 
@@ -138,10 +142,6 @@ func (d *Decoder) Reset(r io.Reader) error {
 
 	// TODO: If r is a *bytes.Buffer, we could automatically switch to sync operation.
 
-	if d.current.d != nil {
-		println("adding current decoder", d.current.d)
-		d.decoders <- d.current.d
-	}
 	d.drainOutput()
 
 	// Remove current block.
@@ -165,6 +165,12 @@ func (d *Decoder) drainOutput() {
 		println("cancelling current")
 		close(d.current.cancel)
 		d.current.cancel = nil
+	}
+	if d.current.d != nil {
+		println("re-adding current decoder", d.current.d, len(d.decoders))
+		d.decoders <- d.current.d
+		d.current.d = nil
+		d.current.b = nil
 	}
 	if d.current.output == nil || d.current.flushed {
 		println("current already flushed")
@@ -200,6 +206,9 @@ func (d *Decoder) WriteTo(w io.Writer) (int64, error) {
 		d.nextBlock()
 	}
 	err := d.current.err
+	if err != nil {
+		d.drainOutput()
+	}
 	if err == io.EOF {
 		err = nil
 	}
@@ -212,6 +221,10 @@ func (d *Decoder) WriteTo(w io.Writer) (int64, error) {
 // DecodeAll can be used concurrently. If you plan to, do not use the low memory option.
 // The Decoder concurrency limits will be respected.
 func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
+	if d.current.err == ErrDecoderClosed {
+		return dst, ErrDecoderClosed
+	}
+	//println(len(d.frames), len(d.decoders), d.current)
 	block, frame := <-d.decoders, <-d.frames
 	defer func() {
 		d.decoders <- block
@@ -230,7 +243,8 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 		if err != nil {
 			return dst, err
 		}
-		if frame.FrameContentSize > 0 {
+		if frame.FrameContentSize > 0 && frame.FrameContentSize < 1<<30 {
+			// Never preallocate moe than 1 GB.
 			if uint64(cap(dst)) < frame.FrameContentSize {
 				dst2 := make([]byte, len(dst), len(dst)+int(frame.FrameContentSize))
 				copy(dst2, dst)
@@ -352,7 +366,10 @@ func (d *Decoder) startStreamDecoder() {
 				case dec := <-d.decoders:
 					select {
 					case <-stream.cancel:
-						frame.sendErr(dec, io.EOF)
+						if !frame.sendErr(dec, io.EOF) {
+							// To not let the decoder dangle, send it back.
+							stream.output <- decodeOutput{d: dec}
+						}
 						break decodeStream
 					default:
 					}
@@ -361,13 +378,11 @@ func (d *Decoder) startStreamDecoder() {
 					case io.EOF:
 						// End of current frame, no error
 						println("EOF on next block")
-						// stream.output <- decodeOutput{err: err, d: nil}
 						break decodeFrame
 					case nil:
 						continue
 					default:
 						println("block decoder returned", err)
-						//stream.output <- decodeOutput{err: err, d: dec}
 						break decodeStream
 					}
 				case <-stream.cancel:

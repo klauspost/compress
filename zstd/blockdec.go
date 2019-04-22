@@ -300,6 +300,14 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 	in := b.data
 	delayedHistory := hist == nil
 
+	if delayedHistory {
+		// We must always grab history.
+		defer func() {
+			if hist == nil {
+				<-b.history
+			}
+		}()
+	}
 	// There must be at least one byte for Literals_Block_Type and one for Sequences_Section_Header
 	if len(in) < 2 {
 		return ErrBlockTooSmall
@@ -569,11 +577,18 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 	// All time spent after this is critical since it is strictly sequential.
 	if hist == nil {
 		hist = <-b.history
-		// treeless 4393, with: 32775, total: 37168, 11% treeless.
+		if hist.error {
+			return ErrDecoderClosed
+		}
 	}
 
 	// Decode treeless literal block.
 	if litType == LiteralsBlockTreeless {
+		// TODO: We could send the history early WITHOUT the stream history.
+		//   This would allow decoding treeless literials before the byte history is available.
+		//   Silencia stats: Treeless 4393, with: 32775, total: 37168, 11% treeless.
+		//   So not much obvious gain here.
+
 		if hist.huffTree == nil {
 			return errors.New("literal block was treeless, but no history was defined")
 		}
@@ -637,6 +652,10 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 	if err := br.init(in); err != nil {
 		return err
 	}
+
+	// TODO: Investigate if sending history without decoders are faster.
+	//   This would allow the sequences to be decoded async and only have to construct stream history.
+	//   If only recent offsets were not transferred, this would be an obvious win.
 
 	if err := seqs.initialize(br, hist, literals, b.dst); err != nil {
 		println("initializing sequences:", err)

@@ -96,7 +96,7 @@ func TestNewDecoderBigFile(t *testing.T) {
 }
 
 func TestDecoderRegression(t *testing.T) {
-	defer timeout(1 * time.Second)()
+	defer timeout(5 * time.Second)()
 	data, err := ioutil.ReadFile("testdata/regression.zip")
 	if err != nil {
 		t.Fatal(err)
@@ -105,17 +105,18 @@ func TestDecoderRegression(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	defer dec.Close()
+
 	for _, tt := range zr.File {
-		dec, err := NewReader(nil, WithDecoderConcurrency(1))
-		if err != nil {
-			t.Error(err)
-			return
+		if !strings.HasSuffix(t.Name(), "") {
+			continue
 		}
-		defer dec.Close()
 		t.Run("Reader-"+tt.Name, func(t *testing.T) {
-			if !strings.HasSuffix(t.Name(), "") {
-				return
-			}
 			r, err := tt.Open()
 			if err != nil {
 				t.Error(err)
@@ -127,6 +128,19 @@ func TestDecoderRegression(t *testing.T) {
 				return
 			}
 			got, err := ioutil.ReadAll(dec)
+			t.Log("Received:", len(got), err)
+		})
+		t.Run("DecodeAll-"+tt.Name, func(t *testing.T) {
+			r, err := tt.Open()
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			in, err := ioutil.ReadAll(r)
+			if err != nil {
+				t.Error(err)
+			}
+			got, err := dec.DecodeAll(in, nil)
 			t.Log("Received:", len(got), err)
 		})
 	}

@@ -25,12 +25,25 @@ func Fuzz(data []byte) int {
 			}
 		}()
 	*/
-	dec, err := NewReader(bytes.NewBuffer(data))
-	if err != nil {
+	if false {
+		dec, err := NewReader(bytes.NewBuffer(data))
+		if err != nil {
+			return 0
+		}
+		defer dec.Close()
+		_, err = io.Copy(ioutil.Discard, dec)
+		switch err {
+		case nil, ErrCRCMismatch:
+			return 1
+		}
 		return 0
 	}
+	dec, err := NewReader(nil, WithLowmemDecoder(true), WithDecoderConcurrency(1))
+	if err != nil {
+		panic(err)
+	}
 	defer dec.Close()
-	_, err = io.Copy(ioutil.Discard, dec)
+	_, err = dec.DecodeAll(data, nil)
 	switch err {
 	case nil, ErrCRCMismatch:
 		return 1

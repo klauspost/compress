@@ -33,6 +33,10 @@ type frameDec struct {
 	history history
 
 	rawInput byteBuffer
+
+	// asyncRunning indicates whether the async routine processes input on 'decoding'.
+	asyncRunning   bool
+	asyncRunningMu sync.Mutex
 }
 
 const (
@@ -243,6 +247,11 @@ func (d *frameDec) next(block *blockDec) error {
 	if debug {
 		println("next block:", block)
 	}
+	d.asyncRunningMu.Lock()
+	defer d.asyncRunningMu.Unlock()
+	if !d.asyncRunning {
+		return nil
+	}
 	if block.Last {
 		// We indicate the frame is done by sending io.EOF
 		d.decoding <- block
@@ -254,10 +263,18 @@ func (d *frameDec) next(block *blockDec) error {
 
 // sendEOF will queue an error block on the frame.
 // This will cause the frame decoder to return when it encounters the block.
-func (d *frameDec) sendErr(block *blockDec, err error) {
-	println("sending error")
+// Returns true if the decoder was added.
+func (d *frameDec) sendErr(block *blockDec, err error) bool {
+	d.asyncRunningMu.Lock()
+	defer d.asyncRunningMu.Unlock()
+	if !d.asyncRunning {
+		return false
+	}
+
+	println("sending error", err.Error())
 	block.sendErr(err)
 	d.decoding <- block
+	return true
 }
 
 // checkCRC will check the checksum if the frame has one.
@@ -308,6 +325,9 @@ func (d *frameDec) initAsync() {
 		h := d.history
 		printf("history init. len: %d, cap: %d", len(h.b), cap(h.b))
 	}
+	d.asyncRunningMu.Lock()
+	d.asyncRunning = true
+	d.asyncRunningMu.Unlock()
 }
 
 // startDecoder will start decoding blocks and write them to the writer.
@@ -317,7 +337,24 @@ func (d *frameDec) initAsync() {
 func (d *frameDec) startDecoder(output chan decodeOutput) {
 	// TODO: Init to dictionary
 	d.history.reset()
+
 	defer func() {
+		d.asyncRunningMu.Lock()
+		d.asyncRunning = false
+		d.asyncRunningMu.Unlock()
+
+		// Drain the currently decoding.
+		d.history.error = true
+	flushdone:
+		for {
+			select {
+			case b := <-d.decoding:
+				b.history <- &d.history
+				output <- <-b.result
+			default:
+				break flushdone
+			}
+		}
 		println("frame decoder done, signalling done")
 		d.frameDone.Done()
 	}()

@@ -4,7 +4,7 @@ import (
 	"log"
 )
 
-const debug = false
+const debug = true
 
 func println(a ...interface{}) {
 	if debug {
