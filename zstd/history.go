@@ -8,7 +8,7 @@ type history struct {
 	b             []byte
 	huffTree      *huff0.Scratch
 	recentOffsets [3]int
-	decoders      sequenceDecoders
+	decoders      sequenceDecs
 	windowSize    int
 	maxSize       int
 }
@@ -27,7 +27,7 @@ func (h *history) reset() {
 	if f := h.decoders.matchLengths.fse; f != nil && !f.preDefined {
 		fseDecoderPool.Put(f)
 	}
-	h.decoders = sequenceDecoders{}
+	h.decoders = sequenceDecs{}
 	if h.huffTree != nil {
 		huffDecoderPool.Put(h.huffTree)
 	}
