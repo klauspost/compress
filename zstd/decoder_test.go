@@ -2,7 +2,6 @@ package zstd
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -128,7 +127,7 @@ func TestDecoderRegression(t *testing.T) {
 				return
 			}
 			got, err := ioutil.ReadAll(dec)
-			fmt.Println("Received:", len(got), err)
+			t.Log("Received:", len(got), err)
 		})
 	}
 }
