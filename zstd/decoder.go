@@ -1,7 +1,6 @@
 package zstd
 
 import (
-	"bytes"
 	"errors"
 	"io"
 	"sync"
@@ -373,19 +372,10 @@ func (d *Decoder) startStreamDecoder() {
 					break decodeStream
 				}
 			}
-			println("waiting for done")
 			// All blocks have started decoding, check if there are more frames.
+			println("waiting for done")
 			frame.frameDone.Wait()
 			println("done waiting...")
-			if b := br.readSmall(4); b == nil || !bytes.Equal(frameMagic, b) {
-				println("No data left on stream, or not frame magic")
-
-				// No more data.
-				stream.output <- decodeOutput{
-					err: io.EOF,
-				}
-				break
-			}
 		}
 		frame.frameDone.Wait()
 		println("Sending EOS")

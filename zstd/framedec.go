@@ -56,10 +56,8 @@ var (
 	// ErrCRCMismatch is returned if CRC mismatches.
 	ErrCRCMismatch = errors.New("CRC check failed")
 
-	errNotimplemented = errors.New("not implemented")
-
 	frameMagic          = []byte{0x28, 0xb5, 0x2f, 0xfd}
-	skippableFrameMagic = []byte{0x18, 0x4d, 0x2a}
+	skippableFrameMagic = []byte{0x2a, 0x4d, 0x18}
 )
 
 func newFrameDec(o decoderOptions) *frameDec {
@@ -75,7 +73,6 @@ func newFrameDec(o decoderOptions) *frameDec {
 // Any other error indicated that the stream contained data, but
 // there was a problem.
 func (d *frameDec) reset(br byteBuffer) error {
-	//br := byteBuf(in)
 	d.HasCheckSum = false
 	d.WindowSize = 0
 	var b []byte
@@ -84,7 +81,10 @@ func (d *frameDec) reset(br byteBuffer) error {
 		if b == nil {
 			return io.EOF
 		}
-		if !bytes.Equal(b[:3], skippableFrameMagic) || b[3]&0xf0 != 0x50 {
+		if !bytes.Equal(b[1:4], skippableFrameMagic) || b[0]&0xf0 != 0x50 {
+			if debug {
+				println("Not skippable", hex.EncodeToString(b), hex.EncodeToString(skippableFrameMagic))
+			}
 			// Break if not skippable frame.
 			break
 		}
@@ -384,6 +384,8 @@ func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {
 
 	// We use the history for output to avoid copying it.
 	d.history.b = dst
+	// Store input length, so we only check new data.
+	crcStart := len(dst)
 	var err error
 	for {
 		err = dec.reset(d.rawInput, d.WindowSize)
@@ -399,9 +401,9 @@ func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {
 	if err == nil {
 		if d.HasCheckSum {
 			var n int
-			n, err = d.crc.Write(dst)
+			n, err = d.crc.Write(dst[crcStart:])
 			if err == nil {
-				if n != len(dst) {
+				if n != len(dst)-crcStart {
 					err = io.ErrShortWrite
 				}
 			}

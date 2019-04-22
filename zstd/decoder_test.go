@@ -178,10 +178,6 @@ func testDecoderFile(t *testing.T, fn string) {
 			}
 			got, err := ioutil.ReadAll(dec)
 			if err != nil {
-				if err == errNotimplemented {
-					t.Skip(err)
-					return
-				}
 				t.Error(err)
 				if err != ErrCRCMismatch {
 					return
@@ -395,7 +391,7 @@ func testDecoderDecodeAll(t *testing.T, fn string, dec *Decoder) {
 		if !strings.HasSuffix(tt.Name, ".zst") {
 			continue
 		}
-		t.Run("ReadAll-"+tt.Name, func(t *testing.T) {
+		t.Run("DecodeAll-"+tt.Name, func(t *testing.T) {
 			t.Parallel()
 			r, err := tt.Open()
 			if err != nil {
@@ -407,10 +403,11 @@ func testDecoderDecodeAll(t *testing.T, fn string, dec *Decoder) {
 			}
 			wantB := want[tt.Name]
 			// make a buffer that is too small.
-			got, err := dec.DecodeAll(in, make([]byte, 0, 200))
+			got, err := dec.DecodeAll(in, make([]byte, 10, 200))
 			if err != nil {
 				t.Error(err)
 			}
+			got = got[10:]
 			if !bytes.Equal(wantB, got) {
 				if len(wantB)+len(got) < 1000 {
 					t.Logf(" got: %v\nwant: %v", got, wantB)

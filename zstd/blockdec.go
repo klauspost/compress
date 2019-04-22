@@ -746,9 +746,9 @@ func (s *sequenceDecoders) decode(seqs int, br *bitReader, hist []byte) error {
 			return fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available", litLen, len(s.literals))
 		}
 		size := litLen + matchLen + len(s.out)
-		if size > maxBlockSize {
-			return fmt.Errorf("output (%d) bigger than max block size", size)
-		}
+		//if size > maxBlockSize {
+		//return fmt.Errorf("output (%d) bigger than max block size", size)
+		//}
 		if size > cap(s.out) {
 			// Not enough size, will be extremely rarely triggered,
 			// but could be if destination slice is too small for sync operations.
