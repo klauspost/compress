@@ -226,7 +226,7 @@ func BenchmarkDecoder_DecodeAll(b *testing.B) {
 		if !strings.HasSuffix(tt.Name, ".zst") {
 			continue
 		}
-		if strings.HasSuffix(tt.Name, "0005.zst") {
+		if strings.HasSuffix(tt.Name, "0010.zst") {
 			break
 		}
 		b.Run(tt.Name, func(b *testing.B) {
@@ -266,7 +266,7 @@ func BenchmarkDecoder_DecodeAllCgo(b *testing.B) {
 		if !strings.HasSuffix(tt.Name, ".zst") {
 			continue
 		}
-		if strings.HasSuffix(tt.Name, "0005.zst") {
+		if strings.HasSuffix(tt.Name, "0010.zst") {
 			break
 		}
 		b.Run(tt.Name, func(b *testing.B) {
@@ -306,7 +306,7 @@ func BenchmarkDecoderSilesia(b *testing.B) {
 		}
 		b.Fatal(err)
 	}
-	dec, err := NewReader(nil)
+	dec, err := NewReader(nil, WithLowmemDecoder(false))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -328,7 +328,7 @@ func BenchmarkDecoderSilesia(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		_, err := io.Copy(ioutil.Discard, dec)
+		_, err := io.CopyN(ioutil.Discard, dec, n)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -356,7 +356,7 @@ func BenchmarkDecoderSilesiaCgo(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		dec := zstd.NewReader(bytes.NewBuffer(data))
-		_, err := io.Copy(ioutil.Discard, dec)
+		_, err := io.CopyN(ioutil.Discard, dec, n)
 		if err != nil {
 			b.Fatal(err)
 		}

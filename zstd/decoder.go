@@ -260,7 +260,9 @@ func (d *Decoder) nextBlock() {
 		return
 	}
 	d.current.decodeOutput = <-d.current.output
-	println("got", len(d.current.b), "bytes, error:", d.current.err)
+	if debug {
+		println("got", len(d.current.b), "bytes, error:", d.current.err)
+	}
 }
 
 // Close will release all resources.
