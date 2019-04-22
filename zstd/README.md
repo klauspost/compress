@@ -1,13 +1,15 @@
 # zstd 
 
-Zstandard is a real-time compression algorithm, providing high compression ratios. 
+[Zstandard](https://facebook.github.io/zstd/) is a real-time compression algorithm, providing high compression ratios. 
 It offers a very wide range of compression / speed trade-off, while being backed by a very fast decoder. 
-It also offers a special mode for small data, called dictionary compression, and can create dictionaries from any sample set. 
-Zstandard library is provided as open source software using a Go standard license.
 
 Currently this package provides *decompression* of zstandard compressed content. 
 Note that custom dictionaries are not supported yet, so if your code relies on that, 
 you cannot use the package as-is.
+
+This package is pure Go and without use of "unsafe".
+
+The `zstd` package is provided as open source software using a Go standard license.
 
 
 ## Decompressor
@@ -20,6 +22,8 @@ STATUS: BETA - there may still be subtle bugs, but a wide variety of content has
 Install using `go get -u github.com/klauspost/compress`. The package is located in `github.com/klauspost/compress/zstd`.
 
 Godoc Documentation: https://golang.org/github.com/klauspost/compress/zstd
+
+You will also need the `github.com/cespare/xxhash` package.
 
 The package has been designed for two main usages, big streams of data and smaller in-memory buffers. 
 There are two main usages of the package for these. Both of them are accessed by creating a `Decoder`.
