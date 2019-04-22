@@ -278,6 +278,9 @@ bigloop:
 		tmp[off+1+bufoff*3] = decode(&br[3])
 		off += 2
 		if off == bufoff {
+			if bufoff > dstEvery {
+				return nil, errors.New("corruption detected: stream overrun")
+			}
 			copy(dstOut, tmp[:bufoff])
 			copy(dstOut[dstEvery:], tmp[bufoff:bufoff*2])
 			copy(dstOut[dstEvery*2:], tmp[bufoff*2:bufoff*3])
