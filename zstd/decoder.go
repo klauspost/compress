@@ -67,9 +67,7 @@ var (
 // The Reset function can be used to initiate a new stream, which is will considerably
 // reduce the allocations normally caused by NewReader.
 func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
-	d := Decoder{
-		stream: make(chan decodeStream, 1),
-	}
+	var d Decoder
 	d.o.setDefault()
 	for _, o := range opts {
 		err := o(&d.o)
@@ -87,9 +85,6 @@ func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
 		d.frames <- newFrameDec(d.o)
 		d.decoders <- newBlockDec(d.o.lowMem)
 	}
-
-	// Could be delayed.
-	go d.startStreamDecoder()
 
 	if r == nil {
 		return &d, nil
@@ -138,6 +133,10 @@ func (d *Decoder) Reset(r io.Reader) error {
 	}
 	if r == nil {
 		return errors.New("nil Reader sent as input")
+	}
+	if d.stream == nil {
+		d.stream = make(chan decodeStream, 1)
+		go d.startStreamDecoder(d.stream)
 	}
 
 	// TODO: If r is a *bytes.Buffer, we could automatically switch to sync operation.
@@ -232,7 +231,8 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 		d.frames <- frame
 	}()
 	if cap(dst) == 0 {
-		dst = make([]byte, 0, 2<<20)
+		// Allocate 1MB by default.
+		dst = make([]byte, 0, 1<<20)
 	}
 	br := byteBuf(input)
 	for {
@@ -243,8 +243,11 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 		if err != nil {
 			return dst, err
 		}
+		if frame.FrameContentSize > d.o.maxDecodedSize-uint64(len(dst)) {
+			return dst, ErrDecoderSizeExceeded
+		}
 		if frame.FrameContentSize > 0 && frame.FrameContentSize < 1<<30 {
-			// Never preallocate moe than 1 GB.
+			// Never preallocate moe than 1 GB up front.
 			if uint64(cap(dst)) < frame.FrameContentSize {
 				dst2 := make([]byte, len(dst), len(dst)+int(frame.FrameContentSize))
 				copy(dst2, dst)
@@ -334,13 +337,11 @@ var errEndOfStream = errors.New("end-of-stream")
 // 		c) return data to WRITER.
 // 		d) wait for next block to return data.
 // Once WRITTEN, the decoders reused by the writer frame decoder for re-use.
-func (d *Decoder) startStreamDecoder() {
-	//println("creating stream decoder")
+func (d *Decoder) startStreamDecoder(inStream chan decodeStream) {
 	d.streamWg.Add(1)
 	defer d.streamWg.Done()
 	frame := newFrameDec(d.o)
-
-	for stream := range d.stream {
+	for stream := range inStream {
 		br := readerWrapper{r: stream.r}
 	decodeStream:
 		for {

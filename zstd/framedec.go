@@ -57,6 +57,9 @@ var (
 	// Typically this indicates wrong or corrupted input.
 	ErrWindowSizeTooSmall = errors.New("invalid input: window size was too small")
 
+	// ErrDecoderSizeExceeded is returned if decompressed size exceeds the configured limit.
+	ErrDecoderSizeExceeded = errors.New("decompressed size exceeds configured limit")
+
 	// ErrCRCMismatch is returned if CRC mismatches.
 	ErrCRCMismatch = errors.New("CRC check failed")
 
@@ -439,6 +442,10 @@ func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {
 		}
 		err = dec.decodeBuf(&d.history)
 		if err != nil || dec.Last {
+			break
+		}
+		if uint64(len(d.history.b)) > d.o.maxDecodedSize {
+			err = ErrDecoderSizeExceeded
 			break
 		}
 	}

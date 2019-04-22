@@ -38,7 +38,7 @@ func Fuzz(data []byte) int {
 		}
 		return 0
 	}
-	dec, err := NewReader(nil, WithLowmemDecoder(true), WithDecoderConcurrency(1))
+	dec, err := NewReader(nil, WithDecoderLowmem(true), WithDecoderConcurrency(1), WithDecoderMaxMemory(10<<20))
 	if err != nil {
 		panic(err)
 	}

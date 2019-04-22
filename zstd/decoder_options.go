@@ -1,6 +1,7 @@
 package zstd
 
 import (
+	"errors"
 	"fmt"
 	"runtime"
 )
@@ -11,8 +12,9 @@ type DOption func(*decoderOptions) error
 // options retains accumulated state of multiple options.
 // See https://wiki.vivino.com/dev/server-side/api/elements/coupondefinition
 type decoderOptions struct {
-	lowMem     bool
-	concurrent int
+	lowMem         bool
+	concurrent     int
+	maxDecodedSize uint64
 }
 
 func (o *decoderOptions) setDefault() {
@@ -24,11 +26,12 @@ func (o *decoderOptions) setDefault() {
 	if o.concurrent > 4 {
 		o.concurrent = 4
 	}
+	o.maxDecodedSize = 1 << 63
 }
 
-// WithLowmemDecoder will set whether to use a lower amount of memory,
+// WithDecoderLowmem will set whether to use a lower amount of memory,
 // but possibly have to allocate more while running.
-func WithLowmemDecoder(b bool) DOption {
+func WithDecoderLowmem(b bool) DOption {
 	return func(o *decoderOptions) error { o.lowMem = b; return nil }
 }
 
@@ -43,6 +46,22 @@ func WithDecoderConcurrency(n int) DOption {
 			return fmt.Errorf("Concurrency must be at least 1")
 		}
 		o.concurrent = n
+		return nil
+	}
+}
+
+// WithDecoderMaxMemory allows to set a maximum decoded size for in-memory
+// (non-streaming) operations.
+// Maxmimum and default is 1 << 63 bytes.
+func WithDecoderMaxMemory(n uint64) DOption {
+	return func(o *decoderOptions) error {
+		if n == 0 {
+			return errors.New("WithDecoderMaxmemory must be at least 1")
+		}
+		if n > 1<<63 {
+			return fmt.Errorf("WithDecoderMaxmemorymust be less than 1 << 63")
+		}
+		o.maxDecodedSize = n
 		return nil
 	}
 }

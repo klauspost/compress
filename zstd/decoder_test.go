@@ -105,7 +105,7 @@ func TestDecoderRegression(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	dec, err := NewReader(nil, WithDecoderConcurrency(1), WithDecoderLowmem(true), WithDecoderMaxMemory(10<<20))
 	if err != nil {
 		t.Error(err)
 		return
@@ -320,7 +320,7 @@ func BenchmarkDecoderSilesia(b *testing.B) {
 		}
 		b.Fatal(err)
 	}
-	dec, err := NewReader(nil, WithLowmemDecoder(false))
+	dec, err := NewReader(nil, WithDecoderLowmem(false))
 	if err != nil {
 		b.Fatal(err)
 	}
