@@ -295,7 +295,7 @@ bigloop:
 	}
 	if off > 0 {
 		ioff := int(off)
-		if len(dstOut) < dstEvery*3-ioff || ioff > dstEvery {
+		if len(dstOut) < dstEvery*3+ioff {
 			return nil, errors.New("corruption detected: stream overrun")
 		}
 		copy(dstOut, tmp[:off])
