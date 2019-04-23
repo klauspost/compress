@@ -1,5 +1,6 @@
 REM go get -u github.com/dvyukov/go-fuzz/...
 cd ..
+del /Q zstd-fuzz.zip
 go-fuzz-build -tags=decompress github.com/klauspost/compress/zstd
 cd testdata
 del /Q fuzz-decompress\crashers\*.*

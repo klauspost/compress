@@ -60,7 +60,7 @@ func Fuzz(data []byte) int {
 		panic(err)
 	}
 	defer dec.Close()
-	got, err = dec.DecodeAll(data, nil)
+	got, err := dec.DecodeAll(data, nil)
 	if err == ErrDecoderSizeExceeded {
 		// Don't run me out of memory.
 		return 0
