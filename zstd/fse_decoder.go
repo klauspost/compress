@@ -28,14 +28,6 @@ const (
 	maxSymbolValue = 255
 )
 
-var (
-	// ErrIncompressible is returned when input is judged to be too hard to compress.
-	ErrIncompressible = errors.New("input is not compressible")
-
-	// ErrUseRLE is returned from the compressor when the input is a single byte value repeated.
-	ErrUseRLE = errors.New("input is single value repeated")
-)
-
 // fseDecoder provides temporary storage for compression and decompression.
 type fseDecoder struct {
 	dt             [maxTablesize]decSymbol // Decompression table.

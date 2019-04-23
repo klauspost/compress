@@ -7,7 +7,6 @@ package zstd
 import (
 	"bytes"
 	"encoding/hex"
-	"errors"
 	"hash"
 	"io"
 	"sync"
@@ -49,24 +48,6 @@ const (
 )
 
 var (
-	// ErrMagicMismatch is returned when a "magic" number isn't what is expected.
-	// Typically this indicates wrong or corrupted input.
-	ErrMagicMismatch = errors.New("invalid input: magic number mismatch")
-
-	// ErrWindowSizeExceeded is returned when a "magic" number isn't what is expected.
-	// Typically this indicates wrong or corrupted input.
-	ErrWindowSizeExceeded = errors.New("window size exceeded")
-
-	// ErrWindowSizeTooSmall is returned when no window size is specified.
-	// Typically this indicates wrong or corrupted input.
-	ErrWindowSizeTooSmall = errors.New("invalid input: window size was too small")
-
-	// ErrDecoderSizeExceeded is returned if decompressed size exceeds the configured limit.
-	ErrDecoderSizeExceeded = errors.New("decompressed size exceeds configured limit")
-
-	// ErrCRCMismatch is returned if CRC mismatches.
-	ErrCRCMismatch = errors.New("CRC check failed")
-
 	frameMagic          = []byte{0x28, 0xb5, 0x2f, 0xfd}
 	skippableFrameMagic = []byte{0x2a, 0x4d, 0x18}
 )

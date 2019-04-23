@@ -13,22 +13,24 @@ import (
 	"github.com/klauspost/compress/huff0"
 )
 
-type BlockType uint8
+type blockType uint8
 
-//go:generate stringer -type=BlockType,LiteralsBlockType,seqCompMode,tableIndex
+//go:generate stringer -type=blockType,literalsBlockType,seqCompMode,tableIndex
 
 const (
-	BlockTypeRaw BlockType = iota
-	BlockTypeRLE
-	BlockTypeCompressed
-	BlockTypeReserved
+	blockTypeRaw blockType = iota
+	blockTypeRLE
+	blockTypeCompressed
+	blockTypeReserved
 )
 
+type literalsBlockType uint8
+
 const (
-	LiteralsBlockRaw LiteralsBlockType = iota
-	LiteralsBlockRLE
-	LiteralsBlockCompressed
-	LiteralsBlockTreeless
+	literalsBlockRaw literalsBlockType = iota
+	literalsBlockRLE
+	literalsBlockCompressed
+	literalsBlockTreeless
 )
 
 const (
@@ -48,21 +50,7 @@ const (
 	maxOffsetBits = 30
 )
 
-type LiteralsBlockType uint8
-
 var (
-	// ErrReservedBlockType is returned when a reserved block type is found.
-	// Typically this indicates wrong or corrupted input.
-	ErrReservedBlockType = errors.New("invalid input: reserved block type encountered")
-
-	// ErrReservedBlockType is returned when a reserved block type is found.
-	// Typically this indicates wrong or corrupted input.
-	ErrCompressedSizeTooBig = errors.New("invalid input: compressed size too big")
-
-	// ErrBlockTooSmall is returned when a block is too small to be decoded.
-	// Typically returned on invalid input.
-	ErrBlockTooSmall = errors.New("block too small")
-
 	huffDecoderPool = sync.Pool{New: func() interface{} {
 		return &huff0.Scratch{}
 	}}
@@ -84,7 +72,7 @@ type blockDec struct {
 
 	// Window size of the block.
 	WindowSize uint64
-	Type       BlockType
+	Type       blockType
 	RLESize    uint32
 
 	// Is this the last block of a frame?
@@ -131,16 +119,16 @@ func (b *blockDec) reset(br byteBuffer, windowSize uint64) error {
 	}
 	bh := uint32(tmp[0]) | (uint32(tmp[1]) << 8) | (uint32(tmp[2]) << 16)
 	b.Last = bh&1 != 0
-	b.Type = BlockType((bh >> 1) & 3)
+	b.Type = blockType((bh >> 1) & 3)
 	// find size.
 	cSize := int(bh >> 3)
 	switch b.Type {
-	case BlockTypeReserved:
+	case blockTypeReserved:
 		return ErrReservedBlockType
-	case BlockTypeRLE:
+	case blockTypeRLE:
 		b.RLESize = uint32(cSize)
 		cSize = 1
-	case BlockTypeCompressed:
+	case blockTypeCompressed:
 		if debug {
 			println("Data size on stream:", cSize)
 		}
@@ -180,7 +168,7 @@ func (b *blockDec) reset(br byteBuffer, windowSize uint64) error {
 // sendEOF will make the decoder send EOF on this frame.
 func (b *blockDec) sendErr(err error) {
 	b.Last = true
-	b.Type = BlockTypeReserved
+	b.Type = blockTypeReserved
 	b.err = err
 	b.input <- struct{}{}
 }
@@ -199,7 +187,7 @@ func (b *blockDec) startDecoder() {
 	for range b.input {
 		//println("blockDec: Got block input")
 		switch b.Type {
-		case BlockTypeRLE:
+		case blockTypeRLE:
 			if cap(b.dst) < int(b.RLESize) {
 				if b.lowMem {
 					b.dst = make([]byte, b.RLESize)
@@ -219,7 +207,7 @@ func (b *blockDec) startDecoder() {
 			hist := <-b.history
 			hist.append(o.b)
 			b.result <- o
-		case BlockTypeRaw:
+		case blockTypeRaw:
 			o := decodeOutput{
 				d:   b,
 				b:   b.data,
@@ -228,7 +216,7 @@ func (b *blockDec) startDecoder() {
 			hist := <-b.history
 			hist.append(o.b)
 			b.result <- o
-		case BlockTypeCompressed:
+		case blockTypeCompressed:
 			b.dst = b.dst[:0]
 			err := b.decodeCompressed(nil)
 			o := decodeOutput{
@@ -240,7 +228,7 @@ func (b *blockDec) startDecoder() {
 				println("Decompressed to", len(b.dst), "bytes, error:", err)
 			}
 			b.result <- o
-		case BlockTypeReserved:
+		case blockTypeReserved:
 			// Used for returning errors.
 			<-b.history
 			b.result <- decodeOutput{
@@ -261,7 +249,7 @@ func (b *blockDec) startDecoder() {
 // If history is provided, it will not fetch it from the channel.
 func (b *blockDec) decodeBuf(hist *history) error {
 	switch b.Type {
-	case BlockTypeRLE:
+	case blockTypeRLE:
 		if cap(b.dst) < int(b.RLESize) {
 			if b.lowMem {
 				b.dst = make([]byte, b.RLESize)
@@ -276,10 +264,10 @@ func (b *blockDec) decodeBuf(hist *history) error {
 		}
 		hist.appendKeep(b.dst)
 		return nil
-	case BlockTypeRaw:
+	case blockTypeRaw:
 		hist.appendKeep(b.data)
 		return nil
-	case BlockTypeCompressed:
+	case blockTypeCompressed:
 		saved := b.dst
 		b.dst = hist.b
 		hist.b = nil
@@ -290,7 +278,7 @@ func (b *blockDec) decodeBuf(hist *history) error {
 		hist.b = b.dst
 		b.dst = saved
 		return err
-	case BlockTypeReserved:
+	case blockTypeReserved:
 		// Used for returning errors.
 		return b.err
 	default:
@@ -317,13 +305,13 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 	if len(in) < 2 {
 		return ErrBlockTooSmall
 	}
-	litType := LiteralsBlockType(in[0] & 3)
+	litType := literalsBlockType(in[0] & 3)
 	var litRegenSize int
 	var litCompSize int
 	sizeFormat := (in[0] >> 2) & 3
 	var fourStreams bool
 	switch litType {
-	case LiteralsBlockRaw, LiteralsBlockRLE:
+	case literalsBlockRaw, literalsBlockRLE:
 		switch sizeFormat {
 		case 0, 2:
 			// Regenerated_Size uses 5 bits (0-31). Literals_Section_Header uses 1 byte.
@@ -342,7 +330,7 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 			litRegenSize = int(in[0]>>4) + (int(in[1]) << 4) + (int(in[2]) << 12)
 			in = in[3:]
 		}
-	case LiteralsBlockCompressed, LiteralsBlockTreeless:
+	case literalsBlockCompressed, literalsBlockTreeless:
 		switch sizeFormat {
 		case 0, 1:
 			// Both Regenerated_Size and Compressed_Size use 10 bits (0-1023).
@@ -380,7 +368,7 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 	var literals []byte
 	var huff *huff0.Scratch
 	switch litType {
-	case LiteralsBlockRaw:
+	case literalsBlockRaw:
 		if len(in) < litRegenSize {
 			println("too small: litType:", litType, " sizeFormat", sizeFormat, "remain:", len(in), "want:", litRegenSize)
 			return ErrBlockTooSmall
@@ -388,7 +376,7 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		literals = in[:litRegenSize]
 		in = in[litRegenSize:]
 		//printf("Found %d uncompressed literals\n", litRegenSize)
-	case LiteralsBlockRLE:
+	case literalsBlockRLE:
 		if len(in) < 1 {
 			println("too small: litType:", litType, " sizeFormat", sizeFormat, "remain:", len(in), "want:", 1)
 			return ErrBlockTooSmall
@@ -415,7 +403,7 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		if debug {
 			printf("Found %d RLE compressed literals\n", litRegenSize)
 		}
-	case LiteralsBlockTreeless:
+	case literalsBlockTreeless:
 		if len(in) < litCompSize {
 			println("too small: litType:", litType, " sizeFormat", sizeFormat, "remain:", len(in), "want:", litCompSize)
 			return ErrBlockTooSmall
@@ -426,7 +414,7 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		if debug {
 			printf("Found %d compressed literals\n", litCompSize)
 		}
-	case LiteralsBlockCompressed:
+	case literalsBlockCompressed:
 		if len(in) < litCompSize {
 			println("too small: litType:", litType, " sizeFormat", sizeFormat, "remain:", len(in), "want:", litCompSize)
 			return ErrBlockTooSmall
@@ -587,7 +575,7 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 	}
 
 	// Decode treeless literal block.
-	if litType == LiteralsBlockTreeless {
+	if litType == literalsBlockTreeless {
 		// TODO: We could send the history early WITHOUT the stream history.
 		//   This would allow decoding treeless literials before the byte history is available.
 		//   Silencia stats: Treeless 4393, with: 32775, total: 37168, 11% treeless.

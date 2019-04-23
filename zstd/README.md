@@ -21,7 +21,7 @@ STATUS: BETA - there may still be subtle bugs, but a wide variety of content has
 
 Install using `go get -u github.com/klauspost/compress`. The package is located in `github.com/klauspost/compress/zstd`.
 
-Godoc Documentation: https://golang.org/github.com/klauspost/compress/zstd
+Godoc Documentation: https://godoc.org/github.com/klauspost/compress/zstd
 
 You will also need the `github.com/cespare/xxhash` package.
 
