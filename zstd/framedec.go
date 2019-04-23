@@ -150,6 +150,9 @@ func (d *frameDec) reset(br byteBuffer) error {
 		if debug {
 			println("Dict size", size, "ID:", d.DictionaryID)
 		}
+		if d.DictionaryID != 0 {
+			return ErrUnknownDictionary
+		}
 	}
 
 	// Read Frame_Content_Size

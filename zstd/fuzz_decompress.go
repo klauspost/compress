@@ -66,18 +66,18 @@ func Fuzz(data []byte) int {
 		return 0
 	}
 
-	want, wantErr := zstd.Decompress(nil, data)
+	ref, refErr := zstd.Decompress(nil, data)
 
 	switch {
 	case err == nil:
-		if wantErr != nil {
-			panic(fmt.Errorf("reference returned no error, but got %v", err))
+		if refErr != nil {
+			panic(fmt.Errorf("decoder returned no error, but reference returned %v", refErr))
 		}
-		if !bytes.Equal(want, got) {
+		if !bytes.Equal(ref, got) {
 			panic("output mismatch")
 		}
 		return 1
-	case wantErr == nil:
+	case refErr == nil:
 		if err != nil {
 			panic(fmt.Errorf("reference returned no error, but got %v", err))
 		}

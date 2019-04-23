@@ -27,7 +27,7 @@ var (
 	// Typically this indicates wrong or corrupted input.
 	ErrMagicMismatch = errors.New("invalid input: magic number mismatch")
 
-	// ErrWindowSizeExceeded is returned when a "magic" number isn't what is expected.
+	// ErrWindowSizeExceeded is returned when a reference exceeds the valid window size.
 	// Typically this indicates wrong or corrupted input.
 	ErrWindowSizeExceeded = errors.New("window size exceeded")
 
@@ -37,6 +37,10 @@ var (
 
 	// ErrDecoderSizeExceeded is returned if decompressed size exceeds the configured limit.
 	ErrDecoderSizeExceeded = errors.New("decompressed size exceeds configured limit")
+
+	// ErrUnknownDictionary is returned if the dictionary ID is unknown.
+	// For the time being dictionaries are not supported.
+	ErrUnknownDictionary = errors.New("unknown dictionary")
 
 	// ErrCRCMismatch is returned if CRC mismatches.
 	ErrCRCMismatch = errors.New("CRC check failed")

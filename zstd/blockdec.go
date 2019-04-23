@@ -659,7 +659,9 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		return err
 	}
 	if !br.finished() {
-		return fmt.Errorf("%d extra bits on block, should be 0", br.remain())
+		// Disabled until this is resolved:
+		// https://github.com/facebook/zstd/issues/1597
+		// return fmt.Errorf("%d extra bits on block, should be 0", br.remain())
 	}
 
 	err = br.close()
