@@ -4,8 +4,11 @@ package zstd
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
+
+	"github.com/DataDog/zstd"
 )
 
 func Fuzz(data []byte) int {
@@ -37,16 +40,47 @@ func Fuzz(data []byte) int {
 			return 1
 		}
 		return 0
+	} else if false {
+		dec, err := NewReader(nil, WithDecoderLowmem(true), WithDecoderConcurrency(1), WithDecoderMaxMemory(10<<20))
+		if err != nil {
+			panic(err)
+		}
+		defer dec.Close()
+		_, err = dec.DecodeAll(data, nil)
+		switch err {
+		case nil, ErrCRCMismatch:
+			return 1
+		}
+		return 0
 	}
+
+	// Run against reference decoder
 	dec, err := NewReader(nil, WithDecoderLowmem(true), WithDecoderConcurrency(1), WithDecoderMaxMemory(10<<20))
 	if err != nil {
 		panic(err)
 	}
 	defer dec.Close()
-	_, err = dec.DecodeAll(data, nil)
-	switch err {
-	case nil, ErrCRCMismatch:
+	got, err = dec.DecodeAll(data, nil)
+	if err == ErrDecoderSizeExceeded {
+		// Don't run me out of memory.
+		return 0
+	}
+
+	want, wantErr := zstd.Decompress(nil, data)
+
+	switch {
+	case err == nil:
+		if wantErr != nil {
+			panic(fmt.Errorf("reference returned no error, but got %v", err))
+		}
+		if !bytes.Equal(want, got) {
+			panic("output mismatch")
+		}
 		return 1
+	case wantErr == nil:
+		if err != nil {
+			panic(fmt.Errorf("reference returned no error, but got %v", err))
+		}
 	}
 	return 0
 }
