@@ -184,6 +184,7 @@ func testDecoderFile(t *testing.T, fn string) {
 				t.Error(err)
 				return
 			}
+			defer r.Close()
 			err = dec.Reset(r)
 			if err != nil {
 				t.Error(err)
@@ -248,6 +249,7 @@ func BenchmarkDecoder_DecodeAll(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
+			defer r.Close()
 			in, err := ioutil.ReadAll(r)
 			if err != nil {
 				b.Fatal(err)
@@ -289,6 +291,7 @@ func BenchmarkDecoder_DecodeAllCgo(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
+			defer r.Close()
 			in, err := ioutil.ReadAll(r)
 			if err != nil {
 				b.Fatal(err)

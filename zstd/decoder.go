@@ -363,30 +363,26 @@ func (d *Decoder) startStreamDecoder(inStream chan decodeStream) {
 		decodeFrame:
 			// Go through all blocks of the frame.
 			for {
+				dec := <-d.decoders
 				select {
-				case dec := <-d.decoders:
-					select {
-					case <-stream.cancel:
-						if !frame.sendErr(dec, io.EOF) {
-							// To not let the decoder dangle, send it back.
-							stream.output <- decodeOutput{d: dec}
-						}
-						break decodeStream
-					default:
-					}
-					err := frame.next(dec)
-					switch err {
-					case io.EOF:
-						// End of current frame, no error
-						println("EOF on next block")
-						break decodeFrame
-					case nil:
-						continue
-					default:
-						println("block decoder returned", err)
-						break decodeStream
-					}
 				case <-stream.cancel:
+					if !frame.sendErr(dec, io.EOF) {
+						// To not let the decoder dangle, send it back.
+						stream.output <- decodeOutput{d: dec}
+					}
+					break decodeStream
+				default:
+				}
+				err := frame.next(dec)
+				switch err {
+				case io.EOF:
+					// End of current frame, no error
+					println("EOF on next block")
+					break decodeFrame
+				case nil:
+					continue
+				default:
+					println("block decoder returned", err)
 					break decodeStream
 				}
 			}
