@@ -57,8 +57,6 @@ var (
 	// Check the interfaces we want to support.
 	_ = io.WriterTo(&Decoder{})
 	_ = io.Reader(&Decoder{})
-
-	ErrDecoderClosed = errors.New("decoder used after Close")
 )
 
 // NewReader creates a new decoder.

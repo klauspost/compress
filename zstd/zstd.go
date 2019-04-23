@@ -40,6 +40,10 @@ var (
 
 	// ErrCRCMismatch is returned if CRC mismatches.
 	ErrCRCMismatch = errors.New("CRC check failed")
+
+	// ErrDecoderClosed will be returned if the Decoder was used after
+	// Close has been called.
+	ErrDecoderClosed = errors.New("decoder used after Close")
 )
 
 func println(a ...interface{}) {
