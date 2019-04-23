@@ -1,3 +1,7 @@
+// Copyright 2019+ Klaus Post. All rights reserved.
+// License information can be found in the LICENSE file.
+// Based on work by Yann Collet, released under BSD License.
+
 package zstd
 
 import (
@@ -18,7 +22,16 @@ const (
 	BlockTypeRLE
 	BlockTypeCompressed
 	BlockTypeReserved
+)
 
+const (
+	LiteralsBlockRaw LiteralsBlockType = iota
+	LiteralsBlockRLE
+	LiteralsBlockCompressed
+	LiteralsBlockTreeless
+)
+
+const (
 	// maxCompressedBlockSize is the biggest allowed compressed block size (128KB)
 	maxCompressedBlockSize = 128 << 10
 
@@ -28,19 +41,11 @@ const (
 	// https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#literals_section_header
 	maxCompressedLiteralSize = 1 << 18
 	maxRLELiteralSize        = 1 << 20
-
-	maxMatchLen = 131074
+	maxMatchLen              = 131074
 
 	// We support slightly less than the reference decoder to be able to
 	// use ints on 32 bit archs.
 	maxOffsetBits = 30
-)
-
-const (
-	LiteralsBlockRaw LiteralsBlockType = iota
-	LiteralsBlockRLE
-	LiteralsBlockCompressed
-	LiteralsBlockTreeless
 )
 
 type LiteralsBlockType uint8
@@ -317,7 +322,6 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 	var litCompSize int
 	sizeFormat := (in[0] >> 2) & 3
 	var fourStreams bool
-	//println("Literals type:", litType, "sizeFormat:", sizeFormat)
 	switch litType {
 	case LiteralsBlockRaw, LiteralsBlockRLE:
 		switch sizeFormat {

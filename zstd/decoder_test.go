@@ -1,3 +1,7 @@
+// Copyright 2019+ Klaus Post. All rights reserved.
+// License information can be found in the LICENSE file.
+// Based on work by Yann Collet, released under BSD License.
+
 package zstd
 
 import (
@@ -44,6 +48,18 @@ func TestNewDecoderLarge(t *testing.T) {
 		t.Fatal(err)
 	}
 	testDecoderDecodeAll(t, "testdata/large.zip", dec)
+}
+
+func TestNewReaderRead(t *testing.T) {
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = dec.Read([]byte{0})
+	if err == nil {
+		t.Fatal("Wanted error on uninitialized read, got nil")
+	}
+	t.Log("correctly got error", err)
 }
 
 func TestNewDecoderBig(t *testing.T) {

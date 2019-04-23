@@ -26,7 +26,7 @@ func Fuzz(data []byte) int {
 		}()
 	*/
 	if false {
-		dec, err := NewReader(bytes.NewBuffer(data))
+		dec, err := NewReader(bytes.NewBuffer(data), WithDecoderConcurrency(1))
 		if err != nil {
 			return 0
 		}

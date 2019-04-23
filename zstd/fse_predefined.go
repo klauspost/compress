@@ -1,3 +1,7 @@
+// Copyright 2019+ Klaus Post. All rights reserved.
+// License information can be found in the LICENSE file.
+// Based on work by Yann Collet, released under BSD License.
+
 package zstd
 
 import (
@@ -120,9 +124,6 @@ func init() {
 		}
 		if err := f.transform(symbolTableX[i]); err != nil {
 			panic(fmt.Errorf("building table %v: %v", tableIndex(i), err))
-		}
-		if false {
-			printf("%v: %v\n", tableIndex(i), f.dt[:1<<f.actualTableLog])
 		}
 		f.preDefined = true
 	}

@@ -93,8 +93,8 @@ It can however decode several buffers concurrently. Use `WithDecoderConcurrency(
 
 The stream decoder operates on
 
-* One goroutine reads input and splits the input to several decoders.
-* A number of decoders will decode each "block".
+* One goroutine reads input and splits the input to several block decoders.
+* A number of decoders will decode blocks.
 * A goroutine coordinates these blocks and sends history from one to the next.
 
 So effectively this also means the decoder will "read ahead" and prepare data to always be available for output.

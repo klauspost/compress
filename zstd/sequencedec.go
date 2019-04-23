@@ -1,3 +1,7 @@
+// Copyright 2019+ Klaus Post. All rights reserved.
+// License information can be found in the LICENSE file.
+// Based on work by Yann Collet, released under BSD License.
+
 package zstd
 
 import (
@@ -28,6 +32,7 @@ type sequenceDec struct {
 	repeat bool
 }
 
+// init the state of the decoder with input from stream.
 func (s *sequenceDec) init(br *bitReader) error {
 	if s.fse == nil {
 		return errors.New("sequence decoder not defined")
@@ -36,6 +41,7 @@ func (s *sequenceDec) init(br *bitReader) error {
 	return nil
 }
 
+// sequenceDecs contains all 3 sequence decoders and their state.
 type sequenceDecs struct {
 	litLengths   sequenceDec
 	offsets      sequenceDec
@@ -47,6 +53,7 @@ type sequenceDecs struct {
 	maxBits      uint8
 }
 
+// initialize all 3 decoders from the stream input.
 func (s *sequenceDecs) initialize(br *bitReader, hist *history, literals, out []byte) error {
 	if err := s.litLengths.init(br); err != nil {
 		return errors.New("litLengths:" + err.Error())
@@ -65,6 +72,7 @@ func (s *sequenceDecs) initialize(br *bitReader, hist *history, literals, out []
 	return nil
 }
 
+// decode sequences from the stream with the provided history.
 func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
 	startSize := len(s.out)
 	for i := seqs - 1; i >= 0; i-- {
@@ -113,7 +121,8 @@ func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
 		s.literals = s.literals[litLen:]
 		out := s.out
 
-		// Copy from history
+		// Copy from history.
+		// TODO: Blocks without history could be made to ignore this completely.
 		if v := matchOff - len(s.out); v > 0 {
 			// v is the start position in history from end.
 			start := len(s.hist) - v
@@ -149,6 +158,7 @@ func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
 		}
 		s.out = out
 		if i == 0 {
+			// This is the last sequence, so we shouldn't update state.
 			break
 		}
 		if true {

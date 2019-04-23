@@ -1,9 +1,14 @@
+// Copyright 2019+ Klaus Post. All rights reserved.
+// License information can be found in the LICENSE file.
+// Based on work by Yann Collet, released under BSD License.
+
 package zstd
 
 import (
 	"github.com/klauspost/compress/huff0"
 )
 
+// history contains the information transferred between blocks.
 type history struct {
 	b             []byte
 	huffTree      *huff0.Scratch
@@ -55,7 +60,7 @@ func (h *history) append(b []byte) {
 	}
 
 	// Move data down so we only have window size left.
-	// We know we have less than window size input at this point.
+	// We know we have less than window size in b at this point.
 	discard := len(b) + len(h.b) - h.windowSize
 	copy(h.b, h.b[discard:])
 	h.b = h.b[:h.windowSize]

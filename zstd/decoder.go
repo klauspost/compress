@@ -1,3 +1,7 @@
+// Copyright 2019+ Klaus Post. All rights reserved.
+// License information can be found in the LICENSE file.
+// Based on work by Yann Collet, released under BSD License.
+
 package zstd
 
 import (
@@ -6,6 +10,12 @@ import (
 	"sync"
 )
 
+// Decoder provides decoding of zstandard streams.
+// The decoder has been designed to operate without allocations after a warmup.
+// This means that you should store the decoder for best performance.
+// To re-use a stream decoder, use the Reset(r io.Reader) error to switch to another stream.
+// A decoder can safely be re-used even if the previous stream failed.
+// To release the resources, you must call the Close() function on a decoder.
 type Decoder struct {
 	o decoderOptions
 
@@ -62,7 +72,6 @@ var (
 // Only a single stream can be decoded concurrently, but the same decoder
 // can run multiple concurrent stateless decodes. It is even possible to
 // use stateless decodes while a stream is being decoded.
-// For best speed it is recommended to keep track of
 //
 // The Reset function can be used to initiate a new stream, which is will considerably
 // reduce the allocations normally caused by NewReader.
@@ -92,7 +101,13 @@ func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
 	return &d, d.Reset(r)
 }
 
+// Read bytes from the decompressed stream into p.
+// Returns the number of bytes written and any error that occurred.
+// When the stream is done, io.EOF will be returned.
 func (d *Decoder) Read(p []byte) (int, error) {
+	if d.stream == nil {
+		return 0, errors.New("no input has been initialized")
+	}
 	var n int
 	for {
 		if len(d.current.b) > 0 {
@@ -134,12 +149,13 @@ func (d *Decoder) Reset(r io.Reader) error {
 	if r == nil {
 		return errors.New("nil Reader sent as input")
 	}
+
+	// TODO: If r is a *bytes.Buffer, we could automatically switch to sync operation.
+
 	if d.stream == nil {
 		d.stream = make(chan decodeStream, 1)
 		go d.startStreamDecoder(d.stream)
 	}
-
-	// TODO: If r is a *bytes.Buffer, we could automatically switch to sync operation.
 
 	d.drainOutput()
 
@@ -191,7 +207,13 @@ func (d *Decoder) drainOutput() {
 	}
 }
 
+// WriteTo writes data to w until there's no more data to write or when an error occurs.
+// The return value n is the number of bytes written.
+// Any error encountered during the write is also returned.
 func (d *Decoder) WriteTo(w io.Writer) (int64, error) {
+	if d.stream == nil {
+		return 0, errors.New("no input has been initialized")
+	}
 	var n int64
 	for d.current.err == nil {
 		if len(d.current.b) > 0 {
@@ -217,7 +239,7 @@ func (d *Decoder) WriteTo(w io.Writer) (int64, error) {
 // DecodeAll allows stateless decoding of a blob of bytes.
 // Output will be appended to dst, so if the destination size is known
 // you can pre-allocate the destination slice to avoid allocations.
-// DecodeAll can be used concurrently. If you plan to, do not use the low memory option.
+// DecodeAll can be used concurrently.
 // The Decoder concurrency limits will be respected.
 func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 	if d.current.err == ErrDecoderClosed {
