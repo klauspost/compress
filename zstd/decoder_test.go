@@ -41,6 +41,15 @@ func TestNewDecoderGood(t *testing.T) {
 	testDecoderDecodeAll(t, "testdata/good.zip", dec)
 }
 
+func TestNewDecoderBad(t *testing.T) {
+	defer timeout(10 * time.Second)()
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testDecoderDecodeAllError(t, "testdata/bad.zip", dec)
+}
+
 func TestNewDecoderLarge(t *testing.T) {
 	testDecoderFile(t, "testdata/large.zip")
 	dec, err := NewReader(nil)
@@ -526,6 +535,40 @@ func testDecoderDecodeAll(t *testing.T, fn string, dec *Decoder) {
 				return
 			}
 			t.Log(len(got), "bytes returned, matches input, ok!")
+		})
+	}
+}
+
+func testDecoderDecodeAllError(t *testing.T, fn string, dec *Decoder) {
+	data, err := ioutil.ReadFile(fn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tt := range zr.File {
+		tt := tt
+		if !strings.HasSuffix(tt.Name, ".zst") {
+			continue
+		}
+		t.Run("DecodeAll-"+tt.Name, func(t *testing.T) {
+			t.Parallel()
+			r, err := tt.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			in, err := ioutil.ReadAll(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// make a buffer that is too small.
+			_, err = dec.DecodeAll(in, make([]byte, 0, 200))
+			if err == nil {
+				t.Error("Did not get expected error")
+			}
 		})
 	}
 }
