@@ -44,6 +44,7 @@ const (
 	maxCompressedLiteralSize = 1 << 18
 	maxRLELiteralSize        = 1 << 20
 	maxMatchLen              = 131074
+	maxSequences             = 0x7f00 + 0xffff
 
 	// We support slightly less than the reference decoder to be able to
 	// use ints on 32 bit archs.
@@ -487,14 +488,13 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		nSeqs = 0x7f00 + int(in[1]) + (int(in[2]) << 8)
 		in = in[3:]
 	}
-
 	// Allocate sequences
 	if cap(b.sequenceBuf) < nSeqs {
 		if b.lowMem {
 			b.sequenceBuf = make([]seq, nSeqs)
 		} else {
 			// Allocate max
-			b.sequenceBuf = make([]seq, nSeqs, 0x7f00+0xffff)
+			b.sequenceBuf = make([]seq, nSeqs, maxSequences)
 		}
 	} else {
 		// Reuse buffer
