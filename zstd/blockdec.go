@@ -653,8 +653,8 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		println("initializing sequences:", err)
 		return err
 	}
-
-	err = seqs.decode(nSeqs, br, hist.b)
+	s := b.sequenceBuf[:nSeqs]
+	err = seqs.decode(s, br)
 	if err != nil {
 		return err
 	}
@@ -662,6 +662,11 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		// Disabled until this is resolved:
 		// https://github.com/facebook/zstd/issues/1597
 		// return fmt.Errorf("%d extra bits on block, should be 0", br.remain())
+	}
+	// We need output history here.
+	err = seqs.execute(s, hist.b)
+	if err != nil {
+		return err
 	}
 
 	err = br.close()

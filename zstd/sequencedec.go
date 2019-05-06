@@ -73,11 +73,10 @@ func (s *sequenceDecs) initialize(br *bitReader, hist *history, literals, out []
 }
 
 // decode sequences from the stream with the provided history.
-func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
-	startSize := len(s.out)
-	for i := seqs - 1; i >= 0; i-- {
+func (s *sequenceDecs) decode(seqs []seq, br *bitReader) error {
+	for i := range seqs {
 		if br.overread() {
-			printf("reading sequence %d, exceeded available data\n", seqs-i)
+			printf("reading sequence %d, exceeded available data\n", i)
 			return io.ErrUnexpectedEOF
 		}
 		var litLen, matchOff, matchLen int
@@ -96,6 +95,60 @@ func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
 		if litLen > len(s.literals) {
 			return fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available", litLen, len(s.literals))
 		}
+
+		if matchLen > maxMatchLen {
+			return fmt.Errorf("match len (%d) bigger than max allowed length", matchLen)
+		}
+		if matchOff == 0 && matchLen > 0 {
+			return fmt.Errorf("zero matchoff and matchlen > 0")
+		}
+		seqs[i] = seq{
+			literals:    uint32(litLen),
+			matchLen:    uint32(matchLen),
+			matchOffset: uint32(matchOff),
+		}
+		if i == len(seqs)-1 {
+			// last sequence, no update.
+			break
+		}
+		if true {
+			// Manually inlined, ~ 5-20% faster
+			// Update all 3 states at once. Approx 20% faster.
+			a, b, c := s.litLengths.state.state, s.matchLengths.state.state, s.offsets.state.state
+
+			nBits := a.nbBits + b.nbBits + c.nbBits
+			if nBits == 0 {
+				s.litLengths.state.state = s.litLengths.state.dt[a.newState]
+				s.matchLengths.state.state = s.matchLengths.state.dt[b.newState]
+				s.offsets.state.state = s.offsets.state.dt[c.newState]
+			} else {
+				bits := br.getBitsFast(nBits)
+				lowBits := uint16(bits >> ((c.nbBits + b.nbBits) & 31))
+				s.litLengths.state.state = s.litLengths.state.dt[a.newState+lowBits]
+
+				lowBits = uint16(bits >> (c.nbBits & 31))
+				lowBits &= bitMask[b.nbBits&15]
+				s.matchLengths.state.state = s.matchLengths.state.dt[b.newState+lowBits]
+
+				lowBits = uint16(bits) & bitMask[c.nbBits&15]
+				s.offsets.state.state = s.offsets.state.dt[c.newState+lowBits]
+			}
+		} else {
+			s.updateAlt(br)
+		}
+	}
+
+	return nil
+}
+
+// decode sequences from the stream with the provided history.
+func (s *sequenceDecs) execute(seqs []seq, hist []byte) error {
+	startSize := len(s.out)
+	for _, seq := range seqs {
+		litLen := int(seq.literals)
+		matchLen := int(seq.matchLen)
+		matchOff := int(seq.matchOffset)
+
 		size := litLen + matchLen + len(s.out)
 		if size-startSize > maxBlockSize {
 			return fmt.Errorf("output (%d) bigger than max block size", size)
@@ -106,9 +159,6 @@ func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
 			// We add maxBlockSize to the capacity.
 			s.out = append(s.out, make([]byte, maxBlockSize)...)
 			s.out = s.out[:len(s.out)-maxBlockSize]
-		}
-		if matchLen > maxMatchLen {
-			return fmt.Errorf("match len (%d) bigger than max allowed length", matchLen)
 		}
 		if matchOff > len(s.out)+len(hist)+litLen {
 			return fmt.Errorf("match offset (%d) bigger than current history (%d)", matchOff, len(s.out)+len(hist)+litLen)
@@ -157,35 +207,6 @@ func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
 			}
 		}
 		s.out = out
-		if i == 0 {
-			// This is the last sequence, so we shouldn't update state.
-			break
-		}
-		if true {
-			// Manually inlined, ~ 5-20% faster
-			// Update all 3 states at once. Approx 20% faster.
-			a, b, c := s.litLengths.state.state, s.matchLengths.state.state, s.offsets.state.state
-
-			nBits := a.nbBits + b.nbBits + c.nbBits
-			if nBits == 0 {
-				s.litLengths.state.state = s.litLengths.state.dt[a.newState]
-				s.matchLengths.state.state = s.matchLengths.state.dt[b.newState]
-				s.offsets.state.state = s.offsets.state.dt[c.newState]
-			} else {
-				bits := br.getBitsFast(nBits)
-				lowBits := uint16(bits >> ((c.nbBits + b.nbBits) & 31))
-				s.litLengths.state.state = s.litLengths.state.dt[a.newState+lowBits]
-
-				lowBits = uint16(bits >> (c.nbBits & 31))
-				lowBits &= bitMask[b.nbBits&15]
-				s.matchLengths.state.state = s.matchLengths.state.dt[b.newState+lowBits]
-
-				lowBits = uint16(bits) & bitMask[c.nbBits&15]
-				s.offsets.state.state = s.offsets.state.dt[c.newState+lowBits]
-			}
-		} else {
-			s.updateAlt(br)
-		}
 	}
 
 	// Add final literals
