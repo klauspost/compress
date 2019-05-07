@@ -23,11 +23,26 @@ var bitMask16 = [32]uint16{
 	0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
 	0xFFFF, 0xFFFF} /* up to 16 bits */
 
+var bitMask32 = [32]uint32{
+	0, 1, 3, 7, 0xF, 0x1F, 0x3F, 0x7F, 0xFF,
+	0x1FF, 0x3FF, 0x7FF, 0xFFF, 0x1FFF, 0x3FFF, 0x7FFF, 0xFFFF,
+	0x1ffff, 0x3ffff, 0x7FFFF, 0xfFFFF, 0x1fFFFF, 0x3fFFFF, 0x7fFFFF, 0xffFFFF,
+	0x1ffFFFF, 0x3ffFFFF, 0x7ffFFFF, 0xfffFFFF, 0x1fffFFFF, 0x3fffFFFF, 0x7fffFFFF,
+} // up to 32 bits
+
 // addBits16NC will add up to 16 bits.
 // It will not check if there is space for them,
 // so the caller must ensure that it has flushed recently.
 func (b *bitWriter) addBits16NC(value uint16, bits uint8) {
 	b.bitContainer |= uint64(value&bitMask16[bits&31]) << (b.nBits & 63)
+	b.nBits += bits
+}
+
+// addBits16NC will add up to 16 bits.
+// It will not check if there is space for them,
+// so the caller must ensure that it has flushed recently.
+func (b *bitWriter) addBits32NC(value uint32, bits uint8) {
+	b.bitContainer |= uint64(value&bitMask32[bits&31]) << (b.nBits & 63)
 	b.nBits += bits
 }
 

@@ -100,11 +100,6 @@ func decodedLen(src []byte) (blockLen, headerLen int, err error) {
 	return int(v), n, nil
 }
 
-const (
-	decodeErrCodeCorrupt                  = 1
-	decodeErrCodeUnsupportedLiteralLength = 2
-)
-
 /*
 // Decode returns the decoded form of src. The returned slice may be a sub-
 // slice of dst if dst was large enough to hold the entire decoded block.
@@ -159,11 +154,6 @@ type seqCodes struct {
 
 	llEnc, ofEnc, mlEnc    *fseEncoder
 	llPrev, ofPrev, mlPrev *fseEncoder
-
-	// maximum values
-	//llMax uint8
-	//ofMax uint8
-	//mlMax uint8
 }
 
 func (s *seqCodes) initSize(sequences int) {
@@ -495,6 +485,50 @@ func (b *block) encode() error {
 	if err != nil {
 		return err
 	}
+
+	// Maybe in block?
+	var wr bitWriter
+	wr.reset(b.output)
+
+	var ll, of, ml cState
+
+	// Current sequence
+	seq := len(b.sequences) - 1
+	llTT, ofTT, mlTT := llEnc.ct.symbolTT[:256], ofEnc.ct.symbolTT[:256], mlEnc.ct.symbolTT[:256]
+	llIn, ofIn, mlIn := b.seqCodes.litLen, b.seqCodes.offset, b.seqCodes.matchLen
+	llB, ofB, mlB := llIn[seq], ofIn[seq], mlIn[seq]
+	ll.init(&wr, &llEnc.ct, llTT[llB])
+	of.init(&wr, &ofEnc.ct, ofTT[ofB])
+	wr.flush32()
+	ml.init(&wr, &mlEnc.ct, mlTT[mlB])
+
+	s := b.sequences[seq]
+	wr.addBits32NC(s.litLen, llB)
+	wr.flush32()
+	wr.addBits32NC(s.offset, ofB)
+	wr.flush32()
+	wr.addBits32NC(s.matchLen, mlB)
+	seq--
+	for seq >= 0 {
+		s = b.sequences[seq]
+		wr.flush32()
+		llB, ofB, mlB := llIn[seq], ofIn[seq], mlIn[seq]
+		ll.encode(llTT[llB])
+		of.encode(ofTT[ofB])
+		wr.flush32()
+		ml.encode(mlTT[mlB])
+		wr.addBits32NC(s.litLen, llB)
+		wr.flush32()
+		wr.addBits32NC(s.offset, ofB)
+		wr.flush32()
+		wr.addBits32NC(s.matchLen, mlB)
+		seq--
+	}
+	ll.flush(llEnc.actualTableLog)
+	of.flush(ofEnc.actualTableLog)
+	ml.flush(mlEnc.actualTableLog)
+	wr.flushAlign()
+	b.output = wr.out
 
 	// Size is output minus block header.
 	bh.setSize(uint32(len(b.output)) - 3)

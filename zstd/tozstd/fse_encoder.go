@@ -555,7 +555,7 @@ type cState struct {
 }
 
 // init will initialize the compression state to the first symbol of the stream.
-func (c *cState) init(bw *bitWriter, ct *cTable, tableLog uint8, first symbolTransform) {
+func (c *cState) init(bw *bitWriter, ct *cTable, first symbolTransform) {
 	c.bw = bw
 	c.stateTable = ct.stateTable
 
@@ -586,5 +586,4 @@ func (c *cState) encodeZero(symbolTT symbolTransform) {
 func (c *cState) flush(tableLog uint8) {
 	c.bw.flush32()
 	c.bw.addBits16NC(c.state, tableLog)
-	c.bw.flush()
 }
