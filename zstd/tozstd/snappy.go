@@ -3,6 +3,7 @@ package tozstd
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"hash/crc32"
 	"io"
 	"math"
@@ -77,12 +78,6 @@ var crcTable = crc32.MakeTable(crc32.Castagnoli)
 func crc(b []byte) uint32 {
 	c := crc32.Update(0, crcTable, b)
 	return uint32(c>>15|c<<17) + 0xa282ead8
-}
-
-// DecodedLen returns the length of the decoded block.
-func DecodedLen(src []byte) (int, error) {
-	v, _, err := decodedLen(src)
-	return v, err
 }
 
 // decodedLen returns the length of the decoded block and the number of bytes
@@ -212,7 +207,6 @@ func (b *block) reset() {
 	b.seqCodes.offset = b.seqCodes.offset[:0]
 	b.seqCodes.litLen = b.seqCodes.litLen[:0]
 	b.output = b.output[:0]
-	b.extraLits = 0
 }
 
 type blockHeader uint32
@@ -239,7 +233,7 @@ func (h blockHeader) appendTo(b []byte) []byte {
 	return append(b, uint8(h), uint8(h>>8), uint8(h>>16))
 }
 
-type literalsHeader uint32
+type literalsHeader uint64
 
 type literalsBlockType uint8
 
@@ -251,7 +245,7 @@ const (
 )
 
 func (h *literalsHeader) setType(t literalsBlockType) {
-	const mask = math.MaxUint64 - 3
+	const mask = math.MaxUint32 - 3
 	*h = (*h & mask) | literalsHeader(t<<1)
 }
 
@@ -270,6 +264,7 @@ func (h *literalsHeader) setSize(regenLen int) {
 	default:
 		panic("internal error: block too big")
 	}
+	*h = literalsHeader(lh)
 }
 
 func (h *literalsHeader) setSizes(compLen, inLen int) {
@@ -287,6 +282,7 @@ func (h *literalsHeader) setSizes(compLen, inLen int) {
 	default:
 		panic("internal error: block too big")
 	}
+	*h = literalsHeader(lh)
 }
 
 func (h literalsHeader) appendTo(b []byte) []byte {
@@ -303,7 +299,7 @@ func (h literalsHeader) appendTo(b []byte) []byte {
 	case 5:
 		b = append(b, uint8(h), uint8(h>>8), uint8(h>>16), uint8(h>>24), uint8(h>>32))
 	default:
-		panic("internal error: literalsHeader has invalid size")
+		panic(fmt.Errorf("internal error: literalsHeader has invalid size (%d)", size))
 	}
 	return b
 }
@@ -394,7 +390,6 @@ func (b *block) encode() error {
 	bh.setLast(b.last)
 	bh.setType(blockTypeCompressed)
 
-	// TODO: We must set size when we are finished.
 	b.output = bh.appendTo(b.output)
 
 	// TODO: Switch to 1X when less than 32 bytes.
@@ -590,7 +585,7 @@ func (b *block) genCodes() {
 
 		v = mlCode(seq.matchLen)
 		ml[i] = v
-		mlH[i]++
+		mlH[v]++
 		if v > mlMax {
 			mlMax = v
 		}
@@ -624,6 +619,7 @@ func (r *Snappy) readFull(p []byte, allowEOF bool) (ok bool) {
 }
 
 func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
+	// TODO: Add frame header.
 	r.err = nil
 	r.r = in
 	if r.block == nil {
@@ -644,6 +640,7 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 		chunkType := r.buf[0]
 		if !readHeader {
 			if chunkType != chunkTypeStreamIdentifier {
+				println("chunkType != chunkTypeStreamIdentifier", chunkType)
 				r.err = ErrCorrupt
 				return written, r.err
 			}
@@ -661,6 +658,7 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 		case chunkTypeCompressedData:
 			// Section 4.2. Compressed data (chunk type 0x00).
 			if chunkLen < checksumSize {
+				println("chunkLen < checksumSize", chunkLen, checksumSize)
 				r.err = ErrCorrupt
 				return written, r.err
 			}
@@ -671,12 +669,14 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 			//checksum := uint32(buf[0]) | uint32(buf[1])<<8 | uint32(buf[2])<<16 | uint32(buf[3])<<24
 			buf = buf[checksumSize:]
 
-			n, err := DecodedLen(buf)
+			n, hdr, err := decodedLen(buf)
 			if err != nil {
 				r.err = err
 				return written, r.err
 			}
+			buf = buf[hdr:]
 			if n > maxBlockSize {
+				println("n > maxBlockSize", n, maxBlockSize)
 				r.err = ErrCorrupt
 				return written, r.err
 			}
@@ -705,8 +705,11 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 			continue
 
 		case chunkTypeUncompressedData:
+			fmt.Println("Uncompressed, chunklen", chunkLen)
+
 			// Section 4.3. Uncompressed data (chunk type 0x01).
 			if chunkLen < checksumSize {
+				println("chunkLen < checksumSize", chunkLen, checksumSize)
 				r.err = ErrCorrupt
 				return written, r.err
 			}
@@ -719,6 +722,7 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 			// Read directly into r.decoded instead of via r.buf.
 			n := chunkLen - checksumSize
 			if n > maxBlockSize {
+				println("n > maxBlockSize", n, maxBlockSize)
 				r.err = ErrCorrupt
 				return written, r.err
 			}
@@ -727,6 +731,7 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 				return written, r.err
 			}
 			if crc(r.block.literals) != checksum {
+				println("literals crc mismatch")
 				r.err = ErrCorrupt
 				return written, r.err
 			}
@@ -742,8 +747,10 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 			continue
 
 		case chunkTypeStreamIdentifier:
+			println("stream id", chunkLen, len(magicBody))
 			// Section 4.1. Stream identifier (chunk type 0xff).
 			if chunkLen != len(magicBody) {
+				println("chunkLen != len(magicBody)", chunkLen, len(magicBody))
 				r.err = ErrCorrupt
 				return written, r.err
 			}
@@ -752,6 +759,7 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 			}
 			for i := 0; i < len(magicBody); i++ {
 				if r.buf[i] != magicBody[i] {
+					println("r.buf[i] != magicBody[i]", r.buf[i], magicBody[i], i)
 					r.err = ErrCorrupt
 					return written, r.err
 				}
@@ -778,7 +786,8 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 //
 // It returns 0 on success or a decodeErrCodeXxx error code on failure.
 func decode(dst *block, src []byte) error {
-	var d, s, length int
+	//decodeRef(make([]byte, maxBlockSize), src)
+	var s, length int
 	lits := dst.extraLits
 	var offset uint32
 	for s < len(src) {
@@ -791,33 +800,40 @@ func decode(dst *block, src []byte) error {
 			case x == 60:
 				s += 2
 				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+					println("uint(s) > uint(len(src)", s, src)
 					return ErrCorrupt
 				}
 				x = uint32(src[s-1])
 			case x == 61:
 				s += 3
 				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+					println("uint(s) > uint(len(src)", s, src)
 					return ErrCorrupt
 				}
 				x = uint32(src[s-2]) | uint32(src[s-1])<<8
 			case x == 62:
 				s += 4
 				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+					println("uint(s) > uint(len(src)", s, src)
 					return ErrCorrupt
 				}
 				x = uint32(src[s-3]) | uint32(src[s-2])<<8 | uint32(src[s-1])<<16
 			case x == 63:
 				s += 5
 				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+					println("uint(s) > uint(len(src)", s, src)
 					return ErrCorrupt
 				}
 				x = uint32(src[s-4]) | uint32(src[s-3])<<8 | uint32(src[s-2])<<16 | uint32(src[s-1])<<24
 			}
 			if x > maxBlockSize {
+				println("x > maxBlockSize", x, maxBlockSize)
 				return ErrCorrupt
 			}
 			length = int(x) + 1
 			if length <= 0 {
+				println("length <= 0 ", length)
+
 				return errUnsupportedLiteralLength
 			}
 			//if length > maxBlockSize-d || uint32(length) > len(src)-s {
@@ -825,6 +841,7 @@ func decode(dst *block, src []byte) error {
 			//}
 
 			dst.literals = append(dst.literals, src[s:s+length]...)
+			println(length, "literals")
 			lits += length
 			s += length
 			continue
@@ -832,6 +849,7 @@ func decode(dst *block, src []byte) error {
 		case tagCopy1:
 			s += 2
 			if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+				println("uint(s) > uint(len(src)", s, len(src))
 				return ErrCorrupt
 			}
 			length = 4 + int(src[s-2])>>2&0x7
@@ -840,6 +858,7 @@ func decode(dst *block, src []byte) error {
 		case tagCopy2:
 			s += 3
 			if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+				println("uint(s) > uint(len(src)", s, len(src))
 				return ErrCorrupt
 			}
 			length = 1 + int(src[s-3])>>2
@@ -848,13 +867,16 @@ func decode(dst *block, src []byte) error {
 		case tagCopy4:
 			s += 5
 			if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+				println("uint(s) > uint(len(src)", s, len(src))
 				return ErrCorrupt
 			}
 			length = 1 + int(src[s-5])>>2
 			offset = uint32(src[s-4]) | uint32(src[s-3])<<8 | uint32(src[s-2])<<16 | uint32(src[s-1])<<24
 		}
 
-		if offset <= 0 || d < int(offset) /*|| length > len(dst)-d */ {
+		if offset <= 0 || dst.size+lits < int(offset) /*|| length > len(dst)-d */ {
+			println("offset <= 0 || dst.size+lits < int(offset)", offset, dst.size+lits, int(offset), dst.size, lits)
+
 			return ErrCorrupt
 		}
 		// Copy from an earlier sub-slice of dst to a later sub-slice. Unlike
@@ -865,17 +887,124 @@ func decode(dst *block, src []byte) error {
 		//for end := d + length; d != end; d++ {
 		//	dst[d] = dst[d-offset]
 		//}
+		println(length, "match", offset)
+
 		dst.sequences = append(dst.sequences, seq{
-			litLen:   uint32(lits),
-			offset:   offset,
+			litLen: uint32(lits),
+			// TODO: Allow repeat offsets.
+			offset:   offset + 3,
 			matchLen: uint32(length),
 		})
-		lits = 0
 		dst.size += length + lits
+		lits = 0
 	}
 	dst.extraLits = lits
 	//if d != len(dst) {
 	//	return ErrCorrupt
 	//}
 	return nil
+}
+
+// decode writes the decoding of src to dst. It assumes that the varint-encoded
+// length of the decompressed bytes has already been read, and that len(dst)
+// equals that length.
+//
+// It returns 0 on success or a decodeErrCodeXxx error code on failure.
+func decodeRef(dst, src []byte) (res int) {
+	defer func() {
+		if res != 0 {
+			fmt.Println("reference corrupted")
+		}
+	}()
+	const decodeErrCodeCorrupt = 1
+	var d, s, offset, length int
+	for s < len(src) {
+		switch src[s] & 0x03 {
+		case tagLiteral:
+			x := uint32(src[s] >> 2)
+			switch {
+			case x < 60:
+				s++
+			case x == 60:
+				s += 2
+				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+					return decodeErrCodeCorrupt
+				}
+				x = uint32(src[s-1])
+			case x == 61:
+				s += 3
+				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+					return decodeErrCodeCorrupt
+				}
+				x = uint32(src[s-2]) | uint32(src[s-1])<<8
+			case x == 62:
+				s += 4
+				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+					return decodeErrCodeCorrupt
+				}
+				x = uint32(src[s-3]) | uint32(src[s-2])<<8 | uint32(src[s-1])<<16
+			case x == 63:
+				s += 5
+				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+					return decodeErrCodeCorrupt
+				}
+				x = uint32(src[s-4]) | uint32(src[s-3])<<8 | uint32(src[s-2])<<16 | uint32(src[s-1])<<24
+			}
+			length = int(x) + 1
+			if length <= 0 {
+				return decodeErrCodeCorrupt
+			}
+			if length > len(dst)-d || length > len(src)-s {
+				return decodeErrCodeCorrupt
+			}
+			copy(dst[d:], src[s:s+length])
+			println(length, "literal (REF)")
+
+			d += length
+			s += length
+			continue
+
+		case tagCopy1:
+			s += 2
+			if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+				return decodeErrCodeCorrupt
+			}
+			length = 4 + int(src[s-2])>>2&0x7
+			offset = int(uint32(src[s-2])&0xe0<<3 | uint32(src[s-1]))
+
+		case tagCopy2:
+			s += 3
+			if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+				return decodeErrCodeCorrupt
+			}
+			length = 1 + int(src[s-3])>>2
+			offset = int(uint32(src[s-2]) | uint32(src[s-1])<<8)
+
+		case tagCopy4:
+			s += 5
+			if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+				return decodeErrCodeCorrupt
+			}
+			length = 1 + int(src[s-5])>>2
+			offset = int(uint32(src[s-4]) | uint32(src[s-3])<<8 | uint32(src[s-2])<<16 | uint32(src[s-1])<<24)
+		}
+
+		if offset <= 0 || d < offset || length > len(dst)-d {
+			return decodeErrCodeCorrupt
+		}
+		// Copy from an earlier sub-slice of dst to a later sub-slice. Unlike
+		// the built-in copy function, this byte-by-byte copy always runs
+		// forwards, even if the slices overlap. Conceptually, this is:
+		//
+		// d += forwardCopy(dst[d:d+length], dst[d-offset:])
+		println(length, "match (REF)", offset)
+
+		for end := d + length; d != end; d++ {
+			dst[d] = dst[d-offset]
+		}
+	}
+	if d != len(dst) {
+		return decodeErrCodeCorrupt
+	}
+	return 0
 }
