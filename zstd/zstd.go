@@ -8,7 +8,7 @@ import (
 	"log"
 )
 
-const debug = false
+const debug = true
 
 var (
 	// ErrReservedBlockType is returned when a reserved block type is found.

@@ -366,6 +366,9 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 			in = in[5:]
 		}
 	}
+	if debug {
+		println("literals type:", litType)
+	}
 	var literals []byte
 	var huff *huff0.Scratch
 	switch litType {
@@ -450,6 +453,7 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 			literals, err = huff.Decompress1X(literals)
 		}
 		if err != nil {
+			println("decoding compressed literals:", err)
 			return err
 		}
 		// Make sure we don't leak our literals buffer

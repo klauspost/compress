@@ -6,13 +6,12 @@ import (
 	"os"
 	"testing"
 
-	"github.com/klauspost/compress/zstd"
-
 	"github.com/klauspost/compress/snappy"
+	"github.com/klauspost/compress/zstd"
 )
 
-func TestSnappy_Convert(t *testing.T) {
-	in, err := os.Open("testdata/xml")
+func TestSnappy_ConvertSimple(t *testing.T) {
+	in, err := os.Open("testdata/z000028")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,5 +43,4 @@ func TestSnappy_Convert(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log(len(decoded))
-
 }

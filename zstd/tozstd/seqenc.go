@@ -2,6 +2,25 @@ package tozstd
 
 import "math/bits"
 
+type seq struct {
+	litLen   uint32
+	offset   uint32
+	matchLen uint32
+}
+
+type seqCodes struct {
+	litLen   []uint8
+	offset   []uint8
+	matchLen []uint8
+
+	llEnc, ofEnc, mlEnc    *fseEncoder
+	llPrev, ofPrev, mlPrev *fseEncoder
+}
+
+func (s *seqCodes) initSize(sequences int) {
+	// maybe move stuff here
+}
+
 func highBit(val uint32) (n uint32) {
 	return uint32(bits.Len32(val) - 1)
 }
