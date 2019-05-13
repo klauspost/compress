@@ -40,7 +40,8 @@ func TestSnappy_ConvertSimple(t *testing.T) {
 	}
 	decoded, err := dec.DecodeAll(dst.Bytes(), nil)
 	if err != nil {
-		t.Fatal(err)
+		t.Error(err, len(decoded))
 	}
 	t.Log(len(decoded))
+	// ioutil.WriteFile("testdata/xml.decoded", decoded, os.ModePerm)
 }

@@ -34,6 +34,17 @@ var llCodeTable = [64]byte{0, 1, 2, 3, 4, 5, 6, 7,
 	24, 24, 24, 24, 24, 24, 24, 24,
 	24, 24, 24, 24, 24, 24, 24, 24}
 
+const maxLLCode = 35
+
+// llBitsTable translates from ll code to number of bits.
+// TODO: We should probably combine these in a single bigger array to avoid bounds checks.
+var llBitsTable = [maxLLCode + 1]byte{
+	0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0,
+	1, 1, 1, 1, 2, 2, 3, 3,
+	4, 6, 7, 8, 9, 10, 11, 12,
+	13, 14, 15, 16}
+
 // llCode returns the code that represents the literal length requested.
 func llCode(litLength uint32) uint8 {
 	const llDeltaCode = 19
@@ -52,6 +63,18 @@ var mlCodeTable = [128]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
 	41, 41, 41, 41, 41, 41, 41, 41, 41, 41, 41, 41, 41, 41, 41, 41,
 	42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42,
 	42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42}
+
+const maxMLCode = 52
+
+// mlBitsTable translates from ml code to number of bits.
+var mlBitsTable = [maxMLCode + 1]byte{
+	0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0,
+	1, 1, 1, 1, 2, 2, 3, 3,
+	4, 4, 5, 7, 8, 9, 10, 11,
+	12, 13, 14, 15, 16}
 
 // note : mlBase = matchLength - MINMATCH;
 // because it's the format it's stored in seqStore->sequences

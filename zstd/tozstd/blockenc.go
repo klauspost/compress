@@ -387,20 +387,20 @@ func (b *block) encode() error {
 		s = b.sequences[seq]
 		wr.flush32()
 		llB, ofB, mlB := llIn[seq], ofIn[seq], mlIn[seq]
-		ll.encode(llTT[llB])
 		of.encode(ofTT[ofB])
-		wr.flush32()
 		ml.encode(mlTT[mlB])
-		wr.addBits32NC(s.litLen, llB)
+		ll.encode(llTT[llB])
+		wr.flush32()
+		wr.addBits32NC(s.litLen, llBitsTable[llB])
+		wr.flush32()
+		wr.addBits32NC(s.matchLen, mlBitsTable[mlB])
 		wr.flush32()
 		wr.addBits32NC(s.offset, ofB)
-		wr.flush32()
-		wr.addBits32NC(s.matchLen, mlB)
 		seq--
 	}
-	ll.flush(llEnc.actualTableLog)
-	of.flush(ofEnc.actualTableLog)
 	ml.flush(mlEnc.actualTableLog)
+	of.flush(ofEnc.actualTableLog)
+	ll.flush(llEnc.actualTableLog)
 	err = wr.close()
 	if err != nil {
 		return err
@@ -486,7 +486,7 @@ func (b *block) genCodes() {
 	b.seqCodes.litLen = ll
 	b.seqCodes.offset = of
 	b.seqCodes.matchLen = ml
-	b.seqCodes.ofEnc.HistogramFinished(ofMax, maxCount(mlH[:ofMax]))
-	b.seqCodes.llEnc.HistogramFinished(llMax, maxCount(llH[:llMax]))
 	b.seqCodes.mlEnc.HistogramFinished(mlMax, maxCount(mlH[:mlMax]))
+	b.seqCodes.ofEnc.HistogramFinished(ofMax, maxCount(ofH[:ofMax]))
+	b.seqCodes.llEnc.HistogramFinished(llMax, maxCount(llH[:llMax]))
 }
