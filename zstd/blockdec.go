@@ -367,7 +367,7 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		}
 	}
 	if debug {
-		println("literals type:", litType)
+		println("literals type:", litType, "litRegenSize:", litRegenSize, "litCompSize", litCompSize)
 	}
 	var literals []byte
 	var huff *huff0.Scratch

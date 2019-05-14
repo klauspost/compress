@@ -3,6 +3,7 @@ package tozstd
 import (
 	"fmt"
 	"math"
+	"math/bits"
 
 	"github.com/klauspost/compress/huff0"
 )
@@ -133,13 +134,23 @@ func (h *literalsHeader) setSize(regenLen int) {
 }
 
 func (h *literalsHeader) setSizes(compLen, inLen int) {
-	compBits, inBits := highBit(uint32(compLen)), highBit(uint32(inLen))
+	compBits, inBits := bits.Len32(uint32(compLen)), bits.Len32(uint32(inLen))
 	// Only retain 2 bits
 	const mask = 3
 	lh := uint64(*h & mask)
 	switch {
 	case compBits <= 10 && inBits <= 10:
 		lh |= (1 << 2) | (uint64(inLen) << 4) | (uint64(compLen) << (10 + 4)) | (3 << 60)
+		if debug {
+			const mmask = (1 << 24) - 1
+			n := (lh >> 4) & mmask
+			if int(n&1023) != inLen {
+				panic(fmt.Sprint("regensize:", int(n&1023), "!=", inLen, inBits))
+			}
+			if int(n>>10) != compLen {
+				panic(fmt.Sprint("compsize:", int(n>>10), "!=", compLen, compBits))
+			}
+		}
 	case compBits <= 14 && inBits <= 14:
 		lh |= (2 << 2) | (uint64(inLen) << 4) | (uint64(compLen) << (14 + 4)) | (4 << 60)
 	case compBits <= 18 && inBits <= 18:
@@ -281,9 +292,17 @@ func (b *block) encode() error {
 	case nil:
 		// Compressed literals...
 		if reUsed {
+			println("reused tree")
 			lh.setType(literalsBlockTreeless)
 		} else {
+			println("new tree, size:", len(b.litEnc.OutTable))
 			lh.setType(literalsBlockCompressed)
+			if debug {
+				_, _, err := huff0.ReadTable(out, nil)
+				if err != nil {
+					panic(err)
+				}
+			}
 		}
 		lh.setSizes(len(out), len(b.literals))
 		if debug {
@@ -414,7 +433,7 @@ func (b *block) encode() error {
 
 	// Size is output minus block header.
 	bh.setSize(uint32(len(b.output)) - 3)
-	fmt.Println("Adding block header", bh)
+	println("Rewriting block header", bh)
 	_ = bh.appendTo(b.output[:0])
 	return nil
 }

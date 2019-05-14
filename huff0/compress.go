@@ -112,7 +112,11 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 	}
 
 	// Use new table
-	s.cTable.write(s)
+	err = s.cTable.write(s)
+	if err != nil {
+		s.OutTable = nil
+		return nil, false, err
+	}
 	s.OutTable = s.Out
 
 	// Compress using new table
