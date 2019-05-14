@@ -409,7 +409,7 @@ func decode(dst *block, src []byte) error {
 			litLen: uint32(lits),
 			// TODO: Allow repeat offsets.
 			offset:   offset + 3,
-			matchLen: uint32(length),
+			matchLen: uint32(length) - zstdMinMatch,
 		})
 		dst.size += length + lits
 		lits = 0
@@ -420,6 +420,8 @@ func decode(dst *block, src []byte) error {
 	//}
 	return nil
 }
+
+const zstdMinMatch = 3
 
 // decode writes the decoding of src to dst. It assumes that the varint-encoded
 // length of the decompressed bytes has already been read, and that len(dst)

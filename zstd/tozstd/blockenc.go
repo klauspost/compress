@@ -377,11 +377,11 @@ func (b *block) encode() error {
 	ml.init(&wr, &mlEnc.ct, mlTT[mlB])
 
 	s := b.sequences[seq]
-	wr.addBits32NC(s.litLen, llB)
+	wr.addBits32NC(s.litLen, llBitsTable[llB])
 	wr.flush32()
 	wr.addBits32NC(s.offset, ofB)
 	wr.flush32()
-	wr.addBits32NC(s.matchLen, mlB)
+	wr.addBits32NC(s.matchLen, mlBitsTable[mlB])
 	seq--
 	for seq >= 0 {
 		s = b.sequences[seq]
@@ -396,6 +396,11 @@ func (b *block) encode() error {
 		wr.addBits32NC(s.matchLen, mlBitsTable[mlB])
 		wr.flush32()
 		wr.addBits32NC(s.offset, ofB)
+		if seq < 10 {
+			//println("seq", seq, "offset", s.offset, "bits", ofB)
+			//println("seq", seq, "matchlen", s.matchLen, "bits", mlBitsTable[mlB])
+		}
+
 		seq--
 	}
 	ml.flush(mlEnc.actualTableLog)
