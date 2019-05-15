@@ -117,6 +117,7 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 		r.block = &block{}
 		r.block.init()
 	}
+	r.block.initOffsets()
 	if len(r.buf) != maxEncodedLenOfMaxBlockSize+checksumSize {
 		r.buf = make([]byte, maxEncodedLenOfMaxBlockSize+checksumSize)
 	}
@@ -403,12 +404,53 @@ func decode(dst *block, src []byte) error {
 		//	dst[d] = dst[d-offset]
 		//}
 
-		//println(length, "match", offset)
-
+		// TODO: This hardly looks worth it.
+		if lits > 0 {
+			switch offset {
+			case dst.recentOffsets[0]:
+				offset = 1
+			case dst.recentOffsets[1]:
+				dst.recentOffsets[1] = dst.recentOffsets[0]
+				dst.recentOffsets[0] = offset
+				offset = 2
+			case dst.recentOffsets[2]:
+				dst.recentOffsets[1] = dst.recentOffsets[0]
+				dst.recentOffsets[2] = dst.recentOffsets[1]
+				dst.recentOffsets[0] = offset
+				offset = 3
+			default:
+				dst.recentOffsets[2] = dst.recentOffsets[1]
+				dst.recentOffsets[1] = dst.recentOffsets[0]
+				dst.recentOffsets[0] = offset
+				offset += 3
+			}
+		} else {
+			switch offset {
+			case dst.recentOffsets[1]:
+				dst.recentOffsets[1] = dst.recentOffsets[0]
+				dst.recentOffsets[0] = offset
+				offset = 1
+			case dst.recentOffsets[2]:
+				dst.recentOffsets[2] = dst.recentOffsets[1]
+				dst.recentOffsets[1] = dst.recentOffsets[0]
+				dst.recentOffsets[0] = offset
+				offset = 2
+			case dst.recentOffsets[0] - 1:
+				dst.recentOffsets[2] = dst.recentOffsets[1]
+				dst.recentOffsets[1] = dst.recentOffsets[0]
+				dst.recentOffsets[0] = offset
+				offset = 3
+			default:
+				dst.recentOffsets[2] = dst.recentOffsets[1]
+				dst.recentOffsets[1] = dst.recentOffsets[0]
+				dst.recentOffsets[0] = offset
+				offset += 3
+			}
+		}
+		//println("len:", length, "offset:", offset)
 		dst.sequences = append(dst.sequences, seq{
-			litLen: uint32(lits),
-			// TODO: Allow repeat offsets.
-			offset:   offset + 3,
+			litLen:   uint32(lits),
+			offset:   offset,
 			matchLen: uint32(length) - zstdMinMatch,
 		})
 		dst.size += length + lits

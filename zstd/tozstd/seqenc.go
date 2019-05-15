@@ -89,5 +89,6 @@ func mlCode(mlBase uint32) uint8 {
 }
 
 func ofCode(offset uint32) uint8 {
-	return uint8(bits.Len32(offset) - 1)
+	// A valid offset will always be > 0.
+	return uint8(highBit(offset))
 }

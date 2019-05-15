@@ -30,14 +30,14 @@ type block struct {
 	size      int
 	literals  []byte
 	sequences []seq
-	//done      chan struct{}
-	seqCodes seqCodes
-	litEnc   huff0.Scratch
+	seqCodes  seqCodes
+	litEnc    huff0.Scratch
 
 	extraLits int
 	last      bool
 
-	output []byte
+	output        []byte
+	recentOffsets [3]uint32
 }
 
 func (b *block) init() {
@@ -68,6 +68,10 @@ func (b *block) init() {
 	}
 
 	b.reset()
+}
+
+func (b *block) initOffsets() {
+	b.recentOffsets = [3]uint32{1, 4, 8}
 }
 
 func (b *block) reset() {
@@ -438,6 +442,12 @@ func (b *block) encode() error {
 	return nil
 }
 
+const (
+	maxLiteralLengthBits = 35
+	maxOffsetBits        = 30
+	maxMatchLengthBits   = 52
+)
+
 func (b *block) genCodes() {
 	if len(b.sequences) == 0 {
 		// nothing to do
@@ -505,6 +515,15 @@ func (b *block) genCodes() {
 			}
 		}
 		return int(max)
+	}
+	if mlMax > maxMatchLengthBits {
+		panic(fmt.Errorf("mlMax > maxMatchLengthBits (%d)", mlMax))
+	}
+	if ofMax > maxOffsetBits {
+		panic(fmt.Errorf("ofMax > maxOffsetBits (%d)", ofMax))
+	}
+	if llMax > maxLiteralLengthBits {
+		panic(fmt.Errorf("llMax > maxLiteralLengthBits (%d)", llMax))
 	}
 
 	b.seqCodes.litLen = ll
