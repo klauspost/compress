@@ -351,12 +351,15 @@ type cTableEntry struct {
 const huffNodesMask = huffNodesLen - 1
 
 func (s *Scratch) buildCTable() error {
-	if cap(s.cTable) < maxSymbolValue+1 {
-		s.cTable = make([]cTableEntry, 0, maxSymbolValue+1)
-	}
-
 	s.huffSort()
-	s.cTable = s.cTable[:s.symbolLen]
+	if cap(s.cTable) < maxSymbolValue+1 {
+		s.cTable = make([]cTableEntry, s.symbolLen, maxSymbolValue+1)
+	} else {
+		s.cTable = s.cTable[:s.symbolLen]
+		for i := range s.cTable {
+			s.cTable[i] = cTableEntry{}
+		}
+	}
 
 	var startNode = int16(s.symbolLen)
 	nonNullRank := s.symbolLen - 1

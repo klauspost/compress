@@ -1,7 +1,9 @@
 package huff0
 
 import (
+	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -148,6 +150,37 @@ func TestCompress4X(t *testing.T) {
 			}
 
 			t.Logf("%s: %d -> %d bytes (%.2f:1) %t (table: %d bytes)", test.name, len(buf0), len(b), float64(len(buf0))/float64(len(b)), re, len(s.OutTable))
+		})
+	}
+}
+
+func TestCompress4XReuse(t *testing.T) {
+	rng := rand.NewSource(0x1337)
+	var s Scratch
+	s.Reuse = ReusePolicyAllow
+	for i := 0; i < 255; i++ {
+		t.Run(fmt.Sprint("test-", i), func(t *testing.T) {
+			buf0 := make([]byte, BlockSizeMax)
+			for j := range buf0 {
+				buf0[j] = byte(int64(i) + (rng.Int63() & 3))
+			}
+
+			b, re, err := Compress4X(buf0, &s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if b == nil {
+				t.Error("got no output")
+				return
+			}
+			if len(s.OutData) == 0 {
+				t.Error("got no data output")
+			}
+			if re {
+				t.Error("claimed to have re-used. Unlikely.")
+			}
+
+			t.Logf("%s: %d -> %d bytes (%.2f:1) %t (table: %d bytes)", t.Name(), len(buf0), len(b), float64(len(buf0))/float64(len(b)), re, len(s.OutTable))
 		})
 	}
 }
