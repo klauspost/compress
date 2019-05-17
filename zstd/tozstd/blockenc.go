@@ -77,11 +77,13 @@ func (b *block) initOffsets() {
 func (b *block) reset() {
 	b.extraLits = 0
 	b.literals = b.literals[:0]
+	b.size = 0
 	b.sequences = b.sequences[:0]
 	b.seqCodes.matchLen = b.seqCodes.matchLen[:0]
 	b.seqCodes.offset = b.seqCodes.offset[:0]
 	b.seqCodes.litLen = b.seqCodes.litLen[:0]
 	b.output = b.output[:0]
+	b.litEnc.Reuse = huff0.ReusePolicyNone
 }
 
 type blockHeader uint32
@@ -279,9 +281,18 @@ func (b *block) encode() error {
 	bh.setType(blockTypeCompressed)
 	b.output = bh.appendTo(b.output)
 
-	// TODO: Switch to 1X on small blocks.
-	out, reUsed, err := huff0.Compress4X(b.literals, &b.litEnc)
-	if len(out) > len(b.literals)-len(b.literals)>>4 {
+	var (
+		out    []byte
+		reUsed bool
+		err    error
+	)
+	if len(b.literals) > 32 {
+		// TODO: Switch to 1X on small blocks.
+		out, reUsed, err = huff0.Compress4X(b.literals, &b.litEnc)
+		if len(out) > len(b.literals)-len(b.literals)>>4 {
+			err = huff0.ErrIncompressible
+		}
+	} else {
 		err = huff0.ErrIncompressible
 	}
 	switch err {

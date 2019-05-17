@@ -95,8 +95,6 @@ type Snappy struct {
 	//i, j       int
 	//readHeader bool
 
-	//compress chan *block
-	//write    chan *block
 	block *block
 }
 
@@ -199,6 +197,11 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 			r.block.reset()
 			if err := decode(r.block, buf); err != nil {
 				r.err = err
+				return written, r.err
+			}
+			if r.block.size+r.block.extraLits != n {
+				printf("invalid size, want %d, got %d\n", n, r.block.size+r.block.extraLits)
+				r.err = ErrCorrupt
 				return written, r.err
 			}
 			err = r.block.encode()
@@ -415,8 +418,8 @@ func decode(dst *block, src []byte) error {
 					dst.recentOffsets[0] = offset
 					offset = 2
 				case dst.recentOffsets[2]:
-					dst.recentOffsets[1] = dst.recentOffsets[0]
 					dst.recentOffsets[2] = dst.recentOffsets[1]
+					dst.recentOffsets[1] = dst.recentOffsets[0]
 					dst.recentOffsets[0] = offset
 					offset = 3
 				default:
@@ -451,7 +454,6 @@ func decode(dst *block, src []byte) error {
 		} else {
 			offset += 3
 		}
-		//println("len:", length, "offset:", offset)
 		dst.sequences = append(dst.sequences, seq{
 			litLen:   uint32(lits),
 			offset:   offset,
@@ -461,9 +463,6 @@ func decode(dst *block, src []byte) error {
 		lits = 0
 	}
 	dst.extraLits = lits
-	//if d != len(dst) {
-	//	return ErrCorrupt
-	//}
 	return nil
 }
 

@@ -582,7 +582,6 @@ func (c *cState) init(bw *bitWriter, ct *cTable, first symbolTransform) {
 	c.stateTable = ct.stateTable
 	if len(c.stateTable) == 1 {
 		// RLE
-		println("init cstate RLE")
 		c.stateTable[0] = uint16(0)
 		c.state = 0
 		return
@@ -596,16 +595,9 @@ func (c *cState) init(bw *bitWriter, ct *cTable, first symbolTransform) {
 
 // encode the output symbol provided and write it to the bitstream.
 func (c *cState) encode(symbolTT symbolTransform) {
-	if len(c.stateTable) == 1 {
-		println("RLE encode:", symbolTT, symbolTT.deltaNbBits, c.state)
-	}
-
 	nbBitsOut := (uint32(c.state) + symbolTT.deltaNbBits) >> 16
 	dstState := int32(c.state>>(nbBitsOut&15)) + symbolTT.deltaFindState
 	c.bw.addBits16NC(c.state, uint8(nbBitsOut))
-	if len(c.stateTable) == 1 {
-		println("RLE:", nbBitsOut, symbolTT.deltaNbBits, dstState, c.state)
-	}
 	c.state = c.stateTable[dstState]
 }
 
