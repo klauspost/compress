@@ -405,47 +405,51 @@ func decode(dst *block, src []byte) error {
 		//}
 
 		// TODO: This hardly looks worth it.
-		if lits > 0 {
-			switch offset {
-			case dst.recentOffsets[0]:
-				offset = 1
-			case dst.recentOffsets[1]:
-				dst.recentOffsets[1] = dst.recentOffsets[0]
-				dst.recentOffsets[0] = offset
-				offset = 2
-			case dst.recentOffsets[2]:
-				dst.recentOffsets[1] = dst.recentOffsets[0]
-				dst.recentOffsets[2] = dst.recentOffsets[1]
-				dst.recentOffsets[0] = offset
-				offset = 3
-			default:
-				dst.recentOffsets[2] = dst.recentOffsets[1]
-				dst.recentOffsets[1] = dst.recentOffsets[0]
-				dst.recentOffsets[0] = offset
-				offset += 3
+		if true {
+			if lits > 0 {
+				switch offset {
+				case dst.recentOffsets[0]:
+					offset = 1
+				case dst.recentOffsets[1]:
+					dst.recentOffsets[1] = dst.recentOffsets[0]
+					dst.recentOffsets[0] = offset
+					offset = 2
+				case dst.recentOffsets[2]:
+					dst.recentOffsets[1] = dst.recentOffsets[0]
+					dst.recentOffsets[2] = dst.recentOffsets[1]
+					dst.recentOffsets[0] = offset
+					offset = 3
+				default:
+					dst.recentOffsets[2] = dst.recentOffsets[1]
+					dst.recentOffsets[1] = dst.recentOffsets[0]
+					dst.recentOffsets[0] = offset
+					offset += 3
+				}
+			} else {
+				switch offset {
+				case dst.recentOffsets[1]:
+					dst.recentOffsets[1] = dst.recentOffsets[0]
+					dst.recentOffsets[0] = offset
+					offset = 1
+				case dst.recentOffsets[2]:
+					dst.recentOffsets[2] = dst.recentOffsets[1]
+					dst.recentOffsets[1] = dst.recentOffsets[0]
+					dst.recentOffsets[0] = offset
+					offset = 2
+				case dst.recentOffsets[0] - 1:
+					dst.recentOffsets[2] = dst.recentOffsets[1]
+					dst.recentOffsets[1] = dst.recentOffsets[0]
+					dst.recentOffsets[0] = offset
+					offset = 3
+				default:
+					dst.recentOffsets[2] = dst.recentOffsets[1]
+					dst.recentOffsets[1] = dst.recentOffsets[0]
+					dst.recentOffsets[0] = offset
+					offset += 3
+				}
 			}
 		} else {
-			switch offset {
-			case dst.recentOffsets[1]:
-				dst.recentOffsets[1] = dst.recentOffsets[0]
-				dst.recentOffsets[0] = offset
-				offset = 1
-			case dst.recentOffsets[2]:
-				dst.recentOffsets[2] = dst.recentOffsets[1]
-				dst.recentOffsets[1] = dst.recentOffsets[0]
-				dst.recentOffsets[0] = offset
-				offset = 2
-			case dst.recentOffsets[0] - 1:
-				dst.recentOffsets[2] = dst.recentOffsets[1]
-				dst.recentOffsets[1] = dst.recentOffsets[0]
-				dst.recentOffsets[0] = offset
-				offset = 3
-			default:
-				dst.recentOffsets[2] = dst.recentOffsets[1]
-				dst.recentOffsets[1] = dst.recentOffsets[0]
-				dst.recentOffsets[0] = offset
-				offset += 3
-			}
+			offset += 3
 		}
 		//println("len:", length, "offset:", offset)
 		dst.sequences = append(dst.sequences, seq{

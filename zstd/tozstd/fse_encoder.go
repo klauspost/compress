@@ -241,9 +241,22 @@ func (s *fseEncoder) buildCTable() error {
 
 var rtbTable = [...]uint32{0, 473195, 504333, 520860, 550000, 700000, 750000, 830000}
 
+func (s *fseEncoder) setRLE(val byte) {
+	s.actualTableLog = 0
+	s.ct.stateTable = s.ct.stateTable[:1]
+	s.ct.symbolTT[val] = symbolTransform{
+		deltaFindState: 0,
+		deltaNbBits:    0,
+	}
+	println("setRLE: val", val, "symbolTT", s.ct.symbolTT[val])
+	s.rleVal = val
+	s.useRLE = true
+}
+
 // normalizeCount will normalize the count of the symbols so
 // the total is equal to the table size.
 func (s *fseEncoder) normalizeCount(in []byte) error {
+	s.optimalTableLog(len(in))
 	var (
 		length            = len(in)
 		tableLog          = s.actualTableLog
@@ -257,10 +270,9 @@ func (s *fseEncoder) normalizeCount(in []byte) error {
 	)
 	if s.maxCount == length {
 		s.useRLE = true
-		s.rleVal = in[0]
 		return nil
 	}
-	s.optimalTableLog(length)
+	s.useRLE = false
 	for i, cnt := range s.count[:s.symbolLen] {
 		// already handled
 		// if (count[s] == s.length) return 0;   /* rle special case */
@@ -291,10 +303,20 @@ func (s *fseEncoder) normalizeCount(in []byte) error {
 	}
 
 	if -stillToDistribute >= (s.norm[largest] >> 1) {
+		if debug {
+			err := s.normalizeCount2(length)
+			if err != nil {
+				return err
+			}
+			return s.validateNorm()
+		}
 		// corner case, need another normalization method
 		return s.normalizeCount2(length)
 	}
 	s.norm[largest] += stillToDistribute
+	if debug {
+		return s.validateNorm()
+	}
 	return nil
 }
 
@@ -521,7 +543,7 @@ func (s *fseEncoder) writeCount(out []byte) ([]byte, error) {
 
 		previous0 = count == 1
 		if remaining < 1 {
-			return nil, errors.New("internal error: remaining<1")
+			return nil, errors.New("internal error: remaining < 1")
 		}
 		for remaining < threshold {
 			nbBits--
@@ -558,7 +580,13 @@ type cState struct {
 func (c *cState) init(bw *bitWriter, ct *cTable, first symbolTransform) {
 	c.bw = bw
 	c.stateTable = ct.stateTable
-
+	if len(c.stateTable) == 1 {
+		// RLE
+		println("init cstate RLE")
+		c.stateTable[0] = uint16(0)
+		c.state = 0
+		return
+	}
 	nbBitsOut := (first.deltaNbBits + (1 << 15)) >> 16
 	im := int32((nbBitsOut << 16) - first.deltaNbBits)
 	lu := (im >> nbBitsOut) + first.deltaFindState
@@ -568,9 +596,16 @@ func (c *cState) init(bw *bitWriter, ct *cTable, first symbolTransform) {
 
 // encode the output symbol provided and write it to the bitstream.
 func (c *cState) encode(symbolTT symbolTransform) {
+	if len(c.stateTable) == 1 {
+		println("RLE encode:", symbolTT, symbolTT.deltaNbBits, c.state)
+	}
+
 	nbBitsOut := (uint32(c.state) + symbolTT.deltaNbBits) >> 16
 	dstState := int32(c.state>>(nbBitsOut&15)) + symbolTT.deltaFindState
 	c.bw.addBits16NC(c.state, uint8(nbBitsOut))
+	if len(c.stateTable) == 1 {
+		println("RLE:", nbBitsOut, symbolTT.deltaNbBits, dstState, c.state)
+	}
 	c.state = c.stateTable[dstState]
 }
 

@@ -136,7 +136,7 @@ func (b *blockDec) reset(br byteBuffer, windowSize uint64) error {
 		b.RLESize = 0
 		if cSize > maxCompressedBlockSize || uint64(cSize) > b.WindowSize {
 			if debug {
-				printf("compressed block too big: %+v\n", b)
+				printf("compressed block too big: csize:%d block: %+v\n", uint64(cSize), b)
 			}
 			return ErrCompressedSizeTooBig
 		}
@@ -512,6 +512,7 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		br := byteReader{b: in, off: 0}
 		compMode := br.Uint8()
 		br.advance(1)
+		printf("Compression modes: 0b%b", compMode)
 		for i := uint(0); i < 3; i++ {
 			mode := seqCompMode((compMode >> (6 - i*2)) & 3)
 			//println("Table", tableIndex(i), "is", mode)
@@ -536,7 +537,7 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 				dec := fseDecoderPool.Get().(*fseDecoder)
 				symb, err := decSymbolValue(v, symbolTableX[i])
 				if err != nil {
-					println("RLE Transform table error:", err)
+					printf("RLE Transform table (%v) error: %v", tableIndex(i), err)
 					return err
 				}
 				dec.setRLE(symb)

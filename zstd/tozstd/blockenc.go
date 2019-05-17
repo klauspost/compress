@@ -125,11 +125,17 @@ func (h *literalsHeader) setSize(regenLen int) {
 	const mask = 3
 	lh := uint64(*h & mask)
 	switch {
-	case inBits <= 5:
+	case inBits < 5:
 		lh |= (uint64(regenLen) << 3) | (1 << 60)
-	case inBits <= 12:
+		if debug {
+			got := int(lh>>3) & 0xff
+			if got != regenLen {
+				panic(fmt.Sprint("litRegenSize = ", regenLen, "(want) != ", got, "(got)"))
+			}
+		}
+	case inBits < 12:
 		lh |= (1 << 2) | (uint64(regenLen) << 4) | (2 << 60)
-	case inBits <= 20:
+	case inBits < 20:
 		lh |= (3 << 2) | (uint64(regenLen) << 4) | (3 << 60)
 	default:
 		panic("internal error: block too big")
@@ -184,6 +190,11 @@ func (h literalsHeader) appendTo(b []byte) []byte {
 	return b
 }
 
+// size returns the output size with currently set values.
+func (h literalsHeader) size() int {
+	return int(h >> 60)
+}
+
 func (h literalsHeader) String() string {
 	return fmt.Sprintf("Type: %d, SizeFormat: %d, Size: 0x%d, Bytes:%d", literalsBlockType(h&3), (h>>2)&3, h&((1<<60)-1)>>4, h>>60)
 }
@@ -204,6 +215,10 @@ func (b *block) encodeLits() error {
 
 	// TODO: Switch to 1X when less than 32 bytes.
 	out, reUsed, err := huff0.Compress4X(b.literals, &b.litEnc)
+	// Bail out of compression is too little.
+	if len(out) > (len(b.literals) - len(b.literals)>>4) {
+		err = huff0.ErrIncompressible
+	}
 	switch err {
 	case huff0.ErrIncompressible:
 		bh.setType(blockTypeRaw)
@@ -223,30 +238,19 @@ func (b *block) encodeLits() error {
 	// Now, allow reuse
 	b.litEnc.Reuse = huff0.ReusePolicyAllow
 	bh.setType(blockTypeCompressed)
-	bh.setSize(uint32(len(out)))
-	b.output = bh.appendTo(b.output)
-
-	var lh uint64
+	var lh literalsHeader
 	if reUsed {
-		lh |= uint64(literalsBlockTreeless)
+		lh.setType(literalsBlockTreeless)
 	} else {
-		lh |= uint64(literalsBlockCompressed)
+		lh.setType(literalsBlockCompressed)
 	}
-	compLen, inLen := uint64(len(out)), uint64(len(b.literals))
-	compBits, inBits := highBit(uint32(compLen)), highBit(uint32(inLen))
-	switch {
-	case compBits <= 10 && inBits <= 10:
-		lh |= (1 << 2) | (inLen << 4) | (compLen << (10 + 4))
-		b.output = append(b.output, uint8(lh), uint8(lh>>8), uint8(lh>>16))
-	case compBits <= 14 && inBits <= 14:
-		lh |= (2 << 2) | (inLen << 4) | (compLen << (14 + 4))
-		b.output = append(b.output, uint8(lh), uint8(lh>>8), uint8(lh>>16), uint8(lh>>24))
-	case compBits <= 18 && inBits <= 18:
-		lh |= (3 << 2) | (inLen << 4) | (compLen << (18 + 4))
-		b.output = append(b.output, uint8(lh), uint8(lh>>8), uint8(lh>>16), uint8(lh>>24), uint8(lh>>32))
-	default:
-		panic("internal error: block too big")
-	}
+	// Set sizes
+	lh.setSizes(len(out), len(b.literals))
+	bh.setSize(uint32(len(out) + lh.size() + 1))
+
+	// Write block headers.
+	b.output = bh.appendTo(b.output)
+	b.output = lh.appendTo(b.output)
 	// Add compressed data.
 	b.output = append(b.output, out...)
 	// No sequences.
@@ -275,15 +279,18 @@ func (b *block) encode() error {
 	bh.setType(blockTypeCompressed)
 	b.output = bh.appendTo(b.output)
 
-	// TODO: Switch to 1X when less than 32 bytes.
+	// TODO: Switch to 1X on small blocks.
 	out, reUsed, err := huff0.Compress4X(b.literals, &b.litEnc)
+	if len(out) > len(b.literals)-len(b.literals)>>4 {
+		err = huff0.ErrIncompressible
+	}
 	switch err {
 	case huff0.ErrIncompressible:
 		lh.setType(literalsBlockRaw)
 		lh.setSize(len(b.literals))
 		b.output = lh.appendTo(b.output)
 		b.output = append(b.output, b.literals...)
-		println("Adding literals RAW")
+		println("Adding literals RAW, length", len(b.literals))
 	case huff0.ErrUseRLE:
 		lh.setType(literalsBlockRLE)
 		lh.setSize(len(b.literals))
@@ -337,15 +344,16 @@ func (b *block) encode() error {
 	llEnc := b.seqCodes.llEnc
 	ofEnc := b.seqCodes.ofEnc
 	mlEnc := b.seqCodes.mlEnc
-	err = llEnc.normalizeCount(b.seqCodes.litLen)
+	llIn, ofIn, mlIn := b.seqCodes.litLen, b.seqCodes.offset, b.seqCodes.matchLen
+	err = llEnc.normalizeCount(llIn)
 	if err != nil {
 		return err
 	}
-	err = ofEnc.normalizeCount(b.seqCodes.offset)
+	err = ofEnc.normalizeCount(ofIn)
 	if err != nil {
 		return err
 	}
-	err = mlEnc.normalizeCount(b.seqCodes.matchLen)
+	err = mlEnc.normalizeCount(mlIn)
 	if err != nil {
 		return err
 	}
@@ -354,16 +362,23 @@ func (b *block) encode() error {
 	var mode uint8
 	if llEnc.useRLE {
 		mode |= uint8(compModeRLE) << 6
+		llEnc.setRLE(llIn[0])
+		println("llEnc.useRLE")
 	} else {
 		mode |= uint8(compModeFSE) << 6
 	}
 	if ofEnc.useRLE {
 		mode |= uint8(compModeRLE) << 4
+		ofEnc.setRLE(ofIn[0])
+		println("ofEnc.useRLE")
 	} else {
 		mode |= uint8(compModeFSE) << 4
 	}
 	if mlEnc.useRLE {
 		mode |= uint8(compModeRLE) << 2
+		mlEnc.setRLE(mlIn[0])
+		println("mlEnc.useRLE")
+		fmt.Println()
 	} else {
 		mode |= uint8(compModeFSE) << 2
 	}
@@ -374,9 +389,17 @@ func (b *block) encode() error {
 	if err != nil {
 		return err
 	}
+	start := len(b.output)
 	b.output, err = ofEnc.writeCount(b.output)
 	if err != nil {
 		return err
+	}
+	if false && len(b.sequences) == 64 {
+		println("block:", b.output[start:], "tablelog", ofEnc.actualTableLog, "maxcount:", ofEnc.maxCount)
+		fmt.Printf("selected TableLog: %d, Symbol length: %d\n", ofEnc.actualTableLog, ofEnc.symbolLen)
+		for i, v := range ofEnc.norm[:ofEnc.symbolLen] {
+			fmt.Printf("%3d: %5d -> %4d \n", i, ofEnc.count[i], v)
+		}
 	}
 	b.output, err = mlEnc.writeCount(b.output)
 	if err != nil {
@@ -392,7 +415,6 @@ func (b *block) encode() error {
 	// Current sequence
 	seq := len(b.sequences) - 1
 	llTT, ofTT, mlTT := llEnc.ct.symbolTT[:256], ofEnc.ct.symbolTT[:256], mlEnc.ct.symbolTT[:256]
-	llIn, ofIn, mlIn := b.seqCodes.litLen, b.seqCodes.offset, b.seqCodes.matchLen
 	llB, ofB, mlB := llIn[seq], ofIn[seq], mlIn[seq]
 	ll.init(&wr, &llEnc.ct, llTT[llB])
 	of.init(&wr, &ofEnc.ct, ofTT[ofB])
@@ -402,9 +424,9 @@ func (b *block) encode() error {
 	s := b.sequences[seq]
 	wr.addBits32NC(s.litLen, llBitsTable[llB])
 	wr.flush32()
-	wr.addBits32NC(s.offset, ofB)
-	wr.flush32()
 	wr.addBits32NC(s.matchLen, mlBitsTable[mlB])
+	wr.flush32()
+	wr.addBits32NC(s.offset, ofB)
 	seq--
 	for seq >= 0 {
 		s = b.sequences[seq]
@@ -529,7 +551,7 @@ func (b *block) genCodes() {
 	b.seqCodes.litLen = ll
 	b.seqCodes.offset = of
 	b.seqCodes.matchLen = ml
-	b.seqCodes.mlEnc.HistogramFinished(mlMax, maxCount(mlH[:mlMax]))
-	b.seqCodes.ofEnc.HistogramFinished(ofMax, maxCount(ofH[:ofMax]))
-	b.seqCodes.llEnc.HistogramFinished(llMax, maxCount(llH[:llMax]))
+	b.seqCodes.mlEnc.HistogramFinished(mlMax, maxCount(mlH[:mlMax+1]))
+	b.seqCodes.ofEnc.HistogramFinished(ofMax, maxCount(ofH[:ofMax+1]))
+	b.seqCodes.llEnc.HistogramFinished(llMax, maxCount(llH[:llMax+1]))
 }
