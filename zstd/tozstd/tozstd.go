@@ -2,7 +2,7 @@ package tozstd
 
 import "log"
 
-const debug = true
+const debug = false
 
 func println(a ...interface{}) {
 	if debug {

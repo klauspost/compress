@@ -6,16 +6,12 @@ import (
 )
 
 const (
-	tablelogAbsoluteMax = 9
-)
-
-const (
 	/*!MEMORY_USAGE :
 	 *  Memory usage formula : N->2^N Bytes (examples : 10 -> 1KB; 12 -> 4KB ; 16 -> 64KB; 20 -> 1MB; etc.)
 	 *  Increasing memory usage improves compression ratio
 	 *  Reduced memory usage can improve speed, due to cache effect
 	 *  Recommended max value is 14, for 16KB, which nicely fits into Intel x86 L1 cache */
-	maxMemoryUsage = 11
+	maxMemoryUsage = 10
 
 	maxTableLog    = maxMemoryUsage - 2
 	maxTablesize   = 1 << maxTableLog
@@ -248,7 +244,9 @@ func (s *fseEncoder) setRLE(val byte) {
 		deltaFindState: 0,
 		deltaNbBits:    0,
 	}
-	println("setRLE: val", val, "symbolTT", s.ct.symbolTT[val])
+	if debug {
+		println("setRLE: val", val, "symbolTT", s.ct.symbolTT[val])
+	}
 	s.rleVal = val
 	s.useRLE = true
 }
@@ -419,7 +417,13 @@ func (s *fseEncoder) normalizeCount2(length int) error {
 // optimalTableLog calculates and sets the optimal tableLog in s.actualTableLog
 func (s *fseEncoder) optimalTableLog(length int) {
 	tableLog := uint8(maxTableLog)
-	minBits := uint8(minTablelog)
+	minBitsSrc := highBit(uint32(length)) + 1
+	minBitsSymbols := highBit(uint32(s.symbolLen-1)) + 2
+	minBits := uint8(minBitsSymbols)
+	if minBitsSrc < minBitsSymbols {
+		minBits = uint8(minBitsSrc)
+	}
+
 	maxBitsSrc := uint8(highBit(uint32(length-1))) - 2
 	if maxBitsSrc < tableLog {
 		// Accuracy can be reduced

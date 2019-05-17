@@ -32,6 +32,7 @@ type block struct {
 	sequences []seq
 	seqCodes  seqCodes
 	litEnc    huff0.Scratch
+	wr        bitWriter
 
 	extraLits int
 	last      bool
@@ -72,6 +73,7 @@ func (b *block) init() {
 
 func (b *block) initOffsets() {
 	b.recentOffsets = [3]uint32{1, 4, 8}
+	b.litEnc.Reuse = huff0.ReusePolicyNone
 }
 
 func (b *block) reset() {
@@ -83,7 +85,6 @@ func (b *block) reset() {
 	b.seqCodes.offset = b.seqCodes.offset[:0]
 	b.seqCodes.litLen = b.seqCodes.litLen[:0]
 	b.output = b.output[:0]
-	b.litEnc.Reuse = huff0.ReusePolicyNone
 }
 
 type blockHeader uint32
@@ -301,23 +302,33 @@ func (b *block) encode() error {
 		lh.setSize(len(b.literals))
 		b.output = lh.appendTo(b.output)
 		b.output = append(b.output, b.literals...)
-		println("Adding literals RAW, length", len(b.literals))
+		if debug {
+			println("Adding literals RAW, length", len(b.literals))
+		}
 	case huff0.ErrUseRLE:
 		lh.setType(literalsBlockRLE)
 		lh.setSize(len(b.literals))
 		b.output = lh.appendTo(b.output)
 		b.output = append(b.output, b.literals[0])
-		println("Adding literals RLE")
+		if debug {
+			println("Adding literals RLE")
+		}
 	default:
-		println("Adding literals ERROR:", err)
+		if debug {
+			println("Adding literals ERROR:", err)
+		}
 		return err
 	case nil:
 		// Compressed literals...
 		if reUsed {
-			println("reused tree")
+			if debug {
+				println("reused tree")
+			}
 			lh.setType(literalsBlockTreeless)
 		} else {
-			println("new tree, size:", len(b.litEnc.OutTable))
+			if debug {
+				println("new tree, size:", len(b.litEnc.OutTable))
+			}
 			lh.setType(literalsBlockCompressed)
 			if debug {
 				_, _, err := huff0.ReadTable(out, nil)
@@ -334,7 +345,9 @@ func (b *block) encode() error {
 		b.output = lh.appendTo(b.output)
 		b.output = append(b.output, out...)
 		b.litEnc.Reuse = huff0.ReusePolicyAllow
-		println("Adding literals compressed")
+		if debug {
+			println("Adding literals compressed")
+		}
 	}
 	// Sequence compression
 
@@ -349,8 +362,9 @@ func (b *block) encode() error {
 		n := len(b.sequences) - 0x7f00
 		b.output = append(b.output, 255, uint8(n), uint8(n>>8))
 	}
-	println("Encoding", len(b.sequences), "sequences")
-
+	if debug {
+		println("Encoding", len(b.sequences), "sequences")
+	}
 	b.genCodes()
 	llEnc := b.seqCodes.llEnc
 	ofEnc := b.seqCodes.ofEnc
@@ -374,28 +388,34 @@ func (b *block) encode() error {
 	if llEnc.useRLE {
 		mode |= uint8(compModeRLE) << 6
 		llEnc.setRLE(llIn[0])
-		println("llEnc.useRLE")
+		if debug {
+			println("llEnc.useRLE")
+		}
 	} else {
 		mode |= uint8(compModeFSE) << 6
 	}
 	if ofEnc.useRLE {
 		mode |= uint8(compModeRLE) << 4
 		ofEnc.setRLE(ofIn[0])
-		println("ofEnc.useRLE")
+		if debug {
+			println("ofEnc.useRLE")
+		}
 	} else {
 		mode |= uint8(compModeFSE) << 4
 	}
 	if mlEnc.useRLE {
 		mode |= uint8(compModeRLE) << 2
 		mlEnc.setRLE(mlIn[0])
-		println("mlEnc.useRLE")
-		fmt.Println()
+		if debug {
+			println("mlEnc.useRLE")
+		}
 	} else {
 		mode |= uint8(compModeFSE) << 2
 	}
 	b.output = append(b.output, mode)
-	printf("Compression modes: 0b%b", mode)
-
+	if debug {
+		printf("Compression modes: 0b%b", mode)
+	}
 	b.output, err = llEnc.writeCount(b.output)
 	if err != nil {
 		return err
@@ -418,7 +438,7 @@ func (b *block) encode() error {
 	}
 
 	// Maybe in block?
-	var wr bitWriter
+	wr := &b.wr
 	wr.reset(b.output)
 
 	var ll, of, ml cState
@@ -427,14 +447,13 @@ func (b *block) encode() error {
 	seq := len(b.sequences) - 1
 	llTT, ofTT, mlTT := llEnc.ct.symbolTT[:256], ofEnc.ct.symbolTT[:256], mlEnc.ct.symbolTT[:256]
 	llB, ofB, mlB := llIn[seq], ofIn[seq], mlIn[seq]
-	ll.init(&wr, &llEnc.ct, llTT[llB])
-	of.init(&wr, &ofEnc.ct, ofTT[ofB])
+	ll.init(wr, &llEnc.ct, llTT[llB])
+	of.init(wr, &ofEnc.ct, ofTT[ofB])
 	wr.flush32()
-	ml.init(&wr, &mlEnc.ct, mlTT[mlB])
+	ml.init(wr, &mlEnc.ct, mlTT[mlB])
 
 	s := b.sequences[seq]
 	wr.addBits32NC(s.litLen, llBitsTable[llB])
-	wr.flush32()
 	wr.addBits32NC(s.matchLen, mlBitsTable[mlB])
 	wr.flush32()
 	wr.addBits32NC(s.offset, ofB)
@@ -443,20 +462,15 @@ func (b *block) encode() error {
 		s = b.sequences[seq]
 		wr.flush32()
 		llB, ofB, mlB := llIn[seq], ofIn[seq], mlIn[seq]
+		// tabelog max is
 		of.encode(ofTT[ofB])
 		ml.encode(mlTT[mlB])
 		ll.encode(llTT[llB])
 		wr.flush32()
 		wr.addBits32NC(s.litLen, llBitsTable[llB])
-		wr.flush32()
 		wr.addBits32NC(s.matchLen, mlBitsTable[mlB])
 		wr.flush32()
 		wr.addBits32NC(s.offset, ofB)
-		if seq < 10 {
-			//println("seq", seq, "offset", s.offset, "bits", ofB)
-			//println("seq", seq, "matchlen", s.matchLen, "bits", mlBitsTable[mlB])
-		}
-
 		seq--
 	}
 	ml.flush(mlEnc.actualTableLog)
@@ -470,7 +484,9 @@ func (b *block) encode() error {
 
 	// Size is output minus block header.
 	bh.setSize(uint32(len(b.output)) - 3)
-	println("Rewriting block header", bh)
+	if debug {
+		println("Rewriting block header", bh)
+	}
 	_ = bh.appendTo(b.output[:0])
 	return nil
 }

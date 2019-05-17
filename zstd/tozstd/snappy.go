@@ -224,8 +224,9 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 			continue
 
 		case chunkTypeUncompressedData:
-			fmt.Println("Uncompressed, chunklen", chunkLen)
-
+			if debug {
+				fmt.Println("Uncompressed, chunklen", chunkLen)
+			}
 			// Section 4.3. Uncompressed data (chunk type 0x01).
 			if chunkLen < checksumSize {
 				println("chunkLen < checksumSize", chunkLen, checksumSize)
@@ -266,7 +267,9 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 			continue
 
 		case chunkTypeStreamIdentifier:
-			println("stream id", chunkLen, len(magicBody))
+			if debug {
+				println("stream id", chunkLen, len(magicBody))
+			}
 			// Section 4.1. Stream identifier (chunk type 0xff).
 			if chunkLen != len(magicBody) {
 				println("chunkLen != len(magicBody)", chunkLen, len(magicBody))
@@ -304,10 +307,10 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 // equals that length.
 //
 // It returns 0 on success or a decodeErrCodeXxx error code on failure.
-func decode(dst *block, src []byte) error {
+func decode(blk *block, src []byte) error {
 	//decodeRef(make([]byte, maxBlockSize), src)
 	var s, length int
-	lits := dst.extraLits
+	lits := blk.extraLits
 	var offset uint32
 	for s < len(src) {
 		switch src[s] & 0x03 {
@@ -359,7 +362,7 @@ func decode(dst *block, src []byte) error {
 			//	return ErrCorrupt
 			//}
 
-			dst.literals = append(dst.literals, src[s:s+length]...)
+			blk.literals = append(blk.literals, src[s:s+length]...)
 			//println(length, "literals")
 			lits += length
 			s += length
@@ -393,76 +396,76 @@ func decode(dst *block, src []byte) error {
 			offset = uint32(src[s-4]) | uint32(src[s-3])<<8 | uint32(src[s-2])<<16 | uint32(src[s-1])<<24
 		}
 
-		if offset <= 0 || dst.size+lits < int(offset) /*|| length > len(dst)-d */ {
-			println("offset <= 0 || dst.size+lits < int(offset)", offset, dst.size+lits, int(offset), dst.size, lits)
+		if offset <= 0 || blk.size+lits < int(offset) /*|| length > len(blk)-d */ {
+			println("offset <= 0 || blk.size+lits < int(offset)", offset, blk.size+lits, int(offset), blk.size, lits)
 
 			return ErrCorrupt
 		}
-		// Copy from an earlier sub-slice of dst to a later sub-slice. Unlike
+		// Copy from an earlier sub-slice of blk to a later sub-slice. Unlike
 		// the built-in copy function, this byte-by-byte copy always runs
 		// forwards, even if the slices overlap. Conceptually, this is:
 		//
-		// d += forwardCopy(dst[d:d+length], dst[d-offset:])
+		// d += forwardCopy(blk[d:d+length], blk[d-offset:])
 		//for end := d + length; d != end; d++ {
-		//	dst[d] = dst[d-offset]
+		//	blk[d] = blk[d-offset]
 		//}
 
 		// TODO: This hardly looks worth it.
 		if true {
 			if lits > 0 {
 				switch offset {
-				case dst.recentOffsets[0]:
+				case blk.recentOffsets[0]:
 					offset = 1
-				case dst.recentOffsets[1]:
-					dst.recentOffsets[1] = dst.recentOffsets[0]
-					dst.recentOffsets[0] = offset
+				case blk.recentOffsets[1]:
+					blk.recentOffsets[1] = blk.recentOffsets[0]
+					blk.recentOffsets[0] = offset
 					offset = 2
-				case dst.recentOffsets[2]:
-					dst.recentOffsets[2] = dst.recentOffsets[1]
-					dst.recentOffsets[1] = dst.recentOffsets[0]
-					dst.recentOffsets[0] = offset
+				case blk.recentOffsets[2]:
+					blk.recentOffsets[2] = blk.recentOffsets[1]
+					blk.recentOffsets[1] = blk.recentOffsets[0]
+					blk.recentOffsets[0] = offset
 					offset = 3
 				default:
-					dst.recentOffsets[2] = dst.recentOffsets[1]
-					dst.recentOffsets[1] = dst.recentOffsets[0]
-					dst.recentOffsets[0] = offset
+					blk.recentOffsets[2] = blk.recentOffsets[1]
+					blk.recentOffsets[1] = blk.recentOffsets[0]
+					blk.recentOffsets[0] = offset
 					offset += 3
 				}
 			} else {
 				switch offset {
-				case dst.recentOffsets[1]:
-					dst.recentOffsets[1] = dst.recentOffsets[0]
-					dst.recentOffsets[0] = offset
+				case blk.recentOffsets[1]:
+					blk.recentOffsets[1] = blk.recentOffsets[0]
+					blk.recentOffsets[0] = offset
 					offset = 1
-				case dst.recentOffsets[2]:
-					dst.recentOffsets[2] = dst.recentOffsets[1]
-					dst.recentOffsets[1] = dst.recentOffsets[0]
-					dst.recentOffsets[0] = offset
+				case blk.recentOffsets[2]:
+					blk.recentOffsets[2] = blk.recentOffsets[1]
+					blk.recentOffsets[1] = blk.recentOffsets[0]
+					blk.recentOffsets[0] = offset
 					offset = 2
-				case dst.recentOffsets[0] - 1:
-					dst.recentOffsets[2] = dst.recentOffsets[1]
-					dst.recentOffsets[1] = dst.recentOffsets[0]
-					dst.recentOffsets[0] = offset
+				case blk.recentOffsets[0] - 1:
+					blk.recentOffsets[2] = blk.recentOffsets[1]
+					blk.recentOffsets[1] = blk.recentOffsets[0]
+					blk.recentOffsets[0] = offset
 					offset = 3
 				default:
-					dst.recentOffsets[2] = dst.recentOffsets[1]
-					dst.recentOffsets[1] = dst.recentOffsets[0]
-					dst.recentOffsets[0] = offset
+					blk.recentOffsets[2] = blk.recentOffsets[1]
+					blk.recentOffsets[1] = blk.recentOffsets[0]
+					blk.recentOffsets[0] = offset
 					offset += 3
 				}
 			}
 		} else {
 			offset += 3
 		}
-		dst.sequences = append(dst.sequences, seq{
+		blk.sequences = append(blk.sequences, seq{
 			litLen:   uint32(lits),
 			offset:   offset,
 			matchLen: uint32(length) - zstdMinMatch,
 		})
-		dst.size += length + lits
+		blk.size += length + lits
 		lits = 0
 	}
-	dst.extraLits = lits
+	blk.extraLits = lits
 	return nil
 }
 
