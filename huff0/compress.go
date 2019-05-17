@@ -61,6 +61,9 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 		if maxCount > len(in) {
 			return nil, false, fmt.Errorf("maxCount (%d) > length (%d)", maxCount, len(in))
 		}
+		if len(in) == 1 {
+			return nil, false, ErrIncompressible
+		}
 		// One symbol, use RLE
 		return nil, false, ErrUseRLE
 	}
