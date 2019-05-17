@@ -450,12 +450,16 @@ func (b *block) encode() error {
 	ofEnc.setBits(nil)
 
 	llTT, ofTT, mlTT := llEnc.ct.symbolTT[:256], ofEnc.ct.symbolTT[:256], mlEnc.ct.symbolTT[:256]
+
+	// We have 3 bounds checks here (and in the loop).
+	// Since we are iterating backwards it is kinda hard to avoid.
 	llB, ofB, mlB := llTT[llIn[seq]], ofTT[ofIn[seq]], mlTT[mlIn[seq]]
 	ll.init(wr, &llEnc.ct, llB)
 	of.init(wr, &ofEnc.ct, ofB)
 	wr.flush32()
 	ml.init(wr, &mlEnc.ct, mlB)
 
+	// Each of these lookups also generates a bounds check.
 	s := b.sequences[seq]
 	wr.addBits32NC(s.litLen, llB.outBits)
 	wr.addBits32NC(s.matchLen, mlB.outBits)
@@ -541,6 +545,11 @@ func (b *block) genCodes() {
 	}
 
 	var llMax, ofMax, mlMax uint8
+
+	// Done to avoid bounds checks in loop.
+	ll = ll[:len(b.sequences)]
+	of = of[:len(b.sequences)]
+	ml = ml[:len(b.sequences)]
 	for i, seq := range b.sequences {
 		v := llCode(seq.litLen)
 		ll[i] = v
