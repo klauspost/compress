@@ -57,8 +57,9 @@ type cTable struct {
 
 // symbolTransform contains the state transform for a symbol.
 type symbolTransform struct {
-	deltaFindState int32
 	deltaNbBits    uint32
+	deltaFindState int16
+	outBits        uint8
 }
 
 // String prints values as a human readable string.
@@ -218,13 +219,13 @@ func (s *fseEncoder) buildCTable() error {
 			case 0:
 			case -1, 1:
 				symbolTT[i].deltaNbBits = tl
-				symbolTT[i].deltaFindState = int32(total - 1)
+				symbolTT[i].deltaFindState = int16(total - 1)
 				total++
 			default:
 				maxBitsOut := uint32(tableLog) - highBit(uint32(v-1))
 				minStatePlus := uint32(v) << maxBitsOut
 				symbolTT[i].deltaNbBits = (maxBitsOut << 16) - minStatePlus
-				symbolTT[i].deltaFindState = int32(total - v)
+				symbolTT[i].deltaFindState = int16(total - v)
 				total += v
 			}
 		}
@@ -249,6 +250,20 @@ func (s *fseEncoder) setRLE(val byte) {
 	}
 	s.rleVal = val
 	s.useRLE = true
+}
+
+// setBits will set output bits for the transform.
+// if nil is provided, the number of bits is equal to the index.
+func (s *fseEncoder) setBits(transform []byte) {
+	if transform == nil {
+		for i := range s.ct.symbolTT[:s.symbolLen] {
+			s.ct.symbolTT[i].outBits = uint8(i)
+		}
+		return
+	}
+	for i, v := range transform {
+		s.ct.symbolTT[i].outBits = v
+	}
 }
 
 // normalizeCount will normalize the count of the symbols so
@@ -592,7 +607,7 @@ func (c *cState) init(bw *bitWriter, ct *cTable, first symbolTransform) {
 	}
 	nbBitsOut := (first.deltaNbBits + (1 << 15)) >> 16
 	im := int32((nbBitsOut << 16) - first.deltaNbBits)
-	lu := (im >> nbBitsOut) + first.deltaFindState
+	lu := (im >> nbBitsOut) + int32(first.deltaFindState)
 	c.state = c.stateTable[lu]
 	return
 }
@@ -600,7 +615,7 @@ func (c *cState) init(bw *bitWriter, ct *cTable, first symbolTransform) {
 // encode the output symbol provided and write it to the bitstream.
 func (c *cState) encode(symbolTT symbolTransform) {
 	nbBitsOut := (uint32(c.state) + symbolTT.deltaNbBits) >> 16
-	dstState := int32(c.state>>(nbBitsOut&15)) + symbolTT.deltaFindState
+	dstState := int32(c.state>>(nbBitsOut&15)) + int32(symbolTT.deltaFindState)
 	c.bw.addBits16NC(c.state, uint8(nbBitsOut))
 	c.state = c.stateTable[dstState]
 }
@@ -608,7 +623,7 @@ func (c *cState) encode(symbolTT symbolTransform) {
 // encode the output symbol provided and write it to the bitstream.
 func (c *cState) encodeZero(symbolTT symbolTransform) {
 	nbBitsOut := (uint32(c.state) + symbolTT.deltaNbBits) >> 16
-	dstState := int32(c.state>>(nbBitsOut&15)) + symbolTT.deltaFindState
+	dstState := int32(c.state>>(nbBitsOut&15)) + int32(symbolTT.deltaFindState)
 	c.bw.addBits16ZeroNC(c.state, uint8(nbBitsOut))
 	c.state = c.stateTable[dstState]
 }

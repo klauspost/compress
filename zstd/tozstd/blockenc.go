@@ -445,32 +445,39 @@ func (b *block) encode() error {
 
 	// Current sequence
 	seq := len(b.sequences) - 1
+	llEnc.setBits(llBitsTable[:])
+	mlEnc.setBits(mlBitsTable[:])
+	ofEnc.setBits(nil)
+
 	llTT, ofTT, mlTT := llEnc.ct.symbolTT[:256], ofEnc.ct.symbolTT[:256], mlEnc.ct.symbolTT[:256]
-	llB, ofB, mlB := llIn[seq], ofIn[seq], mlIn[seq]
-	ll.init(wr, &llEnc.ct, llTT[llB])
-	of.init(wr, &ofEnc.ct, ofTT[ofB])
+	llB, ofB, mlB := llTT[llIn[seq]], ofTT[ofIn[seq]], mlTT[mlIn[seq]]
+	ll.init(wr, &llEnc.ct, llB)
+	of.init(wr, &ofEnc.ct, ofB)
 	wr.flush32()
-	ml.init(wr, &mlEnc.ct, mlTT[mlB])
+	ml.init(wr, &mlEnc.ct, mlB)
 
 	s := b.sequences[seq]
-	wr.addBits32NC(s.litLen, llBitsTable[llB])
-	wr.addBits32NC(s.matchLen, mlBitsTable[mlB])
+	wr.addBits32NC(s.litLen, llB.outBits)
+	wr.addBits32NC(s.matchLen, mlB.outBits)
 	wr.flush32()
-	wr.addBits32NC(s.offset, ofB)
+	wr.addBits32NC(s.offset, ofB.outBits)
 	seq--
 	for seq >= 0 {
 		s = b.sequences[seq]
 		wr.flush32()
-		llB, ofB, mlB := llIn[seq], ofIn[seq], mlIn[seq]
-		// tabelog max is
-		of.encode(ofTT[ofB])
-		ml.encode(mlTT[mlB])
-		ll.encode(llTT[llB])
+		llB, ofB, mlB := llTT[llIn[seq]], ofTT[ofIn[seq]], mlTT[mlIn[seq]]
+		// tabelog max is 8 for all.
+		of.encode(ofB)
+		ml.encode(mlB)
+		ll.encode(llB)
 		wr.flush32()
-		wr.addBits32NC(s.litLen, llBitsTable[llB])
-		wr.addBits32NC(s.matchLen, mlBitsTable[mlB])
-		wr.flush32()
-		wr.addBits32NC(s.offset, ofB)
+
+		// We know that snappy will only output limited match ranges,
+		// otherwise a flush should be inserted before adding offset.
+		wr.addBits32NC(s.litLen, llB.outBits)
+		wr.addBits32NC(s.matchLen, mlB.outBits)
+		wr.addBits32NC(s.offset, ofB.outBits)
+
 		seq--
 	}
 	ml.flush(mlEnc.actualTableLog)

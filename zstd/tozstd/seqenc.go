@@ -17,10 +17,6 @@ type seqCodes struct {
 	llPrev, ofPrev, mlPrev *fseEncoder
 }
 
-func (s *seqCodes) initSize(sequences int) {
-	// maybe move stuff here
-}
-
 func highBit(val uint32) (n uint32) {
 	return uint32(bits.Len32(val) - 1)
 }
