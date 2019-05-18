@@ -59,8 +59,6 @@ var llCodeTable = [64]byte{0, 1, 2, 3, 4, 5, 6, 7,
 const maxLLCode = 35
 
 // llBitsTable translates from ll code to number of bits.
-// TODO: We should probably combine these in a single bigger array to avoid bounds checks
-//  or combine this into the fse table.
 var llBitsTable = [maxLLCode + 1]byte{
 	0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0,

@@ -394,13 +394,19 @@ func (b *block) encode() error {
 		prevSize := prev.approxSize(hist)
 		switch {
 		case predefSize <= prevSize && predefSize <= nSize || forcePreDef:
-			println("Using predefined", predefSize>>3, "<=", nSize>>3)
+			if debug {
+				println("Using predefined", predefSize>>3, "<=", nSize>>3)
+			}
 			return preDef, compModePredefined
 		case prevSize <= nSize:
-			println("Using previous", prevSize>>3, "<=", nSize>>3)
+			if debug {
+				println("Using previous", prevSize>>3, "<=", nSize>>3)
+			}
 			return prev, compModeRepeat
 		default:
-			println("Using new, previous:", prevSize>>3, ">", nSize>>3, "header max:", cur.maxHeaderSize()>>3, "bytes")
+			if debug {
+				println("Using new, previous:", prevSize>>3, ">", nSize>>3, "header max:", cur.maxHeaderSize()>>3, "bytes")
+			}
 			return cur, compModeFSE
 		}
 	}

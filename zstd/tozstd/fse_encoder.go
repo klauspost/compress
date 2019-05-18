@@ -23,29 +23,17 @@ const (
 
 // Scratch provides temporary storage for compression and decompression.
 type fseEncoder struct {
-	// Private
 	symbolLen      uint16 // Length of active part of the symbol table.
 	actualTableLog uint8  // Selected tablelog.
-	bw             bitWriter
 	ct             cTable // Compression tables.
-	zeroBits       bool   // no bits has prob > 50%.
-	clearCount     bool   // clear count
 	maxCount       int    // count of the most probable symbol
-	useRLE         bool
-	rleVal         uint8
-	preDefined     bool
-	reUsed         bool
-
-	// Per block parameters.
-	// These can be used to override compression parameters of the block.
-	// Do not touch, unless you know what you are doing.
-
-	// Out is output buffer.
-	// If the scratch is re-used before the caller is done processing the output,
-	// set this field to nil.
-	// Otherwise the output buffer will be re-used for next Compression/Decompression step
-	// and allocation will be avoided.
-	//Out []byte
+	bw             bitWriter
+	zeroBits       bool  // no bits has prob > 50%.
+	clearCount     bool  // clear count
+	useRLE         bool  // This encoder is for RLE
+	rleVal         uint8 // RLE Symbol
+	preDefined     bool  // This encoder is predefined.
+	reUsed         bool  // Set to know when the encoder has been reused.
 
 	count [256]uint32
 	norm  [256]int16
@@ -67,7 +55,7 @@ type symbolTransform struct {
 
 // String prints values as a human readable string.
 func (s symbolTransform) String() string {
-	return fmt.Sprintf("dnbits: %08x, fs:%d", s.deltaNbBits, s.deltaFindState)
+	return fmt.Sprintf("dnbits: %08x, fs:%d outbits:%d", s.deltaNbBits, s.deltaFindState, s.outBits)
 }
 
 // Histogram allows to populate the histogram and skip that step in the compression,
@@ -660,7 +648,6 @@ func (s *fseEncoder) approxSize(hist []uint32) uint32 {
 		if s.norm[i] == 0 {
 			return math.MaxUint32
 		}
-		//unsigned const tableLog = s.ct..ct..stateLog;
 		bitCost := s.bitCost(uint8(i), kAccuracyLog)
 		if bitCost > badCost {
 			return math.MaxUint32
@@ -671,6 +658,7 @@ func (s *fseEncoder) approxSize(hist []uint32) uint32 {
 }
 
 // maxHeaderSize returns the maximum header size in bits.
+// This is not exact size, but we want a penalty for new tables anyway.
 func (s *fseEncoder) maxHeaderSize() uint32 {
 	if s.preDefined {
 		return 0
