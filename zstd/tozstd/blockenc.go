@@ -392,7 +392,17 @@ func (b *block) encode() error {
 			println("llEnc.useRLE")
 		}
 	} else {
-		mode |= uint8(compModeFSE) << 6
+		// See if predefined is better
+		hist := llEnc.count[:llEnc.symbolLen]
+		nSize := llEnc.approxSize(hist) + llEnc.maxHeaderSize()
+		preSize := fsePredefEnc[tableLiteralLengths].approxSize(hist)
+		if preSize <= nSize || forcePreDef {
+			println("llEnc: Using predefined", preSize, "<=", nSize)
+			llEnc = &fsePredefEnc[tableLiteralLengths]
+			mode |= uint8(compModePredefined) << 6
+		} else {
+			mode |= uint8(compModeFSE) << 6
+		}
 	}
 	if ofEnc.useRLE {
 		mode |= uint8(compModeRLE) << 4
@@ -401,7 +411,16 @@ func (b *block) encode() error {
 			println("ofEnc.useRLE")
 		}
 	} else {
-		mode |= uint8(compModeFSE) << 4
+		hist := ofEnc.count[:ofEnc.symbolLen]
+		nSize := ofEnc.approxSize(hist) + ofEnc.maxHeaderSize()
+		preSize := fsePredefEnc[tableOffsets].approxSize(hist)
+		if preSize <= nSize || forcePreDef {
+			println("ofEnc: Using predefined", preSize, "<=", nSize)
+			ofEnc = &fsePredefEnc[tableOffsets]
+			mode |= uint8(compModePredefined) << 4
+		} else {
+			mode |= uint8(compModeFSE) << 4
+		}
 	}
 	if mlEnc.useRLE {
 		mode |= uint8(compModeRLE) << 2
@@ -410,7 +429,16 @@ func (b *block) encode() error {
 			println("mlEnc.useRLE")
 		}
 	} else {
-		mode |= uint8(compModeFSE) << 2
+		hist := mlEnc.count[:mlEnc.symbolLen]
+		nSize := mlEnc.approxSize(hist) + mlEnc.maxHeaderSize()
+		preSize := fsePredefEnc[tableMatchLengths].approxSize(hist)
+		if preSize <= nSize || forcePreDef {
+			println("mlEnc: Using predefined", preSize, "<=", nSize)
+			mlEnc = &fsePredefEnc[tableMatchLengths]
+			mode |= uint8(compModePredefined) << 2
+		} else {
+			mode |= uint8(compModeFSE) << 2
+		}
 	}
 	b.output = append(b.output, mode)
 	if debug {

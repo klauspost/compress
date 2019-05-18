@@ -3,6 +3,7 @@ package tozstd
 import (
 	"errors"
 	"fmt"
+	"math"
 )
 
 const (
@@ -32,6 +33,7 @@ type fseEncoder struct {
 	maxCount       int    // count of the most probable symbol
 	useRLE         bool
 	rleVal         uint8
+	preDefined     bool
 
 	// Per block parameters.
 	// These can be used to override compression parameters of the block.
@@ -268,6 +270,7 @@ func (s *fseEncoder) setBits(transform []byte) {
 
 // normalizeCount will normalize the count of the symbols so
 // the total is equal to the table size.
+// If successful, compression tables will also be made ready.
 func (s *fseEncoder) normalizeCount(in []byte) error {
 	s.optimalTableLog(len(in))
 	var (
@@ -316,21 +319,27 @@ func (s *fseEncoder) normalizeCount(in []byte) error {
 	}
 
 	if -stillToDistribute >= (s.norm[largest] >> 1) {
+		// corner case, need another normalization method
+		err := s.normalizeCount2(length)
+		if err != nil {
+			return err
+		}
 		if debug {
-			err := s.normalizeCount2(length)
+			err = s.validateNorm()
 			if err != nil {
 				return err
 			}
-			return s.validateNorm()
 		}
-		// corner case, need another normalization method
-		return s.normalizeCount2(length)
+		return s.buildCTable()
 	}
 	s.norm[largest] += stillToDistribute
 	if debug {
-		return s.validateNorm()
+		err := s.validateNorm()
+		if err != nil {
+			return err
+		}
 	}
-	return nil
+	return s.buildCTable()
 }
 
 // Secondary normalization method.
@@ -508,6 +517,10 @@ func (s *fseEncoder) writeCount(out []byte) ([]byte, error) {
 	if s.useRLE {
 		return append(out, s.rleVal), nil
 	}
+	if s.preDefined {
+		// Never write predefined.
+		return out, nil
+	}
 	outP := len(out)
 	out = out[:outP+maxHeaderSize]
 
@@ -585,7 +598,80 @@ func (s *fseEncoder) writeCount(out []byte) ([]byte, error) {
 	if uint16(charnum) > s.symbolLen {
 		return nil, errors.New("internal error: charnum > s.symbolLen")
 	}
-	return out[:outP], s.buildCTable()
+	return out[:outP], nil
+}
+
+// Approximate symbol cost, as fractional value, using fixed-point format (accuracyLog fractional bits)
+// note 1 : assume symbolValue is valid (<= maxSymbolValue)
+// note 2 : if freq[symbolValue]==0, @return a fake cost of tableLog+1 bits *
+func (s *fseEncoder) bitCost(symbolValue uint8, accuracyLog uint32) uint32 {
+	minNbBits := s.ct.symbolTT[symbolValue].deltaNbBits >> 16
+	threshold := (minNbBits + 1) << 16
+	if debug {
+		if !(s.actualTableLog < 16) {
+			panic("!s.actualTableLog < 16")
+		}
+		// ensure enough room for renormalization double shift
+		if !(uint8(accuracyLog) < 31-s.actualTableLog) {
+			panic("!uint8(accuracyLog) < 31-s.actualTableLog")
+		}
+	}
+	tableSize := uint32(1) << s.actualTableLog
+	deltaFromThreshold := threshold - (s.ct.symbolTT[symbolValue].deltaNbBits + tableSize)
+	// linear interpolation (very approximate)
+	normalizedDeltaFromThreshold := (deltaFromThreshold << accuracyLog) >> s.actualTableLog
+	bitMultiplier := uint32(1) << accuracyLog
+	if debug {
+		if s.ct.symbolTT[symbolValue].deltaNbBits+tableSize > threshold {
+			panic("s.ct.symbolTT[symbolValue].deltaNbBits+tableSize > threshold")
+		}
+		if normalizedDeltaFromThreshold > bitMultiplier {
+			panic("normalizedDeltaFromThreshold > bitMultiplier")
+		}
+	}
+	return (minNbBits+1)*bitMultiplier - normalizedDeltaFromThreshold
+}
+
+// Returns the cost in bits of encoding the distribution in count using ctable.
+// Histogram should only be up to the last non-zero symbol.
+// Returns an -1 if ctable cannot represent all the symbols in count.
+func (s *fseEncoder) approxSize(hist []uint32) uint32 {
+	if int(s.symbolLen) < len(hist) {
+		// More symbols than we have.
+		return math.MaxUint32
+	}
+	if s.useRLE {
+		return 0
+	}
+	const kAccuracyLog = 8
+	badCost := (uint32(s.actualTableLog) + 1) << kAccuracyLog
+	var cost uint32
+	for i, v := range hist {
+		if v == 0 {
+			continue
+		}
+		if s.norm[i] == 0 {
+			return math.MaxUint32
+		}
+		//unsigned const tableLog = s.ct..ct..stateLog;
+		bitCost := s.bitCost(uint8(i), kAccuracyLog)
+		if bitCost > badCost {
+			return math.MaxUint32
+		}
+		cost += v * bitCost
+	}
+	return cost
+}
+
+// maxHeaderSize returns the maximum header size in bits.
+func (s *fseEncoder) maxHeaderSize() uint32 {
+	if s.preDefined {
+		return 0
+	}
+	if s.useRLE {
+		return 8
+	}
+	return (((uint32(s.symbolLen) * uint32(s.actualTableLog)) >> 3) + 3) * 8
 }
 
 // cState contains the compression state of a stream.
