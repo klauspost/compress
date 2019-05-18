@@ -17,6 +17,32 @@ type seqCodes struct {
 	llPrev, ofPrev, mlPrev *fseEncoder
 }
 
+// setPrev will update the previous encoders to the actually used ones
+// and make sure a fresh one is in the main slot.
+func (s *seqCodes) setPrev(ll, ml, of *fseEncoder) {
+	compareSwap := func(used *fseEncoder, current, prev **fseEncoder) {
+		// We used the new one, more current to history and reuse the previous history
+		if *current == used {
+			*prev, *current = *current, *prev
+			c := *current
+			p := *prev
+			c.reUsed = false
+			p.reUsed = true
+			return
+		}
+		if used == *prev {
+			return
+		}
+		// Ensure we cannot reuse by accident
+		prevEnc := *prev
+		prevEnc.symbolLen = 0
+		return
+	}
+	compareSwap(ll, &s.llEnc, &s.llPrev)
+	compareSwap(ml, &s.mlEnc, &s.mlPrev)
+	compareSwap(of, &s.ofEnc, &s.ofPrev)
+}
+
 func highBit(val uint32) (n uint32) {
 	return uint32(bits.Len32(val) - 1)
 }

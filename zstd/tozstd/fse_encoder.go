@@ -34,6 +34,7 @@ type fseEncoder struct {
 	useRLE         bool
 	rleVal         uint8
 	preDefined     bool
+	reUsed         bool
 
 	// Per block parameters.
 	// These can be used to override compression parameters of the block.
@@ -257,6 +258,9 @@ func (s *fseEncoder) setRLE(val byte) {
 // setBits will set output bits for the transform.
 // if nil is provided, the number of bits is equal to the index.
 func (s *fseEncoder) setBits(transform []byte) {
+	if s.reUsed || s.preDefined {
+		return
+	}
 	if transform == nil {
 		for i := range s.ct.symbolTT[:s.symbolLen] {
 			s.ct.symbolTT[i].outBits = uint8(i)
@@ -272,6 +276,9 @@ func (s *fseEncoder) setBits(transform []byte) {
 // the total is equal to the table size.
 // If successful, compression tables will also be made ready.
 func (s *fseEncoder) normalizeCount(in []byte) error {
+	if s.reUsed {
+		return nil
+	}
 	s.optimalTableLog(len(in))
 	var (
 		length            = len(in)
@@ -517,7 +524,7 @@ func (s *fseEncoder) writeCount(out []byte) ([]byte, error) {
 	if s.useRLE {
 		return append(out, s.rleVal), nil
 	}
-	if s.preDefined {
+	if s.preDefined || s.reUsed {
 		// Never write predefined.
 		return out, nil
 	}
@@ -660,7 +667,7 @@ func (s *fseEncoder) approxSize(hist []uint32) uint32 {
 		}
 		cost += v * bitCost
 	}
-	return cost
+	return cost >> kAccuracyLog
 }
 
 // maxHeaderSize returns the maximum header size in bits.

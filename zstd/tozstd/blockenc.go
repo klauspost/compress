@@ -64,16 +64,20 @@ func (b *block) init() {
 	b.seqCodes.litLen = fn(b.seqCodes.litLen)
 	if b.seqCodes.mlEnc == nil {
 		b.seqCodes.mlEnc = &fseEncoder{}
+		b.seqCodes.mlPrev = &fseEncoder{}
 		b.seqCodes.ofEnc = &fseEncoder{}
+		b.seqCodes.ofPrev = &fseEncoder{}
 		b.seqCodes.llEnc = &fseEncoder{}
+		b.seqCodes.llPrev = &fseEncoder{}
 	}
 
 	b.reset()
 }
 
-func (b *block) initOffsets() {
+func (b *block) initNewEncode() {
 	b.recentOffsets = [3]uint32{1, 4, 8}
 	b.litEnc.Reuse = huff0.ReusePolicyNone
+	b.seqCodes.setPrev(nil, nil, nil)
 }
 
 func (b *block) reset() {
@@ -382,6 +386,24 @@ func (b *block) encode() error {
 	if err != nil {
 		return err
 	}
+	chooseComp := func(cur, prev, preDef *fseEncoder) (*fseEncoder, seqCompMode) {
+		// See if predefined/previous is better
+		hist := cur.count[:cur.symbolLen]
+		nSize := cur.approxSize(hist) + cur.maxHeaderSize()
+		predefSize := preDef.approxSize(hist)
+		prevSize := prev.approxSize(hist)
+		switch {
+		case predefSize <= prevSize && predefSize <= nSize || forcePreDef:
+			println("Using predefined", predefSize>>3, "<=", nSize>>3)
+			return preDef, compModePredefined
+		case prevSize <= nSize:
+			println("Using previous", prevSize>>3, "<=", nSize>>3)
+			return prev, compModeRepeat
+		default:
+			println("Using new, previous:", prevSize>>3, ">", nSize>>3, "header max:", cur.maxHeaderSize()>>3, "bytes")
+			return cur, compModeFSE
+		}
+	}
 
 	// Write compression mode
 	var mode uint8
@@ -392,17 +414,9 @@ func (b *block) encode() error {
 			println("llEnc.useRLE")
 		}
 	} else {
-		// See if predefined is better
-		hist := llEnc.count[:llEnc.symbolLen]
-		nSize := llEnc.approxSize(hist) + llEnc.maxHeaderSize()
-		preSize := fsePredefEnc[tableLiteralLengths].approxSize(hist)
-		if preSize <= nSize || forcePreDef {
-			println("llEnc: Using predefined", preSize, "<=", nSize)
-			llEnc = &fsePredefEnc[tableLiteralLengths]
-			mode |= uint8(compModePredefined) << 6
-		} else {
-			mode |= uint8(compModeFSE) << 6
-		}
+		var m seqCompMode
+		llEnc, m = chooseComp(llEnc, b.seqCodes.llPrev, &fsePredefEnc[tableLiteralLengths])
+		mode |= uint8(m) << 6
 	}
 	if ofEnc.useRLE {
 		mode |= uint8(compModeRLE) << 4
@@ -411,17 +425,11 @@ func (b *block) encode() error {
 			println("ofEnc.useRLE")
 		}
 	} else {
-		hist := ofEnc.count[:ofEnc.symbolLen]
-		nSize := ofEnc.approxSize(hist) + ofEnc.maxHeaderSize()
-		preSize := fsePredefEnc[tableOffsets].approxSize(hist)
-		if preSize <= nSize || forcePreDef {
-			println("ofEnc: Using predefined", preSize, "<=", nSize)
-			ofEnc = &fsePredefEnc[tableOffsets]
-			mode |= uint8(compModePredefined) << 4
-		} else {
-			mode |= uint8(compModeFSE) << 4
-		}
+		var m seqCompMode
+		ofEnc, m = chooseComp(ofEnc, b.seqCodes.ofPrev, &fsePredefEnc[tableOffsets])
+		mode |= uint8(m) << 4
 	}
+
 	if mlEnc.useRLE {
 		mode |= uint8(compModeRLE) << 2
 		mlEnc.setRLE(mlIn[0])
@@ -429,16 +437,9 @@ func (b *block) encode() error {
 			println("mlEnc.useRLE")
 		}
 	} else {
-		hist := mlEnc.count[:mlEnc.symbolLen]
-		nSize := mlEnc.approxSize(hist) + mlEnc.maxHeaderSize()
-		preSize := fsePredefEnc[tableMatchLengths].approxSize(hist)
-		if preSize <= nSize || forcePreDef {
-			println("mlEnc: Using predefined", preSize, "<=", nSize)
-			mlEnc = &fsePredefEnc[tableMatchLengths]
-			mode |= uint8(compModePredefined) << 2
-		} else {
-			mode |= uint8(compModeFSE) << 2
-		}
+		var m seqCompMode
+		mlEnc, m = chooseComp(mlEnc, b.seqCodes.mlPrev, &fsePredefEnc[tableMatchLengths])
+		mode |= uint8(m) << 2
 	}
 	b.output = append(b.output, mode)
 	if debug {
@@ -527,6 +528,7 @@ func (b *block) encode() error {
 		println("Rewriting block header", bh)
 	}
 	_ = bh.appendTo(b.output[:0])
+	b.seqCodes.setPrev(llEnc, mlEnc, ofEnc)
 	return nil
 }
 

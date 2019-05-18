@@ -115,7 +115,7 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 		r.block = &block{}
 		r.block.init()
 	}
-	r.block.initOffsets()
+	r.block.initNewEncode()
 	if len(r.buf) != maxEncodedLenOfMaxBlockSize+checksumSize {
 		r.buf = make([]byte, maxEncodedLenOfMaxBlockSize+checksumSize)
 	}
@@ -225,7 +225,7 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 
 		case chunkTypeUncompressedData:
 			if debug {
-				fmt.Println("Uncompressed, chunklen", chunkLen)
+				println("Uncompressed, chunklen", chunkLen)
 			}
 			// Section 4.3. Uncompressed data (chunk type 0x01).
 			if chunkLen < checksumSize {
