@@ -193,7 +193,7 @@ func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
 		}
 	}
 
-	// Add final litLen
+	// Add final literals
 	s.out = append(s.out, s.literals...)
 	return nil
 }
