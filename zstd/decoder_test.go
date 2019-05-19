@@ -95,7 +95,7 @@ func TestNewDecoderBigFile(t *testing.T) {
 	file := "testdata/enwik9.zst"
 	const wantSize = 1000000000
 	if _, err := os.Stat(file); os.IsNotExist(err) {
-		t.Skip("To run extended tests, download http://mattmahoney.net/dc/textdata unzip it \n" +
+		t.Skip("To run extended tests, download http://mattmahoney.net/dc/enwik9.zip unzip it \n" +
 			"compress it with 'zstd -15 -T0 enwik9' and place it in " + file)
 	}
 	f, err := os.Open(file)

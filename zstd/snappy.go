@@ -1,4 +1,4 @@
-package tozstd
+package zstd
 
 import (
 	"encoding/binary"
@@ -353,7 +353,7 @@ func decodeSnappy(blk *blockEnc, src []byte) error {
 			//}
 
 			blk.literals = append(blk.literals, src[s:s+length]...)
-			//println(length, "literals")
+			//println(length, "litLen")
 			lits += length
 			s += length
 			continue

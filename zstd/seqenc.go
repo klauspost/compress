@@ -1,12 +1,6 @@
-package tozstd
+package zstd
 
 import "math/bits"
-
-type seq struct {
-	litLen   uint32
-	offset   uint32
-	matchLen uint32
-}
 
 type seqCodes struct {
 	litLen   []uint8

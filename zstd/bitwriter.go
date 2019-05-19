@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 // Based on work Copyright (c) 2013, Yann Collet, released under BSD License.
 
-package tozstd
+package zstd
 
 import "fmt"
 

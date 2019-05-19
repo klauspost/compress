@@ -1,4 +1,4 @@
-package tozstd
+package zstd
 
 import (
 	"fmt"
@@ -6,32 +6,6 @@ import (
 	"math/bits"
 
 	"github.com/klauspost/compress/huff0"
-)
-
-type blockType uint8
-
-const (
-	blockTypeRaw blockType = iota
-	blockTypeRLE
-	blockTypeCompressed
-	blockTypeReserved
-)
-
-type literalsBlockType uint8
-
-const (
-	literalsBlockRaw literalsBlockType = iota
-	literalsBlockRLE
-	literalsBlockCompressed
-	literalsBlockTreeless
-)
-
-const (
-	// maxCompressedBlockSize is the biggest allowed compressed block size (128KB)
-	maxCompressedBlockSize = 128 << 10
-
-	// https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#literals_section_header
-	maxCompressedLiteralSize = 1 << 18
 )
 
 type blockEnc struct {
@@ -214,7 +188,7 @@ func (h literalsHeader) String() string {
 	return fmt.Sprintf("Type: %d, SizeFormat: %d, Size: 0x%d, Bytes:%d", literalsBlockType(h&3), (h>>2)&3, h&((1<<60)-1)>>4, h>>60)
 }
 
-// encodeLits can be used if the block is only literals.
+// encodeLits can be used if the block is only litLen.
 func (b *blockEnc) encodeLits() error {
 	var bh blockHeader
 	bh.setLast(b.last)
@@ -273,16 +247,7 @@ func (b *blockEnc) encodeLits() error {
 	return nil
 }
 
-type seqCompMode uint8
-
-const (
-	compModePredefined seqCompMode = iota
-	compModeRLE
-	compModeFSE
-	compModeRepeat
-)
-
-// encodeLits can be used if the block is only literals.
+// encode will encode the block and put the output in b.output.
 func (b *blockEnc) encode() error {
 	if len(b.sequences) == 0 {
 		return b.encodeLits()
@@ -331,7 +296,7 @@ func (b *blockEnc) encode() error {
 		}
 		return err
 	case nil:
-		// Compressed literals...
+		// Compressed litLen...
 		if reUsed {
 			if debug {
 				println("reused tree")
@@ -568,12 +533,6 @@ func (b *blockEnc) encode() error {
 	return nil
 }
 
-const (
-	maxLiteralLengthBits = 35
-	maxOffsetBits        = 30
-	maxMatchLengthBits   = 52
-)
-
 func (b *blockEnc) genCodes() {
 	if len(b.sequences) == 0 {
 		// nothing to do
@@ -647,14 +606,14 @@ func (b *blockEnc) genCodes() {
 		}
 		return int(max)
 	}
-	if mlMax > maxMatchLengthBits {
-		panic(fmt.Errorf("mlMax > maxMatchLengthBits (%d)", mlMax))
+	if mlMax > maxMatchLengthSymbol {
+		panic(fmt.Errorf("mlMax > maxMatchLengthSymbol (%d)", mlMax))
 	}
 	if ofMax > maxOffsetBits {
 		panic(fmt.Errorf("ofMax > maxOffsetBits (%d)", ofMax))
 	}
-	if llMax > maxLiteralLengthBits {
-		panic(fmt.Errorf("llMax > maxLiteralLengthBits (%d)", llMax))
+	if llMax > maxLiteralLengthSymbol {
+		panic(fmt.Errorf("llMax > maxLiteralLengthSymbol (%d)", llMax))
 	}
 
 	b.seqCodes.litLen = ll

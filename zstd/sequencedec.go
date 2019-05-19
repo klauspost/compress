@@ -11,9 +11,9 @@ import (
 )
 
 type seq struct {
-	literals    uint32
-	matchLen    uint32
-	matchOffset uint32
+	litLen   uint32
+	matchLen uint32
+	offset   uint32
 }
 
 type seqCompMode uint8
@@ -193,7 +193,7 @@ func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
 		}
 	}
 
-	// Add final literals
+	// Add final litLen
 	s.out = append(s.out, s.literals...)
 	return nil
 }

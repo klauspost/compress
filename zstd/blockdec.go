@@ -68,7 +68,7 @@ type blockDec struct {
 	// Destination of the decoded data.
 	dst []byte
 
-	// Buffer for literals data.
+	// Buffer for litLen data.
 	literalBuf []byte
 
 	// Window size of the block.
@@ -379,7 +379,7 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		}
 		literals = in[:litRegenSize]
 		in = in[litRegenSize:]
-		//printf("Found %d uncompressed literals\n", litRegenSize)
+		//printf("Found %d uncompressed litLen\n", litRegenSize)
 	case literalsBlockRLE:
 		if len(in) < 1 {
 			println("too small: litType:", litType, " sizeFormat", sizeFormat, "remain:", len(in), "want:", 1)
@@ -412,7 +412,7 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 			println("too small: litType:", litType, " sizeFormat", sizeFormat, "remain:", len(in), "want:", litCompSize)
 			return ErrBlockTooSmall
 		}
-		// Store compressed literals, so we defer decoding until we get history.
+		// Store compressed litLen, so we defer decoding until we get history.
 		literals = in[:litCompSize]
 		in = in[litCompSize:]
 		if debug {
@@ -456,7 +456,7 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 			println("decoding compressed literals:", err)
 			return err
 		}
-		// Make sure we don't leak our literals buffer
+		// Make sure we don't leak our litLen buffer
 		huff.Out = nil
 		if len(literals) != litRegenSize {
 			return fmt.Errorf("literal output size mismatch want %d, got %d", litRegenSize, len(literals))
@@ -606,7 +606,7 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		} else {
 			literals, err = huff.Decompress1X(literals)
 		}
-		// Make sure we don't leak our literals buffer
+		// Make sure we don't leak our litLen buffer
 		huff.Out = nil
 		if err != nil {
 			println("decompressing literals:", err)

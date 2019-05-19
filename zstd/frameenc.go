@@ -1,8 +1,6 @@
-package tozstd
+package zstd
 
 import "math/bits"
-
-var frameMagic = []byte{0x28, 0xb5, 0x2f, 0xfd}
 
 type frameHeader struct {
 	ContentSize   uint64

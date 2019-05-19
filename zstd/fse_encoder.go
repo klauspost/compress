@@ -1,4 +1,4 @@
-package tozstd
+package zstd
 
 import (
 	"errors"
@@ -7,18 +7,12 @@ import (
 )
 
 const (
-	/*!MEMORY_USAGE :
-	 *  Memory usage formula : N->2^N Bytes (examples : 10 -> 1KB; 12 -> 4KB ; 16 -> 64KB; 20 -> 1MB; etc.)
-	 *  Increasing memory usage improves compression ratio
-	 *  Reduced memory usage can improve speed, due to cache effect
-	 *  Recommended max value is 14, for 16KB, which nicely fits into Intel x86 L1 cache */
-	maxMemoryUsage = 10
-
-	maxTableLog    = maxMemoryUsage - 2
-	maxTablesize   = 1 << maxTableLog
-	maxTableMask   = (1 << maxTableLog) - 1
-	minTablelog    = 5
-	maxSymbolValue = 52
+	// For encoding we only support up to
+	maxEncTableLog    = 8
+	maxEncTablesize   = 1 << maxTableLog
+	maxEncTableMask   = (1 << maxTableLog) - 1
+	minEncTablelog    = 5
+	maxEncSymbolValue = maxMatchLengthSymbol
 )
 
 // Scratch provides temporary storage for compression and decompression.
@@ -118,16 +112,11 @@ func (s *fseEncoder) allocCtable() {
 	s.ct.symbolTT = s.ct.symbolTT[:256]
 }
 
-// tableStep returns the next table index.
-func tableStep(tableSize uint32) uint32 {
-	return (tableSize >> 1) + (tableSize >> 3) + 3
-}
-
 // buildCTable will populate the compression table so it is ready to be used.
 func (s *fseEncoder) buildCTable() error {
 	tableSize := uint32(1 << s.actualTableLog)
 	highThreshold := tableSize - 1
-	var cumul [maxSymbolValue + 2]int16
+	var cumul [256]int16
 
 	s.allocCtable()
 	tableSymbol := s.ct.tableSymbol[:tableSize]
@@ -452,7 +441,7 @@ func (s *fseEncoder) normalizeCount2(length int) error {
 
 // optimalTableLog calculates and sets the optimal tableLog in s.actualTableLog
 func (s *fseEncoder) optimalTableLog(length int) {
-	tableLog := uint8(maxTableLog)
+	tableLog := uint8(maxEncTableLog)
 	minBitsSrc := highBit(uint32(length)) + 1
 	minBitsSymbols := highBit(uint32(s.symbolLen-1)) + 2
 	minBits := uint8(minBitsSymbols)
@@ -469,11 +458,11 @@ func (s *fseEncoder) optimalTableLog(length int) {
 		tableLog = minBits
 	}
 	// Need a minimum to safely represent all symbol values
-	if tableLog < minTablelog {
-		tableLog = minTablelog
+	if tableLog < minEncTablelog {
+		tableLog = minEncTablelog
 	}
-	if tableLog > maxTableLog {
-		tableLog = maxTableLog
+	if tableLog > maxEncTableLog {
+		tableLog = maxEncTableLog
 	}
 	s.actualTableLog = tableLog
 }
@@ -520,7 +509,7 @@ func (s *fseEncoder) writeCount(out []byte) ([]byte, error) {
 		maxHeaderSize = ((int(s.symbolLen) * int(tableLog)) >> 3) + 3
 
 		// Write Table Size
-		bitStream = uint32(tableLog - minTablelog)
+		bitStream = uint32(tableLog - minEncTablelog)
 		bitCount  = uint(4)
 		remaining = int16(tableSize + 1) /* +1 for extra accuracy */
 		threshold = int16(tableSize)
