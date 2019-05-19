@@ -21,14 +21,13 @@ type fseEncoder struct {
 	actualTableLog uint8  // Selected tablelog.
 	ct             cTable // Compression tables.
 	maxCount       int    // count of the most probable symbol
-	bw             bitWriter
-	zeroBits       bool  // no bits has prob > 50%.
-	clearCount     bool  // clear count
-	useRLE         bool  // This encoder is for RLE
-	preDefined     bool  // This encoder is predefined.
-	reUsed         bool  // Set to know when the encoder has been reused.
-	rleVal         uint8 // RLE Symbol
-	maxBits        uint8 // Maximum output bits after transform.
+	zeroBits       bool   // no bits has prob > 50%.
+	clearCount     bool   // clear count
+	useRLE         bool   // This encoder is for RLE
+	preDefined     bool   // This encoder is predefined.
+	reUsed         bool   // Set to know when the encoder has been reused.
+	rleVal         uint8  // RLE Symbol
+	maxBits        uint8  // Maximum output bits after transform.
 
 	count [256]uint32
 	norm  [256]int16
@@ -85,8 +84,6 @@ func (s *fseEncoder) prepare() (*fseEncoder, error) {
 		}
 		s.clearCount = false
 	}
-	//s.br.init(in)
-
 	return s, nil
 }
 
@@ -641,7 +638,8 @@ func (s *fseEncoder) approxSize(hist []uint32) uint32 {
 		return math.MaxUint32
 	}
 	if s.useRLE {
-		return 0
+		// We will never reuse RLE encoders.
+		return math.MaxUint32
 	}
 	const kAccuracyLog = 8
 	badCost := (uint32(s.actualTableLog) + 1) << kAccuracyLog

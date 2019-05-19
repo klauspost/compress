@@ -13,6 +13,12 @@ type frameHeader struct {
 func (f frameHeader) appendTo(dst []byte) ([]byte, error) {
 	dst = append(dst, frameMagic...)
 	var fhd uint8
+	if f.Checksum {
+		fhd |= 1 << 2
+	}
+	if f.SingleSegment {
+		fhd |= 1 << 5
+	}
 	// TODO: add the rest
 	const winLogMin = 10
 	windowLog := (bits.Len32(f.WindowSize-1) - winLogMin) << 3

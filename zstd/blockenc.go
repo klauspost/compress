@@ -1,6 +1,7 @@
 package zstd
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/bits"
@@ -19,8 +20,9 @@ type blockEnc struct {
 	extraLits int
 	last      bool
 
-	output        []byte
-	recentOffsets [3]uint32
+	output            []byte
+	recentOffsets     [3]uint32
+	prevRecentOffsets [3]uint32
 }
 
 func (b *blockEnc) init() {
@@ -43,7 +45,6 @@ func (b *blockEnc) init() {
 		b.coders.llEnc = &fseEncoder{}
 		b.coders.llPrev = &fseEncoder{}
 	}
-
 	b.reset()
 }
 
@@ -59,6 +60,7 @@ func (b *blockEnc) reset() {
 	b.size = 0
 	b.sequences = b.sequences[:0]
 	b.output = b.output[:0]
+	b.last = false
 }
 
 type blockHeader uint32
@@ -71,6 +73,7 @@ func (h *blockHeader) setLast(b bool) {
 		*h = *h & mask
 	}
 }
+
 func (h *blockHeader) setSize(v uint32) {
 	const mask = 7
 	*h = (*h)&mask | blockHeader(v<<3)
@@ -176,6 +179,29 @@ func (h literalsHeader) String() string {
 	return fmt.Sprintf("Type: %d, SizeFormat: %d, Size: 0x%d, Bytes:%d", literalsBlockType(h&3), (h>>2)&3, h&((1<<60)-1)>>4, h>>60)
 }
 
+// pushOffsets will push the recent offsets to the backup store.
+func (b *blockEnc) pushOffsets() {
+	b.prevRecentOffsets = b.recentOffsets
+}
+
+// pushOffsets will push the recent offsets to the backup store.
+func (b *blockEnc) popOffsets() {
+	b.recentOffsets = b.prevRecentOffsets
+}
+
+// encodeRaw can be used to set the output to a raw representation of supplied bytes.
+func (b *blockEnc) encodeRaw(a []byte) {
+	var bh blockHeader
+	bh.setLast(b.last)
+	bh.setSize(uint32(len(a)))
+	bh.setType(blockTypeRaw)
+	b.output = bh.appendTo(b.output[:0])
+	b.output = append(b.output, a...)
+	if debug {
+		println("Adding RAW block, length", len(a))
+	}
+}
+
 // encodeLits can be used if the block is only litLen.
 func (b *blockEnc) encodeLits() error {
 	var bh blockHeader
@@ -184,6 +210,9 @@ func (b *blockEnc) encodeLits() error {
 
 	// Don't compress extremely small blocks
 	if len(b.literals) < 32 {
+		if debug {
+			println("Adding RAW block, length", len(b.literals))
+		}
 		bh.setType(blockTypeRaw)
 		b.output = bh.appendTo(b.output)
 		b.output = append(b.output, b.literals...)
@@ -198,11 +227,17 @@ func (b *blockEnc) encodeLits() error {
 	}
 	switch err {
 	case huff0.ErrIncompressible:
+		if debug {
+			println("Adding RAW block, length", len(b.literals))
+		}
 		bh.setType(blockTypeRaw)
 		b.output = bh.appendTo(b.output)
 		b.output = append(b.output, b.literals...)
 		return nil
 	case huff0.ErrUseRLE:
+		if debug {
+			println("Adding RLE block, length", len(b.literals))
+		}
 		bh.setType(blockTypeRLE)
 		b.output = bh.appendTo(b.output)
 		b.output = append(b.output, b.literals[0])
@@ -217,8 +252,14 @@ func (b *blockEnc) encodeLits() error {
 	bh.setType(blockTypeCompressed)
 	var lh literalsHeader
 	if reUsed {
+		if debug {
+			println("Reused tree, compressed to", len(out))
+		}
 		lh.setType(literalsBlockTreeless)
 	} else {
+		if debug {
+			println("New tree, compressed to", len(out), "tree size:", len(b.litEnc.OutTable))
+		}
 		lh.setType(literalsBlockCompressed)
 	}
 	// Set sizes
@@ -239,6 +280,11 @@ func (b *blockEnc) encodeLits() error {
 func (b *blockEnc) encode() error {
 	if len(b.sequences) == 0 {
 		return b.encodeLits()
+	}
+	// We want some difference
+	if len(b.literals) > (b.size - (b.size >> 5)) {
+		println("potentially small gain")
+		//return errIncompressible
 	}
 
 	var bh blockHeader
@@ -361,14 +407,14 @@ func (b *blockEnc) encode() error {
 				println("Using predefined", predefSize>>3, "<=", nSize>>3)
 			}
 			return preDef, compModePredefined
-		case prevSize <= nSize && false:
+		case prevSize <= nSize:
 			if debug {
 				println("Using previous", prevSize>>3, "<=", nSize>>3)
 			}
 			return prev, compModeRepeat
 		default:
 			if debug {
-				println("Using new, previous:", prevSize>>3, ">", nSize>>3, "header max:", cur.maxHeaderSize()>>3, "bytes")
+				println("Using new, predef", predefSize>>3, ". previous:", prevSize>>3, ">", nSize>>3, "header max:", cur.maxHeaderSize()>>3, "bytes")
 			}
 			return cur, compModeFSE
 		}
@@ -513,6 +559,12 @@ func (b *blockEnc) encode() error {
 	}
 	b.output = wr.out
 
+	if len(b.output)-3 >= b.size {
+		// Maybe even add a bigger margin.
+		b.litEnc.Reuse = huff0.ReusePolicyNone
+		return errIncompressible
+	}
+
 	// Size is output minus block header.
 	bh.setSize(uint32(len(b.output)) - 3)
 	if debug {
@@ -522,6 +574,8 @@ func (b *blockEnc) encode() error {
 	b.coders.setPrev(llEnc, mlEnc, ofEnc)
 	return nil
 }
+
+var errIncompressible = errors.New("uncompressible")
 
 func (b *blockEnc) genCodes() {
 	if len(b.sequences) == 0 {
