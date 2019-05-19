@@ -55,30 +55,6 @@ var (
 	errUnsupportedLiteralLength = errors.New("snappy: unsupported literal length")
 )
 
-var crcTable = crc32.MakeTable(crc32.Castagnoli)
-
-// crc implements the checksum specified in section 3 of
-// https://github.com/google/snappy/blob/master/framing_format.txt
-func snappyCRC(b []byte) uint32 {
-	c := crc32.Update(0, crcTable, b)
-	return uint32(c>>15|c<<17) + 0xa282ead8
-}
-
-// decodedLen returns the length of the decoded block and the number of bytes
-// that the length header occupied.
-func decodedLen(src []byte) (blockLen, headerLen int, err error) {
-	v, n := binary.Uvarint(src)
-	if n <= 0 || v > 0xffffffff {
-		return 0, 0, ErrSnappyCorrupt
-	}
-
-	const wordSize = 32 << (^uint(0) >> 32 & 1)
-	if wordSize == 32 && v > 0x7fffffff {
-		return 0, 0, ErrSnappyTooLarge
-	}
-	return int(v), n, nil
-}
-
 // SnappyConverter can read SnappyConverter-compressed streams and convert them to zstd.
 // Conversion is done by converting the stream directly from Snappy without intermediate
 // full decoding.
@@ -93,16 +69,6 @@ type SnappyConverter struct {
 	err   error
 	buf   []byte
 	block *blockEnc
-}
-
-func (r *SnappyConverter) readFull(p []byte, allowEOF bool) (ok bool) {
-	if _, r.err = io.ReadFull(r.r, p); r.err != nil {
-		if r.err == io.ErrUnexpectedEOF || (r.err == io.EOF && !allowEOF) {
-			r.err = ErrSnappyCorrupt
-		}
-		return false
-	}
-	return true
 }
 
 // Convert the Snappy stream supplied in 'in' and write the zStandard stream to 'w'.
@@ -183,7 +149,7 @@ func (r *SnappyConverter) Convert(in io.Reader, w io.Writer) (int64, error) {
 			//checksum := uint32(buf[0]) | uint32(buf[1])<<8 | uint32(buf[2])<<16 | uint32(buf[3])<<24
 			buf = buf[snappyChecksumSize:]
 
-			n, hdr, err := decodedLen(buf)
+			n, hdr, err := snappyDecodedLen(buf)
 			if err != nil {
 				r.err = err
 				return written, r.err
@@ -458,4 +424,38 @@ func decodeSnappy(blk *blockEnc, src []byte) error {
 	}
 	blk.extraLits = lits
 	return nil
+}
+
+func (r *SnappyConverter) readFull(p []byte, allowEOF bool) (ok bool) {
+	if _, r.err = io.ReadFull(r.r, p); r.err != nil {
+		if r.err == io.ErrUnexpectedEOF || (r.err == io.EOF && !allowEOF) {
+			r.err = ErrSnappyCorrupt
+		}
+		return false
+	}
+	return true
+}
+
+var crcTable = crc32.MakeTable(crc32.Castagnoli)
+
+// crc implements the checksum specified in section 3 of
+// https://github.com/google/snappy/blob/master/framing_format.txt
+func snappyCRC(b []byte) uint32 {
+	c := crc32.Update(0, crcTable, b)
+	return uint32(c>>15|c<<17) + 0xa282ead8
+}
+
+// snappyDecodedLen returns the length of the decoded block and the number of bytes
+// that the length header occupied.
+func snappyDecodedLen(src []byte) (blockLen, headerLen int, err error) {
+	v, n := binary.Uvarint(src)
+	if n <= 0 || v > 0xffffffff {
+		return 0, 0, ErrSnappyCorrupt
+	}
+
+	const wordSize = 32 << (^uint(0) >> 32 & 1)
+	if wordSize == 32 && v > 0x7fffffff {
+		return 0, 0, ErrSnappyTooLarge
+	}
+	return int(v), n, nil
 }

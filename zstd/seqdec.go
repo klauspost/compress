@@ -93,11 +93,6 @@ func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
 			br.fill()
 		}
 
-		if seqs-i <= 10 {
-			//println("seq", seqs-i-1, "offset", matchOff, "bits", s.offsets.state.state.addBits, "baseline", s.offsets.state.state.baseline)
-			//println("seq", seqs-i-1, "matchLen", matchLen, "bits", s.matchLengths.state.state.addBits, "baseline", s.matchLengths.state.state.baseline)
-		}
-
 		if debug {
 			//println("Seq", seqs-i, "Litlen:", litLen, "matchOff:", matchOff, "matchLen:", matchLen)
 		}
