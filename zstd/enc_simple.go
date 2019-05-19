@@ -1,7 +1,7 @@
 package zstd
 
 const (
-	tableBits         = 14                      // Bits used in the table
+	tableBits         = 15                      // Bits used in the table
 	tableSize         = 1 << tableBits          // Size of the table
 	tableMask         = tableSize - 1           // Mask for table indices. Redundant, but can eliminate bounds checks.
 	tableShift        = 32 - tableBits          // Right-shift to get the tableBits most significant bits of a uint32.
@@ -11,7 +11,7 @@ const (
 )
 
 func hashFn(u uint32) uint32 {
-	return (u * 0x1e35a7bd) >> tableShift
+	return (u * 2654435761) >> tableShift
 }
 
 type tableEntry struct {
@@ -120,8 +120,6 @@ func (e *simpleEncoder) Encode(dst *blockEnc, src []byte) {
 		// A 4-byte match has been found. We'll later see if more than 4 bytes
 		// match. But, prior to the match, src[nextEmit:s] are unmatched. Emit
 		// them as literal bytes.
-		//emitLiteral(dst, src[nextEmit:s])
-		dst.literals = append(dst.literals, src[nextEmit:s]...)
 		seq.litLen = uint32(s - nextEmit)
 
 		// Call emitCopy, and then see if another emitCopy could be our next
@@ -142,11 +140,18 @@ func (e *simpleEncoder) Encode(dst *blockEnc, src []byte) {
 			t := candidate.offset - e.cur + 4
 			l := e.matchlen(s, t, src)
 
-			// matchToken is flate's equivalent of Snappy's emitCopy. (length,offset)
-			//dst.tokens[dst.n] = matchToken(uint32(l+4-baseMatchLength), uint32(s-t-baseMatchOffset))
-			//dst.n++
-			seq.matchLen = uint32(l + 4 - zstdMinMatch)
+			// Short matches are often not too good. Extending them may be preferable.
+			if false && l == 0 {
+				s -= 3
+				cv = load3232(src, s)
+				nextHash = hashFn(cv)
+				break
+			}
 
+			seq.matchLen = uint32(l + 4 - zstdMinMatch)
+			if seq.litLen > 0 {
+				dst.literals = append(dst.literals, src[nextEmit:s-4]...)
+			}
 			// +3 because we don't use recent offsets yet.
 			seq.offset = uint32(s-t) + 3
 			dst.sequences = append(dst.sequences, seq)
@@ -169,8 +174,14 @@ func (e *simpleEncoder) Encode(dst *blockEnc, src []byte) {
 			// at s+1. At least on GOARCH=amd64, these three hashFn calculations
 			// are faster as one load64 call (with some shifts) instead of
 			// three load32 calls.
-			x := load6432(src, s-1)
+			x := load6432(src, s-3)
 			prevHash := hashFn(uint32(x))
+			e.table[prevHash&tableMask] = tableEntry{offset: e.cur + s - 3, val: uint32(x)}
+			x >>= 8
+			prevHash = hashFn(uint32(x))
+			e.table[prevHash&tableMask] = tableEntry{offset: e.cur + s - 2, val: uint32(x)}
+			x >>= 8
+			prevHash = hashFn(uint32(x))
 			e.table[prevHash&tableMask] = tableEntry{offset: e.cur + s - 1, val: uint32(x)}
 			x >>= 8
 			currHash := hashFn(uint32(x))

@@ -217,6 +217,7 @@ func (s *fseEncoder) buildCTable() error {
 var rtbTable = [...]uint32{0, 473195, 504333, 520860, 550000, 700000, 750000, 830000}
 
 func (s *fseEncoder) setRLE(val byte) {
+	s.allocCtable()
 	s.actualTableLog = 0
 	s.ct.stateTable = s.ct.stateTable[:1]
 	s.ct.symbolTT[val] = symbolTransform{
@@ -242,7 +243,7 @@ func (s *fseEncoder) setBits(transform []byte) {
 			s.maxBits = s.rleVal
 			return
 		}
-		s.maxBits = s.rleVal
+		s.maxBits = transform[s.rleVal]
 		s.ct.symbolTT[s.rleVal].outBits = s.maxBits
 		return
 	}

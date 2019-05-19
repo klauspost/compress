@@ -100,7 +100,7 @@ func (h *literalsHeader) setType(t literalsBlockType) {
 }
 
 func (h *literalsHeader) setSize(regenLen int) {
-	inBits := highBit(uint32(regenLen))
+	inBits := bits.Len32(uint32(regenLen))
 	// Only retain 2 bits
 	const mask = 3
 	lh := uint64(*h & mask)
@@ -118,7 +118,7 @@ func (h *literalsHeader) setSize(regenLen int) {
 	case inBits < 20:
 		lh |= (3 << 2) | (uint64(regenLen) << 4) | (3 << 60)
 	default:
-		panic("internal error: block too big")
+		panic(fmt.Errorf("internal error: block too big (%d)", regenLen))
 	}
 	*h = literalsHeader(lh)
 }
@@ -449,7 +449,7 @@ func (b *blockEnc) encode() error {
 		mode |= uint8(compModeRLE) << 2
 		mlEnc.setRLE(b.sequences[0].mlCode)
 		if debug {
-			println("mlEnc.useRLE")
+			println("mlEnc.useRLE, code: ", b.sequences[0].mlCode, "value", b.sequences[0].matchLen)
 		}
 	} else {
 		var m seqCompMode

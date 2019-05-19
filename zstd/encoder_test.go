@@ -12,7 +12,7 @@ func TestEncoder_EncodeAllSimple(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
+	in = append(in, in...)
 	var e Encoder
 	dst := e.EncodeAll(in, nil)
 	t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
@@ -27,6 +27,7 @@ func TestEncoder_EncodeAllSimple(t *testing.T) {
 	}
 	if !bytes.Equal(decoded, in) {
 		ioutil.WriteFile("testdata/"+t.Name()+"-z000028.got", decoded, os.ModePerm)
+		ioutil.WriteFile("testdata/"+t.Name()+"-z000028.want", in, os.ModePerm)
 		t.Fatal("Decoded does not match")
 	}
 	t.Log("Encoded content matched")
@@ -143,6 +144,30 @@ func BenchmarkEncoder_EncodeAllXML(b *testing.B) {
 		b.Fatal(err)
 	}
 	dec.Close()
+
+	enc := Encoder{}
+	dst := enc.EncodeAll(in, nil)
+	wantSize := len(dst)
+	b.ResetTimer()
+	b.ReportAllocs()
+	b.SetBytes(int64(len(in)))
+	for i := 0; i < b.N; i++ {
+		dst := enc.EncodeAll(in, dst[:0])
+		if len(dst) != wantSize {
+			b.Fatal(len(dst), "!=", wantSize)
+		}
+	}
+}
+
+func BenchmarkEncoder_EncodeAllSimple(b *testing.B) {
+	f, err := os.Open("testdata/z000028")
+	if err != nil {
+		b.Fatal(err)
+	}
+	in, err := ioutil.ReadAll(f)
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	enc := Encoder{}
 	dst := enc.EncodeAll(in, nil)

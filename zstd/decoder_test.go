@@ -120,6 +120,34 @@ func TestNewDecoderBigFile(t *testing.T) {
 	t.Logf("Decoded %d bytes with %f.2 MB/s", n, mbpersec)
 }
 
+func TestNewDecoderSmallFile(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
+	file := "testdata/z000028.zst"
+	const wantSize = 39807
+	f, err := os.Open(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	start := time.Now()
+	dec, err := NewReader(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := io.Copy(ioutil.Discard, dec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != wantSize {
+		t.Errorf("want size %d, got size %d", wantSize, n)
+	}
+	elapsed := time.Since(start)
+	mbpersec := (float64(n) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
+	t.Logf("Decoded %d bytes with %f.2 MB/s", n, mbpersec)
+}
+
 func TestDecoderRegression(t *testing.T) {
 	defer timeout(5 * time.Second)()
 	data, err := ioutil.ReadFile("testdata/regression.zip")

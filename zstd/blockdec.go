@@ -545,7 +545,7 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 				dec.setRLE(symb)
 				seq.fse = dec
 				if debug {
-					println("RLE set to ", symb)
+					printf("RLE set to %+v, code: %v", symb, v)
 				}
 			case compModeFSE:
 				println("Reading table for", tableIndex(i))
