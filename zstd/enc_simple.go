@@ -1,11 +1,11 @@
 package zstd
 
 const (
-	tableBits         = 14             // Bits used in the table
-	tableSize         = 1 << tableBits // Size of the table
-	tableMask         = tableSize - 1  // Mask for table indices. Redundant, but can eliminate bounds checks.
-	tableShift        = 32 - tableBits // Right-shift to get the tableBits most significant bits of a uint32.
-	maxMatchOffset    = (1 << 16) - 1  // The largest match offset
+	tableBits         = 14                      // Bits used in the table
+	tableSize         = 1 << tableBits          // Size of the table
+	tableMask         = tableSize - 1           // Mask for table indices. Redundant, but can eliminate bounds checks.
+	tableShift        = 32 - tableBits          // Right-shift to get the tableBits most significant bits of a uint32.
+	maxMatchOffset    = maxStoreBlockSize*2 - 1 // The largest match offset
 	maxStoreBlockSize = 1 << 16
 	maxMatchLength    = (1 << 16) - 1
 )
@@ -194,10 +194,7 @@ emitRemainder:
 		dst.extraLits = len(src) - int(nextEmit)
 	}
 	e.cur += int32(len(src))
-
-	// TODO: copy should not be needed:
 	e.prev = src
-	//copy(e.prev, src)
 }
 
 func (e *simpleEncoder) matchlen(s, t int32, src []byte) int32 {

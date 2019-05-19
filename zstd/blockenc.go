@@ -284,7 +284,7 @@ func (b *blockEnc) encode() error {
 	// We want some difference
 	if len(b.literals) > (b.size - (b.size >> 5)) {
 		println("potentially small gain")
-		//return errIncompressible
+		return errIncompressible
 	}
 
 	var bh blockHeader

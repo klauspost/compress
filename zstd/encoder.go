@@ -2,6 +2,7 @@ package zstd
 
 import "github.com/cespare/xxhash"
 
+// Encoder provides encoding to Zstandard
 type Encoder struct {
 	enc   simpleEncoder
 	block *blockEnc
@@ -9,6 +10,8 @@ type Encoder struct {
 	tmp   [8]byte
 }
 
+// EncodeAll will encode all input in src and append it to dst.
+// If empty input is given, nothing is returned.
 func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 	if len(src) == 0 {
 		return dst
@@ -22,7 +25,7 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 	e.enc.Reset()
 	fh := frameHeader{
 		ContentSize:   uint64(len(src)),
-		WindowSize:    maxStoreBlockSize,
+		WindowSize:    maxStoreBlockSize * 2,
 		SingleSegment: false,
 		Checksum:      true,
 		DictID:        0,
@@ -63,5 +66,6 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 	}
 	crc := e.crc.Sum(e.tmp[:0])
 	dst = append(dst, crc[7], crc[6], crc[5], crc[4])
+	e.enc.Reset()
 	return dst
 }
