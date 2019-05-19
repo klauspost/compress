@@ -34,7 +34,7 @@ const (
 	maxCompressedLiteralSize = 1 << 18
 )
 
-type block struct {
+type blockEnc struct {
 	size      int
 	literals  []byte
 	sequences []seq
@@ -49,7 +49,7 @@ type block struct {
 	recentOffsets [3]uint32
 }
 
-func (b *block) init() {
+func (b *blockEnc) init() {
 	if cap(b.literals) < maxCompressedLiteralSize {
 		b.literals = make([]byte, 0, maxCompressedLiteralSize)
 	}
@@ -82,13 +82,13 @@ func (b *block) init() {
 	b.reset()
 }
 
-func (b *block) initNewEncode() {
+func (b *blockEnc) initNewEncode() {
 	b.recentOffsets = [3]uint32{1, 4, 8}
 	b.litEnc.Reuse = huff0.ReusePolicyNone
 	b.seqCodes.setPrev(nil, nil, nil)
 }
 
-func (b *block) reset() {
+func (b *blockEnc) reset() {
 	b.extraLits = 0
 	b.literals = b.literals[:0]
 	b.size = 0
@@ -215,7 +215,7 @@ func (h literalsHeader) String() string {
 }
 
 // encodeLits can be used if the block is only literals.
-func (b *block) encodeLits() error {
+func (b *blockEnc) encodeLits() error {
 	var bh blockHeader
 	bh.setLast(b.last)
 	bh.setSize(uint32(len(b.literals)))
@@ -283,7 +283,7 @@ const (
 )
 
 // encodeLits can be used if the block is only literals.
-func (b *block) encode() error {
+func (b *blockEnc) encode() error {
 	if len(b.sequences) == 0 {
 		return b.encodeLits()
 	}
@@ -574,7 +574,7 @@ const (
 	maxMatchLengthBits   = 52
 )
 
-func (b *block) genCodes() {
+func (b *blockEnc) genCodes() {
 	if len(b.sequences) == 0 {
 		// nothing to do
 		return

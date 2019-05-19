@@ -85,7 +85,7 @@ type SnappyConverter struct {
 	err error
 	buf []byte
 
-	block *block
+	block *blockEnc
 }
 
 func (r *SnappyConverter) readFull(p []byte, allowEOF bool) (ok bool) {
@@ -102,7 +102,7 @@ func (r *SnappyConverter) Convert(in io.Reader, w io.Writer) (int64, error) {
 	r.err = nil
 	r.r = in
 	if r.block == nil {
-		r.block = &block{}
+		r.block = &blockEnc{}
 		r.block.init()
 	}
 	r.block.initNewEncode()
@@ -297,7 +297,7 @@ func (r *SnappyConverter) Convert(in io.Reader, w io.Writer) (int64, error) {
 // equals that length.
 //
 // It returns 0 on success or a decodeErrCodeXxx error code on failure.
-func decodeSnappy(blk *block, src []byte) error {
+func decodeSnappy(blk *blockEnc, src []byte) error {
 	//decodeRef(make([]byte, snappyMaxBlockSize), src)
 	var s, length int
 	lits := blk.extraLits
