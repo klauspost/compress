@@ -391,10 +391,10 @@ func decodeSnappy(blk *blockEnc, src []byte) error {
 
 			return ErrSnappyCorrupt
 		}
-		// Copy from an earlier sub-slice of blk to a later sub-slice. Unlike
-		// the built-in copy function, this byte-by-byte copy always runs
-		// forwards, even if the slices overlap. Conceptually, this is:
-		// TODO: This hardly looks worth it.
+
+		// Check if offset is one of the recent offsets.
+		// Adjusts the output offset accordingly.
+		// Gives a tiny bit of compression, typically around 1%.
 		if true {
 			if lits > 0 {
 				switch offset {

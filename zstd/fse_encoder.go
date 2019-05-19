@@ -269,13 +269,12 @@ func (s *fseEncoder) setBits(transform []byte) {
 // normalizeCount will normalize the count of the symbols so
 // the total is equal to the table size.
 // If successful, compression tables will also be made ready.
-func (s *fseEncoder) normalizeCount(in []byte) error {
+func (s *fseEncoder) normalizeCount(length int) error {
 	if s.reUsed {
 		return nil
 	}
-	s.optimalTableLog(len(in))
+	s.optimalTableLog(length)
 	var (
-		length            = len(in)
 		tableLog          = s.actualTableLog
 		scale             = 62 - uint64(tableLog)
 		step              = (1 << 62) / uint64(length)

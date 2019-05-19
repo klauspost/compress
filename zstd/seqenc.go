@@ -2,18 +2,14 @@ package zstd
 
 import "math/bits"
 
-type seqCodes struct {
-	litLen   []uint8
-	offset   []uint8
-	matchLen []uint8
-
+type seqCoders struct {
 	llEnc, ofEnc, mlEnc    *fseEncoder
 	llPrev, ofPrev, mlPrev *fseEncoder
 }
 
 // setPrev will update the previous encoders to the actually used ones
 // and make sure a fresh one is in the main slot.
-func (s *seqCodes) setPrev(ll, ml, of *fseEncoder) {
+func (s *seqCoders) setPrev(ll, ml, of *fseEncoder) {
 	compareSwap := func(used *fseEncoder, current, prev **fseEncoder) {
 		// We used the new one, more current to history and reuse the previous history
 		if *current == used {
@@ -50,6 +46,7 @@ var llCodeTable = [64]byte{0, 1, 2, 3, 4, 5, 6, 7,
 	24, 24, 24, 24, 24, 24, 24, 24,
 	24, 24, 24, 24, 24, 24, 24, 24}
 
+// Up to 6 bits
 const maxLLCode = 35
 
 // llBitsTable translates from ll code to number of bits.
@@ -79,6 +76,7 @@ var mlCodeTable = [128]byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
 	42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42,
 	42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42, 42}
 
+// Up to 6 bits
 const maxMLCode = 52
 
 // mlBitsTable translates from ml code to number of bits.

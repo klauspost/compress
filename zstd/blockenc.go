@@ -12,7 +12,7 @@ type blockEnc struct {
 	size      int
 	literals  []byte
 	sequences []seq
-	seqCodes  seqCodes
+	coders    seqCoders
 	litEnc    huff0.Scratch
 	wr        bitWriter
 
@@ -35,22 +35,13 @@ func (b *blockEnc) init() {
 	if cap(b.output) < maxCompressedBlockSize {
 		b.output = make([]byte, 0, maxCompressedBlockSize)
 	}
-	fn := func(b []uint8) []uint8 {
-		if cap(b) < defSeqs {
-			return make([]uint8, 0, defSeqs)
-		}
-		return b
-	}
-	b.seqCodes.matchLen = fn(b.seqCodes.matchLen)
-	b.seqCodes.offset = fn(b.seqCodes.offset)
-	b.seqCodes.litLen = fn(b.seqCodes.litLen)
-	if b.seqCodes.mlEnc == nil {
-		b.seqCodes.mlEnc = &fseEncoder{}
-		b.seqCodes.mlPrev = &fseEncoder{}
-		b.seqCodes.ofEnc = &fseEncoder{}
-		b.seqCodes.ofPrev = &fseEncoder{}
-		b.seqCodes.llEnc = &fseEncoder{}
-		b.seqCodes.llPrev = &fseEncoder{}
+	if b.coders.mlEnc == nil {
+		b.coders.mlEnc = &fseEncoder{}
+		b.coders.mlPrev = &fseEncoder{}
+		b.coders.ofEnc = &fseEncoder{}
+		b.coders.ofPrev = &fseEncoder{}
+		b.coders.llEnc = &fseEncoder{}
+		b.coders.llPrev = &fseEncoder{}
 	}
 
 	b.reset()
@@ -59,7 +50,7 @@ func (b *blockEnc) init() {
 func (b *blockEnc) initNewEncode() {
 	b.recentOffsets = [3]uint32{1, 4, 8}
 	b.litEnc.Reuse = huff0.ReusePolicyNone
-	b.seqCodes.setPrev(nil, nil, nil)
+	b.coders.setPrev(nil, nil, nil)
 }
 
 func (b *blockEnc) reset() {
@@ -67,9 +58,6 @@ func (b *blockEnc) reset() {
 	b.literals = b.literals[:0]
 	b.size = 0
 	b.sequences = b.sequences[:0]
-	b.seqCodes.matchLen = b.seqCodes.matchLen[:0]
-	b.seqCodes.offset = b.seqCodes.offset[:0]
-	b.seqCodes.litLen = b.seqCodes.litLen[:0]
 	b.output = b.output[:0]
 }
 
@@ -343,22 +331,24 @@ func (b *blockEnc) encode() error {
 		println("Encoding", len(b.sequences), "sequences")
 	}
 	b.genCodes()
-	llEnc := b.seqCodes.llEnc
-	ofEnc := b.seqCodes.ofEnc
-	mlEnc := b.seqCodes.mlEnc
-	llIn, ofIn, mlIn := b.seqCodes.litLen, b.seqCodes.offset, b.seqCodes.matchLen
-	err = llEnc.normalizeCount(llIn)
+	llEnc := b.coders.llEnc
+	ofEnc := b.coders.ofEnc
+	mlEnc := b.coders.mlEnc
+	err = llEnc.normalizeCount(len(b.sequences))
 	if err != nil {
 		return err
 	}
-	err = ofEnc.normalizeCount(ofIn)
+	err = ofEnc.normalizeCount(len(b.sequences))
 	if err != nil {
 		return err
 	}
-	err = mlEnc.normalizeCount(mlIn)
+	err = mlEnc.normalizeCount(len(b.sequences))
 	if err != nil {
 		return err
 	}
+
+	// Choose the best compression mode for each type.
+	// Will evaluate the new vs predefined and previous.
 	chooseComp := func(cur, prev, preDef *fseEncoder) (*fseEncoder, seqCompMode) {
 		// See if predefined/previous is better
 		hist := cur.count[:cur.symbolLen]
@@ -388,36 +378,36 @@ func (b *blockEnc) encode() error {
 	var mode uint8
 	if llEnc.useRLE {
 		mode |= uint8(compModeRLE) << 6
-		llEnc.setRLE(llIn[0])
+		llEnc.setRLE(b.sequences[0].llCode)
 		if debug {
 			println("llEnc.useRLE")
 		}
 	} else {
 		var m seqCompMode
-		llEnc, m = chooseComp(llEnc, b.seqCodes.llPrev, &fsePredefEnc[tableLiteralLengths])
+		llEnc, m = chooseComp(llEnc, b.coders.llPrev, &fsePredefEnc[tableLiteralLengths])
 		mode |= uint8(m) << 6
 	}
 	if ofEnc.useRLE {
 		mode |= uint8(compModeRLE) << 4
-		ofEnc.setRLE(ofIn[0])
+		ofEnc.setRLE(b.sequences[0].ofCode)
 		if debug {
 			println("ofEnc.useRLE")
 		}
 	} else {
 		var m seqCompMode
-		ofEnc, m = chooseComp(ofEnc, b.seqCodes.ofPrev, &fsePredefEnc[tableOffsets])
+		ofEnc, m = chooseComp(ofEnc, b.coders.ofPrev, &fsePredefEnc[tableOffsets])
 		mode |= uint8(m) << 4
 	}
 
 	if mlEnc.useRLE {
 		mode |= uint8(compModeRLE) << 2
-		mlEnc.setRLE(mlIn[0])
+		mlEnc.setRLE(b.sequences[0].mlCode)
 		if debug {
 			println("mlEnc.useRLE")
 		}
 	} else {
 		var m seqCompMode
-		mlEnc, m = chooseComp(mlEnc, b.seqCodes.mlPrev, &fsePredefEnc[tableMatchLengths])
+		mlEnc, m = chooseComp(mlEnc, b.coders.mlPrev, &fsePredefEnc[tableMatchLengths])
 		mode |= uint8(m) << 2
 	}
 	b.output = append(b.output, mode)
@@ -453,6 +443,7 @@ func (b *blockEnc) encode() error {
 
 	// Current sequence
 	seq := len(b.sequences) - 1
+	s := b.sequences[seq]
 	llEnc.setBits(llBitsTable[:])
 	mlEnc.setBits(mlBitsTable[:])
 	ofEnc.setBits(nil)
@@ -461,14 +452,13 @@ func (b *blockEnc) encode() error {
 
 	// We have 3 bounds checks here (and in the loop).
 	// Since we are iterating backwards it is kinda hard to avoid.
-	llB, ofB, mlB := llTT[llIn[seq]], ofTT[ofIn[seq]], mlTT[mlIn[seq]]
+	llB, ofB, mlB := llTT[s.llCode], ofTT[s.ofCode], mlTT[s.mlCode]
 	ll.init(wr, &llEnc.ct, llB)
 	of.init(wr, &ofEnc.ct, ofB)
 	wr.flush32()
 	ml.init(wr, &mlEnc.ct, mlB)
 
 	// Each of these lookups also generates a bounds check.
-	s := b.sequences[seq]
 	wr.addBits32NC(s.litLen, llB.outBits)
 	wr.addBits32NC(s.matchLen, mlB.outBits)
 	wr.flush32()
@@ -480,7 +470,7 @@ func (b *blockEnc) encode() error {
 		for seq >= 0 {
 			s = b.sequences[seq]
 			wr.flush32()
-			llB, ofB, mlB := llTT[llIn[seq]], ofTT[ofIn[seq]], mlTT[mlIn[seq]]
+			llB, ofB, mlB := llTT[s.llCode], ofTT[s.ofCode], mlTT[s.mlCode]
 			// tabelog max is 8 for all.
 			of.encode(ofB)
 			ml.encode(mlB)
@@ -498,7 +488,7 @@ func (b *blockEnc) encode() error {
 		for seq >= 0 {
 			s = b.sequences[seq]
 			wr.flush32()
-			llB, ofB, mlB := llTT[llIn[seq]], ofTT[ofIn[seq]], mlTT[mlIn[seq]]
+			llB, ofB, mlB := llTT[s.llCode], ofTT[s.ofCode], mlTT[s.mlCode]
 			// tabelog max is below 8 for each.
 			of.encode(ofB)
 			ml.encode(mlB)
@@ -529,7 +519,7 @@ func (b *blockEnc) encode() error {
 		println("Rewriting block header", bh)
 	}
 	_ = bh.appendTo(b.output[:0])
-	b.seqCodes.setPrev(llEnc, mlEnc, ofEnc)
+	b.coders.setPrev(llEnc, mlEnc, ofEnc)
 	return nil
 }
 
@@ -542,23 +532,10 @@ func (b *blockEnc) genCodes() {
 	if len(b.sequences) > math.MaxUint16 {
 		panic("can only encode up to 64K sequences")
 	}
-	if cap(b.seqCodes.litLen) < len(b.sequences) {
-		b.seqCodes.litLen = make([]byte, len(b.sequences)*2)
-	}
-	if cap(b.seqCodes.offset) < len(b.sequences) {
-		b.seqCodes.offset = make([]byte, len(b.sequences)*2)
-	}
-	if cap(b.seqCodes.matchLen) < len(b.sequences) {
-		b.seqCodes.matchLen = make([]byte, len(b.sequences)*2)
-	}
-	ll := b.seqCodes.litLen[:len(b.sequences)]
-	of := b.seqCodes.offset[:len(b.sequences)]
-	ml := b.seqCodes.matchLen[:len(b.sequences)]
-
 	// No bounds checks after here:
-	llH := b.seqCodes.llEnc.Histogram()[:256]
-	ofH := b.seqCodes.ofEnc.Histogram()[:256]
-	mlH := b.seqCodes.mlEnc.Histogram()[:256]
+	llH := b.coders.llEnc.Histogram()[:256]
+	ofH := b.coders.ofEnc.Histogram()[:256]
+	mlH := b.coders.mlEnc.Histogram()[:256]
 	for i := range llH {
 		llH[i] = 0
 	}
@@ -570,32 +547,28 @@ func (b *blockEnc) genCodes() {
 	}
 
 	var llMax, ofMax, mlMax uint8
-
-	// Done to avoid bounds checks in loop.
-	ll = ll[:len(b.sequences)]
-	of = of[:len(b.sequences)]
-	ml = ml[:len(b.sequences)]
 	for i, seq := range b.sequences {
 		v := llCode(seq.litLen)
-		ll[i] = v
+		seq.llCode = v
 		llH[v]++
 		if v > llMax {
 			llMax = v
 		}
 
 		v = ofCode(seq.offset)
-		of[i] = v
+		seq.ofCode = v
 		ofH[v]++
 		if v > ofMax {
 			ofMax = v
 		}
 
 		v = mlCode(seq.matchLen)
-		ml[i] = v
+		seq.mlCode = v
 		mlH[v]++
 		if v > mlMax {
 			mlMax = v
 		}
+		b.sequences[i] = seq
 	}
 	maxCount := func(a []uint32) int {
 		var max uint32
@@ -616,10 +589,7 @@ func (b *blockEnc) genCodes() {
 		panic(fmt.Errorf("llMax > maxLiteralLengthSymbol (%d)", llMax))
 	}
 
-	b.seqCodes.litLen = ll
-	b.seqCodes.offset = of
-	b.seqCodes.matchLen = ml
-	b.seqCodes.mlEnc.HistogramFinished(mlMax, maxCount(mlH[:mlMax+1]))
-	b.seqCodes.ofEnc.HistogramFinished(ofMax, maxCount(ofH[:ofMax+1]))
-	b.seqCodes.llEnc.HistogramFinished(llMax, maxCount(llH[:llMax+1]))
+	b.coders.mlEnc.HistogramFinished(mlMax, maxCount(mlH[:mlMax+1]))
+	b.coders.ofEnc.HistogramFinished(ofMax, maxCount(ofH[:ofMax+1]))
+	b.coders.llEnc.HistogramFinished(llMax, maxCount(llH[:llMax+1]))
 }
