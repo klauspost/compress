@@ -31,9 +31,10 @@ type fseEncoder struct {
 	zeroBits       bool  // no bits has prob > 50%.
 	clearCount     bool  // clear count
 	useRLE         bool  // This encoder is for RLE
-	rleVal         uint8 // RLE Symbol
 	preDefined     bool  // This encoder is predefined.
 	reUsed         bool  // Set to know when the encoder has been reused.
+	rleVal         uint8 // RLE Symbol
+	maxBits        uint8 // Maximum output bits after transform.
 
 	count [256]uint32
 	norm  [256]int16
@@ -249,14 +250,30 @@ func (s *fseEncoder) setBits(transform []byte) {
 	if s.reUsed || s.preDefined {
 		return
 	}
+	if s.useRLE {
+		if transform == nil {
+			s.ct.symbolTT[s.rleVal].outBits = s.rleVal
+			s.maxBits = s.rleVal
+			return
+		}
+		s.maxBits = s.rleVal
+		s.ct.symbolTT[s.rleVal].outBits = s.maxBits
+		return
+	}
 	if transform == nil {
 		for i := range s.ct.symbolTT[:s.symbolLen] {
 			s.ct.symbolTT[i].outBits = uint8(i)
 		}
+		s.maxBits = uint8(s.symbolLen - 1)
 		return
 	}
-	for i, v := range transform {
+	s.maxBits = 0
+	for i, v := range transform[:s.symbolLen] {
 		s.ct.symbolTT[i].outBits = v
+		if v > s.maxBits {
+			// We could assume bits always going up, but we play safe.
+			s.maxBits = v
+		}
 	}
 }
 

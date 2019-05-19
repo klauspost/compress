@@ -28,7 +28,7 @@ func TestSnappy_ConvertSimple(t *testing.T) {
 		t.Fatal(err)
 	}
 	snapLen := comp.Len()
-	s := Snappy{}
+	s := SnappyConverter{}
 	var dst bytes.Buffer
 	n, err := s.Convert(&comp, &dst)
 	if err != io.EOF {
@@ -37,7 +37,7 @@ func TestSnappy_ConvertSimple(t *testing.T) {
 	if n != int64(dst.Len()) {
 		t.Errorf("Dest was %d bytes, but said to have written %d bytes", dst.Len(), n)
 	}
-	t.Log("Snappy len", snapLen, "-> zstd len", dst.Len())
+	t.Log("SnappyConverter len", snapLen, "-> zstd len", dst.Len())
 
 	dec, err := zstd.NewReader(nil)
 	if err != nil {
@@ -71,7 +71,7 @@ func TestSnappy_ConvertXML(t *testing.T) {
 		t.Fatal(err)
 	}
 	snapLen := comp.Len()
-	s := Snappy{}
+	s := SnappyConverter{}
 	var dst bytes.Buffer
 	n, err := s.Convert(&comp, &dst)
 	if err != io.EOF {
@@ -114,7 +114,7 @@ func TestSnappy_ConvertSilesia(t *testing.T) {
 		t.Fatal(err)
 	}
 	snapLen := comp.Len()
-	s := Snappy{}
+	s := SnappyConverter{}
 	var dst bytes.Buffer
 	n, err := s.Convert(&comp, &dst)
 	if err != io.EOF {
@@ -123,7 +123,7 @@ func TestSnappy_ConvertSilesia(t *testing.T) {
 	if n != int64(dst.Len()) {
 		t.Errorf("Dest was %d bytes, but said to have written %d bytes", dst.Len(), n)
 	}
-	t.Log("Snappy len", snapLen, "-> zstd len", dst.Len())
+	t.Log("SnappyConverter len", snapLen, "-> zstd len", dst.Len())
 
 	dec, err := zstd.NewReader(nil)
 	if err != nil {
@@ -156,7 +156,7 @@ func BenchmarkSnappy_ConvertXML(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	s := Snappy{}
+	s := SnappyConverter{}
 	compBytes := comp.Bytes()
 	_, err = s.Convert(&comp, ioutil.Discard)
 	if err != io.EOF {
@@ -189,7 +189,7 @@ func BenchmarkSnappy_ConvertSilesia(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	s := Snappy{}
+	s := SnappyConverter{}
 	compBytes := comp.Bytes()
 	_, err = s.Convert(&comp, ioutil.Discard)
 	if err != io.EOF {

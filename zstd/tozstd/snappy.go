@@ -3,7 +3,6 @@ package tozstd
 import (
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"hash/crc32"
 	"io"
 
@@ -11,19 +10,17 @@ import (
 )
 
 const (
-	tagLiteral = 0x00
-	tagCopy1   = 0x01
-	tagCopy2   = 0x02
-	tagCopy4   = 0x03
+	snappyTagLiteral = 0x00
+	snappyTagCopy1   = 0x01
+	snappyTagCopy2   = 0x02
+	snappyTagCopy4   = 0x03
 )
 
 const (
-	checksumSize    = 4
-	chunkHeaderSize = 4
-	magicChunk      = "\xff\x06\x00\x00" + magicBody
-	magicBody       = "sNaPpY"
+	snappyChecksumSize = 4
+	snappyMagicBody    = "sNaPpY"
 
-	// maxBlockSize is the maximum size of the input to encodeBlock. It is not
+	// snappyMaxBlockSize is the maximum size of the input to encodeBlock. It is not
 	// part of the wire format per se, but some parts of the encoder assume
 	// that an offset fits into a uint16.
 	//
@@ -31,16 +28,13 @@ const (
 	// https://github.com/google/snappy/blob/master/framing_format.txt says
 	// that "the uncompressed data in a chunk must be no longer than 65536
 	// bytes".
-	maxBlockSize = 65536
+	snappyMaxBlockSize = 65536
 
-	// maxEncodedLenOfMaxBlockSize equals MaxEncodedLen(maxBlockSize), but is
+	// snappyMaxEncodedLenOfMaxBlockSize equals MaxEncodedLen(snappyMaxBlockSize), but is
 	// hard coded to be a const instead of a variable, so that obufLen can also
 	// be a const. Their equivalence is confirmed by
 	// TestMaxEncodedLenOfMaxBlockSize.
-	maxEncodedLenOfMaxBlockSize = 76490
-
-	obufHeaderLen = len(magicChunk) + checksumSize + chunkHeaderSize
-	obufLen       = obufHeaderLen + maxEncodedLenOfMaxBlockSize
+	snappyMaxEncodedLenOfMaxBlockSize = 76490
 )
 
 const (
@@ -51,12 +45,12 @@ const (
 )
 
 var (
-	// ErrCorrupt reports that the input is invalid.
-	ErrCorrupt = errors.New("snappy: corrupt input")
-	// ErrTooLarge reports that the uncompressed length is too large.
-	ErrTooLarge = errors.New("snappy: decoded block is too large")
-	// ErrUnsupported reports that the input isn't supported.
-	ErrUnsupported = errors.New("snappy: unsupported input")
+	// ErrSnappyCorrupt reports that the input is invalid.
+	ErrSnappyCorrupt = errors.New("snappy: corrupt input")
+	// ErrSnappyTooLarge reports that the uncompressed length is too large.
+	ErrSnappyTooLarge = errors.New("snappy: decoded block is too large")
+	// ErrSnappyUnsupported reports that the input isn't supported.
+	ErrSnappyUnsupported = errors.New("snappy: unsupported input")
 
 	errUnsupportedLiteralLength = errors.New("snappy: unsupported literal length")
 )
@@ -65,7 +59,7 @@ var crcTable = crc32.MakeTable(crc32.Castagnoli)
 
 // crc implements the checksum specified in section 3 of
 // https://github.com/google/snappy/blob/master/framing_format.txt
-func crc(b []byte) uint32 {
+func snappyCRC(b []byte) uint32 {
 	c := crc32.Update(0, crcTable, b)
 	return uint32(c>>15|c<<17) + 0xa282ead8
 }
@@ -75,40 +69,36 @@ func crc(b []byte) uint32 {
 func decodedLen(src []byte) (blockLen, headerLen int, err error) {
 	v, n := binary.Uvarint(src)
 	if n <= 0 || v > 0xffffffff {
-		return 0, 0, ErrCorrupt
+		return 0, 0, ErrSnappyCorrupt
 	}
 
 	const wordSize = 32 << (^uint(0) >> 32 & 1)
 	if wordSize == 32 && v > 0x7fffffff {
-		return 0, 0, ErrTooLarge
+		return 0, 0, ErrSnappyTooLarge
 	}
 	return int(v), n, nil
 }
 
-// Snappy can read Snappy-compressed streams and convert them to zstd.
-type Snappy struct {
+// SnappyConverter can read SnappyConverter-compressed streams and convert them to zstd.
+type SnappyConverter struct {
 	r   io.Reader
 	err error
-	//decoded []byte
 	buf []byte
-	// decoded[i:j] contains decoded bytes that have not yet been passed on.
-	//i, j       int
-	//readHeader bool
 
 	block *block
 }
 
-func (r *Snappy) readFull(p []byte, allowEOF bool) (ok bool) {
+func (r *SnappyConverter) readFull(p []byte, allowEOF bool) (ok bool) {
 	if _, r.err = io.ReadFull(r.r, p); r.err != nil {
 		if r.err == io.ErrUnexpectedEOF || (r.err == io.EOF && !allowEOF) {
-			r.err = ErrCorrupt
+			r.err = ErrSnappyCorrupt
 		}
 		return false
 	}
 	return true
 }
 
-func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
+func (r *SnappyConverter) Convert(in io.Reader, w io.Writer) (int64, error) {
 	r.err = nil
 	r.r = in
 	if r.block == nil {
@@ -116,8 +106,8 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 		r.block.init()
 	}
 	r.block.initNewEncode()
-	if len(r.buf) != maxEncodedLenOfMaxBlockSize+checksumSize {
-		r.buf = make([]byte, maxEncodedLenOfMaxBlockSize+checksumSize)
+	if len(r.buf) != snappyMaxEncodedLenOfMaxBlockSize+snappyChecksumSize {
+		r.buf = make([]byte, snappyMaxEncodedLenOfMaxBlockSize+snappyChecksumSize)
 	}
 	r.block.litEnc.Reuse = huff0.ReusePolicyNone
 	var written int64
@@ -125,7 +115,7 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 	{
 		var header []byte
 		var n int
-		header, r.err = frameHeader{WindowSize: maxBlockSize}.appendTo(r.buf[:0])
+		header, r.err = frameHeader{WindowSize: snappyMaxBlockSize}.appendTo(r.buf[:0])
 
 		n, r.err = w.Write(header)
 		if r.err != nil {
@@ -155,14 +145,14 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 		if !readHeader {
 			if chunkType != chunkTypeStreamIdentifier {
 				println("chunkType != chunkTypeStreamIdentifier", chunkType)
-				r.err = ErrCorrupt
+				r.err = ErrSnappyCorrupt
 				return written, r.err
 			}
 			readHeader = true
 		}
 		chunkLen := int(r.buf[1]) | int(r.buf[2])<<8 | int(r.buf[3])<<16
 		if chunkLen > len(r.buf) {
-			r.err = ErrUnsupported
+			r.err = ErrSnappyUnsupported
 			return written, r.err
 		}
 
@@ -171,9 +161,9 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 		switch chunkType {
 		case chunkTypeCompressedData:
 			// Section 4.2. Compressed data (chunk type 0x00).
-			if chunkLen < checksumSize {
-				println("chunkLen < checksumSize", chunkLen, checksumSize)
-				r.err = ErrCorrupt
+			if chunkLen < snappyChecksumSize {
+				println("chunkLen < snappyChecksumSize", chunkLen, snappyChecksumSize)
+				r.err = ErrSnappyCorrupt
 				return written, r.err
 			}
 			buf := r.buf[:chunkLen]
@@ -181,7 +171,7 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 				return written, r.err
 			}
 			//checksum := uint32(buf[0]) | uint32(buf[1])<<8 | uint32(buf[2])<<16 | uint32(buf[3])<<24
-			buf = buf[checksumSize:]
+			buf = buf[snappyChecksumSize:]
 
 			n, hdr, err := decodedLen(buf)
 			if err != nil {
@@ -189,19 +179,19 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 				return written, r.err
 			}
 			buf = buf[hdr:]
-			if n > maxBlockSize {
-				println("n > maxBlockSize", n, maxBlockSize)
-				r.err = ErrCorrupt
+			if n > snappyMaxBlockSize {
+				println("n > snappyMaxBlockSize", n, snappyMaxBlockSize)
+				r.err = ErrSnappyCorrupt
 				return written, r.err
 			}
 			r.block.reset()
-			if err := decode(r.block, buf); err != nil {
+			if err := decodeSnappy(r.block, buf); err != nil {
 				r.err = err
 				return written, r.err
 			}
 			if r.block.size+r.block.extraLits != n {
 				printf("invalid size, want %d, got %d\n", n, r.block.size+r.block.extraLits)
-				r.err = ErrCorrupt
+				r.err = ErrSnappyCorrupt
 				return written, r.err
 			}
 			err = r.block.encode()
@@ -216,7 +206,7 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 
 			/*
 				if crc(r.decoded[:n]) != checksum {
-					r.err = ErrCorrupt
+					r.err = ErrSnappyCorrupt
 					return 0, r.err
 				}
 				r.i, r.j = 0, n
@@ -228,31 +218,31 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 				println("Uncompressed, chunklen", chunkLen)
 			}
 			// Section 4.3. Uncompressed data (chunk type 0x01).
-			if chunkLen < checksumSize {
-				println("chunkLen < checksumSize", chunkLen, checksumSize)
-				r.err = ErrCorrupt
+			if chunkLen < snappyChecksumSize {
+				println("chunkLen < snappyChecksumSize", chunkLen, snappyChecksumSize)
+				r.err = ErrSnappyCorrupt
 				return written, r.err
 			}
 			r.block.reset()
-			buf := r.buf[:checksumSize]
+			buf := r.buf[:snappyChecksumSize]
 			if !r.readFull(buf, false) {
 				return written, r.err
 			}
 			checksum := uint32(buf[0]) | uint32(buf[1])<<8 | uint32(buf[2])<<16 | uint32(buf[3])<<24
 			// Read directly into r.decoded instead of via r.buf.
-			n := chunkLen - checksumSize
-			if n > maxBlockSize {
-				println("n > maxBlockSize", n, maxBlockSize)
-				r.err = ErrCorrupt
+			n := chunkLen - snappyChecksumSize
+			if n > snappyMaxBlockSize {
+				println("n > snappyMaxBlockSize", n, snappyMaxBlockSize)
+				r.err = ErrSnappyCorrupt
 				return written, r.err
 			}
 			r.block.literals = r.block.literals[:n]
 			if !r.readFull(r.block.literals, false) {
 				return written, r.err
 			}
-			if crc(r.block.literals) != checksum {
+			if snappyCRC(r.block.literals) != checksum {
 				println("literals crc mismatch")
-				r.err = ErrCorrupt
+				r.err = ErrSnappyCorrupt
 				return written, r.err
 			}
 			err := r.block.encodeLits()
@@ -268,21 +258,21 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 
 		case chunkTypeStreamIdentifier:
 			if debug {
-				println("stream id", chunkLen, len(magicBody))
+				println("stream id", chunkLen, len(snappyMagicBody))
 			}
 			// Section 4.1. Stream identifier (chunk type 0xff).
-			if chunkLen != len(magicBody) {
-				println("chunkLen != len(magicBody)", chunkLen, len(magicBody))
-				r.err = ErrCorrupt
+			if chunkLen != len(snappyMagicBody) {
+				println("chunkLen != len(snappyMagicBody)", chunkLen, len(snappyMagicBody))
+				r.err = ErrSnappyCorrupt
 				return written, r.err
 			}
-			if !r.readFull(r.buf[:len(magicBody)], false) {
+			if !r.readFull(r.buf[:len(snappyMagicBody)], false) {
 				return written, r.err
 			}
-			for i := 0; i < len(magicBody); i++ {
-				if r.buf[i] != magicBody[i] {
-					println("r.buf[i] != magicBody[i]", r.buf[i], magicBody[i], i)
-					r.err = ErrCorrupt
+			for i := 0; i < len(snappyMagicBody); i++ {
+				if r.buf[i] != snappyMagicBody[i] {
+					println("r.buf[i] != snappyMagicBody[i]", r.buf[i], snappyMagicBody[i], i)
+					r.err = ErrSnappyCorrupt
 					return written, r.err
 				}
 			}
@@ -291,7 +281,7 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 
 		if chunkType <= 0x7f {
 			// Section 4.5. Reserved unskippable chunks (chunk types 0x02-0x7f).
-			r.err = ErrUnsupported
+			r.err = ErrSnappyUnsupported
 			return written, r.err
 		}
 		// Section 4.4 Padding (chunk type 0xfe).
@@ -302,19 +292,19 @@ func (r *Snappy) Convert(in io.Reader, w io.Writer) (int64, error) {
 	}
 }
 
-// decode writes the decoding of src to dst. It assumes that the varint-encoded
+// decodeSnappy writes the decoding of src to dst. It assumes that the varint-encoded
 // length of the decompressed bytes has already been read, and that len(dst)
 // equals that length.
 //
 // It returns 0 on success or a decodeErrCodeXxx error code on failure.
-func decode(blk *block, src []byte) error {
-	//decodeRef(make([]byte, maxBlockSize), src)
+func decodeSnappy(blk *block, src []byte) error {
+	//decodeRef(make([]byte, snappyMaxBlockSize), src)
 	var s, length int
 	lits := blk.extraLits
 	var offset uint32
 	for s < len(src) {
 		switch src[s] & 0x03 {
-		case tagLiteral:
+		case snappyTagLiteral:
 			x := uint32(src[s] >> 2)
 			switch {
 			case x < 60:
@@ -323,34 +313,34 @@ func decode(blk *block, src []byte) error {
 				s += 2
 				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
 					println("uint(s) > uint(len(src)", s, src)
-					return ErrCorrupt
+					return ErrSnappyCorrupt
 				}
 				x = uint32(src[s-1])
 			case x == 61:
 				s += 3
 				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
 					println("uint(s) > uint(len(src)", s, src)
-					return ErrCorrupt
+					return ErrSnappyCorrupt
 				}
 				x = uint32(src[s-2]) | uint32(src[s-1])<<8
 			case x == 62:
 				s += 4
 				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
 					println("uint(s) > uint(len(src)", s, src)
-					return ErrCorrupt
+					return ErrSnappyCorrupt
 				}
 				x = uint32(src[s-3]) | uint32(src[s-2])<<8 | uint32(src[s-1])<<16
 			case x == 63:
 				s += 5
 				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
 					println("uint(s) > uint(len(src)", s, src)
-					return ErrCorrupt
+					return ErrSnappyCorrupt
 				}
 				x = uint32(src[s-4]) | uint32(src[s-3])<<8 | uint32(src[s-2])<<16 | uint32(src[s-1])<<24
 			}
-			if x > maxBlockSize {
-				println("x > maxBlockSize", x, maxBlockSize)
-				return ErrCorrupt
+			if x > snappyMaxBlockSize {
+				println("x > snappyMaxBlockSize", x, snappyMaxBlockSize)
+				return ErrSnappyCorrupt
 			}
 			length = int(x) + 1
 			if length <= 0 {
@@ -358,8 +348,8 @@ func decode(blk *block, src []byte) error {
 
 				return errUnsupportedLiteralLength
 			}
-			//if length > maxBlockSize-d || uint32(length) > len(src)-s {
-			//	return ErrCorrupt
+			//if length > snappyMaxBlockSize-d || uint32(length) > len(src)-s {
+			//	return ErrSnappyCorrupt
 			//}
 
 			blk.literals = append(blk.literals, src[s:s+length]...)
@@ -368,29 +358,29 @@ func decode(blk *block, src []byte) error {
 			s += length
 			continue
 
-		case tagCopy1:
+		case snappyTagCopy1:
 			s += 2
 			if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
 				println("uint(s) > uint(len(src)", s, len(src))
-				return ErrCorrupt
+				return ErrSnappyCorrupt
 			}
 			length = 4 + int(src[s-2])>>2&0x7
 			offset = uint32(src[s-2])&0xe0<<3 | uint32(src[s-1])
 
-		case tagCopy2:
+		case snappyTagCopy2:
 			s += 3
 			if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
 				println("uint(s) > uint(len(src)", s, len(src))
-				return ErrCorrupt
+				return ErrSnappyCorrupt
 			}
 			length = 1 + int(src[s-3])>>2
 			offset = uint32(src[s-2]) | uint32(src[s-1])<<8
 
-		case tagCopy4:
+		case snappyTagCopy4:
 			s += 5
 			if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
 				println("uint(s) > uint(len(src)", s, len(src))
-				return ErrCorrupt
+				return ErrSnappyCorrupt
 			}
 			length = 1 + int(src[s-5])>>2
 			offset = uint32(src[s-4]) | uint32(src[s-3])<<8 | uint32(src[s-2])<<16 | uint32(src[s-1])<<24
@@ -399,17 +389,11 @@ func decode(blk *block, src []byte) error {
 		if offset <= 0 || blk.size+lits < int(offset) /*|| length > len(blk)-d */ {
 			println("offset <= 0 || blk.size+lits < int(offset)", offset, blk.size+lits, int(offset), blk.size, lits)
 
-			return ErrCorrupt
+			return ErrSnappyCorrupt
 		}
 		// Copy from an earlier sub-slice of blk to a later sub-slice. Unlike
 		// the built-in copy function, this byte-by-byte copy always runs
 		// forwards, even if the slices overlap. Conceptually, this is:
-		//
-		// d += forwardCopy(blk[d:d+length], blk[d-offset:])
-		//for end := d + length; d != end; d++ {
-		//	blk[d] = blk[d-offset]
-		//}
-
 		// TODO: This hardly looks worth it.
 		if true {
 			if lits > 0 {
@@ -467,111 +451,4 @@ func decode(blk *block, src []byte) error {
 	}
 	blk.extraLits = lits
 	return nil
-}
-
-const zstdMinMatch = 3
-
-// decode writes the decoding of src to dst. It assumes that the varint-encoded
-// length of the decompressed bytes has already been read, and that len(dst)
-// equals that length.
-//
-// It returns 0 on success or a decodeErrCodeXxx error code on failure.
-func decodeRef(dst, src []byte) (res int) {
-	defer func() {
-		if res != 0 {
-			fmt.Println("reference corrupted")
-		}
-	}()
-	const decodeErrCodeCorrupt = 1
-	var d, s, offset, length int
-	for s < len(src) {
-		switch src[s] & 0x03 {
-		case tagLiteral:
-			x := uint32(src[s] >> 2)
-			switch {
-			case x < 60:
-				s++
-			case x == 60:
-				s += 2
-				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
-					return decodeErrCodeCorrupt
-				}
-				x = uint32(src[s-1])
-			case x == 61:
-				s += 3
-				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
-					return decodeErrCodeCorrupt
-				}
-				x = uint32(src[s-2]) | uint32(src[s-1])<<8
-			case x == 62:
-				s += 4
-				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
-					return decodeErrCodeCorrupt
-				}
-				x = uint32(src[s-3]) | uint32(src[s-2])<<8 | uint32(src[s-1])<<16
-			case x == 63:
-				s += 5
-				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
-					return decodeErrCodeCorrupt
-				}
-				x = uint32(src[s-4]) | uint32(src[s-3])<<8 | uint32(src[s-2])<<16 | uint32(src[s-1])<<24
-			}
-			length = int(x) + 1
-			if length <= 0 {
-				return decodeErrCodeCorrupt
-			}
-			if length > len(dst)-d || length > len(src)-s {
-				return decodeErrCodeCorrupt
-			}
-			copy(dst[d:], src[s:s+length])
-			println(length, "literal (REF)")
-
-			d += length
-			s += length
-			continue
-
-		case tagCopy1:
-			s += 2
-			if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
-				return decodeErrCodeCorrupt
-			}
-			length = 4 + int(src[s-2])>>2&0x7
-			offset = int(uint32(src[s-2])&0xe0<<3 | uint32(src[s-1]))
-
-		case tagCopy2:
-			s += 3
-			if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
-				return decodeErrCodeCorrupt
-			}
-			length = 1 + int(src[s-3])>>2
-			offset = int(uint32(src[s-2]) | uint32(src[s-1])<<8)
-
-		case tagCopy4:
-			s += 5
-			if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
-				return decodeErrCodeCorrupt
-			}
-			length = 1 + int(src[s-5])>>2
-			offset = int(uint32(src[s-4]) | uint32(src[s-3])<<8 | uint32(src[s-2])<<16 | uint32(src[s-1])<<24)
-		}
-
-		if offset <= 0 || d < offset || length > len(dst)-d {
-			return decodeErrCodeCorrupt
-		}
-		// Copy from an earlier sub-slice of dst to a later sub-slice. Unlike
-		// the built-in copy function, this byte-by-byte copy always runs
-		// forwards, even if the slices overlap. Conceptually, this is:
-		//
-		// d += forwardCopy(dst[d:d+length], dst[d-offset:])
-
-		println(length, "match (REF)", offset)
-
-		for end := d + length; d != end; d++ {
-			dst[d] = dst[d-offset]
-		}
-	}
-	if d != len(dst) {
-		return decodeErrCodeCorrupt
-	}
-	return 0
 }

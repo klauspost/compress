@@ -26,6 +26,14 @@ const (
 	literalsBlockTreeless
 )
 
+const (
+	// maxCompressedBlockSize is the biggest allowed compressed block size (128KB)
+	maxCompressedBlockSize = 128 << 10
+
+	// https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#literals_section_header
+	maxCompressedLiteralSize = 1 << 18
+)
+
 type block struct {
 	size      int
 	literals  []byte
@@ -42,16 +50,16 @@ type block struct {
 }
 
 func (b *block) init() {
-	if cap(b.literals) < maxBlockSize {
-		b.literals = make([]byte, 0, maxBlockSize)
+	if cap(b.literals) < maxCompressedLiteralSize {
+		b.literals = make([]byte, 0, maxCompressedLiteralSize)
 	}
 	const defSeqs = 200
 	b.literals = b.literals[:0]
 	if cap(b.sequences) < defSeqs {
 		b.sequences = make([]seq, 0, defSeqs)
 	}
-	if cap(b.output) < maxBlockSize+16 {
-		b.output = make([]byte, 0, maxBlockSize+16)
+	if cap(b.output) < maxCompressedBlockSize {
+		b.output = make([]byte, 0, maxCompressedBlockSize)
 	}
 	fn := func(b []uint8) []uint8 {
 		if cap(b) < defSeqs {
@@ -398,7 +406,7 @@ func (b *block) encode() error {
 				println("Using predefined", predefSize>>3, "<=", nSize>>3)
 			}
 			return preDef, compModePredefined
-		case prevSize <= nSize:
+		case prevSize <= nSize && false:
 			if debug {
 				println("Using previous", prevSize>>3, "<=", nSize>>3)
 			}
@@ -501,23 +509,45 @@ func (b *block) encode() error {
 	wr.flush32()
 	wr.addBits32NC(s.offset, ofB.outBits)
 	seq--
-	for seq >= 0 {
-		s = b.sequences[seq]
-		wr.flush32()
-		llB, ofB, mlB := llTT[llIn[seq]], ofTT[ofIn[seq]], mlTT[mlIn[seq]]
-		// tabelog max is 8 for all.
-		of.encode(ofB)
-		ml.encode(mlB)
-		ll.encode(llB)
-		wr.flush32()
 
-		// We know that snappy will only output limited match ranges,
-		// otherwise a flush should be inserted before adding offset.
-		wr.addBits32NC(s.litLen, llB.outBits)
-		wr.addBits32NC(s.matchLen, mlB.outBits)
-		wr.addBits32NC(s.offset, ofB.outBits)
+	if llEnc.maxBits+mlEnc.maxBits+ofEnc.maxBits <= 32 {
+		// No need to flush (common)
+		for seq >= 0 {
+			s = b.sequences[seq]
+			wr.flush32()
+			llB, ofB, mlB := llTT[llIn[seq]], ofTT[ofIn[seq]], mlTT[mlIn[seq]]
+			// tabelog max is 8 for all.
+			of.encode(ofB)
+			ml.encode(mlB)
+			ll.encode(llB)
+			wr.flush32()
 
-		seq--
+			// We checked that all can stay within 32 bits
+			wr.addBits32NC(s.litLen, llB.outBits)
+			wr.addBits32NC(s.matchLen, mlB.outBits)
+			wr.addBits32NC(s.offset, ofB.outBits)
+
+			seq--
+		}
+	} else {
+		for seq >= 0 {
+			s = b.sequences[seq]
+			wr.flush32()
+			llB, ofB, mlB := llTT[llIn[seq]], ofTT[ofIn[seq]], mlTT[mlIn[seq]]
+			// tabelog max is below 8 for each.
+			of.encode(ofB)
+			ml.encode(mlB)
+			ll.encode(llB)
+			wr.flush32()
+
+			// ml+ll = max 32 bits total
+			wr.addBits32NC(s.litLen, llB.outBits)
+			wr.addBits32NC(s.matchLen, mlB.outBits)
+			wr.flush32()
+			wr.addBits32NC(s.offset, ofB.outBits)
+
+			seq--
+		}
 	}
 	ml.flush(mlEnc.actualTableLog)
 	of.flush(ofEnc.actualTableLog)
