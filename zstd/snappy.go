@@ -171,24 +171,22 @@ func (r *SnappyConverter) Convert(in io.Reader, w io.Writer) (int64, error) {
 				return written, r.err
 			}
 			err = r.block.encode()
-			if err != nil {
+			switch err {
+			case errIncompressible:
+				// FIXME: we must decode and handle.
+				// Shouldn't happen with input from the standard compressor, but anyways.
+				return written, err
+			case nil:
+			default:
 				return written, err
 			}
+
 			n, r.err = w.Write(r.block.output)
 			if r.err != nil {
 				return written, err
 			}
 			written += int64(n)
-
-			/*
-				if crc(r.decoded[:n]) != checksum {
-					r.err = ErrSnappyCorrupt
-					return 0, r.err
-				}
-				r.i, r.j = 0, n
-			*/
 			continue
-
 		case chunkTypeUncompressedData:
 			if debug {
 				println("Uncompressed, chunklen", chunkLen)
