@@ -512,7 +512,9 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		br := byteReader{b: in, off: 0}
 		compMode := br.Uint8()
 		br.advance(1)
-		printf("Compression modes: 0b%b", compMode)
+		if debug {
+			printf("Compression modes: 0b%b", compMode)
+		}
 		for i := uint(0); i < 3; i++ {
 			mode := seqCompMode((compMode >> (6 - i*2)) & 3)
 			//println("Table", tableIndex(i), "is", mode)

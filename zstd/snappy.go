@@ -80,11 +80,18 @@ func decodedLen(src []byte) (blockLen, headerLen int, err error) {
 }
 
 // SnappyConverter can read SnappyConverter-compressed streams and convert them to zstd.
+// Conversion is done by converting the stream directly from Snappy without intermediate
+// full decoding.
+// Therefore the compression ratio is much less than what can be done by a full decompression
+// and compression, and a faulty Snappy stream may lead to a faulty Zstandard stream without
+// any errors being generated.
+// No CRC value is being generated and not all CRC values of the Snappy stream are checked.
+// However, it provides really fast recompression of Snappy streams.
+// The converter can be reused to avoid allocations, even after errors.
 type SnappyConverter struct {
-	r   io.Reader
-	err error
-	buf []byte
-
+	r     io.Reader
+	err   error
+	buf   []byte
 	block *blockEnc
 }
 
@@ -98,6 +105,9 @@ func (r *SnappyConverter) readFull(p []byte, allowEOF bool) (ok bool) {
 	return true
 }
 
+// Convert the Snappy stream supplied in 'in' and write the zStandard stream to 'w'.
+// If any error is detected on the Snappy stream it is returned.
+// The number of bytes written is returned.
 func (r *SnappyConverter) Convert(in io.Reader, w io.Writer) (int64, error) {
 	r.err = nil
 	r.r = in
@@ -293,10 +303,7 @@ func (r *SnappyConverter) Convert(in io.Reader, w io.Writer) (int64, error) {
 }
 
 // decodeSnappy writes the decoding of src to dst. It assumes that the varint-encoded
-// length of the decompressed bytes has already been read, and that len(dst)
-// equals that length.
-//
-// It returns 0 on success or a decodeErrCodeXxx error code on failure.
+// length of the decompressed bytes has already been read.
 func decodeSnappy(blk *blockEnc, src []byte) error {
 	//decodeRef(make([]byte, snappyMaxBlockSize), src)
 	var s, length int
