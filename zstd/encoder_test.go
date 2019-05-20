@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
+	"time"
 )
 
 func TestEncoder_EncodeAllSimple(t *testing.T) {
@@ -14,8 +15,11 @@ func TestEncoder_EncodeAllSimple(t *testing.T) {
 	}
 	in = append(in, in...)
 	var e Encoder
+	start := time.Now()
 	dst := e.EncodeAll(in, nil)
 	t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
+	mbpersec := (float64(len(in)) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
+	t.Logf("Encoded %d bytes with %.2f MB/s", len(in), mbpersec)
 
 	dec, err := NewReader(nil)
 	if err != nil {
@@ -48,8 +52,11 @@ func TestEncoder_EncodeXML(t *testing.T) {
 	}
 
 	var e Encoder
+	start := time.Now()
 	dst := e.EncodeAll(in, nil)
 	t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
+	mbpersec := (float64(len(in)) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
+	t.Logf("Encoded %d bytes with %.2f MB/s", len(in), mbpersec)
 
 	decoded, err := dec.DecodeAll(dst, nil)
 	if err != nil {
@@ -76,8 +83,11 @@ func TestEncoder_EncodeAllSilesia(t *testing.T) {
 	}
 
 	var e Encoder
+	start := time.Now()
 	dst := e.EncodeAll(in, nil)
 	t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
+	mbpersec := (float64(len(in)) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
+	t.Logf("Encoded %d bytes with %.2f MB/s", len(in), mbpersec)
 
 	dec, err := NewReader(nil, WithDecoderMaxMemory(220<<20))
 	if err != nil {
@@ -116,9 +126,12 @@ func TestEncoder_EncodeAllEnwik9(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	start := time.Now()
 	var e Encoder
 	dst := e.EncodeAll(in, nil)
 	t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
+	mbpersec := (float64(len(in)) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
+	t.Logf("Encoded %d bytes with %.2f MB/s", len(in), mbpersec)
 	decoded, err := dec.DecodeAll(dst, nil)
 	if err != nil {
 		t.Error(err, len(decoded))

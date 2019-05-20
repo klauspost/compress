@@ -143,8 +143,7 @@ func TestNewDecoderSmallFile(t *testing.T) {
 	if n != wantSize {
 		t.Errorf("want size %d, got size %d", wantSize, n)
 	}
-	elapsed := time.Since(start)
-	mbpersec := (float64(n) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
+	mbpersec := (float64(n) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
 	t.Logf("Decoded %d bytes with %f.2 MB/s", n, mbpersec)
 }
 

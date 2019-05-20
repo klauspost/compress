@@ -40,7 +40,7 @@ type simpleEncoder struct {
 // of matching across blocks giving better compression at a small slowdown.
 func (e *simpleEncoder) Encode(dst *blockEnc, src []byte) {
 	const (
-		inputMargin            = 8 - 1
+		inputMargin            = 12 - 1
 		minNonLiteralBlockSize = 1 + 1 + inputMargin
 	)
 
@@ -63,6 +63,12 @@ func (e *simpleEncoder) Encode(dst *blockEnc, src []byte) {
 		e.prev = src
 		return
 	}
+
+	// Based on the entropy of the input, calculate a minimum length we want.
+	// This is in addition to the 4 bytes we already matched
+	//minLen := int32(5 - compress.SnannonEntropyBits(src)/len(src))
+	minLen := int32(0)
+	//fmt.Println("Entropy:", float64(compress.SnannonEntropyBits(src))/float64(len(src)), "bits per symbol. Min len:", minLen)
 
 	// sLimit is when to stop looking for offset/length copies. The inputMargin
 	// lets us use a fast path for emitLiteral in the main loop, while we are
@@ -91,30 +97,61 @@ func (e *simpleEncoder) Encode(dst *blockEnc, src []byte) {
 		// The "skip" variable keeps track of how many bytes there are since
 		// the last match; dividing it by 32 (ie. right-shifting by five) gives
 		// the number of bytes to move ahead for each iteration.
-		skip := int32(32)
+		const skipLog2 = 4
+		skip := int32(1 << skipLog2)
 
 		nextS := s
 		var candidate tableEntry
 		for {
 			s = nextS
-			bytesBetweenHashLookups := skip >> 5
+			bytesBetweenHashLookups := skip >> skipLog2
 			nextS = s + bytesBetweenHashLookups
 			skip += bytesBetweenHashLookups
 			if nextS > sLimit {
 				goto emitRemainder
 			}
 			candidate = e.table[nextHash&tableMask]
-			now := load3232(src, nextS)
+
+			// Load enough for 3 match attempts:
+			// Loading: [76543210], we attempt to match [3210], [5432] and [7654]
+			now := load6432(src, nextS)
 			e.table[nextHash&tableMask] = tableEntry{offset: s + e.cur, val: cv}
-			nextHash = hashFn(now)
+			nextHash = hashFn(uint32(now))
 
 			offset := s - (candidate.offset - e.cur)
-			if offset > maxMatchOffset || cv != candidate.val {
-				// Out of range or not matched.
-				cv = now
-				continue
+			if offset < maxMatchOffset && cv == candidate.val {
+				break
 			}
-			break
+
+			// Out of range or not matched.
+			// Skip 1 byte and try again.
+			cv = uint32(now)
+			s = nextS
+			// Prepare next
+			now >>= 16
+			nextS += 2
+			candidate = e.table[nextHash&tableMask]
+			nextHash = hashFn(uint32(now))
+			offset = s - (candidate.offset - e.cur)
+			if offset < maxMatchOffset && cv == candidate.val {
+				break
+			}
+
+			// Out of range or not matched.
+			// Skip 1 byte and try again.
+			cv = uint32(now)
+			s = nextS
+			// Prepare next
+			now >>= 16
+			nextS += 2
+			candidate = e.table[nextHash&tableMask]
+			nextHash = hashFn(uint32(now))
+			offset = s - (candidate.offset - e.cur)
+			if offset < maxMatchOffset && cv == candidate.val {
+				break
+			}
+			// Out of range or not matched.
+			cv = uint32(now)
 		}
 		var seq seq
 		// A 4-byte match has been found. We'll later see if more than 4 bytes
@@ -141,8 +178,8 @@ func (e *simpleEncoder) Encode(dst *blockEnc, src []byte) {
 			l := e.matchlen(s, t, src)
 
 			// Short matches are often not too good. Extending them may be preferable.
-			if false && l == 0 {
-				s -= 3
+			if false && l < minLen {
+				s -= 2
 				cv = load3232(src, s)
 				nextHash = hashFn(cv)
 				break
@@ -156,6 +193,16 @@ func (e *simpleEncoder) Encode(dst *blockEnc, src []byte) {
 			seq.offset = uint32(s-t) + 3
 			dst.sequences = append(dst.sequences, seq)
 			seq.litLen = 0
+			// Store every second hash in-between.
+			for i := s - 2; i < s+l-7; i += 4 {
+				x := load6432(src, i)
+				prevHash := hashFn(uint32(x))
+				e.table[prevHash&tableMask] = tableEntry{offset: e.cur + i, val: uint32(x)}
+				x >>= 16
+				// Skip one
+				prevHash = hashFn(uint32(x))
+				e.table[prevHash&tableMask] = tableEntry{offset: e.cur + i + 2, val: uint32(x)}
+			}
 			s += l
 			nextEmit = s
 			if s >= sLimit {
@@ -177,10 +224,8 @@ func (e *simpleEncoder) Encode(dst *blockEnc, src []byte) {
 			x := load6432(src, s-3)
 			prevHash := hashFn(uint32(x))
 			e.table[prevHash&tableMask] = tableEntry{offset: e.cur + s - 3, val: uint32(x)}
-			x >>= 8
-			prevHash = hashFn(uint32(x))
-			e.table[prevHash&tableMask] = tableEntry{offset: e.cur + s - 2, val: uint32(x)}
-			x >>= 8
+			x >>= 16
+			// Skip one
 			prevHash = hashFn(uint32(x))
 			e.table[prevHash&tableMask] = tableEntry{offset: e.cur + s - 1, val: uint32(x)}
 			x >>= 8
