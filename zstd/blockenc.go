@@ -338,7 +338,6 @@ func (b *blockEnc) encode() error {
 	}
 	// We want some difference
 	if len(b.literals) > (b.size - (b.size >> 5)) {
-		println("potentially small gain")
 		return errIncompressible
 	}
 
@@ -456,6 +455,9 @@ func (b *blockEnc) encode() error {
 		nSize := cur.approxSize(hist) + cur.maxHeaderSize()
 		predefSize := preDef.approxSize(hist)
 		prevSize := prev.approxSize(hist)
+
+		// Add a small penalty for new encoders.
+		nSize = nSize + nSize>>4
 		switch {
 		case predefSize <= prevSize && predefSize <= nSize || forcePreDef:
 			if debug {

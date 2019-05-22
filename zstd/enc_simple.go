@@ -173,14 +173,31 @@ func (e *simpleEncoder) Encode(blk *blockEnc, src []byte) {
 			// literal bytes prior to s.
 
 			// Extend the 4-byte match as long as possible.
-			//
-			s += 4
-			t := candidate.offset - e.cur + 4
-			l := e.matchlen(s, t, src)
+			t := candidate.offset - e.cur
+			l := e.matchlen(s+4, t+4, src)
+
+			// Extend backwards
+			for t > 0 && seq.litLen > 0 && src[t-1] == src[s-1] {
+				s--
+				t--
+				l++
+				seq.litLen--
+			}
+			for t <= 0 && seq.litLen > 0 && s > 0 {
+				off := int32(len(e.prev)) + t - 1
+				if off > 0 && e.prev[off] == src[s-1] {
+					s--
+					t--
+					l++
+					seq.litLen--
+					continue
+				}
+				break
+			}
 
 			// Short matches are often not too good. Extending them may be preferable.
 			if false && l < minLen {
-				s -= 2
+				s += 2
 				cv = load3232(src, s)
 				nextHash = hashFn(cv)
 				break
@@ -188,13 +205,14 @@ func (e *simpleEncoder) Encode(blk *blockEnc, src []byte) {
 
 			seq.matchLen = uint32(l + 4 - zstdMinMatch)
 			if seq.litLen > 0 {
-				blk.literals = append(blk.literals, src[nextEmit:s-4]...)
+				blk.literals = append(blk.literals, src[nextEmit:s]...)
 			}
 
 			// Don't use repeat offsets
 			seq.offset = uint32(s-t) + 3
 			//seq.offset = blk.matchOffset(uint32(s-t), seq.litLen)
 
+			s += 4
 			blk.sequences = append(blk.sequences, seq)
 			seq.litLen = 0
 			// Store every second hash in-between, but offset by 1.

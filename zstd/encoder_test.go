@@ -69,6 +69,61 @@ func TestEncoder_EncodeXML(t *testing.T) {
 	t.Log("Encoded content matched")
 }
 
+func TestEncoder_EncodeAllTwain(t *testing.T) {
+	in, err := ioutil.ReadFile("../testdata/Mark.Twain-Tom.Sawyer.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	//in = append(in, in...)
+	var e Encoder
+	start := time.Now()
+	dst := e.EncodeAll(in, nil)
+	t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
+	mbpersec := (float64(len(in)) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
+	t.Logf("Encoded %d bytes with %.2f MB/s", len(in), mbpersec)
+
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := dec.DecodeAll(dst, nil)
+	if err != nil {
+		t.Error(err, len(decoded))
+	}
+	if !bytes.Equal(decoded, in) {
+		ioutil.WriteFile("testdata/"+t.Name()+"-Mark.Twain-Tom.Sawyer.txt.got", decoded, os.ModePerm)
+		t.Fatal("Decoded does not match")
+	}
+	t.Log("Encoded content matched")
+}
+
+func TestEncoder_EncodeAllPi(t *testing.T) {
+	in, err := ioutil.ReadFile("../testdata/pi.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var e Encoder
+	start := time.Now()
+	dst := e.EncodeAll(in, nil)
+	t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
+	mbpersec := (float64(len(in)) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
+	t.Logf("Encoded %d bytes with %.2f MB/s", len(in), mbpersec)
+
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := dec.DecodeAll(dst, nil)
+	if err != nil {
+		t.Error(err, len(decoded))
+	}
+	if !bytes.Equal(decoded, in) {
+		ioutil.WriteFile("testdata/"+t.Name()+"-pi.txt.got", decoded, os.ModePerm)
+		t.Fatal("Decoded does not match")
+	}
+	t.Log("Encoded content matched")
+}
+
 func TestEncoder_EncodeAllSilesia(t *testing.T) {
 	if testing.Short() {
 		t.SkipNow()

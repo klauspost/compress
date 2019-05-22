@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/klauspost/compress/huff0"
+	"github.com/klauspost/compress/snappy"
 )
 
 const (
@@ -128,6 +129,7 @@ func (r *SnappyConverter) Convert(in io.Reader, w io.Writer) (int64, error) {
 		}
 		chunkLen := int(r.buf[1]) | int(r.buf[2])<<8 | int(r.buf[3])<<16
 		if chunkLen > len(r.buf) {
+			println("chunkLen > len(r.buf)", chunkType)
 			r.err = ErrSnappyUnsupported
 			return written, r.err
 		}
@@ -161,6 +163,7 @@ func (r *SnappyConverter) Convert(in io.Reader, w io.Writer) (int64, error) {
 				return written, r.err
 			}
 			r.block.reset()
+			r.block.pushOffsets()
 			if err := decodeSnappy(r.block, buf); err != nil {
 				r.err = err
 				return written, r.err
@@ -173,9 +176,17 @@ func (r *SnappyConverter) Convert(in io.Reader, w io.Writer) (int64, error) {
 			err = r.block.encode()
 			switch err {
 			case errIncompressible:
-				// FIXME: we must decode and handle.
-				// Shouldn't happen with input from the standard compressor, but anyways.
-				return written, err
+				r.block.popOffsets()
+				r.block.reset()
+				r.block.literals, err = snappy.Decode(r.block.literals[:n], r.buf[snappyChecksumSize:chunkLen])
+				if err != nil {
+					println("snappy.Decode:", err)
+					return written, err
+				}
+				err = r.block.encodeLits()
+				if err != nil {
+					return written, err
+				}
 			case nil:
 			default:
 				return written, err
@@ -255,6 +266,7 @@ func (r *SnappyConverter) Convert(in io.Reader, w io.Writer) (int64, error) {
 
 		if chunkType <= 0x7f {
 			// Section 4.5. Reserved unskippable chunks (chunk types 0x02-0x7f).
+			println("chunkType <= 0x7f")
 			r.err = ErrSnappyUnsupported
 			return written, r.err
 		}
@@ -366,52 +378,12 @@ func decodeSnappy(blk *blockEnc, src []byte) error {
 		// Check if offset is one of the recent offsets.
 		// Adjusts the output offset accordingly.
 		// Gives a tiny bit of compression, typically around 1%.
-		if true {
-			if lits > 0 {
-				switch offset {
-				case blk.recentOffsets[0]:
-					offset = 1
-				case blk.recentOffsets[1]:
-					blk.recentOffsets[1] = blk.recentOffsets[0]
-					blk.recentOffsets[0] = offset
-					offset = 2
-				case blk.recentOffsets[2]:
-					blk.recentOffsets[2] = blk.recentOffsets[1]
-					blk.recentOffsets[1] = blk.recentOffsets[0]
-					blk.recentOffsets[0] = offset
-					offset = 3
-				default:
-					blk.recentOffsets[2] = blk.recentOffsets[1]
-					blk.recentOffsets[1] = blk.recentOffsets[0]
-					blk.recentOffsets[0] = offset
-					offset += 3
-				}
-			} else {
-				switch offset {
-				case blk.recentOffsets[1]:
-					blk.recentOffsets[1] = blk.recentOffsets[0]
-					blk.recentOffsets[0] = offset
-					offset = 1
-				case blk.recentOffsets[2]:
-					blk.recentOffsets[2] = blk.recentOffsets[1]
-					blk.recentOffsets[1] = blk.recentOffsets[0]
-					blk.recentOffsets[0] = offset
-					offset = 2
-				case blk.recentOffsets[0] - 1:
-					blk.recentOffsets[2] = blk.recentOffsets[1]
-					blk.recentOffsets[1] = blk.recentOffsets[0]
-					blk.recentOffsets[0] = offset
-					offset = 3
-				default:
-					blk.recentOffsets[2] = blk.recentOffsets[1]
-					blk.recentOffsets[1] = blk.recentOffsets[0]
-					blk.recentOffsets[0] = offset
-					offset += 3
-				}
-			}
+		if false {
+			offset = blk.matchOffset(offset, uint32(lits))
 		} else {
 			offset += 3
 		}
+
 		blk.sequences = append(blk.sequences, seq{
 			litLen:   uint32(lits),
 			offset:   offset,
