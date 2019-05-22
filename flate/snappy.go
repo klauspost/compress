@@ -120,30 +120,80 @@ func (e *snappyL1) Encode(dst *tokens, src []byte) {
 		// The "skip" variable keeps track of how many bytes there are since
 		// the last match; dividing it by 32 (ie. right-shifting by five) gives
 		// the number of bytes to move ahead for each iteration.
-		skip := 32
-
+		const skipLog = 5
+		const baseSkip = 1
 		nextS := s
 		candidate := 0
 		for {
 			s = nextS
-			bytesBetweenHashLookups := skip >> 5
-			nextS = s + bytesBetweenHashLookups
-			skip += bytesBetweenHashLookups
+			nextS = (s + baseSkip) + (s-nextEmit)>>skipLog
 			if nextS > sLimit {
 				goto emitRemainder
 			}
+
 			candidate = int(table[nextHash&tableMask])
 			table[nextHash&tableMask] = uint16(s)
-			nextHash = hash(load32(src, nextS))
-			if s-candidate <= maxMatchOffset && load32(src, s) == load32(src, candidate) {
+			n := load6432(src, int32(nextS))
+			curVal := load32(src, s)
+			nextVal := uint32(n)
+			nextHash = hash(nextVal)
+			if s-candidate <= maxMatchOffset && curVal == load32(src, candidate) {
 				break
+			}
+			const skipEvery = 2
+			const skipBits = skipEvery * 8
+			s = nextS
+			curVal = nextVal
+			nextS += skipEvery
+			nextVal = uint32(n >> skipBits)
+			candidate = int(table[nextHash&tableMask])
+			table[nextHash&tableMask] = uint16(s)
+			nextHash = hash(nextVal)
+			if s-candidate <= maxMatchOffset && curVal == load32(src, candidate) {
+				break
+			}
+
+			if skipBits*2 <= 32 {
+				s = nextS
+				curVal = nextVal
+				nextS += skipEvery
+				nextVal = uint32(n >> (skipBits * 2))
+				candidate = int(table[nextHash&tableMask])
+				table[nextHash&tableMask] = uint16(s)
+				nextHash = hash(nextVal)
+				if s-candidate <= maxMatchOffset && curVal == load32(src, candidate) {
+					break
+				}
+			}
+
+			if skipBits*4 <= 32 {
+				s = nextS
+				curVal = nextVal
+				nextS += skipEvery
+				nextVal = uint32(n >> (skipBits * 3))
+				candidate = int(table[nextHash&tableMask])
+				table[nextHash&tableMask] = uint16(s)
+				nextHash = hash(nextVal)
+				if s-candidate <= maxMatchOffset && curVal == load32(src, candidate) {
+					break
+				}
+
+				s = nextS
+				curVal = nextVal
+				nextS += skipEvery
+				nextVal = uint32(n >> (skipBits * 4))
+				candidate = int(table[nextHash&tableMask])
+				table[nextHash&tableMask] = uint16(s)
+				nextHash = hash(nextVal)
+				if s-candidate <= maxMatchOffset && curVal == load32(src, candidate) {
+					break
+				}
 			}
 		}
 
 		// A 4-byte match has been found. We'll later see if more than 4 bytes
 		// match. But, prior to the match, src[nextEmit:s] are unmatched. Emit
 		// them as literal bytes.
-		emitLiteral(dst, src[nextEmit:s])
 
 		// Call emitCopy, and then see if another emitCopy could be our next
 		// move. Repeat until we find no match for the input immediately after
@@ -178,13 +228,38 @@ func (e *snappyL1) Encode(dst *tokens, src []byte) {
 				}
 			}
 			s += l
+			// Match backwards
+			for base > nextEmit && candidate > 0 && s-base < maxMatchLength && src[candidate-1] == src[base-1] {
+				candidate--
+				base--
+			}
+
+			if nextEmit < base {
+				emitLiteral(dst, src[nextEmit:base])
+			}
 
 			// matchToken is flate's equivalent of Snappy's emitCopy.
 			dst.tokens[dst.n] = matchToken(uint32(s-base-baseMatchLength), uint32(base-candidate-baseMatchOffset))
 			dst.n++
 			nextEmit = s
+
 			if s >= sLimit {
 				goto emitRemainder
+			}
+
+			// Store every second hash in-between, but offset by 1.
+			for i := base; i < s-7; i += 6 {
+				x := load6432(src, int32(i))
+				nextHash := hash(uint32(x))
+				table[nextHash&tableMask] = uint16(i)
+				//nextHash = hash(uint32(x >> 8))
+				//table[nextHash&tableMask] = uint16(i + 1)
+				//nextHash = hash(uint32(x >> 16))
+				//table[nextHash&tableMask] = uint16(i + 2)
+				nextHash = hash(uint32(x >> 24))
+				table[nextHash&tableMask] = uint16(i + 3)
+				//nextHash = hash(uint32(x >> 32))
+				//table[nextHash&tableMask] = uint16(i + 4)
 			}
 
 			// We could immediately start working at s now, but to improve
@@ -193,14 +268,14 @@ func (e *snappyL1) Encode(dst *tokens, src []byte) {
 			// at s+1. At least on GOARCH=amd64, these three hash calculations
 			// are faster as one load64 call (with some shifts) instead of
 			// three load32 calls.
-			x := load64(src, s-1)
+			x := load64(src, s-3)
 			prevHash := hash(uint32(x >> 0))
-			table[prevHash&tableMask] = uint16(s - 1)
-			currHash := hash(uint32(x >> 8))
+			currHash := hash(uint32(x >> 24))
+			table[prevHash&tableMask] = uint16(s - 3)
 			candidate = int(table[currHash&tableMask])
 			table[currHash&tableMask] = uint16(s)
-			if s-candidate > maxMatchOffset || uint32(x>>8) != load32(src, candidate) {
-				nextHash = hash(uint32(x >> 16))
+			if s-candidate > maxMatchOffset || uint32(x>>24) != load32(src, candidate) {
+				nextHash = hash(uint32(x >> 32))
 				s++
 				break
 			}
@@ -249,7 +324,7 @@ type snappyL2 struct {
 // of matching across blocks giving better compression at a small slowdown.
 func (e *snappyL2) Encode(dst *tokens, src []byte) {
 	const (
-		inputMargin            = 8 - 1
+		inputMargin            = 12 - 1
 		minNonLiteralBlockSize = 1 + 1 + inputMargin
 	)
 
@@ -299,36 +374,46 @@ func (e *snappyL2) Encode(dst *tokens, src []byte) {
 		// The "skip" variable keeps track of how many bytes there are since
 		// the last match; dividing it by 32 (ie. right-shifting by five) gives
 		// the number of bytes to move ahead for each iteration.
-		skip := int32(32)
+		const skipLog = 5
+		const doEvery = 2
 
 		nextS := s
 		var candidate tableEntry
 		for {
 			s = nextS
-			bytesBetweenHashLookups := skip >> 5
-			nextS = s + bytesBetweenHashLookups
-			skip += bytesBetweenHashLookups
+			nextS = s + doEvery + (s-nextEmit)>>skipLog
 			if nextS > sLimit {
 				goto emitRemainder
 			}
 			candidate = e.table[nextHash&tableMask]
-			now := load3232(src, nextS)
+			now := load6432(src, nextS)
 			e.table[nextHash&tableMask] = tableEntry{offset: s + e.cur, val: cv}
-			nextHash = hash(now)
+			nextHash = hash(uint32(now))
 
 			offset := s - (candidate.offset - e.cur)
-			if offset > maxMatchOffset || cv != candidate.val {
-				// Out of range or not matched.
-				cv = now
-				continue
+			if offset < maxMatchOffset && cv == candidate.val {
+				break
 			}
-			break
+
+			// Do one right away...
+			cv = uint32(now)
+			s = nextS
+			nextS++
+			candidate = e.table[nextHash&tableMask]
+			now >>= 8
+			e.table[nextHash&tableMask] = tableEntry{offset: s + e.cur, val: cv}
+			nextHash = hash(uint32(now))
+
+			offset = s - (candidate.offset - e.cur)
+			if offset < maxMatchOffset && cv == candidate.val {
+				break
+			}
+			cv = uint32(now)
 		}
 
 		// A 4-byte match has been found. We'll later see if more than 4 bytes
 		// match. But, prior to the match, src[nextEmit:s] are unmatched. Emit
 		// them as literal bytes.
-		emitLiteral(dst, src[nextEmit:s])
 
 		// Call emitCopy, and then see if another emitCopy could be our next
 		// move. Repeat until we find no match for the input immediately after
@@ -343,15 +428,34 @@ func (e *snappyL2) Encode(dst *tokens, src []byte) {
 			// literal bytes prior to s.
 
 			// Extend the 4-byte match as long as possible.
-			//
-			s += 4
-			t := candidate.offset - e.cur + 4
-			l := e.matchlen(s, t, src)
+			t := candidate.offset - e.cur
+			l := e.matchlen(s+4, t+4, src)
+
+			// Extend backwards
+			for t > 0 && nextEmit < s && src[t-1] == src[s-1] && l < maxMatchLength-4 {
+				s--
+				t--
+				l++
+			}
+			for t <= 0 && nextEmit < s && s > 0 {
+				off := int32(len(e.prev)) + t - 1
+				if off > 0 && e.prev[off] == src[s-1] && l < maxMatchLength-4 {
+					s--
+					t--
+					l++
+					continue
+				}
+				break
+			}
+
+			if nextEmit < s {
+				emitLiteral(dst, src[nextEmit:s])
+			}
 
 			// matchToken is flate's equivalent of Snappy's emitCopy. (length,offset)
 			dst.tokens[dst.n] = matchToken(uint32(l+4-baseMatchLength), uint32(s-t-baseMatchOffset))
 			dst.n++
-			s += l
+			s = s + l + 4
 			nextEmit = s
 			if s >= sLimit {
 				t += l
@@ -363,16 +467,31 @@ func (e *snappyL2) Encode(dst *tokens, src []byte) {
 				goto emitRemainder
 			}
 
+			// Store every second hash in-between, but offset by 1.
+			for i := s - l - 2; i < s-7; i += 7 {
+				x := load6432(src, int32(i))
+				nextHash := hash(uint32(x))
+				e.table[nextHash&tableMask] = tableEntry{offset: e.cur + i, val: uint32(x)}
+				// Skip one
+				x >>= 16
+				nextHash = hash(uint32(x))
+				e.table[nextHash&tableMask] = tableEntry{offset: e.cur + i + 2, val: uint32(x)}
+				// Skip one
+				x >>= 16
+				nextHash = hash(uint32(x))
+				e.table[nextHash&tableMask] = tableEntry{offset: e.cur + i + 4, val: uint32(x)}
+			}
+
 			// We could immediately start working at s now, but to improve
 			// compression we first update the hash table at s-1 and at s. If
 			// another emitCopy is not our next move, also calculate nextHash
 			// at s+1. At least on GOARCH=amd64, these three hash calculations
 			// are faster as one load64 call (with some shifts) instead of
 			// three load32 calls.
-			x := load6432(src, s-1)
+			x := load6432(src, s-2)
 			prevHash := hash(uint32(x))
-			e.table[prevHash&tableMask] = tableEntry{offset: e.cur + s - 1, val: uint32(x)}
-			x >>= 8
+			e.table[prevHash&tableMask] = tableEntry{offset: e.cur + s - 2, val: uint32(x)}
+			x >>= 16
 			currHash := hash(uint32(x))
 			candidate = e.table[currHash&tableMask]
 			e.table[currHash&tableMask] = tableEntry{offset: e.cur + s, val: uint32(x)}
