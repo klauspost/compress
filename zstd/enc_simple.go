@@ -38,7 +38,7 @@ type simpleEncoder struct {
 
 // EncodeL2 uses a similar algorithm to level 1, but is capable
 // of matching across blocks giving better compression at a small slowdown.
-func (e *simpleEncoder) Encode(dst *blockEnc, src []byte) {
+func (e *simpleEncoder) Encode(blk *blockEnc, src []byte) {
 	const (
 		inputMargin            = 12 - 1
 		minNonLiteralBlockSize = 1 + 1 + inputMargin
@@ -51,14 +51,14 @@ func (e *simpleEncoder) Encode(dst *blockEnc, src []byte) {
 		}
 		e.cur = maxStoreBlockSize
 	}
-	dst.size = len(src)
+	blk.size = len(src)
 	// This check isn't in the Snappy implementation, but there, the caller
 	// instead of the callee handles this case.
 	if len(src) < minNonLiteralBlockSize {
 		// We do not fill the token table.
 		// This will be picked up by caller.
-		dst.extraLits = len(src)
-		copy(dst.literals[:len(src)], src)
+		blk.extraLits = len(src)
+		copy(blk.literals[:len(src)], src)
 		e.cur += maxMatchOffset
 		e.prev = src
 		return
@@ -113,7 +113,8 @@ func (e *simpleEncoder) Encode(dst *blockEnc, src []byte) {
 			candidate = e.table[nextHash&tableMask]
 
 			// Load enough for 3 match attempts:
-			// Loading: [76543210], we attempt to match [3210], [5432] and [7654]
+			// Loading: [76543210], we attempt to match [3210], [5432] and [6543] will be ready for next loop.
+			// On the last attempt we skip one more, so we increment by 3 (+skip) on evey loop
 			now := load6432(src, nextS)
 			e.table[nextHash&tableMask] = tableEntry{offset: s + e.cur, val: cv}
 			nextHash = hashFn(uint32(now))
@@ -138,12 +139,12 @@ func (e *simpleEncoder) Encode(dst *blockEnc, src []byte) {
 			}
 
 			// Out of range or not matched.
-			// Skip 1 byte and try again.
+			// Skip no bytes before trying.
 			cv = uint32(now)
 			s = nextS
 			// Prepare next
-			now >>= 16
-			nextS += 2
+			now >>= 8
+			nextS += 1
 			candidate = e.table[nextHash&tableMask]
 			nextHash = hashFn(uint32(now))
 			offset = s - (candidate.offset - e.cur)
@@ -187,21 +188,28 @@ func (e *simpleEncoder) Encode(dst *blockEnc, src []byte) {
 
 			seq.matchLen = uint32(l + 4 - zstdMinMatch)
 			if seq.litLen > 0 {
-				dst.literals = append(dst.literals, src[nextEmit:s-4]...)
+				blk.literals = append(blk.literals, src[nextEmit:s-4]...)
 			}
-			// +3 because we don't use recent offsets yet.
+
+			// Don't use repeat offsets
 			seq.offset = uint32(s-t) + 3
-			dst.sequences = append(dst.sequences, seq)
+			//seq.offset = blk.matchOffset(uint32(s-t), seq.litLen)
+
+			blk.sequences = append(blk.sequences, seq)
 			seq.litLen = 0
-			// Store every second hash in-between.
-			for i := s - 2; i < s+l-7; i += 4 {
+			// Store every second hash in-between, but offset by 1.
+			for i := s - 2; i < s+l-7; i += 5 {
 				x := load6432(src, i)
 				prevHash := hashFn(uint32(x))
 				e.table[prevHash&tableMask] = tableEntry{offset: e.cur + i, val: uint32(x)}
-				x >>= 16
 				// Skip one
+				x >>= 16
 				prevHash = hashFn(uint32(x))
 				e.table[prevHash&tableMask] = tableEntry{offset: e.cur + i + 2, val: uint32(x)}
+				// Skip one
+				x >>= 16
+				prevHash = hashFn(uint32(x))
+				e.table[prevHash&tableMask] = tableEntry{offset: e.cur + i + 4, val: uint32(x)}
 			}
 			s += l
 			nextEmit = s
@@ -246,8 +254,8 @@ func (e *simpleEncoder) Encode(dst *blockEnc, src []byte) {
 emitRemainder:
 	if int(nextEmit) < len(src) {
 		//emitLiteral(dst, src[nextEmit:])
-		dst.literals = append(dst.literals, src[nextEmit:]...)
-		dst.extraLits = len(src) - int(nextEmit)
+		blk.literals = append(blk.literals, src[nextEmit:]...)
+		blk.extraLits = len(src) - int(nextEmit)
 	}
 	e.cur += int32(len(src))
 	e.prev = src

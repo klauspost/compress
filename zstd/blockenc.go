@@ -189,6 +189,61 @@ func (b *blockEnc) popOffsets() {
 	b.recentOffsets = b.prevRecentOffsets
 }
 
+// matchOffset will adjust recent offsets and return the adjusted one,
+// if it matches a previous offset.
+func (b *blockEnc) matchOffset(offset, lits uint32) uint32 {
+	// Check if offset is one of the recent offsets.
+	// Adjusts the output offset accordingly.
+	// Gives a tiny bit of compression, typically around 1%.
+	if true {
+		if lits > 0 {
+			switch offset {
+			case b.recentOffsets[0]:
+				offset = 1
+			case b.recentOffsets[1]:
+				b.recentOffsets[1] = b.recentOffsets[0]
+				b.recentOffsets[0] = offset
+				offset = 2
+			case b.recentOffsets[2]:
+				b.recentOffsets[2] = b.recentOffsets[1]
+				b.recentOffsets[1] = b.recentOffsets[0]
+				b.recentOffsets[0] = offset
+				offset = 3
+			default:
+				b.recentOffsets[2] = b.recentOffsets[1]
+				b.recentOffsets[1] = b.recentOffsets[0]
+				b.recentOffsets[0] = offset
+				offset += 3
+			}
+		} else {
+			switch offset {
+			case b.recentOffsets[1]:
+				b.recentOffsets[1] = b.recentOffsets[0]
+				b.recentOffsets[0] = offset
+				offset = 1
+			case b.recentOffsets[2]:
+				b.recentOffsets[2] = b.recentOffsets[1]
+				b.recentOffsets[1] = b.recentOffsets[0]
+				b.recentOffsets[0] = offset
+				offset = 2
+			case b.recentOffsets[0] - 1:
+				b.recentOffsets[2] = b.recentOffsets[1]
+				b.recentOffsets[1] = b.recentOffsets[0]
+				b.recentOffsets[0] = offset
+				offset = 3
+			default:
+				b.recentOffsets[2] = b.recentOffsets[1]
+				b.recentOffsets[1] = b.recentOffsets[0]
+				b.recentOffsets[0] = offset
+				offset += 3
+			}
+		}
+	} else {
+		offset += 3
+	}
+	return offset
+}
+
 // encodeRaw can be used to set the output to a raw representation of supplied bytes.
 func (b *blockEnc) encodeRaw(a []byte) {
 	var bh blockHeader
