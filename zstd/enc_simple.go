@@ -1,7 +1,7 @@
 package zstd
 
 const (
-	tableBits         = 15                      // Bits used in the table
+	tableBits         = 14                      // Bits used in the table
 	tableSize         = 1 << tableBits          // Size of the table
 	tableMask         = tableSize - 1           // Mask for table indices. Redundant, but can eliminate bounds checks.
 	tableShift        = 32 - tableBits          // Right-shift to get the tableBits most significant bits of a uint32.
@@ -67,7 +67,7 @@ func (e *simpleEncoder) Encode(dst *blockEnc, src []byte) {
 	// Based on the entropy of the input, calculate a minimum length we want.
 	// This is in addition to the 4 bytes we already matched
 	//minLen := int32(5 - compress.SnannonEntropyBits(src)/len(src))
-	minLen := int32(0)
+	minLen := int32(2)
 	//fmt.Println("Entropy:", float64(compress.SnannonEntropyBits(src))/float64(len(src)), "bits per symbol. Min len:", minLen)
 
 	// sLimit is when to stop looking for offset/length copies. The inputMargin
@@ -142,8 +142,8 @@ func (e *simpleEncoder) Encode(dst *blockEnc, src []byte) {
 			cv = uint32(now)
 			s = nextS
 			// Prepare next
-			now >>= 16
-			nextS += 2
+			now >>= 8
+			nextS += 1
 			candidate = e.table[nextHash&tableMask]
 			nextHash = hashFn(uint32(now))
 			offset = s - (candidate.offset - e.cur)
@@ -173,13 +173,31 @@ func (e *simpleEncoder) Encode(dst *blockEnc, src []byte) {
 
 			// Extend the 4-byte match as long as possible.
 			//
-			s += 4
-			t := candidate.offset - e.cur + 4
-			l := e.matchlen(s, t, src)
+			t := candidate.offset - e.cur
+			l := e.matchlen(s+4, t+4, src)
+
+			// Extend backwards
+			for t > 0 && seq.litLen > 0 && src[t-1] == src[s-1] {
+				s--
+				t--
+				l++
+				seq.litLen--
+			}
+			for t <= 0 && seq.litLen > 0 && s > 0 {
+				off := int32(len(e.prev)) + t - 1
+				if off > 0 && e.prev[off] == src[s-1] {
+					s--
+					t--
+					l++
+					seq.litLen--
+					continue
+				}
+				break
+			}
 
 			// Short matches are often not too good. Extending them may be preferable.
-			if false && l < minLen {
-				s -= 2
+			if true && l < minLen {
+				s += 2
 				cv = load3232(src, s)
 				nextHash = hashFn(cv)
 				break
@@ -187,10 +205,12 @@ func (e *simpleEncoder) Encode(dst *blockEnc, src []byte) {
 
 			seq.matchLen = uint32(l + 4 - zstdMinMatch)
 			if seq.litLen > 0 {
-				dst.literals = append(dst.literals, src[nextEmit:s-4]...)
+				dst.literals = append(dst.literals, src[nextEmit:s]...)
 			}
 			// +3 because we don't use recent offsets yet.
 			seq.offset = uint32(s-t) + 3
+			s += 4
+
 			dst.sequences = append(dst.sequences, seq)
 			seq.litLen = 0
 			// Store every second hash in-between.
@@ -222,12 +242,10 @@ func (e *simpleEncoder) Encode(dst *blockEnc, src []byte) {
 			// are faster as one load64 call (with some shifts) instead of
 			// three load32 calls.
 			x := load6432(src, s-3)
-			prevHash := hashFn(uint32(x))
-			e.table[prevHash&tableMask] = tableEntry{offset: e.cur + s - 3, val: uint32(x)}
+			e.table[hashFn(uint32(x))&tableMask] = tableEntry{offset: e.cur + s - 3, val: uint32(x)}
 			x >>= 16
 			// Skip one
-			prevHash = hashFn(uint32(x))
-			e.table[prevHash&tableMask] = tableEntry{offset: e.cur + s - 1, val: uint32(x)}
+			e.table[hashFn(uint32(x))&tableMask] = tableEntry{offset: e.cur + s - 1, val: uint32(x)}
 			x >>= 8
 			currHash := hashFn(uint32(x))
 			candidate = e.table[currHash&tableMask]

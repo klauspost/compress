@@ -8,7 +8,7 @@ import (
 	"log"
 )
 
-const debug = false
+const debug = true
 
 // force encoder to use predefined tables.
 const forcePreDef = false
