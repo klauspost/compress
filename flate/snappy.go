@@ -247,19 +247,21 @@ func (e *snappyL1) Encode(dst *tokens, src []byte) {
 				goto emitRemainder
 			}
 
-			// Store every second hash in-between, but offset by 1.
-			for i := base; i < s-7; i += 6 {
-				x := load6432(src, int32(i))
-				nextHash := hash(uint32(x))
-				table[nextHash&tableMask] = uint16(i)
-				//nextHash = hash(uint32(x >> 8))
-				//table[nextHash&tableMask] = uint16(i + 1)
-				//nextHash = hash(uint32(x >> 16))
-				//table[nextHash&tableMask] = uint16(i + 2)
-				nextHash = hash(uint32(x >> 24))
-				table[nextHash&tableMask] = uint16(i + 3)
-				//nextHash = hash(uint32(x >> 32))
-				//table[nextHash&tableMask] = uint16(i + 4)
+			// Store sparse hashes inbetween, but don't bother for the last KB.
+			if s < len(src)-1024 {
+				for i := base; i < s-7; i += 6 {
+					x := load6432(src, int32(i))
+					nextHash := hash(uint32(x))
+					table[nextHash&tableMask] = uint16(i)
+					//nextHash = hash(uint32(x >> 8))
+					//table[nextHash&tableMask] = uint16(i + 1)
+					//nextHash = hash(uint32(x >> 16))
+					//table[nextHash&tableMask] = uint16(i + 2)
+					nextHash = hash(uint32(x >> 24))
+					table[nextHash&tableMask] = uint16(i + 3)
+					//nextHash = hash(uint32(x >> 32))
+					//table[nextHash&tableMask] = uint16(i + 4)
+				}
 			}
 
 			// We could immediately start working at s now, but to improve
@@ -270,6 +272,7 @@ func (e *snappyL1) Encode(dst *tokens, src []byte) {
 			// three load32 calls.
 			x := load64(src, s-3)
 			prevHash := hash(uint32(x >> 0))
+			// Skip 2 bytes
 			currHash := hash(uint32(x >> 24))
 			table[prevHash&tableMask] = uint16(s - 3)
 			candidate = int(table[currHash&tableMask])
@@ -491,6 +494,7 @@ func (e *snappyL2) Encode(dst *tokens, src []byte) {
 			x := load6432(src, s-2)
 			prevHash := hash(uint32(x))
 			e.table[prevHash&tableMask] = tableEntry{offset: e.cur + s - 2, val: uint32(x)}
+			// Skip 1 byte.
 			x >>= 16
 			currHash := hash(uint32(x))
 			candidate = e.table[currHash&tableMask]
