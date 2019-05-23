@@ -43,14 +43,14 @@ var lengthExtraBits = [32]int8{
 }
 
 // The length indicated by length code X - LENGTH_CODES_START.
-var lengthBase = []uint8{
+var lengthBase = [32]uint8{
 	0, 1, 2, 3, 4, 5, 6, 7, 8, 10,
 	12, 14, 16, 20, 24, 28, 32, 40, 48, 56,
 	64, 80, 96, 112, 128, 160, 192, 224, 255,
 }
 
 // offset code word extra bits.
-var offsetExtraBits = []int8{
+var offsetExtraBits = [64]int8{
 	0, 0, 0, 0, 1, 1, 2, 2, 3, 3,
 	4, 4, 5, 5, 6, 6, 7, 7, 8, 8,
 	9, 9, 10, 10, 11, 11, 12, 12, 13, 13,
@@ -58,7 +58,7 @@ var offsetExtraBits = []int8{
 	14, 14, 15, 15, 16, 16, 17, 17, 18, 18, 19, 19, 20, 20,
 }
 
-var offsetBase = []uint32{
+var offsetBase = [64]uint32{
 	/* normal deflate */
 	0x000000, 0x000001, 0x000002, 0x000003, 0x000004,
 	0x000006, 0x000008, 0x00000c, 0x000010, 0x000018,
@@ -462,7 +462,7 @@ func (w *huffmanBitWriter) writeBlock(tokens []token, eof bool, input []byte) {
 		}
 		for offsetCode := 4; offsetCode < numOffsets; offsetCode++ {
 			// First four offset codes have extra size = 0.
-			extraBits += int(w.offsetFreq[offsetCode]) * int(offsetExtraBits[offsetCode])
+			extraBits += int(w.offsetFreq[offsetCode]) * int(offsetExtraBits[offsetCode&63])
 		}
 	}
 
@@ -624,16 +624,16 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 		w.writeCode(leCodes[lengthCode+lengthCodesStart])
 		extraLengthBits := uint(lengthExtraBits[lengthCode&31])
 		if extraLengthBits > 0 {
-			extraLength := int32(length - lengthBase[lengthCode])
+			extraLength := int32(length - lengthBase[lengthCode&31])
 			w.writeBits(extraLength, extraLengthBits)
 		}
 		// Write the offset
 		offset := t.offset()
 		offsetCode := offsetCode(offset)
 		w.writeCode(oeCodes[offsetCode])
-		extraOffsetBits := uint(offsetExtraBits[offsetCode])
+		extraOffsetBits := uint(offsetExtraBits[offsetCode&63])
 		if extraOffsetBits > 0 {
-			extraOffset := int32(offset - offsetBase[offsetCode])
+			extraOffset := int32(offset - offsetBase[offsetCode&63])
 			w.writeBits(extraOffset, extraOffsetBits)
 		}
 	}
