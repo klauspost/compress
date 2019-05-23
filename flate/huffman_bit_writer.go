@@ -86,9 +86,9 @@ type huffmanBitWriter struct {
 	// and then the low nbits of bits.
 	bits            uint64
 	nbits           uint
-	bytes           [bufferSize]byte
+	bytes           [256]byte
 	codegenFreq     [codegenCodeCount]int32
-	nbytes          int
+	nbytes          uint8
 	literalFreq     []int32
 	offsetFreq      []int32
 	codegen         []uint8
@@ -113,7 +113,7 @@ func newHuffmanBitWriter(w io.Writer) *huffmanBitWriter {
 func (w *huffmanBitWriter) reset(writer io.Writer) {
 	w.writer = writer
 	w.bits, w.nbits, w.nbytes, w.err = 0, 0, 0, nil
-	w.bytes = [bufferSize]byte{}
+	w.bytes = [256]byte{}
 }
 
 func (w *huffmanBitWriter) flush() {
@@ -145,9 +145,6 @@ func (w *huffmanBitWriter) write(b []byte) {
 }
 
 func (w *huffmanBitWriter) writeBits(b int32, nb uint) {
-	if w.err != nil {
-		return
-	}
 	w.bits |= uint64(b) << w.nbits
 	w.nbits += nb
 	if w.nbits >= 48 {
@@ -164,6 +161,10 @@ func (w *huffmanBitWriter) writeBits(b int32, nb uint) {
 		bytes[5] = byte(bits >> 40)
 		n += 6
 		if n >= bufferFlushSize {
+			if w.err != nil {
+				n = 0
+				return
+			}
 			w.write(w.bytes[:n])
 			n = 0
 		}
@@ -333,9 +334,6 @@ func (w *huffmanBitWriter) storedSize(in []byte) (int, bool) {
 }
 
 func (w *huffmanBitWriter) writeCode(c hcode) {
-	if w.err != nil {
-		return
-	}
 	w.bits |= uint64(c.code) << w.nbits
 	w.nbits += uint(c.len)
 	if w.nbits >= 48 {
@@ -352,6 +350,10 @@ func (w *huffmanBitWriter) writeCode(c hcode) {
 		bytes[5] = byte(bits >> 40)
 		n += 6
 		if n >= bufferFlushSize {
+			if w.err != nil {
+				n = 0
+				return
+			}
 			w.write(w.bytes[:n])
 			n = 0
 		}
