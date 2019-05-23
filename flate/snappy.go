@@ -120,7 +120,7 @@ func (e *snappyL1) Encode(dst *tokens, src []byte) {
 		// The "skip" variable keeps track of how many bytes there are since
 		// the last match; dividing it by 32 (ie. right-shifting by five) gives
 		// the number of bytes to move ahead for each iteration.
-		const skipLog = 5
+		const skipLog = 4
 		const baseSkip = 1
 		nextS := s
 		candidate := 0
@@ -140,7 +140,7 @@ func (e *snappyL1) Encode(dst *tokens, src []byte) {
 			if s-candidate <= maxMatchOffset && curVal == load32(src, candidate) {
 				break
 			}
-			const skipEvery = 2
+			const skipEvery = 1
 			const skipBits = skipEvery * 8
 			s = nextS
 			curVal = nextVal
@@ -248,7 +248,8 @@ func (e *snappyL1) Encode(dst *tokens, src []byte) {
 			}
 
 			// Store sparse hashes inbetween, but don't bother for the last KB.
-			if s < len(src)-1024 {
+			if false && s < len(src)-1024 {
+				// Couldn't find a combination that gave a reasonable gain.
 				for i := base; i < s-7; i += 6 {
 					x := load6432(src, int32(i))
 					nextHash := hash(uint32(x))
@@ -270,15 +271,14 @@ func (e *snappyL1) Encode(dst *tokens, src []byte) {
 			// at s+1. At least on GOARCH=amd64, these three hash calculations
 			// are faster as one load64 call (with some shifts) instead of
 			// three load32 calls.
-			x := load64(src, s-3)
-			prevHash := hash(uint32(x >> 0))
-			// Skip 2 bytes
-			currHash := hash(uint32(x >> 24))
-			table[prevHash&tableMask] = uint16(s - 3)
+			x := load64(src, s-1)
+			currHash := hash(uint32(x >> 8))
+			prevHash := hash(uint32(x))
 			candidate = int(table[currHash&tableMask])
+			table[prevHash&tableMask] = uint16(s - 1)
 			table[currHash&tableMask] = uint16(s)
-			if s-candidate > maxMatchOffset || uint32(x>>24) != load32(src, candidate) {
-				nextHash = hash(uint32(x >> 32))
+			if s-candidate > maxMatchOffset || uint32(x>>8) != load32(src, candidate) {
+				nextHash = hash(uint32(x >> 16))
 				s++
 				break
 			}
@@ -377,7 +377,7 @@ func (e *snappyL2) Encode(dst *tokens, src []byte) {
 		// The "skip" variable keeps track of how many bytes there are since
 		// the last match; dividing it by 32 (ie. right-shifting by five) gives
 		// the number of bytes to move ahead for each iteration.
-		const skipLog = 5
+		const skipLog = 4
 		const doEvery = 2
 
 		nextS := s
@@ -471,18 +471,20 @@ func (e *snappyL2) Encode(dst *tokens, src []byte) {
 			}
 
 			// Store every second hash in-between, but offset by 1.
-			for i := s - l - 2; i < s-7; i += 7 {
-				x := load6432(src, int32(i))
-				nextHash := hash(uint32(x))
-				e.table[nextHash&tableMask] = tableEntry{offset: e.cur + i, val: uint32(x)}
-				// Skip one
-				x >>= 16
-				nextHash = hash(uint32(x))
-				e.table[nextHash&tableMask] = tableEntry{offset: e.cur + i + 2, val: uint32(x)}
-				// Skip one
-				x >>= 16
-				nextHash = hash(uint32(x))
-				e.table[nextHash&tableMask] = tableEntry{offset: e.cur + i + 4, val: uint32(x)}
+			if false {
+				for i := s - l - 2; i < s-7; i += 7 {
+					x := load6432(src, int32(i))
+					nextHash := hash(uint32(x))
+					e.table[nextHash&tableMask] = tableEntry{offset: e.cur + i, val: uint32(x)}
+					// Skip one
+					x >>= 16
+					nextHash = hash(uint32(x))
+					e.table[nextHash&tableMask] = tableEntry{offset: e.cur + i + 2, val: uint32(x)}
+					// Skip one
+					x >>= 16
+					nextHash = hash(uint32(x))
+					e.table[nextHash&tableMask] = tableEntry{offset: e.cur + i + 4, val: uint32(x)}
+				}
 			}
 
 			// We could immediately start working at s now, but to improve
@@ -492,17 +494,18 @@ func (e *snappyL2) Encode(dst *tokens, src []byte) {
 			// are faster as one load64 call (with some shifts) instead of
 			// three load32 calls.
 			x := load6432(src, s-2)
+			o := e.cur + s - 2
 			prevHash := hash(uint32(x))
-			e.table[prevHash&tableMask] = tableEntry{offset: e.cur + s - 2, val: uint32(x)}
-			// Skip 1 byte.
-			x >>= 16
-			currHash := hash(uint32(x))
+			prevHash2 := hash(uint32(x >> 8))
+			e.table[prevHash&tableMask] = tableEntry{offset: o, val: uint32(x)}
+			e.table[prevHash2&tableMask] = tableEntry{offset: o + 1, val: uint32(x >> 8)}
+			currHash := hash(uint32(x >> 16))
 			candidate = e.table[currHash&tableMask]
-			e.table[currHash&tableMask] = tableEntry{offset: e.cur + s, val: uint32(x)}
+			e.table[currHash&tableMask] = tableEntry{offset: o + 2, val: uint32(x >> 16)}
 
 			offset := s - (candidate.offset - e.cur)
-			if offset > maxMatchOffset || uint32(x) != candidate.val {
-				cv = uint32(x >> 8)
+			if offset > maxMatchOffset || uint32(x>>16) != candidate.val {
+				cv = uint32(x >> 24)
 				nextHash = hash(cv)
 				s++
 				break
