@@ -35,7 +35,7 @@ const (
 )
 
 // The number of extra bits needed by length code X - LENGTH_CODES_START.
-var lengthExtraBits = []int8{
+var lengthExtraBits = [32]int8{
 	/* 257 */ 0, 0, 0,
 	/* 260 */ 0, 0, 0, 0, 0, 1, 1, 1, 1, 2,
 	/* 270 */ 2, 2, 2, 3, 3, 3, 3, 4, 4, 4,
@@ -43,7 +43,7 @@ var lengthExtraBits = []int8{
 }
 
 // The length indicated by length code X - LENGTH_CODES_START.
-var lengthBase = []uint32{
+var lengthBase = []uint8{
 	0, 1, 2, 3, 4, 5, 6, 7, 8, 10,
 	12, 14, 16, 20, 24, 28, 32, 40, 48, 56,
 	64, 80, 96, 112, 128, 160, 192, 224, 255,
@@ -548,9 +548,21 @@ func (w *huffmanBitWriter) indexTokens(tokens []token) (numLiterals, numOffsets 
 		w.offsetFreq[i] = 0
 	}
 
+	if len(tokens) == 0 {
+		return
+	}
+
+	// Only last token should be endBlockMarker.
+	if tokens[len(tokens)-1] == endBlockMarker {
+		w.literalFreq[endBlockMarker]++
+		tokens = tokens[:len(tokens)-1]
+	}
+
+	// Pure literals
+	lits := w.literalFreq[:256]
 	for _, t := range tokens {
-		if t < matchType {
-			w.literalFreq[t.literal()]++
+		if t < endBlockMarker {
+			lits[t.literal()]++
 			continue
 		}
 		length := t.length()
@@ -586,16 +598,29 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 	if w.err != nil {
 		return
 	}
+	if len(tokens) == 0 {
+		return
+	}
+
+	// Only last token should be endBlockMarker.
+	var deferEOB bool
+	if tokens[len(tokens)-1] == endBlockMarker {
+		tokens = tokens[:len(tokens)-1]
+		deferEOB = true
+	}
+
+	lits := leCodes[:256]
 	for _, t := range tokens {
 		if t < matchType {
-			w.writeCode(leCodes[t.literal()])
+			w.writeCode(lits[t.literal()])
 			continue
 		}
+
 		// Write the length
 		length := t.length()
 		lengthCode := lengthCode(length)
 		w.writeCode(leCodes[lengthCode+lengthCodesStart])
-		extraLengthBits := uint(lengthExtraBits[lengthCode])
+		extraLengthBits := uint(lengthExtraBits[lengthCode&31])
 		if extraLengthBits > 0 {
 			extraLength := int32(length - lengthBase[lengthCode])
 			w.writeBits(extraLength, extraLengthBits)
@@ -609,6 +634,9 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 			extraOffset := int32(offset - offsetBase[offsetCode])
 			w.writeBits(extraOffset, extraOffsetBits)
 		}
+	}
+	if deferEOB {
+		w.writeCode(leCodes[endBlockMarker])
 	}
 }
 
