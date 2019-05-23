@@ -145,9 +145,6 @@ func (w *huffmanBitWriter) write(b []byte) {
 }
 
 func (w *huffmanBitWriter) writeBits(b int32, nb uint) {
-	if w.err != nil {
-		return
-	}
 	w.bits |= uint64(b) << w.nbits
 	w.nbits += nb
 	if w.nbits >= 48 {
@@ -164,6 +161,10 @@ func (w *huffmanBitWriter) writeBits(b int32, nb uint) {
 		bytes[5] = byte(bits >> 40)
 		n += 6
 		if n >= bufferFlushSize {
+			if w.err != nil {
+				n = 0
+				return
+			}
 			w.write(w.bytes[:n])
 			n = 0
 		}
