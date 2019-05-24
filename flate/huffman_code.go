@@ -58,8 +58,8 @@ func maxNode() literalNode { return literalNode{math.MaxUint16, math.MaxInt32} }
 
 func newHuffmanEncoder(size int) *huffmanEncoder {
 	// Make capacity to next power of two.
-	c := uint(bits.Len32(uint32(size-1)))
-	return &huffmanEncoder{codes: make([]hcode, size, 1 << c)}
+	c := uint(bits.Len32(uint32(size - 1)))
+	return &huffmanEncoder{codes: make([]hcode, size, 1<<c)}
 }
 
 // Generates a HuffmanCode corresponding to the fixed literal table

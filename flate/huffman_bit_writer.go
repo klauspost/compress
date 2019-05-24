@@ -611,7 +611,7 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 		tokens = tokens[:len(tokens)-1]
 		deferEOB = true
 	}
-	
+
 	// Create slices up to the next power of two to avoid bounds checks.
 	lits := leCodes[:256]
 	offs := oeCodes[:32]
