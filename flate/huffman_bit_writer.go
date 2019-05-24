@@ -101,8 +101,8 @@ type huffmanBitWriter struct {
 func newHuffmanBitWriter(w io.Writer) *huffmanBitWriter {
 	return &huffmanBitWriter{
 		writer:          w,
-		literalFreq:     make([]int32, maxNumLit),
-		offsetFreq:      make([]int32, offsetCodeCount),
+		literalFreq:     make([]int32, lengthCodesStart+32),
+		offsetFreq:      make([]int32, 32),
 		codegen:         make([]uint8, maxNumLit+offsetCodeCount+1),
 		literalEncoding: newHuffmanEncoder(maxNumLit),
 		codegenEncoding: newHuffmanEncoder(codegenCodeCount),
@@ -558,8 +558,11 @@ func (w *huffmanBitWriter) indexTokens(tokens []token) (numLiterals, numOffsets 
 		tokens = tokens[:len(tokens)-1]
 	}
 
-	// Pure literals
+	// Create slices up to the next power of two to avoid bounds checks.
 	lits := w.literalFreq[:256]
+	offs := w.offsetFreq[:32]
+	lengths := w.literalFreq[lengthCodesStart:]
+	lengths = lengths[:32]
 	for _, t := range tokens {
 		if t < endBlockMarker {
 			lits[t.literal()]++
@@ -567,8 +570,8 @@ func (w *huffmanBitWriter) indexTokens(tokens []token) (numLiterals, numOffsets 
 		}
 		length := t.length()
 		offset := t.offset()
-		w.literalFreq[lengthCodesStart+lengthCode(length)]++
-		w.offsetFreq[offsetCode(offset)]++
+		lengths[lengthCode(length)&31]++
+		offs[offsetCode(offset)&31]++
 	}
 
 	// get the number of literals
@@ -587,8 +590,8 @@ func (w *huffmanBitWriter) indexTokens(tokens []token) (numLiterals, numOffsets 
 		w.offsetFreq[0] = 1
 		numOffsets = 1
 	}
-	w.literalEncoding.generate(w.literalFreq, 15)
-	w.offsetEncoding.generate(w.offsetFreq, 15)
+	w.literalEncoding.generate(w.literalFreq[:maxNumLit], 15)
+	w.offsetEncoding.generate(w.offsetFreq[:offsetCodeCount], 15)
 	return
 }
 
@@ -608,8 +611,12 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 		tokens = tokens[:len(tokens)-1]
 		deferEOB = true
 	}
-
+	
+	// Create slices up to the next power of two to avoid bounds checks.
 	lits := leCodes[:256]
+	offs := oeCodes[:32]
+	lengths := leCodes[lengthCodesStart:]
+	lengths = lengths[:32]
 	for _, t := range tokens {
 		if t < matchType {
 			w.writeCode(lits[t.literal()])
@@ -619,7 +626,7 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 		// Write the length
 		length := t.length()
 		lengthCode := lengthCode(length)
-		w.writeCode(leCodes[lengthCode+lengthCodesStart])
+		w.writeCode(lengths[lengthCode&31])
 		extraLengthBits := uint(lengthExtraBits[lengthCode&31])
 		if extraLengthBits > 0 {
 			extraLength := int32(length - lengthBase[lengthCode&31])
@@ -628,7 +635,7 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 		// Write the offset
 		offset := t.offset()
 		offsetCode := offsetCode(offset)
-		w.writeCode(oeCodes[offsetCode])
+		w.writeCode(offs[offsetCode&31])
 		extraOffsetBits := uint(offsetExtraBits[offsetCode&63])
 		if extraOffsetBits > 0 {
 			extraOffset := int32(offset - offsetBase[offsetCode&63])
@@ -648,7 +655,7 @@ func init() {
 	w := newHuffmanBitWriter(nil)
 	w.offsetFreq[0] = 1
 	huffOffset = newHuffmanEncoder(offsetCodeCount)
-	huffOffset.generate(w.offsetFreq, 15)
+	huffOffset.generate(w.offsetFreq[:offsetCodeCount], 15)
 }
 
 // writeBlockHuff encodes a block of bytes as either
@@ -672,7 +679,7 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
 	const numLiterals = endBlockMarker + 1
 	const numOffsets = 1
 
-	w.literalEncoding.generate(w.literalFreq, 15)
+	w.literalEncoding.generate(w.literalFreq[:maxNumLit], 15)
 
 	// Figure out smallest code.
 	// Always use dynamic Huffman or Store
