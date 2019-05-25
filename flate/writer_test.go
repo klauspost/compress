@@ -15,7 +15,6 @@ import (
 )
 
 func benchmarkEncoder(b *testing.B, testfile, level, n int) {
-	b.StopTimer()
 	b.SetBytes(int64(n))
 	buf0, err := ioutil.ReadFile(testfiles[testfile])
 	if err != nil {
@@ -34,7 +33,8 @@ func benchmarkEncoder(b *testing.B, testfile, level, n int) {
 	buf0 = nil
 	runtime.GC()
 	w, err := NewWriter(ioutil.Discard, level)
-	b.StartTimer()
+	b.ResetTimer()
+	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		w.Reset(ioutil.Discard)
 		_, err = w.Write(buf1)
