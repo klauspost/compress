@@ -14,6 +14,7 @@ It offers slightly better compression at lower compression settings, and up to 3
 
 # changelog
 
+* May 25, 2019: deflate/gzip: 10% faster bit writer, mostly visible in lower levels.
 * Apr 22, 2019: [zstd](https://github.com/klauspost/compress/tree/master/zstd#zstd) decompression added.
 * Aug 1, 2018: Added [huff0 README](https://github.com/klauspost/compress/tree/master/huff0#huff0-entropy-compression).
 * Jul 8, 2018: Added [Performance Update 2018](#performance-update-2018) below.
