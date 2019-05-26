@@ -11,6 +11,7 @@ This package is pure Go and without use of "unsafe".
 
 The `zstd` package is provided as open source software using a Go standard license.
 
+Currently the package is heavily optimized for 64 bit processors and will be significantly slower on 32 bit processors.
 
 ## Decompressor
 

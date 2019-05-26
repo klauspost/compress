@@ -4,6 +4,8 @@ import "github.com/cespare/xxhash"
 
 // Encoder provides encoding to Zstandard
 type Encoder struct {
+	Crc bool
+
 	enc   simpleEncoder
 	block *blockEnc
 	crc   *xxhash.Digest
@@ -19,15 +21,14 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 	if e.block == nil {
 		e.block = &blockEnc{}
 		e.block.init()
-	} else {
-		e.block.initNewEncode()
 	}
+	e.block.initNewEncode()
 	e.enc.Reset()
 	fh := frameHeader{
 		ContentSize:   uint64(len(src)),
 		WindowSize:    maxStoreBlockSize * 2,
 		SingleSegment: false,
-		Checksum:      true,
+		Checksum:      e.Crc,
 		DictID:        0,
 	}
 	dst, err := fh.appendTo(dst)
@@ -45,10 +46,12 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 			todo = todo[:maxStoreBlockSize]
 		}
 		src = src[len(todo):]
-		_, _ = e.crc.Write(todo)
+		if e.Crc {
+			_, _ = e.crc.Write(todo)
+		}
 		e.block.reset()
 		e.block.pushOffsets()
-		e.enc.Encode(e.block, todo)
+		e.enc.EncodeFast(e.block, todo)
 		if len(src) == 0 {
 			e.block.last = true
 		}
@@ -64,8 +67,10 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 		}
 		dst = append(dst, e.block.output...)
 	}
-	crc := e.crc.Sum(e.tmp[:0])
-	dst = append(dst, crc[7], crc[6], crc[5], crc[4])
+	if e.Crc {
+		crc := e.crc.Sum(e.tmp[:0])
+		dst = append(dst, crc[7], crc[6], crc[5], crc[4])
+	}
 	e.enc.Reset()
 	return dst
 }

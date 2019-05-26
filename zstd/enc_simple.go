@@ -1,11 +1,11 @@
 package zstd
 
 const (
-	tableBits         = 15                      // Bits used in the table
-	tableSize         = 1 << tableBits          // Size of the table
-	tableMask         = tableSize - 1           // Mask for table indices. Redundant, but can eliminate bounds checks.
-	tableShift        = 32 - tableBits          // Right-shift to get the tableBits most significant bits of a uint32.
-	maxMatchOffset    = maxStoreBlockSize*2 - 1 // The largest match offset
+	tableBits         = 15                // Bits used in the table
+	tableSize         = 1 << tableBits    // Size of the table
+	tableMask         = tableSize - 1     // Mask for table indices. Redundant, but can eliminate bounds checks.
+	tableShift        = 32 - tableBits    // Right-shift to get the tableBits most significant bits of a uint32.
+	maxMatchOffset    = maxStoreBlockSize // The largest match offset
 	maxStoreBlockSize = 1 << 16
 	maxMatchLength    = (1 << 16) - 1
 )
@@ -24,6 +24,16 @@ func load3232(b []byte, i int32) uint32 {
 	return uint32(b[0]) | uint32(b[1])<<8 | uint32(b[2])<<16 | uint32(b[3])<<24
 }
 
+// cmp32 will compare a uint32 with 4 bytes at offset i in b.
+func cmp32(b []byte, i int32, want uint32) bool {
+	// Help the compiler eliminate bounds checks on the next lines.
+	b = b[i : i+4]
+	return b[3] == uint8(want>>24) &&
+		b[2] == uint8(want>>16) &&
+		b[1] == uint8(want>>8) &&
+		b[0] == uint8(want)
+}
+
 func load6432(b []byte, i int32) uint64 {
 	b = b[i : i+8 : len(b)] // Help the compiler eliminate bounds checks on the next line.
 	return uint64(b[0]) | uint64(b[1])<<8 | uint64(b[2])<<16 | uint64(b[3])<<24 |
@@ -31,12 +41,13 @@ func load6432(b []byte, i int32) uint64 {
 }
 
 type simpleEncoder struct {
+	o     encParams
 	prev  []byte
 	cur   int32
 	table [tableSize]tableEntry
 }
 
-// EncodeL2 uses a similar algorithm to level 1, but is capable
+// Encode uses a simple  algorithm, mostly lifted from deflate of finding
 // of matching across blocks giving better compression at a small slowdown.
 func (e *simpleEncoder) Encode(blk *blockEnc, src []byte) {
 	const (
@@ -279,6 +290,253 @@ emitRemainder:
 	e.prev = src
 }
 
+// Encode uses a simple  algorithm, mostly lifted from deflate of finding
+// of matching across blocks giving better compression at a small slowdown.
+func (e *simpleEncoder) EncodeFast(blk *blockEnc, src []byte) {
+	const (
+		inputMargin            = 8
+		minNonLiteralBlockSize = 1 + 1 + inputMargin
+	)
+
+	// Protect against e.cur wraparound.
+	if e.cur > 1<<30 {
+		for i := range e.table[:] {
+			e.table[i] = tableEntry{}
+		}
+		e.cur = maxStoreBlockSize
+	}
+	blk.size = len(src)
+	// This check isn't in the Snappy implementation, but there, the caller
+	// instead of the callee handles this case.
+	if len(src) < minNonLiteralBlockSize {
+		// We do not fill the token table.
+		// This will be picked up by caller.
+		blk.extraLits = len(src)
+		copy(blk.literals[:len(src)], src)
+		e.cur += maxMatchOffset
+		e.prev = src
+		return
+	}
+
+	sLimit := int32(len(src) - inputMargin)
+	stepSize := int32(e.o.targetLength)
+	if stepSize == 0 {
+		stepSize++
+	}
+	stepSize++
+
+	// TEMPLATE
+	const hashLog = tableBits
+	const mls = 6
+	// seems global, but would be nice to tweak.
+	const kSearchStrength = 8
+
+	// nextEmit is where in src the next emitLiteral should start from.
+	nextEmit := int32(0)
+	s := int32(0)
+	cv := load6432(src, s)
+	// nextHash is the hash at s
+	//nextHash := hashLen(cv, hashLog, mls)
+	nextHash := hash6(cv, hashLog)
+
+	offset1 := int32(blk.recentOffsets[0])
+	offset2 := int32(blk.recentOffsets[1])
+
+	addLiterals := func(s *seq, until int32) {
+		if until == nextEmit {
+			return
+		}
+		blk.literals = append(blk.literals, src[nextEmit:until]...)
+		s.litLen = uint32(until - nextEmit)
+	}
+	if debug {
+		println("recent offsets:", blk.recentOffsets)
+	}
+
+encodeLoop:
+	for {
+		var t int32
+		for {
+			if debug && offset1 == 0 {
+				panic("offset0 was 0")
+			}
+
+			nextHash2 := hash6(cv>>8, hashLog) & tableMask
+			//nextHash2 := hashLen(cv>>8, hashLog, mls) & tableMask
+			if 8-mls < 0 {
+				panic("hashlog doesn't leave 2 bytes")
+			}
+			nextHash = nextHash & tableMask
+			candidate := e.table[nextHash]
+			candidate2 := e.table[nextHash2]
+			repIndex := s - offset1 + 2
+
+			e.table[nextHash] = tableEntry{offset: s + e.cur, val: uint32(cv)}
+			e.table[nextHash2] = tableEntry{offset: s + e.cur + 1, val: uint32(cv >> 8)}
+
+			if e.cmp32Hist(uint32(cv>>16), repIndex, src) {
+				// Consider history as well.
+				var seq seq
+				lenght := 4 + e.matchlen(s+6, repIndex+4, src)
+
+				// We might be able to match one backwards
+				seq.matchLen = uint32(lenght - zstdMinMatch)
+				if repIndex > 0 && src[repIndex-1] == uint8(cv>>8) {
+					addLiterals(&seq, s+1)
+					seq.matchLen++
+				} else {
+					addLiterals(&seq, s+2)
+				}
+				// rep 0
+				seq.offset = 1
+				blk.sequences = append(blk.sequences, seq)
+				s += lenght + 2
+				//println("repeat sequence", seq, "next s:", s)
+				nextEmit = s
+				if s >= sLimit {
+					if debug {
+						println("repeat ended", s, lenght)
+
+					}
+					break encodeLoop
+				}
+				cv = load6432(src, s)
+				//nextHash = hashLen(cv, hashLog, mls)
+				nextHash = hash6(cv, hashLog)
+				continue
+			}
+			coffset0 := s - (candidate.offset - e.cur)
+			coffset1 := s - (candidate2.offset - e.cur) + 1
+			if coffset0 < maxMatchOffset && uint32(cv) == candidate.val {
+				// found a regular match
+				t = candidate.offset - e.cur
+				if debug && s <= t {
+					panic("s <= t")
+				}
+				break
+			}
+			if coffset1 < maxMatchOffset && uint32(cv>>8) == candidate2.val {
+				// found a regular match
+				t = candidate2.offset - e.cur
+				s++
+				if debug && s <= t {
+					panic("s <= t")
+				}
+				break
+			}
+			s += stepSize + ((s - nextEmit) >> (kSearchStrength - 1))
+			if s >= sLimit {
+				break encodeLoop
+			}
+			cv = load6432(src, s)
+			//nextHash = hashLen(cv, hashLog, mls)
+			nextHash = hash6(cv, hashLog)
+		}
+		offset2 = offset1
+		offset1 = s - t
+
+		if debug && s <= t {
+			panic("s <= t")
+		}
+
+		if debug && int(offset1) > len(src)+len(e.prev) {
+			panic("invalid offset")
+		}
+
+		var seq seq
+		// A 4-byte match has been found. We'll later see if more than 4 bytes
+		// match. But, prior to the match, src[nextEmit:s] are unmatched. Emit
+		// them as literal bytes.
+		seq.litLen = uint32(s - nextEmit)
+
+		// Call emitCopy, and then see if another emitCopy could be our next
+		// move. Repeat until we find no match for the input immediately after
+		// what was consumed by the last emitCopy call.
+		//
+		// If we exit this loop normally then we need to call emitLiteral next,
+		// though we don't yet know how big the literal will be. We handle that
+		// by proceeding to the next iteration of the main loop. We also can
+		// exit this loop via goto if we get close to exhausting the input.
+
+		// Invariant: we have a 4-byte match at s, and no need to emit any
+		// literal bytes prior to s.
+
+		// Extend the 4-byte match as long as possible.
+		l := e.matchlen(s+4, t+4, src)
+
+		// Extend backwards
+		for t > 0 && seq.litLen > 0 && src[t-1] == src[s-1] {
+			s--
+			t--
+			l++
+			seq.litLen--
+		}
+		for t <= 0 && seq.litLen > 0 && s > 0 {
+			off := int32(len(e.prev)) + t - 1
+			if off > 0 && e.prev[off] == src[s-1] {
+				s--
+				t--
+				l++
+				seq.litLen--
+				continue
+			}
+			break
+		}
+		l += 4
+		seq.matchLen = uint32(l - zstdMinMatch)
+		if seq.litLen > 0 {
+			blk.literals = append(blk.literals, src[nextEmit:s]...)
+		}
+		// Don't use repeat offsets
+		seq.offset = uint32(s-t) + 3
+		s += l
+		//println("sequence", seq, "next s:", s)
+		blk.sequences = append(blk.sequences, seq)
+		nextEmit = s
+		if s >= sLimit {
+			if debug {
+				println("ended after match")
+			}
+			break encodeLoop
+		}
+		cv = load6432(src, s)
+		nextHash = hash6(cv, hashLog)
+
+		//		nextHash = hashLen(cv, hashLog, mls)
+	}
+
+	if int(nextEmit) < len(src) {
+		blk.literals = append(blk.literals, src[nextEmit:]...)
+		blk.extraLits = len(src) - int(nextEmit)
+	}
+	e.cur += int32(len(src))
+	e.prev = src
+	blk.recentOffsets[0] = uint32(offset1)
+	blk.recentOffsets[1] = uint32(offset2)
+	if debug {
+		println("returning, recent offsets:", blk.recentOffsets)
+	}
+}
+
+// cmp32Hist compares a value, potentially in history
+// t == 0 is the start of current block.
+func (e *simpleEncoder) cmp32Hist(want uint32, t int32, src []byte) bool {
+	// If we are inside the current block
+	if t >= 0 {
+		return want == load3232(src, t)
+	}
+	if t > -4 {
+		// We skip the boundary
+		return false
+	}
+
+	tp := int32(len(e.prev)) + t
+	if tp < 0 {
+		return false
+	}
+	return load3232(e.prev, tp) == want
+}
+
 func (e *simpleEncoder) matchlen(s, t int32, src []byte) int32 {
 	s1 := int(s) + maxMatchLength - 4
 	if s1 > len(src) {
@@ -334,6 +592,21 @@ func (e *simpleEncoder) matchlen(s, t int32, src []byte) int32 {
 		}
 	}
 	return int32(len(a)) + n
+}
+
+// matchLen returns a match length in src between index s and t
+func matchLenIn(src []byte, s, t int32) int32 {
+	s1 := len(src)
+	b := src[t:]
+	a := src[s:s1]
+	b = b[:len(a)]
+	// Extend the match to be as long as possible.
+	for i := range a {
+		if a[i] != b[i] {
+			return int32(i)
+		}
+	}
+	return int32(len(a))
 }
 
 // Reset the encoding table.

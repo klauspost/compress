@@ -20,6 +20,10 @@ type seq struct {
 	llCode, mlCode, ofCode uint8
 }
 
+func (s seq) String() string {
+	return fmt.Sprint("litLen:", s.litLen, ",matchLen:", s.matchLen+zstdMinMatch, ",offset:", s.offset, "(raw)")
+}
+
 type seqCompMode uint8
 
 const (
