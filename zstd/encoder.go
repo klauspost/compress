@@ -6,7 +6,7 @@ import "github.com/cespare/xxhash"
 type Encoder struct {
 	Crc bool
 
-	enc   simpleEncoder
+	enc   fastEncoder
 	block *blockEnc
 	crc   *xxhash.Digest
 	tmp   [8]byte
@@ -51,7 +51,7 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 		}
 		e.block.reset()
 		e.block.pushOffsets()
-		e.enc.EncodeFast(e.block, todo)
+		e.enc.Encode(e.block, todo)
 		if len(src) == 0 {
 			e.block.last = true
 		}

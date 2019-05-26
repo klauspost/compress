@@ -21,7 +21,13 @@ type seq struct {
 }
 
 func (s seq) String() string {
-	return fmt.Sprint("litLen:", s.litLen, ",matchLen:", s.matchLen+zstdMinMatch, ",offset:", s.offset, "(raw)")
+	if s.offset <= 3 {
+		if s.offset == 0 {
+			return fmt.Sprint("litLen:", s.litLen, ", matchLen:", s.matchLen+zstdMinMatch, ", offset: INVALID (0)")
+		}
+		return fmt.Sprint("litLen:", s.litLen, ", matchLen:", s.matchLen+zstdMinMatch, ", offset:", s.offset, " (repeat)")
+	}
+	return fmt.Sprint("litLen:", s.litLen, ", matchLen:", s.matchLen+zstdMinMatch, ", offset:", s.offset-3, " (new)")
 }
 
 type seqCompMode uint8
