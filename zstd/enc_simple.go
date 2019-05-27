@@ -1,5 +1,7 @@
 package zstd
 
+import "math/bits"
+
 const (
 	tableBits         = 15                // Bits used in the table
 	tableSize         = 1 << tableBits    // Size of the table
@@ -25,6 +27,12 @@ func load3232(b []byte, i int32) uint32 {
 }
 
 func load6432(b []byte, i int32) uint64 {
+	b = b[i : i+8 : len(b)] // Help the compiler eliminate bounds checks on the next line.
+	return uint64(b[0]) | uint64(b[1])<<8 | uint64(b[2])<<16 | uint64(b[3])<<24 |
+		uint64(b[4])<<32 | uint64(b[5])<<40 | uint64(b[6])<<48 | uint64(b[7])<<56
+}
+
+func load64(b []byte, i int) uint64 {
 	b = b[i : i+8 : len(b)] // Help the compiler eliminate bounds checks on the next line.
 	return uint64(b[0]) | uint64(b[1])<<8 | uint64(b[2])<<16 | uint64(b[3])<<24 |
 		uint64(b[4])<<32 | uint64(b[5])<<40 | uint64(b[6])<<48 | uint64(b[7])<<56
@@ -560,14 +568,8 @@ func (e *fastEncoder) matchlen(s, t int32, src []byte) int32 {
 	if t >= 0 {
 		b := src[t:]
 		a := src[s:s1]
-		b = b[:len(a)]
 		// Extend the match to be as long as possible.
-		for i := range a {
-			if a[i] != b[i] {
-				return int32(i)
-			}
-		}
-		return int32(len(a))
+		return int32(matchLen(a, b))
 	}
 
 	// We found a match in the previous block.
@@ -583,10 +585,9 @@ func (e *fastEncoder) matchlen(s, t int32, src []byte) int32 {
 		b = b[:len(a)]
 	}
 	a = a[:len(b)]
-	for i := range b {
-		if a[i] != b[i] {
-			return int32(i)
-		}
+	l := matchLen(b, a)
+	if l < len(b) {
+		return int32(l)
 	}
 
 	// If we reached our limit, we matched everything we are
@@ -598,13 +599,30 @@ func (e *fastEncoder) matchlen(s, t int32, src []byte) int32 {
 
 	// Continue looking for more matches in the current block.
 	a = src[s+n : s1]
-	b = src[:len(a)]
-	for i := range a {
-		if a[i] != b[i] {
-			return int32(i) + n
+	l = matchLen(a, b)
+	return int32(l) + n
+}
+
+// matchLen returns the maximum length.
+// a must be the shortest of the two.
+// The function also returns whether all bytes matched.
+func matchLen(a, b []byte) int {
+	b = b[:len(a)]
+	for i := 0; i < len(a)-7; i += 8 {
+		if diff := load64(a, i) ^ load64(b, i); diff != 0 {
+			return i + (bits.TrailingZeros64(diff) >> 3)
 		}
 	}
-	return int32(len(a)) + n
+	checked := (len(a) >> 3) << 3
+	a = a[checked:]
+	b = b[checked:]
+	// TODO: We could do a 4 check.
+	for i := range a {
+		if a[i] != b[i] {
+			return int(i) + checked
+		}
+	}
+	return len(a) + checked
 }
 
 // matchLen returns a match length in src between index s and t
