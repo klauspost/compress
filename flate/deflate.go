@@ -278,7 +278,7 @@ func (d *compressor) findMatch(pos int, prevHead int, prevLength int, lookahead 
 
 	for i := prevHead; tries > 0; tries-- {
 		if wEnd == win[i+length] {
-			n := matchLen(win[i:], wPos, minMatchLook)
+			n := matchLen(win[i:i+minMatchLook], wPos)
 
 			if n > length && (n > minMatchLength || pos-i <= 4096) {
 				length = n
@@ -390,6 +390,7 @@ func bulkHash4(b []byte, dst []uint32) {
 	}
 }
 
+/*
 // matchLen returns the number of matching bytes in a and b
 // up to length 'max'. Both slices must be at least 'max'
 // bytes in size.
@@ -403,6 +404,7 @@ func matchLen(a, b []byte, max int) int {
 	}
 	return max
 }
+*/
 
 func (d *compressor) initDeflate() {
 	d.window = make([]byte, 2*windowSize)

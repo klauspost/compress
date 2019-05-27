@@ -5,6 +5,8 @@
 
 package flate
 
+import "math/bits"
+
 // emitLiteral writes a literal chunk and returns the number of bytes written.
 func emitLiteral(dst *tokens, lit []byte) {
 	ol := int(dst.n)
@@ -219,14 +221,7 @@ func (e *snappyL1) Encode(dst *tokens, src []byte) {
 			}
 			a := src[s:s1]
 			b := src[candidate+4:]
-			b = b[:len(a)]
-			l := len(a)
-			for i := range a {
-				if a[i] != b[i] {
-					l = i
-					break
-				}
-			}
+			l := matchLen(a, b)
 			s += l
 			// Match backwards
 			for base > nextEmit && candidate > 0 && s-base < maxMatchLength && src[candidate-1] == src[base-1] {
@@ -972,14 +967,8 @@ func (e *snappyGen) matchlen(s, t int32, src []byte) int32 {
 	if t >= 0 {
 		b := src[t:]
 		a := src[s:s1]
-		b = b[:len(a)]
 		// Extend the match to be as long as possible.
-		for i := range a {
-			if a[i] != b[i] {
-				return int32(i)
-			}
-		}
-		return int32(len(a))
+		return int32(matchLen(a, b))
 	}
 
 	// We found a match in the previous block.
@@ -994,33 +983,42 @@ func (e *snappyGen) matchlen(s, t int32, src []byte) int32 {
 	if len(b) > len(a) {
 		b = b[:len(a)]
 	}
-	a = a[:len(b)]
-	for i := range b {
-		if a[i] != b[i] {
-			return int32(i)
-		}
-	}
-
+	n := matchLen(b, a)
 	// If we reached our limit, we matched everything we are
 	// allowed to in the previous block and we return.
-	n := int32(len(b))
-	if int(s+n) == s1 {
-		return n
+	if len(b) != n || int(s)+n == s1 {
+		return int32(n)
 	}
 
 	// Continue looking for more matches in the current block.
-	a = src[s+n : s1]
+	a = src[int(s)+n : s1]
 	b = src[:len(a)]
-	for i := range a {
-		if a[i] != b[i] {
-			return int32(i) + n
-		}
-	}
-	return int32(len(a)) + n
+	return int32(matchLen(a, b) + n)
 }
 
 // Reset the encoding table.
 func (e *snappyGen) Reset() {
 	e.prev = e.prev[:0]
 	e.cur += maxMatchOffset
+}
+
+// matchLen returns the maximum length.
+// 'a' must be the shortest of the two.
+func matchLen(a, b []byte) int {
+	b = b[:len(a)]
+	for i := 0; i < len(a)-7; i += 8 {
+		if diff := load64(a, i) ^ load64(b, i); diff != 0 {
+			return i + (bits.TrailingZeros64(diff) >> 3)
+		}
+	}
+	checked := (len(a) >> 3) << 3
+	a = a[checked:]
+	b = b[checked:]
+	// TODO: We could do a 4 check.
+	for i := range a {
+		if a[i] != b[i] {
+			return int(i) + checked
+		}
+	}
+	return len(a) + checked
 }
