@@ -1,3 +1,7 @@
+// Copyright 2019+ Klaus Post. All rights reserved.
+// License information can be found in the LICENSE file.
+// Based on work by Yann Collet, released under BSD License.
+
 package zstd
 
 import (
@@ -702,14 +706,6 @@ func (c *cState) encode(symbolTT symbolTransform) {
 	nbBitsOut := (uint32(c.state) + symbolTT.deltaNbBits) >> 16
 	dstState := int32(c.state>>(nbBitsOut&15)) + int32(symbolTT.deltaFindState)
 	c.bw.addBits16NC(c.state, uint8(nbBitsOut))
-	c.state = c.stateTable[dstState]
-}
-
-// encode the output symbol provided and write it to the bitstream.
-func (c *cState) encodeZero(symbolTT symbolTransform) {
-	nbBitsOut := (uint32(c.state) + symbolTT.deltaNbBits) >> 16
-	dstState := int32(c.state>>(nbBitsOut&15)) + int32(symbolTT.deltaFindState)
-	c.bw.addBits16ZeroNC(c.state, uint8(nbBitsOut))
 	c.state = c.stateTable[dstState]
 }
 

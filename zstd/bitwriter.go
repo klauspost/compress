@@ -38,7 +38,7 @@ func (b *bitWriter) addBits16NC(value uint16, bits uint8) {
 	b.nBits += bits
 }
 
-// addBits16NC will add up to 16 bits.
+// addBits32NC will add up to 32 bits.
 // It will not check if there is space for them,
 // so the caller must ensure that it has flushed recently.
 func (b *bitWriter) addBits32NC(value uint32, bits uint8) {
@@ -49,20 +49,6 @@ func (b *bitWriter) addBits32NC(value uint32, bits uint8) {
 // addBits16Clean will add up to 16 bits. value may not contain more set bits than indicated.
 // It will not check if there is space for them, so the caller must ensure that it has flushed recently.
 func (b *bitWriter) addBits16Clean(value uint16, bits uint8) {
-	b.bitContainer |= uint64(value) << (b.nBits & 63)
-	b.nBits += bits
-}
-
-// addBits16ZeroNC will add up to 16 bits.
-// It will not check if there is space for them,
-// so the caller must ensure that it has flushed recently.
-// This is fastest if bits can be zero.
-func (b *bitWriter) addBits16ZeroNC(value uint16, bits uint8) {
-	if bits == 0 {
-		return
-	}
-	value <<= (16 - bits) & 15
-	value >>= (16 - bits) & 15
 	b.bitContainer |= uint64(value) << (b.nBits & 63)
 	b.nBits += bits
 }
