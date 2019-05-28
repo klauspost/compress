@@ -390,22 +390,6 @@ func bulkHash4(b []byte, dst []uint32) {
 	}
 }
 
-/*
-// matchLen returns the number of matching bytes in a and b
-// up to length 'max'. Both slices must be at least 'max'
-// bytes in size.
-func matchLen(a, b []byte, max int) int {
-	a = a[:max]
-	b = b[:len(a)]
-	for i, av := range a {
-		if b[i] != av {
-			return i
-		}
-	}
-	return max
-}
-*/
-
 func (d *compressor) initDeflate() {
 	d.window = make([]byte, 2*windowSize)
 	d.hashOffset = 1
