@@ -20,7 +20,7 @@ func Fuzz(data []byte) int {
 	defer dec.Close()
 	got, err := dec.DecodeAll(encoded, nil)
 	if err != nil {
-		panic(fmt.Sprintln(err, "got:", got, "want:", want))
+		panic(fmt.Sprintln(err, "got:", got, "want:", data))
 	}
 	if !bytes.Equal(got, data) {
 		panic(fmt.Sprintln("output mismatch", got, "(got) != ", data, "(want)"))
