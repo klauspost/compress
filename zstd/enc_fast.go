@@ -71,7 +71,8 @@ func (e *fastEncoder) Encode(blk *blockEnc, src []byte) {
 		// We do not fill the token table.
 		// This will be picked up by caller.
 		blk.extraLits = len(src)
-		copy(blk.literals[:len(src)], src)
+		blk.literals = blk.literals[:len(src)]
+		copy(blk.literals, src)
 		e.cur += maxMatchOffset
 		e.prev = src
 		return
@@ -148,9 +149,11 @@ encodeLoop:
 				}
 				// rep 0
 				seq.offset = 1
+				if debugSequences {
+					println("repeat sequence", seq, "next s:", s)
+				}
 				blk.sequences = append(blk.sequences, seq)
 				s += lenght + 2
-				//println("repeat sequence", seq, "next s:", s)
 				nextEmit = s
 				if s >= sLimit {
 					if debug {
@@ -249,7 +252,9 @@ encodeLoop:
 		// Don't use repeat offsets
 		seq.offset = uint32(s-t) + 3
 		s += l
-		//println("sequence", seq, "next s:", s)
+		if debugSequences {
+			println("sequence", seq, "next s:", s)
+		}
 		blk.sequences = append(blk.sequences, seq)
 		nextEmit = s
 		if s >= sLimit {
@@ -272,6 +277,9 @@ encodeLoop:
 			seq.offset = 1
 			s += l
 			nextEmit = s
+			if debugSequences {
+				println("sequence", seq, "next s:", s)
+			}
 			blk.sequences = append(blk.sequences, seq)
 			//println("repeat 2 sequence", seq, "next s:", s, "offset2:", offset2)
 
@@ -295,7 +303,7 @@ encodeLoop:
 	blk.recentOffsets[0] = uint32(offset1)
 	blk.recentOffsets[1] = uint32(offset2)
 	if debug {
-		println("returning, recent offsets:", blk.recentOffsets)
+		println("returning, recent offsets:", blk.recentOffsets, "extra literals:", blk.extraLits)
 	}
 }
 
@@ -322,7 +330,8 @@ func (e *fastEncoder) EncodeSimple(blk *blockEnc, src []byte) {
 		// We do not fill the token table.
 		// This will be picked up by caller.
 		blk.extraLits = len(src)
-		copy(blk.literals[:len(src)], src)
+		blk.literals = blk.literals[:len(src)]
+		copy(blk.literals, src)
 		e.cur += maxMatchOffset
 		e.prev = src
 		return
@@ -474,7 +483,7 @@ func (e *fastEncoder) EncodeSimple(blk *blockEnc, src []byte) {
 
 			// Don't use repeat offsets
 			seq.offset = uint32(s-t) + 3
-			//seq.offset = blk.matchOffset(uint32(s-t), seq.litLen)
+			seq.offset = blk.matchOffset(uint32(s-t), seq.litLen)
 
 			s += 4
 			blk.sequences = append(blk.sequences, seq)

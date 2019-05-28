@@ -461,7 +461,8 @@ func (b *blockEnc) encode() error {
 		prevSize := prev.approxSize(hist)
 
 		// Add a small penalty for new encoders.
-		nSize = nSize + nSize>>4
+		// Don't bother with extremely small (<2 byte gains).
+		nSize = nSize + (nSize+2*8*16)>>4
 		switch {
 		case predefSize <= prevSize && predefSize <= nSize || forcePreDef:
 			if debug {
@@ -476,6 +477,7 @@ func (b *blockEnc) encode() error {
 		default:
 			if debug {
 				println("Using new, predef", predefSize>>3, ". previous:", prevSize>>3, ">", nSize>>3, "header max:", cur.maxHeaderSize()>>3, "bytes")
+				println("tl:", cur.actualTableLog, "symbolLen:", cur.symbolLen, "norm:", cur.norm[:cur.symbolLen], "hist", cur.count[:cur.symbolLen])
 			}
 			return cur, compModeFSE
 		}
@@ -530,7 +532,7 @@ func (b *blockEnc) encode() error {
 	if err != nil {
 		return err
 	}
-	if false && len(b.sequences) == 64 {
+	if false {
 		println("block:", b.output[start:], "tablelog", ofEnc.actualTableLog, "maxcount:", ofEnc.maxCount)
 		fmt.Printf("selected TableLog: %d, Symbol length: %d\n", ofEnc.actualTableLog, ofEnc.symbolLen)
 		for i, v := range ofEnc.norm[:ofEnc.symbolLen] {
@@ -570,8 +572,10 @@ func (b *blockEnc) encode() error {
 	wr.addBits32NC(s.matchLen, mlB.outBits)
 	wr.flush32()
 	wr.addBits32NC(s.offset, ofB.outBits)
+	if debugSequences {
+		println("Encoded seq", seq, s, "codes:", s.llCode, s.mlCode, s.ofCode, "states:", ll.state, ml.state, of.state, "bits:", llB, mlB, ofB)
+	}
 	seq--
-
 	if llEnc.maxBits+mlEnc.maxBits+ofEnc.maxBits <= 32 {
 		// No need to flush (common)
 		for seq >= 0 {
@@ -588,6 +592,10 @@ func (b *blockEnc) encode() error {
 			wr.addBits32NC(s.litLen, llB.outBits)
 			wr.addBits32NC(s.matchLen, mlB.outBits)
 			wr.addBits32NC(s.offset, ofB.outBits)
+
+			if debugSequences {
+				println("Encoded seq", seq, s)
+			}
 
 			seq--
 		}
@@ -607,6 +615,10 @@ func (b *blockEnc) encode() error {
 			wr.addBits32NC(s.matchLen, mlB.outBits)
 			wr.flush32()
 			wr.addBits32NC(s.offset, ofB.outBits)
+
+			if debugSequences {
+				println("Encoded seq", seq, s)
+			}
 
 			seq--
 		}

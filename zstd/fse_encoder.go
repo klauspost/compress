@@ -33,6 +33,7 @@ type fseEncoder struct {
 	rleVal         uint8  // RLE Symbol
 	maxBits        uint8  // Maximum output bits after transform.
 
+	// TODO: Technically zstd should be fine with 64 bytes.
 	count [256]uint32
 	norm  [256]int16
 }
@@ -53,7 +54,7 @@ type symbolTransform struct {
 
 // String prints values as a human readable string.
 func (s symbolTransform) String() string {
-	return fmt.Sprintf("dnbits: %08x, fs:%d outbits:%d", s.deltaNbBits, s.deltaFindState, s.outBits)
+	return fmt.Sprintf("{deltabits: %08x, findstate:%d outbits:%d}", s.deltaNbBits, s.deltaFindState, s.outBits)
 }
 
 // Histogram allows to populate the histogram and skip that step in the compression,

@@ -8,8 +8,11 @@ import (
 	"bytes"
 	"io/ioutil"
 	"os"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/klauspost/compress/zip"
 )
 
 func TestEncoder_EncodeAllSimple(t *testing.T) {
@@ -71,6 +74,55 @@ func TestEncoder_EncodeXML(t *testing.T) {
 		t.Fatal("Decoded does not match")
 	}
 	t.Log("Encoded content matched")
+}
+
+func TestEncoderRegression(t *testing.T) {
+	defer timeout(30 * time.Second)()
+	data, err := ioutil.ReadFile("testdata/comp-crashers.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	enc := Encoder{
+		Crc: true,
+	}
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	defer dec.Close()
+
+	for _, tt := range zr.File {
+		if !strings.HasSuffix(t.Name(), "") {
+			continue
+		}
+		if tt.Name[0] == 'f' || tt.Name[0] == '7' || tt.Name[0] == 'a' {
+			//continue
+		}
+		t.Run(tt.Name, func(t *testing.T) {
+			r, err := tt.Open()
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			in, err := ioutil.ReadAll(r)
+			if err != nil {
+				t.Error(err)
+			}
+			encoded := enc.EncodeAll(in, nil)
+			got, err := dec.DecodeAll(encoded, nil)
+			if err != nil {
+				//ref, refErr := zstd.Decompress(nil, encoded)
+				//t.Logf("error: %v (ref:%v)\nwant: %v\nref:  %v\ngot:  %v", err, refErr, in, ref, got)
+				t.Logf("error: %v\nwant: %v\ngot:  %v", err, in, got)
+				t.Fatal(err)
+			}
+		})
+	}
 }
 
 func TestEncoder_EncodeAllTwain(t *testing.T) {

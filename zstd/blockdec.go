@@ -526,6 +526,8 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 				seq = &seqs.offsets
 			case tableMatchLengths:
 				seq = &seqs.matchLengths
+			default:
+				panic("unknown table")
 			}
 			switch mode {
 			case compModePredefined:
@@ -555,11 +557,13 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 					println("Read table error:", err)
 					return err
 				}
-				println("Read table ok")
 				err = dec.transform(symbolTableX[i])
 				if err != nil {
 					println("Transform table error:", err)
 					return err
+				}
+				if debug {
+					println("Read table ok", "symbolLen:", dec.symbolLen)
 				}
 				seq.fse = dec
 			case compModeRepeat:

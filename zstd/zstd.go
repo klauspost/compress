@@ -9,6 +9,7 @@ import (
 )
 
 const debug = false
+const debugSequences = false
 
 // force encoder to use predefined tables.
 const forcePreDef = false

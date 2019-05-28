@@ -103,8 +103,8 @@ func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
 			br.fill()
 		}
 
-		if debug {
-			//println("Seq", seqs-i, "Litlen:", litLen, "matchOff:", matchOff, "matchLen:", matchLen)
+		if debugSequences {
+			println("Seq", seqs-i-1, "Litlen:", litLen, "matchOff:", matchOff, "(abs) matchLen:", matchLen)
 		}
 
 		if litLen > len(s.literals) {
