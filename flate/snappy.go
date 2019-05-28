@@ -1018,7 +1018,7 @@ func matchLen(a, b []byte) int {
 				return i + (bits.TrailingZeros64(diff) >> 3)
 			}
 		}
-		checked = 4+((len(a)-4) >> 3) << 3
+		checked = 4 + ((len(a)-4)>>3)<<3
 		a = a[checked:]
 		b = b[checked:]
 	}
