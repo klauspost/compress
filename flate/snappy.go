@@ -1006,15 +1006,22 @@ func (e *snappyGen) Reset() {
 // 'a' must be the shortest of the two.
 func matchLen(a, b []byte) int {
 	b = b[:len(a)]
-	for i := 0; i < len(a)-7; i += 8 {
-		if diff := load64(a, i) ^ load64(b, i); diff != 0 {
-			return i + (bits.TrailingZeros64(diff) >> 3)
+	var checked int
+	if len(a) > 4 {
+		// Try 4 bytes first
+		if diff := load32(a, 0) ^ load32(b, 0); diff != 0 {
+			return bits.TrailingZeros32(diff) >> 3
 		}
+		// Switch to 8 byte matching.
+		for i := 4; i < len(a)-7; i += 8 {
+			if diff := load64(a, i) ^ load64(b, i); diff != 0 {
+				return i + (bits.TrailingZeros64(diff) >> 3)
+			}
+		}
+		checked = 4+((len(a)-4) >> 3) << 3
+		a = a[checked:]
+		b = b[checked:]
 	}
-	checked := (len(a) >> 3) << 3
-	a = a[checked:]
-	b = b[checked:]
-	// TODO: We could do a 4 check.
 	for i := range a {
 		if a[i] != b[i] {
 			return int(i) + checked
