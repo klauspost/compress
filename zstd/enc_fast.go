@@ -612,6 +612,7 @@ func (e *fastEncoder) matchlen(s, t int32, src []byte) int32 {
 
 	// Continue looking for more matches in the current block.
 	a = src[s+n : s1]
+	b = src[:len(a)]
 	l = matchLen(a, b)
 	return int32(l) + n
 }
