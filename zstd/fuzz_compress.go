@@ -9,7 +9,10 @@ import (
 
 func Fuzz(data []byte) int {
 	var e Encoder
-	e.Crc = true
+	enc, err := NewWriter(nil, WithEncoderCRC(true))
+	if err != nil {
+		panic(err)
+	}
 	encoded := e.EncodeAll(data, nil)
 
 	// Run test against out decoder

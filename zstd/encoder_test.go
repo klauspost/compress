@@ -86,8 +86,9 @@ func TestEncoderRegression(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	enc := Encoder{
-		Crc: true,
+	enc, err := NewWriter(nil, WithEncoderCRC(true))
+	if err != nil {
+		t.Fatal(err)
 	}
 	dec, err := NewReader(nil)
 	if err != nil {
