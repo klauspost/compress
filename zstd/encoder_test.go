@@ -309,6 +309,30 @@ func BenchmarkEncoder_EncodeAllSimple(b *testing.B) {
 	}
 }
 
+func BenchmarkEncoder_EncodeAllHTML(b *testing.B) {
+	f, err := os.Open("../testdata/html.txt")
+	if err != nil {
+		b.Fatal(err)
+	}
+	in, err := ioutil.ReadAll(f)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	enc := Encoder{}
+	dst := enc.EncodeAll(in, nil)
+	wantSize := len(dst)
+	b.ResetTimer()
+	b.ReportAllocs()
+	b.SetBytes(int64(len(in)))
+	for i := 0; i < b.N; i++ {
+		dst := enc.EncodeAll(in, dst[:0])
+		if len(dst) != wantSize {
+			b.Fatal(len(dst), "!=", wantSize)
+		}
+	}
+}
+
 func BenchmarkEncoder_EncodeAllTwain(b *testing.B) {
 	f, err := os.Open("../testdata/Mark.Twain-Tom.Sawyer.txt")
 	if err != nil {

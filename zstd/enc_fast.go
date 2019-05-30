@@ -4,7 +4,9 @@
 
 package zstd
 
-import "math/bits"
+import (
+	"math/bits"
+)
 
 const (
 	tableBits         = 15                // Bits used in the table
@@ -63,6 +65,7 @@ func (e *fastEncoder) Encode(blk *blockEnc, src []byte) {
 			e.table[i] = tableEntry{}
 		}
 		e.cur = maxStoreBlockSize
+		e.prev = nil
 	}
 	blk.size = len(src)
 	// This check isn't in the Snappy implementation, but there, the caller
@@ -73,12 +76,14 @@ func (e *fastEncoder) Encode(blk *blockEnc, src []byte) {
 		blk.extraLits = len(src)
 		blk.literals = blk.literals[:len(src)]
 		copy(blk.literals, src)
-		e.cur += maxMatchOffset
+		e.cur += int32(len(src))
 		e.prev = src
 		return
 	}
 
 	sLimit := int32(len(src) - inputMargin)
+	// stepSize is the number of bytes to skip on every main loop iteration.
+	// It should be >= 2.
 	stepSize := int32(e.o.targetLength)
 	if stepSize == 0 {
 		stepSize++
@@ -139,14 +144,30 @@ encodeLoop:
 				var seq seq
 				lenght := 4 + e.matchlen(s+6, repIndex+4, src)
 
-				// We might be able to match one backwards
 				seq.matchLen = uint32(lenght - zstdMinMatch)
-				if repIndex > 0 && src[repIndex-1] == uint8(cv>>8) {
-					addLiterals(&seq, s+1)
+
+				// We might be able to match backwards.
+				// Extend as long as we can.
+				start := s + 2
+				// We end the search early, so we don't risk 0 literals
+				// and have to do special offset treatment.
+				startLimit := nextEmit + 1
+				for repIndex > 0 && start > startLimit && src[repIndex-1] == src[start-1] {
+					repIndex--
+					start--
 					seq.matchLen++
-				} else {
-					addLiterals(&seq, s+2)
 				}
+				if repIndex <= 0 {
+					// Offset is (now) in previous block.
+					off := int32(len(e.prev)) + repIndex
+					for off > 0 && start > startLimit && e.prev[off-1] == src[start-1] {
+						off--
+						start--
+						seq.matchLen++
+					}
+				}
+				addLiterals(&seq, start)
+
 				// rep 0
 				seq.offset = 1
 				if debugSequences {
