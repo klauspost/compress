@@ -12,8 +12,8 @@ const (
 	tableMask         = tableSize - 1     // Mask for table indices. Redundant, but can eliminate bounds checks.
 	tableShift        = 32 - tableBits    // Right-shift to get the tableBits most significant bits of a uint32.
 	maxMatchOffset    = maxStoreBlockSize // The largest match offset
-	maxStoreBlockSize = 1 << 16
-	maxMatchLength    = (1 << 16) - 1
+	maxStoreBlockSize = 1 << 17
+	maxMatchLength    = (1 << 18) - 1
 )
 
 func hashFn(u uint32) uint32 {

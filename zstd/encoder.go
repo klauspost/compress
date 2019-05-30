@@ -4,16 +4,34 @@
 
 package zstd
 
-import "github.com/cespare/xxhash"
+import (
+	"io"
+
+	"github.com/cespare/xxhash"
+)
 
 // Encoder provides encoding to Zstandard
 type Encoder struct {
-	Crc bool
-
+	o     encoderOptions
 	enc   fastEncoder
 	block *blockEnc
 	crc   *xxhash.Digest
 	tmp   [8]byte
+}
+
+// NewWriter will create a new Zstandard encoder.
+// If the encoder will be used for encoding blocks a nil writer can be used.
+func NewWriter(w io.Writer, opts ...EOption) (*Encoder, error) {
+	var e Encoder
+	e.o.setDefault()
+	for _, o := range opts {
+		err := o(&e.o)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &e, nil
 }
 
 // EncodeAll will encode all input in src and append it to dst.
@@ -32,7 +50,7 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 		ContentSize:   uint64(len(src)),
 		WindowSize:    maxStoreBlockSize * 2,
 		SingleSegment: false,
-		Checksum:      e.Crc,
+		Checksum:      e.o.crc,
 		DictID:        0,
 	}
 	dst, err := fh.appendTo(dst)
@@ -50,7 +68,7 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 			todo = todo[:maxStoreBlockSize]
 		}
 		src = src[len(todo):]
-		if e.Crc {
+		if e.o.crc {
 			_, _ = e.crc.Write(todo)
 		}
 		e.block.reset()
@@ -62,7 +80,9 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 		err := e.block.encode()
 		switch err {
 		case errIncompressible:
-			println("Storing uncompressible block as raw")
+			if debug {
+				println("Storing uncompressible block as raw")
+			}
 			e.block.encodeRaw(todo)
 			e.block.popOffsets()
 		case nil:
@@ -71,7 +91,7 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 		}
 		dst = append(dst, e.block.output...)
 	}
-	if e.Crc {
+	if e.o.crc {
 		crc := e.crc.Sum(e.tmp[:0])
 		dst = append(dst, crc[7], crc[6], crc[5], crc[4])
 	}

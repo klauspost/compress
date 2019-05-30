@@ -185,6 +185,39 @@ func TestCompress4XReuse(t *testing.T) {
 	}
 }
 
+func TestCompress4XReuseActually(t *testing.T) {
+	rng := rand.NewSource(0x1337)
+	var s Scratch
+	s.Reuse = ReusePolicyAllow
+	for i := 0; i < 255; i++ {
+		t.Run(fmt.Sprint("test-", i), func(t *testing.T) {
+			buf0 := make([]byte, BlockSizeMax)
+			for j := range buf0 {
+				buf0[j] = byte(rng.Int63() & 7)
+			}
+
+			b, re, err := Compress4X(buf0, &s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if b == nil {
+				t.Error("got no output")
+				return
+			}
+			if len(s.OutData) == 0 {
+				t.Error("got no data output")
+			}
+			if re && i == 0 {
+				t.Error("Claimed to have re-used on first loop.")
+			}
+			if !re && i > 0 {
+				t.Error("Expected table to be reused")
+			}
+
+			t.Logf("%s: %d -> %d bytes (%.2f:1) %t (table: %d bytes)", t.Name(), len(buf0), len(b), float64(len(buf0))/float64(len(b)), re, len(s.OutTable))
+		})
+	}
+}
 func TestCompress1XReuse(t *testing.T) {
 	for _, test := range testfiles {
 		t.Run(test.name, func(t *testing.T) {

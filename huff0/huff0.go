@@ -23,7 +23,7 @@ const (
 	huffNodesLen    = 512
 
 	// BlockSizeMax is maximum input size for a single block uncompressed.
-	BlockSizeMax = 128 << 10
+	BlockSizeMax = 1<<18 - 1
 )
 
 var (
