@@ -8,12 +8,12 @@ import (
 )
 
 func Fuzz(data []byte) int {
-	var e Encoder
 	enc, err := NewWriter(nil, WithEncoderCRC(true))
 	if err != nil {
 		panic(err)
 	}
-	encoded := e.EncodeAll(data, nil)
+	encoded := enc.EncodeAll(data, nil)
+	defer enc.Close()
 
 	// Run test against out decoder
 	dec, err := NewReader(nil)

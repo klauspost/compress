@@ -259,6 +259,9 @@ func (e *Encoder) Flush() error {
 // The function will block until everything has been written.
 func (e *Encoder) Close() error {
 	s := &e.state
+	if s.encoder == nil {
+		return nil
+	}
 	err := e.nextBlock(true)
 	if err != nil {
 		return err
