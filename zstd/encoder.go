@@ -6,17 +6,13 @@ package zstd
 
 import (
 	"io"
-
-	"github.com/cespare/xxhash"
 )
 
 // Encoder provides encoding to Zstandard
 type Encoder struct {
-	o     encoderOptions
-	enc   fastEncoder
-	block *blockEnc
-	crc   *xxhash.Digest
-	tmp   [8]byte
+	o        encoderOptions
+	encoders chan *fastEncoder
+	blocks   chan *blockEnc
 }
 
 // NewWriter will create a new Zstandard encoder.
@@ -30,22 +26,35 @@ func NewWriter(w io.Writer, opts ...EOption) (*Encoder, error) {
 			return nil, err
 		}
 	}
-
+	e.encoders = make(chan *fastEncoder, e.o.concurrent)
+	e.blocks = make(chan *blockEnc, e.o.concurrent)
+	for i := 0; i < e.o.concurrent; i++ {
+		enc := fastEncoder{}
+		blk := blockEnc{}
+		blk.init()
+		e.encoders <- &enc
+		e.blocks <- &blk
+	}
 	return &e, nil
 }
 
 // EncodeAll will encode all input in src and append it to dst.
+// This function can be called concurrently, but each call will only run on a single goroutine.
 // If empty input is given, nothing is returned.
 func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 	if len(src) == 0 {
 		return dst
 	}
-	if e.block == nil {
-		e.block = &blockEnc{}
-		e.block.init()
-	}
-	e.block.initNewEncode()
-	e.enc.Reset()
+	blk := <-e.blocks
+	enc := <-e.encoders
+	defer func() {
+		// Release encoder reference to last block.
+		enc.Reset()
+		e.blocks <- blk
+		e.encoders <- enc
+	}()
+	enc.Reset()
+	blk.initNewEncode()
 	fh := frameHeader{
 		ContentSize:   uint64(len(src)),
 		WindowSize:    maxStoreBlockSize * 2,
@@ -57,11 +66,7 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 	if err != nil {
 		panic(err)
 	}
-	if e.crc == nil {
-		e.crc = xxhash.New()
-	} else {
-		e.crc.Reset()
-	}
+
 	for len(src) > 0 {
 		todo := src
 		if len(todo) > maxStoreBlockSize {
@@ -69,32 +74,32 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 		}
 		src = src[len(todo):]
 		if e.o.crc {
-			_, _ = e.crc.Write(todo)
+			_, _ = enc.crc.Write(todo)
 		}
-		e.block.reset()
-		e.block.pushOffsets()
-		e.enc.Encode(e.block, todo)
+		blk.reset()
+		blk.pushOffsets()
+		enc.Encode(blk, todo)
 		if len(src) == 0 {
-			e.block.last = true
+			blk.last = true
 		}
-		err := e.block.encode()
+		err := blk.encode()
 		switch err {
 		case errIncompressible:
 			if debug {
 				println("Storing uncompressible block as raw")
 			}
-			e.block.encodeRaw(todo)
-			e.block.popOffsets()
+			blk.encodeRaw(todo)
+			blk.popOffsets()
 		case nil:
 		default:
 			panic(err)
 		}
-		dst = append(dst, e.block.output...)
+		dst = append(dst, blk.output...)
 	}
 	if e.o.crc {
-		crc := e.crc.Sum(e.tmp[:0])
+		crc := enc.crc.Sum(enc.tmp[:0])
 		dst = append(dst, crc[7], crc[6], crc[5], crc[4])
 	}
-	e.enc.Reset()
+	enc.Reset()
 	return dst
 }

@@ -95,16 +95,15 @@ func TestEncoderRegression(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	defer dec.Close()
+	// We can't close the decoder.
 
 	for _, tt := range zr.File {
 		if !strings.HasSuffix(t.Name(), "") {
 			continue
 		}
-		if tt.Name[0] == 'f' || tt.Name[0] == '7' || tt.Name[0] == 'a' {
-			//continue
-		}
+
 		t.Run(tt.Name, func(t *testing.T) {
+			t.Parallel()
 			r, err := tt.Open()
 			if err != nil {
 				t.Error(err)

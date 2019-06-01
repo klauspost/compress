@@ -6,6 +6,8 @@ package zstd
 
 import (
 	"math/bits"
+
+	"github.com/cespare/xxhash"
 )
 
 const (
@@ -48,7 +50,9 @@ type fastEncoder struct {
 	o     encParams
 	prev  []byte
 	cur   int32
+	crc   *xxhash.Digest
 	table [tableSize]tableEntry
+	tmp   [8]byte
 }
 
 // Encode mimmics functionality in zstd_fast.c but uses separate buffers for previous buffer and history.
@@ -677,6 +681,11 @@ func matchLenIn(src []byte, s, t int32) int32 {
 
 // Reset the encoding table.
 func (e *fastEncoder) Reset() {
+	if e.crc == nil {
+		e.crc = xxhash.New()
+	} else {
+		e.crc.Reset()
+	}
 	e.prev = nil
 	e.cur += maxMatchOffset
 }
