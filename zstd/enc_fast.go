@@ -17,7 +17,7 @@ const (
 	tableShift        = 32 - tableBits    // Right-shift to get the tableBits most significant bits of a uint32.
 	maxMatchOffset    = maxStoreBlockSize // The largest match offset
 	maxStoreBlockSize = 1 << 17
-	maxMatchLength    = (1 << 18) - 1
+	maxMatchLength    = 131074
 )
 
 func hashFn(u uint32) uint32 {
@@ -53,6 +53,7 @@ type fastEncoder struct {
 	crc   *xxhash.Digest
 	table [tableSize]tableEntry
 	tmp   [8]byte
+	blk   *blockEnc
 }
 
 // Encode mimmics functionality in zstd_fast.c but uses separate buffers for previous buffer and history.
@@ -156,7 +157,7 @@ encodeLoop:
 				// We end the search early, so we don't risk 0 literals
 				// and have to do special offset treatment.
 				startLimit := nextEmit + 1
-				for repIndex > 0 && start > startLimit && src[repIndex-1] == src[start-1] {
+				for repIndex > 0 && start > startLimit && src[repIndex-1] == src[start-1] && seq.matchLen < maxMatchLength-zstdMinMatch {
 					repIndex--
 					start--
 					seq.matchLen++
@@ -164,7 +165,7 @@ encodeLoop:
 				if repIndex <= 0 {
 					// Offset is (now) in previous block.
 					off := int32(len(e.prev)) + repIndex
-					for off > 0 && start > startLimit && e.prev[off-1] == src[start-1] {
+					for off > 0 && start > startLimit && e.prev[off-1] == src[start-1] && seq.matchLen < maxMatchLength-zstdMinMatch {
 						off--
 						start--
 						seq.matchLen++
@@ -236,29 +237,17 @@ encodeLoop:
 		// them as literal bytes.
 		seq.litLen = uint32(s - nextEmit)
 
-		// Call emitCopy, and then see if another emitCopy could be our next
-		// move. Repeat until we find no match for the input immediately after
-		// what was consumed by the last emitCopy call.
-		//
-		// If we exit this loop normally then we need to call emitLiteral next,
-		// though we don't yet know how big the literal will be. We handle that
-		// by proceeding to the next iteration of the main loop. We also can
-		// exit this loop via goto if we get close to exhausting the input.
-
-		// Invariant: we have a 4-byte match at s, and no need to emit any
-		// literal bytes prior to s.
-
 		// Extend the 4-byte match as long as possible.
 		l := e.matchlen(s+4, t+4, src)
 
 		// Extend backwards
-		for t > 0 && seq.litLen > 0 && src[t-1] == src[s-1] {
+		for t > 0 && seq.litLen > 0 && src[t-1] == src[s-1] && l < maxMatchLength {
 			s--
 			t--
 			l++
 			seq.litLen--
 		}
-		for t <= 0 && seq.litLen > 0 && s > 0 {
+		for t <= 0 && seq.litLen > 0 && s > 0 && l < maxMatchLength {
 			off := int32(len(e.prev)) + t - 1
 			if off > 0 && e.prev[off] == src[s-1] {
 				s--
@@ -681,6 +670,11 @@ func matchLenIn(src []byte, s, t int32) int32 {
 
 // Reset the encoding table.
 func (e *fastEncoder) Reset() {
+	if e.blk == nil {
+		e.blk = &blockEnc{}
+		e.blk.init()
+	}
+	e.blk.initNewEncode()
 	if e.crc == nil {
 		e.crc = xxhash.New()
 	} else {

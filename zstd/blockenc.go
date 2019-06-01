@@ -29,6 +29,8 @@ type blockEnc struct {
 	prevRecentOffsets [3]uint32
 }
 
+// init should be used once the block has been created.
+// If called more than once, the effect is the same as calling reset.
 func (b *blockEnc) init() {
 	if cap(b.literals) < maxCompressedLiteralSize {
 		b.literals = make([]byte, 0, maxCompressedLiteralSize)
@@ -52,12 +54,15 @@ func (b *blockEnc) init() {
 	b.reset()
 }
 
+// initNewEncode can be used to reset offsets and encoders to the initial state.
 func (b *blockEnc) initNewEncode() {
 	b.recentOffsets = [3]uint32{1, 4, 8}
 	b.litEnc.Reuse = huff0.ReusePolicyNone
 	b.coders.setPrev(nil, nil, nil)
 }
 
+// reset will reset the block for a new encode, but in the same stream,
+// meaning that state will be carried over, but the block content is reset.
 func (b *blockEnc) reset() {
 	b.extraLits = 0
 	b.literals = b.literals[:0]
@@ -67,8 +72,10 @@ func (b *blockEnc) reset() {
 	b.last = false
 }
 
+// blockHeader contains the information for a block header.
 type blockHeader uint32
 
+// setLast sets the 'last' indicator on a block.
 func (h *blockHeader) setLast(b bool) {
 	if b {
 		*h = *h | 1
@@ -78,31 +85,38 @@ func (h *blockHeader) setLast(b bool) {
 	}
 }
 
+// setSize will store the compressed size of a block.
 func (h *blockHeader) setSize(v uint32) {
 	const mask = 7
 	*h = (*h)&mask | blockHeader(v<<3)
 }
 
+// setType sets the block type.
 func (h *blockHeader) setType(t blockType) {
 	const mask = 1 | (((1 << 24) - 1) ^ 7)
 	*h = (*h & mask) | blockHeader(t<<1)
 }
 
+// appendTo will append the block header to a slice.
 func (h blockHeader) appendTo(b []byte) []byte {
 	return append(b, uint8(h), uint8(h>>8), uint8(h>>16))
 }
 
+// String returns a string representation of the block.
 func (h blockHeader) String() string {
 	return fmt.Sprintf("Type: %d, Size: %d, Last:%t", (h>>1)&3, h>>3, h&1 == 1)
 }
 
+// literalsHeader contains literals header information.
 type literalsHeader uint64
 
+// setType can be used to set the type of literal block.
 func (h *literalsHeader) setType(t literalsBlockType) {
 	const mask = math.MaxUint64 - 3
 	*h = (*h & mask) | literalsHeader(t)
 }
 
+// setSize can be used to set a single size, for uncompressed and RLE content.
 func (h *literalsHeader) setSize(regenLen int) {
 	inBits := bits.Len32(uint32(regenLen))
 	// Only retain 2 bits
@@ -127,6 +141,7 @@ func (h *literalsHeader) setSize(regenLen int) {
 	*h = literalsHeader(lh)
 }
 
+// setSizes will set the size of a compressed literals section and the input length.
 func (h *literalsHeader) setSizes(compLen, inLen int) {
 	compBits, inBits := bits.Len32(uint32(compLen)), bits.Len32(uint32(inLen))
 	// Only retain 2 bits
@@ -155,6 +170,7 @@ func (h *literalsHeader) setSizes(compLen, inLen int) {
 	*h = literalsHeader(lh)
 }
 
+// appendTo will append the literals header to a byte slice.
 func (h literalsHeader) appendTo(b []byte) []byte {
 	size := uint8(h >> 60)
 	switch size {
@@ -278,7 +294,7 @@ func (b *blockEnc) encodeLits() error {
 		return nil
 	}
 
-	// TODO: Switch to 1X when less than 32 bytes.
+	// TODO: Switch to 1X when less than x bytes.
 	out, reUsed, err := huff0.Compress4X(b.literals, &b.litEnc)
 	// Bail out of compression is too little.
 	if len(out) > (len(b.literals) - len(b.literals)>>4) {
@@ -694,6 +710,9 @@ func (b *blockEnc) genCodes() {
 		mlH[v]++
 		if v > mlMax {
 			mlMax = v
+			if debug && mlMax > maxMatchLengthSymbol {
+				panic(fmt.Errorf("mlMax > maxMatchLengthSymbol (%d), matchlen: %d", mlMax, seq.matchLen))
+			}
 		}
 		b.sequences[i] = seq
 	}
