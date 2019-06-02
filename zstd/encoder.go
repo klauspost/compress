@@ -5,6 +5,7 @@
 package zstd
 
 import (
+	"crypto/rand"
 	"fmt"
 	"io"
 	"sync"
@@ -32,6 +33,7 @@ type encoderState struct {
 	writing       *blockEnc
 	err           error
 	writeErr      error
+	nWritten      int64
 	headerWritten bool
 	eofWritten    bool
 
@@ -104,6 +106,7 @@ func (e *Encoder) Reset(w io.Writer) {
 	s.eofWritten = false
 	s.w = w
 	s.err = nil
+	s.nWritten = 0
 	s.writeErr = nil
 }
 
@@ -167,10 +170,12 @@ func (e *Encoder) nextBlock(final bool) error {
 		}
 		s.headerWritten = true
 		s.wWg.Wait()
-		_, s.err = s.w.Write(dst)
+		var n2 int
+		n2, s.err = s.w.Write(dst)
 		if s.err != nil {
 			return s.err
 		}
+		s.nWritten += int64(n2)
 	}
 	if s.eofWritten {
 		// Ensure we only write it once.
@@ -187,6 +192,7 @@ func (e *Encoder) nextBlock(final bool) error {
 			blk.encodeRaw(nil)
 			s.wWg.Wait()
 			_, s.err = s.w.Write(blk.output)
+			s.nWritten += int64(len(blk.output))
 		}
 		return s.err
 	}
@@ -244,6 +250,7 @@ func (e *Encoder) nextBlock(final bool) error {
 				return
 			}
 			_, s.writeErr = s.w.Write(blk.output)
+			s.nWritten += int64(len(blk.output))
 		}()
 	}(s.current)
 	return nil
@@ -342,6 +349,17 @@ func (e *Encoder) Close() error {
 		crc := s.encoder.crc.Sum(s.encoder.tmp[:0])
 		crc[0], crc[1], crc[2], crc[3] = crc[7], crc[6], crc[5], crc[4]
 		_, s.err = s.w.Write(crc[:4])
+		s.nWritten += 4
+	}
+
+	// Add padding with content from crypto/rand.Reader
+	if s.err == nil && e.o.pad > 0 {
+		add := calcSkippableFrame(s.nWritten, int64(e.o.pad))
+		frame, err := skippableFrame(s.filling[:0], add, rand.Reader)
+		if err != nil {
+			return err
+		}
+		_, s.err = s.w.Write(frame)
 	}
 	return s.err
 }
@@ -418,6 +436,14 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 	if e.o.crc {
 		crc := enc.crc.Sum(enc.tmp[:0])
 		dst = append(dst, crc[7], crc[6], crc[5], crc[4])
+	}
+	// Add padding with content from crypto/rand.Reader
+	if e.o.pad > 0 {
+		add := calcSkippableFrame(int64(len(dst)), int64(e.o.pad))
+		dst, err = skippableFrame(dst, add, rand.Reader)
+		if err != nil {
+			panic(err)
+		}
 	}
 	return dst
 }

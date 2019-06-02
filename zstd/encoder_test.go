@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"strings"
 	"testing"
@@ -185,6 +186,93 @@ func TestEncoder_EncodeAllPi(t *testing.T) {
 	t.Log("Encoded content matched")
 }
 
+func TestWithEncoderPadding(t *testing.T) {
+	n := 100
+	if testing.Short() {
+		n = 5
+	}
+	rng := rand.New(rand.NewSource(0x1337))
+	d, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < n; i++ {
+		padding := (rng.Int() & 0xfff) + 1
+		src := make([]byte, (rng.Int()&0xfffff)+1)
+		for i := range src {
+			src[i] = uint8(rng.Uint32()) & 7
+		}
+		e, err := NewWriter(nil, WithEncoderPadding(padding), WithEncoderCRC(rng.Uint32()&1 == 0))
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Test the added padding is invisible.
+		dst := e.EncodeAll(src, nil)
+		if len(dst)%padding != 0 {
+			t.Fatalf("wanted size to be mutiple of %d, got size %d with remainder %d", padding, len(dst), len(dst)%padding)
+		}
+		got, err := d.DecodeAll(dst, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(src, got) {
+			t.Fatal("output mismatch")
+		}
+		// Test when we supply data as well.
+		dst = e.EncodeAll(src, make([]byte, rng.Int()&255))
+		if len(dst)%padding != 0 {
+			t.Fatalf("wanted size to be mutiple of %d, got size %d with remainder %d", padding, len(dst), len(dst)%padding)
+		}
+
+		// Test using the writer.
+		var buf bytes.Buffer
+		e.Reset(&buf)
+		_, err = io.Copy(e, bytes.NewBuffer(src))
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = e.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		dst = buf.Bytes()
+		if len(dst)%padding != 0 {
+			t.Fatalf("wanted size to be mutiple of %d, got size %d with remainder %d", padding, len(dst), len(dst)%padding)
+		}
+		// Test the added padding is invisible.
+		got, err = d.DecodeAll(dst, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(src, got) {
+			t.Fatal("output mismatch")
+		}
+		// Try after reset
+		buf.Reset()
+		e.Reset(&buf)
+		_, err = io.Copy(e, bytes.NewBuffer(src))
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = e.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		dst = buf.Bytes()
+		if len(dst)%padding != 0 {
+			t.Fatalf("wanted size to be mutiple of %d, got size %d with remainder %d", padding, len(dst), len(dst)%padding)
+		}
+		// Test the added padding is invisible.
+		got, err = d.DecodeAll(dst, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(src, got) {
+			t.Fatal("output mismatch")
+		}
+	}
+}
 func TestEncoder_EncoderXML(t *testing.T) {
 	testEncoderRoundtrip(t, "./testdata/xml.zst", []byte{0x56, 0x54, 0x69, 0x8e, 0x40, 0x50, 0x11, 0xe})
 }
