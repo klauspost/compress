@@ -9,7 +9,12 @@ import (
 	"sync"
 )
 
-// Encoder provides encoding to Zstandard
+// Encoder provides encoding to Zstandard.
+// An Encoder can be used for either compressing a stream via the
+// io.WriteCloser interface supported by the Encoder or as multiple independent
+// tasks via the EncodeAll function.
+// Smaller encodes are encouraged to use the EncodeAll function.
+// Use NewWriter to create a new instance.
 type Encoder struct {
 	o        encoderOptions
 	encoders chan *fastEncoder
@@ -23,12 +28,16 @@ type encoderState struct {
 	current       []byte
 	previous      []byte
 	encoder       *fastEncoder
+	writing       *blockEnc
 	err           error
+	writeErr      error
 	headerWritten bool
 	eofWritten    bool
 
 	// This waitgroup indicates an encode is running.
 	wg sync.WaitGroup
+	// This waitgroup indicates we have a block encoding/writing.
+	wWg sync.WaitGroup
 }
 
 // NewWriter will create a new Zstandard encoder.
@@ -44,8 +53,11 @@ func NewWriter(w io.Writer, opts ...EOption) (*Encoder, error) {
 	}
 	if w != nil {
 		e.Reset(w)
+	} else {
+		e.init.Do(func() {
+			e.initialize()
+		})
 	}
-	e.initialize()
 	return &e, nil
 }
 
@@ -57,7 +69,12 @@ func (e *Encoder) initialize() {
 	}
 }
 
+// Reset will re-initialize the writer and new writes will encode to the supplied writer
+// as a new, independent stream.
 func (e *Encoder) Reset(w io.Writer) {
+	e.init.Do(func() {
+		e.initialize()
+	})
 	s := &e.state
 	s.wg.Wait()
 	if cap(s.filling) == 0 {
@@ -71,7 +88,13 @@ func (e *Encoder) Reset(w io.Writer) {
 	}
 	if s.encoder == nil {
 		s.encoder = &fastEncoder{}
+		s.encoder.useRepeat = false
 	}
+	if s.writing == nil {
+		s.writing = &blockEnc{}
+		s.writing.init()
+	}
+	s.writing.initNewEncode()
 	s.filling = s.filling[:0]
 	s.current = s.current[:0]
 	s.previous = s.previous[:0]
@@ -80,8 +103,14 @@ func (e *Encoder) Reset(w io.Writer) {
 	s.eofWritten = false
 	s.w = w
 	s.err = nil
+	s.writeErr = nil
 }
 
+// Write data to the encoder.
+// Input data will be buffered and as the buffer fills up
+// content will be compressed and written to the output.
+// When done writing, use Close to flush the remaining output
+// and write CRC if requested.
 func (e *Encoder) Write(p []byte) (n int, err error) {
 	s := &e.state
 	for len(p) > 0 {
@@ -113,6 +142,8 @@ func (e *Encoder) Write(p []byte) (n int, err error) {
 	return n, nil
 }
 
+// nextBlock will synchronize and start compressing input in e.state.filling.
+// If an error has occurred during encoding it will be returned.
 func (e *Encoder) nextBlock(final bool) error {
 	s := &e.state
 	// Wait for current block.
@@ -134,6 +165,7 @@ func (e *Encoder) nextBlock(final bool) error {
 			return err
 		}
 		s.headerWritten = true
+		s.wWg.Wait()
 		_, s.err = s.w.Write(dst)
 		if s.err != nil {
 			return s.err
@@ -149,9 +181,10 @@ func (e *Encoder) nextBlock(final bool) error {
 		if final {
 			enc := s.encoder
 			blk := enc.blk
-			blk.reset()
+			blk.reset(nil)
 			blk.last = true
 			blk.encodeRaw(nil)
+			s.wWg.Wait()
 			_, s.err = s.w.Write(blk.output)
 		}
 		return s.err
@@ -167,27 +200,40 @@ func (e *Encoder) nextBlock(final bool) error {
 		defer s.wg.Done()
 		enc := s.encoder
 		blk := enc.blk
-		blk.reset()
-		blk.pushOffsets()
 		enc.Encode(blk, src)
 		blk.last = final
 		if final {
 			s.eofWritten = true
 		}
-		err := blk.encode()
-		switch err {
-		case errIncompressible:
-			if debug {
-				println("Storing incompressible block as raw")
-			}
-			blk.encodeRaw(src)
-			blk.popOffsets()
-		case nil:
-		default:
-			s.err = err
+		// Wait for pending writes.
+		s.wWg.Wait()
+		if s.writeErr != nil {
+			s.err = s.writeErr
 			return
 		}
-		_, s.err = s.w.Write(blk.output)
+		// Transfer encoders from previous write block.
+		blk.swapEncoders(s.writing)
+		// Transfer recent offsets to next.
+		enc.useBlock(s.writing)
+		s.writing = blk
+		s.wWg.Add(1)
+		go func() {
+			defer s.wWg.Done()
+			err := blk.encode()
+			switch err {
+			case errIncompressible:
+				if debug {
+					println("Storing incompressible block as raw")
+				}
+				blk.encodeRaw(src)
+				// In fast mode, we do not transfer offsets, so we don't have to deal with changing the.
+			case nil:
+			default:
+				s.writeErr = err
+				return
+			}
+			_, s.writeErr = s.w.Write(blk.output)
+		}()
 	}(s.current)
 	return nil
 }
@@ -252,7 +298,11 @@ func (e *Encoder) Flush() error {
 		}
 	}
 	s.wg.Wait()
-	return s.err
+	s.wWg.Wait()
+	if s.err != nil {
+		return s.err
+	}
+	return s.writeErr
 }
 
 // Close will flush the final output and close the stream.
@@ -267,6 +317,14 @@ func (e *Encoder) Close() error {
 		return err
 	}
 	s.wg.Wait()
+	s.wWg.Wait()
+
+	if s.err != nil {
+		return s.err
+	}
+	if s.writeErr != nil {
+		return s.writeErr
+	}
 
 	// Write CRC
 	if e.o.crc && s.err == nil {
@@ -280,7 +338,9 @@ func (e *Encoder) Close() error {
 // EncodeAll will encode all input in src and append it to dst.
 // This function can be called concurrently, but each call will only run on a single goroutine.
 // If empty input is given, nothing is returned.
-// Encoded blocks can be concatenated
+// Encoded blocks can be concatenated and the result will be the combined input stream.
+// Data compressed with EncodeAll can be decoded with the Decoder,
+// using either a stream or DecodeAll.
 func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 	if len(src) == 0 {
 		return dst
@@ -296,6 +356,7 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 		e.encoders <- enc
 	}()
 	enc.Reset()
+	enc.useRepeat = true
 	blk := enc.blk
 	fh := frameHeader{
 		ContentSize:   uint64(len(src)),
@@ -318,7 +379,7 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 		if e.o.crc {
 			_, _ = enc.crc.Write(todo)
 		}
-		blk.reset()
+		blk.reset(nil)
 		blk.pushOffsets()
 		enc.Encode(blk, todo)
 		if len(src) == 0 {

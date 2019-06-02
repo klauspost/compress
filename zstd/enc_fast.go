@@ -53,13 +53,14 @@ func load64(b []byte, i int) uint64 {
 }
 
 type fastEncoder struct {
-	o     encParams
-	prev  []byte
-	cur   int32
-	crc   *xxhash.Digest
-	table [tableSize]tableEntry
-	tmp   [8]byte
-	blk   *blockEnc
+	o         encParams
+	prev      []byte
+	cur       int32
+	crc       *xxhash.Digest
+	table     [tableSize]tableEntry
+	tmp       [8]byte
+	blk       *blockEnc
+	useRepeat bool
 }
 
 // Encode mimmics functionality in zstd_fast.c but uses separate buffers for previous buffer and history.
@@ -132,6 +133,8 @@ func (e *fastEncoder) Encode(blk *blockEnc, src []byte) {
 encodeLoop:
 	for {
 		var t int32
+		// We allow the encoder to optionally turn off repeat offsets across blocks
+		canRepeat := e.useRepeat || len(blk.sequences) > 3
 		for {
 			if debug && offset1 == 0 {
 				panic("offset0 was 0")
@@ -150,7 +153,7 @@ encodeLoop:
 			e.table[nextHash] = tableEntry{offset: s + e.cur, val: uint32(cv)}
 			e.table[nextHash2] = tableEntry{offset: s + e.cur + 1, val: uint32(cv >> 8)}
 
-			if e.cmp32Hist(uint32(cv>>16), repIndex, src) {
+			if canRepeat && e.cmp32Hist(uint32(cv>>16), repIndex, src) {
 				// Consider history as well.
 				var seq seq
 				lenght := 4 + e.matchlen(s+6, repIndex+4, src)
@@ -285,7 +288,7 @@ encodeLoop:
 		nextHash = hash6(cv, hashLog)
 
 		// Check offset 2
-		if o2 := s - offset2; e.cmp32Hist(uint32(cv), o2, src) {
+		if o2 := s - offset2; canRepeat && e.cmp32Hist(uint32(cv), o2, src) {
 			// We have at least 4 byte match.
 			// No need to check backwards. We come straight from a match
 			l := 4 + e.matchlen(s+4, o2+4, src)
@@ -570,6 +573,13 @@ emitRemainder:
 	}
 	e.cur += int32(len(src))
 	e.prev = src
+}
+
+// useBlock will replace the block with the provided one,
+// but transfer recent offsets from the previous.
+func (e *fastEncoder) useBlock(enc *blockEnc) {
+	enc.reset(e.blk)
+	e.blk = enc
 }
 
 // cmp32Hist compares a value, potentially in history

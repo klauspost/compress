@@ -108,7 +108,7 @@ func (r *SnappyConverter) Convert(in io.Reader, w io.Writer) (int64, error) {
 	for {
 		if !r.readFull(r.buf[:4], true) {
 			// Add empty last block
-			r.block.reset()
+			r.block.reset(nil)
 			r.block.last = true
 			err := r.block.encodeLits()
 			if err != nil {
@@ -166,7 +166,7 @@ func (r *SnappyConverter) Convert(in io.Reader, w io.Writer) (int64, error) {
 				r.err = ErrSnappyCorrupt
 				return written, r.err
 			}
-			r.block.reset()
+			r.block.reset(nil)
 			r.block.pushOffsets()
 			if err := decodeSnappy(r.block, buf); err != nil {
 				r.err = err
@@ -181,7 +181,7 @@ func (r *SnappyConverter) Convert(in io.Reader, w io.Writer) (int64, error) {
 			switch err {
 			case errIncompressible:
 				r.block.popOffsets()
-				r.block.reset()
+				r.block.reset(nil)
 				r.block.literals, err = snappy.Decode(r.block.literals[:n], r.buf[snappyChecksumSize:chunkLen])
 				if err != nil {
 					println("snappy.Decode:", err)
@@ -212,7 +212,7 @@ func (r *SnappyConverter) Convert(in io.Reader, w io.Writer) (int64, error) {
 				r.err = ErrSnappyCorrupt
 				return written, r.err
 			}
-			r.block.reset()
+			r.block.reset(nil)
 			buf := r.buf[:snappyChecksumSize]
 			if !r.readFull(buf, false) {
 				return written, r.err

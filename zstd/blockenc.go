@@ -18,7 +18,7 @@ type blockEnc struct {
 	literals  []byte
 	sequences []seq
 	coders    seqCoders
-	litEnc    huff0.Scratch
+	litEnc    *huff0.Scratch
 	wr        bitWriter
 
 	extraLits int
@@ -51,7 +51,8 @@ func (b *blockEnc) init() {
 		b.coders.llEnc = &fseEncoder{}
 		b.coders.llPrev = &fseEncoder{}
 	}
-	b.reset()
+	b.litEnc = &huff0.Scratch{}
+	b.reset(nil)
 }
 
 // initNewEncode can be used to reset offsets and encoders to the initial state.
@@ -63,13 +64,25 @@ func (b *blockEnc) initNewEncode() {
 
 // reset will reset the block for a new encode, but in the same stream,
 // meaning that state will be carried over, but the block content is reset.
-func (b *blockEnc) reset() {
+// If a previous block is provided, the recent offsets are carried over.
+func (b *blockEnc) reset(prev *blockEnc) {
 	b.extraLits = 0
 	b.literals = b.literals[:0]
 	b.size = 0
 	b.sequences = b.sequences[:0]
 	b.output = b.output[:0]
 	b.last = false
+	if prev != nil {
+		b.recentOffsets = prev.prevRecentOffsets
+	}
+}
+
+// reset will reset the block for a new encode, but in the same stream,
+// meaning that state will be carried over, but the block content is reset.
+// If a previous block is provided, the recent offsets are carried over.
+func (b *blockEnc) swapEncoders(prev *blockEnc) {
+	b.coders.swap(&prev.coders)
+	b.litEnc, prev.litEnc = prev.litEnc, b.litEnc
 }
 
 // blockHeader contains the information for a block header.
@@ -295,7 +308,7 @@ func (b *blockEnc) encodeLits() error {
 	}
 
 	// TODO: Switch to 1X when less than x bytes.
-	out, reUsed, err := huff0.Compress4X(b.literals, &b.litEnc)
+	out, reUsed, err := huff0.Compress4X(b.literals, b.litEnc)
 	// Bail out of compression is too little.
 	if len(out) > (len(b.literals) - len(b.literals)>>4) {
 		err = huff0.ErrIncompressible
@@ -374,7 +387,7 @@ func (b *blockEnc) encode() error {
 	)
 	if len(b.literals) > 32 {
 		// TODO: Switch to 1X on small blocks.
-		out, reUsed, err = huff0.Compress4X(b.literals, &b.litEnc)
+		out, reUsed, err = huff0.Compress4X(b.literals, b.litEnc)
 		if len(out) > len(b.literals)-len(b.literals)>>4 {
 			err = huff0.ErrIncompressible
 		}

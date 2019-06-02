@@ -11,6 +11,11 @@ type seqCoders struct {
 	llPrev, ofPrev, mlPrev *fseEncoder
 }
 
+// swap coders with another (block).
+func (s *seqCoders) swap(other *seqCoders) {
+	*s, *other = *other, *s
+}
+
 // setPrev will update the previous encoders to the actually used ones
 // and make sure a fresh one is in the main slot.
 func (s *seqCoders) setPrev(ll, ml, of *fseEncoder) {
