@@ -369,3 +369,6 @@ Contributions are always welcome.
 For new features/fixes, remember to add tests and for performance enhancements include benchmarks.
 
 For sending files for reproducing errors use a service like [goobox](https://goobox.io/#/upload) or similar to share your files.
+
+For general feedback and experience reports, feel free to open an issue or write me on [Twitter](https://twitter.com/sh0dan).
+
