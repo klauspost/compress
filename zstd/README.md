@@ -205,10 +205,43 @@ silesia.tar zstd    2   211947520   69595464    1097    184.09
 
 ```
 
+### Converters
+
+As part of the development process a *Snappy* -> *Zstandard* converter was also built.
+
+This can convert a *framed* [Snappy Stream](https://godoc.org/github.com/golang/snappy#Writer) to a zstd stream. Note that a single block is not framed.
+
+Conversion is done by converting the stream directly from Snappy without intermediate full decoding.
+Therefore the compression ratio is much less than what can be done by a full decompression
+and compression, and a faulty Snappy stream may lead to a faulty Zstandard stream without
+any errors being generated.
+No CRC value is being generated and not all CRC values of the Snappy stream are checked.
+However, it provides really fast re-compression of Snappy streams.
+
+
+```
+BenchmarkSnappy_ConvertSilesia-8           1  1156001600 ns/op   183.35 MB/s
+Snappy len 103008711 -> zstd len 82687318
+
+BenchmarkSnappy_Enwik9-8           1  6472998400 ns/op   154.49 MB/s
+Snappy len 508028601 -> zstd len 390921079
+```
+
+
+```Go
+	s := zstd.SnappyConverter{}
+	n, err = s.Convert(input, output)
+	if err != nil {
+	    fmt.Println("Re-compressed stream to", n, "bytes")
+	}
+```
+
+The converter `s` can be reused to avoid allocations, even after errors.
+
 
 ## Decompressor
 
-STATUS: BETA+ - there may still be subtle bugs, but a wide variety of content has been tested.
+STATUS: Release Candidate - there may still be subtle bugs, but a wide variety of content has been tested.
 
  
 ### Usage
