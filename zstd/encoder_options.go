@@ -13,6 +13,7 @@ type encoderOptions struct {
 	concurrent int
 	crc        bool
 	single     bool
+	pad        int
 }
 
 func (o *encoderOptions) setDefault() {
@@ -40,6 +41,29 @@ func WithEncoderConcurrency(n int) EOption {
 			return fmt.Errorf("concurrency must be at least 1")
 		}
 		o.concurrent = n
+		return nil
+	}
+}
+
+// WithEncoderPadding will add padding to all output so the size will be a multiple of n.
+// This can be used to obfuscate the exact output size or make blocks of a certain size.
+// The contents will be a skippable frame, so it will be invisible by the decoder.
+// n must be > 0 and <= 1GB, 1<<30 bytes.
+// The padded area will be filled with data from crypto/rand.Reader.
+// If `EncodeAll` is used with data already in the destination, the total size will be multiple of this.
+func WithEncoderPadding(n int) EOption {
+	return func(o *encoderOptions) error {
+		if n <= 0 {
+			return fmt.Errorf("padding must be at least 1")
+		}
+		// No need to waste our time.
+		if n == 1 {
+			o.pad = 0
+		}
+		if n > 1<<30 {
+			return fmt.Errorf("padding must less than 1GB (1<<30 bytes) ")
+		}
+		o.pad = n
 		return nil
 	}
 }
