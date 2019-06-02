@@ -5,6 +5,7 @@
 package zstd
 
 import (
+	"fmt"
 	"io"
 	"sync"
 )
@@ -197,7 +198,12 @@ func (e *Encoder) nextBlock(final bool) error {
 		if debug {
 			println("Adding block,", len(src), "bytes, final:", final)
 		}
-		defer s.wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				s.err = fmt.Errorf("panic while encoding: %v", r)
+			}
+			s.wg.Done()
+		}()
 		enc := s.encoder
 		blk := enc.blk
 		enc.Encode(blk, src)
@@ -218,7 +224,12 @@ func (e *Encoder) nextBlock(final bool) error {
 		s.writing = blk
 		s.wWg.Add(1)
 		go func() {
-			defer s.wWg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					s.writeErr = fmt.Errorf("panic while encoding/writing: %v", r)
+				}
+				s.wWg.Done()
+			}()
 			err := blk.encode()
 			switch err {
 			case errIncompressible:
