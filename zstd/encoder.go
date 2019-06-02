@@ -365,6 +365,11 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 		Checksum:      e.o.crc,
 		DictID:        0,
 	}
+
+	// If less than 1MB, allocate a buffer up front.
+	if len(dst) == 0 && cap(dst) == 0 && len(src) < 1<<20 {
+		dst = make([]byte, 0, len(src))
+	}
 	dst, err := fh.appendTo(dst)
 	if err != nil {
 		panic(err)

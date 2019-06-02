@@ -304,7 +304,7 @@ func TestEncoder_EncodeAllSilesia(t *testing.T) {
 	var e Encoder
 	start := time.Now()
 	dst := e.EncodeAll(in, nil)
-	t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
+	t.Log("Fast Encoder len", len(in), "-> zstd len", len(dst))
 	mbpersec := (float64(len(in)) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
 	t.Logf("Encoded %d bytes with %.2f MB/s", len(in), mbpersec)
 
