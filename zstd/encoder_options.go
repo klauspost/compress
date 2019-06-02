@@ -46,7 +46,7 @@ func WithEncoderConcurrency(n int) EOption {
 }
 
 // WithEncoderPadding will add padding to all output so the size will be a multiple of n.
-// This can be used to obfuscate the exact output size.
+// This can be used to obfuscate the exact output size or make blocks of a certain size.
 // The contents will be a skippable frame, so it will be invisible by the decoder.
 // n must be > 0 and <= 1GB, 1<<30 bytes.
 // The padded area will be filled with data from crypto/rand.Reader.
