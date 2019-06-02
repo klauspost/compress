@@ -17,7 +17,8 @@ const (
 // l must be >=4 and <=8. Any other value will return hash for 4 bytes.
 // h should always be <32.
 // Preferably h and l should be a constant.
-// TODO: Check if this is inlined if constant.
+// FIXME: This does NOT get resolved, if 'mls' is constant,
+//  so this cannot be used.
 func hashLen(u uint64, hashLog, mls uint8) uint32 {
 	switch mls {
 	case 5:
