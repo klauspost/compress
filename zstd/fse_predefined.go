@@ -15,13 +15,21 @@ var (
 	// These values are already transformed.
 	fsePredef [3]fseDecoder
 
+	// fsePredefEnc are the predefined encoder based on fse tables as defined here:
+	// https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#default-distributions
+	// These values are already transformed.
+	fsePredefEnc [3]fseEncoder
+
 	// symbolTableX contain the transformations needed for each type as defined in
 	// https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#the-codes-for-literals-lengths-match-lengths-and-offsets
 	symbolTableX [3][]baseOffset
 
 	// maxTableSymbol is the biggest supported symbol for each table type
 	// https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#the-codes-for-literals-lengths-match-lengths-and-offsets
-	maxTableSymbol = [3]uint8{tableLiteralLengths: 35, tableOffsets: 30, tableMatchLengths: 52}
+	maxTableSymbol = [3]uint8{tableLiteralLengths: maxLiteralLengthSymbol, tableOffsets: maxOffsetLengthSymbol, tableMatchLengths: maxMatchLengthSymbol}
+
+	// bitTables is the bits table for each table.
+	bitTables = [3][]byte{tableLiteralLengths: llBitsTable[:], tableOffsets: nil, tableMatchLengths: mlBitsTable[:]}
 )
 
 type tableIndex uint8
@@ -31,6 +39,10 @@ const (
 	tableLiteralLengths tableIndex = 0
 	tableOffsets        tableIndex = 1
 	tableMatchLengths   tableIndex = 2
+
+	maxLiteralLengthSymbol = 35
+	maxOffsetLengthSymbol  = 30
+	maxMatchLengthSymbol   = 52
 )
 
 // baseOffset is used for calculating transformations.
@@ -126,5 +138,16 @@ func init() {
 			panic(fmt.Errorf("building table %v: %v", tableIndex(i), err))
 		}
 		f.preDefined = true
+
+		// Create encoder as well
+		enc := &fsePredefEnc[i]
+		copy(enc.norm[:], f.norm[:])
+		enc.symbolLen = f.symbolLen
+		enc.actualTableLog = f.actualTableLog
+		if err := enc.buildCTable(); err != nil {
+			panic(fmt.Errorf("building encoding table %v: %v", tableIndex(i), err))
+		}
+		enc.setBits(bitTables[i])
+		enc.preDefined = true
 	}
 }

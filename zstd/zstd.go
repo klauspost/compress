@@ -9,6 +9,13 @@ import (
 )
 
 const debug = false
+const debugSequences = false
+
+// force encoder to use predefined tables.
+const forcePreDef = false
+
+// zstdMinMatch is the minimum zstd match length.
+const zstdMinMatch = 3
 
 var (
 	// ErrReservedBlockType is returned when a reserved block type is found.
