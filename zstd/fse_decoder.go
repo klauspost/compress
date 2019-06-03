@@ -52,8 +52,7 @@ func (s *fseDecoder) readNCount(b *byteReader, maxSymbol uint16) error {
 		charnum   uint16
 		previous0 bool
 	)
-	iend := b.remain()
-	if iend < 4 {
+	if b.remain() < 4 {
 		return errors.New("input too small")
 	}
 	bitStream := b.Uint32()
@@ -73,8 +72,10 @@ func (s *fseDecoder) readNCount(b *byteReader, maxSymbol uint16) error {
 
 	for remaining > 1 && charnum <= maxSymbol {
 		if previous0 {
+			//println("prev0")
 			n0 := charnum
 			for (bitStream & 0xFFFF) == 0xFFFF {
+				//println("24 x 0")
 				n0 += 24
 				if r := b.remain(); r > 5 {
 					b.advance(2)
@@ -85,6 +86,7 @@ func (s *fseDecoder) readNCount(b *byteReader, maxSymbol uint16) error {
 					bitCount += 16
 				}
 			}
+			//printf("bitstream: %d, 0b%b", bitStream&3, bitStream)
 			for (bitStream & 3) == 3 {
 				n0 += 3
 				bitStream >>= 2
@@ -96,8 +98,9 @@ func (s *fseDecoder) readNCount(b *byteReader, maxSymbol uint16) error {
 			if n0 > maxSymbolValue {
 				return errors.New("maxSymbolValue too small")
 			}
+			//println("inserting ", n0-charnum, "zeroes from idx", charnum, "ending before", n0)
 			for charnum < n0 {
-				s.norm[charnum&0xff] = 0
+				s.norm[uint8(charnum)] = 0
 				charnum++
 			}
 
@@ -115,6 +118,9 @@ func (s *fseDecoder) readNCount(b *byteReader, maxSymbol uint16) error {
 
 		if int32(bitStream)&(threshold-1) < max {
 			count = int32(bitStream) & (threshold - 1)
+			if debug && nbBits < 1 {
+				panic("nbBits underflow")
+			}
 			bitCount += nbBits - 1
 		} else {
 			count = int32(bitStream) & (2*threshold - 1)
@@ -142,15 +148,17 @@ func (s *fseDecoder) readNCount(b *byteReader, maxSymbol uint16) error {
 			threshold >>= 1
 		}
 
+		//println("b.off:", b.off, "len:", len(b.b), "bc:", bitCount, "remain:", b.remain())
 		if r := b.remain(); r >= 7 || r+int(bitCount>>3) >= 4 {
 			b.advance(bitCount >> 3)
 			bitCount &= 7
 		} else {
-			bitCount -= (uint)(8 * (iend - 4 - b.off))
-			b.off = iend - 4
+			bitCount -= (uint)(8 * (len(b.b) - 4 - b.off))
+			b.off = len(b.b) - 4
+			//println("b.off:", b.off, "len:", len(b.b), "bc:", bitCount, "iend", iend)
 		}
-		v := b.Uint32()
-		bitStream = v >> (bitCount & 31)
+		bitStream = b.Uint32() >> (bitCount & 31)
+		//printf("bitstream is now: 0b%b", bitStream)
 	}
 	s.symbolLen = charnum
 	if s.symbolLen <= 1 {
@@ -169,6 +177,7 @@ func (s *fseDecoder) readNCount(b *byteReader, maxSymbol uint16) error {
 		return fmt.Errorf("corruption detected (total %d != %d)", gotTotal, 1<<s.actualTableLog)
 	}
 	b.advance((bitCount + 7) >> 3)
+	// println(s.norm[:s.symbolLen], s.symbolLen)
 	return s.buildDtable()
 }
 

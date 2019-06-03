@@ -11,9 +11,23 @@ import (
 )
 
 type seq struct {
-	literals    uint32
-	matchLen    uint32
-	matchOffset uint32
+	litLen   uint32
+	matchLen uint32
+	offset   uint32
+
+	// Codes are stored here for the encoder
+	// so they only have to be looked up once.
+	llCode, mlCode, ofCode uint8
+}
+
+func (s seq) String() string {
+	if s.offset <= 3 {
+		if s.offset == 0 {
+			return fmt.Sprint("litLen:", s.litLen, ", matchLen:", s.matchLen+zstdMinMatch, ", offset: INVALID (0)")
+		}
+		return fmt.Sprint("litLen:", s.litLen, ", matchLen:", s.matchLen+zstdMinMatch, ", offset:", s.offset, " (repeat)")
+	}
+	return fmt.Sprint("litLen:", s.litLen, ", matchLen:", s.matchLen+zstdMinMatch, ", offset:", s.offset-3, " (new)")
 }
 
 type seqCompMode uint8
@@ -89,8 +103,8 @@ func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
 			br.fill()
 		}
 
-		if debug {
-			//println("Seq", seqs-i, "Litlen:", litLen, "matchOff:", matchOff, "matchLen:", matchLen)
+		if debugSequences {
+			println("Seq", seqs-i-1, "Litlen:", litLen, "matchOff:", matchOff, "(abs) matchLen:", matchLen)
 		}
 
 		if litLen > len(s.literals) {

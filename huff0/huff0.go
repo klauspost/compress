@@ -23,7 +23,7 @@ const (
 	huffNodesLen    = 512
 
 	// BlockSizeMax is maximum input size for a single block uncompressed.
-	BlockSizeMax = 128 << 10
+	BlockSizeMax = 1<<18 - 1
 )
 
 var (
@@ -194,6 +194,7 @@ func (c cTable) write(s *Scratch) error {
 			s.Out = append(s.Out, b...)
 			return nil
 		}
+		// Unable to compress (RLE/uncompressible)
 	}
 	// write raw values as 4-bits (max : 15)
 	if maxSymbolValue > (256 - 128) {
