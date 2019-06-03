@@ -679,7 +679,9 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 	if err != nil {
 		printf("Closing sequences: %v, %+v\n", err, *br)
 	}
-
+	if len(b.data) > maxCompressedBlockSize {
+		return fmt.Errorf("compressed block size too large (%d)", len(b.data))
+	}
 	// Set output and release references.
 	b.dst = seqs.out
 	seqs.out, seqs.literals, seqs.hist = nil, nil, nil

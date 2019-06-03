@@ -16,7 +16,7 @@ const (
 	tableMask         = tableSize - 1     // Mask for table indices. Redundant, but can eliminate bounds checks.
 	tableShift        = 32 - tableBits    // Right-shift to get the tableBits most significant bits of a uint32.
 	maxMatchOffset    = maxStoreBlockSize // The largest match offset
-	maxStoreBlockSize = 1 << 17
+	maxStoreBlockSize = maxCompressedBlockSize
 	maxMatchLength    = 131074
 )
 
