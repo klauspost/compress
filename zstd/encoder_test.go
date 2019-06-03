@@ -275,32 +275,40 @@ func TestWithEncoderPadding(t *testing.T) {
 }
 func TestEncoder_EncoderXML(t *testing.T) {
 	testEncoderRoundtrip(t, "./testdata/xml.zst", []byte{0x56, 0x54, 0x69, 0x8e, 0x40, 0x50, 0x11, 0xe})
+	testEncoderRoundtripWriter(t, "./testdata/xml.zst", []byte{0x56, 0x54, 0x69, 0x8e, 0x40, 0x50, 0x11, 0xe})
 }
 
 func TestEncoder_EncoderTwain(t *testing.T) {
 	testEncoderRoundtrip(t, "../testdata/Mark.Twain-Tom.Sawyer.txt", []byte{0x12, 0x1f, 0x12, 0x70, 0x79, 0x37, 0x1f, 0xc6})
+	testEncoderRoundtripWriter(t, "../testdata/Mark.Twain-Tom.Sawyer.txt", []byte{0x12, 0x1f, 0x12, 0x70, 0x79, 0x37, 0x1f, 0xc6})
 }
 
 func TestEncoder_EncoderPi(t *testing.T) {
 	testEncoderRoundtrip(t, "../testdata/pi.txt", []byte{0xe7, 0xe5, 0x25, 0x39, 0x92, 0xc7, 0x4a, 0xfb})
+	testEncoderRoundtripWriter(t, "../testdata/pi.txt", []byte{0xe7, 0xe5, 0x25, 0x39, 0x92, 0xc7, 0x4a, 0xfb})
 }
 
 func TestEncoder_EncoderSilesia(t *testing.T) {
 	testEncoderRoundtrip(t, "testdata/silesia.tar", []byte{0xa5, 0x5b, 0x5e, 0xe, 0x5e, 0xea, 0x51, 0x6b})
+	testEncoderRoundtripWriter(t, "testdata/silesia.tar", []byte{0xa5, 0x5b, 0x5e, 0xe, 0x5e, 0xea, 0x51, 0x6b})
 }
 
 func TestEncoder_EncoderSimple(t *testing.T) {
 	testEncoderRoundtrip(t, "testdata/z000028", []byte{0x8b, 0x2, 0x37, 0x70, 0x92, 0xb, 0x98, 0x95})
+	testEncoderRoundtripWriter(t, "testdata/z000028", []byte{0x8b, 0x2, 0x37, 0x70, 0x92, 0xb, 0x98, 0x95})
 }
 
 func TestEncoder_EncoderHTML(t *testing.T) {
 	testEncoderRoundtrip(t, "../testdata/html.txt", []byte{0x35, 0xa9, 0x5c, 0x37, 0x20, 0x9e, 0xc3, 0x37})
+	testEncoderRoundtripWriter(t, "../testdata/html.txt", []byte{0x35, 0xa9, 0x5c, 0x37, 0x20, 0x9e, 0xc3, 0x37})
 }
 
 func TestEncoder_EncoderEnwik9(t *testing.T) {
 	testEncoderRoundtrip(t, "./testdata/enwik9.zst", []byte{0x28, 0xfa, 0xf4, 0x30, 0xca, 0x4b, 0x64, 0x12})
+	testEncoderRoundtripWriter(t, "./testdata/enwik9.zst", []byte{0x28, 0xfa, 0xf4, 0x30, 0xca, 0x4b, 0x64, 0x12})
 }
 
+// test roundtrip using io.ReaderFrom interface.
 func testEncoderRoundtrip(t *testing.T, file string, wantCRC []byte) {
 	f, err := os.Open(file)
 	if err != nil {
@@ -334,7 +342,92 @@ func testEncoderRoundtrip(t *testing.T, file string, wantCRC []byte) {
 	var wantSize int64
 	start := time.Now()
 	go func() {
-		n, err := io.Copy(enc, input)
+		n, err := enc.ReadFrom(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantSize = n
+		err = enc.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		pw.Close()
+	}()
+	var gotSize int64
+
+	// Check CRC
+	d := xxhash.New()
+	if true {
+		gotSize, err = io.Copy(d, dec2)
+	} else {
+		fout, err := os.Create(file + ".got")
+		if err != nil {
+			t.Fatal(err)
+		}
+		gotSize, err = io.Copy(io.MultiWriter(fout, d), dec2)
+	}
+	if wantSize != gotSize {
+		t.Errorf("want size (%d) != got size (%d)", wantSize, gotSize)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotCRC := d.Sum(nil); len(wantCRC) > 0 && !bytes.Equal(gotCRC, wantCRC) {
+		t.Errorf("crc mismatch %#v (want) != %#v (got)", wantCRC, gotCRC)
+	} else if len(wantCRC) != 8 {
+		t.Logf("Unable to verify CRC: %#v", gotCRC)
+	} else {
+		t.Logf("CRC Verified: %#v", gotCRC)
+	}
+	t.Log("Fast Encoder len", wantSize)
+	mbpersec := (float64(wantSize) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
+	t.Logf("Encoded+Decoded %d bytes with %.2f MB/s", wantSize, mbpersec)
+}
+
+type writerWrapper struct {
+	w io.Writer
+}
+
+func (w writerWrapper) Write(p []byte) (n int, err error) {
+	return w.w.Write(p)
+}
+
+// test roundtrip using plain io.Writer interface.
+func testEncoderRoundtripWriter(t *testing.T, file string, wantCRC []byte) {
+	f, err := os.Open(file)
+	if err != nil {
+		if os.IsNotExist(err) {
+			t.Skip("No input file:", file)
+			return
+		}
+		t.Fatal(err)
+	}
+	defer f.Close()
+	input := io.Reader(f)
+	if strings.HasSuffix(file, ".zst") {
+		dec, err := NewReader(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		input = dec
+		defer dec.Close()
+	}
+
+	pr, pw := io.Pipe()
+	dec2, err := NewReader(pr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	enc, err := NewWriter(pw, WithEncoderCRC(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	encW := writerWrapper{w: enc}
+	var wantSize int64
+	start := time.Now()
+	go func() {
+		n, err := io.CopyBuffer(encW, input, make([]byte, 1337))
 		if err != nil {
 			t.Fatal(err)
 		}

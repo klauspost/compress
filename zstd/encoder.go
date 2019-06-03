@@ -126,8 +126,8 @@ func (e *Encoder) Write(p []byte) (n int, err error) {
 			return n + len(p), nil
 		}
 		add := p
-		if len(p) > maxStoreBlockSize {
-			add = add[:maxStoreBlockSize]
+		if len(p)+len(s.filling) > maxStoreBlockSize {
+			add = add[:maxStoreBlockSize-len(s.filling)]
 		}
 		if e.o.crc {
 			_, _ = s.encoder.crc.Write(add)
@@ -157,6 +157,9 @@ func (e *Encoder) nextBlock(final bool) error {
 	s.wg.Wait()
 	if s.err != nil {
 		return s.err
+	}
+	if len(s.filling) > maxStoreBlockSize {
+		return fmt.Errorf("block > maxStoreBlockSize")
 	}
 	if !s.headerWritten {
 		var tmp [maxHeaderSize]byte
