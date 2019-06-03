@@ -125,7 +125,10 @@ func (e *Encoder) Write(p []byte) (n int, err error) {
 			s.filling = append(s.filling, p...)
 			return n + len(p), nil
 		}
-		add := p[:maxStoreBlockSize]
+		add := p
+		if len(p) > maxStoreBlockSize {
+			add = add[:maxStoreBlockSize]
+		}
 		if e.o.crc {
 			_, _ = s.encoder.crc.Write(add)
 		}
