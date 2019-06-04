@@ -49,6 +49,10 @@ var (
 	// For the time being dictionaries are not supported.
 	ErrUnknownDictionary = errors.New("unknown dictionary")
 
+	// ErrFrameSizeExceeded is returned if the stated frame size is exceeded.
+	// This is only returned if SingleSegment is specified on the frame.
+	ErrFrameSizeExceeded = errors.New("frame size exceeded")
+
 	// ErrCRCMismatch is returned if CRC mismatches.
 	ErrCRCMismatch = errors.New("CRC check failed")
 
