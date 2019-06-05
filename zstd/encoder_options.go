@@ -14,6 +14,8 @@ type encoderOptions struct {
 	crc        bool
 	single     bool
 	pad        int
+	blockSize  int
+	windowSize int
 }
 
 func (o *encoderOptions) setDefault() {
@@ -22,6 +24,8 @@ func (o *encoderOptions) setDefault() {
 		concurrent: runtime.GOMAXPROCS(0),
 		crc:        true,
 		single:     false,
+		blockSize:  1 << 16,
+		windowSize: 1 << 21,
 	}
 }
 

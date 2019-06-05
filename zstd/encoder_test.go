@@ -505,7 +505,7 @@ func TestEncoder_EncodeAllSilesia(t *testing.T) {
 }
 
 func TestEncoder_EncodeAllEnwik9(t *testing.T) {
-	if true || testing.Short() {
+	if false || testing.Short() {
 		t.SkipNow()
 	}
 	file := "testdata/enwik9.zst"
@@ -668,84 +668,3 @@ func BenchmarkEncoder_EncodeAllPi(b *testing.B) {
 		}
 	}
 }
-
-/*
-func BenchmarkSnappy_Enwik9(b *testing.B) {
-	f, err := os.Open("testdata/enwik9.zst")
-	if err != nil {
-		b.Fatal(err)
-	}
-	dec, err := NewReader(f)
-	if err != nil {
-		b.Fatal(err)
-	}
-	in, err := ioutil.ReadAll(dec)
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer dec.Close()
-
-	var comp bytes.Buffer
-	w := snappy.NewBufferedWriter(&comp)
-	_, err = io.Copy(w, bytes.NewBuffer(in))
-	if err != nil {
-		b.Fatal(err)
-	}
-	err = w.Close()
-	if err != nil {
-		b.Fatal(err)
-	}
-	s := SnappyConverter{}
-	compBytes := comp.Bytes()
-	_, err = s.Convert(&comp, ioutil.Discard)
-	if err != io.EOF {
-		b.Fatal(err)
-	}
-	b.ResetTimer()
-	b.ReportAllocs()
-	b.SetBytes(int64(len(in)))
-	for i := 0; i < b.N; i++ {
-		_, err := s.Convert(bytes.NewBuffer(compBytes), ioutil.Discard)
-		if err != io.EOF {
-			b.Fatal(err)
-		}
-	}
-}
-
-func BenchmarkSnappy_ConvertSilesia(b *testing.B) {
-	in, err := ioutil.ReadFile("testdata/silesia.tar")
-	if err != nil {
-		if os.IsNotExist(err) {
-			b.Skip("Missing testdata/silesia.tar")
-			return
-		}
-		b.Fatal(err)
-	}
-
-	var comp bytes.Buffer
-	w := snappy.NewBufferedWriter(&comp)
-	_, err = io.Copy(w, bytes.NewBuffer(in))
-	if err != nil {
-		b.Fatal(err)
-	}
-	err = w.Close()
-	if err != nil {
-		b.Fatal(err)
-	}
-	s := SnappyConverter{}
-	compBytes := comp.Bytes()
-	_, err = s.Convert(&comp, ioutil.Discard)
-	if err != io.EOF {
-		b.Fatal(err)
-	}
-	b.ResetTimer()
-	b.ReportAllocs()
-	b.SetBytes(int64(len(in)))
-	for i := 0; i < b.N; i++ {
-		_, err := s.Convert(bytes.NewBuffer(compBytes), ioutil.Discard)
-		if err != io.EOF {
-			b.Fatal(err)
-		}
-	}
-}
-*/
