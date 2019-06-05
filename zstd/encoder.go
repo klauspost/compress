@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	rdebug "runtime/debug"
 	"sync"
 )
 
@@ -67,7 +68,9 @@ func NewWriter(w io.Writer, opts ...EOption) (*Encoder, error) {
 func (e *Encoder) initialize() {
 	e.encoders = make(chan *fastEncoder, e.o.concurrent)
 	for i := 0; i < e.o.concurrent; i++ {
-		enc := fastEncoder{}
+		enc := fastEncoder{
+			maxMatchOff: int32(e.o.windowSize),
+		}
 		e.encoders <- &enc
 	}
 }
@@ -81,16 +84,16 @@ func (e *Encoder) Reset(w io.Writer) {
 	s := &e.state
 	s.wg.Wait()
 	if cap(s.filling) == 0 {
-		s.filling = make([]byte, 0, maxStoreBlockSize)
+		s.filling = make([]byte, 0, e.o.blockSize)
 	}
 	if cap(s.current) == 0 {
-		s.current = make([]byte, 0, maxStoreBlockSize)
+		s.current = make([]byte, 0, e.o.blockSize)
 	}
 	if cap(s.previous) == 0 {
-		s.previous = make([]byte, 0, maxStoreBlockSize)
+		s.previous = make([]byte, 0, e.o.blockSize)
 	}
 	if s.encoder == nil {
-		s.encoder = &fastEncoder{}
+		s.encoder = &fastEncoder{maxMatchOff: int32(e.o.windowSize)}
 		s.encoder.useRepeat = false
 	}
 	if s.writing == nil {
@@ -118,7 +121,7 @@ func (e *Encoder) Reset(w io.Writer) {
 func (e *Encoder) Write(p []byte) (n int, err error) {
 	s := &e.state
 	for len(p) > 0 {
-		if len(p)+len(s.filling) < maxStoreBlockSize {
+		if len(p)+len(s.filling) < e.o.blockSize {
 			if e.o.crc {
 				_, _ = s.encoder.crc.Write(p)
 			}
@@ -126,8 +129,8 @@ func (e *Encoder) Write(p []byte) (n int, err error) {
 			return n + len(p), nil
 		}
 		add := p
-		if len(p)+len(s.filling) > maxStoreBlockSize {
-			add = add[:maxStoreBlockSize-len(s.filling)]
+		if len(p)+len(s.filling) > e.o.blockSize {
+			add = add[:e.o.blockSize-len(s.filling)]
 		}
 		if e.o.crc {
 			_, _ = s.encoder.crc.Write(add)
@@ -135,7 +138,7 @@ func (e *Encoder) Write(p []byte) (n int, err error) {
 		s.filling = append(s.filling, add...)
 		p = p[len(add):]
 		n += len(add)
-		if len(s.filling) < maxStoreBlockSize {
+		if len(s.filling) < e.o.blockSize {
 			return n, nil
 		}
 		err := e.nextBlock(false)
@@ -158,14 +161,14 @@ func (e *Encoder) nextBlock(final bool) error {
 	if s.err != nil {
 		return s.err
 	}
-	if len(s.filling) > maxStoreBlockSize {
+	if len(s.filling) > e.o.blockSize {
 		return fmt.Errorf("block > maxStoreBlockSize")
 	}
 	if !s.headerWritten {
 		var tmp [maxHeaderSize]byte
 		fh := frameHeader{
 			ContentSize:   0,
-			WindowSize:    maxStoreBlockSize * 2,
+			WindowSize:    uint32(s.encoder.maxMatchOff),
 			SingleSegment: false,
 			Checksum:      e.o.crc,
 			DictID:        0,
@@ -213,6 +216,7 @@ func (e *Encoder) nextBlock(final bool) error {
 		defer func() {
 			if r := recover(); r != nil {
 				s.err = fmt.Errorf("panic while encoding: %v", r)
+				rdebug.PrintStack()
 			}
 			s.wg.Done()
 		}()
@@ -239,6 +243,7 @@ func (e *Encoder) nextBlock(final bool) error {
 			defer func() {
 				if r := recover(); r != nil {
 					s.writeErr = fmt.Errorf("panic while encoding/writing: %v", r)
+					rdebug.PrintStack()
 				}
 				s.wWg.Done()
 			}()
@@ -272,7 +277,7 @@ func (e *Encoder) ReadFrom(r io.Reader) (n int64, err error) {
 		println("Using ReadFrom")
 	}
 	// Maybe handle stuff queued?
-	e.state.filling = e.state.filling[:maxStoreBlockSize]
+	e.state.filling = e.state.filling[:e.o.blockSize]
 	src := e.state.filling
 	for {
 		n2, err := r.Read(src)
@@ -305,7 +310,7 @@ func (e *Encoder) ReadFrom(r io.Reader) (n int64, err error) {
 		if err != nil {
 			return n, err
 		}
-		e.state.filling = e.state.filling[:maxStoreBlockSize]
+		e.state.filling = e.state.filling[:e.o.blockSize]
 		src = e.state.filling
 	}
 }
@@ -395,7 +400,7 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 	blk := enc.blk
 	fh := frameHeader{
 		ContentSize:   uint64(len(src)),
-		WindowSize:    maxStoreBlockSize * 2,
+		WindowSize:    uint32(enc.maxMatchOff),
 		SingleSegment: e.o.single,
 		Checksum:      e.o.crc,
 		DictID:        0,
@@ -412,8 +417,8 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 
 	for len(src) > 0 {
 		todo := src
-		if len(todo) > maxStoreBlockSize {
-			todo = todo[:maxStoreBlockSize]
+		if len(todo) > e.o.blockSize {
+			todo = todo[:e.o.blockSize]
 		}
 		src = src[len(todo):]
 		if e.o.crc {
@@ -429,7 +434,7 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 		switch err {
 		case errIncompressible:
 			if debug {
-				println("Storing uncompressible block as raw")
+				println("Storing incompressible block as raw")
 			}
 			blk.encodeRaw(todo)
 			blk.popOffsets()
