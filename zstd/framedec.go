@@ -333,6 +333,7 @@ func (d *frameDec) initAsync() {
 func (d *frameDec) startDecoder(output chan decodeOutput) {
 	// TODO: Init to dictionary
 	d.history.reset()
+	written := int64(0)
 
 	defer func() {
 		d.asyncRunningMu.Lock()
@@ -396,6 +397,12 @@ func (d *frameDec) startDecoder(output chan decodeOutput) {
 				return
 			}
 		}
+		written += int64(len(r.b))
+		if d.SingleSegment && uint64(written) > d.FrameContentSize {
+			r.err = ErrFrameSizeExceeded
+			output <- r
+			return
+		}
 		if block.Last {
 			r.err = d.checkCRC()
 			output <- r
@@ -439,6 +446,10 @@ func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {
 		}
 		if uint64(len(d.history.b)) > d.o.maxDecodedSize {
 			err = ErrDecoderSizeExceeded
+			break
+		}
+		if d.SingleSegment && uint64(len(d.history.b)) > d.o.maxDecodedSize {
+			err = ErrFrameSizeExceeded
 			break
 		}
 	}

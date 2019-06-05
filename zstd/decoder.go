@@ -5,6 +5,7 @@
 package zstd
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"sync"
@@ -148,14 +149,28 @@ func (d *Decoder) Reset(r io.Reader) error {
 		return errors.New("nil Reader sent as input")
 	}
 
-	// TODO: If r is a *bytes.Buffer, we could automatically switch to sync operation.
-
 	if d.stream == nil {
 		d.stream = make(chan decodeStream, 1)
 		go d.startStreamDecoder(d.stream)
 	}
 
 	d.drainOutput()
+
+	// If bytes buffer and < 1MB, do sync decoding anyway.
+	if bb, ok := r.(*bytes.Buffer); ok && bb.Len() < 1<<20 {
+		b := bb.Bytes()
+		dst, err := d.DecodeAll(b, nil)
+		if err == nil {
+			err = io.EOF
+		}
+		d.current.decodeOutput = decodeOutput{
+			d:   nil,
+			b:   dst,
+			err: err,
+		}
+		d.current.output <- decodeOutput{err: errEndOfStream}
+		return nil
+	}
 
 	// Remove current block.
 	d.current.decodeOutput = decodeOutput{}
@@ -366,14 +381,18 @@ func (d *Decoder) startStreamDecoder(inStream chan decodeStream) {
 	decodeStream:
 		for {
 			err := frame.reset(&br)
-			println("Frame decoder returned", err)
+			if debug && err != nil {
+				println("Frame decoder returned", err)
+			}
 			if err != nil {
 				stream.output <- decodeOutput{
 					err: err,
 				}
 				break
 			}
-			println("starting frame decoder")
+			if debug {
+				println("starting frame decoder")
+			}
 
 			// This goroutine will forward history between frames.
 			frame.frameDone.Add(1)
