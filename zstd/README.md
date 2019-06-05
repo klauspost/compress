@@ -146,7 +146,7 @@ The test data for the Large Text Compression Benchmark is the first
 http://mattmahoney.net/dc/textdata.html
 
 file    out     level   insize  outsize     millis  mb/s
-enwik9  zskp    1   1000000000  348027537   7537    126.53
+enwik9  zskp    1   1000000000  343933099   5900    161.61
 enwik9  gzstd   1   1000000000  382578136   13627   69.98
 enwik9  gzstd   3   1000000000  349139651   22344   42.68
 enwik9  zstd    1   1000000000  357416379   4838    197.12
@@ -156,7 +156,7 @@ GOB stream of binary data. Highly compressible.
 https://files.klauspost.com/compress/gob-stream.7z
 
 file        out level   insize      outsize     millis  mb/s
-gob-stream  zskp    1   1911399616  272529084   7047    258.67
+gob-stream  zskp    1   1911399616  235708371   5084    358.55
 gob-stream  gzstd   1   1911399616  357382641   14727   123.78
 gob-stream  gzstd   3   1911399616  327835097   17005   107.19
 gob-stream  zstd    1   1911399616  250787165   4345    419.43
@@ -166,7 +166,7 @@ Highly compressible JSON file. Similar to logs in a lot of ways.
 https://files.klauspost.com/compress/adresser.001.gz
 
 file            out level   insize      outsize     millis  mb/s
-adresser.001    zskp    1   1073741824  18235536    1220    839.34
+adresser.001    zskp    1   1073741824  18358532    1366    749.63
 adresser.001    gzstd   1   1073741824  47755503    3079    332.47
 adresser.001    gzstd   3   1073741824  40052381    3051    335.63
 adresser.001    zstd    1   1073741824  16135896    903     1133.99
@@ -176,7 +176,7 @@ VM Image, Linux mint with a few installed applications:
 https://files.klauspost.com/compress/rawstudio-mint14.7z
 
 file    out level   insize  outsize millis  mb/s
-rawstudio-mint14.tar    zskp    1   8558382592  3800966951  43201   188.93
+rawstudio-mint14.tar    zskp    1   8558382592  3655209378  36011   226.64
 rawstudio-mint14.tar    gzstd   1   8558382592  3926257486  84712   96.35
 rawstudio-mint14.tar    gzstd   3   8558382592  3740711978  176344  46.28
 rawstudio-mint14.tar    zstd    1   8558382592  3607859705  27613   295.58
@@ -187,7 +187,7 @@ The test data is designed to test archivers in realistic backup scenarios.
 http://mattmahoney.net/dc/10gb.html
 
 file    out level   insize  outsize millis  mb/s
-10gb.tar    zskp    1   10065157632 5001038195  59349   161.74
+10gb.tar    zskp    1   10065157632 4888194207  44595   215.25
 10gb.tar    gzstd   1   10065157632 5198296126  97769   98.18
 10gb.tar    gzstd   3   10065157632 4932665487  313427  30.63
 10gb.tar    zstd    1   10065157632 4940796535  40391   237.65
@@ -197,12 +197,11 @@ Silesia Corpus:
 http://sun.aei.polsl.pl/~sdeor/corpus/silesia.zip
 
 file    out level   insize  outsize millis  mb/s
-silesia.tar zskp    1   211947520   73712964    1369    147.65
+silesia.tar zskp    1   211947520   73119165    1106    182.59
 silesia.tar gzstd   1   211947520   80007735    2515    80.37
 silesia.tar gzstd   3   211947520   73133380    4259    47.45
 silesia.tar zstd    1   211947520   73513991    946     213.44
 silesia.tar zstd    2   211947520   69595464    1097    184.09
-
 ```
 
 ### Converters
