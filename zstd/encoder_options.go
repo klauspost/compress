@@ -25,7 +25,7 @@ func (o *encoderOptions) setDefault() {
 		crc:        true,
 		single:     false,
 		blockSize:  1 << 16,
-		windowSize: 1 << 21,
+		windowSize: 1 << 22,
 	}
 }
 

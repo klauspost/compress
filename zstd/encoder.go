@@ -20,7 +20,7 @@ import (
 // Use NewWriter to create a new instance.
 type Encoder struct {
 	o        encoderOptions
-	encoders chan *fastEncoder
+	encoders chan *fastDEncoder
 	state    encoderState
 	init     sync.Once
 }
@@ -30,7 +30,7 @@ type encoderState struct {
 	filling       []byte
 	current       []byte
 	previous      []byte
-	encoder       *fastEncoder
+	encoder       *fastDEncoder
 	writing       *blockEnc
 	err           error
 	writeErr      error
@@ -66,10 +66,12 @@ func NewWriter(w io.Writer, opts ...EOption) (*Encoder, error) {
 }
 
 func (e *Encoder) initialize() {
-	e.encoders = make(chan *fastEncoder, e.o.concurrent)
+	e.encoders = make(chan *fastDEncoder, e.o.concurrent)
 	for i := 0; i < e.o.concurrent; i++ {
-		enc := fastEncoder{
-			maxMatchOff: int32(e.o.windowSize),
+		enc := fastDEncoder{
+			fastEncoder: fastEncoder{
+				maxMatchOff: int32(e.o.windowSize),
+			},
 		}
 		e.encoders <- &enc
 	}
@@ -93,7 +95,7 @@ func (e *Encoder) Reset(w io.Writer) {
 		s.previous = make([]byte, 0, e.o.blockSize)
 	}
 	if s.encoder == nil {
-		s.encoder = &fastEncoder{maxMatchOff: int32(e.o.windowSize)}
+		s.encoder = &fastDEncoder{fastEncoder: fastEncoder{maxMatchOff: int32(e.o.windowSize)}}
 		s.encoder.useRepeat = false
 	}
 	if s.writing == nil {
