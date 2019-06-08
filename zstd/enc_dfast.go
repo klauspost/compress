@@ -145,11 +145,11 @@ encodeLoop:
 					// and have to do special offset treatment.
 					startLimit := nextEmit + 1
 
-					sMin := s - e.maxMatchOff
-					if sMin < 0 {
-						sMin = 0
+					tMin := s - e.maxMatchOff
+					if tMin < 0 {
+						tMin = 0
 					}
-					for repIndex > sMin && start > startLimit && src[repIndex-1] == src[start-1] && seq.matchLen < maxMatchLength-zstdMinMatch {
+					for repIndex > tMin && start > startLimit && src[repIndex-1] == src[start-1] && seq.matchLen < maxMatchLength-zstdMinMatch-1 {
 						repIndex--
 						start--
 						seq.matchLen++
@@ -194,11 +194,11 @@ encodeLoop:
 					// and have to do special offset treatment.
 					startLimit := nextEmit + 1
 
-					sMin := s - e.maxMatchOff
-					if sMin < 0 {
-						sMin = 0
+					tMin := s - e.maxMatchOff
+					if tMin < 0 {
+						tMin = 0
 					}
-					for repIndex > sMin && start > startLimit && src[repIndex-1] == src[start-1] && seq.matchLen < maxMatchLength-zstdMinMatch {
+					for repIndex > tMin && start > startLimit && src[repIndex-1] == src[start-1] && seq.matchLen < maxMatchLength-zstdMinMatch-1 {
 						repIndex--
 						start--
 						seq.matchLen++
@@ -317,11 +317,11 @@ encodeLoop:
 		l := e.matchlen(s+4, t+4, src) + 4
 
 		// Extend backwards
-		sMin := s - e.maxMatchOff
-		if sMin < 0 {
-			sMin = 0
+		tMin := s - e.maxMatchOff
+		if tMin < 0 {
+			tMin = 0
 		}
-		for t > sMin && s > nextEmit && src[t-1] == src[s-1] && l < maxMatchLength {
+		for t > tMin && s > nextEmit && src[t-1] == src[s-1] && l < maxMatchLength {
 			s--
 			t--
 			l++
@@ -346,22 +346,21 @@ encodeLoop:
 		}
 
 		// Index match start + 2 and end - 2
-		if true {
-			const plus = 2
-			cvSp2 := load6432(src, s-l+plus)
-			entry := tableEntry{offset: s + -l + plus + e.cur, val: uint32(cvSp2)}
-			e.table[hash5(cvSp2, dFastShortTableBits)&dFastShortTableMask] = entry
-			e.longTable[hash8(cvSp2, dFastLongTableBits)&dFastLongTableMask] = entry
-
-			// if l is 4, we would check the same place twice.
-			if l != 4 {
-				const minus = 2
-				cvEm2 := load6432(src, s-minus)
-				entry := tableEntry{offset: s - minus + e.cur, val: uint32(cvEm2)}
-				e.table[hash5(cvEm2, dFastShortTableBits)&dFastShortTableMask] = entry
-				e.longTable[hash8(cvEm2, dFastLongTableBits)&dFastLongTableMask] = entry
-			}
+		index0 := s - l + 2
+		index1 := s - 2
+		if l == 4 {
+			// if l is 4, we would check the same place twice, so index s-1 instead.
+			index1++
 		}
+
+		cv0 := load6432(src, index0)
+		cv1 := load6432(src, index1)
+		entry0 := tableEntry{offset: index0 + e.cur, val: uint32(cv0)}
+		entry1 := tableEntry{offset: index1 + e.cur, val: uint32(cv1)}
+		e.table[hash5(cv0, dFastShortTableBits)&dFastShortTableMask] = entry0
+		e.longTable[hash8(cv0, dFastLongTableBits)&dFastLongTableMask] = entry0
+		e.table[hash5(cv1, dFastShortTableBits)&dFastShortTableMask] = entry1
+		e.longTable[hash8(cv1, dFastLongTableBits)&dFastLongTableMask] = entry1
 
 		cv = load6432(src, s)
 		nextHashS = hash5(cv, dFastShortTableBits)
