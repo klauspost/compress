@@ -31,7 +31,10 @@ You will also need the [`github.com/cespare/xxhash`](https://github.com/cespare/
 BETA - there may still be subtle bugs, but a wide variety of content has been tested. 
 There may still be implementation specific stuff in regards to error handling that could lead to edge cases. 
 
-For now, a high speed compressor has been implemented. The compression ratio is roughly equivalent to zstd level 2.
+For now, a high speed (fastest) and medium-fast (default) compressor has been implemented. 
+
+The "Fastest" compression ratio is roughly equivalent to zstd level 1. 
+The "Default" compression ration is roughly equivalent to zstd level 3 (default).
 
 In terms of speed, it is typically 2x as fast as the stdlib deflate/gzip in its fastest mode. The compression ratio compared to stdlib is around level 3, but usually 3x as fast.
 
@@ -77,6 +80,8 @@ of a stream. This is independent of the `WithEncoderConcurrency(n)`, but that is
 in the future. So if you want to limit concurrency for future updates, specify the concurrency
 you would like.
 
+You can specify your desired compression level using `WithEncoderLevel()` option. Currently only pre-defined 
+compression settings can be specified.
 
 #### Future Compatibility Guarantees
 
@@ -135,7 +140,7 @@ I have collected some speed examples to compare speed and compression against ot
 
 * `file` is the input file.
 * `out` is the compressor used. `zskp` is this package. `gzstd` is gzip standard library. `zstd` is the Datadog cgo library.
-* `level` is the compression level used.
+* `level` is the compression level used. For `zskp` level 1 is "fastest", level 2 is "default".
 * `insize`/`outsize` is the input/output size.
 * `millis` is the number of milliseconds used for compression.
 * `mb/s` is megabytes (2^20 bytes) per second.

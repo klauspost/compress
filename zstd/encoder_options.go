@@ -3,6 +3,7 @@ package zstd
 import (
 	"fmt"
 	"runtime"
+	"strings"
 )
 
 // DOption is an option for creating a encoder.
@@ -12,7 +13,7 @@ type EOption func(*encoderOptions) error
 type encoderOptions struct {
 	concurrent int
 	crc        bool
-	single     bool
+	single     *bool
 	pad        int
 	blockSize  int
 	windowSize int
@@ -24,7 +25,7 @@ func (o *encoderOptions) setDefault() {
 		// use less ram: true for now, but may change.
 		concurrent: runtime.GOMAXPROCS(0),
 		crc:        true,
-		single:     false,
+		single:     nil,
 		blockSize:  1 << 16,
 		windowSize: 1 << 22,
 		level:      SpeedDefault,
@@ -86,6 +87,9 @@ func WithEncoderPadding(n int) EOption {
 }
 
 // EncoderLevel predefines encoder compression levels.
+// Only use the constants made available, since the actual mapping
+// of these values are very likely to change and your compression could change
+// unpredictably when upgrading the library.
 type EncoderLevel int
 
 const (
@@ -103,7 +107,7 @@ const (
 	// The is not for external usage, but is used to keep track of the valid options.
 	speedLast
 
-	// SpeedBetterCompression will yield better compression than the default,
+	// SpeedBetterCompression will (in the future) yield better compression than the default,
 	// but at approximately 4x the CPU usage of the default.
 	// For now this is not implemented.
 	SpeedBetterCompression = SpeedDefault
@@ -112,6 +116,31 @@ const (
 	// For now this is not implemented.
 	SpeedBestCompression = SpeedDefault
 )
+
+// EncoderLevelFromString will convert a string representation of an encoding level back
+// to a compression level. The compare is not case sensitive.
+// If the string wasn't recognized, (false, SpeedDefault) will be returned.
+func EncoderLevelFromString(s string) (bool, EncoderLevel) {
+	for l := EncoderLevel(speedNotSet + 1); l < speedLast; l++ {
+		if strings.EqualFold(s, l.String()) {
+			return true, l
+		}
+	}
+	return false, SpeedDefault
+}
+
+// EncoderLevelFromZstd will return an encoder level that closest matches the compression
+// ratio of a specific zstd compression level.
+// Many input values will provide the same compression level.
+func EncoderLevelFromZstd(level int) EncoderLevel {
+	switch {
+	case level < 3:
+		return SpeedFastest
+	case level >= 3:
+		return SpeedDefault
+	}
+	return SpeedDefault
+}
 
 // String provides a string representation of the compression level.
 func (e EncoderLevel) String() string {
@@ -145,10 +174,11 @@ func WithEncoderLevel(l EncoderLevel) EOption {
 // a decoder is allowed to reject a compressed frame which requests a memory size beyond decoder's authorized range.
 // For broader compatibility, decoders are recommended to support memory sizes of at least 8 MB.
 // This is only a recommendation, each decoder is free to support higher or lower limits, depending on local limitations.
+// If this is not specified, block encodes will automatically choose this based on the input size.
 // This setting has no effect on streamed encodes.
 func WithSingleSegment(b bool) EOption {
 	return func(o *encoderOptions) error {
-		o.single = b
+		o.single = &b
 		return nil
 	}
 }

@@ -405,10 +405,14 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 	}()
 	enc.Reset()
 	blk := enc.Block()
+	single := len(src) > 1<<20
+	if e.o.single != nil {
+		single = *e.o.single
+	}
 	fh := frameHeader{
 		ContentSize:   uint64(len(src)),
 		WindowSize:    uint32(enc.WindowSize(len(src))),
-		SingleSegment: e.o.single,
+		SingleSegment: single,
 		Checksum:      e.o.crc,
 		DictID:        0,
 	}
