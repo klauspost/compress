@@ -114,9 +114,6 @@ encodeLoop:
 		// We allow the encoder to optionally turn off repeat offsets across blocks
 		canRepeat := len(blk.sequences) > 2
 
-		// sMin is the smallest valid offset in src that a match can start.
-		//var sMin int32
-
 		for {
 			if debug && canRepeat && offset1 == 0 {
 				panic("offset0 was 0")
@@ -231,8 +228,11 @@ encodeLoop:
 					continue
 				}
 			}
+			// Find the offsets of our two matches.
 			coffsetL := s - (candidateL.offset - e.cur)
 			coffsetS := s - (candidateS.offset - e.cur)
+
+			// Check if we have a long match.
 			if coffsetL < e.maxMatchOff && uint32(cv) == candidateL.val {
 				// Found a long match, likely at least 8 bytes.
 				// Reference encoder checks all 8 bytes, we only check 4,
@@ -250,6 +250,7 @@ encodeLoop:
 				break
 			}
 
+			// Check if we have a short match.
 			if coffsetS < e.maxMatchOff && uint32(cv) == candidateS.val {
 				// found a regular match
 				// See if we can find a long match at s+1
@@ -288,15 +289,19 @@ encodeLoop:
 				}
 				break
 			}
+
+			// No match found, move forward in input.
 			s += stepSize + ((s - nextEmit) >> (kSearchStrength - 1))
 			if s >= sLimit {
 				break encodeLoop
 			}
 			cv = load6432(src, s)
-			//nextHash = hashLen(cv, hashLog, mls)
 			nextHashS = hash5(cv, dFastShortTableBits)
 			nextHashL = hash8(cv, dFastLongTableBits)
 		}
+
+		// A 4-byte match has been found. Update recent offsets.
+		// We'll later see if more than 4 bytes.
 		offset2 = offset1
 		offset1 = s - t
 
@@ -308,27 +313,23 @@ encodeLoop:
 			panic("invalid offset")
 		}
 
-		var seq seq
-		// A 4-byte match has been found. We'll later see if more than 4 bytes
-		// match. But, prior to the match, src[nextEmit:s] are unmatched. Emit
-		// them as literal bytes.
-		seq.litLen = uint32(s - nextEmit)
-
 		// Extend the 4-byte match as long as possible.
-		l := e.matchlen(s+4, t+4, src)
+		l := e.matchlen(s+4, t+4, src) + 4
 
 		// Extend backwards
 		sMin := s - e.maxMatchOff
 		if sMin < 0 {
 			sMin = 0
 		}
-		for t > sMin && seq.litLen > 0 && src[t-1] == src[s-1] && l < maxMatchLength {
+		for t > sMin && s > nextEmit && src[t-1] == src[s-1] && l < maxMatchLength {
 			s--
 			t--
 			l++
-			seq.litLen--
 		}
-		l += 4
+
+		// Write our sequence
+		var seq seq
+		seq.litLen = uint32(s - nextEmit)
 		seq.matchLen = uint32(l - zstdMinMatch)
 		if seq.litLen > 0 {
 			blk.literals = append(blk.literals, src[nextEmit:s]...)
@@ -348,14 +349,14 @@ encodeLoop:
 		if true {
 			const plus = 2
 			cvSp2 := load6432(src, s-l+plus)
-			//	nextHash = hashLen(cv, hashLog, mls)
 			entry := tableEntry{offset: s + -l + plus + e.cur, val: uint32(cvSp2)}
 			e.table[hash5(cvSp2, dFastShortTableBits)&dFastShortTableMask] = entry
 			e.longTable[hash8(cvSp2, dFastLongTableBits)&dFastLongTableMask] = entry
+
+			// if l is 4, we would check the same place twice.
 			if l != 4 {
 				const minus = 2
 				cvEm2 := load6432(src, s-minus)
-				//	nextHash = hashLen(cv, hashLog, mls)
 				entry := tableEntry{offset: s - minus + e.cur, val: uint32(cvEm2)}
 				e.table[hash5(cvEm2, dFastShortTableBits)&dFastShortTableMask] = entry
 				e.longTable[hash8(cvEm2, dFastLongTableBits)&dFastLongTableMask] = entry
@@ -363,7 +364,6 @@ encodeLoop:
 		}
 
 		cv = load6432(src, s)
-		//		nextHash = hashLen(cv, hashLog, mls)
 		nextHashS = hash5(cv, dFastShortTableBits)
 		nextHashL = hash8(cv, dFastLongTableBits)
 

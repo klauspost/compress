@@ -118,7 +118,6 @@ func (e *fastEncoder) Encode(blk *blockEnc, src []byte) {
 
 	// TEMPLATE
 	const hashLog = tableBits
-	const mls = 6
 	// seems global, but would be nice to tweak.
 	const kSearchStrength = 8
 
@@ -145,12 +144,13 @@ func (e *fastEncoder) Encode(blk *blockEnc, src []byte) {
 
 encodeLoop:
 	for {
+		// t will contain the match offset when we find one.
+		// When existing the search loop, we have already checked 4 bytes.
 		var t int32
-		// We allow the encoder to optionally turn off repeat offsets across blocks
-		canRepeat := len(blk.sequences) > 2
 
-		// sMin is the smallest valid offset in src that a match can start.
-		//var sMin int32
+		// We will not use repeat offsets across blocks.
+		// By not using them for the first 3 matches
+		canRepeat := len(blk.sequences) > 2
 
 		for {
 			if debug && canRepeat && offset1 == 0 {
@@ -158,11 +158,6 @@ encodeLoop:
 			}
 
 			nextHash2 := hash6(cv>>8, hashLog) & tableMask
-
-			//nextHash2 := hashLen(cv>>8, hashLog, mls) & tableMask
-			if 8-mls < 0 {
-				panic("hashlog doesn't leave 2 bytes")
-			}
 			nextHash = nextHash & tableMask
 			candidate := e.table[nextHash]
 			candidate2 := e.table[nextHash2]
@@ -250,9 +245,9 @@ encodeLoop:
 				break encodeLoop
 			}
 			cv = load6432(src, s)
-			//nextHash = hashLen(cv, hashLog, mls)
 			nextHash = hash6(cv, hashLog)
 		}
+		// A 4-byte match has been found. We'll later see if more than 4 bytes.
 		offset2 = offset1
 		offset1 = s - t
 
@@ -264,27 +259,23 @@ encodeLoop:
 			panic("invalid offset")
 		}
 
-		var seq seq
-		// A 4-byte match has been found. We'll later see if more than 4 bytes
-		// match. But, prior to the match, src[nextEmit:s] are unmatched. Emit
-		// them as literal bytes.
-		seq.litLen = uint32(s - nextEmit)
-
 		// Extend the 4-byte match as long as possible.
-		l := e.matchlen(s+4, t+4, src)
+		l := e.matchlen(s+4, t+4, src) + 4
 
 		// Extend backwards
-		sMin := s - e.maxMatchOff
-		if sMin < 0 {
-			sMin = 0
+		tMin := s - e.maxMatchOff
+		if tMin < 0 {
+			tMin = 0
 		}
-		for t > sMin && seq.litLen > 0 && src[t-1] == src[s-1] && l < maxMatchLength {
+		for t > tMin && s > nextEmit && src[t-1] == src[s-1] && l < maxMatchLength {
 			s--
 			t--
 			l++
-			seq.litLen--
 		}
-		l += 4
+
+		// Write our sequence.
+		var seq seq
+		seq.litLen = uint32(s - nextEmit)
 		seq.matchLen = uint32(l - zstdMinMatch)
 		if seq.litLen > 0 {
 			blk.literals = append(blk.literals, src[nextEmit:s]...)
@@ -301,7 +292,6 @@ encodeLoop:
 			break encodeLoop
 		}
 		cv = load6432(src, s)
-		//		nextHash = hashLen(cv, hashLog, mls)
 		nextHash = hash6(cv, hashLog)
 
 		// Check offset 2
