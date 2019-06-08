@@ -163,12 +163,9 @@ func (d *Decoder) Reset(r io.Reader) error {
 		if err == nil {
 			err = io.EOF
 		}
-		d.current.decodeOutput = decodeOutput{
-			d:   nil,
-			b:   dst,
-			err: err,
-		}
-		d.current.output <- decodeOutput{err: errEndOfStream}
+		d.current.b = dst
+		d.current.err = err
+		d.current.flushed = true
 		return nil
 	}
 
@@ -228,7 +225,7 @@ func (d *Decoder) WriteTo(w io.Writer) (int64, error) {
 		return 0, errors.New("no input has been initialized")
 	}
 	var n int64
-	for d.current.err == nil {
+	for {
 		if len(d.current.b) > 0 {
 			n2, err2 := w.Write(d.current.b)
 			n += int64(n2)
@@ -236,6 +233,9 @@ func (d *Decoder) WriteTo(w io.Writer) (int64, error) {
 				d.current.err = err2
 				break
 			}
+		}
+		if d.current.err != nil {
+			break
 		}
 		d.nextBlock()
 	}
