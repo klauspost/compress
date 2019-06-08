@@ -16,6 +16,7 @@ type encoderOptions struct {
 	pad        int
 	blockSize  int
 	windowSize int
+	level      EncoderLevel
 }
 
 func (o *encoderOptions) setDefault() {
@@ -26,7 +27,19 @@ func (o *encoderOptions) setDefault() {
 		single:     false,
 		blockSize:  1 << 16,
 		windowSize: 1 << 22,
+		level:      SpeedDefault,
 	}
+}
+
+// encoder returns an encoder with the selected options.
+func (o encoderOptions) encoder() encoder {
+	switch o.level {
+	case SpeedDefault:
+		return &doubleFastEncoder{fastEncoder: fastEncoder{maxMatchOff: int32(o.windowSize)}}
+	case SpeedFastest:
+		return &fastEncoder{maxMatchOff: int32(o.windowSize)}
+	}
+	panic("unknown compression level")
 }
 
 // WithEncoderCRC will add CRC value to output.
@@ -68,6 +81,58 @@ func WithEncoderPadding(n int) EOption {
 			return fmt.Errorf("padding must less than 1GB (1<<30 bytes) ")
 		}
 		o.pad = n
+		return nil
+	}
+}
+
+// EncoderLevel predefines encoder compression levels.
+type EncoderLevel int
+
+const (
+	speedNotSet EncoderLevel = iota
+
+	// SpeedFastest will choose the fastest reasonable compression.
+	// This is roughly equivalent to the fastest Zstandard mode.
+	SpeedFastest
+
+	// SpeedDefault is the default "pretty fast" compression option.
+	// This is roughly equivalent to the default Zstandard mode (level 3).
+	SpeedDefault
+
+	// speedLast should be kept as the last actual compression option.
+	// The is not for external usage, but is used to keep track of the valid options.
+	speedLast
+
+	// SpeedBetterCompression will yield better compression than the default,
+	// but at approximately 4x the CPU usage of the default.
+	// For now this is not implemented.
+	SpeedBetterCompression = SpeedDefault
+
+	// SpeedBestCompression will choose the best available compression option.
+	// For now this is not implemented.
+	SpeedBestCompression = SpeedDefault
+)
+
+// String provides a string representation of the compression level.
+func (e EncoderLevel) String() string {
+	switch e {
+	case SpeedFastest:
+		return "fastest"
+	case SpeedDefault:
+		return "default"
+	default:
+		return "invalid"
+	}
+}
+
+// WithEncoderLevel specifies a predefined compression level.
+func WithEncoderLevel(l EncoderLevel) EOption {
+	return func(o *encoderOptions) error {
+		switch {
+		case l <= speedNotSet || l >= speedLast:
+			return fmt.Errorf("unknown encoder level")
+		}
+		o.level = l
 		return nil
 	}
 }

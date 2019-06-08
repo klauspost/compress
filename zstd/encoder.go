@@ -10,6 +10,8 @@ import (
 	"io"
 	rdebug "runtime/debug"
 	"sync"
+
+	"github.com/cespare/xxhash"
 )
 
 // Encoder provides encoding to Zstandard.
@@ -20,9 +22,19 @@ import (
 // Use NewWriter to create a new instance.
 type Encoder struct {
 	o        encoderOptions
-	encoders chan *fastDEncoder
+	encoders chan encoder
 	state    encoderState
 	init     sync.Once
+}
+
+type encoder interface {
+	Encode(blk *blockEnc, src []byte)
+	Block() *blockEnc
+	CRC() *xxhash.Digest
+	AppendCRC([]byte) []byte
+	WindowSize(size int) int32
+	UseBlock(*blockEnc)
+	Reset()
 }
 
 type encoderState struct {
@@ -30,7 +42,7 @@ type encoderState struct {
 	filling       []byte
 	current       []byte
 	previous      []byte
-	encoder       *fastDEncoder
+	encoder       encoder
 	writing       *blockEnc
 	err           error
 	writeErr      error
@@ -66,14 +78,9 @@ func NewWriter(w io.Writer, opts ...EOption) (*Encoder, error) {
 }
 
 func (e *Encoder) initialize() {
-	e.encoders = make(chan *fastDEncoder, e.o.concurrent)
+	e.encoders = make(chan encoder, e.o.concurrent)
 	for i := 0; i < e.o.concurrent; i++ {
-		enc := fastDEncoder{
-			fastEncoder: fastEncoder{
-				maxMatchOff: int32(e.o.windowSize),
-			},
-		}
-		e.encoders <- &enc
+		e.encoders <- e.o.encoder()
 	}
 }
 
@@ -95,8 +102,7 @@ func (e *Encoder) Reset(w io.Writer) {
 		s.previous = make([]byte, 0, e.o.blockSize)
 	}
 	if s.encoder == nil {
-		s.encoder = &fastDEncoder{fastEncoder: fastEncoder{maxMatchOff: int32(e.o.windowSize)}}
-		s.encoder.useRepeat = false
+		s.encoder = e.o.encoder()
 	}
 	if s.writing == nil {
 		s.writing = &blockEnc{}
@@ -125,7 +131,7 @@ func (e *Encoder) Write(p []byte) (n int, err error) {
 	for len(p) > 0 {
 		if len(p)+len(s.filling) < e.o.blockSize {
 			if e.o.crc {
-				_, _ = s.encoder.crc.Write(p)
+				_, _ = s.encoder.CRC().Write(p)
 			}
 			s.filling = append(s.filling, p...)
 			return n + len(p), nil
@@ -135,7 +141,7 @@ func (e *Encoder) Write(p []byte) (n int, err error) {
 			add = add[:e.o.blockSize-len(s.filling)]
 		}
 		if e.o.crc {
-			_, _ = s.encoder.crc.Write(add)
+			_, _ = s.encoder.CRC().Write(add)
 		}
 		s.filling = append(s.filling, add...)
 		p = p[len(add):]
@@ -170,7 +176,7 @@ func (e *Encoder) nextBlock(final bool) error {
 		var tmp [maxHeaderSize]byte
 		fh := frameHeader{
 			ContentSize:   0,
-			WindowSize:    uint32(s.encoder.maxMatchOff),
+			WindowSize:    uint32(s.encoder.WindowSize(0)),
 			SingleSegment: false,
 			Checksum:      e.o.crc,
 			DictID:        0,
@@ -197,7 +203,7 @@ func (e *Encoder) nextBlock(final bool) error {
 		// Final block, but no data.
 		if final {
 			enc := s.encoder
-			blk := enc.blk
+			blk := enc.Block()
 			blk.reset(nil)
 			blk.last = true
 			blk.encodeRaw(nil)
@@ -223,7 +229,7 @@ func (e *Encoder) nextBlock(final bool) error {
 			s.wg.Done()
 		}()
 		enc := s.encoder
-		blk := enc.blk
+		blk := enc.Block()
 		enc.Encode(blk, src)
 		blk.last = final
 		if final {
@@ -238,7 +244,7 @@ func (e *Encoder) nextBlock(final bool) error {
 		// Transfer encoders from previous write block.
 		blk.swapEncoders(s.writing)
 		// Transfer recent offsets to next.
-		enc.useBlock(s.writing)
+		enc.UseBlock(s.writing)
 		s.writing = blk
 		s.wWg.Add(1)
 		go func() {
@@ -283,7 +289,7 @@ func (e *Encoder) ReadFrom(r io.Reader) (n int64, err error) {
 	src := e.state.filling
 	for {
 		n2, err := r.Read(src)
-		_, _ = e.state.encoder.crc.Write(src[:n2])
+		_, _ = e.state.encoder.CRC().Write(src[:n2])
 		// src is now the unfilled part...
 		src = src[n2:]
 		n += int64(n2)
@@ -359,9 +365,9 @@ func (e *Encoder) Close() error {
 
 	// Write CRC
 	if e.o.crc && s.err == nil {
-		crc := s.encoder.crc.Sum(s.encoder.tmp[:0])
-		crc[0], crc[1], crc[2], crc[3] = crc[7], crc[6], crc[5], crc[4]
-		_, s.err = s.w.Write(crc[:4])
+		// heap alloc.
+		var tmp [4]byte
+		_, s.err = s.w.Write(s.encoder.AppendCRC(tmp[:0]))
 		s.nWritten += 4
 	}
 
@@ -398,11 +404,10 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 		e.encoders <- enc
 	}()
 	enc.Reset()
-	enc.useRepeat = true
-	blk := enc.blk
+	blk := enc.Block()
 	fh := frameHeader{
 		ContentSize:   uint64(len(src)),
-		WindowSize:    uint32(enc.maxMatchOff),
+		WindowSize:    uint32(enc.WindowSize(len(src))),
 		SingleSegment: e.o.single,
 		Checksum:      e.o.crc,
 		DictID:        0,
@@ -424,7 +429,7 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 		}
 		src = src[len(todo):]
 		if e.o.crc {
-			_, _ = enc.crc.Write(todo)
+			_, _ = enc.CRC().Write(todo)
 		}
 		blk.reset(nil)
 		blk.pushOffsets()
@@ -447,8 +452,7 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 		dst = append(dst, blk.output...)
 	}
 	if e.o.crc {
-		crc := enc.crc.Sum(enc.tmp[:0])
-		dst = append(dst, crc[7], crc[6], crc[5], crc[4])
+		dst = enc.AppendCRC(dst)
 	}
 	// Add padding with content from crypto/rand.Reader
 	if e.o.pad > 0 {

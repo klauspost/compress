@@ -5,6 +5,8 @@
 package zstd
 
 import (
+	"math/bits"
+
 	"github.com/cespare/xxhash"
 )
 
@@ -22,7 +24,7 @@ type tableEntry struct {
 
 type fastEncoder struct {
 	o encParams
-	// cur is the offset at the start of Hist
+	// cur is the offset at the start of hist
 	cur int32
 	// maximum offset. Should be at least 2x block size.
 	maxMatchOff int32
@@ -31,11 +33,40 @@ type fastEncoder struct {
 	table       [tableSize]tableEntry
 	tmp         [8]byte
 	blk         *blockEnc
-	useRepeat   bool
 }
 
-// Encode mimmics functionality in zstd_fast.c but uses separate buffers for previous buffer and history.
-// This should probably be refactored to a single buffer
+// CRC returns the underlying CRC writer.
+func (e *fastEncoder) CRC() *xxhash.Digest {
+	return e.crc
+}
+
+// AppendCRC will append the CRC to the destination slice and return it.
+func (e *fastEncoder) AppendCRC(dst []byte) []byte {
+	crc := e.crc.Sum(e.tmp[:0])
+	dst = append(dst, crc[7], crc[6], crc[5], crc[4])
+	return dst
+}
+
+// WindowSize returns the window size of the encoder,
+// or a window size small enough to contain the input size, if > 0.
+func (e *fastEncoder) WindowSize(size int) int32 {
+	if size > 0 && size < int(e.maxMatchOff) {
+		b := int32(1) << uint(bits.Len(uint(size)))
+		// Keep minimum window.
+		if b < 1024 {
+			b = 1024
+		}
+		return b
+	}
+	return e.maxMatchOff
+}
+
+// Block returns the current block.
+func (e *fastEncoder) Block() *blockEnc {
+	return e.blk
+}
+
+// Encode mimmics functionality in zstd_fast.c
 func (e *fastEncoder) Encode(blk *blockEnc, src []byte) {
 	const (
 		inputMargin            = 8
@@ -116,7 +147,7 @@ encodeLoop:
 	for {
 		var t int32
 		// We allow the encoder to optionally turn off repeat offsets across blocks
-		canRepeat := e.useRepeat || len(blk.sequences) > 3
+		canRepeat := len(blk.sequences) > 2
 
 		// sMin is the smallest valid offset in src that a match can start.
 		//var sMin int32
@@ -341,7 +372,7 @@ func (e *fastEncoder) addBlock(src []byte) int32 {
 
 // useBlock will replace the block with the provided one,
 // but transfer recent offsets from the previous.
-func (e *fastEncoder) useBlock(enc *blockEnc) {
+func (e *fastEncoder) UseBlock(enc *blockEnc) {
 	enc.reset(e.blk)
 	e.blk = enc
 }
