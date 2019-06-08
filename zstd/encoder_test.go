@@ -99,6 +99,13 @@ func TestEncoderRegression(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// We can't close the decoder.
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	defer dec.Close()
 	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
 			zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
@@ -109,12 +116,6 @@ func TestEncoderRegression(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			dec, err := NewReader(nil)
-			if err != nil {
-				t.Error(err)
-				return
-			}
-			// We can't close the decoder.
 
 			for i, tt := range zr.File {
 				if !strings.HasSuffix(t.Name(), "") {
@@ -125,7 +126,6 @@ func TestEncoderRegression(t *testing.T) {
 				}
 
 				t.Run(tt.Name, func(t *testing.T) {
-					t.Parallel()
 					r, err := tt.Open()
 					if err != nil {
 						t.Error(err)
@@ -141,6 +141,25 @@ func TestEncoderRegression(t *testing.T) {
 						t.Logf("error: %v\nwant: %v\ngot:  %v", err, in, got)
 						t.Fatal(err)
 					}
+
+					// Use the Writer
+					var dst bytes.Buffer
+					enc.Reset(&dst)
+					_, err = enc.Write(in)
+					if err != nil {
+						t.Error(err)
+					}
+					err = enc.Close()
+					if err != nil {
+						t.Error(err)
+					}
+					encoded = dst.Bytes()
+					got, err = dec.DecodeAll(encoded, nil)
+					if err != nil {
+						t.Logf("error: %v\nwant: %v\ngot:  %v", err, in, got)
+						t.Fatal(err)
+					}
+
 				})
 			}
 		})

@@ -92,6 +92,7 @@ func (e *Encoder) Reset(w io.Writer) {
 	})
 	s := &e.state
 	s.wg.Wait()
+	s.wWg.Wait()
 	if cap(s.filling) == 0 {
 		s.filling = make([]byte, 0, e.o.blockSize)
 	}
@@ -344,6 +345,7 @@ func (e *Encoder) Flush() error {
 
 // Close will flush the final output and close the stream.
 // The function will block until everything has been written.
+// The Encoder can still be re-used after calling this.
 func (e *Encoder) Close() error {
 	s := &e.state
 	if s.encoder == nil {

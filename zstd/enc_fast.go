@@ -393,6 +393,8 @@ func (e *fastEncoder) Reset() {
 	if e.blk == nil {
 		e.blk = &blockEnc{}
 		e.blk.init()
+	} else {
+		e.blk.reset(nil)
 	}
 	e.blk.initNewEncode()
 	if e.crc == nil {
