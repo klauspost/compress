@@ -5,6 +5,8 @@
 package zstd
 
 import (
+	"math/bits"
+
 	"github.com/cespare/xxhash"
 )
 
@@ -22,7 +24,7 @@ type tableEntry struct {
 
 type fastEncoder struct {
 	o encParams
-	// cur is the offset at the start of Hist
+	// cur is the offset at the start of hist
 	cur int32
 	// maximum offset. Should be at least 2x block size.
 	maxMatchOff int32
@@ -31,11 +33,40 @@ type fastEncoder struct {
 	table       [tableSize]tableEntry
 	tmp         [8]byte
 	blk         *blockEnc
-	useRepeat   bool
 }
 
-// Encode mimmics functionality in zstd_fast.c but uses separate buffers for previous buffer and history.
-// This should probably be refactored to a single buffer
+// CRC returns the underlying CRC writer.
+func (e *fastEncoder) CRC() *xxhash.Digest {
+	return e.crc
+}
+
+// AppendCRC will append the CRC to the destination slice and return it.
+func (e *fastEncoder) AppendCRC(dst []byte) []byte {
+	crc := e.crc.Sum(e.tmp[:0])
+	dst = append(dst, crc[7], crc[6], crc[5], crc[4])
+	return dst
+}
+
+// WindowSize returns the window size of the encoder,
+// or a window size small enough to contain the input size, if > 0.
+func (e *fastEncoder) WindowSize(size int) int32 {
+	if size > 0 && size < int(e.maxMatchOff) {
+		b := int32(1) << uint(bits.Len(uint(size)))
+		// Keep minimum window.
+		if b < 1024 {
+			b = 1024
+		}
+		return b
+	}
+	return e.maxMatchOff
+}
+
+// Block returns the current block.
+func (e *fastEncoder) Block() *blockEnc {
+	return e.blk
+}
+
+// Encode mimmics functionality in zstd_fast.c
 func (e *fastEncoder) Encode(blk *blockEnc, src []byte) {
 	const (
 		inputMargin            = 8
@@ -87,7 +118,6 @@ func (e *fastEncoder) Encode(blk *blockEnc, src []byte) {
 
 	// TEMPLATE
 	const hashLog = tableBits
-	const mls = 6
 	// seems global, but would be nice to tweak.
 	const kSearchStrength = 8
 
@@ -114,12 +144,13 @@ func (e *fastEncoder) Encode(blk *blockEnc, src []byte) {
 
 encodeLoop:
 	for {
+		// t will contain the match offset when we find one.
+		// When existing the search loop, we have already checked 4 bytes.
 		var t int32
-		// We allow the encoder to optionally turn off repeat offsets across blocks
-		canRepeat := e.useRepeat || len(blk.sequences) > 3
 
-		// sMin is the smallest valid offset in src that a match can start.
-		//var sMin int32
+		// We will not use repeat offsets across blocks.
+		// By not using them for the first 3 matches
+		canRepeat := len(blk.sequences) > 2
 
 		for {
 			if debug && canRepeat && offset1 == 0 {
@@ -127,11 +158,6 @@ encodeLoop:
 			}
 
 			nextHash2 := hash6(cv>>8, hashLog) & tableMask
-
-			//nextHash2 := hashLen(cv>>8, hashLog, mls) & tableMask
-			if 8-mls < 0 {
-				panic("hashlog doesn't leave 2 bytes")
-			}
 			nextHash = nextHash & tableMask
 			candidate := e.table[nextHash]
 			candidate2 := e.table[nextHash2]
@@ -219,9 +245,9 @@ encodeLoop:
 				break encodeLoop
 			}
 			cv = load6432(src, s)
-			//nextHash = hashLen(cv, hashLog, mls)
 			nextHash = hash6(cv, hashLog)
 		}
+		// A 4-byte match has been found. We'll later see if more than 4 bytes.
 		offset2 = offset1
 		offset1 = s - t
 
@@ -233,27 +259,23 @@ encodeLoop:
 			panic("invalid offset")
 		}
 
-		var seq seq
-		// A 4-byte match has been found. We'll later see if more than 4 bytes
-		// match. But, prior to the match, src[nextEmit:s] are unmatched. Emit
-		// them as literal bytes.
-		seq.litLen = uint32(s - nextEmit)
-
 		// Extend the 4-byte match as long as possible.
-		l := e.matchlen(s+4, t+4, src)
+		l := e.matchlen(s+4, t+4, src) + 4
 
 		// Extend backwards
-		sMin := s - e.maxMatchOff
-		if sMin < 0 {
-			sMin = 0
+		tMin := s - e.maxMatchOff
+		if tMin < 0 {
+			tMin = 0
 		}
-		for t > sMin && seq.litLen > 0 && src[t-1] == src[s-1] && l < maxMatchLength {
+		for t > tMin && s > nextEmit && src[t-1] == src[s-1] && l < maxMatchLength {
 			s--
 			t--
 			l++
-			seq.litLen--
 		}
-		l += 4
+
+		// Write our sequence.
+		var seq seq
+		seq.litLen = uint32(s - nextEmit)
 		seq.matchLen = uint32(l - zstdMinMatch)
 		if seq.litLen > 0 {
 			blk.literals = append(blk.literals, src[nextEmit:s]...)
@@ -270,7 +292,6 @@ encodeLoop:
 			break encodeLoop
 		}
 		cv = load6432(src, s)
-		//		nextHash = hashLen(cv, hashLog, mls)
 		nextHash = hash6(cv, hashLog)
 
 		// Check offset 2
@@ -341,7 +362,7 @@ func (e *fastEncoder) addBlock(src []byte) int32 {
 
 // useBlock will replace the block with the provided one,
 // but transfer recent offsets from the previous.
-func (e *fastEncoder) useBlock(enc *blockEnc) {
+func (e *fastEncoder) UseBlock(enc *blockEnc) {
 	enc.reset(e.blk)
 	e.blk = enc
 }
@@ -372,6 +393,8 @@ func (e *fastEncoder) Reset() {
 	if e.blk == nil {
 		e.blk = &blockEnc{}
 		e.blk.init()
+	} else {
+		e.blk.reset(nil)
 	}
 	e.blk.initNewEncode()
 	if e.crc == nil {

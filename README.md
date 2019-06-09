@@ -14,6 +14,7 @@ It offers slightly better compression at lower compression settings, and up to 3
 
 # changelog
 
+* June 9, 2019: New stronger "default" [zstd](https://github.com/klauspost/compress/tree/master/zstd#zstd) compression mode. Matches zstd default compression ratio.
 * June 5, 2019: 20-40% throughput in [zstandard](https://github.com/klauspost/compress/tree/master/zstd#zstd) compression and better compression.
 * June 5, 2019: deflate/gzip compression: Reduce memory usage of lower compression levels.
 * June 2, 2019: Added [zstandard](https://github.com/klauspost/compress/tree/master/zstd#zstd) compression!

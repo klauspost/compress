@@ -31,7 +31,10 @@ You will also need the [`github.com/cespare/xxhash`](https://github.com/cespare/
 BETA - there may still be subtle bugs, but a wide variety of content has been tested. 
 There may still be implementation specific stuff in regards to error handling that could lead to edge cases. 
 
-For now, a high speed compressor has been implemented. The compression ratio is roughly equivalent to zstd level 2.
+For now, a high speed (fastest) and medium-fast (default) compressor has been implemented. 
+
+The "Fastest" compression ratio is roughly equivalent to zstd level 1. 
+The "Default" compression ration is roughly equivalent to zstd level 3 (default).
 
 In terms of speed, it is typically 2x as fast as the stdlib deflate/gzip in its fastest mode. The compression ratio compared to stdlib is around level 3, but usually 3x as fast.
 
@@ -51,16 +54,16 @@ To create a writer with default options, do like this:
 ```Go
 // Compress input to output.
 func Compress(in io.Reader, out io.Writer) error {
-	w, err := NewWriter(output)
-	if err != nil {
-		return err
-	}
-	_, err := io.Copy(w, input)
-	if err != nil {
-		enc.Close()
-		return err
-	}
-	return enc.Close()
+    w, err := NewWriter(output)
+    if err != nil {
+        return err
+    }
+    _, err := io.Copy(w, input)
+    if err != nil {
+        enc.Close()
+        return err
+    }
+    return enc.Close()
 }
 ```
 
@@ -77,6 +80,8 @@ of a stream. This is independent of the `WithEncoderConcurrency(n)`, but that is
 in the future. So if you want to limit concurrency for future updates, specify the concurrency
 you would like.
 
+You can specify your desired compression level using `WithEncoderLevel()` option. Currently only pre-defined 
+compression settings can be specified.
 
 #### Future Compatibility Guarantees
 
@@ -120,7 +125,7 @@ var encoder, _ = zstd.NewWriter(nil)
 // Compress a buffer. 
 // If you have a destination buffer, the allocation in the call can also be eliminated.
 func Compress(src []byte) []byte {
-	return encoder.EncodeAll(src, make([]byte, 0, len(src)))
+    return encoder.EncodeAll(src, make([]byte, 0, len(src)))
 } 
 ```
 
@@ -135,7 +140,7 @@ I have collected some speed examples to compare speed and compression against ot
 
 * `file` is the input file.
 * `out` is the compressor used. `zskp` is this package. `gzstd` is gzip standard library. `zstd` is the Datadog cgo library.
-* `level` is the compression level used.
+* `level` is the compression level used. For `zskp` level 1 is "fastest", level 2 is "default".
 * `insize`/`outsize` is the input/output size.
 * `millis` is the number of milliseconds used for compression.
 * `mb/s` is megabytes (2^20 bytes) per second.
@@ -146,62 +151,68 @@ The test data for the Large Text Compression Benchmark is the first
 http://mattmahoney.net/dc/textdata.html
 
 file    out     level   insize  outsize     millis  mb/s
-enwik9  zskp    1   1000000000  343933099   5900    161.61
+enwik9  zskp    1   1000000000  343833033   5840    163.30
+enwik9  zskp    2   1000000000  317822183   8449    112.87
 enwik9  gzstd   1   1000000000  382578136   13627   69.98
 enwik9  gzstd   3   1000000000  349139651   22344   42.68
 enwik9  zstd    1   1000000000  357416379   4838    197.12
-enwik9  zstd    2   1000000000  329056536   5899    161.64
+enwik9  zstd    3   1000000000  313734522   7556    126.21
 
 GOB stream of binary data. Highly compressible.
 https://files.klauspost.com/compress/gob-stream.7z
 
 file        out level   insize      outsize     millis  mb/s
-gob-stream  zskp    1   1911399616  235708371   5084    358.55
+gob-stream  zskp    1   1911399616  234981983   5100    357.42
+gob-stream  zskp    2   1911399616  208674003   6698    272.15
 gob-stream  gzstd   1   1911399616  357382641   14727   123.78
 gob-stream  gzstd   3   1911399616  327835097   17005   107.19
-gob-stream  zstd    1   1911399616  250787165   4345    419.43
-gob-stream  zstd    2   1911399616  225853438   4599    396.36
+gob-stream  zstd    1   1911399616  250787165   4075    447.22
+gob-stream  zstd    3   1911399616  208191888   5511    330.77
 
 Highly compressible JSON file. Similar to logs in a lot of ways.
 https://files.klauspost.com/compress/adresser.001.gz
 
 file            out level   insize      outsize     millis  mb/s
-adresser.001    zskp    1   1073741824  18358532    1366    749.63
+adresser.001    zskp    1   1073741824  18510122    1477    692.83
+adresser.001    zskp    2   1073741824  19831697    1705    600.59
 adresser.001    gzstd   1   1073741824  47755503    3079    332.47
 adresser.001    gzstd   3   1073741824  40052381    3051    335.63
-adresser.001    zstd    1   1073741824  16135896    903     1133.99
-adresser.001    zstd    2   1073741824  16340655    916     1117.90
+adresser.001    zstd    1   1073741824  16135896    994     1030.18
+adresser.001    zstd    3   1073741824  17794465    905     1131.49
 
 VM Image, Linux mint with a few installed applications:
 https://files.klauspost.com/compress/rawstudio-mint14.7z
 
 file    out level   insize  outsize millis  mb/s
-rawstudio-mint14.tar    zskp    1   8558382592  3655209378  36011   226.64
+rawstudio-mint14.tar    zskp    1   8558382592  3648168838  33398   244.38
+rawstudio-mint14.tar    zskp    2   8558382592  3376721436  50962   160.16
 rawstudio-mint14.tar    gzstd   1   8558382592  3926257486  84712   96.35
 rawstudio-mint14.tar    gzstd   3   8558382592  3740711978  176344  46.28
-rawstudio-mint14.tar    zstd    1   8558382592  3607859705  27613   295.58
-rawstudio-mint14.tar    zstd    2   8558382592  3457698070  31781   256.81
+rawstudio-mint14.tar    zstd    1   8558382592  3607859742  27903   292.51
+rawstudio-mint14.tar    zstd    3   8558382592  3341710879  46700   174.77
 
 
 The test data is designed to test archivers in realistic backup scenarios.
 http://mattmahoney.net/dc/10gb.html
 
 file    out level   insize  outsize millis  mb/s
-10gb.tar    zskp    1   10065157632 4888194207  44595   215.25
+10gb.tar    zskp    1   10065157632 4883149814  45715   209.97
+10gb.tar    zskp    2   10065157632 4638110010  60970   157.44
 10gb.tar    gzstd   1   10065157632 5198296126  97769   98.18
 10gb.tar    gzstd   3   10065157632 4932665487  313427  30.63
 10gb.tar    zstd    1   10065157632 4940796535  40391   237.65
-10gb.tar    zstd    2   10065157632 4778612089  43680   219.75
+10gb.tar    zstd    3   10065157632 4638618579  52911   181.42
 
 Silesia Corpus:
 http://sun.aei.polsl.pl/~sdeor/corpus/silesia.zip
 
 file    out level   insize  outsize millis  mb/s
-silesia.tar zskp    1   211947520   73119165    1106    182.59
+silesia.tar zskp    1   211947520   73025800    1108    182.26
+silesia.tar zskp    2   211947520   67674684    1599    126.41
 silesia.tar gzstd   1   211947520   80007735    2515    80.37
 silesia.tar gzstd   3   211947520   73133380    4259    47.45
-silesia.tar zstd    1   211947520   73513991    946     213.44
-silesia.tar zstd    2   211947520   69595464    1097    184.09
+silesia.tar zstd    1   211947520   73513991    933     216.64
+silesia.tar zstd    3   211947520   66793301    1377    146.79
 ```
 
 ### Converters
@@ -228,11 +239,11 @@ Snappy len 508028601 -> zstd len 390921079
 
 
 ```Go
-	s := zstd.SnappyConverter{}
-	n, err = s.Convert(input, output)
-	if err != nil {
-	    fmt.Println("Re-compressed stream to", n, "bytes")
-	}
+    s := zstd.SnappyConverter{}
+    n, err = s.Convert(input, output)
+    if err != nil {
+        fmt.Println("Re-compressed stream to", n, "bytes")
+    }
 ```
 
 The converter `s` can be reused to avoid allocations, even after errors.
@@ -256,7 +267,7 @@ import "github.com/klauspost/compress/zstd"
 func Decompress(in io.Reader, out io.Writer) error {
     d, err := zstd.NewReader(input)
     if err != nil {
-    	return err
+        return err
     }
     defer d.Close()
     
@@ -281,7 +292,7 @@ var decoder, _ = zstd.NewReader(nil)
 // Decompress a buffer. We don't supply a destination buffer,
 // so it will be allocated by the decoder.
 func Decompress(src []byte) ([]byte, error) {
-	return decoder.DecodeAll(src, nil)
+    return decoder.DecodeAll(src, nil)
 } 
 ```
 
