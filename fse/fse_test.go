@@ -9,8 +9,6 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -151,28 +149,6 @@ func ExampleDecompress() {
 	}
 	fmt.Printf("Input matches: %t\n", bytes.Equal(d, data))
 	// OUTPUT: Input matches: true
-}
-
-func TestGenCorpus(t *testing.T) {
-	t.Skip("only for generating decompress corpus")
-	filepath.Walk("fuzz/compress/corpus", func(path string, info os.FileInfo, err error) error {
-		t.Run(path, func(t *testing.T) {
-			var s Scratch
-			buf0, err := ioutil.ReadFile(path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			b, err := Compress(buf0, &s)
-			if err != nil {
-				t.Skip("skipping")
-				return
-			}
-			t.Logf("%s: %d -> %d bytes (%.2f:1)", path, len(buf0), len(b), float64(len(buf0))/float64(len(b)))
-			dstP := strings.Replace(path, "compress", "decompress", 1)
-			ioutil.WriteFile(dstP, b, os.ModePerm)
-		})
-		return nil
-	})
 }
 
 func BenchmarkCompress(b *testing.B) {
