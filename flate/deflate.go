@@ -1168,12 +1168,12 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 	case level == DefaultCompression:
 		level = 5
 		fallthrough
-	case level >= 1 && level <= 5:
+	case level >= 1 && level <= 6:
 		d.snap = newFastEnc(level)
 		d.window = make([]byte, maxStoreBlockSize)
 		d.fill = (*compressor).fillBlock
 		d.step = (*compressor).storeFast
-	case 6 <= level && level <= 9:
+	case 7 <= level && level <= 9:
 		d.state = &advancedState{}
 		d.compressionLevel = levels[level]
 		d.initDeflate()
