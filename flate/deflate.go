@@ -116,7 +116,7 @@ type compressor struct {
 	err            error
 	ii             uint16 // position of last match, intended to overflow to reset.
 
-	snap      snappyEnc
+	snap      fastEnc
 	hashMatch [maxMatchLength + minMatchLength]uint32
 }
 
@@ -1153,7 +1153,7 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 		d.fill = (*compressor).fillBlock
 		d.step = (*compressor).storeHuff
 	case level >= 1 && level <= 4:
-		d.snap = newSnappy(level)
+		d.snap = newFastEnc(level)
 		d.window = make([]byte, maxStoreBlockSize)
 		d.fill = (*compressor).fillBlock
 		d.step = (*compressor).storeSnappy

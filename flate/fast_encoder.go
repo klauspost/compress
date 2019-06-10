@@ -22,21 +22,21 @@ func emitCopy(dst *tokens, offset, length int) {
 	dst.n++
 }
 
-type snappyEnc interface {
+type fastEnc interface {
 	Encode(dst *tokens, src []byte)
 	Reset()
 }
 
-func newSnappy(level int) snappyEnc {
+func newFastEnc(level int) fastEnc {
 	switch level {
 	case 1:
-		return &snappyL1{}
+		return &fastEncL1{}
 	case 2:
-		return &snappyL2{snappyGen: snappyGen{cur: maxStoreBlockSize, prev: make([]byte, 0, maxStoreBlockSize)}}
+		return &fastEncL2{fastGen: fastGen{cur: maxStoreBlockSize, prev: make([]byte, 0, maxStoreBlockSize)}}
 	case 3:
-		return &snappyL3{snappyGen: snappyGen{cur: maxStoreBlockSize, prev: make([]byte, 0, maxStoreBlockSize)}}
+		return &fastEncL3{fastGen: fastGen{cur: maxStoreBlockSize, prev: make([]byte, 0, maxStoreBlockSize)}}
 	case 4:
-		return &snappyL4{snappyL3{snappyGen: snappyGen{cur: maxStoreBlockSize, prev: make([]byte, 0, maxStoreBlockSize)}}}
+		return &fastEncL4{fastEncL3{fastGen: fastGen{cur: maxStoreBlockSize, prev: make([]byte, 0, maxStoreBlockSize)}}}
 	default:
 		panic("invalid level specified")
 	}
@@ -86,12 +86,12 @@ func hash(u uint32) uint32 {
 	return (u * 0x1e35a7bd) >> tableShift
 }
 
-// snappyL1 encapsulates level 1 compression
-type snappyL1 struct{}
+// fastEncL1 encapsulates level 1 compression
+type fastEncL1 struct{}
 
-func (e *snappyL1) Reset() {}
+func (e *fastEncL1) Reset() {}
 
-func (e *snappyL1) Encode(dst *tokens, src []byte) {
+func (e *fastEncL1) Encode(dst *tokens, src []byte) {
 	const (
 		inputMargin            = 16 - 1
 		minNonLiteralBlockSize = 1 + 1 + inputMargin
@@ -310,25 +310,25 @@ type tableEntry struct {
 	offset int32
 }
 
-// snappyGen maintains the table for matches,
+// fastGen maintains the table for matches,
 // and the previous byte block for level 2.
 // This is the generic implementation.
-type snappyGen struct {
+type fastGen struct {
 	prev []byte
 	cur  int32
 }
 
-// snappyGen maintains the table for matches,
+// fastGen maintains the table for matches,
 // and the previous byte block for level 2.
 // This is the generic implementation.
-type snappyL2 struct {
-	snappyGen
+type fastEncL2 struct {
+	fastGen
 	table [tableSize]tableEntry
 }
 
 // EncodeL2 uses a similar algorithm to level 1, but is capable
 // of matching across blocks giving better compression at a small slowdown.
-func (e *snappyL2) Encode(dst *tokens, src []byte) {
+func (e *fastEncL2) Encode(dst *tokens, src []byte) {
 	const (
 		inputMargin            = 12 - 1
 		minNonLiteralBlockSize = 1 + 1 + inputMargin
@@ -530,14 +530,14 @@ type tableEntryPrev struct {
 	Prev tableEntry
 }
 
-// snappyL3
-type snappyL3 struct {
-	snappyGen
+// fastEncL3
+type fastEncL3 struct {
+	fastGen
 	table [tableSize]tableEntryPrev
 }
 
 // Encode uses a similar algorithm to level 2, will check up to two candidates.
-func (e *snappyL3) Encode(dst *tokens, src []byte) {
+func (e *fastEncL3) Encode(dst *tokens, src []byte) {
 	const (
 		inputMargin            = 8 - 1
 		minNonLiteralBlockSize = 1 + 1 + inputMargin
@@ -548,7 +548,7 @@ func (e *snappyL3) Encode(dst *tokens, src []byte) {
 		for i := range e.table[:] {
 			e.table[i] = tableEntryPrev{}
 		}
-		e.snappyGen = snappyGen{cur: maxStoreBlockSize, prev: e.prev[:0]}
+		e.fastGen = fastGen{cur: maxStoreBlockSize, prev: e.prev[:0]}
 	}
 
 	// This check isn't in the Snappy implementation, but there, the caller
@@ -738,14 +738,14 @@ emitRemainder:
 	copy(e.prev, src)
 }
 
-// snappyL4
-type snappyL4 struct {
-	snappyL3
+// fastEncL4
+type fastEncL4 struct {
+	fastEncL3
 }
 
 // Encode uses a similar algorithm to level 3,
 // but will check up to two candidates if first isn't long enough.
-func (e *snappyL4) Encode(dst *tokens, src []byte) {
+func (e *fastEncL4) Encode(dst *tokens, src []byte) {
 	const (
 		inputMargin            = 8 - 3
 		minNonLiteralBlockSize = 1 + 1 + inputMargin
@@ -757,7 +757,7 @@ func (e *snappyL4) Encode(dst *tokens, src []byte) {
 		for i := range e.table[:] {
 			e.table[i] = tableEntryPrev{}
 		}
-		e.snappyGen = snappyGen{cur: maxStoreBlockSize, prev: e.prev[:0]}
+		e.fastGen = fastGen{cur: maxStoreBlockSize, prev: e.prev[:0]}
 	}
 
 	// This check isn't in the Snappy implementation, but there, the caller
@@ -965,7 +965,7 @@ emitRemainder:
 	copy(e.prev, src)
 }
 
-func (e *snappyGen) matchlen(s, t int32, src []byte) int32 {
+func (e *fastGen) matchlen(s, t int32, src []byte) int32 {
 	s1 := int(s) + maxMatchLength - 4
 	if s1 > len(src) {
 		s1 = len(src)
@@ -1005,7 +1005,7 @@ func (e *snappyGen) matchlen(s, t int32, src []byte) int32 {
 }
 
 // Reset the encoding table.
-func (e *snappyGen) Reset() {
+func (e *fastGen) Reset() {
 	e.prev = e.prev[:0]
 	e.cur += maxMatchOffset
 }
