@@ -1079,7 +1079,7 @@ func (d *compressor) storeHuff() {
 // storeHuff will compress and store the currently added data,
 // if enough has been accumulated or we at the end of the stream.
 // Any error that occurred will be in d.err
-func (d *compressor) storeSnappy() {
+func (d *compressor) storeFast() {
 	// We only compress if we have maxStoreBlockSize.
 	if d.windowEnd < maxStoreBlockSize {
 		if !d.sync {
@@ -1169,7 +1169,7 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 		d.snap = newFastEnc(level)
 		d.window = make([]byte, maxStoreBlockSize)
 		d.fill = (*compressor).fillBlock
-		d.step = (*compressor).storeSnappy
+		d.step = (*compressor).storeFast
 	case level == DefaultCompression:
 		level = 5
 		fallthrough

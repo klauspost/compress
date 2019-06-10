@@ -32,11 +32,11 @@ func newFastEnc(level int) fastEnc {
 	case 1:
 		return &fastEncL1{}
 	case 2:
-		return &fastEncL2{fastGen: fastGen{cur: maxStoreBlockSize, prev: make([]byte, 0, maxStoreBlockSize)}}
+		return &fastEncL2{fastGen: fastGen{cur: maxStoreBlockSize}}
 	case 3:
-		return &fastEncL3{fastGen: fastGen{cur: maxStoreBlockSize, prev: make([]byte, 0, maxStoreBlockSize)}}
+		return &fastEncL3{fastGen: fastGen{cur: maxStoreBlockSize}}
 	case 4:
-		return &fastEncL4{fastEncL3{fastGen: fastGen{cur: maxStoreBlockSize, prev: make([]byte, 0, maxStoreBlockSize)}}}
+		return &fastEncL4{fastEncL3{fastGen: fastGen{cur: maxStoreBlockSize}}}
 	default:
 		panic("invalid level specified")
 	}
@@ -141,7 +141,7 @@ func (e *fastEncL1) Encode(dst *tokens, src []byte) {
 		// The "skip" variable keeps track of how many bytes there are since
 		// the last match; dividing it by 32 (ie. right-shifting by five) gives
 		// the number of bytes to move ahead for each iteration.
-		const skipLog = 4
+		const skipLog = 6
 		const baseSkip = 1
 		nextS := s
 		candidate := 0
@@ -314,8 +314,30 @@ type tableEntry struct {
 // and the previous byte block for level 2.
 // This is the generic implementation.
 type fastGen struct {
-	prev []byte
+	hist []byte
 	cur  int32
+}
+
+func (e *fastGen) addBlock(src []byte) int32 {
+	// check if we have space already
+	if len(e.hist)+len(src) > cap(e.hist) {
+		if cap(e.hist) == 0 {
+			l := maxMatchOffset * 10
+			e.hist = make([]byte, 0, l)
+		} else {
+			if cap(e.hist) < int(maxMatchOffset*2) {
+				panic("unexpected buffer size")
+			}
+			// Move down
+			offset := int32(len(e.hist)) - maxMatchOffset
+			copy(e.hist[0:maxMatchOffset], e.hist[offset:])
+			e.cur += offset
+			e.hist = e.hist[:maxMatchOffset]
+		}
+	}
+	s := int32(len(e.hist))
+	e.hist = append(e.hist, src...)
+	return s
 }
 
 // fastGen maintains the table for matches,
@@ -335,12 +357,29 @@ func (e *fastEncL2) Encode(dst *tokens, src []byte) {
 	)
 
 	// Protect against e.cur wraparound.
-	if e.cur > 1<<30 {
-		for i := range e.table[:] {
-			e.table[i] = tableEntry{}
+	for e.cur >= (1<<31)-(maxStoreBlockSize*2) {
+		if len(e.hist) == 0 {
+			for i := range e.table[:] {
+				e.table[i] = tableEntry{}
+			}
+			e.cur = maxMatchOffset
+			break
 		}
-		e.cur = maxStoreBlockSize
+		// Shift down everything in the table that isn't already too far away.
+		minOff := e.cur + int32(len(e.hist)) - maxMatchOffset
+		for i := range e.table[:] {
+			v := e.table[i].offset
+			if v < minOff {
+				v = 0
+			} else {
+				v = v - e.cur + maxMatchOffset
+			}
+			e.table[i].offset = v
+		}
+		e.cur = maxMatchOffset
 	}
+
+	s := e.addBlock(src)
 
 	// This check isn't in the Snappy implementation, but there, the caller
 	// instead of the callee handles this case.
@@ -348,10 +387,12 @@ func (e *fastEncL2) Encode(dst *tokens, src []byte) {
 		// We do not fill the token table.
 		// This will be picked up by caller.
 		dst.n = uint16(len(src))
-		e.cur += maxStoreBlockSize
-		e.prev = e.prev[:0]
 		return
 	}
+
+	// Override src
+	src = e.hist
+	nextEmit := s
 
 	// sLimit is when to stop looking for offset/length copies. The inputMargin
 	// lets us use a fast path for emitLiteral in the main loop, while we are
@@ -359,8 +400,6 @@ func (e *fastEncL2) Encode(dst *tokens, src []byte) {
 	sLimit := int32(len(src) - inputMargin)
 
 	// nextEmit is where in src the next emitLiteral should start from.
-	nextEmit := int32(0)
-	s := int32(0)
 	cv := load3232(src, s)
 	nextHash := hash(cv)
 
@@ -380,7 +419,7 @@ func (e *fastEncL2) Encode(dst *tokens, src []byte) {
 		// The "skip" variable keeps track of how many bytes there are since
 		// the last match; dividing it by 32 (ie. right-shifting by five) gives
 		// the number of bytes to move ahead for each iteration.
-		const skipLog = 4
+		const skipLog = 6
 		const doEvery = 2
 
 		nextS := s
@@ -435,40 +474,32 @@ func (e *fastEncL2) Encode(dst *tokens, src []byte) {
 
 			// Extend the 4-byte match as long as possible.
 			t := candidate.offset - e.cur
-			l := e.matchlen(s+4, t+4, src)
+			l := e.matchlen(s+4, t+4, src) + 4
 
 			// Extend backwards
-			for t > 0 && nextEmit < s && src[t-1] == src[s-1] && l < maxMatchLength-4 {
+			tMin := s - maxMatchOffset
+			if tMin < 0 {
+				tMin = 0
+			}
+			for t > tMin && s > nextEmit && src[t-1] == src[s-1] && l < maxMatchLength {
 				s--
 				t--
 				l++
 			}
-			for t <= 0 && nextEmit < s && s > 0 {
-				off := int32(len(e.prev)) + t - 1
-				if off > 0 && e.prev[off] == src[s-1] && l < maxMatchLength-4 {
-					s--
-					t--
-					l++
-					continue
-				}
-				break
-			}
-
 			if nextEmit < s {
 				emitLiteral(dst, src[nextEmit:s])
 			}
 
 			// matchToken is flate's equivalent of Snappy's emitCopy. (length,offset)
-			dst.tokens[dst.n] = matchToken(uint32(l+4-baseMatchLength), uint32(s-t-baseMatchOffset))
+			dst.tokens[dst.n] = matchToken(uint32(l-baseMatchLength), uint32(s-t-baseMatchOffset))
 			dst.n++
-			s = s + l + 4
+			s += l
 			nextEmit = s
 			if s >= sLimit {
-				t += l
 				// Index first pair after match end.
-				if int(t+4) < len(src) && t > 0 {
-					cv := load3232(src, t)
-					e.table[hash(cv)&tableMask] = tableEntry{offset: t + e.cur, val: cv}
+				if int(s+l+4) < len(src) {
+					cv := load3232(src, s)
+					e.table[hash(cv)&tableMask] = tableEntry{offset: s + e.cur, val: cv}
 				}
 				goto emitRemainder
 			}
@@ -520,9 +551,6 @@ emitRemainder:
 	if int(nextEmit) < len(src) {
 		emitLiteral(dst, src[nextEmit:])
 	}
-	e.cur += int32(len(src))
-	e.prev = e.prev[:len(src)]
-	copy(e.prev, src)
 }
 
 type tableEntryPrev struct {
@@ -544,12 +572,34 @@ func (e *fastEncL3) Encode(dst *tokens, src []byte) {
 	)
 
 	// Protect against e.cur wraparound.
-	if e.cur > 1<<30 {
-		for i := range e.table[:] {
-			e.table[i] = tableEntryPrev{}
+	for e.cur >= (1<<31)-(maxStoreBlockSize) {
+		if len(e.hist) == 0 {
+			for i := range e.table[:] {
+				e.table[i] = tableEntryPrev{}
+			}
+			e.cur = maxMatchOffset
+			break
 		}
-		e.fastGen = fastGen{cur: maxStoreBlockSize, prev: e.prev[:0]}
+		// Shift down everything in the table that isn't already too far away.
+		minOff := e.cur + int32(len(e.hist)) - maxMatchOffset
+		for i := range e.table[:] {
+			v := e.table[i]
+			if v.Cur.offset < minOff {
+				v.Cur.offset = 0
+			} else {
+				v.Cur.offset = v.Cur.offset - e.cur + maxMatchOffset
+			}
+			if v.Prev.offset < minOff {
+				v.Prev.offset = 0
+			} else {
+				v.Prev.offset = v.Prev.offset - e.cur + maxMatchOffset
+			}
+			e.table[i] = v
+		}
+		e.cur = maxMatchOffset
 	}
+
+	s := e.addBlock(src)
 
 	// This check isn't in the Snappy implementation, but there, the caller
 	// instead of the callee handles this case.
@@ -557,10 +607,12 @@ func (e *fastEncL3) Encode(dst *tokens, src []byte) {
 		// We do not fill the token table.
 		// This will be picked up by caller.
 		dst.n = uint16(len(src))
-		e.cur += maxStoreBlockSize
-		e.prev = e.prev[:0]
 		return
 	}
+
+	// Override src
+	src = e.hist
+	nextEmit := s
 
 	// sLimit is when to stop looking for offset/length copies. The inputMargin
 	// lets us use a fast path for emitLiteral in the main loop, while we are
@@ -568,8 +620,6 @@ func (e *fastEncL3) Encode(dst *tokens, src []byte) {
 	sLimit := int32(len(src) - inputMargin)
 
 	// nextEmit is where in src the next emitLiteral should start from.
-	nextEmit := int32(0)
-	s := int32(0)
 	cv := load3232(src, s)
 	nextHash := hash(cv)
 
@@ -627,11 +677,6 @@ func (e *fastEncL3) Encode(dst *tokens, src []byte) {
 			cv = now
 		}
 
-		// A 4-byte match has been found. We'll later see if more than 4 bytes
-		// match. But, prior to the match, src[nextEmit:s] are unmatched. Emit
-		// them as literal bytes.
-		emitLiteral(dst, src[nextEmit:s])
-
 		// Call emitCopy, and then see if another emitCopy could be our next
 		// move. Repeat until we find no match for the input immediately after
 		// what was consumed by the last emitCopy call.
@@ -646,12 +691,25 @@ func (e *fastEncL3) Encode(dst *tokens, src []byte) {
 
 			// Extend the 4-byte match as long as possible.
 			//
-			s += 4
-			t := candidate.offset - e.cur + 4
-			l := e.matchlen(s, t, src)
+			t := candidate.offset - e.cur
+			l := e.matchlen(s+4, t+4, src) + 4
+
+			// Extend backwards
+			tMin := s - maxMatchOffset
+			if tMin < 0 {
+				tMin = 0
+			}
+			for t > tMin && s > nextEmit && src[t-1] == src[s-1] && l < maxMatchLength {
+				s--
+				t--
+				l++
+			}
+			if nextEmit < s {
+				emitLiteral(dst, src[nextEmit:s])
+			}
 
 			// matchToken is flate's equivalent of Snappy's emitCopy. (length,offset)
-			dst.tokens[dst.n] = matchToken(uint32(l+4-baseMatchLength), uint32(s-t-baseMatchOffset))
+			dst.tokens[dst.n] = matchToken(uint32(l-baseMatchLength), uint32(s-t-baseMatchOffset))
 			dst.n++
 			s += l
 			nextEmit = s
@@ -733,9 +791,6 @@ emitRemainder:
 	if int(nextEmit) < len(src) {
 		emitLiteral(dst, src[nextEmit:])
 	}
-	e.cur += int32(len(src))
-	e.prev = e.prev[:len(src)]
-	copy(e.prev, src)
 }
 
 // fastEncL4
@@ -753,12 +808,34 @@ func (e *fastEncL4) Encode(dst *tokens, src []byte) {
 	)
 
 	// Protect against e.cur wraparound.
-	if e.cur > 1<<30 {
-		for i := range e.table[:] {
-			e.table[i] = tableEntryPrev{}
+	for e.cur >= (1<<31)-(maxStoreBlockSize) {
+		if len(e.hist) == 0 {
+			for i := range e.table[:] {
+				e.table[i] = tableEntryPrev{}
+			}
+			e.cur = maxMatchOffset
+			break
 		}
-		e.fastGen = fastGen{cur: maxStoreBlockSize, prev: e.prev[:0]}
+		// Shift down everything in the table that isn't already too far away.
+		minOff := e.cur + int32(len(e.hist)) - maxMatchOffset
+		for i := range e.table[:] {
+			v := e.table[i]
+			if v.Cur.offset < minOff {
+				v.Cur.offset = 0
+			} else {
+				v.Cur.offset = v.Cur.offset - e.cur + maxMatchOffset
+			}
+			if v.Prev.offset < minOff {
+				v.Prev.offset = 0
+			} else {
+				v.Prev.offset = v.Prev.offset - e.cur + maxMatchOffset
+			}
+			e.table[i] = v
+		}
+		e.cur = maxMatchOffset
 	}
+
+	s := e.addBlock(src)
 
 	// This check isn't in the Snappy implementation, but there, the caller
 	// instead of the callee handles this case.
@@ -766,10 +843,12 @@ func (e *fastEncL4) Encode(dst *tokens, src []byte) {
 		// We do not fill the token table.
 		// This will be picked up by caller.
 		dst.n = uint16(len(src))
-		e.cur += maxStoreBlockSize
-		e.prev = e.prev[:0]
 		return
 	}
+
+	// Override src
+	src = e.hist
+	nextEmit := s
 
 	// sLimit is when to stop looking for offset/length copies. The inputMargin
 	// lets us use a fast path for emitLiteral in the main loop, while we are
@@ -777,8 +856,6 @@ func (e *fastEncL4) Encode(dst *tokens, src []byte) {
 	sLimit := int32(len(src) - inputMargin)
 
 	// nextEmit is where in src the next emitLiteral should start from.
-	nextEmit := int32(0)
-	s := int32(0)
 	cv := load3232(src, s)
 	nextHash := hash(cv)
 
@@ -960,9 +1037,6 @@ emitRemainder:
 	if int(nextEmit) < len(src) {
 		emitLiteral(dst, src[nextEmit:])
 	}
-	e.cur += int32(len(src))
-	e.prev = e.prev[:len(src)]
-	copy(e.prev, src)
 }
 
 func (e *fastGen) matchlen(s, t int32, src []byte) int32 {
@@ -971,43 +1045,23 @@ func (e *fastGen) matchlen(s, t int32, src []byte) int32 {
 		s1 = len(src)
 	}
 
-	// If we are inside the current block
-	if t >= 0 {
-		b := src[t:]
-		a := src[s:s1]
-		// Extend the match to be as long as possible.
-		return int32(matchLen(a, b))
-	}
-
-	// We found a match in the previous block.
-	tp := int32(len(e.prev)) + t
-	if tp < 0 {
-		return 0
-	}
-
 	// Extend the match to be as long as possible.
-	a := src[s:s1]
-	b := e.prev[tp:]
-	if len(b) > len(a) {
-		b = b[:len(a)]
-	}
-	n := matchLen(b, a)
-	// If we reached our limit, we matched everything we are
-	// allowed to in the previous block and we return.
-	if len(b) != n || int(s)+n == s1 {
-		return int32(n)
-	}
-
-	// Continue looking for more matches in the current block.
-	a = src[int(s)+n : s1]
-	b = src[:len(a)]
-	return int32(matchLen(a, b) + n)
+	return int32(matchLen(src[s:s1], src[t:]))
 }
 
 // Reset the encoding table.
 func (e *fastGen) Reset() {
-	e.prev = e.prev[:0]
-	e.cur += maxMatchOffset
+	if cap(e.hist) < int(maxMatchOffset*2) {
+		l := maxMatchOffset * 2
+		// Make it at least 1MB.
+		if l < 1<<20 {
+			l = 1 << 20
+		}
+		e.hist = make([]byte, 0, l)
+	}
+	// We offset current position so everything will be out of reach
+	e.cur += maxMatchOffset + int32(len(e.hist))
+	e.hist = e.hist[:0]
 }
 
 // matchLen returns the maximum length.
