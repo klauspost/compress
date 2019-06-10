@@ -3,8 +3,6 @@ package huff0
 import (
 	"bytes"
 	"testing"
-
-	"github.com/google/go-cmp/cmp"
 )
 
 func TestDecompress1X(t *testing.T) {
@@ -70,7 +68,7 @@ func TestDecompress1X(t *testing.T) {
 				} else {
 					dc = dc[:len(buf0)]
 				}
-				if !cmp.Equal(buf0, dc) {
+				if !bytes.Equal(buf0, dc) {
 					if len(dc) > 1024 {
 						t.Log(string(dc[:1024]))
 						t.Errorf(test.name+"decompressed, got delta: \n(in)\t%02x !=\n(out)\t%02x\n", buf0[:1024], dc[:1024])
@@ -81,7 +79,7 @@ func TestDecompress1X(t *testing.T) {
 				}
 				return
 			}
-			if !cmp.Equal(buf0, dc) {
+			if !bytes.Equal(buf0, dc) {
 				if len(buf0) > 1024 {
 					t.Log(string(dc[:1024]))
 				} else {
@@ -160,7 +158,7 @@ func TestDecompress4X(t *testing.T) {
 				} else {
 					dc = dc[:len(buf0)]
 				}
-				if !cmp.Equal(buf0, dc) {
+				if !bytes.Equal(buf0, dc) {
 					if len(dc) > 1024 {
 						t.Log(string(dc[:1024]))
 						t.Errorf(test.name+"decompressed, got delta: \n(in)\t%02x !=\n(out)\t%02x\n", buf0[:1024], dc[:1024])
@@ -171,7 +169,7 @@ func TestDecompress4X(t *testing.T) {
 				}
 				return
 			}
-			if !cmp.Equal(buf0, dc) {
+			if !bytes.Equal(buf0, dc) {
 				if len(buf0) > 1024 {
 					t.Log(string(dc[:1024]))
 				} else {
@@ -187,7 +185,7 @@ func TestDecompress4X(t *testing.T) {
 	}
 }
 
-func TestDecompress1XFuzz(t *testing.T) {
+func TestRoundtrip1XFuzz(t *testing.T) {
 	for _, test := range testfilesExtended {
 		t.Run(test.name, func(t *testing.T) {
 			var s = &Scratch{}
@@ -251,7 +249,7 @@ func TestDecompress1XFuzz(t *testing.T) {
 				} else {
 					dc = dc[:len(buf0)]
 				}
-				if !cmp.Equal(buf0, dc) {
+				if !bytes.Equal(buf0, dc) {
 					if len(dc) > 1024 {
 						t.Log(string(dc[:1024]))
 						t.Errorf(test.name+"decompressed, got delta: \n(in)\t%02x !=\n(out)\t%02x\n", buf0[:1024], dc[:1024])
@@ -262,7 +260,7 @@ func TestDecompress1XFuzz(t *testing.T) {
 				}
 				return
 			}
-			if !cmp.Equal(buf0, dc) {
+			if !bytes.Equal(buf0, dc) {
 				if len(buf0) > 1024 {
 					t.Log(string(dc[:1024]))
 				} else {
@@ -278,7 +276,7 @@ func TestDecompress1XFuzz(t *testing.T) {
 	}
 }
 
-func TestDecompress4XFuzz(t *testing.T) {
+func TestRoundtrip4XFuzz(t *testing.T) {
 	for _, test := range testfilesExtended {
 		t.Run(test.name, func(t *testing.T) {
 			var s = &Scratch{}
@@ -342,7 +340,7 @@ func TestDecompress4XFuzz(t *testing.T) {
 				} else {
 					dc = dc[:len(buf0)]
 				}
-				if !cmp.Equal(buf0, dc) {
+				if !bytes.Equal(buf0, dc) {
 					if len(dc) > 1024 {
 						t.Log(string(dc[:1024]))
 						t.Errorf(test.name+"decompressed, got delta: \n(in)\t%02x !=\n(out)\t%02x\n", buf0[:1024], dc[:1024])
@@ -353,7 +351,7 @@ func TestDecompress4XFuzz(t *testing.T) {
 				}
 				return
 			}
-			if !cmp.Equal(buf0, dc) {
+			if !bytes.Equal(buf0, dc) {
 				if len(buf0) > 1024 {
 					t.Log(string(dc[:1024]))
 				} else {

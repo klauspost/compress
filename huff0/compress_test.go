@@ -1,15 +1,16 @@
 package huff0
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/klauspost/compress/flate"
+	"github.com/klauspost/compress/zip"
 )
 
 type inputFn func() ([]byte, error)
@@ -53,21 +54,38 @@ type fuzzInput struct {
 	fn   inputFn
 }
 
+// testfilesExtended is used for regression testing the decoder.
+// These files are expected to fail, but not crash
 var testfilesExtended []fuzzInput
 
 func init() {
-	filepath.Walk("./fuzz/compress/corpus", func(path string, info os.FileInfo, err error) error {
-		if info.Size() == 0 || info.IsDir() {
-			return nil
+	data, err := ioutil.ReadFile("testdata/regression.zip")
+	if err != nil {
+		panic(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		panic(err)
+	}
+	for _, tt := range zr.File {
+		if tt.UncompressedSize64 == 0 {
+			continue
+		}
+		rc, err := tt.Open()
+		if err != nil {
+			panic(err)
+		}
+		b, err := ioutil.ReadAll(rc)
+		if err != nil {
+			panic(err)
 		}
 		testfilesExtended = append(testfilesExtended, fuzzInput{
-			name: filepath.Base(path),
+			name: filepath.Base(tt.Name),
 			fn: func() ([]byte, error) {
-				return ioutil.ReadFile(path)
+				return b, nil
 			},
 		})
-		return nil
-	})
+	}
 }
 
 func TestCompress1X(t *testing.T) {
