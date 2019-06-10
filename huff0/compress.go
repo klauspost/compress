@@ -61,6 +61,9 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 		if maxCount > len(in) {
 			return nil, false, fmt.Errorf("maxCount (%d) > length (%d)", maxCount, len(in))
 		}
+		if len(in) == 1 {
+			return nil, false, ErrIncompressible
+		}
 		// One symbol, use RLE
 		return nil, false, ErrUseRLE
 	}
@@ -112,7 +115,11 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 	}
 
 	// Use new table
-	s.cTable.write(s)
+	err = s.cTable.write(s)
+	if err != nil {
+		s.OutTable = nil
+		return nil, false, err
+	}
 	s.OutTable = s.Out
 
 	// Compress using new table
@@ -347,12 +354,15 @@ type cTableEntry struct {
 const huffNodesMask = huffNodesLen - 1
 
 func (s *Scratch) buildCTable() error {
-	if cap(s.cTable) < maxSymbolValue+1 {
-		s.cTable = make([]cTableEntry, 0, maxSymbolValue+1)
-	}
-
 	s.huffSort()
-	s.cTable = s.cTable[:s.symbolLen]
+	if cap(s.cTable) < maxSymbolValue+1 {
+		s.cTable = make([]cTableEntry, s.symbolLen, maxSymbolValue+1)
+	} else {
+		s.cTable = s.cTable[:s.symbolLen]
+		for i := range s.cTable {
+			s.cTable[i] = cTableEntry{}
+		}
+	}
 
 	var startNode = int16(s.symbolLen)
 	nonNullRank := s.symbolLen - 1

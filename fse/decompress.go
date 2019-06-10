@@ -134,8 +134,8 @@ func (s *Scratch) readNCount() error {
 			b.advance(bitCount >> 3)
 			bitCount &= 7
 		} else {
-			bitCount -= (uint)(8 * (iend - 4 - b.off))
-			b.off = iend - 4
+			bitCount -= (uint)(8 * (len(b.b) - 4 - b.off))
+			b.off = len(b.b) - 4
 		}
 		bitStream = b.Uint32() >> (bitCount & 31)
 	}

@@ -342,7 +342,7 @@ func (s *Scratch) allocCtable() {
 	}
 	s.ct.stateTable = s.ct.stateTable[:ctSize]
 
-	if cap(s.ct.symbolTT) < int(s.symbolLen) {
+	if cap(s.ct.symbolTT) < 256 {
 		s.ct.symbolTT = make([]symbolTransform, 256)
 	}
 	s.ct.symbolTT = s.ct.symbolTT[:256]

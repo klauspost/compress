@@ -5,6 +5,7 @@
 package zstd
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"sync"
@@ -148,14 +149,25 @@ func (d *Decoder) Reset(r io.Reader) error {
 		return errors.New("nil Reader sent as input")
 	}
 
-	// TODO: If r is a *bytes.Buffer, we could automatically switch to sync operation.
-
 	if d.stream == nil {
 		d.stream = make(chan decodeStream, 1)
 		go d.startStreamDecoder(d.stream)
 	}
 
 	d.drainOutput()
+
+	// If bytes buffer and < 1MB, do sync decoding anyway.
+	if bb, ok := r.(*bytes.Buffer); ok && bb.Len() < 1<<20 {
+		b := bb.Bytes()
+		dst, err := d.DecodeAll(b, nil)
+		if err == nil {
+			err = io.EOF
+		}
+		d.current.b = dst
+		d.current.err = err
+		d.current.flushed = true
+		return nil
+	}
 
 	// Remove current block.
 	d.current.decodeOutput = decodeOutput{}
@@ -213,7 +225,7 @@ func (d *Decoder) WriteTo(w io.Writer) (int64, error) {
 		return 0, errors.New("no input has been initialized")
 	}
 	var n int64
-	for d.current.err == nil {
+	for {
 		if len(d.current.b) > 0 {
 			n2, err2 := w.Write(d.current.b)
 			n += int64(n2)
@@ -221,6 +233,9 @@ func (d *Decoder) WriteTo(w io.Writer) (int64, error) {
 				d.current.err = err2
 				break
 			}
+		}
+		if d.current.err != nil {
+			break
 		}
 		d.nextBlock()
 	}
@@ -366,14 +381,18 @@ func (d *Decoder) startStreamDecoder(inStream chan decodeStream) {
 	decodeStream:
 		for {
 			err := frame.reset(&br)
-			println("Frame decoder returned", err)
+			if debug && err != nil {
+				println("Frame decoder returned", err)
+			}
 			if err != nil {
 				stream.output <- decodeOutput{
 					err: err,
 				}
 				break
 			}
-			println("starting frame decoder")
+			if debug {
+				println("starting frame decoder")
+			}
 
 			// This goroutine will forward history between frames.
 			frame.frameDone.Add(1)

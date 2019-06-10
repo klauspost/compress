@@ -95,7 +95,7 @@ func TestNewDecoderBigFile(t *testing.T) {
 	file := "testdata/enwik9.zst"
 	const wantSize = 1000000000
 	if _, err := os.Stat(file); os.IsNotExist(err) {
-		t.Skip("To run extended tests, download http://mattmahoney.net/dc/textdata unzip it \n" +
+		t.Skip("To run extended tests, download http://mattmahoney.net/dc/enwik9.zip unzip it \n" +
 			"compress it with 'zstd -15 -T0 enwik9' and place it in " + file)
 	}
 	f, err := os.Open(file)
@@ -117,6 +117,33 @@ func TestNewDecoderBigFile(t *testing.T) {
 	}
 	elapsed := time.Since(start)
 	mbpersec := (float64(n) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
+	t.Logf("Decoded %d bytes with %f.2 MB/s", n, mbpersec)
+}
+
+func TestNewDecoderSmallFile(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
+	file := "testdata/z000028.zst"
+	const wantSize = 39807
+	f, err := os.Open(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	start := time.Now()
+	dec, err := NewReader(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := io.Copy(ioutil.Discard, dec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != wantSize {
+		t.Errorf("want size %d, got size %d", wantSize, n)
+	}
+	mbpersec := (float64(n) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
 	t.Logf("Decoded %d bytes with %f.2 MB/s", n, mbpersec)
 }
 
@@ -168,6 +195,71 @@ func TestDecoderRegression(t *testing.T) {
 			got, err := dec.DecodeAll(in, nil)
 			t.Log("Received:", len(got), err)
 		})
+	}
+}
+
+func TestDecoder_Reset(t *testing.T) {
+	in, err := ioutil.ReadFile("testdata/z000028")
+	if err != nil {
+		t.Fatal(err)
+	}
+	in = append(in, in...)
+	var e Encoder
+	start := time.Now()
+	dst := e.EncodeAll(in, nil)
+	t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
+	mbpersec := (float64(len(in)) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
+	t.Logf("Encoded %d bytes with %.2f MB/s", len(in), mbpersec)
+
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := dec.DecodeAll(dst, nil)
+	if err != nil {
+		t.Error(err, len(decoded))
+	}
+	if !bytes.Equal(decoded, in) {
+		t.Fatal("Decoded does not match")
+	}
+	t.Log("Encoded content matched")
+
+	// Decode using reset+copy
+	for i := 0; i < 3; i++ {
+		err = dec.Reset(bytes.NewBuffer(dst))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var dBuf bytes.Buffer
+		n, err := io.Copy(&dBuf, dec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded = dBuf.Bytes()
+		if int(n) != len(decoded) {
+			t.Fatalf("decoded reported length mismatch %d != %d", n, len(decoded))
+		}
+		if !bytes.Equal(decoded, in) {
+			ioutil.WriteFile("testdata/"+t.Name()+"-z000028.got", decoded, os.ModePerm)
+			ioutil.WriteFile("testdata/"+t.Name()+"-z000028.want", in, os.ModePerm)
+			t.Fatal("Decoded does not match")
+		}
+	}
+	// Test without WriterTo interface support.
+	for i := 0; i < 3; i++ {
+		err = dec.Reset(bytes.NewBuffer(dst))
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded, err := ioutil.ReadAll(ioutil.NopCloser(dec))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(decoded, in) {
+			ioutil.WriteFile("testdata/"+t.Name()+"-z000028.got", decoded, os.ModePerm)
+			ioutil.WriteFile("testdata/"+t.Name()+"-z000028.want", in, os.ModePerm)
+			t.Fatal("Decoded does not match")
+		}
 	}
 }
 

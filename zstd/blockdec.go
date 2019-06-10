@@ -136,7 +136,7 @@ func (b *blockDec) reset(br byteBuffer, windowSize uint64) error {
 		b.RLESize = 0
 		if cSize > maxCompressedBlockSize || uint64(cSize) > b.WindowSize {
 			if debug {
-				printf("compressed block too big: %+v\n", b)
+				printf("compressed block too big: csize:%d block: %+v\n", uint64(cSize), b)
 			}
 			return ErrCompressedSizeTooBig
 		}
@@ -366,6 +366,9 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 			in = in[5:]
 		}
 	}
+	if debug {
+		println("literals type:", litType, "litRegenSize:", litRegenSize, "litCompSize", litCompSize)
+	}
 	var literals []byte
 	var huff *huff0.Scratch
 	switch litType {
@@ -450,6 +453,7 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 			literals, err = huff.Decompress1X(literals)
 		}
 		if err != nil {
+			println("decoding compressed literals:", err)
 			return err
 		}
 		// Make sure we don't leak our literals buffer
@@ -508,6 +512,9 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		br := byteReader{b: in, off: 0}
 		compMode := br.Uint8()
 		br.advance(1)
+		if debug {
+			printf("Compression modes: 0b%b", compMode)
+		}
 		for i := uint(0); i < 3; i++ {
 			mode := seqCompMode((compMode >> (6 - i*2)) & 3)
 			//println("Table", tableIndex(i), "is", mode)
@@ -519,6 +526,8 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 				seq = &seqs.offsets
 			case tableMatchLengths:
 				seq = &seqs.matchLengths
+			default:
+				panic("unknown table")
 			}
 			switch mode {
 			case compModePredefined:
@@ -532,13 +541,13 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 				dec := fseDecoderPool.Get().(*fseDecoder)
 				symb, err := decSymbolValue(v, symbolTableX[i])
 				if err != nil {
-					println("RLE Transform table error:", err)
+					printf("RLE Transform table (%v) error: %v", tableIndex(i), err)
 					return err
 				}
 				dec.setRLE(symb)
 				seq.fse = dec
 				if debug {
-					println("RLE set to ", symb)
+					printf("RLE set to %+v, code: %v", symb, v)
 				}
 			case compModeFSE:
 				println("Reading table for", tableIndex(i))
@@ -548,11 +557,13 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 					println("Read table error:", err)
 					return err
 				}
-				println("Read table ok")
 				err = dec.transform(symbolTableX[i])
 				if err != nil {
 					println("Transform table error:", err)
 					return err
+				}
+				if debug {
+					println("Read table ok", "symbolLen:", dec.symbolLen)
 				}
 				seq.fse = dec
 			case compModeRepeat:
@@ -668,7 +679,9 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 	if err != nil {
 		printf("Closing sequences: %v, %+v\n", err, *br)
 	}
-
+	if len(b.data) > maxCompressedBlockSize {
+		return fmt.Errorf("compressed block size too large (%d)", len(b.data))
+	}
 	// Set output and release references.
 	b.dst = seqs.out
 	seqs.out, seqs.literals, seqs.hist = nil, nil, nil
