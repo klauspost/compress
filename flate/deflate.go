@@ -208,8 +208,16 @@ func (d *compressor) writeBlockSkip(tok tokens, index int, eof bool) error {
 func (d *compressor) fillWindow(b []byte) {
 	// Do not fill window if we are in store-only mode,
 	// use constant or Snappy compression.
-	switch d.compressionLevel.level {
-	case 0, 1, 2:
+	if d.level == 0 {
+		return
+	}
+	if d.snap != nil {
+		// encode the last data, but discard the result
+		if len(b) > maxMatchOffset {
+			b = b[len(b)-maxMatchOffset:]
+		}
+		d.snap.Encode(&d.tokens, b)
+		d.tokens.n = 0
 		return
 	}
 	s := d.state
