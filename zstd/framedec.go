@@ -12,7 +12,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/cespare/xxhash"
+	"github.com/klauspost/compress/zstd/internal/xxhash"
 )
 
 type frameDec struct {

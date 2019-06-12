@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cespare/xxhash"
 	"github.com/klauspost/compress/zip"
+	"github.com/klauspost/compress/zstd/internal/xxhash"
 )
 
 func TestEncoder_EncodeAllSimple(t *testing.T) {

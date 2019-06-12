@@ -11,7 +11,7 @@ import (
 	rdebug "runtime/debug"
 	"sync"
 
-	"github.com/cespare/xxhash"
+	"github.com/klauspost/compress/zstd/internal/xxhash"
 )
 
 // Encoder provides encoding to Zstandard.

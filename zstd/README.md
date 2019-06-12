@@ -21,8 +21,6 @@ Install using `go get -u github.com/klauspost/compress`. The package is located 
 
 Godoc Documentation: https://godoc.org/github.com/klauspost/compress/zstd
 
-You will also need the [`github.com/cespare/xxhash`](https://github.com/cespare/xxhash) package.
-
 
 ## Compressor
 
@@ -382,3 +380,4 @@ For sending files for reproducing errors use a service like [goobox](https://goo
 
 For general feedback and experience reports, feel free to open an issue or write me on [Twitter](https://twitter.com/sh0dan).
 
+This package includes the excellent [`github.com/cespare/xxhash`](https://github.com/cespare/xxhash) package Copyright (c) 2016 Caleb Spare.
