@@ -7,7 +7,7 @@ package zstd
 import (
 	"math/bits"
 
-	"github.com/cespare/xxhash"
+	"github.com/klauspost/compress/zstd/internal/xxhash"
 )
 
 const (
