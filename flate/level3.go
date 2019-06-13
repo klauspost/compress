@@ -150,9 +150,7 @@ func (e *fastEncL3) Encode(dst *tokens, src []byte) {
 				emitLiteral(dst, src[nextEmit:s])
 			}
 
-			// matchToken is flate's equivalent of Snappy's emitCopy. (length,offset)
-			dst.tokens[dst.n] = matchToken(uint32(l-baseMatchLength), uint32(s-t-baseMatchOffset))
-			dst.n++
+			dst.AddMatch(uint32(l-baseMatchLength), uint32(s-t-baseMatchOffset))
 			s += l
 			nextEmit = s
 			if nextS >= s {

@@ -168,8 +168,8 @@ func TestHistogram(t *testing.T) {
 	for i := 0; i <= maxLen; i += is {
 		// Test different offsets
 		for j := 0; j < maxOff; j += js {
-			var got [256]int32
-			var reference [256]int32
+			var got [256]uint16
+			var reference [256]uint16
 
 			histogram(a[j:i+j], got[:])
 			histogramReference(a[j:i+j], reference[:])
@@ -183,7 +183,7 @@ func TestHistogram(t *testing.T) {
 }
 
 // histogramReference is a reference
-func histogramReference(b []byte, h []int32) {
+func histogramReference(b []byte, h []uint16) {
 	if len(h) < 256 {
 		panic("Histogram too small")
 	}

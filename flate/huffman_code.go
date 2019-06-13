@@ -25,7 +25,7 @@ type huffmanEncoder struct {
 
 type literalNode struct {
 	literal uint16
-	freq    int32
+	freq    uint16
 }
 
 // A levelInfo describes the state of the constructed tree for a given depth.
@@ -54,7 +54,7 @@ func (h *hcode) set(code uint16, length uint16) {
 	h.code = code
 }
 
-func maxNode() literalNode { return literalNode{math.MaxUint16, math.MaxInt32} }
+func maxNode() literalNode { return literalNode{math.MaxUint16, math.MaxUint16} }
 
 func newHuffmanEncoder(size int) *huffmanEncoder {
 	// Make capacity to next power of two.
@@ -108,7 +108,7 @@ func generateFixedOffsetEncoding() *huffmanEncoder {
 var fixedLiteralEncoding *huffmanEncoder = generateFixedLiteralEncoding()
 var fixedOffsetEncoding *huffmanEncoder = generateFixedOffsetEncoding()
 
-func (h *huffmanEncoder) bitLength(freq []int32) int {
+func (h *huffmanEncoder) bitLength(freq []uint16) int {
 	var total int
 	for i, f := range freq {
 		if f != 0 {
@@ -163,13 +163,13 @@ func (h *huffmanEncoder) bitCounts(list []literalNode, maxBits int32) []int32 {
 		// We initialize the levels as if we had already figured this out.
 		levels[level] = levelInfo{
 			level:        level,
-			lastFreq:     list[1].freq,
-			nextCharFreq: list[2].freq,
-			nextPairFreq: list[0].freq + list[1].freq,
+			lastFreq:     int32(list[1].freq),
+			nextCharFreq: int32(list[2].freq),
+			nextPairFreq: int32(list[0].freq) + int32(list[1].freq),
 		}
 		leafCounts[level][level] = 2
 		if level == 1 {
-			levels[level].nextPairFreq = math.MaxInt32
+			levels[level].nextPairFreq = math.MaxUint16
 		}
 	}
 
@@ -179,13 +179,13 @@ func (h *huffmanEncoder) bitCounts(list []literalNode, maxBits int32) []int32 {
 	level := maxBits
 	for {
 		l := &levels[level]
-		if l.nextPairFreq == math.MaxInt32 && l.nextCharFreq == math.MaxInt32 {
+		if l.nextPairFreq == math.MaxUint16 && l.nextCharFreq == math.MaxUint16 {
 			// We've run out of both leafs and pairs.
 			// End all calculations for this level.
 			// To make sure we never come back to this level or any lower level,
 			// set nextPairFreq impossibly large.
 			l.needed = 0
-			levels[level+1].nextPairFreq = math.MaxInt32
+			levels[level+1].nextPairFreq = math.MaxUint16
 			level++
 			continue
 		}
@@ -197,7 +197,7 @@ func (h *huffmanEncoder) bitCounts(list []literalNode, maxBits int32) []int32 {
 			l.lastFreq = l.nextCharFreq
 			// Lower leafCounts are the same of the previous node.
 			leafCounts[level][level] = n
-			l.nextCharFreq = list[n].freq
+			l.nextCharFreq = int32(list[n].freq)
 		} else {
 			// The next item on this row is a pair from the previous row.
 			// nextPairFreq isn't valid until we generate two
@@ -273,7 +273,7 @@ func (h *huffmanEncoder) assignEncodingAndSize(bitCount []int32, list []literalN
 //
 // freq  An array of frequencies, in which frequency[i] gives the frequency of literal i.
 // maxBits  The maximum number of bits to use for any literal.
-func (h *huffmanEncoder) generate(freq []int32, maxBits int32) {
+func (h *huffmanEncoder) generate(freq []uint16, maxBits int32) {
 	if h.freqcache == nil {
 		// Allocate a reusable buffer with the longest possible frequency table.
 		// Possible lengths are codegenCodeCount, offsetCodeCount and maxNumLit.
@@ -345,3 +345,13 @@ func (s byFreq) Less(i, j int) bool {
 }
 
 func (s byFreq) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+
+// histogram accumulates a histogram of b in h.
+//
+// len(h) must be >= 256, and h's elements must be all zeroes.
+func histogram(b []byte, h []uint16) {
+	h = h[:256]
+	for _, t := range b {
+		h[t]++
+	}
+}

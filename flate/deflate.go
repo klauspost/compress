@@ -164,14 +164,14 @@ func (d *compressor) fillDeflate(b []byte) int {
 	return n
 }
 
-func (d *compressor) writeBlock(tok tokens, index int, eof bool) error {
+func (d *compressor) writeBlock(tok *tokens, index int, eof bool) error {
 	if index > 0 || eof {
 		var window []byte
 		if d.blockStart <= index {
 			window = d.window[d.blockStart:index]
 		}
 		d.blockStart = index
-		d.w.writeBlock(tok.tokens[:tok.n], eof, window)
+		d.w.writeBlock(tok, eof, window)
 		return d.w.err
 	}
 	return nil
@@ -180,7 +180,7 @@ func (d *compressor) writeBlock(tok tokens, index int, eof bool) error {
 // writeBlockSkip writes the current block and uses the number of tokens
 // to determine if the block should be stored on no matches, or
 // only huffman encoded.
-func (d *compressor) writeBlockSkip(tok tokens, index int, eof bool) error {
+func (d *compressor) writeBlockSkip(tok *tokens, index int, eof bool) error {
 	if index > 0 || eof {
 		if d.blockStart <= index {
 			window := d.window[d.blockStart:index]
@@ -190,10 +190,10 @@ func (d *compressor) writeBlockSkip(tok tokens, index int, eof bool) error {
 				d.w.writeBlockHuff(eof, window)
 			} else {
 				// Write a dynamic huffman block.
-				d.w.writeBlockDynamic(tok.tokens[:tok.n], eof, window)
+				d.w.writeBlockDynamic(tok, eof, window)
 			}
 		} else {
-			d.w.writeBlock(tok.tokens[:tok.n], eof, nil)
+			d.w.writeBlock(tok, eof, nil)
 		}
 		d.blockStart = index
 		return d.w.err
@@ -217,7 +217,7 @@ func (d *compressor) fillWindow(b []byte) {
 			b = b[len(b)-maxMatchOffset:]
 		}
 		d.snap.Encode(&d.tokens, b)
-		d.tokens.n = 0
+		d.tokens.Reset()
 		return
 	}
 	s := d.state
@@ -456,10 +456,10 @@ func (d *compressor) deflate() {
 			}
 			if lookahead == 0 {
 				if d.tokens.n > 0 {
-					if d.err = d.writeBlockSkip(d.tokens, s.index, false); d.err != nil {
+					if d.err = d.writeBlockSkip(&d.tokens, s.index, false); d.err != nil {
 						return
 					}
-					d.tokens.n = 0
+					d.tokens.Reset()
 				}
 				return
 			}
@@ -490,8 +490,7 @@ func (d *compressor) deflate() {
 			// There was a match at the previous step, and the current match is
 			// not better. Output the previous match.
 			// "s.length-3" should NOT be "s.length-minMatchLength", since the format always assume 3
-			d.tokens.tokens[d.tokens.n] = matchToken(uint32(s.length-3), uint32(s.offset-minOffsetSize))
-			d.tokens.n++
+			d.tokens.AddMatch(uint32(s.length-3), uint32(s.offset-minOffsetSize))
 			// Insert in the hash table all strings up to the end of the match.
 			// index and index-1 are already inserted. If there is not enough
 			// lookahead, the last two strings are not inserted into the hash
@@ -537,10 +536,10 @@ func (d *compressor) deflate() {
 			}
 			if d.tokens.n == maxFlateBlockTokens {
 				// The block includes the current character
-				if d.err = d.writeBlockSkip(d.tokens, s.index, false); d.err != nil {
+				if d.err = d.writeBlockSkip(&d.tokens, s.index, false); d.err != nil {
 					return
 				}
-				d.tokens.n = 0
+				d.tokens.Reset()
 			}
 		} else {
 			s.ii++
@@ -549,13 +548,12 @@ func (d *compressor) deflate() {
 				end = d.windowEnd
 			}
 			for i := s.index; i < end; i++ {
-				d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[i]))
-				d.tokens.n++
+				d.tokens.AddLiteral(d.window[i])
 				if d.tokens.n == maxFlateBlockTokens {
-					if d.err = d.writeBlockSkip(d.tokens, i+1, false); d.err != nil {
+					if d.err = d.writeBlockSkip(&d.tokens, i+1, false); d.err != nil {
 						return
 					}
-					d.tokens.n = 0
+					d.tokens.Reset()
 				}
 			}
 			s.index = end
@@ -597,15 +595,14 @@ func (d *compressor) deflateLazy() {
 				// Flush current output block if any.
 				if d.byteAvailable {
 					// There is still one pending token that needs to be flushed
-					d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[s.index-1]))
-					d.tokens.n++
+					d.tokens.AddLiteral(d.window[s.index-1])
 					d.byteAvailable = false
 				}
 				if d.tokens.n > 0 {
-					if d.err = d.writeBlock(d.tokens, s.index, false); d.err != nil {
+					if d.err = d.writeBlock(&d.tokens, s.index, false); d.err != nil {
 						return
 					}
-					d.tokens.n = 0
+					d.tokens.Reset()
 				}
 				return
 			}
@@ -636,8 +633,7 @@ func (d *compressor) deflateLazy() {
 		if prevLength >= minMatchLength && s.length <= prevLength {
 			// There was a match at the previous step, and the current match is
 			// not better. Output the previous match.
-			d.tokens.tokens[d.tokens.n] = matchToken(uint32(prevLength-3), uint32(prevOffset-minOffsetSize))
-			d.tokens.n++
+			d.tokens.AddMatch(uint32(prevLength-3), uint32(prevOffset-minOffsetSize))
 
 			// Insert in the hash table all strings up to the end of the match.
 			// index and index-1 are already inserted. If there is not enough
@@ -678,10 +674,10 @@ func (d *compressor) deflateLazy() {
 			s.length = minMatchLength - 1
 			if d.tokens.n == maxFlateBlockTokens {
 				// The block includes the current character
-				if d.err = d.writeBlock(d.tokens, s.index, false); d.err != nil {
+				if d.err = d.writeBlock(&d.tokens, s.index, false); d.err != nil {
 					return
 				}
-				d.tokens.n = 0
+				d.tokens.Reset()
 			}
 		} else {
 			// Reset, if we got a match this run.
@@ -691,13 +687,12 @@ func (d *compressor) deflateLazy() {
 			// We have a byte waiting. Emit it.
 			if d.byteAvailable {
 				s.ii++
-				d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[s.index-1]))
-				d.tokens.n++
+				d.tokens.AddLiteral(d.window[s.index-1])
 				if d.tokens.n == maxFlateBlockTokens {
-					if d.err = d.writeBlock(d.tokens, s.index, false); d.err != nil {
+					if d.err = d.writeBlock(&d.tokens, s.index, false); d.err != nil {
 						return
 					}
-					d.tokens.n = 0
+					d.tokens.Reset()
 				}
 				s.index++
 
@@ -710,26 +705,24 @@ func (d *compressor) deflateLazy() {
 							break
 						}
 
-						d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[s.index-1]))
-						d.tokens.n++
+						d.tokens.AddLiteral(d.window[s.index-1])
 						if d.tokens.n == maxFlateBlockTokens {
-							if d.err = d.writeBlock(d.tokens, s.index, false); d.err != nil {
+							if d.err = d.writeBlock(&d.tokens, s.index, false); d.err != nil {
 								return
 							}
-							d.tokens.n = 0
+							d.tokens.Reset()
 						}
 						s.index++
 					}
 					// Flush last byte
-					d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[s.index-1]))
-					d.tokens.n++
+					d.tokens.AddLiteral(d.window[s.index-1])
 					d.byteAvailable = false
 					// s.length = minMatchLength - 1 // not needed, since s.ii is reset above, so it should never be > minMatchLength
 					if d.tokens.n == maxFlateBlockTokens {
-						if d.err = d.writeBlock(d.tokens, s.index, false); d.err != nil {
+						if d.err = d.writeBlock(&d.tokens, s.index, false); d.err != nil {
 							return
 						}
-						d.tokens.n = 0
+						d.tokens.Reset()
 					}
 				}
 			} else {
@@ -772,10 +765,10 @@ func (d *compressor) deflateSSE() {
 			}
 			if lookahead == 0 {
 				if d.tokens.n > 0 {
-					if d.err = d.writeBlockSkip(d.tokens, s.index, false); d.err != nil {
+					if d.err = d.writeBlockSkip(&d.tokens, s.index, false); d.err != nil {
 						return
 					}
-					d.tokens.n = 0
+					d.tokens.Reset()
 				}
 				return
 			}
@@ -806,8 +799,7 @@ func (d *compressor) deflateSSE() {
 			// There was a match at the previous step, and the current match is
 			// not better. Output the previous match.
 			// "s.length-3" should NOT be "s.length-minMatchLength", since the format always assume 3
-			d.tokens.tokens[d.tokens.n] = matchToken(uint32(s.length-3), uint32(s.offset-minOffsetSize))
-			d.tokens.n++
+			d.tokens.AddMatch(uint32(s.length-3), uint32(s.offset-minOffsetSize))
 			// Insert in the hash table all strings up to the end of the match.
 			// index and index-1 are already inserted. If there is not enough
 			// lookahead, the last two strings are not inserted into the hash
@@ -854,10 +846,10 @@ func (d *compressor) deflateSSE() {
 			}
 			if d.tokens.n == maxFlateBlockTokens {
 				// The block includes the current character
-				if d.err = d.writeBlockSkip(d.tokens, s.index, false); d.err != nil {
+				if d.err = d.writeBlockSkip(&d.tokens, s.index, false); d.err != nil {
 					return
 				}
-				d.tokens.n = 0
+				d.tokens.Reset()
 			}
 		} else {
 			s.ii++
@@ -866,13 +858,12 @@ func (d *compressor) deflateSSE() {
 				end = d.windowEnd
 			}
 			for i := s.index; i < end; i++ {
-				d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[i]))
-				d.tokens.n++
+				d.tokens.AddLiteral(d.window[i])
 				if d.tokens.n == maxFlateBlockTokens {
-					if d.err = d.writeBlockSkip(d.tokens, i+1, false); d.err != nil {
+					if d.err = d.writeBlockSkip(&d.tokens, i+1, false); d.err != nil {
 						return
 					}
-					d.tokens.n = 0
+					d.tokens.Reset()
 				}
 			}
 			s.index = end
@@ -914,15 +905,14 @@ func (d *compressor) deflateLazySSE() {
 				// Flush current output block if any.
 				if d.byteAvailable {
 					// There is still one pending token that needs to be flushed
-					d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[s.index-1]))
-					d.tokens.n++
+					d.tokens.AddLiteral(d.window[s.index-1])
 					d.byteAvailable = false
 				}
 				if d.tokens.n > 0 {
-					if d.err = d.writeBlock(d.tokens, s.index, false); d.err != nil {
+					if d.err = d.writeBlock(&d.tokens, s.index, false); d.err != nil {
 						return
 					}
-					d.tokens.n = 0
+					d.tokens.Reset()
 				}
 				return
 			}
@@ -953,8 +943,7 @@ func (d *compressor) deflateLazySSE() {
 		if prevLength >= minMatchLength && s.length <= prevLength {
 			// There was a match at the previous step, and the current match is
 			// not better. Output the previous match.
-			d.tokens.tokens[d.tokens.n] = matchToken(uint32(prevLength-3), uint32(prevOffset-minOffsetSize))
-			d.tokens.n++
+			d.tokens.AddMatch(uint32(prevLength-3), uint32(prevOffset-minOffsetSize))
 
 			// Insert in the hash table all strings up to the end of the match.
 			// index and index-1 are already inserted. If there is not enough
@@ -995,10 +984,10 @@ func (d *compressor) deflateLazySSE() {
 			s.length = minMatchLength - 1
 			if d.tokens.n == maxFlateBlockTokens {
 				// The block includes the current character
-				if d.err = d.writeBlock(d.tokens, s.index, false); d.err != nil {
+				if d.err = d.writeBlock(&d.tokens, s.index, false); d.err != nil {
 					return
 				}
-				d.tokens.n = 0
+				d.tokens.Reset()
 			}
 		} else {
 			// Reset, if we got a match this run.
@@ -1008,13 +997,12 @@ func (d *compressor) deflateLazySSE() {
 			// We have a byte waiting. Emit it.
 			if d.byteAvailable {
 				s.ii++
-				d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[s.index-1]))
-				d.tokens.n++
+				d.tokens.AddLiteral(d.window[s.index-1])
 				if d.tokens.n == maxFlateBlockTokens {
-					if d.err = d.writeBlock(d.tokens, s.index, false); d.err != nil {
+					if d.err = d.writeBlock(&d.tokens, s.index, false); d.err != nil {
 						return
 					}
-					d.tokens.n = 0
+					d.tokens.Reset()
 				}
 				s.index++
 
@@ -1027,26 +1015,24 @@ func (d *compressor) deflateLazySSE() {
 							break
 						}
 
-						d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[s.index-1]))
-						d.tokens.n++
+						d.tokens.AddLiteral(d.window[s.index-1])
 						if d.tokens.n == maxFlateBlockTokens {
-							if d.err = d.writeBlock(d.tokens, s.index, false); d.err != nil {
+							if d.err = d.writeBlock(&d.tokens, s.index, false); d.err != nil {
 								return
 							}
-							d.tokens.n = 0
+							d.tokens.Reset()
 						}
 						s.index++
 					}
 					// Flush last byte
-					d.tokens.tokens[d.tokens.n] = literalToken(uint32(d.window[s.index-1]))
-					d.tokens.n++
+					d.tokens.AddLiteral(d.window[s.index-1])
 					d.byteAvailable = false
 					// s.length = minMatchLength - 1 // not needed, since s.ii is reset above, so it should never be > minMatchLength
 					if d.tokens.n == maxFlateBlockTokens {
-						if d.err = d.writeBlock(d.tokens, s.index, false); d.err != nil {
+						if d.err = d.writeBlock(&d.tokens, s.index, false); d.err != nil {
 							return
 						}
-						d.tokens.n = 0
+						d.tokens.Reset()
 					}
 				}
 			} else {
@@ -1100,13 +1086,13 @@ func (d *compressor) storeFast() {
 			}
 			if d.windowEnd <= 32 {
 				d.err = d.writeStoredBlock(d.window[:d.windowEnd])
-				d.tokens.n = 0
+				d.tokens.Reset()
 				d.windowEnd = 0
 			} else {
 				d.w.writeBlockHuff(false, d.window[:d.windowEnd])
 				d.err = d.w.err
 			}
-			d.tokens.n = 0
+			d.tokens.Reset()
 			d.windowEnd = 0
 			d.snap.Reset()
 			return
@@ -1122,10 +1108,10 @@ func (d *compressor) storeFast() {
 		d.w.writeBlockHuff(false, d.window[:d.windowEnd])
 		d.err = d.w.err
 	} else {
-		d.w.writeBlockDynamic(d.tokens.tokens[:d.tokens.n], false, d.window[:d.windowEnd])
+		d.w.writeBlockDynamic(&d.tokens, false, d.window[:d.windowEnd])
 		d.err = d.w.err
 	}
-	d.tokens.n = 0
+	d.tokens.Reset()
 	d.windowEnd = 0
 }
 
@@ -1215,7 +1201,7 @@ func (d *compressor) reset(w io.Writer) {
 	if d.snap != nil {
 		d.snap.Reset()
 		d.windowEnd = 0
-		d.tokens.n = 0
+		d.tokens.Reset()
 		return
 	}
 	switch d.compressionLevel.chain {
@@ -1234,7 +1220,7 @@ func (d *compressor) reset(w io.Writer) {
 		s.hashOffset = 1
 		s.index, d.windowEnd = 0, 0
 		d.blockStart, d.byteAvailable = 0, false
-		d.tokens.n = 0
+		d.tokens.Reset()
 		s.length = minMatchLength - 1
 		s.offset = 0
 		s.hash = 0

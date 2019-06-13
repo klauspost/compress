@@ -5,21 +5,19 @@
 
 package flate
 
-import "math/bits"
+import (
+	"fmt"
+	"math/bits"
+)
 
 // emitLiteral writes a literal chunk and returns the number of bytes written.
 func emitLiteral(dst *tokens, lit []byte) {
 	ol := int(dst.n)
 	for i, v := range lit {
 		dst.tokens[(i+ol)&maxStoreBlockSize] = token(v)
+		dst.litHist[v]++
 	}
 	dst.n += uint16(len(lit))
-}
-
-// emitCopy writes a copy chunk and returns the number of bytes written.
-func emitCopy(dst *tokens, offset, length int) {
-	dst.tokens[dst.n] = matchToken(uint32(length-3), uint32(offset-minOffsetSize))
-	dst.n++
 }
 
 type fastEnc interface {
@@ -184,6 +182,17 @@ type fastEncL4 struct {
 // The maximum length returned is maxMatchLength - 4.
 // It is assumed that s > t, that t >=0 and s < len(src).
 func (e *fastGen) matchlen(s, t int32, src []byte) int32 {
+	if false {
+		if t >= s {
+			panic(fmt.Sprint("t>=s", t, s))
+		}
+		if int(s) >= len(src) {
+			panic(fmt.Sprint("s >= len(src)", s, len(src)))
+		}
+		if t < 0 {
+			panic(fmt.Sprint("t < 0 ", t))
+		}
+	}
 	s1 := int(s) + maxMatchLength - 4
 	if s1 > len(src) {
 		s1 = len(src)

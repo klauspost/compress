@@ -23,13 +23,3 @@ func matchLenSSE4(a, b []byte, max int) int {
 	panic("no assembler")
 	return 0
 }
-
-// histogram accumulates a histogram of b in h.
-//
-// len(h) must be >= 256, and h's elements must be all zeroes.
-func histogram(b []byte, h []int32) {
-	h = h[:256]
-	for _, t := range b {
-		h[t]++
-	}
-}

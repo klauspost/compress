@@ -30,12 +30,6 @@ func crc32sseAll(a []byte, dst []uint32)
 //go:noescape
 func matchLenSSE4(a, b []byte, max int) int
 
-// histogram accumulates a histogram of b in h.
-// h must be at least 256 entries in length,
-// and must be cleared before calling this function.
-//go:noescape
-func histogram(b []byte, h []int32)
-
 // Detect SSE 4.2 feature.
 func init() {
 	useSSE42 = cpuid.CPU.SSE42()

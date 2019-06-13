@@ -79,7 +79,8 @@ func (e *fastEncL6) Encode(dst *tokens, src []byte) {
 	cv := load6432(src, s)
 	nextHashS := hash4x64(cv, tableBits)
 	nextHashL := hash7(cv, tableBits)
-	repeat := int32(0)
+	// Repeat MUST be > 1 and within rabge
+	repeat := int32(1)
 
 	for {
 		const skipLog = 6
@@ -142,18 +143,24 @@ func (e *fastEncL6) Encode(dst *tokens, src []byte) {
 				l = e.matchlen(s+4, t+4, src) + 4
 				lCandidate = e.bTable[nextHashL&tableMask]
 
-				t2 := s - repeat
-				if repeat > 0 && load3232(src, t2) == uint32(cv) {
-					ml := e.matchlen(s+4, t2+4, src) + 4
-					if ml > l {
-						t = t2
-						l = ml
-					}
-				}
 				// Store the next match
 				e.table[nextHashS&tableMask] = tableEntry{offset: nextS + e.cur, val: uint32(next)}
 				eLong := &e.bTable[nextHashL&tableMask]
 				eLong.Cur, eLong.Prev = tableEntry{offset: nextS + e.cur, val: uint32(next)}, eLong.Cur
+
+				// Check repeat at s
+				const repOff = 1
+				t2 := s - repeat + repOff
+				if load3232(src, t2) == uint32(cv>>(9*repOff)) {
+					ml := e.matchlen(s+4+repOff, t2+4, src) + 4
+					if ml > l {
+						t = t2
+						l = ml
+						s += repOff
+						// Not worth checking more.
+						break
+					}
+				}
 
 				// If the next long is a candidate, use that...
 				t2 = lCandidate.Cur.offset - e.cur
@@ -220,9 +227,7 @@ func (e *fastEncL6) Encode(dst *tokens, src []byte) {
 			}
 		}
 
-		// matchToken is flate's equivalent of Snappy's emitCopy. (length,offset)
-		dst.tokens[dst.n] = matchToken(uint32(l-baseMatchLength), uint32(s-t-baseMatchOffset))
-		dst.n++
+		dst.AddMatch(uint32(l-baseMatchLength), uint32(s-t-baseMatchOffset))
 		repeat = s - t
 		s += l
 		nextEmit = s

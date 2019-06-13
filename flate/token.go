@@ -4,6 +4,8 @@
 
 package flate
 
+import "math"
+
 const (
 	// 2 bits:   type   0 = literal  1=EOF  2=Match   3=Unused
 	// 8 bits:   xlength = length - MIN_MATCH_LENGTH
@@ -68,17 +70,113 @@ var offsetCodes = [256]uint32{
 type token uint32
 
 type tokens struct {
-	tokens [maxStoreBlockSize + 1]token
-	n      uint16 // Must be able to contain maxStoreBlockSize
+	n         uint16 // Must be able to contain maxStoreBlockSize
+	tokens    [maxStoreBlockSize + 1]token
+	litHist   [256]uint16 // codes 0->255
+	extraHist [32]uint16  // codes 256->maxnumlit
+	offHist   [32]uint16  // offset codes
+}
+
+func (t *tokens) Reset() {
+	if t.n == 0 {
+		return
+	}
+	t.n = 0
+	for i := range t.litHist[:] {
+		t.litHist[i] = 0
+	}
+	for i := range t.extraHist[:] {
+		t.extraHist[i] = 0
+	}
+	for i := range t.offHist[:] {
+		t.offHist[i] = 0
+	}
+}
+
+func (t *tokens) Fill() {
+	if t.n == 0 {
+		return
+	}
+	for i := range t.litHist[:] {
+		if t.litHist[i] == 0 {
+			t.litHist[i] = 1
+		}
+	}
+	for i := range t.extraHist[:maxNumLit-256] {
+		if t.extraHist[i] == 0 {
+			t.extraHist[i] = 1
+		}
+	}
+	for i := range t.offHist[:offsetCodeCount] {
+		if t.offHist[i] == 0 {
+			t.offHist[i] = 1
+		}
+	}
+}
+
+func indexTokens(in []token) tokens {
+	var t tokens
+	for _, tok := range in {
+		if tok < matchType {
+			t.tokens[t.n] = tok
+			t.litHist[tok]++
+			t.n++
+			continue
+		}
+		t.AddMatch(uint32(tok.length()), tok.offset())
+	}
+	return t
+}
+
+func (t *tokens) AddLiteral(lit byte) {
+	t.tokens[t.n] = token(lit)
+	t.litHist[lit]++
+	t.n++
+}
+
+func (t *tokens) EstimatedBits() int {
+	shannon := float64(0)
+	total := float64(t.n)
+	for _, v := range t.litHist[:] {
+		n := float64(v)
+		if n > 0 {
+			shannon += math.Log2(total/n) * n
+		}
+	}
+	for _, v := range t.extraHist[:maxNumLit-256] {
+		n := float64(v)
+		if n > 0 {
+			shannon += math.Log2(total/n) * n
+		}
+	}
+	for _, v := range t.offHist[:offsetCodeCount] {
+		n := float64(v)
+		if n > 0 {
+			shannon += math.Log2(total/n) * n
+		}
+	}
+	return int(math.Ceil(shannon))
+}
+
+func (t *tokens) AddMatch(xlength uint32, xoffset uint32) {
+	t.tokens[t.n] = token(matchType + uint32(xlength)<<lengthShift + xoffset)
+	t.offHist[offsetCode(xoffset)&31]++
+	t.extraHist[(1+lengthCodes[uint8(xlength)])&31]++
+	t.n++
+}
+
+func (t *tokens) AddEOB() {
+	t.tokens[t.n] = token(endBlockMarker)
+	t.extraHist[0]++
+	t.n++
+}
+
+func (t *tokens) Slice() []token {
+	return t.tokens[:t.n]
 }
 
 // Convert a literal into a literal token.
 func literalToken(literal uint32) token { return token(literalType + literal) }
-
-// Convert a < xlength, xoffset > pair into a match token.
-func matchToken(xlength uint32, xoffset uint32) token {
-	return token(matchType + xlength<<lengthShift + xoffset)
-}
 
 // Returns the type of a token
 func (t token) typ() uint32 { return uint32(t) & typeMask }
