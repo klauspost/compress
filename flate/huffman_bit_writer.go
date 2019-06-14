@@ -181,26 +181,7 @@ func (w *huffmanBitWriter) writeBits(b int32, nb uint) {
 	w.bits |= uint64(b) << w.nbits
 	w.nbits += nb
 	if w.nbits >= 48 {
-		bits := w.bits
-		w.bits >>= 48
-		w.nbits -= 48
-		n := w.nbytes
-		w.bytes[n] = byte(bits)
-		w.bytes[n+1] = byte(bits >> 8)
-		w.bytes[n+2] = byte(bits >> 16)
-		w.bytes[n+3] = byte(bits >> 24)
-		w.bytes[n+4] = byte(bits >> 32)
-		w.bytes[n+5] = byte(bits >> 40)
-		n += 6
-		if n >= bufferFlushSize {
-			if w.err != nil {
-				n = 0
-				return
-			}
-			w.write(w.bytes[:n])
-			n = 0
-		}
-		w.nbytes = n
+		w.writeOutBits()
 	}
 }
 
@@ -381,27 +362,32 @@ func (w *huffmanBitWriter) writeCode(c hcode) {
 	w.bits |= uint64(c.code) << w.nbits
 	w.nbits += uint(c.len)
 	if w.nbits >= 48 {
-		bits := w.bits
-		w.bits >>= 48
-		w.nbits -= 48
-		n := w.nbytes
-		w.bytes[n] = byte(bits)
-		w.bytes[n+1] = byte(bits >> 8)
-		w.bytes[n+2] = byte(bits >> 16)
-		w.bytes[n+3] = byte(bits >> 24)
-		w.bytes[n+4] = byte(bits >> 32)
-		w.bytes[n+5] = byte(bits >> 40)
-		n += 6
-		if n >= bufferFlushSize {
-			if w.err != nil {
-				n = 0
-				return
-			}
-			w.write(w.bytes[:n])
-			n = 0
-		}
-		w.nbytes = n
+		w.writeOutBits()
 	}
+}
+
+// writeOutBits will write bits to the buffer.
+func (w *huffmanBitWriter) writeOutBits() {
+	bits := w.bits
+	w.bits >>= 48
+	w.nbits -= 48
+	n := w.nbytes
+	w.bytes[n] = byte(bits)
+	w.bytes[n+1] = byte(bits >> 8)
+	w.bytes[n+2] = byte(bits >> 16)
+	w.bytes[n+3] = byte(bits >> 24)
+	w.bytes[n+4] = byte(bits >> 32)
+	w.bytes[n+5] = byte(bits >> 40)
+	n += 6
+	if n >= bufferFlushSize {
+		if w.err != nil {
+			n = 0
+			return
+		}
+		w.write(w.bytes[:n])
+		n = 0
+	}
+	w.nbytes = n
 }
 
 // Write the header of a dynamic Huffman block to the output stream.
@@ -721,35 +707,14 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
 	// Huffman.
 	w.writeDynamicHeader(numLiterals, numOffsets, numCodegens, eof)
 	encoding := w.literalEncoding.codes[:257]
-	n := w.nbytes
 	for _, t := range input {
 		// Bitwriting inlined, ~30% speedup
 		c := encoding[t]
 		w.bits |= uint64(c.code) << w.nbits
 		w.nbits += uint(c.len)
-		if w.nbits < 48 {
-			continue
+		if w.nbits >= 48 {
+			w.writeOutBits()
 		}
-		// Store 6 bytes
-		bits := w.bits
-		w.bits >>= 48
-		w.nbits -= 48
-		w.bytes[n] = byte(bits)
-		w.bytes[n+1] = byte(bits >> 8)
-		w.bytes[n+2] = byte(bits >> 16)
-		w.bytes[n+3] = byte(bits >> 24)
-		w.bytes[n+4] = byte(bits >> 32)
-		w.bytes[n+5] = byte(bits >> 40)
-		n += 6
-		if n < bufferFlushSize {
-			continue
-		}
-		w.write(w.bytes[:n])
-		if w.err != nil {
-			return // Return early in the event of write failures
-		}
-		n = 0
 	}
-	w.nbytes = n
 	w.writeCode(encoding[endBlockMarker])
 }
