@@ -195,9 +195,7 @@ func (t *tokens) EstimatedBits() int {
 func (t *tokens) AddMatch(xlength uint32, xoffset uint32) {
 	t.tokens[t.n] = token(matchType | xlength<<lengthShift | xoffset)
 	t.offHist[offsetCode(xoffset)&31]++
-	// (bounds check could be avoided, but it causes the function not to inline)
-	// this is faster, but it will no longer inline t.extraHist[(1+lengthCodes[uint8(xlength)])&31]++
-	t.extraHist[(1+lengthCodes[uint8(xlength)])]++
+	t.extraHist[(1+lengthCodes[uint8(xlength)])&31]++
 	t.nLits++
 	t.n++
 }
@@ -232,10 +230,10 @@ func lengthCode(len uint8) uint32 { return uint32(lengthCodes[len]) }
 // Returns the offset code corresponding to a specific offset
 func offsetCode(off uint32) uint32 {
 	if off < uint32(len(offsetCodes)) {
-		return offsetCodes[off&255]
+		return offsetCodes[uint8(off)]
 	} else if off>>7 < uint32(len(offsetCodes)) {
-		return offsetCodes[(off>>7)&255] + 14
+		return offsetCodes[uint8(off>>7)] + 14
 	} else {
-		return offsetCodes[(off>>14)&255] + 28
+		return offsetCodes[uint8(off>>14)] + 28
 	}
 }
