@@ -10,16 +10,6 @@ import (
 	"math/bits"
 )
 
-// emitLiteral writes a literal chunk and returns the number of bytes written.
-func emitLiteral(dst *tokens, lit []byte) {
-	ol := int(dst.n)
-	for i, v := range lit {
-		dst.tokens[(i+ol)&maxStoreBlockSize] = token(v)
-		dst.litHist[v]++
-	}
-	dst.n += uint16(len(lit))
-}
-
 type fastEnc interface {
 	Encode(dst *tokens, src []byte)
 	Reset()

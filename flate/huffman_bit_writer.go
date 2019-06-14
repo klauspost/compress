@@ -340,8 +340,20 @@ func (w *huffmanBitWriter) dynamicSize(litEnc, offEnc *huffmanEncoder, extraBits
 		litEnc.bitLength(w.literalFreq) +
 		offEnc.bitLength(w.offsetFreq) +
 		extraBits
-
 	return size, numCodegens
+}
+
+// extraBitSize will return the number of bits that will be written
+// as "extra" bits on matches.
+func (w *huffmanBitWriter) extraBitSize() int {
+	total := 0
+	for i, n := range w.literalFreq[257:maxNumLit] {
+		total += int(n) * int(lengthExtraBits[i&31])
+	}
+	for i, n := range w.offsetFreq[:offsetCodeCount] {
+		total += int(n) * int(offsetExtraBits[i&31])
+	}
+	return total
 }
 
 // fixedSize returns the size of dynamically encoded data in bits.
@@ -552,8 +564,9 @@ func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []b
 	// the literalEncoding and the offsetEncoding.
 	w.generateCodegen(numLiterals, numOffsets, w.literalEncoding, w.offsetEncoding)
 	w.codegenEncoding.generate(w.codegenFreq[:], 7)
-	size, numCodegens := w.dynamicSize(w.literalEncoding, w.offsetEncoding, 0)
+	size, numCodegens := w.dynamicSize(w.literalEncoding, w.offsetEncoding, w.extraBitSize())
 
+	//fmt.Println("dynamicSize:", size>>3, "calc:", tokens.EstimatedBits()>>3)
 	// Store bytes, if we don't get a reasonable improvement.
 	if ssize, storable := w.storedSize(input); storable && ssize < (size+size>>4) {
 		w.writeStoredHeader(len(input), eof)

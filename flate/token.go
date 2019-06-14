@@ -4,7 +4,9 @@
 
 package flate
 
-import "math"
+import (
+	"math"
+)
 
 const (
 	// 2 bits:   type   0 = literal  1=EOF  2=Match   3=Unused
@@ -70,6 +72,7 @@ var offsetCodes = [256]uint32{
 type token uint32
 
 type tokens struct {
+	nLits     int
 	n         uint16 // Must be able to contain maxStoreBlockSize
 	tokens    [maxStoreBlockSize + 1]token
 	litHist   [256]uint16 // codes 0->255
@@ -82,6 +85,7 @@ func (t *tokens) Reset() {
 		return
 	}
 	t.n = 0
+	t.nLits = 0
 	for i := range t.litHist[:] {
 		t.litHist[i] = 0
 	}
@@ -128,40 +132,69 @@ func indexTokens(in []token) tokens {
 	return t
 }
 
+// emitLiteral writes a literal chunk and returns the number of bytes written.
+func emitLiteral(dst *tokens, lit []byte) {
+	ol := int(dst.n)
+	for i, v := range lit {
+		dst.tokens[(i+ol)&maxStoreBlockSize] = token(v)
+		dst.litHist[v]++
+	}
+	dst.n += uint16(len(lit))
+	dst.nLits += len(lit)
+}
+
 func (t *tokens) AddLiteral(lit byte) {
 	t.tokens[t.n] = token(lit)
 	t.litHist[lit]++
 	t.n++
+	t.nLits++
 }
 
+// EstimatedBits will return an minimum size estimated by an *optimal*
+// compression of the block.
+// The size of the block
 func (t *tokens) EstimatedBits() int {
 	shannon := float64(0)
-	total := float64(t.n)
-	for _, v := range t.litHist[:] {
-		n := float64(v)
-		if n > 0 {
-			shannon += math.Log2(total/n) * n
+	bits := int(0)
+	nMatches := 0
+	if t.nLits > 0 {
+		invTotal := 1.0 / float64(t.nLits)
+		for _, v := range t.litHist[:] {
+			if v > 0 {
+				n := float64(v)
+				shannon += math.Ceil(-math.Log2(n*invTotal) * n)
+			}
+		}
+		// Just add 15 for EOB
+		shannon += 15
+		for _, v := range t.extraHist[1 : maxNumLit-256] {
+			if v > 0 {
+				n := float64(v)
+				shannon += math.Ceil(-math.Log2(n*invTotal) * n)
+				bits += int(lengthExtraBits[v&31]) * int(v)
+				nMatches += int(v)
+			}
 		}
 	}
-	for _, v := range t.extraHist[:maxNumLit-256] {
-		n := float64(v)
-		if n > 0 {
-			shannon += math.Log2(total/n) * n
+	if nMatches > 0 {
+		invTotal := 1.0 / float64(nMatches)
+		for _, v := range t.offHist[:offsetCodeCount] {
+			if v > 0 {
+				n := float64(v)
+				shannon += math.Ceil(-math.Log2(n*invTotal) * n)
+				bits += int(offsetExtraBits[v&31]) * int(n)
+			}
 		}
 	}
-	for _, v := range t.offHist[:offsetCodeCount] {
-		n := float64(v)
-		if n > 0 {
-			shannon += math.Log2(total/n) * n
-		}
-	}
-	return int(math.Ceil(shannon))
+
+	return int(shannon) + bits
 }
 
 func (t *tokens) AddMatch(xlength uint32, xoffset uint32) {
 	t.tokens[t.n] = token(matchType + uint32(xlength)<<lengthShift + xoffset)
 	t.offHist[offsetCode(xoffset)&31]++
 	t.extraHist[(1+lengthCodes[uint8(xlength)])&31]++
+	t.nLits++
 	t.n++
 }
 
