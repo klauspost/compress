@@ -231,9 +231,6 @@ func lengthCode(len uint8) uint32 { return uint32(lengthCodes[len]) }
 func offsetCode(off uint32) uint32 {
 	if off < uint32(len(offsetCodes)) {
 		return offsetCodes[uint8(off)]
-	} else if off < uint32(len(offsetCodes))<<8-1 {
-		return offsetCodes[uint8(off>>7)] + 14
-	} else {
-		return offsetCodes[uint8(off>>14)] + 28
 	}
+	return offsetCodes[uint8(off>>7)] + 14
 }
