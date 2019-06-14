@@ -190,10 +190,14 @@ func (t *tokens) EstimatedBits() int {
 	return int(shannon) + bits
 }
 
+// AddMatch adds a match to the tokens.
+// This function is very sensitive to inlining and right on the border.
 func (t *tokens) AddMatch(xlength uint32, xoffset uint32) {
-	t.tokens[t.n] = token(matchType + uint32(xlength)<<lengthShift + xoffset)
+	t.tokens[t.n] = token(matchType | xlength<<lengthShift | xoffset)
 	t.offHist[offsetCode(xoffset)&31]++
-	t.extraHist[(1+lengthCodes[uint8(xlength)])&31]++
+	// (bounds check could be avoided, but it causes the function not to inline)
+	// this is faster, but it will no longer inline t.extraHist[(1+lengthCodes[uint8(xlength)])&31]++
+	t.extraHist[(1+lengthCodes[uint8(xlength)])]++
 	t.nLits++
 	t.n++
 }
