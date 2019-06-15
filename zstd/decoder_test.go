@@ -5,7 +5,10 @@
 package zstd
 
 import (
+	"bufio"
 	"bytes"
+	"encoding/binary"
+	"encoding/hex"
 	"io"
 	"io/ioutil"
 	"log"
@@ -17,9 +20,98 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DataDog/zstd"
 	"github.com/klauspost/compress/zip"
+	"github.com/klauspost/compress/zstd/internal/xxhash"
 )
+
+func TestNewReaderMismatch(t *testing.T) {
+	// To identify a potential decoding error, do the following steps:
+	// 1) Place the compressed file in testdata, eg 'testdata/backup.bin.zst'
+	// 2) Decompress the file to using zstd, so it will be named 'testdata/backup.bin'
+	// 3) Run the test. A hash file will be generated 'testdata/backup.bin.hash'
+	// 4) The decoder will also run and decode the file. It will stop as soon as a mismatch is found.
+	// The hash file will be reused between runs if present.
+	const baseFile = "testdata/backup.bin"
+	const blockSize = 1024
+	hashes, err := ioutil.ReadFile(baseFile + ".hash")
+	if os.IsNotExist(err) {
+		// Create the hash file.
+		f, err := os.Open(baseFile)
+		if os.IsNotExist(err) {
+			t.Skip("no decompressed file found")
+			return
+		}
+		defer f.Close()
+		br := bufio.NewReader(f)
+		var tmp [8]byte
+		xx := xxhash.New()
+		for {
+			xx.Reset()
+			buf := make([]byte, blockSize)
+			n, err := io.ReadFull(br, buf)
+			if err != nil {
+				if err != io.EOF && err != io.ErrUnexpectedEOF {
+					t.Fatal(err)
+				}
+			}
+			if n > 0 {
+				_, _ = xx.Write(buf[:n])
+				binary.LittleEndian.PutUint64(tmp[:], xx.Sum64())
+				hashes = append(hashes, tmp[4:]...)
+			}
+			if n != blockSize {
+				break
+			}
+		}
+		err = ioutil.WriteFile(baseFile+".hash", hashes, os.ModePerm)
+		if err != nil {
+			// We can continue for now
+			t.Error(err)
+		}
+		t.Log("Saved", len(hashes)/4, "hashes as", baseFile+".hash")
+	}
+
+	f, err := os.Open(baseFile + ".zst")
+	if os.IsNotExist(err) {
+		t.Skip("no compressed file found")
+		return
+	}
+	defer f.Close()
+	dec, err := NewReader(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tmp [8]byte
+	xx := xxhash.New()
+	var cHash int
+	for {
+		xx.Reset()
+		buf := make([]byte, blockSize)
+		n, err := io.ReadFull(dec, buf)
+		if err != nil {
+			if err != io.EOF && err != io.ErrUnexpectedEOF {
+				t.Fatal(err)
+			}
+		}
+		if n > 0 {
+			if cHash+4 > len(hashes) {
+				extra, _ := io.Copy(ioutil.Discard, dec)
+				t.Fatal("not enough hashes (length mismatch). Only have", len(hashes)/4, "hashes. Got block of", n, "bytes and", extra, "bytes still on stream.")
+			}
+			_, _ = xx.Write(buf[:n])
+			binary.LittleEndian.PutUint64(tmp[:], xx.Sum64())
+			want, got := hashes[cHash:cHash+4], tmp[4:]
+			if !bytes.Equal(want, got) {
+				t.Fatal("block", cHash/4, "offset", cHash/4*blockSize, "hash mismatch, want:", hex.EncodeToString(want), "got:", hex.EncodeToString(got))
+			}
+			cHash += 4
+		}
+		if n != blockSize {
+			break
+		}
+	}
+	t.Log("Output matched")
+}
 
 func TestNewDecoder(t *testing.T) {
 	defer timeout(60 * time.Second)()
@@ -385,6 +477,7 @@ func BenchmarkDecoder_DecodeAll(b *testing.B) {
 	}
 }
 
+/*
 func BenchmarkDecoder_DecodeAllCgo(b *testing.B) {
 	fn := "testdata/decoder.zip"
 	data, err := ioutil.ReadFile(fn)
@@ -430,6 +523,63 @@ func BenchmarkDecoder_DecodeAllCgo(b *testing.B) {
 	}
 }
 
+func BenchmarkDecoderSilesiaCgo(b *testing.B) {
+	fn := "testdata/silesia.tar.zst"
+	data, err := ioutil.ReadFile(fn)
+	if err != nil {
+		if os.IsNotExist(err) {
+			b.Skip("Missing testdata/silesia.tar.zst")
+			return
+		}
+		b.Fatal(err)
+	}
+	dec := zstd.NewReader(bytes.NewBuffer(data))
+	n, err := io.Copy(ioutil.Discard, dec)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.SetBytes(n)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dec := zstd.NewReader(bytes.NewBuffer(data))
+		_, err := io.CopyN(ioutil.Discard, dec, n)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+func BenchmarkDecoderEnwik9Cgo(b *testing.B) {
+	fn := "testdata/enwik9-1.zst"
+	data, err := ioutil.ReadFile(fn)
+	if err != nil {
+		if os.IsNotExist(err) {
+			b.Skip("Missing " + fn)
+			return
+		}
+		b.Fatal(err)
+	}
+	dec := zstd.NewReader(bytes.NewBuffer(data))
+	n, err := io.Copy(ioutil.Discard, dec)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.SetBytes(n)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dec := zstd.NewReader(bytes.NewBuffer(data))
+		_, err := io.CopyN(ioutil.Discard, dec, n)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+*/
+
 func BenchmarkDecoderSilesia(b *testing.B) {
 	fn := "testdata/silesia.tar.zst"
 	data, err := ioutil.ReadFile(fn)
@@ -469,34 +619,6 @@ func BenchmarkDecoderSilesia(b *testing.B) {
 	}
 }
 
-func BenchmarkDecoderSilesiaCgo(b *testing.B) {
-	fn := "testdata/silesia.tar.zst"
-	data, err := ioutil.ReadFile(fn)
-	if err != nil {
-		if os.IsNotExist(err) {
-			b.Skip("Missing testdata/silesia.tar.zst")
-			return
-		}
-		b.Fatal(err)
-	}
-	dec := zstd.NewReader(bytes.NewBuffer(data))
-	n, err := io.Copy(ioutil.Discard, dec)
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	b.SetBytes(n)
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		dec := zstd.NewReader(bytes.NewBuffer(data))
-		_, err := io.CopyN(ioutil.Discard, dec, n)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
 func BenchmarkDecoderEnwik9(b *testing.B) {
 	fn := "testdata/enwik9-1.zst"
 	data, err := ioutil.ReadFile(fn)
@@ -529,34 +651,6 @@ func BenchmarkDecoderEnwik9(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		_, err := io.CopyN(ioutil.Discard, dec, n)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-func BenchmarkDecoderEnwik9Cgo(b *testing.B) {
-	fn := "testdata/enwik9-1.zst"
-	data, err := ioutil.ReadFile(fn)
-	if err != nil {
-		if os.IsNotExist(err) {
-			b.Skip("Missing " + fn)
-			return
-		}
-		b.Fatal(err)
-	}
-	dec := zstd.NewReader(bytes.NewBuffer(data))
-	n, err := io.Copy(ioutil.Discard, dec)
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	b.SetBytes(n)
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		dec := zstd.NewReader(bytes.NewBuffer(data))
 		_, err := io.CopyN(ioutil.Discard, dec, n)
 		if err != nil {
 			b.Fatal(err)
