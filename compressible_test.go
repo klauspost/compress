@@ -134,9 +134,9 @@ func BenchmarkSnannonEntropyBits(b *testing.B) {
 		b.SetBytes(int64(len(testData)))
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			SnannonEntropyBits(testData)
+			ShannonEntropyBits(testData)
 		}
-		b.Log(SnannonEntropyBits(testData))
+		b.Log(ShannonEntropyBits(testData))
 	})
 
 	// (predictable, high entropy distibution)
@@ -148,9 +148,9 @@ func BenchmarkSnannonEntropyBits(b *testing.B) {
 		b.SetBytes(int64(len(testData)))
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			SnannonEntropyBits(testData)
+			ShannonEntropyBits(testData)
 		}
-		b.Log(SnannonEntropyBits(testData))
+		b.Log(ShannonEntropyBits(testData))
 	})
 
 	// (not predictable, high entropy distibution)
@@ -160,9 +160,9 @@ func BenchmarkSnannonEntropyBits(b *testing.B) {
 		b.SetBytes(int64(len(testData)))
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			SnannonEntropyBits(testData)
+			ShannonEntropyBits(testData)
 		}
-		b.Log(SnannonEntropyBits(testData))
+		b.Log(ShannonEntropyBits(testData))
 	})
 
 	// (not predictable, high entropy distibution)
@@ -172,9 +172,9 @@ func BenchmarkSnannonEntropyBits(b *testing.B) {
 		b.SetBytes(int64(len(testData)))
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			SnannonEntropyBits(testData)
+			ShannonEntropyBits(testData)
 		}
-		b.Log(SnannonEntropyBits(testData))
+		b.Log(ShannonEntropyBits(testData))
 	})
 
 	// (not predictable, high entropy distibution)
@@ -184,9 +184,9 @@ func BenchmarkSnannonEntropyBits(b *testing.B) {
 		b.SetBytes(int64(len(testData)))
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			SnannonEntropyBits(testData)
+			ShannonEntropyBits(testData)
 		}
-		b.Log(SnannonEntropyBits(testData))
+		b.Log(ShannonEntropyBits(testData))
 	})
 
 	// (not predictable, high entropy distibution)
@@ -196,9 +196,9 @@ func BenchmarkSnannonEntropyBits(b *testing.B) {
 		b.SetBytes(int64(len(testData)))
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			SnannonEntropyBits(testData)
+			ShannonEntropyBits(testData)
 		}
-		b.Log(SnannonEntropyBits(testData))
+		b.Log(ShannonEntropyBits(testData))
 	})
 
 	// (not predictable, medium entropy distibution)
@@ -211,9 +211,9 @@ func BenchmarkSnannonEntropyBits(b *testing.B) {
 		b.SetBytes(int64(len(testData)))
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			SnannonEntropyBits(testData)
+			ShannonEntropyBits(testData)
 		}
-		b.Log(SnannonEntropyBits(testData))
+		b.Log(ShannonEntropyBits(testData))
 	})
 	// (medium predictable, medium entropy distibution)
 	b.Run("text", func(b *testing.B) {
@@ -234,9 +234,9 @@ Thoughts?`)
 		b.SetBytes(int64(len(testData)))
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			SnannonEntropyBits(testData)
+			ShannonEntropyBits(testData)
 		}
-		b.Log(SnannonEntropyBits(testData))
+		b.Log(ShannonEntropyBits(testData))
 	})
 }
 
