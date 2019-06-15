@@ -5,6 +5,9 @@
 package flate
 
 import (
+	"bytes"
+	"encoding/binary"
+	"io"
 	"math"
 )
 
@@ -50,6 +53,7 @@ var lengthCodes = [256]uint8{
 	27, 27, 27, 27, 27, 28,
 }
 
+// lengthCodes1 is length codes, but starting at 1.
 var lengthCodes1 = [256]uint8{
 	1, 2, 3, 4, 5, 6, 7, 8, 9, 9,
 	10, 10, 11, 11, 12, 12, 13, 13, 13, 13,
@@ -98,6 +102,7 @@ var offsetCodes = [256]uint32{
 	15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
 }
 
+// offsetCodes14 are offsetCodes, but with 14 added.
 var offsetCodes14 = [256]uint32{
 	14, 15, 16, 17, 18, 18, 19, 19, 20, 20, 20, 20, 21, 21, 21, 21,
 	22, 22, 22, 22, 22, 22, 22, 22, 23, 23, 23, 23, 23, 23, 23, 23,
@@ -168,6 +173,12 @@ func (t *tokens) Fill() {
 
 func indexTokens(in []token) tokens {
 	var t tokens
+	t.indexTokens(in)
+	return t
+}
+
+func (t *tokens) indexTokens(in []token) {
+	t.Reset()
 	for _, tok := range in {
 		if tok < matchType {
 			t.tokens[t.n] = tok
@@ -177,7 +188,6 @@ func indexTokens(in []token) tokens {
 		}
 		t.AddMatch(uint32(tok.length()), tok.offset())
 	}
-	return t
 }
 
 // emitLiteral writes a literal chunk and returns the number of bytes written.
@@ -259,8 +269,34 @@ func (t *tokens) Slice() []token {
 	return t.tokens[:t.n]
 }
 
-// Convert a literal into a literal token.
-func literalToken(literal uint32) token { return token(literalType + literal) }
+// VarInt returns the tokens as varint encoded bytes.
+func (t *tokens) VarInt() []byte {
+	var b = make([]byte, binary.MaxVarintLen32*int(t.n))
+	var off int
+	for _, v := range t.tokens[:t.n] {
+		off += binary.PutUvarint(b[off:], uint64(v))
+	}
+	return b[:off]
+}
+
+// FromVarInt restores t to the varint encoded tokens provided.
+// Any data in t is removed.
+func (t *tokens) FromVarInt(b []byte) error {
+	var buf = bytes.NewReader(b)
+	var toks []token
+	for {
+		r, err := binary.ReadUvarint(buf)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		toks = append(toks, token(r))
+	}
+	t.indexTokens(toks)
+	return nil
+}
 
 // Returns the type of a token
 func (t token) typ() uint32 { return uint32(t) & typeMask }
