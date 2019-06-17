@@ -77,7 +77,7 @@ func TestNewReaderMismatch(t *testing.T) {
 		return
 	}
 	defer f.Close()
-	dec, err := NewReader(f)
+	dec, err := NewReader(f, WithDecoderConcurrency(1))
 	if err != nil {
 		t.Fatal(err)
 	}

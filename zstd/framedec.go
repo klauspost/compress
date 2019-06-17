@@ -19,6 +19,7 @@ type frameDec struct {
 	o         decoderOptions
 	crc       hash.Hash64
 	frameDone sync.WaitGroup
+	offset    int64
 
 	WindowSize       uint64
 	DictionaryID     uint32
@@ -368,14 +369,15 @@ func (d *frameDec) startDecoder(output chan decodeOutput) {
 			return
 		}
 		if debug {
-			println("got result")
+			println("got result, from ", d.offset, "to", d.offset+int64(len(r.b)))
+			d.offset += int64(len(r.b))
 		}
 		if !block.Last {
 			// Send history to next block
 			select {
 			case next = <-d.decoding:
 				if debug {
-					println("Sending ", len(d.history.b), " bytes as history")
+					println("Sending ", len(d.history.b), "bytes as history")
 				}
 				next.history <- &d.history
 			default:

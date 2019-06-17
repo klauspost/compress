@@ -73,7 +73,7 @@ func (s *sequenceDecs) initialize(br *bitReader, hist *history, literals, out []
 		return errors.New("litLengths:" + err.Error())
 	}
 	if err := s.offsets.init(br); err != nil {
-		return errors.New("litLengths:" + err.Error())
+		return errors.New("offsets:" + err.Error())
 	}
 	if err := s.matchLengths.init(br); err != nil {
 		return errors.New("matchLengths:" + err.Error())
