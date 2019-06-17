@@ -517,7 +517,9 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		}
 		for i := uint(0); i < 3; i++ {
 			mode := seqCompMode((compMode >> (6 - i*2)) & 3)
-			//println("Table", tableIndex(i), "is", mode)
+			if debug {
+				println("Table", tableIndex(i), "is", mode)
+			}
 			var seq *sequenceDec
 			switch tableIndex(i) {
 			case tableLiteralLengths:
@@ -659,6 +661,7 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 	// TODO: Investigate if sending history without decoders are faster.
 	//   This would allow the sequences to be decoded async and only have to construct stream history.
 	//   If only recent offsets were not transferred, this would be an obvious win.
+	// 	 Also, if first 3 sequences don't reference recent offsets, all sequences can be decoded.
 
 	if err := seqs.initialize(br, hist, literals, b.dst); err != nil {
 		println("initializing sequences:", err)
@@ -670,9 +673,7 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		return err
 	}
 	if !br.finished() {
-		// Disabled until this is resolved:
-		// https://github.com/facebook/zstd/issues/1597
-		// return fmt.Errorf("%d extra bits on block, should be 0", br.remain())
+		return fmt.Errorf("%d extra bits on block, should be 0", br.remain())
 	}
 
 	err = br.close()
@@ -699,5 +700,9 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 	}
 	hist.append(b.dst)
 	hist.recentOffsets = seqs.prevOffset
+	if debug {
+		println("Finished block with literals:", len(literals), "and", nSeqs, "sequences.")
+	}
+
 	return nil
 }

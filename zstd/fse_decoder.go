@@ -206,7 +206,7 @@ func decSymbolValue(symb uint8, t []baseOffset) (decSymbol, error) {
 // setRLE will set the decoder til RLE mode.
 func (s *fseDecoder) setRLE(symbol decSymbol) {
 	s.actualTableLog = 0
-	s.maxBits = 0
+	s.maxBits = symbol.addBits
 	s.dt[0] = symbol
 }
 

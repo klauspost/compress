@@ -76,7 +76,7 @@ func (b *bitReader) fill() {
 	if b.bitsRead < 32 {
 		return
 	}
-	if b.off > 4 {
+	if b.off >= 4 {
 		v := b.in[b.off-4 : b.off]
 		low := (uint32(v[0])) | (uint32(v[1]) << 8) | (uint32(v[2]) << 16) | (uint32(v[3]) << 24)
 		b.value = (b.value << 32) | uint64(low)
