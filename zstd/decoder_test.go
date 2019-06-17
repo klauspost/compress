@@ -102,6 +102,25 @@ func TestNewReaderMismatch(t *testing.T) {
 			binary.LittleEndian.PutUint64(tmp[:], xx.Sum64())
 			want, got := hashes[cHash:cHash+4], tmp[4:]
 			if !bytes.Equal(want, got) {
+				org, err := os.Open(baseFile)
+				if err == nil {
+					const sizeBack = 8 << 20
+					defer org.Close()
+					start := int64(cHash)/4*blockSize - sizeBack
+					if start < 0 {
+						start = 0
+					}
+					_, err = org.Seek(start, io.SeekStart)
+					buf2 := make([]byte, sizeBack+1<<20)
+					n, _ := io.ReadFull(org, buf2)
+					if n > 0 {
+						err = ioutil.WriteFile(baseFile+".section", buf2[:n], os.ModePerm)
+						if err == nil {
+							t.Log("Wrote problematic section to", baseFile+".section")
+						}
+					}
+				}
+
 				t.Fatal("block", cHash/4, "offset", cHash/4*blockSize, "hash mismatch, want:", hex.EncodeToString(want), "got:", hex.EncodeToString(got))
 			}
 			cHash += 4
