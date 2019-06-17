@@ -105,7 +105,7 @@ func skippableFrame(dst []byte, total int, r io.Reader) ([]byte, error) {
 	if total < skippableFrameHeader {
 		return dst, fmt.Errorf("requested skippable frame (%d) < 8", total)
 	}
-	if total > math.MaxUint32 {
+	if int64(total) > math.MaxUint32 {
 		return dst, fmt.Errorf("requested skippable frame (%d) > max uint32", total)
 	}
 	dst = append(dst, 0x50, 0x2a, 0x4d, 0x18)

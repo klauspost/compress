@@ -127,7 +127,7 @@ func (s *Scratch) prepare(in []byte) (*Scratch, error) {
 	s.br.init(in)
 	if s.DecompressLimit == 0 {
 		// Max size 2GB.
-		s.DecompressLimit = 2 << 30
+		s.DecompressLimit = (2 << 30) - 1
 	}
 
 	return s, nil
