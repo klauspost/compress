@@ -104,11 +104,12 @@ type huffmanBitWriter struct {
 
 func newHuffmanBitWriter(w io.Writer) *huffmanBitWriter {
 	return &huffmanBitWriter{
-		writer:          w,
-		literalFreq:     make([]uint16, lengthCodesStart+32),
-		offsetFreq:      make([]uint16, 32),
-		codegen:         make([]uint8, maxNumLit+offsetCodeCount+1),
-		literalEncoding: newHuffmanEncoder(maxNumLit),
+		writer:      w,
+		literalFreq: make([]uint16, lengthCodesStart+32),
+		offsetFreq:  make([]uint16, 32),
+		// codegen must have an extra space for the final symbol.
+		codegen:         make([]uint8, literalCount+offsetCodeCount+1),
+		literalEncoding: newHuffmanEncoder(literalCount),
 		codegenEncoding: newHuffmanEncoder(codegenCodeCount),
 		offsetEncoding:  newHuffmanEncoder(offsetCodeCount),
 	}
@@ -132,8 +133,8 @@ func (w *huffmanBitWriter) canReuse(t *tokens) (offsets, lits bool) {
 		}
 	}
 
-	a = t.extraHist[:maxNumLit-256]
-	b = w.literalFreq[256:maxNumLit]
+	a = t.extraHist[:literalCount-256]
+	b = w.literalFreq[256:literalCount]
 	b = b[:len(a)]
 	for i := range a {
 		if b[i] == 0 && a[i] != 0 {
@@ -337,7 +338,7 @@ func (w *huffmanBitWriter) dynamicSize(litEnc, offEnc *huffmanEncoder, extraBits
 // as "extra" bits on matches.
 func (w *huffmanBitWriter) extraBitSize() int {
 	total := 0
-	for i, n := range w.literalFreq[257:maxNumLit] {
+	for i, n := range w.literalFreq[257:literalCount] {
 		total += int(n) * int(lengthExtraBits[i&31])
 	}
 	for i, n := range w.offsetFreq[:offsetCodeCount] {
@@ -658,7 +659,7 @@ func (w *huffmanBitWriter) indexTokens(t *tokens) (numLiterals, numOffsets int) 
 }
 
 func (w *huffmanBitWriter) generate(t *tokens) {
-	w.literalEncoding.generate(w.literalFreq[:maxNumLit], 15)
+	w.literalEncoding.generate(w.literalFreq[:literalCount], 15)
 	w.offsetEncoding.generate(w.offsetFreq[:offsetCodeCount], 15)
 }
 
@@ -733,6 +734,7 @@ var huffOffset *huffmanEncoder
 
 func init() {
 	w := newHuffmanBitWriter(nil)
+	w.offsetFreq[0] = 1
 	huffOffset = newHuffmanEncoder(offsetCodeCount)
 	huffOffset.generate(w.offsetFreq[:offsetCodeCount], 15)
 }
@@ -778,7 +780,7 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
 	}
 
 	const numLiterals = endBlockMarker + 1
-	const numOffsets = 0
+	const numOffsets = 1
 	if w.lastHeader == 0 {
 		w.literalFreq[endBlockMarker] = 1
 		w.literalEncoding.generate(w.literalFreq[:numLiterals], 15)

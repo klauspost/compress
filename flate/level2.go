@@ -169,24 +169,22 @@ func (e *fastEncL2) Encode(dst *tokens, src []byte) {
 			}
 
 			// Store every second hash in-between, but offset by 1.
-			if true {
-				for i := s - l + 2; i < s-5; i += 7 {
-					x := load6432(src, int32(i))
-					nextHash := hash4u(uint32(x), bTableBits)
-					e.table[nextHash&bTableMask] = tableEntry{offset: e.cur + i, val: uint32(x)}
-					// Skip one
-					x >>= 16
-					nextHash = hash4u(uint32(x), bTableBits)
-					e.table[nextHash&bTableMask] = tableEntry{offset: e.cur + i + 2, val: uint32(x)}
-					// Skip one
-					x >>= 16
-					nextHash = hash4u(uint32(x), bTableBits)
-					e.table[nextHash&bTableMask] = tableEntry{offset: e.cur + i + 4, val: uint32(x)}
-				}
+			for i := s - l + 2; i < s-5; i += 7 {
+				x := load6432(src, int32(i))
+				nextHash := hash4u(uint32(x), bTableBits)
+				e.table[nextHash&bTableMask] = tableEntry{offset: e.cur + i, val: uint32(x)}
+				// Skip one
+				x >>= 16
+				nextHash = hash4u(uint32(x), bTableBits)
+				e.table[nextHash&bTableMask] = tableEntry{offset: e.cur + i + 2, val: uint32(x)}
+				// Skip one
+				x >>= 16
+				nextHash = hash4u(uint32(x), bTableBits)
+				e.table[nextHash&bTableMask] = tableEntry{offset: e.cur + i + 4, val: uint32(x)}
 			}
 
 			// We could immediately start working at s now, but to improve
-			// compression we first update the hash table at s-1 and at s. If
+			// compression we first update the hash table at s-2 to s. If
 			// another emitCopy is not our next move, also calculate nextHash
 			// at s+1. At least on GOARCH=amd64, these three hash calculations
 			// are faster as one load64 call (with some shifts) instead of

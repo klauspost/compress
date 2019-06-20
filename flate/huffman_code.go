@@ -10,6 +10,12 @@ import (
 	"sort"
 )
 
+const (
+	maxBitsLimit = 16
+	// number of valid literals
+	literalCount = 286
+)
+
 // hcode is a huffman code with a bit code and bit length.
 type hcode struct {
 	code, len uint16
@@ -64,10 +70,10 @@ func newHuffmanEncoder(size int) *huffmanEncoder {
 
 // Generates a HuffmanCode corresponding to the fixed literal table
 func generateFixedLiteralEncoding() *huffmanEncoder {
-	h := newHuffmanEncoder(maxNumLit)
+	h := newHuffmanEncoder(literalCount)
 	codes := h.codes
 	var ch uint16
-	for ch = 0; ch < maxNumLit; ch++ {
+	for ch = 0; ch < literalCount; ch++ {
 		var bits uint16
 		var size uint16
 		switch {
@@ -118,8 +124,6 @@ func (h *huffmanEncoder) bitLength(freq []uint16) int {
 	return total
 }
 
-const maxBitsLimit = 16
-
 // Return the number of literals assigned to each bit size in the Huffman encoding
 //
 // This method is only called when list.length >= 3
@@ -169,7 +173,7 @@ func (h *huffmanEncoder) bitCounts(list []literalNode, maxBits int32) []int32 {
 		}
 		leafCounts[level][level] = 2
 		if level == 1 {
-			levels[level].nextPairFreq = math.MaxUint16
+			levels[level].nextPairFreq = math.MaxInt32
 		}
 	}
 
@@ -179,13 +183,13 @@ func (h *huffmanEncoder) bitCounts(list []literalNode, maxBits int32) []int32 {
 	level := maxBits
 	for {
 		l := &levels[level]
-		if l.nextPairFreq == math.MaxUint16 && l.nextCharFreq == math.MaxUint16 {
+		if l.nextPairFreq == math.MaxInt32 && l.nextCharFreq == math.MaxInt32 {
 			// We've run out of both leafs and pairs.
 			// End all calculations for this level.
 			// To make sure we never come back to this level or any lower level,
 			// set nextPairFreq impossibly large.
 			l.needed = 0
-			levels[level+1].nextPairFreq = math.MaxUint16
+			levels[level+1].nextPairFreq = math.MaxInt32
 			level++
 			continue
 		}
@@ -197,7 +201,12 @@ func (h *huffmanEncoder) bitCounts(list []literalNode, maxBits int32) []int32 {
 			l.lastFreq = l.nextCharFreq
 			// Lower leafCounts are the same of the previous node.
 			leafCounts[level][level] = n
-			l.nextCharFreq = int32(list[n].freq)
+			e := list[n]
+			if e.literal < math.MaxUint16 {
+				l.nextCharFreq = int32(e.freq)
+			} else {
+				l.nextCharFreq = math.MaxInt32
+			}
 		} else {
 			// The next item on this row is a pair from the previous row.
 			// nextPairFreq isn't valid until we generate two
@@ -276,9 +285,9 @@ func (h *huffmanEncoder) assignEncodingAndSize(bitCount []int32, list []literalN
 func (h *huffmanEncoder) generate(freq []uint16, maxBits int32) {
 	if h.freqcache == nil {
 		// Allocate a reusable buffer with the longest possible frequency table.
-		// Possible lengths are codegenCodeCount, offsetCodeCount and maxNumLit.
-		// The largest of these is maxNumLit, so we allocate for that case.
-		h.freqcache = make([]literalNode, maxNumLit+1)
+		// Possible lengths are codegenCodeCount, offsetCodeCount and literalCount.
+		// The largest of these is literalCount, so we allocate for that case.
+		h.freqcache = make([]literalNode, literalCount+1)
 	}
 	list := h.freqcache[:len(freq)+1]
 	// Number of non-zero literals
@@ -346,18 +355,9 @@ func (s byFreq) Less(i, j int) bool {
 
 func (s byFreq) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
-// histogram accumulates a histogram of b in h.
-//
-// len(h) must be >= 256, and h's elements must be all zeroes.
-func histogram(b []byte, h []uint16) {
-	h = h[:256]
-	for _, t := range b {
-		h[t]++
-	}
-}
-
-// histogram accumulates a histogram of b in h.
-//
+// histogramSize accumulates a histogram of b in h.
+// An estimated size is returned.
+// Unassigned values are assigned '1' and given maxBits bits.
 // len(h) must be >= 256, and h's elements must be all zeroes.
 func histogramSize(b []byte, h []uint16, fill bool, maxBits int) int {
 	h = h[:256]
@@ -371,11 +371,6 @@ func histogramSize(b []byte, h []uint16, fill bool, maxBits int) int {
 		if v > 0 {
 			n := float64(v)
 			shannon += math.Ceil(-math.Log2(n*invTotal) * n)
-			if v == math.MaxUint16 {
-				// math.MaxUint16 is used as a magic number in the counting,
-				// so it cannot be in the histograms.
-				h[i] = math.MaxUint16 - 1
-			}
 		} else if fill {
 			h[i] = 1
 			shannon += fMaxBits

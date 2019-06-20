@@ -63,7 +63,7 @@ func (e *fastEncL1) Encode(dst *tokens, src []byte) {
 	nextHash := hash(cv)
 
 	for {
-		const skipLog = 6
+		const skipLog = 5
 		const doEvery = 2
 
 		nextS := s
@@ -143,25 +143,8 @@ func (e *fastEncL1) Encode(dst *tokens, src []byte) {
 				goto emitRemainder
 			}
 
-			// Store every second hash in-between, but offset by 1.
-			if false {
-				for i := s - l - 2; i < s-7; i += 7 {
-					x := load6432(src, int32(i))
-					nextHash := hash(uint32(x))
-					e.table[nextHash&tableMask] = tableEntry{offset: e.cur + i, val: uint32(x)}
-					// Skip one
-					x >>= 16
-					nextHash = hash(uint32(x))
-					e.table[nextHash&tableMask] = tableEntry{offset: e.cur + i + 2, val: uint32(x)}
-					// Skip one
-					x >>= 16
-					nextHash = hash(uint32(x))
-					e.table[nextHash&tableMask] = tableEntry{offset: e.cur + i + 4, val: uint32(x)}
-				}
-			}
-
 			// We could immediately start working at s now, but to improve
-			// compression we first update the hash table at s-1 and at s. If
+			// compression we first update the hash table at s-2 s-1 and at s. If
 			// another emitCopy is not our next move, also calculate nextHash
 			// at s+1. At least on GOARCH=amd64, these three hash calculations
 			// are faster as one load64 call (with some shifts) instead of
