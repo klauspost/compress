@@ -154,19 +154,33 @@ func (t *tokens) Fill() {
 	if t.n == 0 {
 		return
 	}
-	for i := range t.litHist[:] {
-		if t.litHist[i] == 0 {
+	for i, v := range t.litHist[:] {
+		if v == 0 {
 			t.litHist[i] = 1
+			t.nLits++
+		} else if v == math.MaxUint16 {
+			// math.MaxUint16 is used as a magic number in the counting,
+			// so it cannot be in the histograms.
+			t.litHist[i] = math.MaxUint16 - 1
 		}
 	}
-	for i := range t.extraHist[:maxNumLit-256] {
+	for i, v := range t.extraHist[:maxNumLit-256] {
 		if t.extraHist[i] == 0 {
+			t.nLits++
 			t.extraHist[i] = 1
+		} else if v == math.MaxUint16 {
+			// math.MaxUint16 is used as a magic number in the counting,
+			// so it cannot be in the histograms.
+			t.litHist[i] = math.MaxUint16 - 1
 		}
 	}
-	for i := range t.offHist[:offsetCodeCount] {
+	for i, v := range t.offHist[:offsetCodeCount] {
 		if t.offHist[i] == 0 {
 			t.offHist[i] = 1
+		} else if v == math.MaxUint16 {
+			// math.MaxUint16 is used as a magic number in the counting,
+			// so it cannot be in the histograms.
+			t.litHist[i] = math.MaxUint16 - 1
 		}
 	}
 }

@@ -355,3 +355,31 @@ func histogram(b []byte, h []uint16) {
 		h[t]++
 	}
 }
+
+// histogram accumulates a histogram of b in h.
+//
+// len(h) must be >= 256, and h's elements must be all zeroes.
+func histogramSize(b []byte, h []uint16, fill bool, maxBits int) int {
+	h = h[:256]
+	for _, t := range b {
+		h[t]++
+	}
+	invTotal := 1.0 / float64(len(b))
+	fMaxBits := float64(maxBits)
+	shannon := 0.0
+	for i, v := range h[:] {
+		if v > 0 {
+			n := float64(v)
+			shannon += math.Ceil(-math.Log2(n*invTotal) * n)
+			if v == math.MaxUint16 {
+				// math.MaxUint16 is used as a magic number in the counting,
+				// so it cannot be in the histograms.
+				h[i] = math.MaxUint16 - 1
+			}
+		} else if fill {
+			h[i] = 1
+			shannon += fMaxBits
+		}
+	}
+	return int(shannon + 0.99)
+}

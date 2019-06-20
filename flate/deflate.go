@@ -1075,7 +1075,7 @@ func (d *compressor) storeHuff() {
 // Any error that occurred will be in d.err
 func (d *compressor) storeFast() {
 	// We only compress if we have maxStoreBlockSize.
-	if d.windowEnd < maxStoreBlockSize {
+	if d.windowEnd < len(d.window) {
 		if !d.sync {
 			return
 		}
@@ -1156,6 +1156,7 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 		d.fill = (*compressor).fillBlock
 		d.step = (*compressor).store
 	case level == ConstantCompression:
+		d.w.logReusePenalty = uint(4)
 		d.window = make([]byte, maxStoreBlockSize)
 		d.fill = (*compressor).fillBlock
 		d.step = (*compressor).storeHuff
@@ -1163,11 +1164,13 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 		level = 5
 		fallthrough
 	case level >= 1 && level <= 6:
+		d.w.logReusePenalty = uint(level + 1)
 		d.snap = newFastEnc(level)
 		d.window = make([]byte, maxStoreBlockSize)
 		d.fill = (*compressor).fillBlock
 		d.step = (*compressor).storeFast
 	case 7 <= level && level <= 9:
+		d.w.logReusePenalty = uint(level)
 		d.state = &advancedState{}
 		d.compressionLevel = levels[level]
 		d.initDeflate()
