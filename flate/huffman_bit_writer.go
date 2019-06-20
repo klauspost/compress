@@ -85,7 +85,7 @@ type huffmanBitWriter struct {
 	// Data waiting to be written is bytes[0:nbytes]
 	// and then the low nbits of bits.
 	bits            uint64
-	nbits           uint
+	nbits           uint16
 	nbytes          uint8
 	literalFreq     []uint16
 	offsetFreq      []uint16
@@ -182,8 +182,8 @@ func (w *huffmanBitWriter) write(b []byte) {
 	_, w.err = w.writer.Write(b)
 }
 
-func (w *huffmanBitWriter) writeBits(b int32, nb uint) {
-	w.bits |= uint64(b) << w.nbits
+func (w *huffmanBitWriter) writeBits(b int32, nb uint16) {
+	w.bits |= uint64(b) << (w.nbits & 63)
 	w.nbits += nb
 	if w.nbits >= 48 {
 		w.writeOutBits()
@@ -368,8 +368,9 @@ func (w *huffmanBitWriter) storedSize(in []byte) (int, bool) {
 }
 
 func (w *huffmanBitWriter) writeCode(c hcode) {
+	// The function does not get inlined if we "& 63" the shift.
 	w.bits |= uint64(c.code) << w.nbits
-	w.nbits += uint(c.len)
+	w.nbits += c.len
 	if w.nbits >= 48 {
 		w.writeOutBits()
 	}
@@ -692,8 +693,15 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 		// Write the length
 		length := t.length()
 		lengthCode := lengthCode(length)
-		w.writeCode(lengths[lengthCode&31])
-		extraLengthBits := uint(lengthExtraBits[lengthCode&31])
+		//w.writeCode(lengths[lengthCode&31])
+		c := lengths[lengthCode&31]
+		w.bits |= uint64(c.code) << (w.nbits & 63)
+		w.nbits += c.len
+		if w.nbits >= 48 {
+			w.writeOutBits()
+		}
+
+		extraLengthBits := uint16(lengthExtraBits[lengthCode&31])
 		if extraLengthBits > 0 {
 			extraLength := int32(length - lengthBase[lengthCode&31])
 			w.writeBits(extraLength, extraLengthBits)
@@ -701,8 +709,14 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 		// Write the offset
 		offset := t.offset()
 		offsetCode := offsetCode(offset)
-		w.writeCode(offs[offsetCode&31])
-		extraOffsetBits := uint(offsetExtraBits[offsetCode&63])
+		// w.writeCode(offs[offsetCode&31])
+		c = offs[offsetCode&31]
+		w.bits |= uint64(c.code) << (w.nbits & 63)
+		w.nbits += c.len
+		if w.nbits >= 48 {
+			w.writeOutBits()
+		}
+		extraOffsetBits := uint16(offsetExtraBits[offsetCode&63])
 		if extraOffsetBits > 0 {
 			extraOffset := int32(offset - offsetBase[offsetCode&63])
 			w.writeBits(extraOffset, extraOffsetBits)
@@ -794,10 +808,29 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
 	for _, t := range input {
 		// Bitwriting inlined, ~30% speedup
 		c := encoding[t]
-		w.bits |= uint64(c.code) << w.nbits
-		w.nbits += uint(c.len)
+		w.bits |= uint64(c.code) << ((w.nbits) & 63)
+		w.nbits += c.len
 		if w.nbits >= 48 {
-			w.writeOutBits()
+			bits := w.bits
+			w.bits >>= 48
+			w.nbits -= 48
+			n := w.nbytes
+			w.bytes[n] = byte(bits)
+			w.bytes[n+1] = byte(bits >> 8)
+			w.bytes[n+2] = byte(bits >> 16)
+			w.bytes[n+3] = byte(bits >> 24)
+			w.bytes[n+4] = byte(bits >> 32)
+			w.bytes[n+5] = byte(bits >> 40)
+			n += 6
+			if n >= bufferFlushSize {
+				if w.err != nil {
+					n = 0
+					return
+				}
+				w.write(w.bytes[:n])
+				n = 0
+			}
+			w.nbytes = n
 		}
 	}
 	if eof {
