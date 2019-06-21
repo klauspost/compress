@@ -758,7 +758,7 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
 	}
 
 	// Add everything as literals
-	estBits := histogramSize(input, w.literalFreq, !eof, 15) + 15
+	estBits := histogramSize(input, w.literalFreq, !eof) + 15
 
 	// Store bytes, if we don't get a reasonable improvement.
 	ssize, storable := w.storedSize(input)

@@ -357,15 +357,14 @@ func (s byFreq) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
 // histogramSize accumulates a histogram of b in h.
 // An estimated size is returned.
-// Unassigned values are assigned '1' and given maxBits bits.
+// Unassigned values are assigned '1' in the histogram.
 // len(h) must be >= 256, and h's elements must be all zeroes.
-func histogramSize(b []byte, h []uint16, fill bool, maxBits int) int {
+func histogramSize(b []byte, h []uint16, fill bool) int {
 	h = h[:256]
 	for _, t := range b {
 		h[t]++
 	}
 	invTotal := 1.0 / float64(len(b))
-	fMaxBits := float64(maxBits)
 	shannon := 0.0
 	for i, v := range h[:] {
 		if v > 0 {
@@ -373,7 +372,6 @@ func histogramSize(b []byte, h []uint16, fill bool, maxBits int) int {
 			shannon += math.Ceil(-math.Log2(n*invTotal) * n)
 		} else if fill {
 			h[i] = 1
-			shannon += fMaxBits
 		}
 	}
 	return int(shannon + 0.99)
