@@ -43,10 +43,10 @@ const (
 	baseMatchLength = 3              // The smallest match length per the RFC section 3.2.5
 	maxMatchOffset  = 1 << 15        // The largest match offset
 
-	bTableBits = 18              // Bits used in the table
-	bTableSize = 1 << bTableBits // Size of the table
-	bTableMask = bTableSize - 1  // Mask for table indices. Redundant, but can eliminate bounds checks.
-
+	bTableBits  = 18                                  // Bits used in the table
+	bTableSize  = 1 << bTableBits                     // Size of the table
+	bTableMask  = bTableSize - 1                      // Mask for table indices. Redundant, but can eliminate bounds checks.
+	bufferReset = (1 << 31) - (maxStoreBlockSize * 2) // Reset the buffer offset when reaching this.
 )
 
 const (
@@ -182,6 +182,9 @@ func (e *fastGen) matchlen(s, t int32, src []byte) int32 {
 		if t < 0 {
 			panic(fmt.Sprint("t < 0 ", t))
 		}
+		if s-t > maxMatchOffset {
+			panic(fmt.Sprint(s, "-", t, "(", s-t, ") > maxMatchLength (", maxMatchOffset, ")"))
+		}
 	}
 	s1 := int(s) + maxMatchLength - 4
 	if s1 > len(src) {
@@ -218,15 +221,20 @@ func matchLen(a, b []byte) int {
 			return bits.TrailingZeros32(diff) >> 3
 		}
 		// Switch to 8 byte matching.
-		for i := 4; i < len(a)-7; i += 8 {
-			if diff := load64(a, i) ^ load64(b, i); diff != 0 {
-				return i + (bits.TrailingZeros64(diff) >> 3)
+		checked = 4
+		a = a[4:]
+		b = b[4:]
+		for len(a) >= 8 {
+			b = b[:len(a)]
+			if diff := load64(a, 0) ^ load64(b, 0); diff != 0 {
+				return checked + (bits.TrailingZeros64(diff) >> 3)
 			}
+			checked += 8
+			a = a[8:]
+			b = b[8:]
 		}
-		checked = 4 + ((len(a)-4)>>3)<<3
-		a = a[checked:]
-		b = b[checked:]
 	}
+	b = b[:len(a)]
 	for i := range a {
 		if a[i] != b[i] {
 			return int(i) + checked

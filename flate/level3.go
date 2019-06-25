@@ -14,7 +14,7 @@ func (e *fastEncL3) Encode(dst *tokens, src []byte) {
 	)
 
 	// Protect against e.cur wraparound.
-	for e.cur >= (1<<31)-(maxStoreBlockSize) {
+	for e.cur >= bufferReset {
 		if len(e.hist) == 0 {
 			for i := range e.table[:] {
 				e.table[i] = tableEntryPrev{}
@@ -26,12 +26,12 @@ func (e *fastEncL3) Encode(dst *tokens, src []byte) {
 		minOff := e.cur + int32(len(e.hist)) - maxMatchOffset
 		for i := range e.table[:] {
 			v := e.table[i]
-			if v.Cur.offset < minOff {
+			if v.Cur.offset <= minOff {
 				v.Cur.offset = 0
 			} else {
 				v.Cur.offset = v.Cur.offset - e.cur + maxMatchOffset
 			}
-			if v.Prev.offset < minOff {
+			if v.Prev.offset <= minOff {
 				v.Prev.offset = 0
 			} else {
 				v.Prev.offset = v.Prev.offset - e.cur + maxMatchOffset
