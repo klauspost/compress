@@ -24,6 +24,9 @@ func load64(b []byte, i int) uint64 {
 //	1 <= len(lit) && len(lit) <= 65536
 func emitLiteral(dst, lit []byte) int {
 	//fmt.Println("emit lits:", len(lit)-1)
+	if len(lit) == 0 {
+		return 0
+	}
 	i, n := 0, uint(len(lit)-1)
 	switch {
 	case n < 60:
@@ -62,8 +65,6 @@ func emitLiteral(dst, lit []byte) int {
 //	1 <= offset && offset <= 65535
 //	4 <= length && length <= 65535
 func emitCopy(dst []byte, offset, length int) int {
-	//fmt.Println("emit: off/len:", offset, length)
-
 	i := 0
 	// The maximum length for a single tagCopy1 or tagCopy2 op is 64 bytes. The
 	// threshold for this loop is a little higher (at 68 = 64 + 4), and the
@@ -103,6 +104,39 @@ func emitCopy(dst []byte, offset, length int) int {
 	return i + 2
 }
 
+// emitRepeat writes a copy chunk and returns the number of bytes written.
+func emitRepeat(dst []byte, length int) int {
+	i := 0
+	// Repeat offset, make length cheaper
+	if length <= 8 {
+		dst[i+0] = 0 | uint8(length-4)<<2 | tagCopy1
+		dst[i+1] = 0
+		return i + 2
+	}
+	if length < (1<<8)+8 {
+		length -= 8
+		dst[i+0] = 9<<2 | tagCopy1
+		dst[i+1] = 0
+		dst[i+2] = uint8(length)
+		return i + 3
+	}
+	if length < (1<<16)+(1<<8) {
+		length -= 1 << 8
+		dst[i+0] = 10<<2 | tagCopy1
+		dst[i+1] = 0
+		dst[i+2] = uint8(length >> 0)
+		dst[i+3] = uint8(length >> 8)
+		return i + 4
+	}
+	length -= 1 << 16
+	dst[i+0] = 11<<2 | tagCopy1
+	dst[i+1] = 0
+	dst[i+2] = uint8(length >> 0)
+	dst[i+3] = uint8(length >> 8)
+	dst[i+4] = uint8(length >> 16)
+	return i + 5
+}
+
 // extendMatch returns the largest k such that k <= len(src) and that
 // src[i:i+k-j] and src[j:k] have the same contents.
 //
@@ -118,6 +152,20 @@ func hash(u, shift uint32) uint32 {
 	return (u * 0x1e35a7bd) >> shift
 }
 
+// hash5 returns the hash of the lowest 5 bytes of u to fit in a hash table with h bits.
+// Preferably h should be a constant and should always be <64.
+func hash5(u uint64, h uint8) uint32 {
+	const prime5bytes = 889523592379
+	return uint32(((u << (64 - 40)) * prime5bytes) >> ((64 - h) & 63))
+}
+
+// hash6 returns the hash of the lowest 6 bytes of u to fit in a hash table with h bits.
+// Preferably h should be a constant and should always be <64.
+func hash6(u uint64, h uint8) uint32 {
+	const prime6bytes = 227718039650203
+	return uint32(((u << (64 - 48)) * prime6bytes) >> ((64 - h) & 63))
+}
+
 // encodeBlock encodes a non-empty src to a guaranteed-large-enough dst. It
 // assumes that the varint-encoded length of the decompressed bytes has already
 // been written.
@@ -128,12 +176,13 @@ func hash(u, shift uint32) uint32 {
 func encodeBlock(dst, src []byte) (d int) {
 	// Initialize the hash table.
 	const (
-		maxTableSize = 1 << 14
+		tableBits = 14
+
+		maxTableSize = 1 << tableBits
 		// tableMask is redundant, but helps the compiler eliminate bounds
 		// checks.
 		tableMask = maxTableSize - 1
 	)
-	const shift = 32 - 14
 
 	// In Go, all array elements are zero-initialized, so there is no advantage
 	// to a smaller tableSize per se. However, it matches the C++ algorithm,
@@ -152,47 +201,70 @@ func encodeBlock(dst, src []byte) (d int) {
 	// The encoded form must start with a literal, as there are no previous
 	// bytes to copy, so we start looking for hash matches at s == 1.
 	s := 1
-	nextHash := hash(load32(src, s), shift)
+	nextHash := hash6(load64(src, s), tableBits)
+	repeat := 1
 
+mainloop:
 	for {
-		// Copied from the C++ snappy implementation:
-		//
-		// Heuristic match skipping: If 32 bytes are scanned with no matches
-		// found, start looking only at every other byte. If 32 more bytes are
-		// scanned (or skipped), look at every third byte, etc.. When a match
-		// is found, immediately go back to looking at every byte. This is a
-		// small loss (~5% performance, ~0.1% density) for compressible data
-		// due to more bookkeeping, but for non-compressible data (such as
-		// JPEG) it's a huge win since the compressor quickly "realizes" the
-		// data is incompressible and doesn't bother looking for matches
-		// everywhere.
-		//
-		// The "skip" variable keeps track of how many bytes there are since
-		// the last match; dividing it by 32 (ie. right-shifting by five) gives
-		// the number of bytes to move ahead for each iteration.
-		skip := 32
-
 		nextS := s
 		candidate := 0
 		for {
 			s = nextS
-			bytesBetweenHashLookups := skip >> 5
-			nextS = s + bytesBetweenHashLookups
-			skip += bytesBetweenHashLookups
+			bytesBetweenHashLookups := (s - nextEmit) >> 7
+			nextS = s + bytesBetweenHashLookups + 1
 			if nextS > sLimit {
 				goto emitRemainder
 			}
+			x := load64(src, s)
 			candidate = int(table[nextHash&tableMask])
 			table[nextHash&tableMask] = uint32(s)
-			nextHash = hash(load32(src, nextS), shift)
-			if s-candidate < maxMatchOffset && load32(src, s) == load32(src, candidate) {
+			nextHash = hash6(load64(src, nextS), tableBits)
+			if false && uint32(x>>8) == load32(src, s-repeat+1) {
+				base := s + 1
+				// Extend back
+				for i := base - repeat; base > nextEmit && src[i-1] == src[base-1]; i, base = i-1, base-1 {
+				}
+				d += emitLiteral(dst[d:], src[nextEmit:base])
+				s += 5
+				for i := s - repeat; s < len(src) && src[i] == src[s]; i, s = i+1, s+1 {
+				}
+				// fmt.Println(repeat, s-base)
+				if false && nextS < s {
+					table[nextHash&tableMask] = uint32(nextS)
+				}
+				//fmt.Println("repeat, len", s-base)
+				d += emitRepeat(dst[d:], s-base)
+				nextEmit = s
+				if s >= sLimit {
+					goto emitRemainder
+				}
+				nextS = s
+				x := load64(src, nextS-2)
+				if true {
+					hm2 := hash6(x, tableBits)
+					hm1 := hash6(x>>8, tableBits)
+					table[hm2&tableMask] = uint32(nextS - 2)
+					table[hm1&tableMask] = uint32(nextS - 1)
+				}
+				nextHash = hash6(x>>16, tableBits)
+				continue mainloop
+			}
+
+			if uint32(x) == load32(src, candidate) {
 				break
 			}
+		}
+
+		// Extend backwards
+		for candidate > 0 && s > nextEmit && src[candidate-1] == src[s-1] {
+			candidate--
+			s--
 		}
 
 		// A 4-byte match has been found. We'll later see if more than 4 bytes
 		// match. But, prior to the match, src[nextEmit:s] are unmatched. Emit
 		// them as literal bytes.
+
 		d += emitLiteral(dst[d:], src[nextEmit:s])
 
 		// Call emitCopy, and then see if another emitCopy could be our next
@@ -216,12 +288,12 @@ func encodeBlock(dst, src []byte) (d int) {
 			for i := candidate + 4; s < len(src) && src[i] == src[s]; i, s = i+1, s+1 {
 			}
 
-			d += emitCopy(dst[d:], base-candidate, s-base)
+			repeat = base - candidate
+			d += emitCopy(dst[d:], repeat, s-base)
 			nextEmit = s
 			if s >= sLimit {
 				goto emitRemainder
 			}
-
 			// We could immediately start working at s now, but to improve
 			// compression we first update the hash table at s-1 and at s. If
 			// another emitCopy is not our next move, also calculate nextHash
@@ -229,13 +301,13 @@ func encodeBlock(dst, src []byte) (d int) {
 			// are faster as one load64 call (with some shifts) instead of
 			// three load32 calls.
 			x := load64(src, s-1)
-			prevHash := hash(uint32(x>>0), shift)
+			prevHash := hash6(x, tableBits)
 			table[prevHash&tableMask] = uint32(s - 1)
-			currHash := hash(uint32(x>>8), shift)
+			currHash := hash6(x>>8, tableBits)
 			candidate = int(table[currHash&tableMask])
 			table[currHash&tableMask] = uint32(s)
 			if uint32(x>>8) != load32(src, candidate) {
-				nextHash = hash(uint32(x>>16), shift)
+				nextHash = hash6(x>>16, tableBits)
 				s++
 				break
 			}
