@@ -60,9 +60,26 @@ func decode(dst, src []byte) int {
 			if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
 				return decodeErrCodeCorrupt
 			}
-			length = 4 + int(src[s-2])>>2&0x7
-			offset = int(uint32(src[s-2])&0xe0<<3 | uint32(src[s-1]))
-
+			length = int(src[s-2]) >> 2 & 0x7
+			toffset := int(uint32(src[s-2])&0xe0<<3 | uint32(src[s-1]))
+			if toffset == 0 {
+				// keep last offset
+				switch length {
+				case 5:
+					length = int(uint32(src[s])) + 4
+					s += 1
+				case 6:
+					length = int(uint32(src[s])|(uint32(src[s+1])<<8)) + (1 << 8)
+					s += 2
+				case 7:
+					length = int(uint32(src[s])|(uint32(src[s+1])<<8)|(uint32(src[s+2])<<16)) + (1 << 16)
+					s += 3
+				default: // 0-> 4
+				}
+			} else {
+				offset = toffset
+			}
+			length += 4
 		case tagCopy2:
 			s += 3
 			if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.

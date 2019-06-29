@@ -108,28 +108,29 @@ func emitCopy(dst []byte, offset, length int) int {
 func emitRepeat(dst []byte, length int) int {
 	i := 0
 	// Repeat offset, make length cheaper
-	if length <= 8 {
-		dst[i+0] = 0 | uint8(length-4)<<2 | tagCopy1
+	length -= 4
+	if length <= 4 {
+		dst[i+0] = uint8(length)<<2 | tagCopy1
 		dst[i+1] = 0
 		return i + 2
 	}
-	if length < (1<<8)+8 {
-		length -= 8
-		dst[i+0] = 9<<2 | tagCopy1
+	if length < 1<<8 {
+		length -= 4
+		dst[i+0] = 5<<2 | tagCopy1
 		dst[i+1] = 0
 		dst[i+2] = uint8(length)
 		return i + 3
 	}
-	if length < (1<<16)+(1<<8) {
+	if length < (1 << 16) {
 		length -= 1 << 8
-		dst[i+0] = 10<<2 | tagCopy1
+		dst[i+0] = 6<<2 | tagCopy1
 		dst[i+1] = 0
 		dst[i+2] = uint8(length >> 0)
 		dst[i+3] = uint8(length >> 8)
 		return i + 4
 	}
 	length -= 1 << 16
-	dst[i+0] = 11<<2 | tagCopy1
+	dst[i+0] = 7<<2 | tagCopy1
 	dst[i+1] = 0
 	dst[i+2] = uint8(length >> 0)
 	dst[i+3] = uint8(length >> 8)
