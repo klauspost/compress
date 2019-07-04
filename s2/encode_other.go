@@ -4,6 +4,11 @@
 
 package s2
 
+import (
+	"bytes"
+	"math/bits"
+)
+
 func load32(b []byte, i int) uint32 {
 	b = b[i:]
 	b = b[:4]
@@ -184,7 +189,9 @@ func encodeBlock(dst, src []byte) (d int) {
 		// checks.
 		tableMask = maxTableSize - 1
 	)
-
+	if len(src) <= 32 {
+		return emitLiteral(dst, src)
+	}
 	// In Go, all array elements are zero-initialized, so there is no advantage
 	// to a smaller tableSize per se. However, it matches the C++ algorithm,
 	// and in the asm versions of this code, we can get away with zeroing only
@@ -201,18 +208,25 @@ func encodeBlock(dst, src []byte) (d int) {
 
 	// The encoded form must start with a literal, as there are no previous
 	// bytes to copy, so we start looking for hash matches at s == 1.
-	s := 1
-	nextHash := hash6(load64(src, s), tableBits)
-	repeat := 1
+	s := 0
+	for ; s <= 32-inputMargin; s += 3 {
+		x := load64(src, s)
+		h0 := hash6(x, tableBits)
+		h1 := hash6(x>>8, tableBits)
+		h2 := hash6(x>>16, tableBits)
+		table[h0&tableMask] = uint32(s)
+		table[h1&tableMask] = uint32(s + 1)
+		table[h2&tableMask] = uint32(s + 2)
+	}
 
-mainloop:
+	nextHash := hash6(load64(src, s), tableBits)
+	repeat := 0
+
 	for {
-		nextS := s
 		candidate := 0
 		for {
-			s = nextS
-			bytesBetweenHashLookups := (s - nextEmit) >> 7
-			nextS = s + bytesBetweenHashLookups + 1
+			// Next src position to check
+			nextS := s + (s-nextEmit)>>7 + 1
 			if nextS > sLimit {
 				goto emitRemainder
 			}
@@ -220,40 +234,60 @@ mainloop:
 			candidate = int(table[nextHash&tableMask])
 			table[nextHash&tableMask] = uint32(s)
 			nextHash = hash6(load64(src, nextS), tableBits)
-			if false && uint32(x>>8) == load32(src, s-repeat+1) {
+
+			// Check repeat - quite small gain.
+			if false && uint32(x>>8) == load32(src, s-repeat+1) && repeat > 0 {
 				base := s + 1
 				// Extend back
-				for i := base - repeat; base > nextEmit && src[i-1] == src[base-1]; i, base = i-1, base-1 {
+				for i := base - repeat; base > nextEmit && src[i-1] == src[base-1]; {
+					i--
+					base--
 				}
 				d += emitLiteral(dst[d:], src[nextEmit:base])
+
+				candidate := s - repeat + 5
 				s += 5
-				for i := s - repeat; s < len(src) && src[i] == src[s]; i, s = i+1, s+1 {
+				for s <= sLimit {
+					if diff := load64(src, s) ^ load64(src, candidate); diff != 0 {
+						s += bits.TrailingZeros64(diff) >> 3
+						break
+					}
+					s += 8
+					candidate += 8
 				}
-				// fmt.Println(repeat, s-base)
+
 				if false && nextS < s {
+					// worse
 					table[nextHash&tableMask] = uint32(nextS)
 				}
-				//fmt.Println("repeat, len", s-base)
-				d += emitRepeat(dst[d:], s-base)
+				//add := emitRepeat(dst[d:], s-base)
+				add := emitCopy(dst[d:], repeat, s-base)
+				//fmt.Println("repeat, len", s-base, "emitted", base-nextEmit, "added:", add)
+				d += add
 				nextEmit = s
 				if s >= sLimit {
 					goto emitRemainder
 				}
-				nextS = s
-				x := load64(src, nextS-2)
-				if true {
+
+				if false {
+					// worse:
+					x := load64(src, s-2)
 					hm2 := hash6(x, tableBits)
 					hm1 := hash6(x>>8, tableBits)
-					table[hm2&tableMask] = uint32(nextS - 2)
-					table[hm1&tableMask] = uint32(nextS - 1)
+					table[hm2&tableMask] = uint32(s - 2)
+					table[hm1&tableMask] = uint32(s - 1)
+					nextHash = hash6(x>>16, tableBits)
+				} else {
+					x := load64(src, s)
+					nextHash = hash6(x, tableBits)
 				}
-				nextHash = hash6(x>>16, tableBits)
-				continue mainloop
+				continue
 			}
 
 			if uint32(x) == load32(src, candidate) {
 				break
 			}
+			s = nextS
 		}
 
 		// Extend backwards
@@ -280,17 +314,30 @@ mainloop:
 			// Invariant: we have a 4-byte match at s, and no need to emit any
 			// literal bytes prior to s.
 			base := s
+			repeat = base - candidate
 
 			// Extend the 4-byte match as long as possible.
-			//
-			// This is an inlined version of:
-			//	s = extendMatch(src, candidate+4, s+4)
 			s += 4
-			for i := candidate + 4; s < len(src) && src[i] == src[s]; i, s = i+1, s+1 {
+			candidate += 4
+			for s <= len(src)-8 {
+				if diff := load64(src, s) ^ load64(src, candidate); diff != 0 {
+					s += bits.TrailingZeros64(diff) >> 3
+					break
+				}
+				s += 8
+				candidate += 8
 			}
 
-			repeat = base - candidate
 			d += emitCopy(dst[d:], repeat, s-base)
+			if false {
+				a := src[base:s]
+				b := src[base-repeat : base-repeat+(s-base)]
+				if !bytes.Equal(a, b) {
+					panic("mismatch")
+				}
+			}
+			//fmt.Println("regular, len", s-base, "emitted", base-nextEmit, "offset:", repeat)
+
 			nextEmit = s
 			if s >= sLimit {
 				goto emitRemainder

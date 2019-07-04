@@ -837,6 +837,22 @@ func TestEmitCopy(t *testing.T) {
 	}
 }
 
+func TestNewReader(t *testing.T) {
+	f, err := os.Open("testdata/out.snap")
+	if os.IsNotExist(err) {
+		t.Skip("no input")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	d := NewReader(f)
+	_, err = io.Copy(ioutil.Discard, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestNewBufferedWriter(t *testing.T) {
 	// Test all 32 possible sub-sequences of these 5 input slices.
 	//

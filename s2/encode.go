@@ -48,7 +48,7 @@ func Encode(dst, src []byte) []byte {
 // can copy up to 15 bytes too much, but that's OK as subsequent iterations of
 // the encoding loop will fix up the copy overrun, and this inputMargin ensures
 // that we don't overrun the dst and src buffers.
-const inputMargin = 16 - 1
+const inputMargin = 8
 
 // minNonLiteralBlockSize is the minimum size of the input to encodeBlock that
 // could be encoded with a copy tag. This is the minimum with respect to the
