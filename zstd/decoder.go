@@ -151,6 +151,7 @@ func (d *Decoder) Reset(r io.Reader) error {
 
 	if d.stream == nil {
 		d.stream = make(chan decodeStream, 1)
+		d.streamWg.Add(1)
 		go d.startStreamDecoder(d.stream)
 	}
 
@@ -373,7 +374,6 @@ var errEndOfStream = errors.New("end-of-stream")
 // 		d) wait for next block to return data.
 // Once WRITTEN, the decoders reused by the writer frame decoder for re-use.
 func (d *Decoder) startStreamDecoder(inStream chan decodeStream) {
-	d.streamWg.Add(1)
 	defer d.streamWg.Done()
 	frame := newFrameDec(d.o)
 	for stream := range inStream {
