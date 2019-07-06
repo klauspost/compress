@@ -247,6 +247,7 @@ func TestNewDecoderSmallFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer dec.Close()
 	n, err := io.Copy(ioutil.Discard, dec)
 	if err != nil {
 		t.Fatal(err)
