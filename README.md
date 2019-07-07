@@ -14,6 +14,7 @@ It offers slightly better compression at lower compression settings, and up to 3
 
 # changelog
 
+* July 7, 2019 (v1.7.2): Snappy update, zstd decoder potential race fix.
 * June 17, 2019: zstd decompression bugfix.
 * June 17, 2019: fix 32 bit builds.
 * June 17, 2019: Easier use in modules (less dependencies).
