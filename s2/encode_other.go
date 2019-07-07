@@ -247,25 +247,29 @@ func encodeBlock(dst, src []byte) (d int) {
 		table[h2&tableMask] = uint32(s + 2)
 	}
 
-	nextHash := hash6(load64(src, s), tableBits)
+	cv := load64(src, s)
 	repeat := 0
 
 	for {
 		candidate := 0
 		for {
 			// Next src position to check
-			nextS := s + (s-nextEmit)>>7 + 1
+			nextS := s + (s-nextEmit)>>7 + 4
 			if nextS > sLimit {
 				goto emitRemainder
 			}
-			x := load64(src, s)
-			candidate = int(table[nextHash&tableMask])
-			table[nextHash&tableMask] = uint32(s)
-			nextHash = hash6(load64(src, nextS), tableBits)
+			hash0 := hash6(cv, tableBits)
+			hash1 := hash6(cv>>8, tableBits)
+			candidate = int(table[hash0&tableMask])
+			candidate2 := int(table[hash1&tableMask])
+			table[hash0&tableMask] = uint32(s)
+			table[hash1&tableMask] = uint32(s + 1)
+			hash2 := hash6(cv>>16, tableBits)
 
-			// Check repeat.
-			if false && uint32(x>>8) == load32(src, s-repeat+1) && repeat > 0 {
-				base := s + 1
+			// Check repeat at offset checkRep.
+			const checkRep = 3
+			if true && uint32(cv>>(checkRep*8)) == load32(src, s-repeat+checkRep) && repeat > 0 {
+				base := s + checkRep
 				// Extend back
 				for i := base - repeat; base > nextEmit && src[i-1] == src[base-1]; {
 					i--
@@ -274,8 +278,8 @@ func encodeBlock(dst, src []byte) (d int) {
 				d += emitLiteral(dst[d:], src[nextEmit:base])
 
 				// Extend forward
-				candidate := s - repeat + 5
-				s += 5
+				candidate := s - repeat + 4 + checkRep
+				s += 4 + checkRep
 				for s <= sLimit {
 					if diff := load64(src, s) ^ load64(src, candidate); diff != 0 {
 						s += bits.TrailingZeros64(diff) >> 3
@@ -285,10 +289,6 @@ func encodeBlock(dst, src []byte) (d int) {
 					candidate += 8
 				}
 
-				if true && nextS < s {
-					// tiny bit better
-					table[nextHash&tableMask] = uint32(nextS)
-				}
 				add := emitRepeat(dst[d:], repeat, s-base)
 				// same as `add := emitCopy(dst[d:], repeat, s-base)` but skipping offset.
 				d += add
@@ -297,24 +297,27 @@ func encodeBlock(dst, src []byte) (d int) {
 					goto emitRemainder
 				}
 
-				if false {
-					// usually not worth it:
-					x := load64(src, s-2)
-					hm2 := hash6(x, tableBits)
-					hm1 := hash6(x>>8, tableBits)
-					table[hm2&tableMask] = uint32(s - 2)
-					table[hm1&tableMask] = uint32(s - 1)
-					nextHash = hash6(x>>16, tableBits)
-				} else {
-					x := load64(src, s)
-					nextHash = hash6(x, tableBits)
-				}
+				cv = load64(src, s)
 				continue
 			}
 
-			if uint32(x) == load32(src, candidate) {
+			if uint32(cv) == load32(src, candidate) {
 				break
 			}
+			candidate = int(table[hash2&tableMask])
+			if uint32(cv>>8) == load32(src, candidate2) {
+				table[hash2&tableMask] = uint32(s + 2)
+				candidate = candidate2
+				s++
+				break
+			}
+			table[hash2&tableMask] = uint32(s + 2)
+			if uint32(cv>>16) == load32(src, candidate) {
+				s += 2
+				break
+			}
+
+			cv = load64(src, nextS)
 			s = nextS
 		}
 
@@ -365,26 +368,19 @@ func encodeBlock(dst, src []byte) (d int) {
 					panic("mismatch")
 				}
 			}
-			//fmt.Println("regular, len", s-base, "emitted", base-nextEmit, "offset:", repeat)
 
 			nextEmit = s
 			if s >= sLimit {
 				goto emitRemainder
 			}
-			// We could immediately start working at s now, but to improve
-			// compression we first update the hash table at s-1 and at s. If
-			// another emitCopy is not our next move, also calculate nextHash
-			// at s+1. At least on GOARCH=amd64, these three hash calculations
-			// are faster as one load64 call (with some shifts) instead of
-			// three load32 calls.
-			x := load64(src, s-1)
-			prevHash := hash6(x, tableBits)
-			table[prevHash&tableMask] = uint32(s - 1)
-			currHash := hash6(x>>8, tableBits)
+
+			// Check for an immediate match, otherwise start search at s+1
+			x := load64(src, s)
+			currHash := hash6(x, tableBits)
 			candidate = int(table[currHash&tableMask])
 			table[currHash&tableMask] = uint32(s)
-			if uint32(x>>8) != load32(src, candidate) {
-				nextHash = hash6(x>>16, tableBits)
+			if uint32(x) != load32(src, candidate) {
+				cv = load64(src, s+1)
 				s++
 				break
 			}
