@@ -8,6 +8,7 @@ This means that S2 can seamlessly replace Snappy without converting compressed c
 
 # Extensions
 
+* Frame [Stream identifier](https://github.com/google/snappy/blob/master/framing_format.txt#L68) changed from `sNaPpY` to `S2sTwO`.
 * [Framed compressed blocks](https://github.com/google/snappy/blob/master/format_description.txt) can be up to 1MB (up from 64KB).
 * Compressed blocks can have an offset of `0`, which indicates to repeat the last offset.
 
@@ -29,6 +30,7 @@ The length is specified by reading the 3-bit length specified in the tag and dec
 This allows any repeat offset + length to be represented by 2 to 5 bytes.
 
 Lengths are stored as little endian values.
+
 
 # Performance
 

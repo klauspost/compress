@@ -215,10 +215,19 @@ func (r *Reader) Read(p []byte) (int, error) {
 			if !r.readFull(r.buf[:len(magicBody)], false) {
 				return 0, r.err
 			}
+			ok := true
 			for i := 0; i < len(magicBody); i++ {
 				if r.buf[i] != magicBody[i] {
-					r.err = ErrCorrupt
-					return 0, r.err
+					ok = false
+					break
+				}
+			}
+			if !ok {
+				for i := 0; i < len(magicBodySnappy); i++ {
+					if r.buf[i] != magicBodySnappy[i] {
+						r.err = ErrCorrupt
+						return 0, r.err
+					}
 				}
 			}
 			continue

@@ -57,10 +57,12 @@ const (
 )
 
 const (
-	checksumSize    = 4
-	chunkHeaderSize = 4
-	magicChunk      = "\xff\x06\x00\x00" + magicBody
-	magicBody       = "sNaPpY"
+	checksumSize     = 4
+	chunkHeaderSize  = 4
+	magicChunk       = "\xff\x06\x00\x00" + magicBody
+	magicChunkSnappy = "\xff\x06\x00\x00" + magicBodySnappy
+	magicBodySnappy  = "sNaPpY"
+	magicBody        = "S2sTwO"
 
 	// maxBlockSize is the maximum size of the input to encodeBlock. It is not
 	// part of the wire format per se, but some parts of the encoder assume
