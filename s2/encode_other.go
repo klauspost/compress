@@ -1,4 +1,5 @@
 // Copyright 2016 The Snappy-Go Authors. All rights reserved.
+// Copyright (c) 2019 Klaus Post. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -180,17 +181,6 @@ func extendMatch(src []byte, i, j int) int {
 	for ; j < len(src) && src[i] == src[j]; i, j = i+1, j+1 {
 	}
 	return j
-}
-
-func hash(u, shift uint32) uint32 {
-	return (u * 0x1e35a7bd) >> shift
-}
-
-// hash5 returns the hash of the lowest 5 bytes of u to fit in a hash table with h bits.
-// Preferably h should be a constant and should always be <64.
-func hash5(u uint64, h uint8) uint32 {
-	const prime5bytes = 889523592379
-	return uint32(((u << (64 - 40)) * prime5bytes) >> ((64 - h) & 63))
 }
 
 // hash6 returns the hash of the lowest 6 bytes of u to fit in a hash table with h bits.
