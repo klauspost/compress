@@ -264,7 +264,7 @@ func encodeBlock(dst, src []byte) (d int) {
 			nextHash = hash6(load64(src, nextS), tableBits)
 
 			// Check repeat.
-			if true && uint32(x>>8) == load32(src, s-repeat+1) && repeat > 0 {
+			if false && uint32(x>>8) == load32(src, s-repeat+1) && repeat > 0 {
 				base := s + 1
 				// Extend back
 				for i := base - repeat; base > nextEmit && src[i-1] == src[base-1]; {
@@ -273,6 +273,7 @@ func encodeBlock(dst, src []byte) (d int) {
 				}
 				d += emitLiteral(dst[d:], src[nextEmit:base])
 
+				// Extend forward
 				candidate := s - repeat + 5
 				s += 5
 				for s <= sLimit {
