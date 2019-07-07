@@ -2,7 +2,9 @@
 
 S2 is an extension of [Snappy](https://github.com/google/snappy).
 
-Decoding is compatible with Snappy, but content compressed with S2 cannot be decompressed by Snappy.
+Decoding is compatible with Snappy compressed content, but content compressed with S2 cannot be decompressed by Snappy.
+
+This means that S2 can seamlessly replace Snappy without converting compressed content.
 
 # Extensions
 
@@ -37,13 +39,13 @@ Compression is increased, mostly around 5-20% and the throughput is typically 25
 
 | File                 | S2 Througput | S2 Size Smaller |
 |----------------------|--------------|-----------------|
-| consensus.db.10gb    | 1.48x        | 16.61%          |
-| enwik9               | 1.41x        | 2.77%           |
-| gob-stream           | 1.68x        | 24.16%          |
-| adresser.json        | 2.07x        | 39.15%          |
-| rawstudio-mint14.tar | 1.41x        | 4.45%           |
-| 10gb.tar             | 1.24x        | -0.35%          |
-| silesia.tar          | 1.38x        | 3.36%           |
+| [consensus.db.10gb](https://files.klauspost.com/compress/consensus.db.10gb.zst)    | 1.48x        | 16.61%          |
+| [enwik9](http://mattmahoney.net/dc/textdata.html)               | 1.41x        | 2.77%           |
+| [gob-stream](https://files.klauspost.com/compress/gob-stream.7z)           | 1.68x        | 24.16%          |
+| [adresser.json](https://files.klauspost.com/compress/adresser.json.zst)        | 2.07x        | 39.15%          |
+| [rawstudio-mint14.tar](https://files.klauspost.com/compress/rawstudio-mint14.7z) | 1.41x        | 4.45%           |
+| [10gb.tar](http://mattmahoney.net/dc/10gb.html)             | 1.24x        | -0.35%          |
+| [silesia.tar](http://sun.aei.polsl.pl/~sdeor/corpus/silesia.zip)          | 1.38x        | 3.36%           |
 
 There is a good speedup across the board.
 
