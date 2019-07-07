@@ -18,6 +18,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/klauspost/compress/snappy"
 )
 
 var (
@@ -665,7 +667,7 @@ func TestFramingFormat(t *testing.T) {
 	}
 
 	buf := new(bytes.Buffer)
-	bw := NewBufferedWriter(buf)
+	bw := NewWriter(buf)
 	if _, err := bw.Write(src); err != nil {
 		t.Fatalf("Write: encoding: %v", err)
 	}
@@ -684,7 +686,7 @@ func TestFramingFormat(t *testing.T) {
 
 func TestWriterGoldenOutput(t *testing.T) {
 	buf := new(bytes.Buffer)
-	w := NewBufferedWriter(buf)
+	w := NewWriter(buf)
 	defer w.Close()
 	w.Write([]byte("abcd")) // Not compressible.
 	w.Flush()
@@ -837,22 +839,6 @@ func TestEmitCopy(t *testing.T) {
 	}
 }
 
-func TestNewReader(t *testing.T) {
-	f, err := os.Open("testdata/out.snap")
-	if os.IsNotExist(err) {
-		t.Skip("no input")
-	}
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	d := NewReader(f)
-	_, err = io.Copy(ioutil.Discard, d)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestNewBufferedWriter(t *testing.T) {
 	// Test all 32 possible sub-sequences of these 5 input slices.
 	//
@@ -869,7 +855,7 @@ loop:
 	for i := 0; i < 1<<uint(len(inputs)); i++ {
 		var want []byte
 		buf := new(bytes.Buffer)
-		w := NewBufferedWriter(buf)
+		w := NewWriter(buf)
 		for j, input := range inputs {
 			if i&(1<<uint(j)) == 0 {
 				continue
@@ -898,7 +884,7 @@ loop:
 
 func TestFlush(t *testing.T) {
 	buf := new(bytes.Buffer)
-	w := NewBufferedWriter(buf)
+	w := NewWriter(buf)
 	defer w.Close()
 	if _, err := w.Write(bytes.Repeat([]byte{'x'}, 20)); err != nil {
 		t.Fatalf("Write: %v", err)
@@ -956,9 +942,16 @@ func TestReaderUncompressedDataTooLong(t *testing.T) {
 func TestReaderReset(t *testing.T) {
 	gold := bytes.Repeat([]byte("All that is gold does not glitter,\n"), 10000)
 	buf := new(bytes.Buffer)
-	if _, err := NewWriter(buf).Write(gold); err != nil {
+	w := NewWriter(buf)
+	_, err := w.Write(gold)
+	if err != nil {
 		t.Fatalf("Write: %v", err)
 	}
+	err = w.Close()
+	if err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
 	encoded, invalid, partial := buf.String(), "invalid", "partial"
 	r := NewReader(nil)
 	for i, s := range []string{encoded, invalid, partial, encoded, partial, invalid, encoded, encoded} {
@@ -994,33 +987,25 @@ func TestReaderReset(t *testing.T) {
 func TestWriterReset(t *testing.T) {
 	gold := bytes.Repeat([]byte("Not all those who wander are lost;\n"), 10000)
 	const n = 20
-	for _, buffered := range []bool{false, true} {
-		var w *Writer
-		if buffered {
-			w = NewBufferedWriter(nil)
-			defer w.Close()
-		} else {
-			w = NewWriter(nil)
-		}
+	var w *Writer
+	w = NewWriter(nil)
+	defer w.Close()
 
-		var gots, wants [][]byte
-		failed := false
-		for i := 0; i <= n; i++ {
-			buf := new(bytes.Buffer)
-			w.Reset(buf)
-			want := gold[:len(gold)*i/n]
-			if _, err := w.Write(want); err != nil {
-				t.Errorf("#%d: Write: %v", i, err)
-				failed = true
-				continue
-			}
-			if buffered {
-				if err := w.Flush(); err != nil {
-					t.Errorf("#%d: Flush: %v", i, err)
-					failed = true
-					continue
-				}
-			}
+	var gots, wants [][]byte
+	failed := false
+	for i := 0; i <= n; i++ {
+		buf := new(bytes.Buffer)
+		w.Reset(buf)
+		want := gold[:len(gold)*i/n]
+		if _, err := w.Write(want); err != nil {
+			t.Errorf("#%d: Write: %v", i, err)
+			failed = true
+			continue
+		}
+		if err := w.Flush(); err != nil {
+			t.Errorf("#%d: Flush: %v", i, err)
+			failed = true
+			continue
 			got, err := ioutil.ReadAll(NewReader(buf))
 			if err != nil {
 				t.Errorf("#%d: ReadAll: %v", i, err)
@@ -1044,7 +1029,7 @@ func TestWriterReset(t *testing.T) {
 func TestWriterResetWithoutFlush(t *testing.T) {
 	buf0 := new(bytes.Buffer)
 	buf1 := new(bytes.Buffer)
-	w := NewBufferedWriter(buf0)
+	w := NewWriter(buf0)
 	if _, err := w.Write([]byte("xxx")); err != nil {
 		t.Fatalf("Write #0: %v", err)
 	}
@@ -1086,7 +1071,7 @@ func TestNumUnderlyingWrites(t *testing.T) {
 	}
 
 	var c writeCounter
-	w := NewBufferedWriter(&c)
+	w := NewWriter(&c)
 	defer w.Close()
 	for i, tc := range testCases {
 		c = 0
@@ -1102,6 +1087,81 @@ func TestNumUnderlyingWrites(t *testing.T) {
 			t.Errorf("#%d: got %d underlying writes, want %d", i, c, tc.want)
 			continue
 		}
+	}
+}
+
+func testWriterRoundtrip(t *testing.T, src []byte) {
+	var buf bytes.Buffer
+	enc := NewWriter(&buf)
+	n, err := enc.Write(src)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if n != len(src) {
+		t.Error(io.ErrShortWrite)
+		return
+	}
+	t.Logf("encoded to %d -> %d bytes", len(src), buf.Len())
+	dec := NewReader(&buf)
+	decoded, err := ioutil.ReadAll(dec)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if len(decoded) != len(src) {
+		t.Error("decoded len:", len(decoded), "!=", len(src))
+		return
+	}
+	err = cmp(src, decoded)
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func testBlockRoundtrip(t *testing.T, src []byte) {
+	dst := Encode(nil, src)
+	t.Logf("encoded to %d -> %d bytes", len(src), len(dst))
+	decoded, err := Decode(nil, dst)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if len(decoded) != len(src) {
+		t.Error("decoded len:", len(decoded), "!=", len(src))
+		return
+	}
+	err = cmp(src, decoded)
+	if err != nil {
+		t.Error(err)
+	}
+}
+func testSnappyDecode(t *testing.T, src []byte) {
+	var buf bytes.Buffer
+	enc := snappy.NewBufferedWriter(&buf)
+	n, err := enc.Write(src)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if n != len(src) {
+		t.Error(io.ErrShortWrite)
+		return
+	}
+	t.Logf("encoded to %d -> %d bytes", len(src), buf.Len())
+	dec := NewReader(&buf)
+	decoded, err := ioutil.ReadAll(dec)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if len(decoded) != len(src) {
+		t.Error("decoded len:", len(decoded), "!=", len(src))
+		return
+	}
+	err = cmp(src, decoded)
+	if err != nil {
+		t.Error(err)
 	}
 }
 
@@ -1269,6 +1329,51 @@ func benchFile(b *testing.B, i int, decode bool) {
 	} else {
 		benchEncode(b, data)
 	}
+}
+
+func TestRoundtrips(t *testing.T) {
+	testFile(t, 0, 10)
+	testFile(t, 1, 10)
+	testFile(t, 2, 10)
+	testFile(t, 3, 10)
+	testFile(t, 4, 10)
+	testFile(t, 5, 10)
+	testFile(t, 6, 10)
+	testFile(t, 7, 10)
+	testFile(t, 8, 10)
+	testFile(t, 9, 10)
+	testFile(t, 10, 10)
+	testFile(t, 11, 10)
+}
+
+func testFile(t *testing.T, i, repeat int) {
+	if err := downloadBenchmarkFiles(t, testFiles[i].filename); err != nil {
+		t.Skipf("failed to download testdata: %s", err)
+	}
+	if testing.Short() {
+		repeat = 0
+	}
+	t.Run(fmt.Sprint(i, "-", testFiles[i].filename), func(t *testing.T) {
+		bDir := filepath.FromSlash(*benchdataDir)
+		data := readFile(t, filepath.Join(bDir, testFiles[i].filename))
+		oSize := len(data)
+		for i := 0; i < repeat; i++ {
+			data = append(data, data[:oSize]...)
+		}
+		t.Run("s2", func(t *testing.T) {
+			testWriterRoundtrip(t, data)
+		})
+		t.Run("block", func(t *testing.T) {
+			d := data
+			if len(d) > maxBlockSize {
+				d = d[:maxBlockSize]
+			}
+			testBlockRoundtrip(t, d)
+		})
+		t.Run("snappy", func(t *testing.T) {
+			testSnappyDecode(t, data)
+		})
+	})
 }
 
 // Naming convention is kept similar to what snappy's C++ implementation uses.

@@ -80,6 +80,28 @@ func emitCopy(dst []byte, offset, length int) int {
 	// 3+3 bytes). The magic 4 in the 64±4 is because the minimum length for a
 	// tagCopy1 op is 4 bytes, which is why a length 3 copy has to be an
 	// encodes-as-3-bytes tagCopy2 instead of an encodes-as-2-bytes tagCopy1.
+	if offset >= 65536 {
+		for length >= 64 {
+			// Emit a length 64 copy, encoded as 5 bytes.
+			dst[i+0] = 63<<2 | tagCopy4
+			dst[i+1] = uint8(offset)
+			dst[i+2] = uint8(offset >> 8)
+			dst[i+3] = uint8(offset >> 16)
+			dst[i+4] = uint8(offset >> 24)
+			i += 5
+			length -= 64
+		}
+		if length == 0 {
+			return i
+		}
+		// Emit a length 64 copy, encoded as 5 bytes.
+		dst[i+0] = uint8(length-1)<<2 | tagCopy4
+		dst[i+1] = uint8(offset)
+		dst[i+2] = uint8(offset >> 8)
+		dst[i+3] = uint8(offset >> 16)
+		dst[i+4] = uint8(offset >> 24)
+		return i + 5
+	}
 	for length >= 68 {
 		// Emit a length 64 copy, encoded as 3 bytes.
 		dst[i+0] = 63<<2 | tagCopy2
@@ -110,13 +132,19 @@ func emitCopy(dst []byte, offset, length int) int {
 }
 
 // emitRepeat writes a copy chunk and returns the number of bytes written.
-func emitRepeat(dst []byte, length int) int {
+func emitRepeat(dst []byte, offset, length int) int {
 	i := 0
 	// Repeat offset, make length cheaper
 	length -= 4
 	if length <= 4 {
 		dst[i+0] = uint8(length)<<2 | tagCopy1
 		dst[i+1] = 0
+		return i + 2
+	}
+	if length < 8 && offset < 2048 {
+		// Encode WITH offset
+		dst[i+0] = uint8(offset>>8)<<5 | uint8(length)<<2 | tagCopy1
+		dst[i+1] = uint8(offset)
 		return i + 2
 	}
 	if length < 1<<8 {
@@ -235,8 +263,8 @@ func encodeBlock(dst, src []byte) (d int) {
 			table[nextHash&tableMask] = uint32(s)
 			nextHash = hash6(load64(src, nextS), tableBits)
 
-			// Check repeat - quite small gain.
-			if false && uint32(x>>8) == load32(src, s-repeat+1) && repeat > 0 {
+			// Check repeat.
+			if true && uint32(x>>8) == load32(src, s-repeat+1) && repeat > 0 {
 				base := s + 1
 				// Extend back
 				for i := base - repeat; base > nextEmit && src[i-1] == src[base-1]; {
@@ -256,13 +284,12 @@ func encodeBlock(dst, src []byte) (d int) {
 					candidate += 8
 				}
 
-				if false && nextS < s {
-					// worse
+				if true && nextS < s {
+					// tiny bit better
 					table[nextHash&tableMask] = uint32(nextS)
 				}
-				//add := emitRepeat(dst[d:], s-base)
-				add := emitCopy(dst[d:], repeat, s-base)
-				//fmt.Println("repeat, len", s-base, "emitted", base-nextEmit, "added:", add)
+				add := emitRepeat(dst[d:], repeat, s-base)
+				// same as `add := emitCopy(dst[d:], repeat, s-base)` but skipping offset.
 				d += add
 				nextEmit = s
 				if s >= sLimit {
@@ -270,7 +297,7 @@ func encodeBlock(dst, src []byte) (d int) {
 				}
 
 				if false {
-					// worse:
+					// usually not worth it:
 					x := load64(src, s-2)
 					hm2 := hash6(x, tableBits)
 					hm1 := hash6(x>>8, tableBits)
@@ -330,6 +357,7 @@ func encodeBlock(dst, src []byte) (d int) {
 
 			d += emitCopy(dst[d:], repeat, s-base)
 			if false {
+				// Validate match.
 				a := src[base:s]
 				b := src[base-repeat : base-repeat+(s-base)]
 				if !bytes.Equal(a, b) {

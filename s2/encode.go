@@ -107,30 +107,14 @@ func MaxEncodedLen(srcLen int) int {
 
 var errClosed = errors.New("snappy: Writer is closed")
 
-// NewWriter returns a new Writer that compresses to w.
-//
-// The Writer returned does not buffer writes. There is no need to Flush or
-// Close such a Writer.
-//
-// Deprecated: the Writer returned is not suitable for many small writes, only
-// for few large writes. Use NewBufferedWriter instead, which is efficient
-// regardless of the frequency and shape of the writes, and remember to Close
-// that Writer when done.
-func NewWriter(w io.Writer) *Writer {
-	return &Writer{
-		w:    w,
-		obuf: make([]byte, obufLen),
-	}
-}
-
-// NewBufferedWriter returns a new Writer that compresses to w, using the
+// NewWriter returns a new Writer that compresses to w, using the
 // framing format described at
 // https://github.com/google/snappy/blob/master/framing_format.txt
 //
 // The Writer returned buffers writes. Users must call Close to guarantee all
 // data has been forwarded to the underlying io.Writer. They may also call
 // Flush zero or more times before calling Close.
-func NewBufferedWriter(w io.Writer) *Writer {
+func NewWriter(w io.Writer) *Writer {
 	return &Writer{
 		w:    w,
 		ibuf: make([]byte, 0, maxBlockSize),
@@ -162,22 +146,12 @@ type Writer struct {
 func (w *Writer) Reset(writer io.Writer) {
 	w.w = writer
 	w.err = nil
-	if w.ibuf != nil {
-		w.ibuf = w.ibuf[:0]
-	}
+	w.ibuf = w.ibuf[:0]
 	w.wroteStreamHeader = false
 }
 
 // Write satisfies the io.Writer interface.
 func (w *Writer) Write(p []byte) (nRet int, errRet error) {
-	if w.ibuf == nil {
-		// Do not buffer incoming bytes. This does not perform or compress well
-		// if the caller of Writer.Write writes many small slices. This
-		// behavior is therefore deprecated, but still supported for backwards
-		// compatibility with code that doesn't explicitly Flush or Close.
-		return w.write(p)
-	}
-
 	// The remainder of this method is based on bufio.Writer.Write from the
 	// standard library.
 
