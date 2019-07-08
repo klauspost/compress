@@ -179,6 +179,47 @@ func (w *Writer) Write(p []byte) (nRet int, errRet error) {
 	return nRet, nil
 }
 
+// ReadFrom implements the io.ReaderFrom interface.
+// Using this is typically more efficient since it avoids a memory copy.
+// ReadFrom reads data from r until EOF or error.
+// The return value n is the number of bytes read.
+// Any error except io.EOF encountered during the read is also returned.
+func (w *Writer) ReadFrom(r io.Reader) (n int64, err error) {
+	w.ibuf = w.ibuf[0:cap(w.ibuf)]
+	for {
+		n2, err := io.ReadFull(r, w.ibuf)
+		if err != nil {
+			if err == io.ErrUnexpectedEOF {
+				err = io.EOF
+			}
+			if err != io.EOF {
+				w.err = err
+				break
+			}
+		}
+		if n2 == 0 {
+			break
+		}
+		n += int64(n2)
+		w.ibuf = w.ibuf[:n2]
+		n3, err2 := w.write(w.ibuf)
+		if err2 != nil {
+			w.err = err2
+			break
+		}
+		if n3 != n2 {
+			w.err = errors.New("internal error: size uncompressed size mismatch")
+			break
+		}
+		if err != nil {
+			// We got EOF and wrote everything
+			break
+		}
+	}
+	w.ibuf = w.ibuf[:0]
+	return n, w.err
+}
+
 func (w *Writer) write(p []byte) (nRet int, errRet error) {
 	if w.err != nil {
 		return 0, w.err

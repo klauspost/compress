@@ -245,3 +245,158 @@ func (r *Reader) Read(p []byte) (int, error) {
 		}
 	}
 }
+
+// Skip will skip n bytes forward in the decompressed output.
+// For larger skips this consumes less CPU and is faster than reading output and discarding it.
+// CRC is not checked on skipped compressed blocks.
+// io.ErrUnexpectedEOF is returned if the stream ends before all bytes have been skipped.
+// If a decoding error is encountered subsequent calls to Read will also fail.
+func (r *Reader) Skip(n int64) error {
+	if n < 0 {
+		return errors.New("attempted negative skip")
+	}
+	if r.err != nil {
+		return r.err
+	}
+	if r.i < r.j {
+		// Skip in buffer.
+		// decoded[i:j] contains decoded bytes that have not yet been passed on.
+		left := int64(r.j - r.i)
+		if left >= n {
+			r.i += int(n)
+			return nil
+		}
+		r.i, r.j = 0, 0
+	}
+	// Buffer empty.
+	for n > 0 {
+		if !r.readFull(r.buf[:4], true) {
+			if r.err == io.EOF {
+				r.err = io.ErrUnexpectedEOF
+			}
+			return r.err
+		}
+		chunkType := r.buf[0]
+		if !r.readHeader {
+			if chunkType != chunkTypeStreamIdentifier {
+				r.err = ErrCorrupt
+				return r.err
+			}
+			r.readHeader = true
+		}
+		chunkLen := int(r.buf[1]) | int(r.buf[2])<<8 | int(r.buf[3])<<16
+		if chunkLen > len(r.buf) {
+			r.err = ErrUnsupported
+			return r.err
+		}
+
+		// The chunk types are specified at
+		// https://github.com/google/snappy/blob/master/framing_format.txt
+		switch chunkType {
+		case chunkTypeCompressedData:
+			// Section 4.2. Compressed data (chunk type 0x00).
+			if chunkLen < checksumSize {
+				r.err = ErrCorrupt
+				return r.err
+			}
+			buf := r.buf[:chunkLen]
+			if !r.readFull(buf, false) {
+				return r.err
+			}
+			checksum := uint32(buf[0]) | uint32(buf[1])<<8 | uint32(buf[2])<<16 | uint32(buf[3])<<24
+			buf = buf[checksumSize:]
+
+			dLen, err := DecodedLen(buf)
+			if err != nil {
+				r.err = err
+				return r.err
+			}
+			if dLen > len(r.decoded) {
+				r.err = ErrCorrupt
+				return r.err
+			}
+			if int64(dLen) > n {
+				if _, err := Decode(r.decoded, buf); err != nil {
+					r.err = err
+					return r.err
+				}
+				if crc(r.decoded[:dLen]) != checksum {
+					r.err = ErrCorrupt
+					return r.err
+				}
+			} else {
+				n -= int64(dLen)
+			}
+			// We should now have enough data.
+			// Skip partial block, should only recurse once.
+			r.i, r.j = 0, dLen
+			return r.Skip(n)
+		case chunkTypeUncompressedData:
+			// Section 4.3. Uncompressed data (chunk type 0x01).
+			if chunkLen < checksumSize {
+				r.err = ErrCorrupt
+				return r.err
+			}
+			buf := r.buf[:checksumSize]
+			if !r.readFull(buf, false) {
+				return r.err
+			}
+			checksum := uint32(buf[0]) | uint32(buf[1])<<8 | uint32(buf[2])<<16 | uint32(buf[3])<<24
+			// Read directly into r.decoded instead of via r.buf.
+			n := chunkLen - checksumSize
+			if n > len(r.decoded) {
+				r.err = ErrCorrupt
+				return r.err
+			}
+			if !r.readFull(r.decoded[:n], false) {
+				return r.err
+			}
+			if crc(r.decoded[:n]) != checksum {
+				r.err = ErrCorrupt
+				return r.err
+			}
+			r.i, r.j = 0, n
+			continue
+
+		case chunkTypeStreamIdentifier:
+			// Section 4.1. Stream identifier (chunk type 0xff).
+			if chunkLen != len(magicBody) {
+				r.err = ErrCorrupt
+				return r.err
+			}
+			if !r.readFull(r.buf[:len(magicBody)], false) {
+				return r.err
+			}
+			ok := true
+			for i := 0; i < len(magicBody); i++ {
+				if r.buf[i] != magicBody[i] {
+					ok = false
+					break
+				}
+			}
+			if !ok {
+				for i := 0; i < len(magicBodySnappy); i++ {
+					if r.buf[i] != magicBodySnappy[i] {
+						r.err = ErrCorrupt
+						return r.err
+					}
+				}
+			}
+			continue
+		}
+
+		if chunkType <= 0x7f {
+			// Section 4.5. Reserved unskippable chunks (chunk types 0x02-0x7f).
+			r.err = ErrUnsupported
+			return r.err
+		}
+		// Section 4.4 Padding (chunk type 0xfe).
+		// Section 4.6. Reserved skippable chunks (chunk types 0x80-0xfd).
+		if !r.readFull(r.buf[:chunkLen], false) {
+			return r.err
+		}
+
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
