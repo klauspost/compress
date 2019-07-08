@@ -1266,7 +1266,7 @@ var testFiles = []struct {
 	{"html", "html", 0},
 	{"urls", "urls.10K", 0},
 	{"jpg", "fireworks.jpeg", 0},
-	{"jpg_200", "fireworks.jpeg", 200},
+	{"jpg_200", "fireworks.jpeg", 0},
 	{"pdf", "paper-100k.pdf", 0},
 	{"html4", "html_x_4", 0},
 	{"txt1", "alice29.txt", 0},
