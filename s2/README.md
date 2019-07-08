@@ -51,9 +51,7 @@ Compression is increased, mostly around 5-20% and the throughput is typically 25
 
 There is a good speedup across the board.
 
-Machine generated data gets by far the biggest compression boost, with size reduction up to 39% compared to Snappy.
-
-There is a small compression loss on the "backup" set.
+Machine generated data gets by far the biggest compression boost, with size being being reduced by up to 45% of Snappy size.
 
 It would be very feasible to add faster/better compression modes to S2, but the current settings are a good replacement for Snappy.
 
