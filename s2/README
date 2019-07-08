@@ -39,15 +39,15 @@ Only if your decompression platform is heavily memory limited, will there be a d
 
 Compression is increased, mostly around 5-20% and the throughput is typically 25-40% increased compared to the non-assembly Go implementation.
 
-| File                 | S2 Througput | S2 Size Smaller |
+| File                 | S2 Througput | S2 % smaller |
 |----------------------|--------------|-----------------|
-| [consensus.db.10gb](https://files.klauspost.com/compress/consensus.db.10gb.zst)    | 1.48x        | 16.61%          |
-| [enwik9](http://mattmahoney.net/dc/textdata.html)               | 1.41x        | 2.77%           |
-| [gob-stream](https://files.klauspost.com/compress/gob-stream.7z)           | 1.68x        | 24.16%          |
-| [adresser.json](https://files.klauspost.com/compress/adresser.json.zst)        | 2.07x        | 39.15%          |
-| [rawstudio-mint14.tar](https://files.klauspost.com/compress/rawstudio-mint14.7z) | 1.41x        | 4.45%           |
-| [10gb.tar](http://mattmahoney.net/dc/10gb.html)             | 1.24x        | -0.35%          |
-| [silesia.tar](http://sun.aei.polsl.pl/~sdeor/corpus/silesia.zip)          | 1.38x        | 3.36%           |
+| [consensus.db.10gb](https://files.klauspost.com/compress/consensus.db.10gb.zst)    | 1.48x        | 14.83%          |
+| [enwik9](http://mattmahoney.net/dc/textdata.html)               | 1.41x        | 2.79%           |
+| [gob-stream](https://files.klauspost.com/compress/gob-stream.7z)           | 1.68x        | 23.08%          |
+| [adresser.json](https://files.klauspost.com/compress/adresser.json.zst)        | 2.18x        | 45.58%          |
+| [rawstudio-mint14.tar](https://files.klauspost.com/compress/rawstudio-mint14.7z) | 1.41x        | 5.67%           |
+| [10gb.tar](http://mattmahoney.net/dc/10gb.html)             | 1.24x        | 0.10%          |
+| [silesia.tar](http://sun.aei.polsl.pl/~sdeor/corpus/silesia.zip)          | 1.38x        | 3.71%           |
 
 There is a good speedup across the board.
 
