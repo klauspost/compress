@@ -103,8 +103,15 @@ func s2Decode(dst, src []byte) int {
 		if offset <= 0 || d < offset || length > len(dst)-d {
 			return decodeErrCodeCorrupt
 		}
-		// Copy from an earlier sub-slice of dst to a later sub-slice. Unlike
-		// the built-in copy function, this byte-by-byte copy always runs
+		// Copy from an earlier sub-slice of dst to a later sub-slice.
+		// If no overlap, use the built-in copy:
+		if offset > length {
+			copy(dst[d:d+length], dst[d-offset:])
+			d += length
+			continue
+		}
+
+		// Unlike the built-in copy function, this byte-by-byte copy always runs
 		// forwards, even if the slices overlap. Conceptually, this is:
 		//
 		// d += forwardCopy(dst[d:d+length], dst[d-offset:])
