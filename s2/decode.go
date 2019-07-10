@@ -13,13 +13,13 @@ import (
 
 var (
 	// ErrCorrupt reports that the input is invalid.
-	ErrCorrupt = errors.New("snappy: corrupt input")
+	ErrCorrupt = errors.New("s2: corrupt input")
 	// ErrTooLarge reports that the uncompressed length is too large.
-	ErrTooLarge = errors.New("snappy: decoded block is too large")
+	ErrTooLarge = errors.New("s2: decoded block is too large")
 	// ErrUnsupported reports that the input isn't supported.
-	ErrUnsupported = errors.New("snappy: unsupported input")
+	ErrUnsupported = errors.New("s2: unsupported input")
 
-	errUnsupportedLiteralLength = errors.New("snappy: unsupported literal length")
+	errUnsupportedLiteralLength = errors.New("s2: unsupported literal length")
 )
 
 // DecodedLen returns the length of the decoded block.

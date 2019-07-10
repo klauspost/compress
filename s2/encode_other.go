@@ -29,7 +29,6 @@ func load64(b []byte, i int) uint64 {
 //	dst is long enough to hold the encoded bytes
 //	1 <= len(lit) && len(lit) <= 65536
 func emitLiteral(dst, lit []byte) int {
-	//fmt.Println("emit lits:", len(lit)-1)
 	if len(lit) == 0 {
 		return 0
 	}
@@ -154,14 +153,14 @@ func emitRepeat(dst []byte, offset, length int) int {
 		dst[i+1] = uint8(offset)
 		return i + 2
 	}
-	if length < 1<<8 {
+	if length < (1<<8)+4 {
 		length -= 4
 		dst[i+0] = 5<<2 | tagCopy1
 		dst[i+1] = 0
 		dst[i+2] = uint8(length)
 		return i + 3
 	}
-	if length < (1 << 16) {
+	if length < (1<<16)+(1<<8) {
 		length -= 1 << 8
 		dst[i+0] = 6<<2 | tagCopy1
 		dst[i+1] = 0

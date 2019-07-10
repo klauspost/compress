@@ -349,7 +349,7 @@ repeatLen2:
 
 	// length = uint32(src[s-2]) | (uint32(src[s-1])<<8) + (1 << 8)
 	MOVWQZX -2(R_SRC), R_LEN
-	ADDL    $256, R_LEN
+	ADDL    $260, R_LEN
 	JMP     doCopyRepeat
 
 repeatLen3:
@@ -365,7 +365,7 @@ repeatLen3:
 	MOVWLZX -3(R_SRC), R_LEN
 	SHLL    $16, R_TMP0
 	ORL     R_TMP0, R_LEN
-	ADDL    $65536, R_LEN
+	ADDL    $65540, R_LEN
 	JMP     doCopyRepeat
 
 doCopy:
@@ -482,6 +482,9 @@ slowForwardCopy:
 	CMPQ R_LEN, R_TMP2
 	JGT  verySlowForwardCopy
 
+	// We want to keep the offset, so we use R_TMP2 from here.
+	MOVQ R_OFF, R_TMP2
+
 makeOffsetAtLeast8:
 	// !!! As above, expand the pattern so that offset >= 8 and we can use
 	// 8-byte load/stores.
@@ -494,13 +497,13 @@ makeOffsetAtLeast8:
 	//   // The two previous lines together means that d-offset, and therefore
 	//   // R_TMP3, is unchanged.
 	// }
-	CMPQ R_OFF, $8
+	CMPQ R_TMP2, $8
 	JGE  fixUpSlowForwardCopy
 	MOVQ (R_TMP3), R_TMP1
 	MOVQ R_TMP1, (R_DST)
-	SUBQ R_OFF, R_LEN
-	ADDQ R_OFF, R_DST
-	ADDQ R_OFF, R_OFF
+	SUBQ R_TMP2, R_LEN
+	ADDQ R_TMP2, R_DST
+	ADDQ R_TMP2, R_TMP2
 	JMP  makeOffsetAtLeast8
 
 fixUpSlowForwardCopy:

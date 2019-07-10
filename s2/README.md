@@ -24,8 +24,8 @@ The length is specified by reading the 3-bit length specified in the tag and dec
 | 3      | 7                    |
 | 4      | 8                    |
 | 5      | 8 + read 1 byte      |
-| 6      | 256 + read 2 bytes   |
-| 7      | 65536 + read 3 bytes |
+| 6      | 260 + read 2 bytes   |
+| 7      | 65540 + read 3 bytes |
 
 This allows any repeat offset + length to be represented by 2 to 5 bytes.
 
