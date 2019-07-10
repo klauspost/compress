@@ -115,9 +115,16 @@ func s2Decode(dst, src []byte) int {
 		// forwards, even if the slices overlap. Conceptually, this is:
 		//
 		// d += forwardCopy(dst[d:d+length], dst[d-offset:])
-		for end := d + length; d != end; d++ {
-			dst[d] = dst[d-offset]
+		//
+		// We align the slices into a and b and show the compiler they are the same size.
+		// This allows the loop to run without bounds checks.
+		a := dst[d : d+length]
+		b := dst[d-offset:]
+		b = b[:len(a)]
+		for i := range a {
+			a[i] = b[i]
 		}
+		d += length
 	}
 	if d != len(dst) {
 		return decodeErrCodeCorrupt
