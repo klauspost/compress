@@ -259,7 +259,8 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 	if d.current.err == ErrDecoderClosed {
 		return dst, ErrDecoderClosed
 	}
-	//println(len(d.frames), len(d.decoders), d.current)
+
+	// Grab a block decoder and frame decoder.
 	block, frame := <-d.decoders, <-d.frames
 	defer func() {
 		d.decoders <- block
@@ -267,9 +268,11 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 		d.frames <- frame
 	}()
 	if cap(dst) == 0 {
-		// Allocate 1MB by default.
+		// Allocate 1MB by default if nothing is provided.
 		dst = make([]byte, 0, 1<<20)
 	}
+
+	// Allocation here:
 	br := byteBuf(input)
 	for {
 		err := frame.reset(&br)
