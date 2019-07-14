@@ -127,6 +127,9 @@ func (d *Decoder) Read(p []byte) (int, error) {
 		}
 	}
 	if len(d.current.b) > 0 {
+		if debug {
+			println("returning", n, "still bytes left:", len(d.current.b))
+		}
 		// Only return error at end of block
 		return n, nil
 	}
@@ -159,6 +162,9 @@ func (d *Decoder) Reset(r io.Reader) error {
 
 	// If bytes buffer and < 1MB, do sync decoding anyway.
 	if bb, ok := r.(*bytes.Buffer); ok && bb.Len() < 1<<20 {
+		if debug {
+			println("*bytes.Buffer detected, doing sync decode, len:", bb.Len())
+		}
 		b := bb.Bytes()
 		dst, err := d.DecodeAll(b, nil)
 		if err == nil {
@@ -167,6 +173,9 @@ func (d *Decoder) Reset(r io.Reader) error {
 		d.current.b = dst
 		d.current.err = err
 		d.current.flushed = true
+		if debug {
+			println("sync decode to ", len(dst), "bytes, err:", err)
+		}
 		return nil
 	}
 
@@ -193,7 +202,9 @@ func (d *Decoder) drainOutput() {
 		d.current.cancel = nil
 	}
 	if d.current.d != nil {
-		println("re-adding current decoder", d.current.d, len(d.decoders))
+		if debug {
+			printf("re-adding current decoder %p, decoders: %d", d.current.d, len(d.decoders))
+		}
 		d.decoders <- d.current.d
 		d.current.d = nil
 		d.current.b = nil
@@ -206,7 +217,9 @@ func (d *Decoder) drainOutput() {
 		select {
 		case v := <-d.current.output:
 			if v.d != nil {
-				println("got decoder", v.d)
+				if debug {
+					printf("re-adding decoder %p", v.d)
+				}
 				d.decoders <- v.d
 			}
 			if v.err == errEndOfStream {
@@ -259,17 +272,23 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 	if d.current.err == ErrDecoderClosed {
 		return dst, ErrDecoderClosed
 	}
-	//println(len(d.frames), len(d.decoders), d.current)
+
+	// Grab a block decoder and frame decoder.
 	block, frame := <-d.decoders, <-d.frames
 	defer func() {
+		if debug {
+			printf("re-adding decoder: %p", block)
+		}
 		d.decoders <- block
 		frame.rawInput = nil
 		d.frames <- frame
 	}()
 	if cap(dst) == 0 {
-		// Allocate 1MB by default.
+		// Allocate 1MB by default if nothing is provided.
 		dst = make([]byte, 0, 1<<20)
 	}
+
+	// Allocation here:
 	br := byteBuf(input)
 	for {
 		err := frame.reset(&br)
@@ -305,6 +324,9 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 // If an error occurs d.err will be set.
 func (d *Decoder) nextBlock() {
 	if d.current.d != nil {
+		if debug {
+			printf("re-adding current decoder %p", d.current.d)
+		}
 		d.decoders <- d.current.d
 		d.current.d = nil
 	}
@@ -377,6 +399,9 @@ func (d *Decoder) startStreamDecoder(inStream chan decodeStream) {
 	defer d.streamWg.Done()
 	frame := newFrameDec(d.o)
 	for stream := range inStream {
+		if debug {
+			println("got new stream")
+		}
 		br := readerWrapper{r: stream.r}
 	decodeStream:
 		for {
