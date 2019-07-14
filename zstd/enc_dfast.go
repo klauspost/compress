@@ -345,38 +345,38 @@ encodeLoop:
 			break encodeLoop
 		}
 
-		// Index match start + 2 and end - 2
-		index0 := s - l + 2
-		index1 := s - 2
-		if l == 4 {
-			// if l is 4, we would check the same place twice, so index s-1 instead.
-			index1++
-		}
-
-		cv0 := load6432(src, index0)
-		cv1 := load6432(src, index1)
-		entry0 := tableEntry{offset: index0 + e.cur, val: uint32(cv0)}
-		entry1 := tableEntry{offset: index1 + e.cur, val: uint32(cv1)}
-		e.table[hash5(cv0, dFastShortTableBits)&dFastShortTableMask] = entry0
-		e.longTable[hash8(cv0, dFastLongTableBits)&dFastLongTableMask] = entry0
-		e.table[hash5(cv1, dFastShortTableBits)&dFastShortTableMask] = entry1
-		e.longTable[hash8(cv1, dFastLongTableBits)&dFastLongTableMask] = entry1
+		cv = load6432(src, s-2)
+		entryL := tableEntry{offset: s - 2 + e.cur, val: uint32(cv)}
+		entryS := tableEntry{offset: s - 1 + e.cur, val: uint32(cv >> 8)}
+		e.longTable[hash8(cv, dFastLongTableBits)&dFastLongTableMask] = entryL
+		e.table[hash5(cv>>8, dFastShortTableBits)&dFastShortTableMask] = entryS
+		nextHashS = hash5(cv>>16, dFastShortTableBits)
 
 		cv = load6432(src, s)
-		nextHashS = hash5(cv, dFastShortTableBits)
 		nextHashL = hash8(cv, dFastLongTableBits)
+		if !canRepeat {
+			continue
+		}
 
 		// Check offset 2
-		if o2 := s - offset2; canRepeat && o2 > 0 && load3232(src, o2) == uint32(cv) {
+		for {
+			o2 := s - offset2
+			if load3232(src, o2) != uint32(cv) {
+				// Do regular search
+				break
+			}
+
 			// We have at least 4 byte match.
 			// No need to check backwards. We come straight from a match
 			l := 4 + e.matchlen(s+4, o2+4, src)
+
 			// Store this, since we have it.
 			entry := tableEntry{offset: s + e.cur, val: uint32(cv)}
 			e.longTable[nextHashL&dFastLongTableMask] = entry
 			e.table[nextHashS&dFastShortTableMask] = entry
 			seq.matchLen = uint32(l) - zstdMinMatch
 			seq.litLen = 0
+
 			// Since litlen is always 0, this is offset 1.
 			seq.offset = 1
 			s += l
@@ -389,9 +389,9 @@ encodeLoop:
 			// Swap offset 1 and 2.
 			offset1, offset2 = offset2, offset1
 			if s >= sLimit {
+				// Finished
 				break encodeLoop
 			}
-			// Prepare next loop.
 			cv = load6432(src, s)
 			nextHashS = hash5(cv, dFastShortTableBits)
 			nextHashL = hash8(cv, dFastLongTableBits)
