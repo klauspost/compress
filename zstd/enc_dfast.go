@@ -345,15 +345,30 @@ encodeLoop:
 			break encodeLoop
 		}
 
-		cv = load6432(src, s-2)
-		entryL := tableEntry{offset: s - 2 + e.cur, val: uint32(cv)}
-		entryS := tableEntry{offset: s - 1 + e.cur, val: uint32(cv >> 8)}
-		e.longTable[hash8(cv, dFastLongTableBits)&dFastLongTableMask] = entryL
-		e.table[hash5(cv>>8, dFastShortTableBits)&dFastShortTableMask] = entryS
-		nextHashS = hash5(cv>>16, dFastShortTableBits)
+		// Index match start+1 (long) and start+2 (short)
+		index0 := s - l + 1
+		// Index match end-2 (long) and end-1 (short)
+		index1 := s - 2
+
+		cv0 := load6432(src, index0)
+		cv1 := load6432(src, index1)
+		te0 := tableEntry{offset: index0 + e.cur, val: uint32(cv0)}
+		te1 := tableEntry{offset: index1 + e.cur, val: uint32(cv1)}
+		e.longTable[hash8(cv0, dFastLongTableBits)&dFastLongTableMask] = te0
+		e.longTable[hash8(cv1, dFastLongTableBits)&dFastLongTableMask] = te1
+		cv0 >>= 8
+		cv1 >>= 8
+		te0.offset++
+		te1.offset++
+		te0.val = uint32(cv0)
+		te1.val = uint32(cv1)
+		e.table[hash5(cv0, dFastShortTableBits)&dFastShortTableMask] = te0
+		e.table[hash5(cv1, dFastShortTableBits)&dFastShortTableMask] = te1
 
 		cv = load6432(src, s)
+		nextHashS = hash5(cv1>>8, dFastShortTableBits)
 		nextHashL = hash8(cv, dFastLongTableBits)
+
 		if !canRepeat {
 			continue
 		}
