@@ -63,7 +63,8 @@ var (
 
 type blockDec struct {
 	// Raw source data of the block.
-	data []byte
+	data        []byte
+	dataStorage []byte
 
 	// Destination of the decoded data.
 	dst []byte
@@ -145,18 +146,18 @@ func (b *blockDec) reset(br byteBuffer, windowSize uint64) error {
 	}
 
 	// Read block data.
-	if cap(b.data) < cSize {
+	if cap(b.dataStorage) < cSize {
 		if b.lowMem {
-			b.data = make([]byte, 0, cSize)
+			b.dataStorage = make([]byte, 0, cSize)
 		} else {
-			b.data = make([]byte, 0, maxBlockSize)
+			b.dataStorage = make([]byte, 0, maxBlockSize)
 		}
 	}
 	if cap(b.dst) <= maxBlockSize {
 		b.dst = make([]byte, 0, maxBlockSize+1)
 	}
 	var err error
-	b.data, err = br.readBig(cSize, b.data[:0])
+	b.data, err = br.readBig(cSize, b.dataStorage)
 	if err != nil {
 		if debug {
 			println("Reading block:", err)

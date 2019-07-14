@@ -232,7 +232,9 @@ func (d *frameDec) reset(br byteBuffer) error {
 
 // next will start decoding the next block from stream.
 func (d *frameDec) next(block *blockDec) error {
-	println("decoding new block")
+	if debug {
+		printf("decoding new block %p:%p", block, block.data)
+	}
 	err := block.reset(d.rawInput, d.WindowSize)
 	if err != nil {
 		println("block error:", err)

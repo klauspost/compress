@@ -12,6 +12,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -410,15 +411,86 @@ func TestDecoderMultiFrame(t *testing.T) {
 			}
 			// 2x
 			in = append(in, in...)
-			// 4x
-			in = append(in, in...)
-			// 8x
-			in = append(in, in...)
+			if !testing.Short() {
+				// 4x
+				in = append(in, in...)
+				// 8x
+				in = append(in, in...)
+			}
 			err = dec.Reset(bytes.NewBuffer(in))
 			if err != nil {
 				t.Fatal(err)
 			}
 			got, err := ioutil.ReadAll(dec)
+			err = dec.Reset(bytes.NewBuffer(in))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got2, err := ioutil.ReadAll(dec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, got2) {
+				t.Error("results mismatch")
+			}
+		})
+	}
+}
+
+func TestDecoderMultiFrameReset(t *testing.T) {
+	fn := "testdata/benchdecoder.zip"
+	data, err := ioutil.ReadFile(fn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+		return
+	}
+	rng := rand.New(rand.NewSource(1337))
+	defer dec.Close()
+	for _, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, ".zst") {
+			continue
+		}
+		t.Run(tt.Name, func(t *testing.T) {
+			r, err := tt.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer r.Close()
+			in, err := ioutil.ReadAll(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// 2x
+			in = append(in, in...)
+			if !testing.Short() {
+				// 4x
+				in = append(in, in...)
+				// 8x
+				in = append(in, in...)
+			}
+			err = dec.Reset(bytes.NewBuffer(in))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := ioutil.ReadAll(dec)
+			err = dec.Reset(bytes.NewBuffer(in))
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Read a random number of bytes
+			tmp := make([]byte, rng.Intn(len(got)))
+			_, err = io.ReadAtLeast(dec, tmp, len(tmp))
+			if err != nil {
+				t.Fatal(err)
+			}
 			err = dec.Reset(bytes.NewBuffer(in))
 			if err != nil {
 				t.Fatal(err)
