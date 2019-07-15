@@ -13,6 +13,7 @@ It offers slightly better compression at lower compression settings, and up to 3
 [![Sourcegraph Badge](https://sourcegraph.com/github.com/klauspost/compress/-/badge.svg)](https://sourcegraph.com/github.com/klauspost/compress?badge)
 
 # changelog
+* July 15, 2019 (v1.7.3): Minor speedup/compression increase in default zstd encoder.
 * July 14, 2019: zstd decoder: Fix decompression error on multiple uses with mixed content.
 * July 7, 2019 (v1.7.2): Snappy update, zstd decoder potential race fix.
 * June 17, 2019: zstd decompression bugfix.
