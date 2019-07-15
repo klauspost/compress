@@ -211,6 +211,7 @@ func (e *Encoder) nextBlock(final bool) error {
 			s.wWg.Wait()
 			_, s.err = s.w.Write(blk.output)
 			s.nWritten += int64(len(blk.output))
+			s.eofWritten = true
 		}
 		return s.err
 	}
