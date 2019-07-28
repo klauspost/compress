@@ -281,19 +281,14 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 		}
 		d.decoders <- block
 		frame.rawInput = nil
+		frame.bBuf = nil
 		d.frames <- frame
 	}()
 	if cap(dst) == 0 {
 		// Allocate 1MB by default if nothing is provided.
 		dst = make([]byte, 0, 1<<20)
 	}
-
-	// Allocation here:
-	br := frame.bBuf
-	if br == nil {
-		br = &byteBuf{}
-		frame.bBuf = br
-	}
+	br := &frame.bBuf
 	*br = input
 
 	for {
