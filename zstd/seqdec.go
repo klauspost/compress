@@ -256,22 +256,19 @@ func (s *sequenceDecs) nextFast(br *bitReader, llState, mlState, ofState decSymb
 	mo, moB := ofState.final()
 
 	// extra bits are stored in reverse order.
-	a := moB + mlB + llB
-	if a > 0 {
+	br.fillFast()
+	mo += br.getBits(moB)
+	if s.maxBits > 32 {
 		br.fillFast()
-		mo += br.getBits(moB)
-		if a > 32 {
-			br.fillFast()
-		}
-		ml += br.getBits(mlB)
-		ll += br.getBits(llB)
+	}
+	ml += br.getBits(mlB)
+	ll += br.getBits(llB)
 
-		if moB > 1 {
-			s.prevOffset[2] = s.prevOffset[1]
-			s.prevOffset[1] = s.prevOffset[0]
-			s.prevOffset[0] = mo
-			return
-		}
+	if moB > 1 {
+		s.prevOffset[2] = s.prevOffset[1]
+		s.prevOffset[1] = s.prevOffset[0]
+		s.prevOffset[0] = mo
+		return
 	}
 	// mo = s.adjustOffset(mo, ll, moB)
 	// Inlined for rather big speedup
