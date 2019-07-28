@@ -289,9 +289,15 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 	}
 
 	// Allocation here:
-	br := byteBuf(input)
+	br := frame.bBuf
+	if br == nil {
+		br = &byteBuf{}
+		frame.bBuf = br
+	}
+	*br = input
+
 	for {
-		err := frame.reset(&br)
+		err := frame.reset(br)
 		if err == io.EOF {
 			return dst, nil
 		}
@@ -313,7 +319,7 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 		if err != nil {
 			return dst, err
 		}
-		if len(br) == 0 {
+		if len(*br) == 0 {
 			break
 		}
 	}

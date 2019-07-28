@@ -39,6 +39,9 @@ type frameDec struct {
 
 	rawInput byteBuffer
 
+	// Optional byte buffer that can be reused.
+	bBuf *byteBuf
+
 	// asyncRunning indicates whether the async routine processes input on 'decoding'.
 	asyncRunning   bool
 	asyncRunningMu sync.Mutex
