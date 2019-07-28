@@ -39,7 +39,7 @@ type frameDec struct {
 
 	rawInput byteBuffer
 
-	// Optional byte buffer that can be reused.
+	// Byte buffer that can be reused for small input blocks.
 	bBuf byteBuf
 
 	// asyncRunning indicates whether the async routine processes input on 'decoding'.
