@@ -370,11 +370,13 @@ func encodeBlock(dst, src []byte) (d int) {
 			}
 
 			// Check for an immediate match, otherwise start search at s+1
-			x := load64(src, s)
-			currHash := hash6(x, tableBits)
+			x := load64(src, s-2)
+			m2Hash := hash6(x, tableBits)
+			currHash := hash6(x>>16, tableBits)
 			candidate = int(table[currHash])
+			table[m2Hash] = uint32(s - 2)
 			table[currHash] = uint32(s)
-			if uint32(x) != load32(src, candidate) {
+			if uint32(x>>16) != load32(src, candidate) {
 				cv = load64(src, s+1)
 				s++
 				break
