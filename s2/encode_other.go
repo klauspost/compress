@@ -237,9 +237,9 @@ func encodeBlock(dst, src []byte) (d int) {
 		h0 := hash6(x, tableBits)
 		h1 := hash6(x>>8, tableBits)
 		h2 := hash6(x>>16, tableBits)
-		table[h0&tableMask] = uint32(s)
-		table[h1&tableMask] = uint32(s + 1)
-		table[h2&tableMask] = uint32(s + 2)
+		table[h0] = uint32(s)
+		table[h1] = uint32(s + 1)
+		table[h2] = uint32(s + 2)
 	}
 
 	cv := load64(src, s)
@@ -255,15 +255,15 @@ func encodeBlock(dst, src []byte) (d int) {
 			}
 			hash0 := hash6(cv, tableBits)
 			hash1 := hash6(cv>>8, tableBits)
-			candidate = int(table[hash0&tableMask])
-			candidate2 := int(table[hash1&tableMask])
-			table[hash0&tableMask] = uint32(s)
-			table[hash1&tableMask] = uint32(s + 1)
+			candidate = int(table[hash0])
+			candidate2 := int(table[hash1])
+			table[hash0] = uint32(s)
+			table[hash1] = uint32(s + 1)
 			hash2 := hash6(cv>>16, tableBits)
 
 			// Check repeat at offset checkRep.
 			const checkRep = 3
-			if true && uint32(cv>>(checkRep*8)) == load32(src, s-repeat+checkRep) && repeat > 0 {
+			if uint32(cv>>(checkRep*8)) == load32(src, s-repeat+checkRep) && repeat > 0 {
 				base := s + checkRep
 				// Extend back
 				for i := base - repeat; base > nextEmit && src[i-1] == src[base-1]; {
@@ -299,14 +299,14 @@ func encodeBlock(dst, src []byte) (d int) {
 			if uint32(cv) == load32(src, candidate) {
 				break
 			}
-			candidate = int(table[hash2&tableMask])
+			candidate = int(table[hash2])
 			if uint32(cv>>8) == load32(src, candidate2) {
-				table[hash2&tableMask] = uint32(s + 2)
+				table[hash2] = uint32(s + 2)
 				candidate = candidate2
 				s++
 				break
 			}
-			table[hash2&tableMask] = uint32(s + 2)
+			table[hash2] = uint32(s + 2)
 			if uint32(cv>>16) == load32(src, candidate) {
 				s += 2
 				break
@@ -372,8 +372,8 @@ func encodeBlock(dst, src []byte) (d int) {
 			// Check for an immediate match, otherwise start search at s+1
 			x := load64(src, s)
 			currHash := hash6(x, tableBits)
-			candidate = int(table[currHash&tableMask])
-			table[currHash&tableMask] = uint32(s)
+			candidate = int(table[currHash])
+			table[currHash] = uint32(s)
 			if uint32(x) != load32(src, candidate) {
 				cv = load64(src, s+1)
 				s++
