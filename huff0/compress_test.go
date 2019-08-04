@@ -519,3 +519,63 @@ func BenchmarkCompress4XReusePrefer(b *testing.B) {
 		})
 	}
 }
+
+func BenchmarkCompress1XSizes(b *testing.B) {
+	test := testfiles[0]
+	sizes := []int{1e2, 2e2, 5e2, 1e3, 5e3, 1e4, 5e4}
+	for _, size := range sizes {
+		b.Run(test.name+"-"+fmt.Sprint(size), func(b *testing.B) {
+			var s Scratch
+			s.Reuse = ReusePolicyNone
+			buf0, err := test.fn()
+			if err != nil {
+				b.Fatal(err)
+			}
+			buf0 = buf0[:size]
+			_, re, err := Compress1X(buf0, &s)
+			if err != test.err1X {
+				b.Fatal("unexpected error:", err)
+			}
+			//b.Log("Size:", len(o))
+			b.ResetTimer()
+			b.ReportAllocs()
+			b.SetBytes(int64(len(buf0)))
+			for i := 0; i < b.N; i++ {
+				_, re, _ = Compress1X(buf0, &s)
+				if re {
+					b.Fatal("reused")
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkCompress4XSizes(b *testing.B) {
+	test := testfiles[0]
+	sizes := []int{1e2, 2e2, 5e2, 1e3, 5e3, 1e4, 5e4}
+	for _, size := range sizes {
+		b.Run(test.name+"-"+fmt.Sprint(size), func(b *testing.B) {
+			var s Scratch
+			s.Reuse = ReusePolicyNone
+			buf0, err := test.fn()
+			if err != nil {
+				b.Fatal(err)
+			}
+			buf0 = buf0[:size]
+			_, re, err := Compress4X(buf0, &s)
+			if err != test.err1X {
+				b.Fatal("unexpected error:", err)
+			}
+			//b.Log("Size:", len(o))
+			b.ResetTimer()
+			b.ReportAllocs()
+			b.SetBytes(int64(len(buf0)))
+			for i := 0; i < b.N; i++ {
+				_, re, _ = Compress4X(buf0, &s)
+				if re {
+					b.Fatal("reused")
+				}
+			}
+		})
+	}
+}
