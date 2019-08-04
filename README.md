@@ -13,9 +13,9 @@ It offers slightly better compression at lower compression settings, and up to 3
 [![Sourcegraph Badge](https://sourcegraph.com/github.com/klauspost/compress/-/badge.svg)](https://sourcegraph.com/github.com/klauspost/compress?badge)
 
 # changelog
-* Aug4, 2019 (v1.7.5): Better literal compression. #146
-* Aug 4, 2019: Faster zstd compression. #143 #144
-* Aug 4, 2019: Faster zstd decompression. #147 #143 #142
+* Aug4, 2019 (v1.7.5): Better literal compression. [#146](https://github.com/klauspost/compress/pull/146)
+* Aug 4, 2019: Faster zstd compression. [#143](https://github.com/klauspost/compress/pull/143) [#144](https://github.com/klauspost/compress/pull/144)
+* Aug 4, 2019: Faster zstd decompression. [#147](https://github.com/klauspost/compress/pull/147) [#143](https://github.com/klauspost/compress/pull/143) [#142](https://github.com/klauspost/compress/pull/142)
 * July 15, 2019 (v1.7.4): Fix double EOF block in rare cases on zstd encoder.
 * July 15, 2019 (v1.7.3): Minor speedup/compression increase in default zstd encoder.
 * July 14, 2019: zstd decoder: Fix decompression error on multiple uses with mixed content.
