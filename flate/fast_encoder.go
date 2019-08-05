@@ -172,7 +172,7 @@ type fastEncL4 struct {
 // The maximum length returned is maxMatchLength - 4.
 // It is assumed that s > t, that t >=0 and s < len(src).
 func (e *fastGen) matchlen(s, t int32, src []byte) int32 {
-	if false {
+	if debugDecode {
 		if t >= s {
 			panic(fmt.Sprint("t>=s", t, s))
 		}

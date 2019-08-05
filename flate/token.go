@@ -7,6 +7,7 @@ package flate
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"math"
 )
@@ -253,6 +254,14 @@ func (t *tokens) EstimatedBits() int {
 // AddMatch adds a match to the tokens.
 // This function is very sensitive to inlining and right on the border.
 func (t *tokens) AddMatch(xlength uint32, xoffset uint32) {
+	if debugDecode {
+		if xlength >= maxMatchLength+baseMatchLength {
+			panic(fmt.Errorf("invalid length: %v", xlength))
+		}
+		if xoffset >= maxMatchOffset+baseMatchOffset {
+			panic(fmt.Errorf("invalid offset: %v", xoffset))
+		}
+	}
 	t.nLits++
 	lengthCode := lengthCodes1[uint8(xlength)] & 31
 	t.tokens[t.n] = token(matchType | xlength<<lengthShift | xoffset)
@@ -316,6 +325,15 @@ func lengthCode(len uint8) uint32 { return uint32(lengthCodes[len]) }
 
 // Returns the offset code corresponding to a specific offset
 func offsetCode(off uint32) uint32 {
+	if false {
+		if off < uint32(len(offsetCodes)) {
+			return offsetCodes[off&255]
+		} else if off>>7 < uint32(len(offsetCodes)) {
+			return offsetCodes[(off>>7)&255] + 14
+		} else {
+			return offsetCodes[(off>>14)&255] + 28
+		}
+	}
 	if off < uint32(len(offsetCodes)) {
 		return offsetCodes[uint8(off)]
 	}

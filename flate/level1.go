@@ -60,7 +60,6 @@ func (e *fastEncL1) Encode(dst *tokens, src []byte) {
 
 	// nextEmit is where in src the next emitLiteral should start from.
 	cv := load3232(src, s)
-	nextHash := hash(cv)
 
 	for {
 		const skipLog = 5
@@ -74,14 +73,15 @@ func (e *fastEncL1) Encode(dst *tokens, src []byte) {
 			if nextS > sLimit {
 				goto emitRemainder
 			}
-			candidate = e.table[nextHash&tableMask]
+			nextHash := hash(cv)
+			candidate = e.table[nextHash]
 			now := load6432(src, nextS)
-			e.table[nextHash&tableMask] = tableEntry{offset: s + e.cur, val: cv}
+			e.table[nextHash] = tableEntry{offset: s + e.cur, val: cv}
 			nextHash = hash(uint32(now))
 
 			offset := s - (candidate.offset - e.cur)
 			if offset < maxMatchOffset && cv == candidate.val {
-				e.table[nextHash&tableMask] = tableEntry{offset: nextS + e.cur, val: uint32(now)}
+				e.table[nextHash] = tableEntry{offset: nextS + e.cur, val: uint32(now)}
 				break
 			}
 
@@ -89,14 +89,13 @@ func (e *fastEncL1) Encode(dst *tokens, src []byte) {
 			cv = uint32(now)
 			s = nextS
 			nextS++
-			candidate = e.table[nextHash&tableMask]
+			candidate = e.table[nextHash]
 			now >>= 8
-			e.table[nextHash&tableMask] = tableEntry{offset: s + e.cur, val: cv}
-			nextHash = hash(uint32(now))
+			e.table[nextHash] = tableEntry{offset: s + e.cur, val: cv}
 
 			offset = s - (candidate.offset - e.cur)
 			if offset < maxMatchOffset && cv == candidate.val {
-				e.table[nextHash&tableMask] = tableEntry{offset: nextS + e.cur, val: uint32(now)}
+				e.table[nextHash] = tableEntry{offset: nextS + e.cur, val: uint32(now)}
 				break
 			}
 			cv = uint32(now)
@@ -127,7 +126,7 @@ func (e *fastEncL1) Encode(dst *tokens, src []byte) {
 				emitLiteral(dst, src[nextEmit:s])
 			}
 
-			// matchToken is flate's equivalent of Snappy's emitCopy. (length,offset)
+			// Save the match found
 			dst.AddMatch(uint32(l-baseMatchLength), uint32(s-t-baseMatchOffset))
 			s += l
 			nextEmit = s
@@ -138,7 +137,7 @@ func (e *fastEncL1) Encode(dst *tokens, src []byte) {
 				// Index first pair after match end.
 				if int(s+l+4) < len(src) {
 					cv := load3232(src, s)
-					e.table[hash(cv)&tableMask] = tableEntry{offset: s + e.cur, val: cv}
+					e.table[hash(cv)] = tableEntry{offset: s + e.cur, val: cv}
 				}
 				goto emitRemainder
 			}
@@ -153,16 +152,15 @@ func (e *fastEncL1) Encode(dst *tokens, src []byte) {
 			o := e.cur + s - 2
 			prevHash := hash(uint32(x))
 			prevHash2 := hash(uint32(x >> 8))
-			e.table[prevHash&tableMask] = tableEntry{offset: o, val: uint32(x)}
-			e.table[prevHash2&tableMask] = tableEntry{offset: o + 1, val: uint32(x >> 8)}
+			e.table[prevHash] = tableEntry{offset: o, val: uint32(x)}
+			e.table[prevHash2] = tableEntry{offset: o + 1, val: uint32(x >> 8)}
 			currHash := hash(uint32(x >> 16))
-			candidate = e.table[currHash&tableMask]
-			e.table[currHash&tableMask] = tableEntry{offset: o + 2, val: uint32(x >> 16)}
+			candidate = e.table[currHash]
+			e.table[currHash] = tableEntry{offset: o + 2, val: uint32(x >> 16)}
 
 			offset := s - (candidate.offset - e.cur)
 			if offset > maxMatchOffset || uint32(x>>16) != candidate.val {
 				cv = uint32(x >> 24)
-				nextHash = hash(cv)
 				s++
 				break
 			}

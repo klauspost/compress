@@ -120,7 +120,7 @@ type compressor struct {
 
 	// queued output tokens
 	tokens tokens
-	snap   fastEnc
+	fast   fastEnc
 	state  *advancedState
 }
 
@@ -211,12 +211,12 @@ func (d *compressor) fillWindow(b []byte) {
 	if d.level == 0 {
 		return
 	}
-	if d.snap != nil {
+	if d.fast != nil {
 		// encode the last data, but discard the result
 		if len(b) > maxMatchOffset {
 			b = b[len(b)-maxMatchOffset:]
 		}
-		d.snap.Encode(&d.tokens, b)
+		d.fast.Encode(&d.tokens, b)
 		d.tokens.Reset()
 		return
 	}
@@ -1086,20 +1086,18 @@ func (d *compressor) storeFast() {
 			}
 			if d.windowEnd <= 32 {
 				d.err = d.writeStoredBlock(d.window[:d.windowEnd])
-				d.tokens.Reset()
-				d.windowEnd = 0
 			} else {
 				d.w.writeBlockHuff(false, d.window[:d.windowEnd])
 				d.err = d.w.err
 			}
 			d.tokens.Reset()
 			d.windowEnd = 0
-			d.snap.Reset()
+			d.fast.Reset()
 			return
 		}
 	}
 
-	d.snap.Encode(&d.tokens, d.window[:d.windowEnd])
+	d.fast.Encode(&d.tokens, d.window[:d.windowEnd])
 	// If we made zero matches, store the block as is.
 	if int(d.tokens.n) == d.windowEnd {
 		d.err = d.writeStoredBlock(d.window[:d.windowEnd])
@@ -1165,7 +1163,7 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 		fallthrough
 	case level >= 1 && level <= 6:
 		d.w.logReusePenalty = uint(level + 1)
-		d.snap = newFastEnc(level)
+		d.fast = newFastEnc(level)
 		d.window = make([]byte, maxStoreBlockSize)
 		d.fill = (*compressor).fillBlock
 		d.step = (*compressor).storeFast
@@ -1201,8 +1199,8 @@ func (d *compressor) reset(w io.Writer) {
 	d.sync = false
 	d.err = nil
 	// We only need to reset a few things for Snappy.
-	if d.snap != nil {
-		d.snap.Reset()
+	if d.fast != nil {
+		d.fast.Reset()
 		d.windowEnd = 0
 		d.tokens.Reset()
 		return

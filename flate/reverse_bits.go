@@ -7,5 +7,5 @@ package flate
 import "math/bits"
 
 func reverseBits(number uint16, bitLength byte) uint16 {
-	return bits.Reverse16(number << uint8(16-bitLength))
+	return bits.Reverse16(number << ((16 - bitLength) & 15))
 }

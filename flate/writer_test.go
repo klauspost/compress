@@ -48,26 +48,26 @@ func TestWriterRegression(t *testing.T) {
 					buf := new(bytes.Buffer)
 					fw, err := NewWriter(buf, level)
 					if err != nil {
-						panic(msg + err.Error())
+						t.Fatal(msg + err.Error())
 					}
 					n, err := fw.Write(in)
 					if n != len(in) {
-						panic(msg + "short write")
+						t.Fatal(msg + "short write")
 					}
 					if err != nil {
-						panic(msg + err.Error())
+						t.Fatal(msg + err.Error())
 					}
 					err = fw.Close()
 					if err != nil {
-						panic(msg + err.Error())
+						t.Fatal(msg + err.Error())
 					}
 					fr1 := NewReader(buf)
 					data2, err := ioutil.ReadAll(fr1)
 					if err != nil {
-						panic(msg + err.Error())
+						t.Fatal(msg + err.Error())
 					}
 					if bytes.Compare(in, data2) != 0 {
-						panic(msg + "not equal")
+						t.Fatal(msg + "not equal")
 					}
 					// Do it again...
 					msg = "level " + strconv.Itoa(level) + " (reset):"
@@ -75,22 +75,22 @@ func TestWriterRegression(t *testing.T) {
 					fw.Reset(buf)
 					n, err = fw.Write(in)
 					if n != len(in) {
-						panic(msg + "short write")
+						t.Fatal(msg + "short write")
 					}
 					if err != nil {
-						panic(msg + err.Error())
+						t.Fatal(msg + err.Error())
 					}
 					err = fw.Close()
 					if err != nil {
-						panic(msg + err.Error())
+						t.Fatal(msg + err.Error())
 					}
 					fr1 = NewReader(buf)
 					data2, err = ioutil.ReadAll(fr1)
 					if err != nil {
-						panic(msg + err.Error())
+						t.Fatal(msg + err.Error())
 					}
 					if bytes.Compare(in, data2) != 0 {
-						panic(msg + "not equal")
+						t.Fatal(msg + "not equal")
 					}
 				})
 			}
