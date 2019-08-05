@@ -42,9 +42,10 @@ const (
 	baseMatchLength = 3              // The smallest match length per the RFC section 3.2.5
 	maxMatchOffset  = 1 << 15        // The largest match offset
 
-	bTableBits  = 18                                  // Bits used in the table
-	bTableSize  = 1 << bTableBits                     // Size of the table
-	bufferReset = (1 << 31) - (maxStoreBlockSize * 2) // Reset the buffer offset when reaching this.
+	bTableBits   = 18                                           // Bits used in the big tables
+	bTableSize   = 1 << bTableBits                              // Size of the table
+	allocHistory = maxMatchOffset * 10                          // Size to preallocate for history.
+	bufferReset  = (1 << 31) - allocHistory - maxStoreBlockSize // Reset the buffer offset when reaching this.
 )
 
 const (
@@ -107,10 +108,9 @@ func (e *fastGen) addBlock(src []byte) int32 {
 	// check if we have space already
 	if len(e.hist)+len(src) > cap(e.hist) {
 		if cap(e.hist) == 0 {
-			l := maxMatchOffset * 10
-			e.hist = make([]byte, 0, l)
+			e.hist = make([]byte, 0, allocHistory)
 		} else {
-			if cap(e.hist) < int(maxMatchOffset*2) {
+			if cap(e.hist) < maxMatchOffset*2 {
 				panic("unexpected buffer size")
 			}
 			// Move down
@@ -172,13 +172,13 @@ type fastEncL4 struct {
 func (e *fastGen) matchlen(s, t int32, src []byte) int32 {
 	if debugDecode {
 		if t >= s {
-			panic(fmt.Sprint("t>=s", t, s))
+			panic(fmt.Sprint("t >=s:", t, s))
 		}
 		if int(s) >= len(src) {
-			panic(fmt.Sprint("s >= len(src)", s, len(src)))
+			panic(fmt.Sprint("s >= len(src):", s, len(src)))
 		}
 		if t < 0 {
-			panic(fmt.Sprint("t < 0 ", t))
+			panic(fmt.Sprint("t < 0:", t))
 		}
 		if s-t > maxMatchOffset {
 			panic(fmt.Sprint(s, "-", t, "(", s-t, ") > maxMatchLength (", maxMatchOffset, ")"))
