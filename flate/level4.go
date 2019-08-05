@@ -15,7 +15,7 @@ func (e *fastEncL4) Encode(dst *tokens, src []byte) {
 				e.table[i] = tableEntry{}
 			}
 			for i := range e.bTable[:] {
-				e.table[i] = tableEntry{}
+				e.bTable[i] = tableEntry{}
 			}
 			e.cur = maxMatchOffset
 			break
