@@ -61,8 +61,6 @@ func (e *fastEncL2) Encode(dst *tokens, src []byte) {
 
 	// nextEmit is where in src the next emitLiteral should start from.
 	cv := load3232(src, s)
-	nextHash := hash4u(cv, bTableBits)
-
 	for {
 		// Copied from the C++ snappy implementation:
 		//
@@ -85,19 +83,20 @@ func (e *fastEncL2) Encode(dst *tokens, src []byte) {
 		nextS := s
 		var candidate tableEntry
 		for {
+			nextHash := hash4u(cv, bTableBits)
 			s = nextS
 			nextS = s + doEvery + (s-nextEmit)>>skipLog
 			if nextS > sLimit {
 				goto emitRemainder
 			}
-			candidate = e.table[nextHash&bTableMask]
+			candidate = e.table[nextHash]
 			now := load6432(src, nextS)
-			e.table[nextHash&bTableMask] = tableEntry{offset: s + e.cur, val: cv}
+			e.table[nextHash] = tableEntry{offset: s + e.cur, val: cv}
 			nextHash = hash4u(uint32(now), bTableBits)
 
 			offset := s - (candidate.offset - e.cur)
 			if offset < maxMatchOffset && cv == candidate.val {
-				e.table[nextHash&bTableMask] = tableEntry{offset: nextS + e.cur, val: uint32(now)}
+				e.table[nextHash] = tableEntry{offset: nextS + e.cur, val: uint32(now)}
 				break
 			}
 
@@ -105,14 +104,12 @@ func (e *fastEncL2) Encode(dst *tokens, src []byte) {
 			cv = uint32(now)
 			s = nextS
 			nextS++
-			candidate = e.table[nextHash&bTableMask]
+			candidate = e.table[nextHash]
 			now >>= 8
-			e.table[nextHash&bTableMask] = tableEntry{offset: s + e.cur, val: cv}
-			nextHash = hash4u(uint32(now), bTableBits)
+			e.table[nextHash] = tableEntry{offset: s + e.cur, val: cv}
 
 			offset = s - (candidate.offset - e.cur)
 			if offset < maxMatchOffset && cv == candidate.val {
-				e.table[nextHash&bTableMask] = tableEntry{offset: nextS + e.cur, val: uint32(now)}
 				break
 			}
 			cv = uint32(now)
@@ -163,7 +160,7 @@ func (e *fastEncL2) Encode(dst *tokens, src []byte) {
 				// Index first pair after match end.
 				if int(s+l+4) < len(src) {
 					cv := load3232(src, s)
-					e.table[hash4u(cv, bTableBits)&bTableMask] = tableEntry{offset: s + e.cur, val: cv}
+					e.table[hash4u(cv, bTableBits)] = tableEntry{offset: s + e.cur, val: cv}
 				}
 				goto emitRemainder
 			}
@@ -172,15 +169,15 @@ func (e *fastEncL2) Encode(dst *tokens, src []byte) {
 			for i := s - l + 2; i < s-5; i += 7 {
 				x := load6432(src, int32(i))
 				nextHash := hash4u(uint32(x), bTableBits)
-				e.table[nextHash&bTableMask] = tableEntry{offset: e.cur + i, val: uint32(x)}
+				e.table[nextHash] = tableEntry{offset: e.cur + i, val: uint32(x)}
 				// Skip one
 				x >>= 16
 				nextHash = hash4u(uint32(x), bTableBits)
-				e.table[nextHash&bTableMask] = tableEntry{offset: e.cur + i + 2, val: uint32(x)}
+				e.table[nextHash] = tableEntry{offset: e.cur + i + 2, val: uint32(x)}
 				// Skip one
 				x >>= 16
 				nextHash = hash4u(uint32(x), bTableBits)
-				e.table[nextHash&bTableMask] = tableEntry{offset: e.cur + i + 4, val: uint32(x)}
+				e.table[nextHash] = tableEntry{offset: e.cur + i + 4, val: uint32(x)}
 			}
 
 			// We could immediately start working at s now, but to improve
@@ -193,16 +190,15 @@ func (e *fastEncL2) Encode(dst *tokens, src []byte) {
 			o := e.cur + s - 2
 			prevHash := hash4u(uint32(x), bTableBits)
 			prevHash2 := hash4u(uint32(x>>8), bTableBits)
-			e.table[prevHash&bTableMask] = tableEntry{offset: o, val: uint32(x)}
-			e.table[prevHash2&bTableMask] = tableEntry{offset: o + 1, val: uint32(x >> 8)}
+			e.table[prevHash] = tableEntry{offset: o, val: uint32(x)}
+			e.table[prevHash2] = tableEntry{offset: o + 1, val: uint32(x >> 8)}
 			currHash := hash4u(uint32(x>>16), bTableBits)
-			candidate = e.table[currHash&bTableMask]
-			e.table[currHash&bTableMask] = tableEntry{offset: o + 2, val: uint32(x >> 16)}
+			candidate = e.table[currHash]
+			e.table[currHash] = tableEntry{offset: o + 2, val: uint32(x >> 16)}
 
 			offset := s - (candidate.offset - e.cur)
 			if offset > maxMatchOffset || uint32(x>>16) != candidate.val {
 				cv = uint32(x >> 24)
-				nextHash = hash4u(uint32(cv), bTableBits)
 				s++
 				break
 			}

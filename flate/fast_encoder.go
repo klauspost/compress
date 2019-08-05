@@ -37,7 +37,6 @@ func newFastEnc(level int) fastEnc {
 const (
 	tableBits       = 16             // Bits used in the table
 	tableSize       = 1 << tableBits // Size of the table
-	tableMask       = tableSize - 1  // Mask for table indices. Redundant, but can eliminate bounds checks.
 	tableShift      = 32 - tableBits // Right-shift to get the tableBits most significant bits of a uint32.
 	baseMatchOffset = 1              // The smallest match offset
 	baseMatchLength = 3              // The smallest match length per the RFC section 3.2.5
@@ -45,7 +44,6 @@ const (
 
 	bTableBits  = 18                                  // Bits used in the table
 	bTableSize  = 1 << bTableBits                     // Size of the table
-	bTableMask  = bTableSize - 1                      // Mask for table indices. Redundant, but can eliminate bounds checks.
 	bufferReset = (1 << 31) - (maxStoreBlockSize * 2) // Reset the buffer offset when reaching this.
 )
 

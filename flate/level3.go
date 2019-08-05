@@ -63,8 +63,6 @@ func (e *fastEncL3) Encode(dst *tokens, src []byte) {
 
 	// nextEmit is where in src the next emitLiteral should start from.
 	cv := load3232(src, s)
-	nextHash := hash(cv)
-
 	for {
 		// Copied from the C++ snappy implementation:
 		//
@@ -86,6 +84,7 @@ func (e *fastEncL3) Encode(dst *tokens, src []byte) {
 		nextS := s
 		var candidate tableEntry
 		for {
+			nextHash := hash(cv)
 			s = nextS
 			bytesBetweenHashLookups := skip >> 5
 			nextS = s + bytesBetweenHashLookups
@@ -93,9 +92,9 @@ func (e *fastEncL3) Encode(dst *tokens, src []byte) {
 			if nextS > sLimit {
 				goto emitRemainder
 			}
-			candidates := e.table[nextHash&tableMask]
+			candidates := e.table[nextHash]
 			now := load3232(src, nextS)
-			e.table[nextHash&tableMask] = tableEntryPrev{Prev: candidates.Cur, Cur: tableEntry{offset: s + e.cur, val: cv}}
+			e.table[nextHash] = tableEntryPrev{Prev: candidates.Cur, Cur: tableEntry{offset: s + e.cur, val: cv}}
 			nextHash = hash(now)
 
 			// Check both candidates
@@ -162,9 +161,9 @@ func (e *fastEncL3) Encode(dst *tokens, src []byte) {
 				// Index first pair after match end.
 				if int(t+4) < len(src) && t > 0 {
 					cv := load3232(src, t)
-					nextHash = hash(cv)
-					e.table[nextHash&tableMask] = tableEntryPrev{
-						Prev: e.table[nextHash&tableMask].Cur,
+					nextHash := hash(cv)
+					e.table[nextHash] = tableEntryPrev{
+						Prev: e.table[nextHash].Cur,
 						Cur:  tableEntry{offset: e.cur + t, val: cv},
 					}
 				}
@@ -179,29 +178,29 @@ func (e *fastEncL3) Encode(dst *tokens, src []byte) {
 			// three load32 calls.
 			x := load6432(src, s-3)
 			prevHash := hash(uint32(x))
-			e.table[prevHash&tableMask] = tableEntryPrev{
-				Prev: e.table[prevHash&tableMask].Cur,
+			e.table[prevHash] = tableEntryPrev{
+				Prev: e.table[prevHash].Cur,
 				Cur:  tableEntry{offset: e.cur + s - 3, val: uint32(x)},
 			}
 			x >>= 8
 			prevHash = hash(uint32(x))
 
-			e.table[prevHash&tableMask] = tableEntryPrev{
-				Prev: e.table[prevHash&tableMask].Cur,
+			e.table[prevHash] = tableEntryPrev{
+				Prev: e.table[prevHash].Cur,
 				Cur:  tableEntry{offset: e.cur + s - 2, val: uint32(x)},
 			}
 			x >>= 8
 			prevHash = hash(uint32(x))
 
-			e.table[prevHash&tableMask] = tableEntryPrev{
-				Prev: e.table[prevHash&tableMask].Cur,
+			e.table[prevHash] = tableEntryPrev{
+				Prev: e.table[prevHash].Cur,
 				Cur:  tableEntry{offset: e.cur + s - 1, val: uint32(x)},
 			}
 			x >>= 8
 			currHash := hash(uint32(x))
-			candidates := e.table[currHash&tableMask]
+			candidates := e.table[currHash]
 			cv = uint32(x)
-			e.table[currHash&tableMask] = tableEntryPrev{
+			e.table[currHash] = tableEntryPrev{
 				Prev: candidates.Cur,
 				Cur:  tableEntry{offset: s + e.cur, val: cv},
 			}
@@ -225,7 +224,6 @@ func (e *fastEncL3) Encode(dst *tokens, src []byte) {
 				}
 			}
 			cv = uint32(x >> 8)
-			nextHash = hash(cv)
 			s++
 			break
 		}

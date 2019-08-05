@@ -65,9 +65,6 @@ func (e *fastEncL4) Encode(dst *tokens, src []byte) {
 
 	// nextEmit is where in src the next emitLiteral should start from.
 	cv := load6432(src, s)
-	nextHashS := hash4x64(cv, tableBits)
-	nextHashL := hash7(cv, tableBits)
-
 	for {
 		const skipLog = 6
 		const doEvery = 1
@@ -75,18 +72,21 @@ func (e *fastEncL4) Encode(dst *tokens, src []byte) {
 		nextS := s
 		var t int32
 		for {
+			nextHashS := hash4x64(cv, tableBits)
+			nextHashL := hash7(cv, tableBits)
+
 			s = nextS
 			nextS = s + doEvery + (s-nextEmit)>>skipLog
 			if nextS > sLimit {
 				goto emitRemainder
 			}
 			// Fetch a short+long candidate
-			sCandidate := e.table[nextHashS&tableMask]
-			lCandidate := e.bTable[nextHashL&tableMask]
+			sCandidate := e.table[nextHashS]
+			lCandidate := e.bTable[nextHashL]
 			next := load6432(src, nextS)
 			entry := tableEntry{offset: s + e.cur, val: uint32(cv)}
-			e.table[nextHashS&tableMask] = entry
-			e.bTable[nextHashL&tableMask] = entry
+			e.table[nextHashS] = entry
+			e.bTable[nextHashL] = entry
 
 			nextHashS = hash4x64(next, tableBits)
 			nextHashL = hash7(next, tableBits)
@@ -94,8 +94,8 @@ func (e *fastEncL4) Encode(dst *tokens, src []byte) {
 			t = lCandidate.offset - e.cur
 			if s-t < maxMatchOffset && uint32(cv) == lCandidate.val {
 				// Store the next match
-				e.table[nextHashS&tableMask] = tableEntry{offset: nextS + e.cur, val: uint32(next)}
-				e.bTable[nextHashL&tableMask] = tableEntry{offset: nextS + e.cur, val: uint32(next)}
+				e.table[nextHashS] = tableEntry{offset: nextS + e.cur, val: uint32(next)}
+				e.bTable[nextHashL] = tableEntry{offset: nextS + e.cur, val: uint32(next)}
 				break
 			}
 
@@ -104,8 +104,8 @@ func (e *fastEncL4) Encode(dst *tokens, src []byte) {
 				// Found a 4 match...
 				lCandidate = e.bTable[nextHashL]
 				// Store the next match
-				e.table[nextHashS&tableMask] = tableEntry{offset: nextS + e.cur, val: uint32(next)}
-				e.bTable[nextHashL&tableMask] = tableEntry{offset: nextS + e.cur, val: uint32(next)}
+				e.table[nextHashS] = tableEntry{offset: nextS + e.cur, val: uint32(next)}
+				e.bTable[nextHashL] = tableEntry{offset: nextS + e.cur, val: uint32(next)}
 
 				// If the next long is a candidate, use that...
 				if nextS-(lCandidate.offset-e.cur) < maxMatchOffset && lCandidate.val == uint32(next) {
@@ -163,8 +163,8 @@ func (e *fastEncL4) Encode(dst *tokens, src []byte) {
 			// Index first pair after match end.
 			if int(s+8) < len(src) {
 				cv := load6432(src, s)
-				e.table[hash4x64(cv, tableBits)&tableMask] = tableEntry{offset: s + e.cur, val: uint32(cv)}
-				e.bTable[hash7(cv, tableBits)&tableMask] = tableEntry{offset: s + e.cur, val: uint32(cv)}
+				e.table[hash4x64(cv, tableBits)] = tableEntry{offset: s + e.cur, val: uint32(cv)}
+				e.bTable[hash7(cv, tableBits)] = tableEntry{offset: s + e.cur, val: uint32(cv)}
 			}
 			goto emitRemainder
 		}
@@ -174,8 +174,8 @@ func (e *fastEncL4) Encode(dst *tokens, src []byte) {
 			for i := s - l + 4; i < s-2; i += 4 {
 				cv := load6432(src, i)
 				t := tableEntry{offset: i + e.cur, val: uint32(cv)}
-				e.table[hash4x64(cv, tableBits)&tableMask] = t
-				e.bTable[hash7(cv, tableBits)&tableMask] = t
+				e.table[hash4x64(cv, tableBits)] = t
+				e.bTable[hash7(cv, tableBits)] = t
 			}
 		}
 
@@ -185,12 +185,9 @@ func (e *fastEncL4) Encode(dst *tokens, src []byte) {
 		o := e.cur + s - 1
 		prevHashS := hash4x64(x, tableBits)
 		prevHashL := hash7(x, tableBits)
-		e.table[prevHashS&tableMask] = tableEntry{offset: o, val: uint32(x)}
-		e.bTable[prevHashL&tableMask] = tableEntry{offset: o, val: uint32(x)}
-		x >>= 8
-		nextHashS = hash4x64(x, tableBits)
-		nextHashL = hash7(x, tableBits)
-		cv = x
+		e.table[prevHashS] = tableEntry{offset: o, val: uint32(x)}
+		e.bTable[prevHashL] = tableEntry{offset: o, val: uint32(x)}
+		cv = x >> 8
 	}
 
 emitRemainder:
