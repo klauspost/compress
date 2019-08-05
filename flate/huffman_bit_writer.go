@@ -512,8 +512,7 @@ func (w *huffmanBitWriter) writeBlock(tokens *tokens, eof bool, input []byte) {
 		w.writeCode(w.literalEncoding.codes[endBlockMarker])
 		w.lastHeader = 0
 	}
-	w.lastHeader = 0
-	numLiterals, numOffsets := w.indexTokens(tokens)
+	numLiterals, numOffsets := w.indexTokens(tokens, false)
 	w.generate(tokens)
 	var extraBits int
 	storedSize, storable := w.storedSize(input)
@@ -581,9 +580,10 @@ func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []b
 		w.lastHeader = 0
 		w.lastHuffMan = false
 	}
-
-	tokens.Fill()
-	numLiterals, numOffsets := w.indexTokens(tokens)
+	if !eof {
+		tokens.Fill()
+	}
+	numLiterals, numOffsets := w.indexTokens(tokens, !eof)
 
 	var size int
 	// Check if we should reuse.
@@ -648,7 +648,7 @@ func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []b
 // literalFreq and offsetFreq, and generates literalEncoding
 // and offsetEncoding.
 // The number of literal and offset tokens is returned.
-func (w *huffmanBitWriter) indexTokens(t *tokens) (numLiterals, numOffsets int) {
+func (w *huffmanBitWriter) indexTokens(t *tokens, filled bool) (numLiterals, numOffsets int) {
 	copy(w.literalFreq, t.litHist[:])
 	copy(w.literalFreq[256:], t.extraHist[:])
 	copy(w.offsetFreq, t.offHist[:offsetCodeCount])
@@ -656,7 +656,9 @@ func (w *huffmanBitWriter) indexTokens(t *tokens) (numLiterals, numOffsets int) 
 	if t.n == 0 {
 		return
 	}
-
+	if filled {
+		return maxNumLit, maxNumDist
+	}
 	// get the number of literals
 	numLiterals = len(w.literalFreq)
 	for w.literalFreq[numLiterals-1] == 0 {
@@ -819,9 +821,6 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
 		w.writeDynamicHeader(numLiterals, numOffsets, numCodegens, eof)
 		w.lastHuffMan = true
 		w.lastHeader, _ = w.headerSize()
-		if w.lastHeader == 0 {
-			panic("no header")
-		}
 	}
 
 	encoding := w.literalEncoding.codes[:257]
