@@ -79,7 +79,7 @@ func (e *fastEncL6) Encode(dst *tokens, src []byte) {
 	cv := load6432(src, s)
 	nextHashS := hash4x64(cv, tableBits)
 	nextHashL := hash7(cv, tableBits)
-	// Repeat MUST be > 1 and within rabge
+	// Repeat MUST be > 1 and within range
 	repeat := int32(1)
 
 	for {
@@ -149,10 +149,10 @@ func (e *fastEncL6) Encode(dst *tokens, src []byte) {
 				eLong := &e.bTable[nextHashL&tableMask]
 				eLong.Cur, eLong.Prev = tableEntry{offset: nextS + e.cur, val: uint32(next)}, eLong.Cur
 
-				// Check repeat at s
+				// Check repeat at s + repOff
 				const repOff = 1
 				t2 := s - repeat + repOff
-				if load3232(src, t2) == uint32(cv>>(9*repOff)) {
+				if load3232(src, t2) == uint32(cv>>(8*repOff)) {
 					ml := e.matchlen(s+4+repOff, t2+4, src) + 4
 					if ml > l {
 						t = t2
