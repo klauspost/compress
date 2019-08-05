@@ -81,7 +81,7 @@ func largeDataChunk() []byte {
 	return result
 }
 
-func TestCRCBulkOld(t *testing.T) {
+func TestBulkHash4(t *testing.T) {
 	for _, x := range deflateTests {
 		y := x.out
 		if len(y) >= minMatchLength {
