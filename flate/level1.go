@@ -151,9 +151,7 @@ func (e *fastEncL1) Encode(dst *tokens, src []byte) {
 			x := load6432(src, s-2)
 			o := e.cur + s - 2
 			prevHash := hash(uint32(x))
-			prevHash2 := hash(uint32(x >> 8))
 			e.table[prevHash] = tableEntry{offset: o, val: uint32(x)}
-			e.table[prevHash2] = tableEntry{offset: o + 1, val: uint32(x >> 8)}
 			currHash := hash(uint32(x >> 16))
 			candidate = e.table[currHash]
 			e.table[currHash] = tableEntry{offset: o + 2, val: uint32(x >> 16)}

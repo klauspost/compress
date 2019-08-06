@@ -171,11 +171,19 @@ func (e *fastEncL4) Encode(dst *tokens, src []byte) {
 
 		// Store every 4th hash in-between
 		if true {
-			for i := s - l + 4; i < s-2; i += 4 {
+			i := s - l + 4
+			if i < s-1 {
 				cv := load6432(src, i)
 				t := tableEntry{offset: i + e.cur, val: uint32(cv)}
 				e.table[hash4x64(cv, tableBits)] = t
 				e.bTable[hash7(cv, tableBits)] = t
+				i += 3
+				for ; i < s-1; i += 3 {
+					cv := load6432(src, i)
+					t := tableEntry{offset: i + e.cur, val: uint32(cv)}
+					e.table[hash4x64(cv, tableBits)] = t
+					e.bTable[hash7(cv, tableBits)] = t
+				}
 			}
 		}
 

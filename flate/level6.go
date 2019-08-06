@@ -110,11 +110,14 @@ func (e *fastEncL6) Encode(dst *tokens, src []byte) {
 			t = lCandidate.Cur.offset - e.cur
 			if s-t < maxMatchOffset {
 				if uint32(cv) == lCandidate.Cur.val {
+					// Long candidate matches at least 4 bytes.
+
 					// Store the next match
 					e.table[nextHashS] = tableEntry{offset: nextS + e.cur, val: uint32(next)}
 					eLong := &e.bTable[nextHashL]
 					eLong.Cur, eLong.Prev = tableEntry{offset: nextS + e.cur, val: uint32(next)}, eLong.Cur
 
+					// Check the previous long candidate as well.
 					t2 := lCandidate.Prev.offset - e.cur
 					if s-t2 < maxMatchOffset && uint32(cv) == lCandidate.Prev.val {
 						l = e.matchlen(s+4, t+4, src) + 4
@@ -127,6 +130,7 @@ func (e *fastEncL6) Encode(dst *tokens, src []byte) {
 					}
 					break
 				}
+				// Current value did not match, but check if previous long value does.
 				t = lCandidate.Prev.offset - e.cur
 				if s-t < maxMatchOffset && uint32(cv) == lCandidate.Prev.val {
 					// Store the next match
@@ -141,6 +145,8 @@ func (e *fastEncL6) Encode(dst *tokens, src []byte) {
 			if s-t < maxMatchOffset && uint32(cv) == sCandidate.val {
 				// Found a 4 match...
 				l = e.matchlen(s+4, t+4, src) + 4
+
+				// Look up next long candidate (at nextS)
 				lCandidate = e.bTable[nextHashL]
 
 				// Store the next match
@@ -171,6 +177,7 @@ func (e *fastEncL6) Encode(dst *tokens, src []byte) {
 							t = t2
 							s = nextS
 							l = ml
+							// This is ok, but check previous as well.
 						}
 					}
 					// If the previous long is a candidate, use that...
@@ -234,12 +241,9 @@ func (e *fastEncL6) Encode(dst *tokens, src []byte) {
 		if nextS >= s {
 			s = nextS + 1
 		}
-		if nextS >= s {
-			s = nextS + 1
-		}
 
 		if s >= sLimit {
-			// Index first pair after match end.
+			// Index after match end.
 			for i := nextS + 1; i < int32(len(src))-8; i += 2 {
 				cv := load6432(src, i)
 				e.table[hash4x64(cv, tableBits)] = tableEntry{offset: i + e.cur, val: uint32(cv)}
@@ -249,14 +253,17 @@ func (e *fastEncL6) Encode(dst *tokens, src []byte) {
 			goto emitRemainder
 		}
 
-		// Store every hash in-between
+		// Store every long hash in-between and every second short.
 		if true {
-			for i := nextS + 1; i < s; i++ {
+			for i := nextS + 1; i < s-1; i += 2 {
 				cv := load6432(src, i)
 				t := tableEntry{offset: i + e.cur, val: uint32(cv)}
-				e.table[hash4x64(cv, tableBits)] = t
+				t2 := tableEntry{offset: t.offset + 1, val: uint32(cv >> 8)}
 				eLong := &e.bTable[hash7(cv, tableBits)]
+				eLong2 := &e.bTable[hash7(cv>>8, tableBits)]
+				e.table[hash4x64(cv, tableBits)] = t
 				eLong.Cur, eLong.Prev = t, eLong.Cur
+				eLong2.Cur, eLong2.Prev = t2, eLong2.Cur
 			}
 		}
 

@@ -218,29 +218,43 @@ func (e *fastEncL5) Encode(dst *tokens, src []byte) {
 		if nextS >= s {
 			s = nextS + 1
 		}
-		if nextS >= s {
-			s = nextS + 1
-		}
 
 		if s >= sLimit {
-			// Index first pair after match end.
-			if false && int(s+8) < len(src) {
-				cv := load6432(src, s)
-				e.table[hash4x64(cv, tableBits)] = tableEntry{offset: s + e.cur, val: uint32(cv)}
-				eLong := &e.bTable[hash7(cv, tableBits)]
-				eLong.Cur, eLong.Prev = tableEntry{offset: s + e.cur, val: uint32(cv)}, eLong.Cur
-			}
 			goto emitRemainder
 		}
 
-		// Store every 4th hash in-between
+		// Store every 3rd hash in-between.
 		if true {
-			for i := s - l + 4; i < s-2; i += 4 {
+			const hashEvery = 3
+			i := s - l + 1
+			if i < s-1 {
 				cv := load6432(src, i)
 				t := tableEntry{offset: i + e.cur, val: uint32(cv)}
 				e.table[hash4x64(cv, tableBits)] = t
 				eLong := &e.bTable[hash7(cv, tableBits)]
 				eLong.Cur, eLong.Prev = t, eLong.Cur
+
+				// Do an long at i+1
+				cv >>= 8
+				t = tableEntry{offset: t.offset + 1, val: uint32(cv)}
+				eLong = &e.bTable[hash7(cv, tableBits)]
+				eLong.Cur, eLong.Prev = t, eLong.Cur
+
+				// We only have enough bits for a short entry at i+2
+				cv >>= 8
+				t = tableEntry{offset: t.offset + 1, val: uint32(cv)}
+				e.table[hash4x64(cv, tableBits)] = t
+
+				// Skip one - otherwise we risk hitting 's'
+				i += 4
+				for ; i < s-1; i += hashEvery {
+					cv := load6432(src, i)
+					t := tableEntry{offset: i + e.cur, val: uint32(cv)}
+					t2 := tableEntry{offset: t.offset + 1, val: uint32(cv >> 8)}
+					eLong := &e.bTable[hash7(cv, tableBits)]
+					eLong.Cur, eLong.Prev = t, eLong.Cur
+					e.table[hash4u(t2.val, tableBits)] = t2
+				}
 			}
 		}
 
