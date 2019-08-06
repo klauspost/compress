@@ -62,21 +62,7 @@ func (e *fastEncL2) Encode(dst *tokens, src []byte) {
 	// nextEmit is where in src the next emitLiteral should start from.
 	cv := load3232(src, s)
 	for {
-		// Copied from the C++ snappy implementation:
-		//
-		// Heuristic match skipping: If 32 bytes are scanned with no matches
-		// found, start looking only at every other byte. If 32 more bytes are
-		// scanned (or skipped), look at every third byte, etc.. When a match
-		// is found, immediately go back to looking at every byte. This is a
-		// small loss (~5% performance, ~0.1% density) for compressible data
-		// due to more bookkeeping, but for non-compressible data (such as
-		// JPEG) it's a huge win since the compressor quickly "realizes" the
-		// data is incompressible and doesn't bother looking for matches
-		// everywhere.
-		//
-		// The "skip" variable keeps track of how many bytes there are since
-		// the last match; dividing it by 32 (ie. right-shifting by five) gives
-		// the number of bytes to move ahead for each iteration.
+		// When should we start skipping if we haven't found matches in a long while.
 		const skipLog = 6
 		const doEvery = 2
 

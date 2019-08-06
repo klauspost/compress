@@ -43,8 +43,7 @@ func (e *fastEncL3) Encode(dst *tokens, src []byte) {
 
 	s := e.addBlock(src)
 
-	// This check isn't in the Snappy implementation, but there, the caller
-	// instead of the callee handles this case.
+	// Skip if too small.
 	if len(src) < minNonLiteralBlockSize {
 		// We do not fill the token table.
 		// This will be picked up by caller.
@@ -64,46 +63,39 @@ func (e *fastEncL3) Encode(dst *tokens, src []byte) {
 	// nextEmit is where in src the next emitLiteral should start from.
 	cv := load3232(src, s)
 	for {
-		// Copied from the C++ snappy implementation:
-		//
-		// Heuristic match skipping: If 32 bytes are scanned with no matches
-		// found, start looking only at every other byte. If 32 more bytes are
-		// scanned (or skipped), look at every third byte, etc.. When a match
-		// is found, immediately go back to looking at every byte. This is a
-		// small loss (~5% performance, ~0.1% density) for compressible data
-		// due to more bookkeeping, but for non-compressible data (such as
-		// JPEG) it's a huge win since the compressor quickly "realizes" the
-		// data is incompressible and doesn't bother looking for matches
-		// everywhere.
-		//
-		// The "skip" variable keeps track of how many bytes there are since
-		// the last match; dividing it by 32 (ie. right-shifting by five) gives
-		// the number of bytes to move ahead for each iteration.
-		skip := int32(32)
-
+		const skipLog = 6
 		nextS := s
 		var candidate tableEntry
 		for {
 			nextHash := hash(cv)
 			s = nextS
-			bytesBetweenHashLookups := skip >> 5
-			nextS = s + bytesBetweenHashLookups
-			skip += bytesBetweenHashLookups
+			nextS = s + 1 + (s-nextEmit)>>skipLog
 			if nextS > sLimit {
 				goto emitRemainder
 			}
 			candidates := e.table[nextHash]
 			now := load3232(src, nextS)
 			e.table[nextHash] = tableEntryPrev{Prev: candidates.Cur, Cur: tableEntry{offset: s + e.cur, val: cv}}
-			nextHash = hash(now)
 
 			// Check both candidates
 			candidate = candidates.Cur
+			offset := s - (candidate.offset - e.cur)
 			if cv == candidate.val {
-				offset := s - (candidate.offset - e.cur)
-				if offset <= maxMatchOffset {
+				if offset > maxMatchOffset {
+					cv = now
+					// Previous will also be invalid, we have nothing.
+					continue
+				}
+				o2 := s - (candidates.Prev.offset - e.cur)
+				if cv != candidates.Prev.val || o2 > maxMatchOffset {
 					break
 				}
+				// Both match and are valid, pick longest.
+				l1, l2 := matchLen(src[s+4:], src[s-offset+4:]), matchLen(src[s+4:], src[s-o2+4:])
+				if l2 > l1 {
+					candidate = candidates.Prev
+				}
+				break
 			} else {
 				// We only check if value mismatches.
 				// Offset will always be invalid in other cases.
@@ -171,11 +163,7 @@ func (e *fastEncL3) Encode(dst *tokens, src []byte) {
 			}
 
 			// We could immediately start working at s now, but to improve
-			// compression we first update the hash table at s-3 to s. If
-			// another emitCopy is not our next move, also calculate nextHash
-			// at s+1. At least on GOARCH=amd64, these three hash calculations
-			// are faster as one load64 call (with some shifts) instead of
-			// three load32 calls.
+			// compression we first update the hash table at s-3 to s.
 			x := load6432(src, s-3)
 			prevHash := hash(uint32(x))
 			e.table[prevHash] = tableEntryPrev{
