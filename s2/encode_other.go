@@ -231,17 +231,7 @@ func encodeBlock(dst, src []byte) (d int) {
 
 	// The encoded form must start with a literal, as there are no previous
 	// bytes to copy, so we start looking for hash matches at s == 1.
-	s := 0
-	for ; s <= 32-inputMargin; s += 3 {
-		x := load64(src, s)
-		h0 := hash6(x, tableBits)
-		h1 := hash6(x>>8, tableBits)
-		h2 := hash6(x>>16, tableBits)
-		table[h0] = uint32(s)
-		table[h1] = uint32(s + 1)
-		table[h2] = uint32(s + 2)
-	}
-
+	s := 1
 	cv := load64(src, s)
 	repeat := 0
 
@@ -285,7 +275,7 @@ func encodeBlock(dst, src []byte) (d int) {
 				}
 
 				add := emitRepeat(dst[d:], repeat, s-base)
-				// same as `add := emitCopy(dst[d:], repeat, s-base)` but skipping offset.
+				// same as `add := emitCopy(dst[d:], repeat, s-base)` but skips storing offset.
 				d += add
 				nextEmit = s
 				if s >= sLimit {
