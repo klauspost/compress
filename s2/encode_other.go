@@ -38,26 +38,26 @@ func emitLiteral(dst, lit []byte) int {
 		dst[0] = uint8(n)<<2 | tagLiteral
 		i = 1
 	case n < 1<<8:
-		dst[0] = 60<<2 | tagLiteral
 		dst[1] = uint8(n)
+		dst[0] = 60<<2 | tagLiteral
 		i = 2
 	case n < 1<<16:
-		dst[0] = 61<<2 | tagLiteral
-		dst[1] = uint8(n)
 		dst[2] = uint8(n >> 8)
+		dst[1] = uint8(n)
+		dst[0] = 61<<2 | tagLiteral
 		i = 3
 	case n < 1<<24:
-		dst[0] = 62<<2 | tagLiteral
-		dst[1] = uint8(n)
-		dst[2] = uint8(n >> 8)
 		dst[3] = uint8(n >> 16)
+		dst[2] = uint8(n >> 8)
+		dst[1] = uint8(n)
+		dst[0] = 62<<2 | tagLiteral
 		i = 4
 	default:
-		dst[0] = 63<<2 | tagLiteral
-		dst[1] = uint8(n)
-		dst[2] = uint8(n >> 8)
-		dst[3] = uint8(n >> 16)
 		dst[4] = uint8(n >> 24)
+		dst[3] = uint8(n >> 16)
+		dst[2] = uint8(n >> 8)
+		dst[1] = uint8(n)
+		dst[0] = 63<<2 | tagLiteral
 		i = 5
 	}
 	return i + copy(dst[i:], lit)
@@ -70,7 +70,6 @@ func emitLiteral(dst, lit []byte) int {
 //	1 <= offset && offset <= 65535
 //	4 <= length && length <= 65535
 func emitCopy(dst []byte, offset, length int) int {
-	i := 0
 	// The maximum length for a single tagCopy1 or tagCopy2 op is 64 bytes. The
 	// threshold for this loop is a little higher (at 68 = 64 + 4), and the
 	// length emitted down below is is a little lower (at 60 = 64 - 4), because
@@ -81,19 +80,20 @@ func emitCopy(dst []byte, offset, length int) int {
 	// tagCopy1 op is 4 bytes, which is why a length 3 copy has to be an
 	// encodes-as-3-bytes tagCopy2 instead of an encodes-as-2-bytes tagCopy1.
 	if offset >= 65536 {
-		if length >= 64 {
+		i := 0
+		if length > 64 {
 			// Emit a length 64 copy, encoded as 5 bytes.
-			dst[i+0] = 63<<2 | tagCopy4
-			dst[i+1] = uint8(offset)
-			dst[i+2] = uint8(offset >> 8)
-			dst[i+3] = uint8(offset >> 16)
-			dst[i+4] = uint8(offset >> 24)
-			i += 5
+			dst[4] = uint8(offset >> 24)
+			dst[3] = uint8(offset >> 16)
+			dst[2] = uint8(offset >> 8)
+			dst[1] = uint8(offset)
+			dst[0] = 63<<2 | tagCopy4
 			length -= 64
 			if length >= 4 {
 				// Emit remaining as repeats
-				return i + emitRepeat(dst[i:], offset, length)
+				return 5 + emitRepeat(dst[5:], offset, length)
 			}
+			i = 5
 		}
 		if length == 0 {
 			return i
@@ -106,75 +106,68 @@ func emitCopy(dst []byte, offset, length int) int {
 		dst[i+4] = uint8(offset >> 24)
 		return i + 5
 	}
-	if length >= 68 {
-		// Emit a length 64 copy, encoded as 3 bytes.
-		dst[i+0] = 63<<2 | tagCopy2
-		dst[i+1] = uint8(offset)
-		dst[i+2] = uint8(offset >> 8)
-		i += 3
-		length -= 64
-		// Emit remaining as repeats, at least 4 bytes remain.
-		return i + emitRepeat(dst[i:], offset, length)
-	}
+
+	// Offset no more than 2 bytes.
 	if length > 64 {
 		// Emit a length 60 copy, encoded as 3 bytes.
-		dst[i+0] = 59<<2 | tagCopy2
-		dst[i+1] = uint8(offset)
-		dst[i+2] = uint8(offset >> 8)
-		i += 3
+		// Emit remaining as repeat value (minimum 4 bytes).
+		dst[2] = uint8(offset >> 8)
+		dst[1] = uint8(offset)
+		dst[0] = 59<<2 | tagCopy2
 		length -= 60
+		// Emit remaining as repeats, at least 4 bytes remain.
+		return 3 + emitRepeat(dst[3:], offset, length)
 	}
 	if length >= 12 || offset >= 2048 {
 		// Emit the remaining copy, encoded as 3 bytes.
-		dst[i+0] = uint8(length-1)<<2 | tagCopy2
-		dst[i+1] = uint8(offset)
-		dst[i+2] = uint8(offset >> 8)
-		return i + 3
+		dst[2] = uint8(offset >> 8)
+		dst[1] = uint8(offset)
+		dst[0] = uint8(length-1)<<2 | tagCopy2
+		return 3
 	}
 	// Emit the remaining copy, encoded as 2 bytes.
-	dst[i+0] = uint8(offset>>8)<<5 | uint8(length-4)<<2 | tagCopy1
-	dst[i+1] = uint8(offset)
-	return i + 2
+	dst[1] = uint8(offset)
+	dst[0] = uint8(offset>>8)<<5 | uint8(length-4)<<2 | tagCopy1
+	return 2
 }
 
 // emitRepeat writes a copy chunk and returns the number of bytes written.
 func emitRepeat(dst []byte, offset, length int) int {
-	i := 0
 	// Repeat offset, make length cheaper
 	length -= 4
 	if length <= 4 {
-		dst[i+0] = uint8(length)<<2 | tagCopy1
-		dst[i+1] = 0
-		return i + 2
+		dst[0] = uint8(length)<<2 | tagCopy1
+		dst[1] = 0
+		return 2
 	}
 	if length < 8 && offset < 2048 {
 		// Encode WITH offset
-		dst[i+0] = uint8(offset>>8)<<5 | uint8(length)<<2 | tagCopy1
-		dst[i+1] = uint8(offset)
-		return i + 2
+		dst[1] = uint8(offset)
+		dst[0] = uint8(offset>>8)<<5 | uint8(length)<<2 | tagCopy1
+		return 2
 	}
 	if length < (1<<8)+4 {
 		length -= 4
-		dst[i+0] = 5<<2 | tagCopy1
-		dst[i+1] = 0
-		dst[i+2] = uint8(length)
-		return i + 3
+		dst[2] = uint8(length)
+		dst[1] = 0
+		dst[0] = 5<<2 | tagCopy1
+		return 3
 	}
 	if length < (1<<16)+(1<<8) {
 		length -= 1 << 8
-		dst[i+0] = 6<<2 | tagCopy1
-		dst[i+1] = 0
-		dst[i+2] = uint8(length >> 0)
-		dst[i+3] = uint8(length >> 8)
-		return i + 4
+		dst[3] = uint8(length >> 8)
+		dst[2] = uint8(length >> 0)
+		dst[1] = 0
+		dst[0] = 6<<2 | tagCopy1
+		return 4
 	}
 	length -= 1 << 16
-	dst[i+0] = 7<<2 | tagCopy1
-	dst[i+1] = 0
-	dst[i+2] = uint8(length >> 0)
-	dst[i+3] = uint8(length >> 8)
-	dst[i+4] = uint8(length >> 16)
-	return i + 5
+	dst[4] = uint8(length >> 16)
+	dst[3] = uint8(length >> 8)
+	dst[2] = uint8(length >> 0)
+	dst[1] = 0
+	dst[0] = 7<<2 | tagCopy1
+	return 5
 }
 
 // extendMatch returns the largest k such that k <= len(src) and that
