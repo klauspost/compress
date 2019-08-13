@@ -260,7 +260,7 @@ func (e *Encoder) nextBlock(final bool) error {
 			err := errIncompressible
 			// If we got the exact same number of literals as input,
 			// assume the literals cannot be compressed.
-			if len(src) != len(blk.literals) {
+			if len(src) != len(blk.literals) && len(src) == e.o.blockSize {
 				err = blk.encode()
 			}
 			switch err {
@@ -452,7 +452,7 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 		err := errIncompressible
 		// If we got the exact same number of literals as input,
 		// assume the literals cannot be compressed.
-		if len(blk.literals) != len(todo) {
+		if len(blk.literals) != len(todo) && len(todo) == e.o.blockSize {
 			err = blk.encode()
 		}
 
