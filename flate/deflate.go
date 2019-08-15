@@ -184,10 +184,10 @@ func (d *compressor) writeBlockSkip(tok *tokens, index int, eof bool) error {
 			// If we removed less than a 64th of all literals
 			// we huffman compress the block.
 			if int(tok.n) > len(window)-int(tok.n>>6) {
-				d.w.writeBlockHuff(eof, window)
+				d.w.writeBlockHuff(eof, window, d.sync)
 			} else {
 				// Write a dynamic huffman block.
-				d.w.writeBlockDynamic(tok, eof, window)
+				d.w.writeBlockDynamic(tok, eof, window, d.sync)
 			}
 		} else {
 			d.w.writeBlock(tok, eof, nil)
@@ -557,7 +557,7 @@ func (d *compressor) storeHuff() {
 	if d.windowEnd < len(d.window) && !d.sync || d.windowEnd == 0 {
 		return
 	}
-	d.w.writeBlockHuff(false, d.window[:d.windowEnd])
+	d.w.writeBlockHuff(false, d.window[:d.windowEnd], d.sync)
 	d.err = d.w.err
 	d.windowEnd = 0
 }
@@ -579,7 +579,7 @@ func (d *compressor) storeFast() {
 			if d.windowEnd <= 32 {
 				d.err = d.writeStoredBlock(d.window[:d.windowEnd])
 			} else {
-				d.w.writeBlockHuff(false, d.window[:d.windowEnd])
+				d.w.writeBlockHuff(false, d.window[:d.windowEnd], true)
 				d.err = d.w.err
 			}
 			d.tokens.Reset()
@@ -595,10 +595,10 @@ func (d *compressor) storeFast() {
 		d.err = d.writeStoredBlock(d.window[:d.windowEnd])
 		// If we removed less than 1/16th, huffman compress the block.
 	} else if int(d.tokens.n) > d.windowEnd-(d.windowEnd>>4) {
-		d.w.writeBlockHuff(false, d.window[:d.windowEnd])
+		d.w.writeBlockHuff(false, d.window[:d.windowEnd], d.sync)
 		d.err = d.w.err
 	} else {
-		d.w.writeBlockDynamic(&d.tokens, false, d.window[:d.windowEnd])
+		d.w.writeBlockDynamic(&d.tokens, false, d.window[:d.windowEnd], d.sync)
 		d.err = d.w.err
 	}
 	d.tokens.Reset()

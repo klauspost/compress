@@ -564,12 +564,13 @@ func (w *huffmanBitWriter) writeBlock(tokens *tokens, eof bool, input []byte) {
 // histogram distribution.
 // If input is supplied and the compression savings are below 1/16th of the
 // input size the block is stored.
-func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []byte) {
+func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []byte, sync bool) {
 	if w.err != nil {
 		return
 	}
 
-	if eof {
+	sync = sync || eof
+	if sync {
 		tokens.AddEOB()
 	}
 
@@ -580,10 +581,10 @@ func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []b
 		w.lastHeader = 0
 		w.lastHuffMan = false
 	}
-	if !eof {
+	if !sync {
 		tokens.Fill()
 	}
-	numLiterals, numOffsets := w.indexTokens(tokens, !eof)
+	numLiterals, numOffsets := w.indexTokens(tokens, !sync)
 
 	var size int
 	// Check if we should reuse.
@@ -633,15 +634,15 @@ func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []b
 
 		// Write Huffman table.
 		w.writeDynamicHeader(numLiterals, numOffsets, numCodegens, eof)
-		if !eof {
-			w.lastHeader, _ = w.headerSize()
-		}
+		w.lastHeader, _ = w.headerSize()
 		w.lastHuffMan = false
 	}
 
+	if sync {
+		w.lastHeader = 0
+	}
 	// Write the tokens.
 	w.writeTokens(tokens.Slice(), w.literalEncoding.codes, w.offsetEncoding.codes)
-
 }
 
 // indexTokens indexes a slice of tokens, and updates
@@ -768,7 +769,7 @@ func init() {
 // writeBlockHuff encodes a block of bytes as either
 // Huffman encoded literals or uncompressed bytes if the
 // results only gains very little from compression.
-func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
+func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 	if w.err != nil {
 		return
 	}
@@ -784,7 +785,7 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
 	}
 
 	// Add everything as literals
-	estBits := histogramSize(input, w.literalFreq, !eof) + 15
+	estBits := histogramSize(input, w.literalFreq, !eof && !sync) + 15
 
 	// Store bytes, if we don't get a reasonable improvement.
 	ssize, storable := w.storedSize(input)
@@ -852,7 +853,7 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte) {
 			w.nbytes = n
 		}
 	}
-	if eof {
+	if eof || sync {
 		w.writeCode(encoding[endBlockMarker])
 		w.lastHeader = 0
 		w.lastHuffMan = false

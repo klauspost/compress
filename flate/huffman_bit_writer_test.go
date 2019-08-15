@@ -45,7 +45,7 @@ func testBlockHuff(t *testing.T, in, out string) {
 	}
 	var buf bytes.Buffer
 	bw := newHuffmanBitWriter(&buf)
-	bw.writeBlockHuff(false, all)
+	bw.writeBlockHuff(false, all, false)
 	bw.flush()
 	got := buf.Bytes()
 
@@ -80,7 +80,7 @@ func testBlockHuff(t *testing.T, in, out string) {
 	// Test if the writer produces the same output after reset.
 	buf.Reset()
 	bw.reset(&buf)
-	bw.writeBlockHuff(false, all)
+	bw.writeBlockHuff(false, all, false)
 	bw.flush()
 	got = buf.Bytes()
 	if !bytes.Equal(got, want) {
@@ -173,6 +173,14 @@ func TestWriteBlock(t *testing.T) {
 func TestWriteBlockDynamic(t *testing.T) {
 	for _, test := range writeBlockTests {
 		testBlock(t, test, "dyn")
+	}
+}
+
+// TestWriteBlockDynamic tests if the writeBlockDynamic encoding has changed.
+// To update the reference files use the "-update" flag on the test.
+func TestWriteBlockDynamicSync(t *testing.T) {
+	for _, test := range writeBlockTests {
+		testBlock(t, test, "sync")
 	}
 }
 
@@ -302,7 +310,9 @@ func writeToType(t *testing.T, ttype string, bw *huffmanBitWriter, tok tokens, i
 	case "wb":
 		bw.writeBlock(&tok, false, input)
 	case "dyn":
-		bw.writeBlockDynamic(&tok, false, input)
+		bw.writeBlockDynamic(&tok, false, input, false)
+	case "sync":
+		bw.writeBlockDynamic(&tok, false, input, true)
 	default:
 		panic("unknown test type")
 	}
@@ -340,9 +350,9 @@ func testWriterEOF(t *testing.T, ttype string, test huffTest, useInput bool) {
 	case "wb":
 		bw.writeBlock(&tokens, true, input)
 	case "dyn":
-		bw.writeBlockDynamic(&tokens, true, input)
+		bw.writeBlockDynamic(&tokens, true, input, true)
 	case "huff":
-		bw.writeBlockHuff(true, input)
+		bw.writeBlockHuff(true, input, true)
 	default:
 		panic("unknown test type")
 	}
