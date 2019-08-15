@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"math/rand"
 	"net/http"
 	"os"
@@ -33,6 +34,27 @@ func TestMaxEncodedLenOfMaxBlockSize(t *testing.T) {
 	want := MaxEncodedLen(maxBlockSize)
 	if got != want {
 		t.Fatalf("got %d, want %d", got, want)
+	}
+}
+
+func TestMaxEncodedLen(t *testing.T) {
+	testSet := []struct {
+		in, out int
+	}{
+		{in: 0, out: 1},
+		{in: maxBlockSize, out: maxEncodedLenOfMaxBlockSize},
+		{in: math.MaxUint32, out: -1},
+		{in: -1, out: -1},
+	}
+	for i := range testSet {
+		tt := testSet[i]
+		t.Run(fmt.Sprint(tt), func(t *testing.T) {
+			want := tt.out
+			got := MaxEncodedLen(tt.in)
+			if got != want {
+				t.Errorf("input: %d, want: %d, got: %d", tt.in, want, got)
+			}
+		})
 	}
 }
 

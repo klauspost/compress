@@ -37,15 +37,15 @@ func Encode(dst, src []byte) []byte {
 		}
 		if len(p) < minNonLiteralBlockSize {
 			d += emitLiteral(dst[d:], p)
-		} else {
-			n := encodeBlock(dst[d:], p)
-			if n > 0 {
-				d += n
-			} else {
-				// Not compressible
-				d += emitLiteral(dst[d:], p)
-			}
+			continue
 		}
+		n := encodeBlock(dst[d:], p)
+		if n > 0 {
+			d += n
+			continue
+		}
+		// Not compressible
+		d += emitLiteral(dst[d:], p)
 	}
 	return dst[:d]
 }
@@ -76,6 +76,7 @@ const maxExtraLength = 5 - 4 + 5
 func MaxEncodedLen(srcLen int) int {
 	n := uint64(srcLen)
 	if n > 0xffffffff {
+		// Also includes negative.
 		return -1
 	}
 	// Size of the varint encoded block size.
@@ -86,7 +87,11 @@ func MaxEncodedLen(srcLen int) int {
 	// srcLen + (maximum size of literal encoding == 5)
 	n = (n + maxBlockSize - 1) / maxBlockSize
 	n *= maxBlockSize + 5
-	return int(n) + varSize
+	n += uint64(varSize)
+	if n > 0xffffffff {
+		return -1
+	}
+	return int(n)
 }
 
 var errClosed = errors.New("s2: Writer is closed")
