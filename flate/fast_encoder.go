@@ -160,12 +160,6 @@ func hash6(u uint64, h uint8) uint32 {
 	return uint32(((u << (64 - 48)) * prime6bytes) >> ((64 - h) & 63))
 }
 
-type fastEncL4 struct {
-	fastGen
-	table  [tableSize]tableEntry
-	bTable [tableSize]tableEntry
-}
-
 // matchlen will return the match length between offsets and t in src.
 // The maximum length returned is maxMatchLength - 4.
 // It is assumed that s > t, that t >=0 and s < len(src).

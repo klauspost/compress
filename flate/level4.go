@@ -2,6 +2,12 @@ package flate
 
 import "fmt"
 
+type fastEncL4 struct {
+	fastGen
+	table  [tableSize]tableEntry
+	bTable [tableSize]tableEntry
+}
+
 func (e *fastEncL4) Encode(dst *tokens, src []byte) {
 	const (
 		inputMargin            = 12 - 1

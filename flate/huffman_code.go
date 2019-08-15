@@ -60,6 +60,10 @@ func (h *hcode) set(code uint16, length uint16) {
 	h.code = code
 }
 
+func reverseBits(number uint16, bitLength byte) uint16 {
+	return bits.Reverse16(number << ((16 - bitLength) & 15))
+}
+
 func maxNode() literalNode { return literalNode{math.MaxUint16, math.MaxUint16} }
 
 func newHuffmanEncoder(size int) *huffmanEncoder {
