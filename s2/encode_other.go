@@ -170,17 +170,6 @@ func emitRepeat(dst []byte, offset, length int) int {
 	return 5
 }
 
-// extendMatch returns the largest k such that k <= len(src) and that
-// src[i:i+k-j] and src[j:k] have the same contents.
-//
-// It assumes that:
-//	0 <= i && i < j && j <= len(src)
-func extendMatch(src []byte, i, j int) int {
-	for ; j < len(src) && src[i] == src[j]; i, j = i+1, j+1 {
-	}
-	return j
-}
-
 // hash6 returns the hash of the lowest 6 bytes of u to fit in a hash table with h bits.
 // Preferably h should be a constant and should always be <64.
 func hash6(u uint64, h uint8) uint32 {
@@ -201,13 +190,8 @@ func encodeBlock(dst, src []byte) (d int) {
 		tableBits = 14
 
 		maxTableSize = 1 << tableBits
-		// tableMask is redundant, but helps the compiler eliminate bounds
-		// checks.
-		tableMask = maxTableSize - 1
 	)
-	if len(src) <= 32 {
-		return emitLiteral(dst, src)
-	}
+
 	// In Go, all array elements are zero-initialized, so there is no advantage
 	// to a smaller tableSize per se. However, it matches the C++ algorithm,
 	// and in the asm versions of this code, we can get away with zeroing only
@@ -218,6 +202,9 @@ func encodeBlock(dst, src []byte) (d int) {
 	// lets us use a fast path for emitLiteral in the main loop, while we are
 	// looking for copies.
 	sLimit := len(src) - inputMargin
+
+	// Bail if we can't compress to at least this.
+	dstLimit := len(src) - len(src)>>5 - maxExtraLength
 
 	// nextEmit is where in src the next emitLiteral should start from.
 	nextEmit := 0
@@ -305,6 +292,11 @@ func encodeBlock(dst, src []byte) (d int) {
 			s--
 		}
 
+		// Bail if we exceed the maximum size.
+		if d+(s-nextEmit) > dstLimit {
+			return 0
+		}
+
 		// A 4-byte match has been found. We'll later see if more than 4 bytes
 		// match. But, prior to the match, src[nextEmit:s] are unmatched. Emit
 		// them as literal bytes.
@@ -352,6 +344,10 @@ func encodeBlock(dst, src []byte) (d int) {
 				goto emitRemainder
 			}
 
+			if d > dstLimit {
+				// Do we have space for more, if not bail.
+				return 0
+			}
 			// Check for an immediate match, otherwise start search at s+1
 			x := load64(src, s-2)
 			m2Hash := hash6(x, tableBits)
@@ -369,6 +365,10 @@ func encodeBlock(dst, src []byte) (d int) {
 
 emitRemainder:
 	if nextEmit < len(src) {
+		// Bail if we exceed the maximum size.
+		if d+len(src)-nextEmit > dstLimit {
+			return 0
+		}
 		d += emitLiteral(dst[d:], src[nextEmit:])
 	}
 	return d
