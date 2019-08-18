@@ -63,7 +63,7 @@ func (e *fastEncL2) Encode(dst *tokens, src []byte) {
 	cv := load3232(src, s)
 	for {
 		// When should we start skipping if we haven't found matches in a long while.
-		const skipLog = 6
+		const skipLog = 5
 		const doEvery = 2
 
 		nextS := s

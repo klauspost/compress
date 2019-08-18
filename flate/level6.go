@@ -80,7 +80,7 @@ func (e *fastEncL6) Encode(dst *tokens, src []byte) {
 	// Repeat MUST be > 1 and within range
 	repeat := int32(1)
 	for {
-		const skipLog = 6
+		const skipLog = 7
 		const doEvery = 1
 
 		nextS := s

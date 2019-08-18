@@ -562,7 +562,7 @@ func (d *compressor) storeHuff() {
 	d.windowEnd = 0
 }
 
-// storeHuff will compress and store the currently added data,
+// storeFast will compress and store the currently added data,
 // if enough has been accumulated or we at the end of the stream.
 // Any error that occurred will be in d.err
 func (d *compressor) storeFast() {
