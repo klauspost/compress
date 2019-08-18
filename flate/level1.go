@@ -163,6 +163,10 @@ func (e *fastEncL1) Encode(dst *tokens, src []byte) {
 
 emitRemainder:
 	if int(nextEmit) < len(src) {
+		// If nothing was added, don't encode literals.
+		if dst.n == 0 {
+			return
+		}
 		emitLiteral(dst, src[nextEmit:])
 	}
 }

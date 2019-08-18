@@ -591,7 +591,7 @@ func (d *compressor) storeFast() {
 
 	d.fast.Encode(&d.tokens, d.window[:d.windowEnd])
 	// If we made zero matches, store the block as is.
-	if int(d.tokens.n) == d.windowEnd {
+	if d.tokens.n == 0 {
 		d.err = d.writeStoredBlock(d.window[:d.windowEnd])
 		// If we removed less than 1/16th, huffman compress the block.
 	} else if int(d.tokens.n) > d.windowEnd-(d.windowEnd>>4) {
