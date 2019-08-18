@@ -187,6 +187,27 @@ func (e *fastGen) matchlen(s, t int32, src []byte) int32 {
 	return int32(matchLen(src[s:s1], src[t:]))
 }
 
+// matchlenLong will return the match length between offsets and t in src.
+// It is assumed that s > t, that t >=0 and s < len(src).
+func (e *fastGen) matchlenLong(s, t int32, src []byte) int32 {
+	if debugDecode {
+		if t >= s {
+			panic(fmt.Sprint("t >=s:", t, s))
+		}
+		if int(s) >= len(src) {
+			panic(fmt.Sprint("s >= len(src):", s, len(src)))
+		}
+		if t < 0 {
+			panic(fmt.Sprint("t < 0:", t))
+		}
+		if s-t > maxMatchOffset {
+			panic(fmt.Sprint(s, "-", t, "(", s-t, ") > maxMatchLength (", maxMatchOffset, ")"))
+		}
+	}
+	// Extend the match to be as long as possible.
+	return int32(matchLen(src[s:], src[t:]))
+}
+
 // Reset the encoding table.
 func (e *fastGen) Reset() {
 	if cap(e.hist) < int(maxMatchOffset*8) {

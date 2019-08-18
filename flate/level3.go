@@ -125,14 +125,10 @@ func (e *fastEncL3) Encode(dst *tokens, src []byte) {
 			// Extend the 4-byte match as long as possible.
 			//
 			t := candidate.offset - e.cur
-			l := e.matchlen(s+4, t+4, src) + 4
+			l := e.matchlenLong(s+4, t+4, src) + 4
 
 			// Extend backwards
-			tMin := s - maxMatchOffset
-			if tMin < 0 {
-				tMin = 0
-			}
-			for t > tMin && s > nextEmit && src[t-1] == src[s-1] && l < maxMatchLength {
+			for t > 0 && s > nextEmit && src[t-1] == src[s-1] {
 				s--
 				t--
 				l++
@@ -141,7 +137,7 @@ func (e *fastEncL3) Encode(dst *tokens, src []byte) {
 				emitLiteral(dst, src[nextEmit:s])
 			}
 
-			dst.AddMatch(uint32(l-baseMatchLength), uint32(s-t-baseMatchOffset))
+			dst.AddMatchLong(l, uint32(s-t-baseMatchOffset))
 			s += l
 			nextEmit = s
 			if nextS >= s {

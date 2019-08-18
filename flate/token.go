@@ -270,6 +270,33 @@ func (t *tokens) AddMatch(xlength uint32, xoffset uint32) {
 	t.n++
 }
 
+// AddMatch adds a match to the tokens, potentially longer than max match length.
+// Length should NOT have the base subtracted.
+// This function is very sensitive to inlining and right on the border.
+func (t *tokens) AddMatchLong(xlength int32, xoffset uint32) {
+	if debugDecode {
+		if xoffset >= maxMatchOffset+baseMatchOffset {
+			panic(fmt.Errorf("invalid offset: %v", xoffset))
+		}
+	}
+	oc := offsetCode(xoffset) & 31
+	for xlength > 0 {
+		xl := xlength
+		if xl > 258 {
+			// We need to have at least baseMatchLength left over for next loop.
+			xl = 258 - baseMatchLength
+		}
+		xlength -= xl
+		xl -= 3
+		t.nLits++
+		lengthCode := lengthCodes1[uint8(xl)] & 31
+		t.tokens[t.n] = token(matchType | uint32(xl)<<lengthShift | xoffset)
+		t.extraHist[lengthCode]++
+		t.offHist[oc]++
+		t.n++
+	}
+}
+
 func (t *tokens) AddEOB() {
 	t.tokens[t.n] = token(endBlockMarker)
 	t.extraHist[0]++
