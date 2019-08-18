@@ -9,7 +9,7 @@ os:
 go:
 #  - 1.10.x
 #  - 1.11.x
-#  - 1.12.x
+  - 1.12.x
 #  - master
 
 install:
@@ -19,8 +19,8 @@ install:
 script:
  - diff <(gofmt -d .) <(printf "")
  - go test -v -cpu=2 ./...
- - go test -cpu=2 -tags=noasm ./...
- - go test -cpu=1,4 -short -race ./...
+# - go test -cpu=2 -tags=noasm ./...
+# - go test -cpu=1,4 -short -race ./...
  - GOOS=linux GOARCH=386 go install ./...
 
 matrix:
