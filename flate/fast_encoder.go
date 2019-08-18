@@ -57,36 +57,6 @@ const (
 	prime8bytes = 0xcf1bbcdcb7a56463
 )
 
-func load32(b []byte, i int) uint32 {
-	// Help the compiler eliminate bounds checks on the read so it can be done in a single read.
-	b = b[i:]
-	b = b[:4]
-	return uint32(b[0]) | uint32(b[1])<<8 | uint32(b[2])<<16 | uint32(b[3])<<24
-}
-
-func load64(b []byte, i int) uint64 {
-	// Help the compiler eliminate bounds checks on the read so it can be done in a single read.
-	b = b[i:]
-	b = b[:8]
-	return uint64(b[0]) | uint64(b[1])<<8 | uint64(b[2])<<16 | uint64(b[3])<<24 |
-		uint64(b[4])<<32 | uint64(b[5])<<40 | uint64(b[6])<<48 | uint64(b[7])<<56
-}
-
-func load3232(b []byte, i int32) uint32 {
-	// Help the compiler eliminate bounds checks on the read so it can be done in a single read.
-	b = b[i:]
-	b = b[:4]
-	return uint32(b[0]) | uint32(b[1])<<8 | uint32(b[2])<<16 | uint32(b[3])<<24
-}
-
-func load6432(b []byte, i int32) uint64 {
-	// Help the compiler eliminate bounds checks on the read so it can be done in a single read.
-	b = b[i:]
-	b = b[:8]
-	return uint64(b[0]) | uint64(b[1])<<8 | uint64(b[2])<<16 | uint64(b[3])<<24 |
-		uint64(b[4])<<32 | uint64(b[5])<<40 | uint64(b[6])<<48 | uint64(b[7])<<56
-}
-
 func hash(u uint32) uint32 {
 	return (u * 0x1e35a7bd) >> tableShift
 }
@@ -214,22 +184,21 @@ func matchLen(a, b []byte) int {
 		}
 		// Switch to 8 byte matching.
 		checked = 4
-		a = a[4:]
-		b = b[4:]
-		for len(a) >= 8 {
-			b = b[:len(a)]
-			if diff := load64(a, 0) ^ load64(b, 0); diff != 0 {
+		for checked <= len(a)-8 {
+			x := load64(a, checked)
+			y := load64(b, checked)
+			if diff := x ^ y; diff != 0 {
 				return checked + (bits.TrailingZeros64(diff) >> 3)
 			}
 			checked += 8
-			a = a[8:]
-			b = b[8:]
 		}
 	}
+	a = a[checked:]
+	b = b[checked:]
 	b = b[:len(a)]
 	for i := range a {
 		if a[i] != b[i] {
-			return int(i) + checked
+			return i + checked
 		}
 	}
 	return len(a) + checked
