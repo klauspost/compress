@@ -62,6 +62,7 @@ var decTestfiles = []struct {
 	{name: "symlen1", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/dec-symlen1.bin") }, err: "symbolLen (257) too big"},
 	{name: "crash4", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/crash4.bin") }, err: "symbolLen (1) too small"},
 	{name: "crash5", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/crash5.bin") }, err: "symbolLen (1) too small"},
+	{name: "crash6", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/dec-crash6.bin") }, err: "newState (32768) outside table size (32768)"},
 }
 
 func TestCompress(t *testing.T) {
