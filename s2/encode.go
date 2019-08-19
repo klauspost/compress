@@ -19,6 +19,13 @@ import (
 // Otherwise, a newly allocated slice will be returned.
 //
 // The dst and src must not overlap. It is valid to pass a nil dst.
+//
+// The blocks will require the same amount of memory to decode as encoding,
+// and does not make for concurrent decoding.
+// Also note that blocks do not contain CRC information, so corruption may be undetected.
+//
+// If you need to encode larger amounts of data, consider using
+// the streaming interface which gives all of these features.
 func Encode(dst, src []byte) []byte {
 	if n := MaxEncodedLen(len(src)); n < 0 {
 		panic(ErrTooLarge)
@@ -29,24 +36,20 @@ func Encode(dst, src []byte) []byte {
 	// The block starts with the varint-encoded length of the decompressed bytes.
 	d := binary.PutUvarint(dst, uint64(len(src)))
 
-	for len(src) > 0 {
-		p := src
-		src = nil
-		if len(p) > maxBlockSize {
-			p, src = p[:maxBlockSize], p[maxBlockSize:]
-		}
-		if len(p) < minNonLiteralBlockSize {
-			d += emitLiteral(dst[d:], p)
-			continue
-		}
-		n := encodeBlock(dst[d:], p)
-		if n > 0 {
-			d += n
-			continue
-		}
-		// Not compressible
-		d += emitLiteral(dst[d:], p)
+	if len(src) == 0 {
+		return dst[:d]
 	}
+	if len(src) < minNonLiteralBlockSize {
+		d += emitLiteral(dst[d:], src)
+		return dst[:d]
+	}
+	n := encodeBlock(dst[d:], src)
+	if n > 0 {
+		d += n
+		return dst[:d]
+	}
+	// Not compressible
+	d += emitLiteral(dst[d:], src)
 	return dst[:d]
 }
 
@@ -65,7 +68,7 @@ const inputMargin = 8
 const minNonLiteralBlockSize = 32
 
 // maxExtraLength is the maximum extra that will be emitted from a 4 byte match.
-// The copy will be at most 5 bytes (offset > 64k, lenght 4), but subtract 4 from the match.
+// The copy will be at most 5 bytes (offset > 64k, length 4), but subtract 4 from the match.
 // The literal encoding will be at most 5 bytes.
 const maxExtraLength = 5 - 4 + 5
 
@@ -244,16 +247,18 @@ func (w *Writer) write(p []byte) (nRet int, errRet error) {
 		}
 		checksum := crc(uncompressed)
 
-		// Compress the buffer, discarding the result if the improvement
-		// isn't at least 12.5%.
-		compressed := Encode(w.obuf[obufHeaderLen:], uncompressed)
-		chunkType := uint8(chunkTypeCompressedData)
-		chunkLen := 4 + len(compressed)
-		obufEnd := obufHeaderLen + len(compressed)
-		if len(compressed) >= len(uncompressed)-len(uncompressed)/8 {
-			chunkType = chunkTypeUncompressedData
-			chunkLen = 4 + len(uncompressed)
-			obufEnd = obufHeaderLen
+		// Set to uncompressed.
+		chunkType := uint8(chunkTypeUncompressedData)
+		chunkLen := 4 + len(uncompressed)
+		obufEnd := obufHeaderLen
+
+		// Attempt compressing.
+		n := binary.PutUvarint(w.obuf[obufHeaderLen:], uint64(len(uncompressed)))
+		n2 := encodeBlock(w.obuf[obufHeaderLen+n:], uncompressed)
+		if n2 > 0 {
+			chunkType = uint8(chunkTypeCompressedData)
+			chunkLen = 4 + n + n2
+			obufEnd = obufHeaderLen + n + n2
 		}
 
 		// Fill in the per-chunk header that comes before the body.
@@ -289,7 +294,7 @@ func (w *Writer) Flush() error {
 	if len(w.ibuf) == 0 {
 		return nil
 	}
-	w.write(w.ibuf)
+	_, w.err = w.write(w.ibuf)
 	w.ibuf = w.ibuf[:0]
 	return w.err
 }
