@@ -14,6 +14,8 @@ import (
 var (
 	// ErrCorrupt reports that the input is invalid.
 	ErrCorrupt = errors.New("s2: corrupt input")
+	// ErrCRC reports that the input failed CRC validation (streams only)
+	ErrCRC = errors.New("s2: corrupt input, crc mismatch")
 	// ErrTooLarge reports that the uncompressed length is too large.
 	ErrTooLarge = errors.New("s2: decoded block is too large")
 	// ErrUnsupported reports that the input isn't supported.
@@ -173,7 +175,7 @@ func (r *Reader) Read(p []byte) (int, error) {
 				return 0, r.err
 			}
 			if crc(r.decoded[:n]) != checksum {
-				r.err = ErrCorrupt
+				r.err = ErrCRC
 				return 0, r.err
 			}
 			r.i, r.j = 0, n
@@ -200,7 +202,7 @@ func (r *Reader) Read(p []byte) (int, error) {
 				return 0, r.err
 			}
 			if crc(r.decoded[:n]) != checksum {
-				r.err = ErrCorrupt
+				r.err = ErrCRC
 				return 0, r.err
 			}
 			r.i, r.j = 0, n

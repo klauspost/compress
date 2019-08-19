@@ -69,14 +69,23 @@ func s2Decode(dst, src []byte) int {
 				// keep last offset
 				switch length {
 				case 5:
-					length = int(uint32(src[s])) + 4
 					s += 1
+					if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+						return decodeErrCodeCorrupt
+					}
+					length = int(uint32(src[s-1])) + 4
 				case 6:
-					length = int(uint32(src[s])|(uint32(src[s+1])<<8)) + (1 << 8)
 					s += 2
+					if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+						return decodeErrCodeCorrupt
+					}
+					length = int(uint32(src[s-2])|(uint32(src[s-1])<<8)) + (1 << 8)
 				case 7:
-					length = int(uint32(src[s])|(uint32(src[s+1])<<8)|(uint32(src[s+2])<<16)) + (1 << 16)
 					s += 3
+					if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+						return decodeErrCodeCorrupt
+					}
+					length = int(uint32(src[s-3])|(uint32(src[s-2])<<8)|(uint32(src[s-1])<<16)) + (1 << 16)
 				default: // 0-> 4
 				}
 			} else {
