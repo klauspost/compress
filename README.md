@@ -11,9 +11,21 @@ It offers slightly better compression at lower compression settings, and up to 3
 
 [![Build Status](https://travis-ci.org/klauspost/compress.svg?branch=master)](https://travis-ci.org/klauspost/compress)
 [![Sourcegraph Badge](https://sourcegraph.com/github.com/klauspost/compress/-/badge.svg)](https://sourcegraph.com/github.com/klauspost/compress?badge)
+[![fuzzit](https://app.fuzzit.dev/badge?org_id=klauspost)](https://fuzzit.dev)
 
 # changelog
-
+* Aug 18, 2019: Add [fuzzit](https://fuzzit.dev/) continuous fuzzing.
+* Aug 14, 2019: zstd: Skip incompressible data 2x faster.  [#147](https://github.com/klauspost/compress/pull/147)
+* Aug 4, 2019 (v1.7.5): Better literal compression. [#146](https://github.com/klauspost/compress/pull/146)
+* Aug 4, 2019: Faster zstd compression. [#143](https://github.com/klauspost/compress/pull/143) [#144](https://github.com/klauspost/compress/pull/144)
+* Aug 4, 2019: Faster zstd decompression. [#145](https://github.com/klauspost/compress/pull/145) [#143](https://github.com/klauspost/compress/pull/143) [#142](https://github.com/klauspost/compress/pull/142)
+* July 15, 2019 (v1.7.4): Fix double EOF block in rare cases on zstd encoder.
+* July 15, 2019 (v1.7.3): Minor speedup/compression increase in default zstd encoder.
+* July 14, 2019: zstd decoder: Fix decompression error on multiple uses with mixed content.
+* July 7, 2019 (v1.7.2): Snappy update, zstd decoder potential race fix.
+* June 17, 2019: zstd decompression bugfix.
+* June 17, 2019: fix 32 bit builds.
+* June 17, 2019: Easier use in modules (less dependencies).
 * June 9, 2019: New stronger "default" [zstd](https://github.com/klauspost/compress/tree/master/zstd#zstd) compression mode. Matches zstd default compression ratio.
 * June 5, 2019: 20-40% throughput in [zstandard](https://github.com/klauspost/compress/tree/master/zstd#zstd) compression and better compression.
 * June 5, 2019: deflate/gzip compression: Reduce memory usage of lower compression levels.
