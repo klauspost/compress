@@ -243,7 +243,7 @@ func (s *Scratch) buildDtable() error {
 			nBits := s.actualTableLog - byte(highBits(uint32(nextState)))
 			s.decTable[u].nbBits = nBits
 			newState := (nextState << nBits) - tableSize
-			if newState > tableSize {
+			if newState >= tableSize {
 				return fmt.Errorf("newState (%d) outside table size (%d)", newState, tableSize)
 			}
 			if newState == uint16(u) && nBits == 0 {
