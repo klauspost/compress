@@ -11,6 +11,7 @@ It offers slightly better compression at lower compression settings, and up to 3
 
 [![Build Status](https://travis-ci.org/klauspost/compress.svg?branch=master)](https://travis-ci.org/klauspost/compress)
 [![Sourcegraph Badge](https://sourcegraph.com/github.com/klauspost/compress/-/badge.svg)](https://sourcegraph.com/github.com/klauspost/compress?badge)
+[![fuzzit](https://app.fuzzit.dev/badge?org_id=klauspost)](https://fuzzit.dev)
 
 # changelog
 * Aug 18, 2019: Add [fuzzit](https://fuzzit.dev/) continuous fuzzing.
