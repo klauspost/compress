@@ -9,6 +9,9 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"math/bits"
+	"runtime"
+	"sync"
 )
 
 // Encode returns the encoded form of src. The returned slice may be a sub-
@@ -34,9 +37,15 @@ func Encode(dst, src []byte) []byte {
 		}
 		if len(p) < minNonLiteralBlockSize {
 			d += emitLiteral(dst[d:], p)
-		} else {
-			d += encodeBlock(dst[d:], p)
+			continue
 		}
+		n := encodeBlock(dst[d:], p)
+		if n > 0 {
+			d += n
+			continue
+		}
+		// Not compressible
+		d += emitLiteral(dst[d:], p)
 	}
 	return dst[:d]
 }
@@ -52,23 +61,13 @@ func Encode(dst, src []byte) []byte {
 const inputMargin = 8
 
 // minNonLiteralBlockSize is the minimum size of the input to encodeBlock that
-// could be encoded with a copy tag. This is the minimum with respect to the
-// algorithm used by encodeBlock, not a minimum enforced by the file format.
-//
-// The encoded output must start with at least a 1 byte literal, as there are
-// no previous bytes to copy. A minimal (1 byte) copy after that, generated
-// from an emitCopy call in encodeBlock's main loop, would require at least
-// another inputMargin bytes, for the reason above: we want any emitLiteral
-// calls inside encodeBlock's main loop to use the fast path if possible, which
-// requires being able to overrun by inputMargin bytes. Thus,
-// minNonLiteralBlockSize equals 1 + 1 + inputMargin.
-//
-// The C++ code doesn't use this exact threshold, but it could, as discussed at
-// https://groups.google.com/d/topic/snappy-compression/oGbhsdIJSJ8/discussion
-// The difference between Go (2+inputMargin) and C++ (inputMargin) is purely an
-// optimization. It should not affect the encoded form. This is tested by
-// TestSameEncodingAsCppShortCopies.
-const minNonLiteralBlockSize = 1 + 1 + inputMargin
+// will be accepted by the encoder.
+const minNonLiteralBlockSize = 32
+
+// maxExtraLength is the maximum extra that will be emitted from a 4 byte match.
+// The copy will be at most 5 bytes (offset > 64k, lenght 4), but subtract 4 from the match.
+// The literal encoding will be at most 5 bytes.
+const maxExtraLength = 5 - 4 + 5
 
 // MaxEncodedLen returns the maximum length of a snappy block, given its
 // uncompressed length.
@@ -77,36 +76,25 @@ const minNonLiteralBlockSize = 1 + 1 + inputMargin
 func MaxEncodedLen(srcLen int) int {
 	n := uint64(srcLen)
 	if n > 0xffffffff {
+		// Also includes negative.
 		return -1
 	}
-	// Compressed data can be defined as:
-	//    compressed := item* literal*
-	//    item       := literal* copy
-	//
-	// The trailing literal sequence has a space blowup of at most 62/60
-	// since a literal of length 60 needs one tag byte + one extra byte
-	// for length information.
-	//
-	// Item blowup is trickier to measure. Suppose the "copy" op copies
-	// 4 bytes of data. Because of a special check in the encoding code,
-	// we produce a 4-byte copy only if the offset is < 65536. Therefore
-	// the copy op takes 3 bytes to encode, and this type of item leads
-	// to at most the 62/60 blowup for representing literals.
-	//
-	// Suppose the "copy" op copies 5 bytes of data. If the offset is big
-	// enough, it will take 5 bytes to encode the copy op. Therefore the
-	// worst case here is a one-byte literal followed by a five-byte copy.
-	// That is, 6 bytes of input turn into 7 bytes of "compressed" data.
-	//
-	// This last factor dominates the blowup, so the final estimate is:
-	n = 32 + n + n/6
+	// Size of the varint encoded block size.
+	varSize := (bits.Len64(n) + 1) * 9 / 8
+
+	// The encoder will never output blocks that are bigger.
+	// This means that for each block, the maximum size will be
+	// srcLen + (maximum size of literal encoding == 5)
+	n = (n + maxBlockSize - 1) / maxBlockSize
+	n *= maxBlockSize + 5
+	n += uint64(varSize)
 	if n > 0xffffffff {
 		return -1
 	}
 	return int(n)
 }
 
-var errClosed = errors.New("snappy: Writer is closed")
+var errClosed = errors.New("s2: Writer is closed")
 
 // NewWriter returns a new Writer that compresses to w, using the
 // framing format described at
@@ -116,11 +104,16 @@ var errClosed = errors.New("snappy: Writer is closed")
 // data has been forwarded to the underlying io.Writer. They may also call
 // Flush zero or more times before calling Close.
 func NewWriter(w io.Writer) *Writer {
-	return &Writer{
-		w:    w,
-		ibuf: make([]byte, 0, maxBlockSize),
-		obuf: make([]byte, obufLen),
+	w2 := Writer{
+		w:           w,
+		ibuf:        make([]byte, 0, maxBlockSize),
+		obuf:        make([]byte, obufLen),
+		concurrency: runtime.GOMAXPROCS(0),
 	}
+	if w != nil {
+		w2.output = make(chan result, w2.concurrency)
+	}
+	return &w2
 }
 
 // Writer is an io.Writer that can write Snappy-compressed bytes.
@@ -140,11 +133,22 @@ type Writer struct {
 
 	// wroteStreamHeader is whether we have written the stream header.
 	wroteStreamHeader bool
+
+	concurrency int
+	output      chan result
+	buffers     sync.Pool
+}
+
+type result struct {
+	wg  sync.WaitGroup
+	b   []byte
+	err error
 }
 
 // Reset discards the writer's state and switches the Snappy writer to write to
 // w. This permits reusing a Writer rather than allocating a new one.
 func (w *Writer) Reset(writer io.Writer) {
+	w.output = make(chan result, w.concurrency)
 	w.w = writer
 	w.err = nil
 	w.ibuf = w.ibuf[:0]
