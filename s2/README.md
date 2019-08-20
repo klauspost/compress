@@ -79,7 +79,7 @@ Incompressible content (`sharnd.out.2gb`, 2GB random data) sees the smallest spe
 
 While the decompression code hasn't changed, there is a significant speedup in decompression speed.
 
-This is the single goroutine decompression speed:
+Single goroutine decompression speed. No assembly:
 
 | File                           | S2 Throughput | S2 throughput |
 |--------------------------------|--------------|---------------|
@@ -91,6 +91,20 @@ This is the single goroutine decompression speed:
 | enwik9.s2                      | 1.67x        | 681.53 MB/s   |
 | adresser.json.s2               | 3.41x        | 4230.53 MB/s  |
 | silesia.tar.s2                 | 1.52x        | 811.58        |
+
+
+Single goroutine decompression speed. With AMD64 assembly:
+
+| File                           | S2 throughput | S2 throughput |
+|--------------------------------|--------------|---------------|
+| consensus.db.10gb.s2           | 1.15x        | 3074 MB/s     |
+| 10gb.tar.s2                    | 1.08x        | 1534 MB/s     |
+| rawstudio-mint14.tar.s2        | 1.27x        | 2220 MB/s     |
+| github-june-2days-2019.json.s2 | 1.40x        | 2468 MB/s     |
+| github-ranks-backup.bin.s2     | 1.11x        | 2132 MB/s     |
+| enwik9.s2                      | 1.42x        | 1280 MB/s     |
+| adresser.json.s2               | 1.34x        | 4550 MB/s     |
+| silesia.tar.s2                 | 1.22x        | 1374 MB/s     |
 
 Even though S2 typically compresses better than Snappy, decompression speed is always better. 
 
