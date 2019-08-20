@@ -81,6 +81,13 @@ func roundtrip(b, ebuf, dbuf []byte) error {
 	if err := cmp(d, b); err != nil {
 		return fmt.Errorf("roundtrip mismatch: %v", err)
 	}
+	d, err = Decode(dbuf, EncodeBetter(ebuf, b))
+	if err != nil {
+		return fmt.Errorf("decoding error: %v", err)
+	}
+	if err := cmp(d, b); err != nil {
+		return fmt.Errorf("roundtrip mismatch: %v", err)
+	}
 	return nil
 }
 
@@ -1058,6 +1065,24 @@ func testBlockRoundtrip(t *testing.T, src []byte) {
 		t.Error(err)
 	}
 }
+
+func testBetterBlockRoundtrip(t *testing.T, src []byte) {
+	dst := EncodeBetter(nil, src)
+	t.Logf("encoded to %d -> %d bytes", len(src), len(dst))
+	decoded, err := Decode(nil, dst)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if len(decoded) != len(src) {
+		t.Error("decoded len:", len(decoded), "!=", len(src))
+		return
+	}
+	err = cmp(src, decoded)
+	if err != nil {
+		t.Error(err)
+	}
+}
 func testSnappyDecode(t *testing.T, src []byte) {
 	var buf bytes.Buffer
 	enc := snappy.NewBufferedWriter(&buf)
@@ -1097,6 +1122,16 @@ func benchDecode(b *testing.B, src []byte) {
 	}
 }
 
+func benchDecodeBetter(b *testing.B, src []byte) {
+	encoded := EncodeBetter(nil, src)
+	// Bandwidth is in amount of uncompressed data.
+	b.SetBytes(int64(len(src)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		Decode(src, encoded)
+	}
+}
+
 func benchEncode(b *testing.B, src []byte) {
 	// Bandwidth is in amount of uncompressed data.
 	b.SetBytes(int64(len(src)))
@@ -1104,6 +1139,16 @@ func benchEncode(b *testing.B, src []byte) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		Encode(dst, src)
+	}
+}
+
+func benchEncodeBetter(b *testing.B, src []byte) {
+	// Bandwidth is in amount of uncompressed data.
+	b.SetBytes(int64(len(src)))
+	dst := make([]byte, MaxEncodedLen(len(src)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		EncodeBetter(dst, src)
 	}
 }
 
@@ -1166,6 +1211,15 @@ func BenchmarkRandomEncode(b *testing.B) {
 		data[i] = uint8(rng.Intn(256))
 	}
 	benchEncode(b, data)
+}
+
+func BenchmarkRandomEncodeBetter(b *testing.B) {
+	rng := rand.New(rand.NewSource(1))
+	data := make([]byte, 1<<20)
+	for i := range data {
+		data[i] = uint8(rng.Intn(256))
+	}
+	benchEncodeBetter(b, data)
 }
 
 // testFiles' values are copied directly from
@@ -1243,14 +1297,25 @@ func benchFile(b *testing.B, i int, decode bool) {
 	}
 	bDir := filepath.FromSlash(*benchdataDir)
 	data := readFile(b, filepath.Join(bDir, testFiles[i].filename))
-	if n := testFiles[i].sizeLimit; 0 < n && n < len(data) {
-		data = data[:n]
-	}
-	if decode {
-		benchDecode(b, data)
-	} else {
-		benchEncode(b, data)
-	}
+
+	b.Run("block", func(b *testing.B) {
+		if n := testFiles[i].sizeLimit; 0 < n && n < len(data) {
+			data = data[:n]
+		}
+		if decode {
+			benchDecode(b, data)
+		} else {
+			benchEncode(b, data)
+		}
+	})
+	b.Run("block-better", func(b *testing.B) {
+		if decode {
+			benchDecodeBetter(b, data)
+		} else {
+			benchEncodeBetter(b, data)
+		}
+	})
+
 }
 
 func TestRoundtrips(t *testing.T) {
@@ -1288,6 +1353,10 @@ func testFile(t *testing.T, i, repeat int) {
 		t.Run("block", func(t *testing.T) {
 			d := data
 			testBlockRoundtrip(t, d)
+		})
+		t.Run("block-better", func(t *testing.T) {
+			d := data
+			testBetterBlockRoundtrip(t, d)
 		})
 		t.Run("snappy", func(t *testing.T) {
 			testSnappyDecode(t, data)
