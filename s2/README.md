@@ -39,7 +39,7 @@ Only if your decompression platform is heavily memory limited, will there be a d
 
 Compression is increased, mostly around 5-20% and the throughput is typically 25-40% increased compared to the non-assembly Go implementation.
 
-| File                 | S2 Througput | S2 % smaller |
+| File                 | S2 throughput | S2 % smaller |
 |----------------------|--------------|-----------------|
 | [consensus.db.10gb](https://files.klauspost.com/compress/consensus.db.10gb.zst)    | 1.48x        | 14.83%          |
 | [enwik9](http://mattmahoney.net/dc/textdata.html)               | 1.41x        | 2.79%           |
@@ -54,6 +54,45 @@ There is a good speedup across the board.
 Machine generated data gets by far the biggest compression boost, with size being being reduced by up to 45% of Snappy size.
 
 It would be very feasible to add faster/better compression modes to S2, but the current settings are a good replacement for Snappy.
+
+## Concurrent Stream Compression
+
+Streams are concurrently compressed. The stream will be distributed among all available CPU cores for the best possible throughput.
+
+Snappy vs S2 compression speed on 6 core (12 thread) computer:
+
+| File                        | S2 throughput | S2 % Smaller | S2 throughput |
+|-----------------------------|--------------|--------------|---------------|
+| consensus.db.10gb           | 7.33x        | 14.70%       | 3595.97 MB/s  |
+| github-ranks-backup.bin     | 6.22x        | -9.39%       | 2964.83 MB/s  |
+| github-june-2days-2019.json | 7.48x        | 28.80%       | 3741.06 MB/s  |
+| rawstudio-mint14.tar        | 7.35x        | 6.34%        | 3398.61 MB/s  |
+| 10gb.tar                    | 6.99x        | 1.75%        | 2819.25 MB/s  |
+| enwik9                      | 8.85x        | 3.63%        | 2050.45 MB/s  |
+| sharnd.out.2gb              | 0.91x        | 0.01%        | 3770.79 MB/s  |
+| adresser.json               | 4.10x        | 45.94%       | 3937.66 MB/s  |
+| silesia.tar                 | 5.30x        | 5.21%        | 1656.42 MB/s  |
+
+Incompressible content (`sharnd.out.2gb`, 2GB random data) sees the smallest speedup. This is likely dominated by synchronization overhead.
+
+## Decompression
+
+While the decompression code hasn't changed, there is a significant speedup in decompression speed.
+
+This is the single goroutine decompression speed:
+
+| File                           | S2 Throughput | S2 throughput |
+|--------------------------------|--------------|---------------|
+| consensus.db.10gb.s2           | 1.84x        | 2289.8 MB/s   |
+| 10gb.tar.s2                    | 1.30x        | 867.07 MB/s   |
+| rawstudio-mint14.tar.s2        | 1.66x        | 1329.65 MB/s  |
+| github-june-2days-2019.json.s2 | 2.36x        | 1831.59 MB/s  |
+| github-ranks-backup.bin.s2     | 1.73x        | 1390.7 MB/s   |
+| enwik9.s2                      | 1.67x        | 681.53 MB/s   |
+| adresser.json.s2               | 3.41x        | 4230.53 MB/s  |
+| silesia.tar.s2                 | 1.52x        | 811.58        |
+
+Even though S2 typically compresses better than Snappy, decompression speed is always better. 
 
 # LICENSE
 
