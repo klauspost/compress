@@ -1030,9 +1030,11 @@ func TestNumUnderlyingWrites(t *testing.T) {
 		input []byte
 		want  int
 	}{
-		{bytes.Repeat([]byte{'x'}, 100), 1},
+		// Magic header + block
+		{bytes.Repeat([]byte{'x'}, 100), 2},
+		// One block each:
 		{bytes.Repeat([]byte{'y'}, 100), 1},
-		{[]byte("ABCDEFGHIJKLMNOPQRST"), 2},
+		{[]byte("ABCDEFGHIJKLMNOPQRST"), 1},
 	}
 
 	var c writeCounter
@@ -1065,6 +1067,11 @@ func testWriterRoundtrip(t *testing.T, src []byte) {
 	}
 	if n != len(src) {
 		t.Error(io.ErrShortWrite)
+		return
+	}
+	err = enc.Flush()
+	if err != nil {
+		t.Error(err)
 		return
 	}
 	t.Logf("encoded to %d -> %d bytes", len(src), buf.Len())

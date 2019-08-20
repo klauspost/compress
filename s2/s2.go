@@ -75,7 +75,7 @@ const (
 	// TestMaxEncodedLenOfMaxBlockSize.
 	maxEncodedLenOfMaxBlockSize = 1048605
 
-	obufHeaderLen  = len(magicChunk) + checksumSize + chunkHeaderSize
+	obufHeaderLen  = checksumSize + chunkHeaderSize
 	obufLen        = obufHeaderLen + maxEncodedLenOfMaxBlockSize
 	maxMatchOffset = maxBlockSize
 )

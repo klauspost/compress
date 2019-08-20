@@ -108,62 +108,95 @@ var errClosed = errors.New("s2: Writer is closed")
 // Flush zero or more times before calling Close.
 func NewWriter(w io.Writer) *Writer {
 	w2 := Writer{
-		w:           w,
 		ibuf:        make([]byte, 0, maxBlockSize),
-		obuf:        make([]byte, obufLen),
 		concurrency: runtime.GOMAXPROCS(0),
 	}
-	if w != nil {
-		w2.output = make(chan result, w2.concurrency)
+	w2.buffers.New = func() interface{} {
+		return make([]byte, obufLen)
 	}
+	w2.Reset(w)
 	return &w2
 }
 
 // Writer is an io.Writer that can write Snappy-compressed bytes.
 type Writer struct {
-	w   io.Writer
-	err error
+	errMu    sync.Mutex
+	errState error
 
 	// ibuf is a buffer for the incoming (uncompressed) bytes.
-	//
-	// Its use is optional. For backwards compatibility, Writers created by the
-	// NewWriter function have ibuf == nil, do not buffer incoming bytes, and
-	// therefore do not need to be Flush'ed or Close'd.
 	ibuf []byte
-
-	// obuf is a buffer for the outgoing (compressed) bytes.
-	obuf []byte
 
 	// wroteStreamHeader is whether we have written the stream header.
 	wroteStreamHeader bool
 
 	concurrency int
-	output      chan result
+	output      chan chan result
 	buffers     sync.Pool
+	writerWg    sync.WaitGroup
 }
 
-type result struct {
-	wg  sync.WaitGroup
-	b   []byte
-	err error
+type result []byte
+
+// err returns the previously set error.
+// If no error has been set it is set to err if not nil.
+func (w *Writer) err(err error) error {
+	w.errMu.Lock()
+	errSet := w.errState
+	if errSet == nil && err != nil {
+		w.errState = err
+		errSet = err
+	}
+	w.errMu.Unlock()
+	return errSet
 }
 
 // Reset discards the writer's state and switches the Snappy writer to write to
 // w. This permits reusing a Writer rather than allocating a new one.
 func (w *Writer) Reset(writer io.Writer) {
-	w.output = make(chan result, w.concurrency)
-	w.w = writer
-	w.err = nil
+	if w.output != nil {
+		close(w.output)
+		w.writerWg.Wait()
+		w.output = nil
+	}
+	w.errState = nil
 	w.ibuf = w.ibuf[:0]
 	w.wroteStreamHeader = false
+	if writer == nil {
+		return
+	}
+	toWrite := make(chan chan result, w.concurrency)
+	w.output = toWrite
+	w.writerWg.Add(1)
+
+	// Start a writer goroutine that will write all output in order.
+	go func() {
+		defer w.writerWg.Done()
+		for write := range toWrite {
+			in := <-write
+			if len(in) > 0 {
+				if w.err(nil) == nil {
+					n, err := writer.Write(in)
+					if err == nil && n != len(in) {
+						err = io.ErrShortBuffer
+					}
+					_ = w.err(err)
+				}
+				if cap(in) >= obufLen {
+					w.buffers.Put([]byte(in))
+				}
+			}
+			// close the incoming write request.
+			// This can be used for synchronizing flushes.
+			close(write)
+		}
+	}()
 }
 
 // Write satisfies the io.Writer interface.
 func (w *Writer) Write(p []byte) (nRet int, errRet error) {
 	// The remainder of this method is based on bufio.Writer.Write from the
 	// standard library.
-
-	for len(p) > (cap(w.ibuf)-len(w.ibuf)) && w.err == nil {
+	for len(p) > (cap(w.ibuf)-len(w.ibuf)) && w.err(nil) == nil {
 		var n int
 		if len(w.ibuf) == 0 {
 			// Large write, empty buffer.
@@ -172,13 +205,14 @@ func (w *Writer) Write(p []byte) (nRet int, errRet error) {
 		} else {
 			n = copy(w.ibuf[len(w.ibuf):cap(w.ibuf)], p)
 			w.ibuf = w.ibuf[:len(w.ibuf)+n]
-			w.Flush()
+			w.write(w.ibuf)
+			w.ibuf = w.ibuf[:0]
 		}
 		nRet += n
 		p = p[n:]
 	}
-	if w.err != nil {
-		return nRet, w.err
+	if err := w.err(nil); err != nil {
+		return nRet, err
 	}
 	n := copy(w.ibuf[len(w.ibuf):cap(w.ibuf)], p)
 	w.ibuf = w.ibuf[:len(w.ibuf)+n]
@@ -192,7 +226,13 @@ func (w *Writer) Write(p []byte) (nRet int, errRet error) {
 // The return value n is the number of bytes read.
 // Any error except io.EOF encountered during the read is also returned.
 func (w *Writer) ReadFrom(r io.Reader) (n int64, err error) {
-	w.ibuf = w.ibuf[0:cap(w.ibuf)]
+	if len(w.ibuf) > 0 {
+		err := w.Flush()
+		if err != nil {
+			return 0, err
+		}
+	}
+	w.ibuf = w.ibuf[0:maxBlockSize]
 	for {
 		n2, err := io.ReadFull(r, w.ibuf)
 		if err != nil {
@@ -200,8 +240,7 @@ func (w *Writer) ReadFrom(r io.Reader) (n int64, err error) {
 				err = io.EOF
 			}
 			if err != io.EOF {
-				w.err = err
-				break
+				return n, w.err(err)
 			}
 		}
 		if n2 == 0 {
@@ -210,13 +249,11 @@ func (w *Writer) ReadFrom(r io.Reader) (n int64, err error) {
 		n += int64(n2)
 		w.ibuf = w.ibuf[:n2]
 		n3, err2 := w.write(w.ibuf)
-		if err2 != nil {
-			w.err = err2
+		if w.err(err2) != nil {
 			break
 		}
 		if n3 != n2 {
-			w.err = errors.New("internal error: size uncompressed size mismatch")
-			break
+			return n, w.err(errors.New("internal error: size uncompressed size mismatch"))
 		}
 		if err != nil {
 			// We got EOF and wrote everything
@@ -224,19 +261,19 @@ func (w *Writer) ReadFrom(r io.Reader) (n int64, err error) {
 		}
 	}
 	w.ibuf = w.ibuf[:0]
-	return n, w.err
+	return n, w.err(nil)
 }
 
 func (w *Writer) write(p []byte) (nRet int, errRet error) {
-	if w.err != nil {
-		return 0, w.err
+	if err := w.err(nil); err != nil {
+		return 0, err
 	}
 	for len(p) > 0 {
-		obufStart := len(magicChunk)
 		if !w.wroteStreamHeader {
 			w.wroteStreamHeader = true
-			copy(w.obuf, magicChunk)
-			obufStart = 0
+			hWriter := make(chan result)
+			w.output <- hWriter
+			hWriter <- []byte(magicChunk)
 		}
 
 		var uncompressed []byte
@@ -245,42 +282,51 @@ func (w *Writer) write(p []byte) (nRet int, errRet error) {
 		} else {
 			uncompressed, p = p, nil
 		}
-		checksum := crc(uncompressed)
 
-		// Set to uncompressed.
-		chunkType := uint8(chunkTypeUncompressedData)
-		chunkLen := 4 + len(uncompressed)
-		obufEnd := obufHeaderLen
+		// Copy input.
+		// If the block is incompressible, this is used for the result.
+		inbuf := w.buffers.Get().([]byte)[:len(uncompressed)+obufHeaderLen]
+		obuf := w.buffers.Get().([]byte)[:obufLen]
+		copy(inbuf[obufHeaderLen:], uncompressed)
+		uncompressed = inbuf[obufHeaderLen:]
 
-		// Attempt compressing.
-		n := binary.PutUvarint(w.obuf[obufHeaderLen:], uint64(len(uncompressed)))
-		n2 := encodeBlock(w.obuf[obufHeaderLen+n:], uncompressed)
-		if n2 > 0 {
-			chunkType = uint8(chunkTypeCompressedData)
-			chunkLen = 4 + n + n2
-			obufEnd = obufHeaderLen + n + n2
-		}
+		output := make(chan result)
+		w.output <- output
+		go func() {
+			checksum := crc(uncompressed)
 
-		// Fill in the per-chunk header that comes before the body.
-		w.obuf[len(magicChunk)+0] = chunkType
-		w.obuf[len(magicChunk)+1] = uint8(chunkLen >> 0)
-		w.obuf[len(magicChunk)+2] = uint8(chunkLen >> 8)
-		w.obuf[len(magicChunk)+3] = uint8(chunkLen >> 16)
-		w.obuf[len(magicChunk)+4] = uint8(checksum >> 0)
-		w.obuf[len(magicChunk)+5] = uint8(checksum >> 8)
-		w.obuf[len(magicChunk)+6] = uint8(checksum >> 16)
-		w.obuf[len(magicChunk)+7] = uint8(checksum >> 24)
+			// Set to uncompressed.
+			chunkType := uint8(chunkTypeUncompressedData)
+			chunkLen := 4 + len(uncompressed)
 
-		if _, err := w.w.Write(w.obuf[obufStart:obufEnd]); err != nil {
-			w.err = err
-			return nRet, err
-		}
-		if chunkType == chunkTypeUncompressedData {
-			if _, err := w.w.Write(uncompressed); err != nil {
-				w.err = err
-				return nRet, err
+			// Attempt compressing.
+			n := binary.PutUvarint(obuf[obufHeaderLen:], uint64(len(uncompressed)))
+			n2 := encodeBlock(obuf[obufHeaderLen+n:], uncompressed)
+			if n2 > 0 {
+				chunkType = uint8(chunkTypeCompressedData)
+				chunkLen = 4 + n + n2
+				obuf = obuf[:obufHeaderLen+n+n2]
+				w.buffers.Put(inbuf)
+				inbuf = nil
+			} else {
+				// Discard output buffer.
+				w.buffers.Put(obuf)
+				obuf = inbuf
 			}
-		}
+
+			// Fill in the per-chunk header that comes before the body.
+			obuf[0] = chunkType
+			obuf[1] = uint8(chunkLen >> 0)
+			obuf[2] = uint8(chunkLen >> 8)
+			obuf[3] = uint8(chunkLen >> 16)
+			obuf[4] = uint8(checksum >> 0)
+			obuf[5] = uint8(checksum >> 8)
+			obuf[6] = uint8(checksum >> 16)
+			obuf[7] = uint8(checksum >> 24)
+
+			// Queue final output.
+			output <- obuf
+		}()
 		nRet += len(uncompressed)
 	}
 	return nRet, nil
@@ -288,23 +334,33 @@ func (w *Writer) write(p []byte) (nRet int, errRet error) {
 
 // Flush flushes the Writer to its underlying io.Writer.
 func (w *Writer) Flush() error {
-	if w.err != nil {
-		return w.err
+	if err := w.err(nil); err != nil {
+		return err
 	}
-	if len(w.ibuf) == 0 {
-		return nil
+
+	// Queue any data still in input buffer.
+	if len(w.ibuf) != 0 {
+		_, err := w.write(w.ibuf)
+		w.ibuf = w.ibuf[:0]
+		err = w.err(err)
+		if err != nil {
+			return err
+		}
 	}
-	_, w.err = w.write(w.ibuf)
-	w.ibuf = w.ibuf[:0]
-	return w.err
+
+	// Send empty buffer
+	res := make(chan result)
+	w.output <- res
+	// Block until this has been picked up.
+	res <- nil
+	// When it is closed, we have flushed.
+	<-res
+	return w.err(nil)
 }
 
 // Close calls Flush and then closes the Writer.
 func (w *Writer) Close() error {
-	w.Flush()
-	ret := w.err
-	if w.err == nil {
-		w.err = errClosed
-	}
-	return ret
+	err := w.Flush()
+	_ = w.err(errClosed)
+	return err
 }
