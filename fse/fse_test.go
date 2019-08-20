@@ -63,6 +63,7 @@ var decTestfiles = []struct {
 	{name: "crash4", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/crash4.bin") }, err: "symbolLen (1) too small"},
 	{name: "crash5", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/crash5.bin") }, err: "symbolLen (1) too small"},
 	{name: "crash6", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/dec-crash6.bin") }, err: "newState (32768) outside table size (32768)"},
+	{name: "something", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/fse-artifact3.bin") }, err: "output size (1048576) > DecompressLimit (1048576)"},
 }
 
 func TestCompress(t *testing.T) {
@@ -107,6 +108,7 @@ func TestDecompress(t *testing.T) {
 	for _, test := range decTestfiles {
 		t.Run(test.name, func(t *testing.T) {
 			var s Scratch
+			s.DecompressLimit = 1 << 20
 			buf0, err := test.fn()
 			if err != nil {
 				t.Fatal(err)
