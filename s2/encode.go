@@ -175,6 +175,9 @@ func (w *Writer) Reset(writer io.Writer) {
 			in := <-write
 			if len(in) > 0 {
 				if w.err(nil) == nil {
+					// Don't expose data from previous buffers.
+					in = in[:len(in):len(in)]
+					// Write to output.
 					n, err := writer.Write(in)
 					if err == nil && n != len(in) {
 						err = io.ErrShortBuffer
@@ -232,7 +235,7 @@ func (w *Writer) ReadFrom(r io.Reader) (n int64, err error) {
 			return 0, err
 		}
 	}
-	w.ibuf = w.ibuf[0:maxBlockSize]
+	w.ibuf = w.ibuf[:maxBlockSize]
 	for {
 		n2, err := io.ReadFull(r, w.ibuf)
 		if err != nil {
