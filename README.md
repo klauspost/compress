@@ -1,8 +1,8 @@
 # compress
 
-This package is based on an optimized Deflate function, which is used by gzip/zip/zlib packages.
+This package provides various compression algorithms.
 
-It offers slightly better compression at lower compression settings, and up to 3x faster encoding at highest compression level.
+It provides [zstandard](https://github.com/klauspost/compress/tree/master/zstd#zstd) compression and decompression in pure Go and optimized [deflate](https://godoc.org/github.com/klauspost/compress/flate) functions which can be used as a dropin replacement for [gzip](https://godoc.org/github.com/klauspost/compress/gzip), [zip](https://godoc.org/github.com/klauspost/compress/zip) and [zlib](https://godoc.org/github.com/klauspost/compress/zlib)
 
 * [High Throughput Benchmark](http://blog.klauspost.com/go-gzipdeflate-benchmarks/).
 * [Small Payload/Webserver Benchmarks](http://blog.klauspost.com/gzip-performance-for-go-webservers/).
@@ -94,7 +94,7 @@ The raw results are in my [updated spreadsheet](https://docs.google.com/spreadsh
 
 The columns to take note of are: *MB/s* - the throughput. *Reduction* - the data size reduction in percent of the original. *Rel Speed* relative speed compared to the standard libary at the same level. *Smaller* - how many percent smaller is the compressed output compared to stdlib. Negative means the output was bigger. *Loss* means the loss (or gain) in compression as a percentage difference of the input.
 
-The `gzstd` (standard library gzip) and `gzkp` (this package gzip) only uses one CPU core. [`pgzip`](https://github.com/klauspost/pgzip), [`bgzf`](https://github.com/biogo/hts/bgzf) uses all 4 cores. [`zstd`](https://github.com/DataDog/zstd) uses one core, and is a beast (but not Go, yet).
+The `gzstd` (standard library gzip) and `gzkp` (this package gzip) only uses one CPU core. [`pgzip`](https://github.com/klauspost/pgzip), [`bgzf`](https://github.com/biogo/hts/tree/master/bgzf) uses all 4 cores. [`zstd`](https://github.com/DataDog/zstd) uses one core, and is a beast (but not Go, yet).
 
 
 ## Overall differences.
