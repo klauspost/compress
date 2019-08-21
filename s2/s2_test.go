@@ -292,10 +292,10 @@ func TestDecode(t *testing.T) {
 		"abcddddd",
 		nil,
 	}, {
-		`decodedLen=8; tagLiteral (4 bytes "abcd"); tagCopy1; length=4 offset=0; zero offset`,
+		`decodedLen=8; tagLiteral (4 bytes "abcd"); tagCopy1; length=4 offset=0; repeat offset`,
 		"\x08" + "\x0cabcd" + "\x01\x00",
-		"",
-		ErrCorrupt,
+		"abcddddd",
+		nil,
 	}, {
 		`decodedLen=9; tagLiteral (4 bytes "abcd"); tagCopy1; length=4 offset=4; inconsistent dLen`,
 		"\x09" + "\x0cabcd" + "\x01\x04",
