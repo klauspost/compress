@@ -184,6 +184,7 @@ type Writer struct {
 	output      chan chan result
 	buffers     sync.Pool
 	writerWg    sync.WaitGroup
+	writer      io.Writer
 }
 
 type result []byte
@@ -216,6 +217,10 @@ func (w *Writer) Reset(writer io.Writer) {
 	w.ibuf = w.ibuf[:0]
 	w.wroteStreamHeader = false
 	if writer == nil {
+		return
+	}
+	if w.concurrency == 1 {
+		w.writer = writer
 		return
 	}
 	toWrite := make(chan chan result, w.concurrency)
@@ -325,6 +330,9 @@ func (w *Writer) write(p []byte) (nRet int, errRet error) {
 	if err := w.err(nil); err != nil {
 		return 0, err
 	}
+	if w.concurrency == 1 {
+		return w.writeSync(p)
+	}
 	for len(p) > 0 {
 		if !w.wroteStreamHeader {
 			w.wroteStreamHeader = true
@@ -395,6 +403,87 @@ func (w *Writer) write(p []byte) (nRet int, errRet error) {
 	return nRet, nil
 }
 
+func (w *Writer) writeSync(p []byte) (nRet int, errRet error) {
+	if err := w.err(nil); err != nil {
+		return 0, err
+	}
+	for len(p) > 0 {
+		if !w.wroteStreamHeader {
+			w.wroteStreamHeader = true
+			n, err := w.writer.Write([]byte(magicChunk))
+			if err != nil {
+				return 0, w.err(err)
+			}
+			if n != len(magicChunk) {
+				return 0, w.err(io.ErrShortWrite)
+			}
+		}
+
+		var uncompressed []byte
+		if len(p) > maxBlockSize {
+			uncompressed, p = p[:maxBlockSize], p[maxBlockSize:]
+		} else {
+			uncompressed, p = p, nil
+		}
+
+		obuf := w.buffers.Get().([]byte)[:obufLen]
+		checksum := crc(uncompressed)
+
+		// Set to uncompressed.
+		chunkType := uint8(chunkTypeUncompressedData)
+		chunkLen := 4 + len(uncompressed)
+
+		// Attempt compressing.
+		n := binary.PutUvarint(obuf[obufHeaderLen:], uint64(len(uncompressed)))
+		var n2 int
+		if w.better {
+			n2 = encodeBlockBetter(obuf[obufHeaderLen+n:], uncompressed)
+		} else {
+			n2 = encodeBlock(obuf[obufHeaderLen+n:], uncompressed)
+		}
+
+		if n2 > 0 {
+			chunkType = uint8(chunkTypeCompressedData)
+			chunkLen = 4 + n + n2
+			obuf = obuf[:obufHeaderLen+n+n2]
+		} else {
+			obuf = obuf[:8]
+		}
+
+		// Fill in the per-chunk header that comes before the body.
+		obuf[0] = chunkType
+		obuf[1] = uint8(chunkLen >> 0)
+		obuf[2] = uint8(chunkLen >> 8)
+		obuf[3] = uint8(chunkLen >> 16)
+		obuf[4] = uint8(checksum >> 0)
+		obuf[5] = uint8(checksum >> 8)
+		obuf[6] = uint8(checksum >> 16)
+		obuf[7] = uint8(checksum >> 24)
+
+		n, err := w.writer.Write(obuf)
+		if err != nil {
+			return 0, w.err(err)
+		}
+		if n != len(obuf) {
+			return 0, w.err(io.ErrShortWrite)
+		}
+		if chunkType == chunkTypeUncompressedData {
+			// Write uncompressed data.
+			n, err := w.writer.Write(uncompressed)
+			if err != nil {
+				return 0, w.err(err)
+			}
+			if n != len(uncompressed) {
+				return 0, w.err(io.ErrShortWrite)
+			}
+		}
+		w.buffers.Put(obuf)
+		// Queue final output.
+		nRet += len(uncompressed)
+	}
+	return nRet, nil
+}
+
 // Flush flushes the Writer to its underlying io.Writer.
 func (w *Writer) Flush() error {
 	if err := w.err(nil); err != nil {
@@ -409,6 +498,9 @@ func (w *Writer) Flush() error {
 		if err != nil {
 			return err
 		}
+	}
+	if w.output == nil {
+		return w.err(nil)
 	}
 
 	// Send empty buffer

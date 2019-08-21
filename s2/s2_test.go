@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -1030,6 +1031,10 @@ func TestNumUnderlyingWrites(t *testing.T) {
 		{[]byte("ABCDEFGHIJKLMNOPQRST"), 1},
 	}
 
+	// If we are doing sync writes, we write uncompressed as two writes.
+	if runtime.GOMAXPROCS(0) == 1 {
+		testCases[2].want++
+	}
 	var c writeCounter
 	w := NewWriter(&c)
 	defer w.Close()
