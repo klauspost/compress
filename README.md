@@ -2,7 +2,7 @@
 
 This package provides various compression algorithms.
 
-It provides [zstandard](https://github.com/klauspost/compress/tree/master/zstd#zstd) compression and decompression in pure Go and optimized [deflate](https://godoc.org/github.com/klauspost/compress/flate) functions which can be used as a dropin replacement for [gzip](https://godoc.org/github.com/klauspost/compress/gzip), [zip](https://godoc.org/github.com/klauspost/compress/zip) and [zlib](https://godoc.org/github.com/klauspost/compress/zlib)
+It provides [zstandard](https://github.com/klauspost/compress/tree/master/zstd#zstd) compression and decompression in pure Go and optimized [deflate](https://godoc.org/github.com/klauspost/compress/flate) functions which can be used as a dropin replacement for [gzip](https://godoc.org/github.com/klauspost/compress/gzip), [zip](https://godoc.org/github.com/klauspost/compress/zip) and [zlib](https://godoc.org/github.com/klauspost/compress/zlib).
 
 * [High Throughput Benchmark](http://blog.klauspost.com/go-gzipdeflate-benchmarks/).
 * [Small Payload/Webserver Benchmarks](http://blog.klauspost.com/gzip-performance-for-go-webservers/).
