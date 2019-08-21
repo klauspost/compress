@@ -644,6 +644,42 @@ func TestFramingFormat(t *testing.T) {
 	}
 }
 
+func TestFramingFormatBetter(t *testing.T) {
+	// src is comprised of alternating 1e5-sized sequences of random
+	// (incompressible) bytes and repeated (compressible) bytes. 1e5 was chosen
+	// because it is larger than maxBlockSize (64k).
+	src := make([]byte, 1e6)
+	rng := rand.New(rand.NewSource(1))
+	for i := 0; i < 10; i++ {
+		if i%2 == 0 {
+			for j := 0; j < 1e5; j++ {
+				src[1e5*i+j] = uint8(rng.Intn(256))
+			}
+		} else {
+			for j := 0; j < 1e5; j++ {
+				src[1e5*i+j] = uint8(i)
+			}
+		}
+	}
+
+	buf := new(bytes.Buffer)
+	bw := NewWriter(buf, WriterBetterCompression())
+	if _, err := bw.Write(src); err != nil {
+		t.Fatalf("Write: encoding: %v", err)
+	}
+	err := bw.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst, err := ioutil.ReadAll(NewReader(buf))
+	if err != nil {
+		t.Fatalf("ReadAll: decoding: %v", err)
+	}
+	if err := cmp(dst, src); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestEmitLiteral(t *testing.T) {
 	testCases := []struct {
 		length int
@@ -1014,9 +1050,9 @@ func TestNumUnderlyingWrites(t *testing.T) {
 	}
 }
 
-func testWriterRoundtrip(t *testing.T, src []byte) {
+func testWriterRoundtrip(t *testing.T, src []byte, opts ...WriterOption) {
 	var buf bytes.Buffer
-	enc := NewWriter(&buf)
+	enc := NewWriter(&buf, opts...)
 	n, err := enc.Write(src)
 	if err != nil {
 		t.Error(err)
@@ -1349,6 +1385,9 @@ func testFile(t *testing.T, i, repeat int) {
 		}
 		t.Run("s2", func(t *testing.T) {
 			testWriterRoundtrip(t, data)
+		})
+		t.Run("s2-better", func(t *testing.T) {
+			testWriterRoundtrip(t, data, WriterBetterCompression())
 		})
 		t.Run("block", func(t *testing.T) {
 			d := data

@@ -148,11 +148,18 @@ var errClosed = errors.New("s2: Writer is closed")
 // The Writer returned buffers writes. Users must call Close to guarantee all
 // data has been forwarded to the underlying io.Writer. They may also call
 // Flush zero or more times before calling Close.
-func NewWriter(w io.Writer) *Writer {
+func NewWriter(w io.Writer, opts ...WriterOption) *Writer {
 	w2 := Writer{
 		ibuf:        make([]byte, 0, maxBlockSize),
 		concurrency: runtime.GOMAXPROCS(0),
 	}
+	for _, opt := range opts {
+		if err := opt(&w2); err != nil {
+			w2.errState = err
+			return &w2
+		}
+	}
+	w2.paramsOK = true
 	w2.buffers.New = func() interface{} {
 		return make([]byte, obufLen)
 	}
@@ -170,6 +177,8 @@ type Writer struct {
 
 	// wroteStreamHeader is whether we have written the stream header.
 	wroteStreamHeader bool
+	paramsOK          bool
+	better            bool
 
 	concurrency int
 	output      chan chan result
@@ -195,6 +204,9 @@ func (w *Writer) err(err error) error {
 // Reset discards the writer's state and switches the Snappy writer to write to
 // w. This permits reusing a Writer rather than allocating a new one.
 func (w *Writer) Reset(writer io.Writer) {
+	if !w.paramsOK {
+		return
+	}
 	if w.output != nil {
 		close(w.output)
 		w.writerWg.Wait()
@@ -346,9 +358,13 @@ func (w *Writer) write(p []byte) (nRet int, errRet error) {
 
 			// Attempt compressing.
 			n := binary.PutUvarint(obuf[obufHeaderLen:], uint64(len(uncompressed)))
-			//n2 := encodeBlock(obuf[obufHeaderLen+n:], uncompressed)
-			// TODO: Make selector.
-			n2 := encodeBlockBetter(obuf[obufHeaderLen+n:], uncompressed)
+			var n2 int
+			if w.better {
+				n2 = encodeBlockBetter(obuf[obufHeaderLen+n:], uncompressed)
+			} else {
+				n2 = encodeBlock(obuf[obufHeaderLen+n:], uncompressed)
+			}
+
 			if n2 > 0 {
 				chunkType = uint8(chunkTypeCompressedData)
 				chunkLen = 4 + n + n2
@@ -410,4 +426,31 @@ func (w *Writer) Close() error {
 	err := w.Flush()
 	_ = w.err(errClosed)
 	return err
+}
+
+// WriterOption is an option for creating a encoder.
+type WriterOption func(*Writer) error
+
+// WriterConcurrency will set the concurrency,
+// meaning the maximum number of decoders to run concurrently.
+// The value supplied must be at least 1.
+// By default this will be set to GOMAXPROCS.
+func WriterConcurrency(n int) WriterOption {
+	return func(w *Writer) error {
+		if n <= 0 {
+			return errors.New("concurrency must be at least 1")
+		}
+		w.concurrency = n
+		return nil
+	}
+}
+
+// WriterBetterCompression will enable better compression.
+// EncodeBetter compresses better than Encode but typically with a
+// 10-40% speed decrease on both compression and decompression.
+func WriterBetterCompression() WriterOption {
+	return func(w *Writer) error {
+		w.better = true
+		return nil
+	}
 }

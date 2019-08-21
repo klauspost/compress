@@ -213,7 +213,7 @@ func encodeBlock(dst, src []byte) (d int) {
 	// bytes to copy, so we start looking for hash matches at s == 1.
 	s := 1
 	cv := load64(src, s)
-	repeat := 0
+	repeat := 1
 
 	for {
 		candidate := 0
@@ -232,11 +232,11 @@ func encodeBlock(dst, src []byte) (d int) {
 			hash2 := hash6(cv>>16, tableBits)
 
 			// Check repeat at offset checkRep.
-			const checkRep = 3
-			if uint32(cv>>(checkRep*8)) == load32(src, s-repeat+checkRep) && repeat > 0 {
+			const checkRep = 1
+			if uint32(cv>>(checkRep*8)) == load32(src, s-repeat+checkRep) {
 				base := s + checkRep
 				// Extend back
-				for i := base - repeat; base > nextEmit && src[i-1] == src[base-1]; {
+				for i := base - repeat; base > nextEmit && i > 0 && src[i-1] == src[base-1]; {
 					i--
 					base--
 				}
