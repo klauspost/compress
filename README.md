@@ -14,6 +14,7 @@ It provides [zstandard](https://github.com/klauspost/compress/tree/master/zstd#z
 [![fuzzit](https://app.fuzzit.dev/badge?org_id=klauspost)](https://fuzzit.dev)
 
 # changelog
+* Aug 21, 2019: (v1.7.6) Fixed minor issues found by fuzzer. One could lead to zstd not decompressing.
 * Aug 18, 2019: Add [fuzzit](https://fuzzit.dev/) continuous fuzzing.
 * Aug 14, 2019: zstd: Skip incompressible data 2x faster.  [#147](https://github.com/klauspost/compress/pull/147)
 * Aug 4, 2019 (v1.7.5): Better literal compression. [#146](https://github.com/klauspost/compress/pull/146)
