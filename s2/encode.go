@@ -230,7 +230,10 @@ func (w *Writer) Reset(writer io.Writer) {
 	// Start a writer goroutine that will write all output in order.
 	go func() {
 		defer w.writerWg.Done()
+
+		// Get a queued write.
 		for write := range toWrite {
+			// Wait for the data to be available.
 			in := <-write
 			if len(in) > 0 {
 				if w.err(nil) == nil {
@@ -377,12 +380,9 @@ func (w *Writer) write(p []byte) (nRet int, errRet error) {
 				chunkType = uint8(chunkTypeCompressedData)
 				chunkLen = 4 + n + n2
 				obuf = obuf[:obufHeaderLen+n+n2]
-				w.buffers.Put(inbuf)
-				inbuf = nil
 			} else {
-				// Discard output buffer.
-				w.buffers.Put(obuf)
-				obuf = inbuf
+				// Use input as output.
+				obuf, inbuf = inbuf, obuf
 			}
 
 			// Fill in the per-chunk header that comes before the body.
@@ -397,6 +397,9 @@ func (w *Writer) write(p []byte) (nRet int, errRet error) {
 
 			// Queue final output.
 			output <- obuf
+
+			// Put unused buffer back in pool.
+			w.buffers.Put(inbuf)
 		}()
 		nRet += len(uncompressed)
 	}
@@ -552,7 +555,7 @@ func WriterBetterCompression() WriterOption {
 // Minimum size is 4KB and and maximum size is 4MB.
 //
 // Bigger blocks may give bigger throughput on systems with many cores,
-// but will likely be slower on systems with fewer cores and will limit
+// and will increase compression slightly, but it will limit the possible
 // concurrency for smaller payloads for both encoding and decoding.
 // Default block size is 1MB.
 func WriterBlockSize(n int) WriterOption {

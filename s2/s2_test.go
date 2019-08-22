@@ -891,10 +891,23 @@ func TestReaderUncompressedDataNoPayload(t *testing.T) {
 }
 
 func TestReaderUncompressedDataTooLong(t *testing.T) {
-	// The maximum legal chunk length... is 4MB + 4 bytes header.
-	const n = maxBlockSize + 5
+	// The maximum legal chunk length... is 4MB + 4 bytes checksum.
+	n := maxBlockSize + checksumSize
 	n32 := uint32(n)
 	r := NewReader(strings.NewReader(magicChunk +
+		// Uncompressed chunk, n bytes long.
+		string([]byte{chunkTypeUncompressedData, uint8(n32), uint8(n32 >> 8), uint8(n32 >> 16)}) +
+		strings.Repeat("\x00", n),
+	))
+	// CRC is not set, so we should expect that error.
+	if _, err := ioutil.ReadAll(r); err != ErrCRC {
+		t.Fatalf("got %v, want %v", err, ErrCRC)
+	}
+
+	// test first invalid.
+	n++
+	n32 = uint32(n)
+	r = NewReader(strings.NewReader(magicChunk +
 		// Uncompressed chunk, n bytes long.
 		string([]byte{chunkTypeUncompressedData, uint8(n32), uint8(n32 >> 8), uint8(n32 >> 16)}) +
 		strings.Repeat("\x00", n),
