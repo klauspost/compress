@@ -609,9 +609,9 @@ func TestEncodeNoiseThenRepeats(t *testing.T) {
 		}
 		dst := Encode(nil, src)
 		if got, want := len(dst), origLen*3/4; got >= want {
-			// TODO: Investigate
-			t.Logf("origLen=%d: got %d encoded bytes, want less than %d", origLen, got, want)
+			t.Fatalf("origLen=%d: got %d encoded bytes, want less than %d", origLen, got, want)
 		}
+		t.Log(len(dst))
 	}
 }
 
