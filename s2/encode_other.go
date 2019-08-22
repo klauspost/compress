@@ -27,7 +27,7 @@ func load64(b []byte, i int) uint64 {
 //
 // It assumes that:
 //	dst is long enough to hold the encoded bytes
-//	1 <= len(lit) && len(lit) <= 65536
+//	0 <= len(lit) && len(lit) <= math.MaxUint32
 func emitLiteral(dst, lit []byte) int {
 	if len(lit) == 0 {
 		return 0
@@ -204,7 +204,7 @@ func encodeBlock(dst, src []byte) (d int) {
 	sLimit := len(src) - inputMargin
 
 	// Bail if we can't compress to at least this.
-	dstLimit := len(src) - len(src)>>5 - maxExtraLength
+	dstLimit := len(src) - len(src)>>5 - 5
 
 	// nextEmit is where in src the next emitLiteral should start from.
 	nextEmit := 0

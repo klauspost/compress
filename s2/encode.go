@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"math"
 	"math/bits"
 	"runtime"
 	"sync"
@@ -109,10 +110,9 @@ const inputMargin = 8
 // will be accepted by the encoder.
 const minNonLiteralBlockSize = 32
 
-// maxExtraLength is the maximum extra that will be emitted from a 4 byte match.
-// The copy will be at most 5 bytes (offset > 64k, length 4), but subtract 4 from the match.
-// The literal encoding will be at most 5 bytes.
-const maxExtraLength = 5 - 4 + 5
+// MaxBlockSize is the maximum value where MaxEncodedLen will return a valid block size.
+// Blocks this big are highly discouraged, though.
+const MaxBlockSize = math.MaxUint32 - binary.MaxVarintLen32 - 5
 
 // MaxEncodedLen returns the maximum length of a snappy block, given its
 // uncompressed length.
@@ -125,14 +125,10 @@ func MaxEncodedLen(srcLen int) int {
 		return -1
 	}
 	// Size of the varint encoded block size.
-	varSize := (bits.Len64(n) + 1) * 9 / 8
+	n = n + uint64((bits.Len64(n)+7)/7)
 
-	// The encoder will never output blocks that are bigger.
-	// This means that for each block, the maximum size will be
-	// srcLen + (maximum size of literal encoding == 5)
-	n = (n + maxBlockSize - 1) / maxBlockSize
-	n *= maxBlockSize + 5
-	n += uint64(varSize)
+	// Add maximum size of encoding block as literals.
+	n += uint64(literalExtraSize(srcLen))
 	if n > 0xffffffff {
 		return -1
 	}
@@ -150,7 +146,7 @@ var errClosed = errors.New("s2: Writer is closed")
 // Flush zero or more times before calling Close.
 func NewWriter(w io.Writer, opts ...WriterOption) *Writer {
 	w2 := Writer{
-		ibuf:        make([]byte, 0, maxBlockSize),
+		blockSize:   defaultBlockSize,
 		concurrency: runtime.GOMAXPROCS(0),
 	}
 	for _, opt := range opts {
@@ -159,9 +155,11 @@ func NewWriter(w io.Writer, opts ...WriterOption) *Writer {
 			return &w2
 		}
 	}
+	w2.obufLen = obufHeaderLen + MaxEncodedLen(w2.blockSize)
 	w2.paramsOK = true
+	w2.ibuf = make([]byte, 0, w2.blockSize)
 	w2.buffers.New = func() interface{} {
-		return make([]byte, obufLen)
+		return make([]byte, w2.obufLen)
 	}
 	w2.Reset(w)
 	return &w2
@@ -180,6 +178,8 @@ type Writer struct {
 	paramsOK          bool
 	better            bool
 
+	blockSize   int
+	obufLen     int
 	concurrency int
 	output      chan chan result
 	buffers     sync.Pool
@@ -243,7 +243,7 @@ func (w *Writer) Reset(writer io.Writer) {
 					}
 					_ = w.err(err)
 				}
-				if cap(in) >= obufLen {
+				if cap(in) >= w.obufLen {
 					w.buffers.Put([]byte(in))
 				}
 			}
@@ -294,7 +294,7 @@ func (w *Writer) ReadFrom(r io.Reader) (n int64, err error) {
 			return 0, err
 		}
 	}
-	w.ibuf = w.ibuf[:maxBlockSize]
+	w.ibuf = w.ibuf[:w.blockSize]
 	for {
 		n2, err := io.ReadFull(r, w.ibuf)
 		if err != nil {
@@ -342,8 +342,8 @@ func (w *Writer) write(p []byte) (nRet int, errRet error) {
 		}
 
 		var uncompressed []byte
-		if len(p) > maxBlockSize {
-			uncompressed, p = p[:maxBlockSize], p[maxBlockSize:]
+		if len(p) > w.blockSize {
+			uncompressed, p = p[:w.blockSize], p[w.blockSize:]
 		} else {
 			uncompressed, p = p, nil
 		}
@@ -351,7 +351,7 @@ func (w *Writer) write(p []byte) (nRet int, errRet error) {
 		// Copy input.
 		// If the block is incompressible, this is used for the result.
 		inbuf := w.buffers.Get().([]byte)[:len(uncompressed)+obufHeaderLen]
-		obuf := w.buffers.Get().([]byte)[:obufLen]
+		obuf := w.buffers.Get().([]byte)[:w.obufLen]
 		copy(inbuf[obufHeaderLen:], uncompressed)
 		uncompressed = inbuf[obufHeaderLen:]
 
@@ -420,13 +420,13 @@ func (w *Writer) writeSync(p []byte) (nRet int, errRet error) {
 		}
 
 		var uncompressed []byte
-		if len(p) > maxBlockSize {
-			uncompressed, p = p[:maxBlockSize], p[maxBlockSize:]
+		if len(p) > w.blockSize {
+			uncompressed, p = p[:w.blockSize], p[w.blockSize:]
 		} else {
 			uncompressed, p = p, nil
 		}
 
-		obuf := w.buffers.Get().([]byte)[:obufLen]
+		obuf := w.buffers.Get().([]byte)[:w.obufLen]
 		checksum := crc(uncompressed)
 
 		// Set to uncompressed.
@@ -543,6 +543,24 @@ func WriterConcurrency(n int) WriterOption {
 func WriterBetterCompression() WriterOption {
 	return func(w *Writer) error {
 		w.better = true
+		return nil
+	}
+}
+
+// WriterBlockSize allows to override the default block size.
+// Blocks will be this size or smaller.
+// Minimum size is 4KB and and maximum size is 4MB.
+//
+// Bigger blocks may give bigger throughput on systems with many cores,
+// but will likely be slower on systems with fewer cores and will limit
+// concurrency for smaller payloads for both encoding and decoding.
+// Default block size is 1MB.
+func WriterBlockSize(n int) WriterOption {
+	return func(w *Writer) error {
+		if w.blockSize > maxBlockSize || w.blockSize < minBlockSize {
+			return errors.New("s2: block size too large. Must be <= 4MB and >=4KB")
+		}
+		w.blockSize = n
 		return nil
 	}
 }

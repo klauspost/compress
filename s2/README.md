@@ -11,7 +11,7 @@ S2 is aimed for high throughput, which is also why it features concurrent compre
 # Extensions
 
 * Frame [Stream identifier](https://github.com/google/snappy/blob/master/framing_format.txt#L68) changed from `sNaPpY` to `S2sTwO`.
-* [Framed compressed blocks](https://github.com/google/snappy/blob/master/format_description.txt) can be up to 1MB (up from 64KB).
+* [Framed compressed blocks](https://github.com/google/snappy/blob/master/format_description.txt) can be up to 4MB (up from 64KB).
 * Compressed blocks can have an offset of `0`, which indicates to repeat the last seen offset.
 
 Repeat offsets must be encoded as a [2.2.1. Copy with 1-byte offset (01)](https://github.com/google/snappy/blob/master/format_description.txt#L89), where the offset is 0.
@@ -34,6 +34,15 @@ This allows any repeat offset + length to be represented by 2 to 5 bytes.
 Lengths are stored as little endian values.
 
 Initial repeat offset of a block is '1'.
+
+Default streaming block size is 1MB.
+
+# Concatenating blocks and streams.
+
+Blocks can be concatenated safely by just doing a binary concatenation without changing the content.
+
+Streams can also be safely concatenated. 
+The 10 byte 'stream identifier' of the second stream can optionally be stripped, but it is not a requirement.
 
 # Performance
 

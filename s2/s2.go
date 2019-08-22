@@ -67,17 +67,15 @@ const (
 	//
 	// For the framing format (Writer type instead of Encode function),
 	// this is the maximum uncompressed size of a block.
-	maxBlockSize = 1 << 20
+	maxBlockSize = 4 << 20
 
-	// maxEncodedLenOfMaxBlockSize equals MaxEncodedLen(maxBlockSize), but is
-	// hard coded to be a const instead of a variable, so that obufLen can also
-	// be a const. Their equivalence is confirmed by
-	// TestMaxEncodedLenOfMaxBlockSize.
-	maxEncodedLenOfMaxBlockSize = 1048605
+	// minBlockSize is the minimum size of block setting when creating a writer.
+	minBlockSize = 4 << 10
 
-	obufHeaderLen  = checksumSize + chunkHeaderSize
-	obufLen        = obufHeaderLen + maxEncodedLenOfMaxBlockSize
-	maxMatchOffset = maxBlockSize
+	// Default block size
+	defaultBlockSize = 1 << 20
+
+	obufHeaderLen = checksumSize + chunkHeaderSize
 )
 
 const (
@@ -94,4 +92,24 @@ var crcTable = crc32.MakeTable(crc32.Castagnoli)
 func crc(b []byte) uint32 {
 	c := crc32.Update(0, crcTable, b)
 	return uint32(c>>15|c<<17) + 0xa282ead8
+}
+
+// literalExtraSize returns the extra size of encoding n literals.
+// n should be >= 0 and <= math.MaxUint32.
+func literalExtraSize(n int) int {
+	if n == 0 {
+		return 0
+	}
+	switch {
+	case n < 60:
+		return 1
+	case n < 1<<8:
+		return 2
+	case n < 1<<16:
+		return 3
+	case n < 1<<24:
+		return 4
+	default:
+		return 5
+	}
 }

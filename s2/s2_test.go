@@ -30,32 +30,38 @@ var (
 	benchdataDir = flag.String("benchdataDir", "testdata/bench", "Directory containing the benchmark data")
 )
 
-func TestMaxEncodedLenOfMaxBlockSize(t *testing.T) {
-	got := maxEncodedLenOfMaxBlockSize
-	want := MaxEncodedLen(maxBlockSize)
-	if got != want {
-		t.Fatalf("got %d, want %d", got, want)
-	}
-}
-
 func TestMaxEncodedLen(t *testing.T) {
 	testSet := []struct {
 		in, out int
 	}{
 		{in: 0, out: 1},
-		{in: maxBlockSize, out: maxEncodedLenOfMaxBlockSize},
+		{in: 1 << 24, out: 1<<24 + binary.PutVarint([]byte{binary.MaxVarintLen32: 0}, int64(1<<24)) + literalExtraSize(1<<24)},
+		{in: MaxBlockSize, out: math.MaxUint32},
+		{in: math.MaxUint32 - binary.MaxVarintLen32 - literalExtraSize(math.MaxUint32), out: math.MaxUint32},
+		{in: math.MaxUint32 - 9, out: -1},
+		{in: math.MaxUint32 - 8, out: -1},
+		{in: math.MaxUint32 - 7, out: -1},
+		{in: math.MaxUint32 - 6, out: -1},
+		{in: math.MaxUint32 - 5, out: -1},
+		{in: math.MaxUint32 - 4, out: -1},
+		{in: math.MaxUint32 - 3, out: -1},
+		{in: math.MaxUint32 - 2, out: -1},
+		{in: math.MaxUint32 - 1, out: -1},
 		{in: math.MaxUint32, out: -1},
 		{in: -1, out: -1},
+		{in: -2, out: -1},
+	}
+	// Test all sizes up to maxBlockSize.
+	for i := 0; i < maxBlockSize; i++ {
+		testSet = append(testSet, struct{ in, out int }{in: i, out: i + binary.PutVarint([]byte{binary.MaxVarintLen32: 0}, int64(i)) + literalExtraSize(i)})
 	}
 	for i := range testSet {
 		tt := testSet[i]
-		t.Run(fmt.Sprint(tt), func(t *testing.T) {
-			want := tt.out
-			got := MaxEncodedLen(tt.in)
-			if got != want {
-				t.Errorf("input: %d, want: %d, got: %d", tt.in, want, got)
-			}
-		})
+		want := tt.out
+		got := MaxEncodedLen(tt.in)
+		if got != want {
+			t.Fatalf("input: %d, want: %d, got: %d", tt.in, want, got)
+		}
 	}
 }
 
@@ -84,10 +90,10 @@ func roundtrip(b, ebuf, dbuf []byte) error {
 	}
 	d, err = Decode(dbuf, EncodeBetter(ebuf, b))
 	if err != nil {
-		return fmt.Errorf("decoding error: %v", err)
+		return fmt.Errorf("decoding better error: %v", err)
 	}
 	if err := cmp(d, b); err != nil {
-		return fmt.Errorf("roundtrip mismatch: %v", err)
+		return fmt.Errorf("roundtrip better mismatch: %v", err)
 	}
 	return nil
 }
@@ -885,8 +891,8 @@ func TestReaderUncompressedDataNoPayload(t *testing.T) {
 }
 
 func TestReaderUncompressedDataTooLong(t *testing.T) {
-	// The maximum legal chunk length... is 1MB + 4 bytes header.
-	const n = 1<<20 + 5
+	// The maximum legal chunk length... is 4MB + 4 bytes header.
+	const n = maxBlockSize + 5
 	n32 := uint32(n)
 	r := NewReader(strings.NewReader(magicChunk +
 		// Uncompressed chunk, n bytes long.

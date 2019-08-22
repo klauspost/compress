@@ -76,12 +76,11 @@ func Decode(dst, src []byte) ([]byte, error) {
 
 // NewReader returns a new Reader that decompresses from r, using the framing
 // format described at
-// https://github.com/google/snappy/blob/master/framing_format.txt
+// https://github.com/google/snappy/blob/master/framing_format.txt with S2 changes.
 func NewReader(r io.Reader) *Reader {
 	return &Reader{
-		r:       r,
-		decoded: make([]byte, maxBlockSize),
-		buf:     make([]byte, maxEncodedLenOfMaxBlockSize+checksumSize),
+		r:   r,
+		buf: make([]byte, MaxEncodedLen(maxBlockSize)+checksumSize),
 	}
 }
 
@@ -167,8 +166,11 @@ func (r *Reader) Read(p []byte) (int, error) {
 				return 0, r.err
 			}
 			if n > len(r.decoded) {
-				r.err = ErrCorrupt
-				return 0, r.err
+				if n > maxBlockSize {
+					r.err = ErrCorrupt
+					return 0, r.err
+				}
+				r.decoded = make([]byte, n)
 			}
 			if _, err := Decode(r.decoded, buf); err != nil {
 				r.err = err
@@ -195,8 +197,11 @@ func (r *Reader) Read(p []byte) (int, error) {
 			// Read directly into r.decoded instead of via r.buf.
 			n := chunkLen - checksumSize
 			if n > len(r.decoded) {
-				r.err = ErrCorrupt
-				return 0, r.err
+				if n > maxBlockSize {
+					r.err = ErrCorrupt
+					return 0, r.err
+				}
+				r.decoded = make([]byte, n)
 			}
 			if !r.readFull(r.decoded[:n], false) {
 				return 0, r.err
@@ -250,7 +255,7 @@ func (r *Reader) Read(p []byte) (int, error) {
 
 // Skip will skip n bytes forward in the decompressed output.
 // For larger skips this consumes less CPU and is faster than reading output and discarding it.
-// CRC is not checked on skipped compressed blocks.
+// CRC is not checked on skipped blocks.
 // io.ErrUnexpectedEOF is returned if the stream ends before all bytes have been skipped.
 // If a decoding error is encountered subsequent calls to Read will also fail.
 func (r *Reader) Skip(n int64) error {
@@ -313,11 +318,14 @@ func (r *Reader) Skip(n int64) error {
 				r.err = err
 				return r.err
 			}
-			if dLen > len(r.decoded) {
+			if dLen > maxBlockSize {
 				r.err = ErrCorrupt
 				return r.err
 			}
 			if int64(dLen) > n {
+				if len(r.decoded) < dLen {
+					r.decoded = make([]byte, dLen)
+				}
 				if _, err := Decode(r.decoded, buf); err != nil {
 					r.err = err
 					return r.err
@@ -345,21 +353,25 @@ func (r *Reader) Skip(n int64) error {
 			}
 			checksum := uint32(buf[0]) | uint32(buf[1])<<8 | uint32(buf[2])<<16 | uint32(buf[3])<<24
 			// Read directly into r.decoded instead of via r.buf.
-			n := chunkLen - checksumSize
-			if n > len(r.decoded) {
-				r.err = ErrCorrupt
+			n2 := chunkLen - checksumSize
+			if n2 > len(r.decoded) {
+				if n2 > maxBlockSize {
+					r.err = ErrCorrupt
+					return r.err
+				}
+				r.decoded = make([]byte, n2)
+			}
+			if !r.readFull(r.decoded[:n2], false) {
 				return r.err
 			}
-			if !r.readFull(r.decoded[:n], false) {
-				return r.err
+			if int64(n2) < n {
+				if crc(r.decoded[:n2]) != checksum {
+					r.err = ErrCorrupt
+					return r.err
+				}
 			}
-			if crc(r.decoded[:n]) != checksum {
-				r.err = ErrCorrupt
-				return r.err
-			}
-			r.i, r.j = 0, n
+			r.i, r.j = 0, n2
 			continue
-
 		case chunkTypeStreamIdentifier:
 			// Section 4.1. Stream identifier (chunk type 0xff).
 			if chunkLen != len(magicBody) {
