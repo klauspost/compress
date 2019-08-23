@@ -84,7 +84,7 @@ func encodeBlockBetter(dst, src []byte) (d int) {
 		candidateL := 0
 		for {
 			// Next src position to check
-			nextS := s + (s-nextEmit)>>8 + 1
+			nextS := s + (s-nextEmit)>>7 + 1
 			if nextS > sLimit {
 				goto emitRemainder
 			}

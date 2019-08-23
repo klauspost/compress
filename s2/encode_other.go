@@ -219,7 +219,7 @@ func encodeBlock(dst, src []byte) (d int) {
 		candidate := 0
 		for {
 			// Next src position to check
-			nextS := s + (s-nextEmit)>>7 + 4
+			nextS := s + (s-nextEmit)>>6 + 4
 			if nextS > sLimit {
 				goto emitRemainder
 			}
