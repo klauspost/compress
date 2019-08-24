@@ -154,10 +154,11 @@ This is likely dominated by synchronization overhead, which is confirmed by the 
 
 ## Decompression
 
-While the decompression code hasn't changed, there is a significant speedup in decompression speed.
+While the decompression code hasn't changed, there is a significant speedup in decompression speed. 
+S2 prefers longer matches and will typically only find matches that are 6 bytes or longer. 
+While this reduces compression a bit, it improves decompression speed.
 
-Decompression remains close to original Snappy speed, with a single additional branch for 1 byte offset matches. So only minor differences should be assumed there.
-Only if your decompression platform is heavily memory limited, will there be a difference.
+The "better" compression mode will actively look for shorter matches, which is why it has a decompression speed quite similar to Snappy.   
 
 Single goroutine decompression speed. No assembly:
 
