@@ -1,18 +1,20 @@
 // Copyright 2016 The Snappy-Go Authors. All rights reserved.
+// Copyright (c) 2019 Klaus Post. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
 // +build !amd64 appengine !gc noasm
 
-package snappy
+package s2
 
 // decode writes the decoding of src to dst. It assumes that the varint-encoded
 // length of the decompressed bytes has already been read, and that len(dst)
 // equals that length.
 //
 // It returns 0 on success or a decodeErrCodeXxx error code on failure.
-func decode(dst, src []byte) int {
-	var d, s, offset, length int
+func s2Decode(dst, src []byte) int {
+	var d, s, length int
+	offset := 0
 	for s < len(src) {
 		switch src[s] & 0x03 {
 		case tagLiteral:
@@ -62,9 +64,35 @@ func decode(dst, src []byte) int {
 			if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
 				return decodeErrCodeCorrupt
 			}
-			length = 4 + int(src[s-2])>>2&0x7
-			offset = int(uint32(src[s-2])&0xe0<<3 | uint32(src[s-1]))
-
+			length = int(src[s-2]) >> 2 & 0x7
+			toffset := int(uint32(src[s-2])&0xe0<<3 | uint32(src[s-1]))
+			if toffset == 0 {
+				// keep last offset
+				switch length {
+				case 5:
+					s += 1
+					if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+						return decodeErrCodeCorrupt
+					}
+					length = int(uint32(src[s-1])) + 4
+				case 6:
+					s += 2
+					if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+						return decodeErrCodeCorrupt
+					}
+					length = int(uint32(src[s-2])|(uint32(src[s-1])<<8)) + (1 << 8)
+				case 7:
+					s += 3
+					if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+						return decodeErrCodeCorrupt
+					}
+					length = int(uint32(src[s-3])|(uint32(src[s-2])<<8)|(uint32(src[s-1])<<16)) + (1 << 16)
+				default: // 0-> 4
+				}
+			} else {
+				offset = toffset
+			}
+			length += 4
 		case tagCopy2:
 			s += 3
 			if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
