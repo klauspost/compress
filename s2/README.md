@@ -17,6 +17,7 @@ S2 is aimed for high throughput, which is also why it features concurrent compre
 * Compatible with Snappy compressed content
 * Smaller maximum block size overhead
 * Block concatenation
+* Automatic stream size padding.
 
 ## Drawbacks over Snappy
 

@@ -6,8 +6,10 @@
 package s2
 
 import (
+	"crypto/rand"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"math/bits"
@@ -222,10 +224,12 @@ type Writer struct {
 	blockSize   int
 	obufLen     int
 	concurrency int
+	written     int64
 	output      chan chan result
 	buffers     sync.Pool
 	writerWg    sync.WaitGroup
 	writer      io.Writer
+	pad         int
 }
 
 type result []byte
@@ -249,6 +253,7 @@ func (w *Writer) Reset(writer io.Writer) {
 	if !w.paramsOK {
 		return
 	}
+	// Close previous writer, if any.
 	if w.output != nil {
 		close(w.output)
 		w.writerWg.Wait()
@@ -257,13 +262,17 @@ func (w *Writer) Reset(writer io.Writer) {
 	w.errState = nil
 	w.ibuf = w.ibuf[:0]
 	w.wroteStreamHeader = false
+	w.written = 0
+	w.writer = writer
+	// If we didn't get a writer, stop here.
 	if writer == nil {
 		return
 	}
+	// If no concurrency requested, don't spin up writer goroutine.
 	if w.concurrency == 1 {
-		w.writer = writer
 		return
 	}
+
 	toWrite := make(chan chan result, w.concurrency)
 	w.output = toWrite
 	w.writerWg.Add(1)
@@ -286,6 +295,7 @@ func (w *Writer) Reset(writer io.Writer) {
 						err = io.ErrShortBuffer
 					}
 					_ = w.err(err)
+					w.written += int64(n)
 				}
 				if cap(in) >= w.obufLen {
 					w.buffers.Put([]byte(in))
@@ -300,8 +310,7 @@ func (w *Writer) Reset(writer io.Writer) {
 
 // Write satisfies the io.Writer interface.
 func (w *Writer) Write(p []byte) (nRet int, errRet error) {
-	// The remainder of this method is based on bufio.Writer.Write from the
-	// standard library.
+	// If we exceed the input buffer size, start writing
 	for len(p) > (cap(w.ibuf)-len(w.ibuf)) && w.err(nil) == nil {
 		var n int
 		if len(w.ibuf) == 0 {
@@ -320,6 +329,7 @@ func (w *Writer) Write(p []byte) (nRet int, errRet error) {
 	if err := w.err(nil); err != nil {
 		return nRet, err
 	}
+	// p should always be able to fit into w.ibuf now.
 	n := copy(w.ibuf[len(w.ibuf):cap(w.ibuf)], p)
 	w.ibuf = w.ibuf[:len(w.ibuf)+n]
 	nRet += n
@@ -377,6 +387,8 @@ func (w *Writer) write(p []byte) (nRet int, errRet error) {
 	if w.concurrency == 1 {
 		return w.writeSync(p)
 	}
+
+	// Spawn goroutine and write block to output channel.
 	for len(p) > 0 {
 		if !w.wroteStreamHeader {
 			w.wroteStreamHeader = true
@@ -400,6 +412,7 @@ func (w *Writer) write(p []byte) (nRet int, errRet error) {
 		uncompressed = inbuf[obufHeaderLen:]
 
 		output := make(chan result)
+		// Queue output now, so we keep order.
 		w.output <- output
 		go func() {
 			checksum := crc(uncompressed)
@@ -417,6 +430,7 @@ func (w *Writer) write(p []byte) (nRet int, errRet error) {
 				n2 = encodeBlock(obuf[obufHeaderLen+n:], uncompressed)
 			}
 
+			// Check if we should use this, or store as uncompressed instead.
 			if n2 > 0 {
 				chunkType = uint8(chunkTypeCompressedData)
 				chunkLen = 4 + n + n2
@@ -461,6 +475,7 @@ func (w *Writer) writeSync(p []byte) (nRet int, errRet error) {
 			if n != len(magicChunk) {
 				return 0, w.err(io.ErrShortWrite)
 			}
+			w.written += int64(n)
 		}
 
 		var uncompressed []byte
@@ -511,6 +526,7 @@ func (w *Writer) writeSync(p []byte) (nRet int, errRet error) {
 		if n != len(obuf) {
 			return 0, w.err(io.ErrShortWrite)
 		}
+		w.written += int64(n)
 		if chunkType == chunkTypeUncompressedData {
 			// Write uncompressed data.
 			n, err := w.writer.Write(uncompressed)
@@ -520,6 +536,7 @@ func (w *Writer) writeSync(p []byte) (nRet int, errRet error) {
 			if n != len(uncompressed) {
 				return 0, w.err(io.ErrShortWrite)
 			}
+			w.written += int64(n)
 		}
 		w.buffers.Put(obuf)
 		// Queue final output.
@@ -529,6 +546,7 @@ func (w *Writer) writeSync(p []byte) (nRet int, errRet error) {
 }
 
 // Flush flushes the Writer to its underlying io.Writer.
+// This does not apply padding.
 func (w *Writer) Flush() error {
 	if err := w.err(nil); err != nil {
 		return err
@@ -565,8 +583,65 @@ func (w *Writer) Close() error {
 		w.writerWg.Wait()
 		w.output = nil
 	}
+	if w.err(nil) == nil && w.writer != nil && w.pad > 0 {
+		add := calcSkippableFrame(w.written, int64(w.pad))
+		frame, err := skippableFrame(w.ibuf[:0], add, rand.Reader)
+		if err = w.err(err); err != nil {
+			return err
+		}
+		_, err2 := w.writer.Write(frame)
+		err = w.err(err2)
+	}
 	_ = w.err(errClosed)
 	return err
+}
+
+const skippableFrameHeader = 4
+
+// calcSkippableFrame will return a total size to be added for written
+// to be divisible by multiple.
+// The value will always be > skippableFrameHeader.
+// The function will panic if written < 0 or wantMultiple <= 0.
+func calcSkippableFrame(written, wantMultiple int64) int {
+	if wantMultiple <= 0 {
+		panic("wantMultiple <= 0")
+	}
+	if written < 0 {
+		panic("written < 0")
+	}
+	leftOver := written % wantMultiple
+	if leftOver == 0 {
+		return 0
+	}
+	toAdd := wantMultiple - leftOver
+	for toAdd < skippableFrameHeader {
+		toAdd += wantMultiple
+	}
+	return int(toAdd)
+}
+
+// skippableFrame will add a skippable frame with a total size of bytes.
+// total should be >= skippableFrameHeader and < maxBlockSize + skippableFrameHeader
+func skippableFrame(dst []byte, total int, r io.Reader) ([]byte, error) {
+	if total == 0 {
+		return dst, nil
+	}
+	if total < skippableFrameHeader {
+		return dst, fmt.Errorf("s2: requested skippable frame (%d) < 4", total)
+	}
+	if int64(total) >= maxBlockSize+skippableFrameHeader {
+		return dst, fmt.Errorf("s2: requested skippable frame (%d) >= max 1<<24", total)
+	}
+	// Chunk type 0xfe "Section 4.4 Padding (chunk type 0xfe)"
+	dst = append(dst, 0xfe)
+	f := uint32(total - skippableFrameHeader)
+	// Add chunk length.
+	dst = append(dst, uint8(f), uint8(f>>8), uint8(f>>16))
+	// Add data
+	start := len(dst)
+	dst = append(dst, make([]byte, f)...)
+	_, err := io.ReadFull(r, dst[start:])
+	return dst, err
 }
 
 // WriterOption is an option for creating a encoder.
@@ -610,6 +685,29 @@ func WriterBlockSize(n int) WriterOption {
 			return errors.New("s2: block size too large. Must be <= 4MB and >=4KB")
 		}
 		w.blockSize = n
+		return nil
+	}
+}
+
+// WriterPadding will add padding to all output so the size will be a multiple of n.
+// This can be used to obfuscate the exact output size or make blocks of a certain size.
+// The contents will be a skippable frame, so it will be invisible by the decoder.
+// n must be > 0 and <= 4MB.
+// The padded area will be filled with data from crypto/rand.Reader.
+// The padding will be applied whenever Close is called on the writer.
+func WriterPadding(n int) WriterOption {
+	return func(w *Writer) error {
+		if n <= 0 {
+			return fmt.Errorf("s2: padding must be at least 1")
+		}
+		// No need to waste our time.
+		if n == 1 {
+			w.pad = 0
+		}
+		if n > maxBlockSize {
+			return fmt.Errorf("s2: padding must less than 4MB")
+		}
+		w.pad = n
 		return nil
 	}
 }

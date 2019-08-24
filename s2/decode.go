@@ -222,19 +222,10 @@ func (r *Reader) Read(p []byte) (int, error) {
 			if !r.readFull(r.buf[:len(magicBody)], false) {
 				return 0, r.err
 			}
-			ok := true
-			for i := 0; i < len(magicBody); i++ {
-				if r.buf[i] != magicBody[i] {
-					ok = false
-					break
-				}
-			}
-			if !ok {
-				for i := 0; i < len(magicBodySnappy); i++ {
-					if r.buf[i] != magicBodySnappy[i] {
-						r.err = ErrCorrupt
-						return 0, r.err
-					}
+			if string(r.buf[:len(magicBody)]) != magicBody {
+				if string(r.buf[:len(magicBody)]) != magicBodySnappy {
+					r.err = ErrCorrupt
+					return 0, r.err
 				}
 			}
 			continue
@@ -381,21 +372,13 @@ func (r *Reader) Skip(n int64) error {
 			if !r.readFull(r.buf[:len(magicBody)], false) {
 				return r.err
 			}
-			ok := true
-			for i := 0; i < len(magicBody); i++ {
-				if r.buf[i] != magicBody[i] {
-					ok = false
-					break
+			if string(r.buf[:len(magicBody)]) != magicBody {
+				if string(r.buf[:len(magicBody)]) != magicBodySnappy {
+					r.err = ErrCorrupt
+					return r.err
 				}
 			}
-			if !ok {
-				for i := 0; i < len(magicBodySnappy); i++ {
-					if r.buf[i] != magicBodySnappy[i] {
-						r.err = ErrCorrupt
-						return r.err
-					}
-				}
-			}
+
 			continue
 		}
 
