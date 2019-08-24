@@ -38,3 +38,10 @@ clang -fsanitize=fuzzer zstd-compress.a -o zstd-compress-fuzz
 clang -fsanitize=fuzzer zstd-decompress.a -o zstd-decompress-fuzz
 ./fuzzit create job --type ${1} klauspost/compress-zstd-compress zstd-compress-fuzz
 ./fuzzit create job --type ${1} klauspost/compress-zstd-decompress zstd-decompress-fuzz
+
+go-fuzz-build -libfuzzer -o s2-compress.a -func=FuzzCompress github.com/klauspost/compress-fuzz/s2
+go-fuzz-build -libfuzzer -o s2-decompress.a -func=FuzzDecompress github.com/klauspost/compress-fuzz/s2
+clang -fsanitize=fuzzer s2-compress.a -o s2-compress-fuzz
+clang -fsanitize=fuzzer s2-decompress.a -o s2-decompress-fuzz
+./fuzzit create job --type ${1} klauspost/compress-s2-compress s2-compress-fuzz
+./fuzzit create job --type ${1} klauspost/compress-s2-decompress s2-decompress-fuzz

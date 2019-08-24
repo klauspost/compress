@@ -2,18 +2,17 @@
 
 This package provides various compression algorithms.
 
-It provides [zstandard](https://github.com/klauspost/compress/tree/master/zstd#zstd) compression and decompression in pure Go and optimized [deflate](https://godoc.org/github.com/klauspost/compress/flate) functions which can be used as a dropin replacement for [gzip](https://godoc.org/github.com/klauspost/compress/gzip), [zip](https://godoc.org/github.com/klauspost/compress/zip) and [zlib](https://godoc.org/github.com/klauspost/compress/zlib).
-
-* [High Throughput Benchmark](http://blog.klauspost.com/go-gzipdeflate-benchmarks/).
-* [Small Payload/Webserver Benchmarks](http://blog.klauspost.com/gzip-performance-for-go-webservers/).
-* [Linear Time Compression](http://blog.klauspost.com/constant-time-gzipzip-compression/).
-* [Re-balancing Deflate Compression Levels](https://blog.klauspost.com/rebalancing-deflate-compression-levels/)
+* [zstandard](https://github.com/klauspost/compress/tree/master/zstd#zstd) compression and decompression in pure Go.
+* [S2](https://github.com/klauspost/compress/tree/master/s2#s2-compression) is a high performance replacement for Snappy.
+* Optimized [deflate](https://godoc.org/github.com/klauspost/compress/flate) packages which can be used as a dropin replacement for [gzip](https://godoc.org/github.com/klauspost/compress/gzip), [zip](https://godoc.org/github.com/klauspost/compress/zip) and [zlib](https://godoc.org/github.com/klauspost/compress/zlib).
+* [huff0](https://github.com/klauspost/compress/tree/master/huff0) and [FSE](https://github.com/klauspost/compress/tree/master/fse) implementations for raw entropy encoding.
 
 [![Build Status](https://travis-ci.org/klauspost/compress.svg?branch=master)](https://travis-ci.org/klauspost/compress)
 [![Sourcegraph Badge](https://sourcegraph.com/github.com/klauspost/compress/-/badge.svg)](https://sourcegraph.com/github.com/klauspost/compress?badge)
 [![fuzzit](https://app.fuzzit.dev/badge?org_id=klauspost)](https://fuzzit.dev)
 
 # changelog
+* Aug 24, 2019: (v1.8.0) Added [S2 compression](https://github.com/klauspost/compress/tree/master/s2#s2-compression), a high performance replacement for Snappy. 
 * Aug 21, 2019: (v1.7.6) Fixed minor issues found by fuzzer. One could lead to zstd not decompressing.
 * Aug 18, 2019: Add [fuzzit](https://fuzzit.dev/) continuous fuzzing.
 * Aug 14, 2019: zstd: Skip incompressible data 2x faster.  [#147](https://github.com/klauspost/compress/pull/147)
@@ -70,7 +69,12 @@ It provides [zstandard](https://github.com/klauspost/compress/tree/master/zstd#z
 * Nov 11 2015: Merged [CL 16669](https://go-review.googlesource.com/#/c/16669/4): archive/zip: enable overriding (de)compressors per file
 * Oct 15 2015: Added skipping on uncompressible data. Random data speed up >5x.
 
-# usage
+# deflate usage
+
+* [High Throughput Benchmark](http://blog.klauspost.com/go-gzipdeflate-benchmarks/).
+* [Small Payload/Webserver Benchmarks](http://blog.klauspost.com/gzip-performance-for-go-webservers/).
+* [Linear Time Compression](http://blog.klauspost.com/constant-time-gzipzip-compression/).
+* [Re-balancing Deflate Compression Levels](https://blog.klauspost.com/rebalancing-deflate-compression-levels/)
 
 The packages are drop-in replacements for standard libraries. Simply replace the import path to use them:
 
