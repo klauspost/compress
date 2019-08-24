@@ -182,9 +182,9 @@ var errClosed = errors.New("s2: Writer is closed")
 // framing format described at
 // https://github.com/google/snappy/blob/master/framing_format.txt
 //
-// The Writer returned buffers writes. Users must call Close to guarantee all
-// data has been forwarded to the underlying io.Writer. They may also call
-// Flush zero or more times before calling Close.
+// Users must call Close to guarantee all data has been forwarded to
+// the underlying io.Writer and that resources are released.
+// They may also call Flush zero or more times before calling Close.
 func NewWriter(w io.Writer, opts ...WriterOption) *Writer {
 	w2 := Writer{
 		blockSize:   defaultBlockSize,
@@ -560,6 +560,11 @@ func (w *Writer) Flush() error {
 // Close calls Flush and then closes the Writer.
 func (w *Writer) Close() error {
 	err := w.Flush()
+	if w.output != nil {
+		close(w.output)
+		w.writerWg.Wait()
+		w.output = nil
+	}
 	_ = w.err(errClosed)
 	return err
 }
