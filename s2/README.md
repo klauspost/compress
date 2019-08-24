@@ -2,11 +2,14 @@
 
 S2 is an extension of [Snappy](https://github.com/google/snappy).
 
-S2 is aimed for high throughput, which is also why it features concurrent compression for bigger payloads.
+S2 is aimed for high throughput, which is why it features concurrent compression for bigger payloads.
 
 Decoding is compatible with Snappy compressed content, but content compressed with S2 cannot be decompressed by Snappy.
 
 This means that S2 can seamlessly replace Snappy without converting compressed content.
+
+S2 is deigned to have high throughput on content that cannot be compressed.
+This is important so you don't have to worry about spending CPU cycles on already compressed data. 
 
 ## Benefits over Snappy
 
@@ -15,7 +18,7 @@ This means that S2 can seamlessly replace Snappy without converting compressed c
 * Faster decompression
 * Ability to quickly skip forward in compressed stream
 * Compatible with Snappy compressed content
-* Smaller maximum block size overhead
+* Smaller block size overhead on incompressible blocks.
 * Block concatenation
 * Automatic stream size padding.
 
@@ -44,6 +47,8 @@ You should always call `enc.Close()`, otherwise you will leak resources and your
 
 For the best throughput, you should attempt to reuse the `Writer` using the `Reset()` method.
 
+The Writer in S2 is always buffered, therefore `NewBufferedWriter` in Snappy can be replaced with `NewWriter` in S2.
+
 ```Go
 func DecodeStream(src io.Reader, dst io.Writer) error        
 	dec := s2.NewReader(src)
@@ -60,7 +65,12 @@ so data corruption may be undetected. Stream encoding provides CRC checks of dat
  
 # Performance
 
-Compression is increased, mostly around 5-20% and the throughput is typically 25-40% increased (single threaded) compared to the non-assembly Go implementation.
+This section will focus on comparisons to Snappy. 
+This package is solely aimed at replacing Snappy as a high speed compression package.
+If you are mainly looking for better compression [zstandard](https://github.com/klauspost/compress/tree/master/zstd#zstd)
+gives better compression, but typically at speeds slightly below "better" mode in this package.
+
+Compression is increased compared to Snappy, mostly around 5-20% and the throughput is typically 25-40% increased (single threaded) compared to the non-assembly Go implementation.
 
 A "better" compression mode is also available. This allows to trade a bit of speed for a minor compression gain.
 The content compressed in this mode is fully compatible with the standard decoder.
