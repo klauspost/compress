@@ -2,11 +2,11 @@
 
 S2 is an extension of [Snappy](https://github.com/google/snappy).
 
+S2 is aimed for high throughput, which is also why it features concurrent compression for bigger payloads.
+
 Decoding is compatible with Snappy compressed content, but content compressed with S2 cannot be decompressed by Snappy.
 
 This means that S2 can seamlessly replace Snappy without converting compressed content.
-
-S2 is aimed for high throughput, which is also why it features concurrent compression for bigger payloads.
 
 ## Benefits over Snappy
 
@@ -24,47 +24,40 @@ S2 is aimed for high throughput, which is also why it features concurrent compre
 * Not optimized for 32 bit systems.
 * Uses slightly more memory due to larger blocks and concurrency (configurable).
 
-# Format Extensions
+# Usage
 
-* Frame [Stream identifier](https://github.com/google/snappy/blob/master/framing_format.txt#L68) changed from `sNaPpY` to `S2sTwO`.
-* [Framed compressed blocks](https://github.com/google/snappy/blob/master/format_description.txt) can be up to 4MB (up from 64KB).
-* Compressed blocks can have an offset of `0`, which indicates to repeat the last seen offset.
+Usage is similar to Snappy:
 
-Repeat offsets must be encoded as a [2.2.1. Copy with 1-byte offset (01)](https://github.com/google/snappy/blob/master/format_description.txt#L89), where the offset is 0.
+```Go
+func EncodeStream(src io.Reader, dst io.Writer) error        
+	enc := s2.NewWriter(dst)
+	_, err := io.Copy(enc, src)
+    if err != nil {
+        enc.Close()
+        return err
+    }
+    return enc.Close() 
+}
+```
 
-The length is specified by reading the 3-bit length specified in the tag and decode using this table:
+You should always call `enc.Close()`, otherwise you will leak resources and your encode will be incomplete, as with Snappy.
 
-| Length | Actual Length        |
-|--------|----------------------|
-| 0      | 4                    |
-| 1      | 5                    |
-| 2      | 6                    |
-| 3      | 7                    |
-| 4      | 8                    |
-| 5      | 8 + read 1 byte      |
-| 6      | 260 + read 2 bytes   |
-| 7      | 65540 + read 3 bytes |
+For the best throughput, you should attempt to reuse the `Writer` using the `Reset()` method.
 
-This allows any repeat offset + length to be represented by 2 to 5 bytes.
+```Go
+func DecodeStream(src io.Reader, dst io.Writer) error        
+	dec := s2.NewReader(src)
+	_, err := io.Copy(dst, dec)
+	return err
+}
+```
 
-Lengths are stored as little endian values.
+Similar to the Writer, a Reader can be reused using the `Reset` method.
 
-The first copy of a block cannot be a repeat offset.
-
-Default streaming block size is 1MB.
-
-# Concatenating blocks and streams.
-
-Concatenating streams and blocks will concatenate the output of both without recompressing them. 
-While this is inefficient in terms of compression it might be usable in certain scenarios. 
-
-Streams can also be safely concatenated. 
-The 10 byte 'stream identifier' of the second stream can optionally be stripped, but it is not a requirement.
-
-Blocks can be concatenated using the `ConcatBlocks` function.
-
-Snappy blocks/streams can safely be concatenated with S2 blocks and streams. 
-
+For smaller data blocks, there is also a non-streaming interface: `Encode()`, `EncodeBetter()` and `Decode()`.
+Do however note that these functions (similar to Snappy) does not provide validation of data, 
+so data corruption may be undetected. Stream encoding provides CRC checks of data.
+ 
 # Performance
 
 Compression is increased, mostly around 5-20% and the throughput is typically 25-40% increased (single threaded) compared to the non-assembly Go implementation.
@@ -258,6 +251,47 @@ The worst case compression speed of Snappy (`plrabn12.txt` and `asyoulik.txt`) i
 Except for the mostly incompressible JPEG image compression is better and usually in the double digits in terms of percentage reduction over Snappy.
 
 The PDF sample shows a significant slowdown compared to Snappy, as this mode tries harder to compress the data.
+
+# Concatenating blocks and streams.
+
+Concatenating streams and blocks will concatenate the output of both without recompressing them. 
+While this is inefficient in terms of compression it might be usable in certain scenarios. 
+
+Streams can also be safely concatenated. 
+The 10 byte 'stream identifier' of the second stream can optionally be stripped, but it is not a requirement.
+
+Blocks can be concatenated using the `ConcatBlocks` function.
+
+Snappy blocks/streams can safely be concatenated with S2 blocks and streams. 
+
+# Format Extensions
+
+* Frame [Stream identifier](https://github.com/google/snappy/blob/master/framing_format.txt#L68) changed from `sNaPpY` to `S2sTwO`.
+* [Framed compressed blocks](https://github.com/google/snappy/blob/master/format_description.txt) can be up to 4MB (up from 64KB).
+* Compressed blocks can have an offset of `0`, which indicates to repeat the last seen offset.
+
+Repeat offsets must be encoded as a [2.2.1. Copy with 1-byte offset (01)](https://github.com/google/snappy/blob/master/format_description.txt#L89), where the offset is 0.
+
+The length is specified by reading the 3-bit length specified in the tag and decode using this table:
+
+| Length | Actual Length        |
+|--------|----------------------|
+| 0      | 4                    |
+| 1      | 5                    |
+| 2      | 6                    |
+| 3      | 7                    |
+| 4      | 8                    |
+| 5      | 8 + read 1 byte      |
+| 6      | 260 + read 2 bytes   |
+| 7      | 65540 + read 3 bytes |
+
+This allows any repeat offset + length to be represented by 2 to 5 bytes.
+
+Lengths are stored as little endian values.
+
+The first copy of a block cannot be a repeat offset.
+
+Default streaming block size is 1MB.
 
 # LICENSE
 

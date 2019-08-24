@@ -247,8 +247,8 @@ func (w *Writer) err(err error) error {
 	return errSet
 }
 
-// Reset discards the writer's state and switches the Snappy writer to write to
-// w. This permits reusing a Writer rather than allocating a new one.
+// Reset discards the writer's state and switches the Snappy writer to write to w.
+// This permits reusing a Writer rather than allocating a new one.
 func (w *Writer) Reset(writer io.Writer) {
 	if !w.paramsOK {
 		return
@@ -576,6 +576,7 @@ func (w *Writer) Flush() error {
 }
 
 // Close calls Flush and then closes the Writer.
+// Calling Close multiple times is ok.
 func (w *Writer) Close() error {
 	err := w.Flush()
 	if w.output != nil {
@@ -593,6 +594,9 @@ func (w *Writer) Close() error {
 		err = w.err(err2)
 	}
 	_ = w.err(errClosed)
+	if err == errClosed {
+		return nil
+	}
 	return err
 }
 

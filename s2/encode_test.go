@@ -32,6 +32,10 @@ func TestWriterPadding(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		err = e.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		if dst.Len()%padding != 0 {
 			t.Fatalf("wanted size to be mutiple of %d, got size %d with remainder %d", padding, dst.Len(), dst.Len()%padding)
