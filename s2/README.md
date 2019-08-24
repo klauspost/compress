@@ -8,7 +8,22 @@ This means that S2 can seamlessly replace Snappy without converting compressed c
 
 S2 is aimed for high throughput, which is also why it features concurrent compression for bigger payloads.
 
-# Extensions
+## Benefits over Snappy
+
+* Better compression
+* Concurrent stream compression
+* Faster decompression
+* Ability to quickly skip forward in compressed stream
+* Compatible with Snappy compressed content
+* Smaller maximum block size overhead
+* Block concatenation
+
+## Drawbacks over Snappy
+
+* Not optimized for 32 bit systems.
+* Uses slightly more memory due to larger blocks and concurrency (configurable).
+
+# Format Extensions
 
 * Frame [Stream identifier](https://github.com/google/snappy/blob/master/framing_format.txt#L68) changed from `sNaPpY` to `S2sTwO`.
 * [Framed compressed blocks](https://github.com/google/snappy/blob/master/format_description.txt) can be up to 4MB (up from 64KB).
@@ -33,16 +48,21 @@ This allows any repeat offset + length to be represented by 2 to 5 bytes.
 
 Lengths are stored as little endian values.
 
-Initial repeat offset of a block is '1'.
+The first copy of a block cannot be a repeat offset.
 
 Default streaming block size is 1MB.
 
 # Concatenating blocks and streams.
 
-Blocks can be concatenated safely by just doing a binary concatenation without changing the content.
+Concatenating streams and blocks will concatenate the output of both without recompressing them. 
+While this is inefficient in terms of compression it might be usable in certain scenarios. 
 
 Streams can also be safely concatenated. 
 The 10 byte 'stream identifier' of the second stream can optionally be stripped, but it is not a requirement.
+
+Blocks can be concatenated using the `ConcatBlocks` function.
+
+Snappy blocks/streams can safely be concatenated with S2 blocks and streams. 
 
 # Performance
 

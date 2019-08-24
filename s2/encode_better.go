@@ -78,6 +78,8 @@ func encodeBlockBetter(dst, src []byte) (d int) {
 	// bytes to copy, so we start looking for hash matches at s == 1.
 	s := 1
 	cv := load64(src, s)
+
+	// We search for a repeat at -1, but don't output repeats when nextEmit == 0
 	repeat := 1
 
 	for {
@@ -117,9 +119,15 @@ func encodeBlockBetter(dst, src []byte) (d int) {
 					s += 8
 					candidate += 8
 				}
+				var add int
+				if nextEmit > 0 {
+					// same as `add := emitCopy(dst[d:], repeat, s-base)` but skips storing offset.
+					add = emitRepeat(dst[d:], repeat, s-base)
+				} else {
+					// First match, cannot be repeat.
+					add = emitCopy(dst[d:], repeat, s-base)
+				}
 
-				add := emitRepeat(dst[d:], repeat, s-base)
-				// same as `add := emitCopy(dst[d:], repeat, s-base)` but skips storing offset.
 				d += add
 				nextEmit = s
 				if s >= sLimit {

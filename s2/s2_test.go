@@ -95,6 +95,28 @@ func roundtrip(b, ebuf, dbuf []byte) error {
 	if err := cmp(d, b); err != nil {
 		return fmt.Errorf("roundtrip better mismatch: %v", err)
 	}
+
+	// Test concat with some existing data.
+	dst := []byte("existing")
+	// Add 3 different encodes and a 0 length block.
+	concat, err := ConcatBlocks(dst, Encode(nil, b), EncodeBetter(nil, b), []byte{0}, snappy.Encode(nil, b))
+	if err != nil {
+		return fmt.Errorf("concat error: %v", err)
+	}
+	if err := cmp(concat[:len(dst)], dst); err != nil {
+		return fmt.Errorf("concat existing mismatch: %v", err)
+	}
+	concat = concat[len(dst):]
+
+	d, err = Decode(nil, concat)
+	want := append(make([]byte, 0, len(b)*3), b...)
+	want = append(want, b...)
+	want = append(want, b...)
+
+	if err := cmp(d, want); err != nil {
+		return fmt.Errorf("roundtrip concat mismatch: %v", err)
+	}
+
 	return nil
 }
 
@@ -135,6 +157,21 @@ func TestSmallRegular(t *testing.T) {
 		b := make([]byte, n)
 		for i := range b {
 			b[i] = uint8(i%10 + 'a')
+		}
+		if err := roundtrip(b, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestSmallRepeat(t *testing.T) {
+	for n := 1; n < 20000; n += 23 {
+		b := make([]byte, n)
+		for i := range b[:n/2] {
+			b[i] = uint8(i * 255 / n)
+		}
+		for i := range b[n/2:] {
+			b[i+n/2] = uint8(i%10 + 'a')
 		}
 		if err := roundtrip(b, nil, nil); err != nil {
 			t.Fatal(err)
@@ -299,9 +336,14 @@ func TestDecode(t *testing.T) {
 		"abcddddd",
 		nil,
 	}, {
-		`decodedLen=8; tagLiteral (4 bytes "abcd"); tagCopy1; length=4 offset=0; repeat offset`,
+		`decodedLen=8; tagLiteral (4 bytes "abcd"); tagCopy1; length=4 offset=0; repeat offset as first match`,
 		"\x08" + "\x0cabcd" + "\x01\x00",
-		"abcddddd",
+		"",
+		ErrCorrupt,
+	}, {
+		`decodedLen=13; tagLiteral (4 bytes "abcd"); tagCopy1; length=4 offset=1; literal: 'z'; tagCopy1; length=4 offset=0; repeat offset as second match`,
+		"\x0d" + "\x0cabcd" + "\x01\x01" + "\x00z" + "\x01\x00",
+		"abcdddddzzzzz",
 		nil,
 	}, {
 		`decodedLen=9; tagLiteral (4 bytes "abcd"); tagCopy1; length=4 offset=4; inconsistent dLen`,
@@ -529,22 +571,6 @@ func TestDecodeGoldenInput(t *testing.T) {
 	}
 	if err := cmp(got, want); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestEncodeGoldenInput(t *testing.T) {
-	tDir := filepath.FromSlash(*testdataDir)
-	src, err := ioutil.ReadFile(filepath.Join(tDir, goldenText))
-	if err != nil {
-		t.Fatalf("ReadFile: %v", err)
-	}
-	got := Encode(nil, src)
-	want, err := ioutil.ReadFile(filepath.Join(tDir, goldenCompressed))
-	if err != nil {
-		t.Fatalf("ReadFile: %v", err)
-	}
-	if err := cmp(got, want); err != nil {
-		t.Log(err)
 	}
 }
 
@@ -804,7 +830,7 @@ func TestEmitCopy(t *testing.T) {
 	}
 }
 
-func TestNewBufferedWriter(t *testing.T) {
+func TestNewWriter(t *testing.T) {
 	// Test all 32 possible sub-sequences of these 5 input slices.
 	//
 	// Their lengths sum to 400,000, which is over 6 times the Writer ibuf

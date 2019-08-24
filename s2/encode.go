@@ -96,6 +96,47 @@ func EncodeBetter(dst, src []byte) []byte {
 	return dst[:d]
 }
 
+// ConcatBlocks will concatenate the supplied blocks and append them to the supplied destination.
+// If the destination is nil or too small, a new will be allocated.
+// The blocks are not validated, so garbage in = garbage out.
+// dst may not overlap block data.
+// Any data in dst is preserved as is, so it will not be considered a block.
+func ConcatBlocks(dst []byte, blocks ...[]byte) ([]byte, error) {
+	totalSize := uint64(0)
+	compSize := 0
+	for _, b := range blocks {
+		l, hdr, err := decodedLen(b)
+		if err != nil {
+			return nil, err
+		}
+		totalSize += uint64(l)
+		compSize += len(b) - hdr
+	}
+	if totalSize == 0 {
+		dst = append(dst, 0)
+		return dst, nil
+	}
+	if totalSize > math.MaxUint32 {
+		return nil, ErrTooLarge
+	}
+	var tmp [binary.MaxVarintLen32]byte
+	hdrSize := binary.PutUvarint(tmp[:], totalSize)
+	wantSize := hdrSize + compSize
+
+	if cap(dst)-len(dst) < wantSize {
+		dst = append(make([]byte, 0, wantSize+len(dst)), dst...)
+	}
+	dst = append(dst, tmp[:hdrSize]...)
+	for _, b := range blocks {
+		_, hdr, err := decodedLen(b)
+		if err != nil {
+			return nil, err
+		}
+		dst = append(dst, b[hdr:]...)
+	}
+	return dst, nil
+}
+
 // inputMargin is the minimum number of extra input bytes to keep, inside
 // encodeBlock's inner loop. On some architectures, this margin lets us
 // implement a fast path for emitLiteral, where the copy of short (<= 16 byte)

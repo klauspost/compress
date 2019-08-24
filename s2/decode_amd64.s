@@ -63,7 +63,7 @@ TEXT ·s2Decode(SB), NOSPLIT, $48-56
 	MOVQ R_SBASE, R_SRC
 	MOVQ R_SBASE, R_SEND
 	ADDQ R_SLEN, R_SEND
-	MOVQ $1, R_OFF
+	XORQ R_OFF, R_OFF
 
 loop:
 	// for s < len(src)

@@ -14,7 +14,7 @@ package s2
 // It returns 0 on success or a decodeErrCodeXxx error code on failure.
 func s2Decode(dst, src []byte) int {
 	var d, s, length int
-	offset := 1
+	offset := 0
 	for s < len(src) {
 		switch src[s] & 0x03 {
 		case tagLiteral:
