@@ -637,7 +637,7 @@ func skippableFrame(dst []byte, total int, r io.Reader) ([]byte, error) {
 		return dst, fmt.Errorf("s2: requested skippable frame (%d) >= max 1<<24", total)
 	}
 	// Chunk type 0xfe "Section 4.4 Padding (chunk type 0xfe)"
-	dst = append(dst, 0xfe)
+	dst = append(dst, chunkTypePadding)
 	f := uint32(total - skippableFrameHeader)
 	// Add chunk length.
 	dst = append(dst, uint8(f), uint8(f>>8), uint8(f>>16))

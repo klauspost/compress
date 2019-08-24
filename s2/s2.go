@@ -3,21 +3,35 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package snappy implements the Snappy compression format. It aims for very
-// high speeds and reasonable compression.
+// Package s2 implements the S2 compression format.
 //
-// There are actually two Snappy formats: block and stream. They are related,
-// but different: trying to decompress block-compressed data as a Snappy stream
+// S2 is an extension of Snappy. Similar to Snappy S2 is aimed for high throughput,
+// which is why it features concurrent compression for bigger payloads.
+//
+// Decoding is compatible with Snappy compressed content,
+// but content compressed with S2 cannot be decompressed by Snappy.
+//
+// For more information on Snappy/S2 differences see README in: https://github.com/klauspost/compress/tree/master/s2
+//
+// There are actually two S2 formats: block and stream. They are related,
+// but different: trying to decompress block-compressed data as a S2 stream
 // will fail, and vice versa. The block format is the Decode and Encode
 // functions and the stream format is the Reader and Writer types.
+//
+// A "better" compression option is available. This will trade some compression
+// speed
 //
 // The block format, the more common case, is used when the complete size (the
 // number of bytes) of the original data is known upfront, at the time
 // compression starts. The stream format, also known as the framing format, is
 // for when that isn't always true.
 //
-// The canonical, C++ implementation is at https://github.com/google/snappy and
-// it only implements the block format.
+// Blocks to not offer much data protection, so it is up to you to
+// add data validation of decompressed blocks.
+//
+// Streams perform CRC validation of the decompressed data.
+// Stream compression will also be performed on multiple CPU cores concurrently
+// significantly improving throughput.
 package s2
 
 import (

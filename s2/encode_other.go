@@ -255,15 +255,13 @@ func encodeBlock(dst, src []byte) (d int) {
 					s += 8
 					candidate += 8
 				}
-				var add int
 				if nextEmit > 0 {
 					// same as `add := emitCopy(dst[d:], repeat, s-base)` but skips storing offset.
-					add = emitRepeat(dst[d:], repeat, s-base)
+					d += emitRepeat(dst[d:], repeat, s-base)
 				} else {
 					// First match, cannot be repeat.
-					add = emitCopy(dst[d:], repeat, s-base)
+					d += emitCopy(dst[d:], repeat, s-base)
 				}
-				d += add
 				nextEmit = s
 				if s >= sLimit {
 					goto emitRemainder
