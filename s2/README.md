@@ -25,16 +25,26 @@ This is important so you don't have to worry about spending CPU cycles on alread
 ## Drawbacks over Snappy
 
 * Not optimized for 32 bit systems.
+* No AMD64 assembler implementation yet, meaning slightly slower compression speed on 1 core CPU.
 * Uses slightly more memory due to larger blocks and concurrency (configurable).
 
 # Usage
 
-Usage is similar to Snappy:
+Installation: `go get -u github.com/klauspost/compress/s2`
+
+Full package documentation:
+ 
+[![godoc][1]][2]
+
+[1]: https://godoc.org/github.com/klauspost/compress?status.svg
+[2]: https://godoc.org/github.com/klauspost/compress/s2
+
+Usage is similar to Snappy.
 
 ```Go
 func EncodeStream(src io.Reader, dst io.Writer) error        
-	enc := s2.NewWriter(dst)
-	_, err := io.Copy(enc, src)
+    enc := s2.NewWriter(dst)
+    _, err := io.Copy(enc, src)
     if err != nil {
         enc.Close()
         return err
@@ -51,9 +61,9 @@ The Writer in S2 is always buffered, therefore `NewBufferedWriter` in Snappy can
 
 ```Go
 func DecodeStream(src io.Reader, dst io.Writer) error        
-	dec := s2.NewReader(src)
-	_, err := io.Copy(dst, dec)
-	return err
+    dec := s2.NewReader(src)
+    _, err := io.Copy(dst, dec)
+    return err
 }
 ```
 
@@ -299,7 +309,7 @@ This allows any repeat offset + length to be represented by 2 to 5 bytes.
 
 Lengths are stored as little endian values.
 
-The first copy of a block cannot be a repeat offset.
+The first copy of a block cannot be a repeat offset and the offset is not carried across blocks in streams.
 
 Default streaming block size is 1MB.
 
