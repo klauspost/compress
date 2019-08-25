@@ -448,6 +448,7 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		}
 		// Use our out buffer.
 		huff.Out = b.literalBuf[:0]
+		huff.MaxDecodedSize = litRegenSize
 		if fourStreams {
 			literals, err = huff.Decompress4X(literals, litRegenSize)
 		} else {
