@@ -5,10 +5,9 @@ S2 is an extension of [Snappy](https://github.com/google/snappy).
 S2 is aimed for high throughput, which is why it features concurrent compression for bigger payloads.
 
 Decoding is compatible with Snappy compressed content, but content compressed with S2 cannot be decompressed by Snappy.
-
 This means that S2 can seamlessly replace Snappy without converting compressed content.
 
-S2 is deigned to have high throughput on content that cannot be compressed.
+S2 is designed to have high throughput on content that cannot be compressed.
 This is important so you don't have to worry about spending CPU cycles on already compressed data. 
 
 ## Benefits over Snappy
@@ -18,6 +17,7 @@ This is important so you don't have to worry about spending CPU cycles on alread
 * Faster decompression
 * Ability to quickly skip forward in compressed stream
 * Compatible with Snappy compressed content
+* Offers alternative, more efficient, but slightly slower compression mode.
 * Smaller block size overhead on incompressible blocks.
 * Block concatenation
 * Automatic stream size padding.
@@ -274,10 +274,8 @@ The PDF sample shows a significant slowdown compared to Snappy, as this mode tri
 
 # Concatenating blocks and streams.
 
-Concatenating streams and blocks will concatenate the output of both without recompressing them. 
+Concatenating streams will concatenate the output of both without recompressing them. 
 While this is inefficient in terms of compression it might be usable in certain scenarios. 
-
-Streams can also be safely concatenated. 
 The 10 byte 'stream identifier' of the second stream can optionally be stripped, but it is not a requirement.
 
 Blocks can be concatenated using the `ConcatBlocks` function.
