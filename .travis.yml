@@ -7,7 +7,6 @@ os:
   - osx
 
 go:
-  - 1.9.x
   - 1.10.x
   - 1.11.x
   - 1.12.x
@@ -15,15 +14,29 @@ go:
 
 install:
  - go get -t ./...
+ - go get github.com/klauspost/compress-fuzz
 
 script:
  - diff <(gofmt -d .) <(printf "")
  - go test -v -cpu=2 ./...
  - go test -cpu=2 -tags=noasm ./...
- - go test -cpu=1,2,4 -short -race ./...
- - go test -cpu=2,4 -short -race -tags=noasm ./...
+ - go test -cpu=1,4 -short -race ./...
+ - GOOS=linux GOARCH=386 go install ./...
 
 matrix:
   allow_failures:
     - go: 'master'
   fast_finish: true 
+
+jobs:
+  include:
+    - stage: Build, Unit-Tests & Fuzz-Tests
+      go: 1.12.x
+      script:
+        - ./fuzzit.sh local-regression
+
+    - stage: Fuzzit (Fuzzing)
+      if: branch = master AND type IN (push)
+      go: 1.12.x
+      script:
+        - ./fuzzit.sh fuzzing

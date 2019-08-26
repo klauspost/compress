@@ -62,20 +62,23 @@ func Estimate(b []byte) float64 {
 	return math.Pow((prediction+entropy)/2, 0.9)
 }
 
-// SnannonEntropyBits returns the number of bits minimum required to represent
+// ShannonEntropyBits returns the number of bits minimum required to represent
 // an entropy encoding of the input bytes.
 // https://en.wiktionary.org/wiki/Shannon_entropy
-func SnannonEntropyBits(b []byte) int {
+func ShannonEntropyBits(b []byte) int {
+	if len(b) == 0 {
+		return 0
+	}
 	var hist [256]int
 	for _, c := range b {
 		hist[c]++
 	}
 	shannon := float64(0)
-	total := float64(len(b))
-	for i := range hist[:] {
-		n := float64(hist[i])
-		if n > 0 {
-			shannon += math.Log2(total/n) * n
+	invTotal := 1.0 / float64(len(b))
+	for _, v := range hist[:] {
+		if v > 0 {
+			n := float64(v)
+			shannon += math.Ceil(-math.Log2(n*invTotal) * n)
 		}
 	}
 	return int(math.Ceil(shannon))

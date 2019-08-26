@@ -247,9 +247,13 @@ func (s *Scratch) Decompress4X(in []byte, dstSize int) (out []byte, err error) {
 	dstOut := s.Out
 	dstEvery := (dstSize + 3) / 4
 
+	const tlSize = 1 << tableLogMax
+	const tlMask = tlSize - 1
+	single := s.dt.single[:tlSize]
+
 	decode := func(br *bitReader) byte {
 		val := br.peekBitsFast(s.actualTableLog) /* note : actualTableLog >= 1 */
-		v := s.dt.single[val]
+		v := single[val&tlMask]
 		br.bitsRead += v.nBits
 		return v.byte
 	}
@@ -279,7 +283,7 @@ bigloop:
 		off += 2
 		if off == bufoff {
 			if bufoff > dstEvery {
-				return nil, errors.New("corruption detected: stream overrun")
+				return nil, errors.New("corruption detected: stream overrun 1")
 			}
 			copy(dstOut, tmp[:bufoff])
 			copy(dstOut[dstEvery:], tmp[bufoff:bufoff*2])
@@ -288,15 +292,15 @@ bigloop:
 			off = 0
 			dstOut = dstOut[bufoff:]
 			// There must at least be 3 buffers left.
-			if len(dstOut) < dstEvery*3+3 {
-				return nil, errors.New("corruption detected: stream overrun")
+			if len(dstOut) < dstEvery*3 {
+				return nil, errors.New("corruption detected: stream overrun 2")
 			}
 		}
 	}
 	if off > 0 {
 		ioff := int(off)
 		if len(dstOut) < dstEvery*3+ioff {
-			return nil, errors.New("corruption detected: stream overrun")
+			return nil, errors.New("corruption detected: stream overrun 3")
 		}
 		copy(dstOut, tmp[:off])
 		copy(dstOut[dstEvery:dstEvery+ioff], tmp[bufoff:bufoff*2])
@@ -311,7 +315,7 @@ bigloop:
 		for !br.finished() {
 			br.fill()
 			if offset >= len(dstOut) {
-				return nil, errors.New("corruption detected: stream overrun")
+				return nil, errors.New("corruption detected: stream overrun 4")
 			}
 			dstOut[offset] = decode(br)
 			offset++

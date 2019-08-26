@@ -12,13 +12,14 @@ import (
 	"io"
 	"sync"
 
-	"github.com/cespare/xxhash"
+	"github.com/klauspost/compress/zstd/internal/xxhash"
 )
 
 type frameDec struct {
 	o         decoderOptions
 	crc       hash.Hash64
 	frameDone sync.WaitGroup
+	offset    int64
 
 	WindowSize       uint64
 	DictionaryID     uint32
@@ -37,6 +38,9 @@ type frameDec struct {
 	history history
 
 	rawInput byteBuffer
+
+	// Byte buffer that can be reused for small input blocks.
+	bBuf byteBuf
 
 	// asyncRunning indicates whether the async routine processes input on 'decoding'.
 	asyncRunning   bool
@@ -231,7 +235,9 @@ func (d *frameDec) reset(br byteBuffer) error {
 
 // next will start decoding the next block from stream.
 func (d *frameDec) next(block *blockDec) error {
-	println("decoding new block")
+	if debug {
+		printf("decoding new block %p:%p", block, block.data)
+	}
 	err := block.reset(d.rawInput, d.WindowSize)
 	if err != nil {
 		println("block error:", err)
@@ -279,13 +285,13 @@ func (d *frameDec) checkCRC() error {
 	if !d.HasCheckSum {
 		return nil
 	}
-	var tmp [8]byte
-	gotB := d.crc.Sum(tmp[:0])
+	var tmp [4]byte
+	got := d.crc.Sum64()
 	// Flip to match file order.
-	gotB[0] = gotB[7]
-	gotB[1] = gotB[6]
-	gotB[2] = gotB[5]
-	gotB[3] = gotB[4]
+	tmp[0] = byte(got >> 0)
+	tmp[1] = byte(got >> 8)
+	tmp[2] = byte(got >> 16)
+	tmp[3] = byte(got >> 24)
 
 	// We can overwrite upper tmp now
 	want := d.rawInput.readSmall(4)
@@ -294,8 +300,10 @@ func (d *frameDec) checkCRC() error {
 		return io.ErrUnexpectedEOF
 	}
 
-	if !bytes.Equal(gotB[:4], want) {
-		println("CRC Check Failed:", gotB[:4], "!=", want)
+	if !bytes.Equal(tmp[:], want) {
+		if debug {
+			println("CRC Check Failed:", tmp[:], "!=", want)
+		}
 		return ErrCRCMismatch
 	}
 	println("CRC ok")
@@ -368,14 +376,15 @@ func (d *frameDec) startDecoder(output chan decodeOutput) {
 			return
 		}
 		if debug {
-			println("got result")
+			println("got result, from ", d.offset, "to", d.offset+int64(len(r.b)))
+			d.offset += int64(len(r.b))
 		}
 		if !block.Last {
 			// Send history to next block
 			select {
 			case next = <-d.decoding:
 				if debug {
-					println("Sending ", len(d.history.b), " bytes as history")
+					println("Sending ", len(d.history.b), "bytes as history")
 				}
 				next.history <- &d.history
 			default:
@@ -421,7 +430,7 @@ func (d *frameDec) startDecoder(output chan decodeOutput) {
 	}
 }
 
-// runDecoder will create a sync decoder that will decodeAsync a block of data.
+// runDecoder will create a sync decoder that will decode a block of data.
 func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {
 	// TODO: Init to dictionary
 	d.history.reset()

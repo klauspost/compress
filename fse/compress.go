@@ -19,7 +19,7 @@ func Compress(in []byte, s *Scratch) ([]byte, error) {
 	if len(in) <= 1 {
 		return nil, ErrIncompressible
 	}
-	if len(in) >= 2<<30 {
+	if len(in) > (2<<30)-1 {
 		return nil, errors.New("input too big, must be < 2GB")
 	}
 	s, err := s.prepare(in)

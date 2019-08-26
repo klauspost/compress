@@ -5,10 +5,14 @@
 package zstd
 
 import (
+	"bufio"
 	"bytes"
+	"encoding/binary"
+	"encoding/hex"
 	"io"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -17,9 +21,120 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DataDog/zstd"
+	// "github.com/DataDog/zstd"
+	// zstd "github.com/valyala/gozstd"
+
 	"github.com/klauspost/compress/zip"
+	"github.com/klauspost/compress/zstd/internal/xxhash"
 )
+
+func TestNewReaderMismatch(t *testing.T) {
+	// To identify a potential decoding error, do the following steps:
+	// 1) Place the compressed file in testdata, eg 'testdata/backup.bin.zst'
+	// 2) Decompress the file to using zstd, so it will be named 'testdata/backup.bin'
+	// 3) Run the test. A hash file will be generated 'testdata/backup.bin.hash'
+	// 4) The decoder will also run and decode the file. It will stop as soon as a mismatch is found.
+	// The hash file will be reused between runs if present.
+	const baseFile = "testdata/backup.bin"
+	const blockSize = 1024
+	hashes, err := ioutil.ReadFile(baseFile + ".hash")
+	if os.IsNotExist(err) {
+		// Create the hash file.
+		f, err := os.Open(baseFile)
+		if os.IsNotExist(err) {
+			t.Skip("no decompressed file found")
+			return
+		}
+		defer f.Close()
+		br := bufio.NewReader(f)
+		var tmp [8]byte
+		xx := xxhash.New()
+		for {
+			xx.Reset()
+			buf := make([]byte, blockSize)
+			n, err := io.ReadFull(br, buf)
+			if err != nil {
+				if err != io.EOF && err != io.ErrUnexpectedEOF {
+					t.Fatal(err)
+				}
+			}
+			if n > 0 {
+				_, _ = xx.Write(buf[:n])
+				binary.LittleEndian.PutUint64(tmp[:], xx.Sum64())
+				hashes = append(hashes, tmp[4:]...)
+			}
+			if n != blockSize {
+				break
+			}
+		}
+		err = ioutil.WriteFile(baseFile+".hash", hashes, os.ModePerm)
+		if err != nil {
+			// We can continue for now
+			t.Error(err)
+		}
+		t.Log("Saved", len(hashes)/4, "hashes as", baseFile+".hash")
+	}
+
+	f, err := os.Open(baseFile + ".zst")
+	if os.IsNotExist(err) {
+		t.Skip("no compressed file found")
+		return
+	}
+	defer f.Close()
+	dec, err := NewReader(f, WithDecoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tmp [8]byte
+	xx := xxhash.New()
+	var cHash int
+	for {
+		xx.Reset()
+		buf := make([]byte, blockSize)
+		n, err := io.ReadFull(dec, buf)
+		if err != nil {
+			if err != io.EOF && err != io.ErrUnexpectedEOF {
+				t.Fatal(err)
+			}
+		}
+		if n > 0 {
+			if cHash+4 > len(hashes) {
+				extra, _ := io.Copy(ioutil.Discard, dec)
+				t.Fatal("not enough hashes (length mismatch). Only have", len(hashes)/4, "hashes. Got block of", n, "bytes and", extra, "bytes still on stream.")
+			}
+			_, _ = xx.Write(buf[:n])
+			binary.LittleEndian.PutUint64(tmp[:], xx.Sum64())
+			want, got := hashes[cHash:cHash+4], tmp[4:]
+			if !bytes.Equal(want, got) {
+				org, err := os.Open(baseFile)
+				if err == nil {
+					const sizeBack = 8 << 20
+					defer org.Close()
+					start := int64(cHash)/4*blockSize - sizeBack
+					if start < 0 {
+						start = 0
+					}
+					_, err = org.Seek(start, io.SeekStart)
+					buf2 := make([]byte, sizeBack+1<<20)
+					n, _ := io.ReadFull(org, buf2)
+					if n > 0 {
+						err = ioutil.WriteFile(baseFile+".section", buf2[:n], os.ModePerm)
+						if err == nil {
+							t.Log("Wrote problematic section to", baseFile+".section")
+						}
+					}
+				}
+
+				t.Fatal("block", cHash/4, "offset", cHash/4*blockSize, "hash mismatch, want:", hex.EncodeToString(want), "got:", hex.EncodeToString(got))
+			}
+			cHash += 4
+		}
+		if n != blockSize {
+			break
+		}
+	}
+	t.Log("Output matched")
+}
 
 func TestNewDecoder(t *testing.T) {
 	defer timeout(60 * time.Second)()
@@ -136,6 +251,7 @@ func TestNewDecoderSmallFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer dec.Close()
 	n, err := io.Copy(ioutil.Discard, dec)
 	if err != nil {
 		t.Fatal(err)
@@ -263,6 +379,133 @@ func TestDecoder_Reset(t *testing.T) {
 	}
 }
 
+func TestDecoderMultiFrame(t *testing.T) {
+	fn := "testdata/benchdecoder.zip"
+	data, err := ioutil.ReadFile(fn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+		return
+	}
+	defer dec.Close()
+	for _, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, ".zst") {
+			continue
+		}
+		t.Run(tt.Name, func(t *testing.T) {
+			r, err := tt.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer r.Close()
+			in, err := ioutil.ReadAll(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// 2x
+			in = append(in, in...)
+			if !testing.Short() {
+				// 4x
+				in = append(in, in...)
+				// 8x
+				in = append(in, in...)
+			}
+			err = dec.Reset(bytes.NewBuffer(in))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := ioutil.ReadAll(dec)
+			err = dec.Reset(bytes.NewBuffer(in))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got2, err := ioutil.ReadAll(dec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, got2) {
+				t.Error("results mismatch")
+			}
+		})
+	}
+}
+
+func TestDecoderMultiFrameReset(t *testing.T) {
+	fn := "testdata/benchdecoder.zip"
+	data, err := ioutil.ReadFile(fn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+		return
+	}
+	rng := rand.New(rand.NewSource(1337))
+	defer dec.Close()
+	for _, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, ".zst") {
+			continue
+		}
+		t.Run(tt.Name, func(t *testing.T) {
+			r, err := tt.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer r.Close()
+			in, err := ioutil.ReadAll(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// 2x
+			in = append(in, in...)
+			if !testing.Short() {
+				// 4x
+				in = append(in, in...)
+				// 8x
+				in = append(in, in...)
+			}
+			err = dec.Reset(bytes.NewBuffer(in))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := ioutil.ReadAll(dec)
+			err = dec.Reset(bytes.NewBuffer(in))
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Read a random number of bytes
+			tmp := make([]byte, rng.Intn(len(got)))
+			_, err = io.ReadAtLeast(dec, tmp, len(tmp))
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = dec.Reset(bytes.NewBuffer(in))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got2, err := ioutil.ReadAll(dec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, got2) {
+				t.Error("results mismatch")
+			}
+		})
+	}
+}
+
 func testDecoderFile(t *testing.T, fn string) {
 	data, err := ioutil.ReadFile(fn)
 	if err != nil {
@@ -338,8 +581,8 @@ func testDecoderFile(t *testing.T, fn string) {
 	}
 }
 
-func BenchmarkDecoder_DecodeAll(b *testing.B) {
-	fn := "testdata/decoder.zip"
+func BenchmarkDecoder_DecoderSmall(b *testing.B) {
+	fn := "testdata/benchdecoder.zip"
 	data, err := ioutil.ReadFile(fn)
 	if err != nil {
 		b.Fatal(err)
@@ -358,8 +601,63 @@ func BenchmarkDecoder_DecodeAll(b *testing.B) {
 		if !strings.HasSuffix(tt.Name, ".zst") {
 			continue
 		}
-		if strings.HasSuffix(tt.Name, "0010.zst") {
-			break
+		b.Run(tt.Name, func(b *testing.B) {
+			r, err := tt.Open()
+			if err != nil {
+				b.Fatal(err)
+			}
+			defer r.Close()
+			in, err := ioutil.ReadAll(r)
+			if err != nil {
+				b.Fatal(err)
+			}
+			// 2x
+			in = append(in, in...)
+			// 4x
+			in = append(in, in...)
+			// 8x
+			in = append(in, in...)
+			err = dec.Reset(bytes.NewBuffer(in))
+			if err != nil {
+				b.Fatal(err)
+			}
+			got, err := ioutil.ReadAll(dec)
+			b.SetBytes(int64(len(got)))
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				err = dec.Reset(bytes.NewBuffer(in))
+				if err != nil {
+					b.Fatal(err)
+				}
+				_, err := io.Copy(ioutil.Discard, dec)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkDecoder_DecodeAll(b *testing.B) {
+	fn := "testdata/benchdecoder.zip"
+	data, err := ioutil.ReadFile(fn)
+	if err != nil {
+		b.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		b.Fatal(err)
+	}
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		b.Fatal(err)
+		return
+	}
+	defer dec.Close()
+	for _, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, ".zst") {
+			continue
 		}
 		b.Run(tt.Name, func(b *testing.B) {
 			r, err := tt.Open()
@@ -385,8 +683,9 @@ func BenchmarkDecoder_DecodeAll(b *testing.B) {
 	}
 }
 
+/*
 func BenchmarkDecoder_DecodeAllCgo(b *testing.B) {
-	fn := "testdata/decoder.zip"
+	fn := "testdata/benchdecoder.zip"
 	data, err := ioutil.ReadFile(fn)
 	if err != nil {
 		b.Fatal(err)
@@ -398,9 +697,6 @@ func BenchmarkDecoder_DecodeAllCgo(b *testing.B) {
 	for _, tt := range zr.File {
 		if !strings.HasSuffix(tt.Name, ".zst") {
 			continue
-		}
-		if strings.HasSuffix(tt.Name, "0010.zst") {
-			break
 		}
 		b.Run(tt.Name, func(b *testing.B) {
 			tt := tt
@@ -429,6 +725,63 @@ func BenchmarkDecoder_DecodeAllCgo(b *testing.B) {
 		})
 	}
 }
+
+func BenchmarkDecoderSilesiaCgo(b *testing.B) {
+	fn := "testdata/silesia.tar.zst"
+	data, err := ioutil.ReadFile(fn)
+	if err != nil {
+		if os.IsNotExist(err) {
+			b.Skip("Missing testdata/silesia.tar.zst")
+			return
+		}
+		b.Fatal(err)
+	}
+	dec := zstd.NewReader(bytes.NewBuffer(data))
+	n, err := io.Copy(ioutil.Discard, dec)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.SetBytes(n)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dec := zstd.NewReader(bytes.NewBuffer(data))
+		_, err := io.CopyN(ioutil.Discard, dec, n)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+func BenchmarkDecoderEnwik9Cgo(b *testing.B) {
+	fn := "testdata/enwik9-1.zst"
+	data, err := ioutil.ReadFile(fn)
+	if err != nil {
+		if os.IsNotExist(err) {
+			b.Skip("Missing " + fn)
+			return
+		}
+		b.Fatal(err)
+	}
+	dec := zstd.NewReader(bytes.NewBuffer(data))
+	n, err := io.Copy(ioutil.Discard, dec)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.SetBytes(n)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		dec := zstd.NewReader(bytes.NewBuffer(data))
+		_, err := io.CopyN(ioutil.Discard, dec, n)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+*/
 
 func BenchmarkDecoderSilesia(b *testing.B) {
 	fn := "testdata/silesia.tar.zst"
@@ -469,34 +822,6 @@ func BenchmarkDecoderSilesia(b *testing.B) {
 	}
 }
 
-func BenchmarkDecoderSilesiaCgo(b *testing.B) {
-	fn := "testdata/silesia.tar.zst"
-	data, err := ioutil.ReadFile(fn)
-	if err != nil {
-		if os.IsNotExist(err) {
-			b.Skip("Missing testdata/silesia.tar.zst")
-			return
-		}
-		b.Fatal(err)
-	}
-	dec := zstd.NewReader(bytes.NewBuffer(data))
-	n, err := io.Copy(ioutil.Discard, dec)
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	b.SetBytes(n)
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		dec := zstd.NewReader(bytes.NewBuffer(data))
-		_, err := io.CopyN(ioutil.Discard, dec, n)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
 func BenchmarkDecoderEnwik9(b *testing.B) {
 	fn := "testdata/enwik9-1.zst"
 	data, err := ioutil.ReadFile(fn)
@@ -529,34 +854,6 @@ func BenchmarkDecoderEnwik9(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		_, err := io.CopyN(ioutil.Discard, dec, n)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-func BenchmarkDecoderEnwik9Cgo(b *testing.B) {
-	fn := "testdata/enwik9-1.zst"
-	data, err := ioutil.ReadFile(fn)
-	if err != nil {
-		if os.IsNotExist(err) {
-			b.Skip("Missing " + fn)
-			return
-		}
-		b.Fatal(err)
-	}
-	dec := zstd.NewReader(bytes.NewBuffer(data))
-	n, err := io.Copy(ioutil.Discard, dec)
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	b.SetBytes(n)
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		dec := zstd.NewReader(bytes.NewBuffer(data))
 		_, err := io.CopyN(ioutil.Discard, dec, n)
 		if err != nil {
 			b.Fatal(err)
@@ -669,103 +966,110 @@ func testDecoderDecodeAllError(t *testing.T, fn string, dec *Decoder) {
 // We don't predefine them, since this also tests our transformations.
 // Reference from here: https://github.com/facebook/zstd/blob/ededcfca57366461021c922720878c81a5854a0a/lib/decompress/zstd_decompress_block.c#L234
 func TestPredefTables(t *testing.T) {
+	x := func(nextState uint16, nbAddBits, nbBits uint8, baseVal uint32) decSymbol {
+		return newDecSymbol(nbBits, nbAddBits, nextState, baseVal)
+	}
 	for i := range fsePredef[:] {
 		var want []decSymbol
 		switch tableIndex(i) {
 		case tableLiteralLengths:
 			want = []decSymbol{
 				/* nextState, nbAddBits, nbBits, baseVal */
-				{0, 0, 4, 0}, {16, 0, 4, 0},
-				{32, 0, 5, 1}, {0, 0, 5, 3},
-				{0, 0, 5, 4}, {0, 0, 5, 6},
-				{0, 0, 5, 7}, {0, 0, 5, 9},
-				{0, 0, 5, 10}, {0, 0, 5, 12},
-				{0, 0, 6, 14}, {0, 1, 5, 16},
-				{0, 1, 5, 20}, {0, 1, 5, 22},
-				{0, 2, 5, 28}, {0, 3, 5, 32},
-				{0, 4, 5, 48}, {32, 6, 5, 64},
-				{0, 7, 5, 128}, {0, 8, 6, 256},
-				{0, 10, 6, 1024}, {0, 12, 6, 4096},
-				{32, 0, 4, 0}, {0, 0, 4, 1},
-				{0, 0, 5, 2}, {32, 0, 5, 4},
-				{0, 0, 5, 5}, {32, 0, 5, 7},
-				{0, 0, 5, 8}, {32, 0, 5, 10},
-				{0, 0, 5, 11}, {0, 0, 6, 13},
-				{32, 1, 5, 16}, {0, 1, 5, 18},
-				{32, 1, 5, 22}, {0, 2, 5, 24},
-				{32, 3, 5, 32}, {0, 3, 5, 40},
-				{0, 6, 4, 64}, {16, 6, 4, 64},
-				{32, 7, 5, 128}, {0, 9, 6, 512},
-				{0, 11, 6, 2048}, {48, 0, 4, 0},
-				{16, 0, 4, 1}, {32, 0, 5, 2},
-				{32, 0, 5, 3}, {32, 0, 5, 5},
-				{32, 0, 5, 6}, {32, 0, 5, 8},
-				{32, 0, 5, 9}, {32, 0, 5, 11},
-				{32, 0, 5, 12}, {0, 0, 6, 15},
-				{32, 1, 5, 18}, {32, 1, 5, 20},
-				{32, 2, 5, 24}, {32, 2, 5, 28},
-				{32, 3, 5, 40}, {32, 4, 5, 48},
-				{0, 16, 6, 65536}, {0, 15, 6, 32768},
-				{0, 14, 6, 16384}, {0, 13, 6, 8192}}
+				x(0, 0, 4, 0), x(16, 0, 4, 0),
+				x(32, 0, 5, 1), x(0, 0, 5, 3),
+				x(0, 0, 5, 4), x(0, 0, 5, 6),
+				x(0, 0, 5, 7), x(0, 0, 5, 9),
+				x(0, 0, 5, 10), x(0, 0, 5, 12),
+				x(0, 0, 6, 14), x(0, 1, 5, 16),
+				x(0, 1, 5, 20), x(0, 1, 5, 22),
+				x(0, 2, 5, 28), x(0, 3, 5, 32),
+				x(0, 4, 5, 48), x(32, 6, 5, 64),
+				x(0, 7, 5, 128), x(0, 8, 6, 256),
+				x(0, 10, 6, 1024), x(0, 12, 6, 4096),
+				x(32, 0, 4, 0), x(0, 0, 4, 1),
+				x(0, 0, 5, 2), x(32, 0, 5, 4),
+				x(0, 0, 5, 5), x(32, 0, 5, 7),
+				x(0, 0, 5, 8), x(32, 0, 5, 10),
+				x(0, 0, 5, 11), x(0, 0, 6, 13),
+				x(32, 1, 5, 16), x(0, 1, 5, 18),
+				x(32, 1, 5, 22), x(0, 2, 5, 24),
+				x(32, 3, 5, 32), x(0, 3, 5, 40),
+				x(0, 6, 4, 64), x(16, 6, 4, 64),
+				x(32, 7, 5, 128), x(0, 9, 6, 512),
+				x(0, 11, 6, 2048), x(48, 0, 4, 0),
+				x(16, 0, 4, 1), x(32, 0, 5, 2),
+				x(32, 0, 5, 3), x(32, 0, 5, 5),
+				x(32, 0, 5, 6), x(32, 0, 5, 8),
+				x(32, 0, 5, 9), x(32, 0, 5, 11),
+				x(32, 0, 5, 12), x(0, 0, 6, 15),
+				x(32, 1, 5, 18), x(32, 1, 5, 20),
+				x(32, 2, 5, 24), x(32, 2, 5, 28),
+				x(32, 3, 5, 40), x(32, 4, 5, 48),
+				x(0, 16, 6, 65536), x(0, 15, 6, 32768),
+				x(0, 14, 6, 16384), x(0, 13, 6, 8192),
+			}
 		case tableOffsets:
 			want = []decSymbol{
 				/* nextState, nbAddBits, nbBits, baseVal */
-				{0, 0, 5, 0}, {0, 6, 4, 61},
-				{0, 9, 5, 509}, {0, 15, 5, 32765},
-				{0, 21, 5, 2097149}, {0, 3, 5, 5},
-				{0, 7, 4, 125}, {0, 12, 5, 4093},
-				{0, 18, 5, 262141}, {0, 23, 5, 8388605},
-				{0, 5, 5, 29}, {0, 8, 4, 253},
-				{0, 14, 5, 16381}, {0, 20, 5, 1048573},
-				{0, 2, 5, 1}, {16, 7, 4, 125},
-				{0, 11, 5, 2045}, {0, 17, 5, 131069},
-				{0, 22, 5, 4194301}, {0, 4, 5, 13},
-				{16, 8, 4, 253}, {0, 13, 5, 8189},
-				{0, 19, 5, 524285}, {0, 1, 5, 1},
-				{16, 6, 4, 61}, {0, 10, 5, 1021},
-				{0, 16, 5, 65533}, {0, 28, 5, 268435453},
-				{0, 27, 5, 134217725}, {0, 26, 5, 67108861},
-				{0, 25, 5, 33554429}, {0, 24, 5, 16777213}}
+				x(0, 0, 5, 0), x(0, 6, 4, 61),
+				x(0, 9, 5, 509), x(0, 15, 5, 32765),
+				x(0, 21, 5, 2097149), x(0, 3, 5, 5),
+				x(0, 7, 4, 125), x(0, 12, 5, 4093),
+				x(0, 18, 5, 262141), x(0, 23, 5, 8388605),
+				x(0, 5, 5, 29), x(0, 8, 4, 253),
+				x(0, 14, 5, 16381), x(0, 20, 5, 1048573),
+				x(0, 2, 5, 1), x(16, 7, 4, 125),
+				x(0, 11, 5, 2045), x(0, 17, 5, 131069),
+				x(0, 22, 5, 4194301), x(0, 4, 5, 13),
+				x(16, 8, 4, 253), x(0, 13, 5, 8189),
+				x(0, 19, 5, 524285), x(0, 1, 5, 1),
+				x(16, 6, 4, 61), x(0, 10, 5, 1021),
+				x(0, 16, 5, 65533), x(0, 28, 5, 268435453),
+				x(0, 27, 5, 134217725), x(0, 26, 5, 67108861),
+				x(0, 25, 5, 33554429), x(0, 24, 5, 16777213),
+			}
 		case tableMatchLengths:
 			want = []decSymbol{
 				/* nextState, nbAddBits, nbBits, baseVal */
-				{0, 0, 6, 3}, {0, 0, 4, 4},
-				{32, 0, 5, 5}, {0, 0, 5, 6},
-				{0, 0, 5, 8}, {0, 0, 5, 9},
-				{0, 0, 5, 11}, {0, 0, 6, 13},
-				{0, 0, 6, 16}, {0, 0, 6, 19},
-				{0, 0, 6, 22}, {0, 0, 6, 25},
-				{0, 0, 6, 28}, {0, 0, 6, 31},
-				{0, 0, 6, 34}, {0, 1, 6, 37},
-				{0, 1, 6, 41}, {0, 2, 6, 47},
-				{0, 3, 6, 59}, {0, 4, 6, 83},
-				{0, 7, 6, 131}, {0, 9, 6, 515},
-				{16, 0, 4, 4}, {0, 0, 4, 5},
-				{32, 0, 5, 6}, {0, 0, 5, 7},
-				{32, 0, 5, 9}, {0, 0, 5, 10},
-				{0, 0, 6, 12}, {0, 0, 6, 15},
-				{0, 0, 6, 18}, {0, 0, 6, 21},
-				{0, 0, 6, 24}, {0, 0, 6, 27},
-				{0, 0, 6, 30}, {0, 0, 6, 33},
-				{0, 1, 6, 35}, {0, 1, 6, 39},
-				{0, 2, 6, 43}, {0, 3, 6, 51},
-				{0, 4, 6, 67}, {0, 5, 6, 99},
-				{0, 8, 6, 259}, {32, 0, 4, 4},
-				{48, 0, 4, 4}, {16, 0, 4, 5},
-				{32, 0, 5, 7}, {32, 0, 5, 8},
-				{32, 0, 5, 10}, {32, 0, 5, 11},
-				{0, 0, 6, 14}, {0, 0, 6, 17},
-				{0, 0, 6, 20}, {0, 0, 6, 23},
-				{0, 0, 6, 26}, {0, 0, 6, 29},
-				{0, 0, 6, 32}, {0, 16, 6, 65539},
-				{0, 15, 6, 32771}, {0, 14, 6, 16387},
-				{0, 13, 6, 8195}, {0, 12, 6, 4099},
-				{0, 11, 6, 2051}, {0, 10, 6, 1027},
+				x(0, 0, 6, 3), x(0, 0, 4, 4),
+				x(32, 0, 5, 5), x(0, 0, 5, 6),
+				x(0, 0, 5, 8), x(0, 0, 5, 9),
+				x(0, 0, 5, 11), x(0, 0, 6, 13),
+				x(0, 0, 6, 16), x(0, 0, 6, 19),
+				x(0, 0, 6, 22), x(0, 0, 6, 25),
+				x(0, 0, 6, 28), x(0, 0, 6, 31),
+				x(0, 0, 6, 34), x(0, 1, 6, 37),
+				x(0, 1, 6, 41), x(0, 2, 6, 47),
+				x(0, 3, 6, 59), x(0, 4, 6, 83),
+				x(0, 7, 6, 131), x(0, 9, 6, 515),
+				x(16, 0, 4, 4), x(0, 0, 4, 5),
+				x(32, 0, 5, 6), x(0, 0, 5, 7),
+				x(32, 0, 5, 9), x(0, 0, 5, 10),
+				x(0, 0, 6, 12), x(0, 0, 6, 15),
+				x(0, 0, 6, 18), x(0, 0, 6, 21),
+				x(0, 0, 6, 24), x(0, 0, 6, 27),
+				x(0, 0, 6, 30), x(0, 0, 6, 33),
+				x(0, 1, 6, 35), x(0, 1, 6, 39),
+				x(0, 2, 6, 43), x(0, 3, 6, 51),
+				x(0, 4, 6, 67), x(0, 5, 6, 99),
+				x(0, 8, 6, 259), x(32, 0, 4, 4),
+				x(48, 0, 4, 4), x(16, 0, 4, 5),
+				x(32, 0, 5, 7), x(32, 0, 5, 8),
+				x(32, 0, 5, 10), x(32, 0, 5, 11),
+				x(0, 0, 6, 14), x(0, 0, 6, 17),
+				x(0, 0, 6, 20), x(0, 0, 6, 23),
+				x(0, 0, 6, 26), x(0, 0, 6, 29),
+				x(0, 0, 6, 32), x(0, 16, 6, 65539),
+				x(0, 15, 6, 32771), x(0, 14, 6, 16387),
+				x(0, 13, 6, 8195), x(0, 12, 6, 4099),
+				x(0, 11, 6, 2051), x(0, 10, 6, 1027),
 			}
 		}
 		pre := fsePredef[i]
 		got := pre.dt[:1<<pre.actualTableLog]
 		if !reflect.DeepEqual(got, want) {
+			t.Logf("want: %v", want)
+			t.Logf("got : %v", got)
 			t.Errorf("Predefined table %d incorrect, len(got) = %d, len(want) = %d", i, len(got), len(want))
 		}
 	}

@@ -21,8 +21,6 @@ Install using `go get -u github.com/klauspost/compress`. The package is located 
 
 Godoc Documentation: https://godoc.org/github.com/klauspost/compress/zstd
 
-You will also need the [`github.com/cespare/xxhash`](https://github.com/cespare/xxhash) package.
-
 
 ## Compressor
 
@@ -36,7 +34,8 @@ For now, a high speed (fastest) and medium-fast (default) compressor has been im
 The "Fastest" compression ratio is roughly equivalent to zstd level 1. 
 The "Default" compression ration is roughly equivalent to zstd level 3 (default).
 
-In terms of speed, it is typically 2x as fast as the stdlib deflate/gzip in its fastest mode. The compression ratio compared to stdlib is around level 3, but usually 3x as fast.
+In terms of speed, it is typically 2x as fast as the stdlib deflate/gzip in its fastest mode. 
+The compression ratio compared to stdlib is around level 3, but usually 3x as fast.
 
 Compared to cgo zstd, the speed is around level 3 (default), but compression slightly worse, between level 1&2.
 
@@ -219,7 +218,8 @@ silesia.tar zstd    3   211947520   66793301    1377    146.79
 
 As part of the development process a *Snappy* -> *Zstandard* converter was also built.
 
-This can convert a *framed* [Snappy Stream](https://godoc.org/github.com/golang/snappy#Writer) to a zstd stream. Note that a single block is not framed.
+This can convert a *framed* [Snappy Stream](https://godoc.org/github.com/golang/snappy#Writer) to a zstd stream. 
+Note that a single block is not framed.
 
 Conversion is done by converting the stream directly from Snappy without intermediate full decoding.
 Therefore the compression ratio is much less than what can be done by a full decompression
@@ -382,3 +382,4 @@ For sending files for reproducing errors use a service like [goobox](https://goo
 
 For general feedback and experience reports, feel free to open an issue or write me on [Twitter](https://twitter.com/sh0dan).
 
+This package includes the excellent [`github.com/cespare/xxhash`](https://github.com/cespare/xxhash) package Copyright (c) 2016 Caleb Spare.
