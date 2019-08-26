@@ -264,7 +264,7 @@ func TestNewDecoderSmallFile(t *testing.T) {
 }
 
 func TestDecoderRegression(t *testing.T) {
-	defer timeout(5 * time.Second)()
+	defer timeout(60 * time.Second)()
 	data, err := ioutil.ReadFile("testdata/regression.zip")
 	if err != nil {
 		t.Fatal(err)
@@ -273,7 +273,7 @@ func TestDecoderRegression(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dec, err := NewReader(nil, WithDecoderConcurrency(1), WithDecoderLowmem(true), WithDecoderMaxMemory(10<<20))
+	dec, err := NewReader(nil, WithDecoderConcurrency(1), WithDecoderLowmem(true), WithDecoderMaxMemory(1<<20))
 	if err != nil {
 		t.Error(err)
 		return
