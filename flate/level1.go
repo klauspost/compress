@@ -68,13 +68,13 @@ func (e *fastEncL1) Encode(dst *tokens, src []byte) {
 		nextS := s
 		var candidate tableEntry
 		for {
-			s = nextS
+			nextHash := hash(cv)
+			candidate = e.table[nextHash]
 			nextS = s + doEvery + (s-nextEmit)>>skipLog
 			if nextS > sLimit {
 				goto emitRemainder
 			}
-			nextHash := hash(cv)
-			candidate = e.table[nextHash]
+
 			now := load6432(src, nextS)
 			e.table[nextHash] = tableEntry{offset: s + e.cur, val: cv}
 			nextHash = hash(uint32(now))
@@ -99,6 +99,7 @@ func (e *fastEncL1) Encode(dst *tokens, src []byte) {
 				break
 			}
 			cv = uint32(now)
+			s = nextS
 		}
 
 		// A 4-byte match has been found. We'll later see if more than 4 bytes
@@ -139,7 +140,7 @@ func (e *fastEncL1) Encode(dst *tokens, src []byte) {
 			}
 
 			// We could immediately start working at s now, but to improve
-			// compression we first update the hash table at s-2 s-1 and at s. If
+			// compression we first update the hash table at s-2 and at s. If
 			// another emitCopy is not our next move, also calculate nextHash
 			// at s+1. At least on GOARCH=amd64, these three hash calculations
 			// are faster as one load64 call (with some shifts) instead of
@@ -148,13 +149,14 @@ func (e *fastEncL1) Encode(dst *tokens, src []byte) {
 			o := e.cur + s - 2
 			prevHash := hash(uint32(x))
 			e.table[prevHash] = tableEntry{offset: o, val: uint32(x)}
-			currHash := hash(uint32(x >> 16))
+			x >>= 16
+			currHash := hash(uint32(x))
 			candidate = e.table[currHash]
-			e.table[currHash] = tableEntry{offset: o + 2, val: uint32(x >> 16)}
+			e.table[currHash] = tableEntry{offset: o + 2, val: uint32(x)}
 
 			offset := s - (candidate.offset - e.cur)
-			if offset > maxMatchOffset || uint32(x>>16) != candidate.val {
-				cv = uint32(x >> 24)
+			if offset > maxMatchOffset || uint32(x) != candidate.val {
+				cv = uint32(x >> 8)
 				s++
 				break
 			}
