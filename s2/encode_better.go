@@ -169,24 +169,8 @@ func encodeBlockBetter(dst, src []byte) (d int) {
 			return 0
 		}
 
-		// A 4-byte match has been found. We'll later see if more than 4 bytes
-		// match. But, prior to the match, src[nextEmit:s] are unmatched. Emit
-		// them as literal bytes.
-
-		d += emitLiteral(dst[d:], src[nextEmit:s])
-
-		// Call emitCopy, and then see if another emitCopy could be our next
-		// move. Repeat until we find no match for the input immediately after
-		// what was consumed by the last emitCopy call.
-		//
-		// If we exit this loop normally then we need to call emitLiteral next,
-		// though we don't yet know how big the literal will be. We handle that
-		// by proceeding to the next iteration of the main loop. We also can
-		// exit this loop via goto if we get close to exhausting the input.
-		// Invariant: we have a 4-byte match at s, and no need to emit any
-		// literal bytes prior to s.
 		base := s
-		repeat = base - candidateL
+		offset := base - candidateL
 
 		// Extend the 4-byte match as long as possible.
 		s += 4
@@ -200,7 +184,15 @@ func encodeBlockBetter(dst, src []byte) (d int) {
 			candidateL += 8
 		}
 
-		d += emitCopy(dst[d:], repeat, s-base)
+		if offset > 65535 && s-base <= 5 {
+			// Bail if the match is equal or worse to the encoding.
+			s = base + 3
+			cv = load64(src, s)
+			continue
+		}
+		repeat = offset
+		d += emitLiteral(dst[d:], src[nextEmit:base])
+		d += emitCopy(dst[d:], offset, s-base)
 
 		nextEmit = s
 		if s >= sLimit {

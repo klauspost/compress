@@ -12,6 +12,8 @@ This package provides various compression algorithms.
 [![fuzzit](https://app.fuzzit.dev/badge?org_id=klauspost)](https://fuzzit.dev)
 
 # changelog
+* Aug 26, 2019: (v1.8.1) S2: 1-2% compression increase in "better" compression mode.
+* Aug 26, 2019: zstd: Check maximum size of Huffman 1X compressed literals while decoding.
 * Aug 24, 2019: (v1.8.0) Added [S2 compression](https://github.com/klauspost/compress/tree/master/s2#s2-compression), a high performance replacement for Snappy. 
 * Aug 21, 2019: (v1.7.6) Fixed minor issues found by fuzzer. One could lead to zstd not decompressing.
 * Aug 18, 2019: Add [fuzzit](https://fuzzit.dev/) continuous fuzzing.
