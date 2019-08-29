@@ -102,6 +102,25 @@ type huffmanBitWriter struct {
 	codegenFreq     [codegenCodeCount]uint16
 }
 
+// Huffman reuse.
+//
+// The huffmanBitWriter supports reusing huffman tables and thereby combining block sections.
+//
+// This is controlled by several variables:
+//
+// If lastHeader is non-zero the Huffman table can be reused.
+// This also indicates that a Huffman table has been generated that can output all
+// possible symbols.
+// It also indicates that an EOB has not yet been emitted, so if a new tabel is generated
+// an EOB with the previous table must be written.
+//
+// If lastHuffMan is set, a table for outputting literals has been generated and offsets are invalid.
+//
+// An incoming block estimates the output size of a new table using a 'fresh' by calculating the
+// optimal size and adding a penalty in 'logReusePenalty'.
+// A Huffman table is not optimal, which is why we add a penalty, and generating a new table
+// is slower both for compression and decompression.
+
 func newHuffmanBitWriter(w io.Writer) *huffmanBitWriter {
 	return &huffmanBitWriter{
 		writer:      w,
@@ -597,7 +616,8 @@ func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []b
 		newSize += newSize >> (w.logReusePenalty & 31)
 		extra := w.extraBitSize()
 		reuseSize, _ := w.dynamicSize(w.literalEncoding, w.offsetEncoding, extra)
-		//fmt.Println("Reuse Size:", reuseSize, "New Size:", newSize, "log", w.logReusePenalty, "header", w.lastHeader, "re extra:", extra, "re-main", reuseSize-extra)
+
+		// Check if a new table is better.
 		if newSize < reuseSize {
 			// Write the EOB we owe.
 			w.writeCode(w.literalEncoding.codes[endBlockMarker])
@@ -615,7 +635,7 @@ func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []b
 		}
 	}
 
-	// We want a new block
+	// We want a new block/table
 	if w.lastHeader == 0 {
 		w.generate(tokens)
 		// Generate codegen and codegenFrequencies, which indicates how to encode
@@ -718,6 +738,7 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 		if false {
 			w.writeCode(lengths[lengthCode&31])
 		} else {
+			// inlined
 			c := lengths[lengthCode&31]
 			w.bits |= uint64(c.code) << (w.nbits & 63)
 			w.nbits += c.len
@@ -737,6 +758,7 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 		if false {
 			w.writeCode(offs[offsetCode&31])
 		} else {
+			// inlined
 			c := offs[offsetCode&31]
 			w.bits |= uint64(c.code) << (w.nbits & 63)
 			w.nbits += c.len

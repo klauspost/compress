@@ -270,9 +270,8 @@ func (t *tokens) AddMatch(xlength uint32, xoffset uint32) {
 	t.n++
 }
 
-// AddMatch adds a match to the tokens, potentially longer than max match length.
-// Length should NOT have the base subtracted.
-// This function is very sensitive to inlining and right on the border.
+// AddMatchLong adds a match to the tokens, potentially longer than max match length.
+// Length should NOT have the base subtracted, only offset should.
 func (t *tokens) AddMatchLong(xlength int32, xoffset uint32) {
 	if debugDecode {
 		if xoffset >= maxMatchOffset+baseMatchOffset {
