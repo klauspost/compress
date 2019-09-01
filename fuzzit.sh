@@ -18,12 +18,14 @@ go-fuzz-build -libfuzzer -o flate.a github.com/klauspost/compress-fuzz/flate
 clang -fsanitize=fuzzer flate.a -o flate-fuzz
 ./fuzzit create job --type ${1} klauspost/compress-flate flate-fuzz
 
-go-fuzz-build -libfuzzer -o fse-compress.a -func=FuzzCompress github.com/klauspost/compress-fuzz/fse
-go-fuzz-build -libfuzzer -o fse-decompress.a -func=FuzzDecompress github.com/klauspost/compress-fuzz/fse
-clang -fsanitize=fuzzer fse-compress.a -o fse-compress-fuzz
-clang -fsanitize=fuzzer fse-decompress.a -o fse-decompress-fuzz
-./fuzzit create job --type ${1} klauspost/compress-fse-compress fse-compress-fuzz
-./fuzzit create job --type ${1} klauspost/compress-fse-decompress fse-decompress-fuzz
+# FSE disabled.
+# FSE is not directly used, so we disable it since we have limited resources.
+#go-fuzz-build -libfuzzer -o fse-compress.a -func=FuzzCompress github.com/klauspost/compress-fuzz/fse
+#go-fuzz-build -libfuzzer -o fse-decompress.a -func=FuzzDecompress github.com/klauspost/compress-fuzz/fse
+#clang -fsanitize=fuzzer fse-compress.a -o fse-compress-fuzz
+#clang -fsanitize=fuzzer fse-decompress.a -o fse-decompress-fuzz
+#./fuzzit create job --type ${1} klauspost/compress-fse-compress fse-compress-fuzz
+#./fuzzit create job --type ${1} klauspost/compress-fse-decompress fse-decompress-fuzz
 
 go-fuzz-build -libfuzzer -o huff0-compress.a -func=FuzzCompress github.com/klauspost/compress-fuzz/huff0
 go-fuzz-build -libfuzzer -o huff0-decompress.a -func=FuzzDecompress github.com/klauspost/compress-fuzz/huff0
