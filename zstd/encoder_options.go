@@ -18,6 +18,7 @@ type encoderOptions struct {
 	blockSize  int
 	windowSize int
 	level      EncoderLevel
+	fullZero   bool
 }
 
 func (o *encoderOptions) setDefault() {
@@ -162,6 +163,16 @@ func WithEncoderLevel(l EncoderLevel) EOption {
 			return fmt.Errorf("unknown encoder level")
 		}
 		o.level = l
+		return nil
+	}
+}
+
+// WithZeroFrames will encode 0 length input as full frames.
+// This can be needed for compatibility with zstandard usage,
+// but is not needed for this package.
+func WithZeroFrames(b bool) EOption {
+	return func(o *encoderOptions) error {
+		o.fullZero = b
 		return nil
 	}
 }
