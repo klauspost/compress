@@ -75,6 +75,7 @@ var (
 // The Reset function can be used to initiate a new stream, which is will considerably
 // reduce the allocations normally caused by NewReader.
 func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
+	initPredefined()
 	var d Decoder
 	d.o.setDefault()
 	for _, o := range opts {
