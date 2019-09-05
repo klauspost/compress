@@ -69,7 +69,7 @@ func WithEncoderConcurrency(n int) EOption {
 // The value must be a power of two between WindowSizeMin and WindowSizeMax.
 // A larger value will enable better compression but allocate more memory and,
 // for above-default values, take considerably longer.
-// By default this is set to 4MB.
+// The default value is determined by the compression level.
 func WithWindowSize(n int) EOption {
 	return func(o *encoderOptions) error {
 		switch {
