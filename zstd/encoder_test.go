@@ -556,6 +556,55 @@ func TestEncoder_EncodeAllSilesia(t *testing.T) {
 	t.Log("Encoded content matched")
 }
 
+func TestEncoder_EncodeAllEmpty(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
+	var in []byte
+
+	e, err := NewWriter(nil, WithZeroFrames(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := e.EncodeAll(in, nil)
+	if len(dst) == 0 {
+		t.Fatal("Requested zero frame, but got nothing.")
+	}
+	t.Log("Block Encoder len", len(in), "-> zstd len", len(dst), dst)
+
+	dec, err := NewReader(nil, WithDecoderMaxMemory(220<<20))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := dec.DecodeAll(dst, nil)
+	if err != nil {
+		t.Error(err, len(decoded))
+	}
+	if !bytes.Equal(decoded, in) {
+		t.Fatal("Decoded does not match")
+	}
+
+	// Test buffer writer.
+	var buf bytes.Buffer
+	e.Reset(&buf)
+	err = e.Close()
+	dst = buf.Bytes()
+	if len(dst) == 0 {
+		t.Fatal("Requested zero frame, but got nothing.")
+	}
+	t.Log("Buffer Encoder len", len(in), "-> zstd len", len(dst))
+
+	decoded, err = dec.DecodeAll(dst, nil)
+	if err != nil {
+		t.Error(err, len(decoded))
+	}
+	if !bytes.Equal(decoded, in) {
+		t.Fatal("Decoded does not match")
+	}
+
+	t.Log("Encoded content matched")
+}
+
 func TestEncoder_EncodeAllEnwik9(t *testing.T) {
 	if false || testing.Short() {
 		t.SkipNow()
