@@ -59,6 +59,7 @@ type encoderState struct {
 // NewWriter will create a new Zstandard encoder.
 // If the encoder will be used for encoding blocks a nil writer can be used.
 func NewWriter(w io.Writer, opts ...EOption) (*Encoder, error) {
+	initPredefined()
 	var e Encoder
 	e.o.setDefault()
 	for _, o := range opts {
