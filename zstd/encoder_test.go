@@ -6,6 +6,7 @@ package zstd
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -17,6 +18,8 @@ import (
 	"github.com/klauspost/compress/zip"
 	"github.com/klauspost/compress/zstd/internal/xxhash"
 )
+
+var testWindowSizes = []int{MinWindowSize, 1 << 16, 1 << 22, 1 << 24}
 
 func TestEncoder_EncodeAllSimple(t *testing.T) {
 	in, err := ioutil.ReadFile("testdata/z000028")
@@ -108,58 +111,67 @@ func TestEncoderRegression(t *testing.T) {
 	defer dec.Close()
 	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
-			zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-			if err != nil {
-				t.Fatal(err)
-			}
-			enc, err := NewWriter(nil, WithEncoderCRC(true), WithEncoderLevel(level))
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			for i, tt := range zr.File {
-				if !strings.HasSuffix(t.Name(), "") {
-					continue
-				}
-				if testing.Short() && i > 100 {
-					break
-				}
-
-				t.Run(tt.Name, func(t *testing.T) {
-					r, err := tt.Open()
+			for _, windowSize := range testWindowSizes {
+				t.Run(fmt.Sprintf("window:%d", windowSize), func(t *testing.T) {
+					zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 					if err != nil {
-						t.Error(err)
-						return
+						t.Fatal(err)
 					}
-					in, err := ioutil.ReadAll(r)
+					enc, err := NewWriter(
+						nil,
+						WithEncoderCRC(true),
+						WithEncoderLevel(level),
+						WithWindowSize(windowSize),
+					)
 					if err != nil {
-						t.Error(err)
-					}
-					encoded := enc.EncodeAll(in, nil)
-					got, err := dec.DecodeAll(encoded, nil)
-					if err != nil {
-						t.Logf("error: %v\nwant: %v\ngot:  %v", err, in, got)
 						t.Fatal(err)
 					}
 
-					// Use the Writer
-					var dst bytes.Buffer
-					enc.Reset(&dst)
-					_, err = enc.Write(in)
-					if err != nil {
-						t.Error(err)
-					}
-					err = enc.Close()
-					if err != nil {
-						t.Error(err)
-					}
-					encoded = dst.Bytes()
-					got, err = dec.DecodeAll(encoded, nil)
-					if err != nil {
-						t.Logf("error: %v\nwant: %v\ngot:  %v", err, in, got)
-						t.Fatal(err)
-					}
+					for i, tt := range zr.File {
+						if !strings.HasSuffix(t.Name(), "") {
+							continue
+						}
+						if testing.Short() && i > 100 {
+							break
+						}
 
+						t.Run(tt.Name, func(t *testing.T) {
+							r, err := tt.Open()
+							if err != nil {
+								t.Error(err)
+								return
+							}
+							in, err := ioutil.ReadAll(r)
+							if err != nil {
+								t.Error(err)
+							}
+							encoded := enc.EncodeAll(in, nil)
+							got, err := dec.DecodeAll(encoded, nil)
+							if err != nil {
+								t.Logf("error: %v\nwant: %v\ngot:  %v", err, in, got)
+								t.Fatal(err)
+							}
+
+							// Use the Writer
+							var dst bytes.Buffer
+							enc.Reset(&dst)
+							_, err = enc.Write(in)
+							if err != nil {
+								t.Error(err)
+							}
+							err = enc.Close()
+							if err != nil {
+								t.Error(err)
+							}
+							encoded = dst.Bytes()
+							got, err = dec.DecodeAll(encoded, nil)
+							if err != nil {
+								t.Logf("error: %v\nwant: %v\ngot:  %v", err, in, got)
+								t.Fatal(err)
+							}
+
+						})
+					}
 				})
 			}
 		})
@@ -173,29 +185,33 @@ func TestEncoder_EncodeAllTwain(t *testing.T) {
 	}
 	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
-			e, err := NewWriter(nil, WithEncoderLevel(level))
-			if err != nil {
-				t.Fatal(err)
-			}
-			start := time.Now()
-			dst := e.EncodeAll(in, nil)
-			t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
-			mbpersec := (float64(len(in)) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
-			t.Logf("Encoded %d bytes with %.2f MB/s", len(in), mbpersec)
+			for _, windowSize := range testWindowSizes {
+				t.Run(fmt.Sprintf("window:%d", windowSize), func(t *testing.T) {
+					e, err := NewWriter(nil, WithEncoderLevel(level), WithWindowSize(windowSize))
+					if err != nil {
+						t.Fatal(err)
+					}
+					start := time.Now()
+					dst := e.EncodeAll(in, nil)
+					t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
+					mbpersec := (float64(len(in)) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
+					t.Logf("Encoded %d bytes with %.2f MB/s", len(in), mbpersec)
 
-			dec, err := NewReader(nil)
-			if err != nil {
-				t.Fatal(err)
+					dec, err := NewReader(nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+					decoded, err := dec.DecodeAll(dst, nil)
+					if err != nil {
+						t.Error(err, len(decoded))
+					}
+					if !bytes.Equal(decoded, in) {
+						ioutil.WriteFile("testdata/"+t.Name()+"-Mark.Twain-Tom.Sawyer.txt.got", decoded, os.ModePerm)
+						t.Fatal("Decoded does not match")
+					}
+					t.Log("Encoded content matched")
+				})
 			}
-			decoded, err := dec.DecodeAll(dst, nil)
-			if err != nil {
-				t.Error(err, len(decoded))
-			}
-			if !bytes.Equal(decoded, in) {
-				ioutil.WriteFile("testdata/"+t.Name()+"-Mark.Twain-Tom.Sawyer.txt.got", decoded, os.ModePerm)
-				t.Fatal("Decoded does not match")
-			}
-			t.Log("Encoded content matched")
 		})
 	}
 }
@@ -207,29 +223,33 @@ func TestEncoder_EncodeAllPi(t *testing.T) {
 	}
 	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
-			e, err := NewWriter(nil, WithEncoderLevel(level))
-			if err != nil {
-				t.Fatal(err)
-			}
-			start := time.Now()
-			dst := e.EncodeAll(in, nil)
-			t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
-			mbpersec := (float64(len(in)) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
-			t.Logf("Encoded %d bytes with %.2f MB/s", len(in), mbpersec)
+			for _, windowSize := range testWindowSizes {
+				t.Run(fmt.Sprintf("window:%d", windowSize), func(t *testing.T) {
+					e, err := NewWriter(nil, WithEncoderLevel(level), WithWindowSize(windowSize))
+					if err != nil {
+						t.Fatal(err)
+					}
+					start := time.Now()
+					dst := e.EncodeAll(in, nil)
+					t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
+					mbpersec := (float64(len(in)) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
+					t.Logf("Encoded %d bytes with %.2f MB/s", len(in), mbpersec)
 
-			dec, err := NewReader(nil)
-			if err != nil {
-				t.Fatal(err)
+					dec, err := NewReader(nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+					decoded, err := dec.DecodeAll(dst, nil)
+					if err != nil {
+						t.Error(err, len(decoded))
+					}
+					if !bytes.Equal(decoded, in) {
+						ioutil.WriteFile("testdata/"+t.Name()+"-pi.txt.got", decoded, os.ModePerm)
+						t.Fatal("Decoded does not match")
+					}
+					t.Log("Encoded content matched")
+				})
 			}
-			decoded, err := dec.DecodeAll(dst, nil)
-			if err != nil {
-				t.Error(err, len(decoded))
-			}
-			if !bytes.Equal(decoded, in) {
-				ioutil.WriteFile("testdata/"+t.Name()+"-pi.txt.got", decoded, os.ModePerm)
-				t.Fatal("Decoded does not match")
-			}
-			t.Log("Encoded content matched")
 		})
 	}
 }

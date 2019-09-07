@@ -1,6 +1,7 @@
 package zstd
 
 import (
+	"strconv"
 	"testing"
 )
 
@@ -116,6 +117,38 @@ func TestEncoderLevelFromZstd(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := EncoderLevelFromZstd(tt.args.level); got != tt.want {
 				t.Errorf("EncoderLevelFromZstd() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWindowSize(t *testing.T) {
+	tests := []struct {
+		windowSize int
+		err        bool
+	}{
+		{1 << 9, true},
+		{1 << 10, false},
+		{(1 << 10) + 1, true},
+		{(1 << 10) * 3, true},
+		{1 << 30, false},
+		{1 << 31, true},
+	}
+	for _, tt := range tests {
+		t.Run(strconv.Itoa(tt.windowSize), func(t *testing.T) {
+			var options encoderOptions
+			err := WithWindowSize(tt.windowSize)(&options)
+			if tt.err {
+				if err == nil {
+					t.Error("did not get error for invalid window size")
+				}
+			} else {
+				if err != nil {
+					t.Error("got error for valid window size")
+				}
+				if options.windowSize != tt.windowSize {
+					t.Error("failed to set window size")
+				}
 			}
 		})
 	}
