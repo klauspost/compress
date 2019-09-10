@@ -12,6 +12,8 @@ This package provides various compression algorithms.
 [![fuzzit](https://app.fuzzit.dev/badge?org_id=klauspost)](https://fuzzit.dev)
 
 # changelog
+* Sep 10, 2019 (v1.8.3) Fix s2 decoder [Skip](https://godoc.org/github.com/klauspost/compress/s2#Reader.Skip).
+* Sep 7, 2019: zstd: Added [WithWindowSize](https://godoc.org/github.com/klauspost/compress/zstd#WithWindowSize), contributed by [ianwilkes](https://github.com/ianwilkes).
 * Sep 5, 2019: (v1.8.2) Add [WithZeroFrames](https://godoc.org/github.com/klauspost/compress/zstd#WithZeroFrames) which adds full zero payload block encoding option.
 * Sep 5, 2019: Lazy initialization of zstandard predefined en/decoder tables.
 * Aug 26, 2019: (v1.8.1) S2: 1-2% compression increase in "better" compression mode.

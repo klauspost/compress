@@ -656,12 +656,19 @@ func TestEncoderSkip(t *testing.T) {
 			dec := NewReader(nil)
 			for i := 0; i < len(src); i += len(src)/20 - 17 {
 				t.Run(fmt.Sprint("skip-", i), func(t *testing.T) {
+					want := src[i:]
 					dec.Reset(bytes.NewBuffer(compressed))
-					err := dec.Skip(int64(i))
+					// Read some of it first
+					read, err := io.CopyN(ioutil.Discard, dec, int64(len(want)/10))
 					if err != nil {
 						t.Fatal(err)
 					}
-					want := src[i:]
+					// skip what we just read.
+					want = want[read:]
+					err = dec.Skip(int64(i))
+					if err != nil {
+						t.Fatal(err)
+					}
 					got, err := ioutil.ReadAll(dec)
 					if err != nil {
 						t.Errorf("Skipping %d returned error: %v", i, err)
