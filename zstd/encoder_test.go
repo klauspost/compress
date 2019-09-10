@@ -109,6 +109,10 @@ func TestEncoderRegression(t *testing.T) {
 		return
 	}
 	defer dec.Close()
+	testWindowSizes := testWindowSizes
+	if testing.Short() {
+		testWindowSizes = []int{1 << 20}
+	}
 	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
 			for _, windowSize := range testWindowSizes {
@@ -183,6 +187,11 @@ func TestEncoder_EncodeAllTwain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	testWindowSizes := testWindowSizes
+	if testing.Short() {
+		testWindowSizes = []int{1 << 20}
+	}
+
 	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
 			for _, windowSize := range testWindowSizes {
@@ -221,6 +230,11 @@ func TestEncoder_EncodeAllPi(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	testWindowSizes := testWindowSizes
+	if testing.Short() {
+		testWindowSizes = []int{1 << 20}
+	}
+
 	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
 			for _, windowSize := range testWindowSizes {
