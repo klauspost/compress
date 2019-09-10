@@ -619,6 +619,76 @@ func TestSlowForwardCopyOverrun(t *testing.T) {
 	}
 }
 
+// TestEncoderSkip will test skipping various sizes and block types.
+func TestEncoderSkip(t *testing.T) {
+	for ti, origLen := range []int{10 << 10, 256 << 10, 2 << 20, 8 << 20} {
+		if testing.Short() && ti > 1 {
+			break
+		}
+		t.Run(fmt.Sprint(origLen), func(t *testing.T) {
+			src := make([]byte, origLen)
+			rng := rand.New(rand.NewSource(1))
+			firstHalf, secondHalf := src[:origLen/2], src[origLen/2:]
+			bonus := secondHalf[len(secondHalf)-origLen/10:]
+			for i := range firstHalf {
+				// Incompressible.
+				firstHalf[i] = uint8(rng.Intn(256))
+			}
+			for i := range secondHalf {
+				// Easy to compress.
+				secondHalf[i] = uint8(i & 32)
+			}
+			for i := range bonus {
+				// Incompressible.
+				bonus[i] = uint8(rng.Intn(256))
+			}
+			var dst bytes.Buffer
+			enc := NewWriter(&dst, WriterBlockSize(64<<10))
+			_, err := io.Copy(enc, bytes.NewBuffer(src))
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = enc.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			compressed := dst.Bytes()
+			dec := NewReader(nil)
+			for i := 0; i < len(src); i += len(src)/20 - 17 {
+				t.Run(fmt.Sprint("skip-", i), func(t *testing.T) {
+					want := src[i:]
+					dec.Reset(bytes.NewBuffer(compressed))
+					// Read some of it first
+					read, err := io.CopyN(ioutil.Discard, dec, int64(len(want)/10))
+					if err != nil {
+						t.Fatal(err)
+					}
+					// skip what we just read.
+					want = want[read:]
+					err = dec.Skip(int64(i))
+					if err != nil {
+						t.Fatal(err)
+					}
+					got, err := ioutil.ReadAll(dec)
+					if err != nil {
+						t.Errorf("Skipping %d returned error: %v", i, err)
+						return
+					}
+					if !bytes.Equal(want, got) {
+						t.Log("got  len:", len(got))
+						t.Log("want len:", len(want))
+						t.Errorf("Skipping %d did not return correct data (content mismatch)", i)
+						return
+					}
+				})
+				if testing.Short() && i > 0 {
+					return
+				}
+			}
+		})
+	}
+}
+
 // TestEncodeNoiseThenRepeats encodes input for which the first half is very
 // incompressible and the second half is very compressible. The encoded form's
 // length should be closer to 50% of the original length than 100%.

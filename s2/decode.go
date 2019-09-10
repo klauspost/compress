@@ -256,18 +256,21 @@ func (r *Reader) Skip(n int64) error {
 	if r.err != nil {
 		return r.err
 	}
-	if r.i < r.j {
-		// Skip in buffer.
-		// decoded[i:j] contains decoded bytes that have not yet been passed on.
-		left := int64(r.j - r.i)
-		if left >= n {
-			r.i += int(n)
-			return nil
-		}
-		r.i, r.j = 0, 0
-	}
-	// Buffer empty.
+
 	for n > 0 {
+		if r.i < r.j {
+			// Skip in buffer.
+			// decoded[i:j] contains decoded bytes that have not yet been passed on.
+			left := int64(r.j - r.i)
+			if left >= n {
+				r.i += int(n)
+				return nil
+			}
+			n -= int64(r.j - r.i)
+			r.i, r.j = 0, 0
+		}
+
+		// Buffer empty; read blocks until we have content.
 		if !r.readFull(r.buf[:4], true) {
 			if r.err == io.EOF {
 				r.err = io.ErrUnexpectedEOF
@@ -313,6 +316,7 @@ func (r *Reader) Skip(n int64) error {
 				r.err = ErrCorrupt
 				return r.err
 			}
+			// Check if destination is within this block
 			if int64(dLen) > n {
 				if len(r.decoded) < dLen {
 					r.decoded = make([]byte, dLen)
@@ -326,12 +330,12 @@ func (r *Reader) Skip(n int64) error {
 					return r.err
 				}
 			} else {
+				// Skip block completely
 				n -= int64(dLen)
+				dLen = 0
 			}
-			// We should now have enough data.
-			// Skip partial block, should only recurse once.
 			r.i, r.j = 0, dLen
-			return r.Skip(n)
+			continue
 		case chunkTypeUncompressedData:
 			// Section 4.3. Uncompressed data (chunk type 0x01).
 			if chunkLen < checksumSize {
