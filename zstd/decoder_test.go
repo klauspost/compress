@@ -280,8 +280,8 @@ func TestDecoderRegression(t *testing.T) {
 	}
 	defer dec.Close()
 
-	for _, tt := range zr.File {
-		if !strings.HasSuffix(t.Name(), "") {
+	for i, tt := range zr.File {
+		if !strings.HasSuffix(t.Name(), "") || (testing.Short() && i > 10) {
 			continue
 		}
 		t.Run("Reader-"+tt.Name, func(t *testing.T) {
@@ -534,8 +534,8 @@ func testDecoderFile(t *testing.T, fn string) {
 		return
 	}
 	defer dec.Close()
-	for _, tt := range zr.File {
-		if !strings.HasSuffix(tt.Name, ".zst") {
+	for i, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, ".zst") || (testing.Short() && i > 20) {
 			continue
 		}
 		t.Run("Reader-"+tt.Name, func(t *testing.T) {
@@ -883,9 +883,9 @@ func testDecoderDecodeAll(t *testing.T, fn string, dec *Decoder) {
 		want[tt.Name+".zst"], _ = ioutil.ReadAll(r)
 	}
 
-	for _, tt := range zr.File {
+	for i, tt := range zr.File {
 		tt := tt
-		if !strings.HasSuffix(tt.Name, ".zst") {
+		if !strings.HasSuffix(tt.Name, ".zst") || (testing.Short() && i > 20) {
 			continue
 		}
 		t.Run("DecodeAll-"+tt.Name, func(t *testing.T) {
