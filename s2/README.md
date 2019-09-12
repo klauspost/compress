@@ -104,12 +104,12 @@ Options:
         Max  block size. Examples: 64K, 256K, 1M, 4M. Must be power of two and <= 4MB (default "1M")
   -c    Write all output to stdout. Multiple input files will be concatenated.
   -cpu int
-        Compress using this amount of threads (default 12)
+        Compress using this amount of threads (default Auto)
   -faster
         Compress faster, but with a minor compression loss
   -help
         Display help
-  -padding string
+  -pad string
         Pad size to a multiple of this value, Examples: 64K, 256K, 1M, 4M, etc (default "1")
   -safe
         Do not overwrite output files
