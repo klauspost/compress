@@ -72,7 +72,69 @@ Similar to the Writer, a Reader can be reused using the `Reset` method.
 For smaller data blocks, there is also a non-streaming interface: `Encode()`, `EncodeBetter()` and `Decode()`.
 Do however note that these functions (similar to Snappy) does not provide validation of data, 
 so data corruption may be undetected. Stream encoding provides CRC checks of data.
- 
+
+# Commandline tools
+
+Some very simply commandline tools are provided; `s2c` for compression and `s2d` for decompression.
+
+Installing then requires Go to be installed. To install them, use:
+
+`go install github.com/klauspost/compress/s2/cmd/s2c && go install github.com/klauspost/compress/s2/cmd/s2d`
+
+To build binaries to the current folder use:
+
+`go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d`
+
+
+## s2c
+
+```
+Usage: s2c [options] file1 file2
+
+Compresses all files supplied as input separately. 
+Output files are written as 'filename.ext.s2'.
+By default output files will be overwritten.
+Use - as the only file name to read from stdin and write to stdout.
+
+Wildcards are accepted: testdir/*.txt will compress all files in testdir ending with .txt
+Directories can be wildcards as well. testdir/*/*.txt will match testdir/subdir/b.txt
+
+Options:
+  -blocksize string
+        Max  block size. Examples: 64K, 256K, 1M, 4M. Must be power of two and <= 4MB (default "1M")
+  -c    Write all output to stdout. Multiple input files will be concatenated.
+  -cpu int
+        Compress using this amount of threads (default 12)
+  -faster
+        Compress faster, but with a minor compression loss
+  -help
+        Display help
+  -padding string
+        Pad size to a multiple of this value, Examples: 64K, 256K, 1M, 4M, etc (default "1")
+  -safe
+        Do not overwrite output files
+```
+
+## s2d
+
+```
+Usage: s2d [options] file1 file2
+
+Decompresses all files supplied as input. Input files must end with '.s2' or '.snappy'.
+Output file names have the extension removed. By default output files will be overwritten.
+Use - as the only file name to read from stdin and write to stdout.
+
+Wildcards are accepted: testdir/*.txt will compress all files in testdir ending with .txt
+Directories can be wildcards as well. testdir/*/*.txt will match testdir/subdir/b.txt
+
+Options:
+  -c    Write all output to stdout. Multiple input files will be concatenated.
+  -help
+        Display help
+  -safe
+        Do not overwrite output files
+```
+
 # Performance
 
 This section will focus on comparisons to Snappy. 
