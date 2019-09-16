@@ -100,6 +100,8 @@ Wildcards are accepted: testdir/*.txt will compress all files in testdir ending 
 Directories can be wildcards as well. testdir/*/*.txt will match testdir/subdir/b.txt
 
 Options:
+  -bench int
+        Run benchmark n times. No output will be written.
   -blocksize string
         Max  block size. Examples: 64K, 256K, 1M, 4M. Must be power of two and <= 4MB (default "1M")
   -c    Write all output to stdout. Multiple input files will be concatenated.
@@ -128,6 +130,8 @@ Wildcards are accepted: testdir/*.txt will compress all files in testdir ending 
 Directories can be wildcards as well. testdir/*/*.txt will match testdir/subdir/b.txt
 
 Options:
+  -bench int
+        Run benchmark n times. No output will be written.
   -c    Write all output to stdout. Multiple input files will be concatenated.
   -help
         Display help

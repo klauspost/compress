@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +19,7 @@ var (
 	safe   = flag.Bool("safe", false, "Do not overwrite output files")
 	stdout = flag.Bool("c", false, "Write all output to stdout. Multiple input files will be concatenated.")
 	help   = flag.Bool("help", false, "Display help")
+	bench  = flag.Int("bench", 0, "Run benchmark n times. No output will be written.")
 )
 
 func main() {
@@ -56,6 +58,11 @@ Options:`)
 		files = append(files, found...)
 	}
 
+	allFiles := files
+	for i := 0; i < *bench; i++ {
+		files = append(files, allFiles...)
+	}
+
 	for _, filename := range files {
 		dstFilename := filename
 		switch {
@@ -88,13 +95,16 @@ Options:`)
 				}
 			}
 			var out io.Writer
-			if *stdout {
+			switch {
+			case *bench > 0:
+				out = ioutil.Discard
+			case *stdout:
 				out = os.Stdout
-			} else {
+			default:
 				dstFile, err := os.OpenFile(dstFilename, os.O_CREATE|os.O_WRONLY, mode)
 				exitErr(err)
 				defer dstFile.Close()
-				bw := bufio.NewWriterSize(out, 4<<20)
+				bw := bufio.NewWriterSize(dstFile, 4<<20)
 				defer bw.Flush()
 				out = bw
 			}

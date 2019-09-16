@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -24,6 +25,7 @@ var (
 	safe      = flag.Bool("safe", false, "Do not overwrite output files")
 	padding   = flag.String("pad", "1", "Pad size to a multiple of this value, Examples: 64K, 256K, 1M, 4M, etc")
 	stdout    = flag.Bool("c", false, "Write all output to stdout. Multiple input files will be concatenated.")
+	bench     = flag.Int("bench", 0, "Run benchmark n times. No output will be written.")
 	help      = flag.Bool("help", false, "Display help")
 )
 
@@ -74,6 +76,11 @@ Options:`)
 		files = append(files, found...)
 	}
 
+	allFiles := files
+	for i := 0; i < *bench; i++ {
+		files = append(files, allFiles...)
+	}
+
 	for _, filename := range files {
 		func() {
 			dstFilename := fmt.Sprintf("%s%s", filename, ".s2")
@@ -88,9 +95,12 @@ Options:`)
 			finfo, err := file.Stat()
 			exitErr(err)
 			var out io.Writer
-			if *stdout {
+			switch {
+			case *bench > 0:
+				out = ioutil.Discard
+			case *stdout:
 				out = os.Stdout
-			} else {
+			default:
 				mode := finfo.Mode() // use the same mode for the output file
 				if *safe {
 					_, err := os.Stat(dstFilename)
