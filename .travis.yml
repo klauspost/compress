@@ -21,7 +21,7 @@ script:
  - go test -v -cpu=2 ./...
  - go test -cpu=2 -tags=noasm ./...
  - go test -cpu=1,4 -short -race ./...
- - go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d && s2c && s2d
+ - go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d && s2c s2c && s2d s2c.s2
  - GOOS=linux GOARCH=386 go install ./...
 
 matrix:
@@ -41,3 +41,13 @@ jobs:
       go: 1.12.x
       script:
         - ./fuzzit.sh fuzzing
+
+after_success:
+# calls goreleaser
+deploy:
+- provider: script
+  skip_cleanup: true
+  script: curl -sL https://git.io/goreleaser | bash
+  on:
+    tags: true
+    condition: $TRAVIS_OS_NAME = linux
