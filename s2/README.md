@@ -77,6 +77,8 @@ so data corruption may be undetected. Stream encoding provides CRC checks of dat
 
 Some very simply commandline tools are provided; `s2c` for compression and `s2d` for decompression.
 
+Binaries can be downloaded on the [Releases Page](https://github.com/klauspost/compress/releases).
+
 Installing then requires Go to be installed. To install them, use:
 
 `go install github.com/klauspost/compress/s2/cmd/s2c && go install github.com/klauspost/compress/s2/cmd/s2d`
