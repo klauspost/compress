@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/klauspost/compress/s2"
@@ -17,9 +18,11 @@ import (
 
 var (
 	safe   = flag.Bool("safe", false, "Do not overwrite output files")
-	stdout = flag.Bool("c", false, "Write all output to stdout. Multiple input files will be concatenated.")
+	stdout = flag.Bool("c", false, "Write all output to stdout. Multiple input files will be concatenated")
+	remove = flag.Bool("rm", false, "Delete source file(s) after successful decompression")
+	quiet  = flag.Bool("q", false, "Don't write any output to terminal, except errors")
+	bench  = flag.Int("bench", 0, "Run benchmark n times. No output will be written")
 	help   = flag.Bool("help", false, "Display help")
-	bench  = flag.Int("bench", 0, "Run benchmark n times. No output will be written.")
 )
 
 func main() {
@@ -29,7 +32,7 @@ func main() {
 	// No args, use stdin/stdout
 	args := flag.Args()
 	if len(args) == 0 || *help {
-		fmt.Println(`Usage: s2d [options] file1 file2
+		_, _ = fmt.Fprintln(os.Stderr, `Usage: s2d [options] file1 file2
 
 Decompresses all files supplied as input. Input files must end with '.s2' or '.snappy'.
 Output file names have the extension removed. By default output files will be overwritten.
@@ -58,6 +61,7 @@ Options:`)
 		files = append(files, found...)
 	}
 
+	*quiet = *quiet || *stdout
 	allFiles := files
 	for i := 0; i < *bench; i++ {
 		files = append(files, allFiles...)
@@ -76,13 +80,14 @@ Options:`)
 		}
 
 		func() {
-			if !*stdout {
+			var closeOnce sync.Once
+			if !*quiet {
 				fmt.Println("Decompressing", filename, "->", dstFilename)
 			}
 			// Input file.
 			file, err := os.Open(filename)
 			exitErr(err)
-			defer file.Close()
+			defer closeOnce.Do(func() { file.Close() })
 			rc := rCounter{in: file}
 			src := bufio.NewReaderSize(&rc, 4<<20)
 			finfo, err := file.Stat()
@@ -112,11 +117,18 @@ Options:`)
 			start := time.Now()
 			output, err := io.Copy(out, r)
 			exitErr(err)
-			if !*stdout {
+			if !*quiet {
 				elapsed := time.Since(start)
 				mbPerSec := (float64(output) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
 				pct := float64(output) * 100 / float64(rc.n)
 				fmt.Printf("%d -> %d [%.02f%%]; %dMB/s\n", rc.n, output, pct, int(mbPerSec))
+			}
+			if *remove {
+				closeOnce.Do(func() {
+					file.Close()
+					err := os.Remove(filename)
+					exitErr(err)
+				})
 			}
 		}()
 	}
