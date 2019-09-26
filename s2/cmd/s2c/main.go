@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -23,9 +24,11 @@ var (
 	cpu       = flag.Int("cpu", runtime.GOMAXPROCS(0), "Compress using this amount of threads")
 	blockSize = flag.String("blocksize", "1M", "Max  block size. Examples: 64K, 256K, 1M, 4M. Must be power of two and <= 4MB")
 	safe      = flag.Bool("safe", false, "Do not overwrite output files")
-	padding   = flag.String("pad", "1", "Pad size to a multiple of this value, Examples: 64K, 256K, 1M, 4M, etc")
-	stdout    = flag.Bool("c", false, "Write all output to stdout. Multiple input files will be concatenated.")
-	bench     = flag.Int("bench", 0, "Run benchmark n times. No output will be written.")
+	padding   = flag.String("pad", "1", "Pad size to a multiple of this value, Examples: 500, 64K, 256K, 1M, 4M, etc")
+	stdout    = flag.Bool("c", false, "Write all output to stdout. Multiple input files will be concatenated")
+	remove    = flag.Bool("rm", false, "Delete source file(s) after successful compression")
+	quiet     = flag.Bool("q", false, "Don't write any output to terminal, except errors")
+	bench     = flag.Int("bench", 0, "Run benchmark n times. No output will be written")
 	help      = flag.Bool("help", false, "Display help")
 )
 
@@ -38,7 +41,7 @@ func main() {
 
 	args := flag.Args()
 	if len(args) == 0 || *help {
-		fmt.Println(`Usage: s2c [options] file1 file2
+		_, _ = fmt.Fprintln(os.Stderr, `Usage: s2c [options] file1 file2
 
 Compresses all files supplied as input separately.
 Output files are written as 'filename.ext.s2'.
@@ -76,21 +79,22 @@ Options:`)
 		files = append(files, found...)
 	}
 
+	*quiet = *quiet || *stdout
 	allFiles := files
 	for i := 0; i < *bench; i++ {
 		files = append(files, allFiles...)
 	}
-
 	for _, filename := range files {
 		func() {
+			var closeOnce sync.Once
 			dstFilename := fmt.Sprintf("%s%s", filename, ".s2")
-			if !*stdout {
+			if !*quiet {
 				fmt.Println("Compressing", filename, "->", dstFilename)
 			}
 			// Input file.
 			file, err := os.Open(filename)
 			exitErr(err)
-			defer file.Close()
+			defer closeOnce.Do(func() { file.Close() })
 			src := bufio.NewReaderSize(file, int(sz)*2)
 			finfo, err := file.Stat()
 			exitErr(err)
@@ -105,7 +109,7 @@ Options:`)
 				if *safe {
 					_, err := os.Stat(dstFilename)
 					if !os.IsNotExist(err) {
-						exitErr(errors.New("destination files exists"))
+						exitErr(errors.New("destination file exists"))
 					}
 				}
 				dstFile, err := os.OpenFile(dstFilename, os.O_CREATE|os.O_WRONLY, mode)
@@ -123,11 +127,18 @@ Options:`)
 			exitErr(err)
 			err = wr.Close()
 			exitErr(err)
-			if !*stdout {
+			if !*quiet {
 				elapsed := time.Since(start)
 				mbpersec := (float64(input) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
 				pct := float64(wc.n) * 100 / float64(input)
 				fmt.Printf("%d -> %d [%.02f%%]; %dMB/s\n", input, wc.n, pct, int(mbpersec))
+			}
+			if *remove {
+				closeOnce.Do(func() {
+					file.Close()
+					err := os.Remove(filename)
+					exitErr(err)
+				})
 			}
 		}()
 	}
