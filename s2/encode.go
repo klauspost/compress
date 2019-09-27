@@ -161,6 +161,7 @@ const MaxBlockSize = math.MaxUint32 - binary.MaxVarintLen32 - 5
 // uncompressed length.
 //
 // It will return a negative value if srcLen is too large to encode.
+// 32 bit platforms will have lower thresholds for rejecting big content.
 func MaxEncodedLen(srcLen int) int {
 	n := uint64(srcLen)
 	if n > 0xffffffff {
@@ -171,7 +172,7 @@ func MaxEncodedLen(srcLen int) int {
 	n = n + uint64((bits.Len64(n)+7)/7)
 
 	// Add maximum size of encoding block as literals.
-	n += uint64(literalExtraSize(srcLen))
+	n += uint64(literalExtraSize(int64(srcLen)))
 	if n > 0xffffffff {
 		return -1
 	}

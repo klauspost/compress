@@ -24,6 +24,9 @@ import (
 	"github.com/klauspost/compress/snappy"
 )
 
+const maxUint = ^uint(0)
+const maxInt = int(maxUint >> 1)
+
 var (
 	download     = flag.Bool("download", false, "If true, download any missing files before running benchmarks")
 	testdataDir  = flag.String("testdataDir", "testdata", "Directory containing the test data")
@@ -32,10 +35,10 @@ var (
 
 func TestMaxEncodedLen(t *testing.T) {
 	testSet := []struct {
-		in, out int
+		in, out int64
 	}{
 		{in: 0, out: 1},
-		{in: 1 << 24, out: 1<<24 + binary.PutVarint([]byte{binary.MaxVarintLen32: 0}, int64(1<<24)) + literalExtraSize(1<<24)},
+		{in: 1 << 24, out: 1<<24 + int64(binary.PutVarint([]byte{binary.MaxVarintLen32: 0}, int64(1<<24))) + literalExtraSize(1<<24)},
 		{in: MaxBlockSize, out: math.MaxUint32},
 		{in: math.MaxUint32 - binary.MaxVarintLen32 - literalExtraSize(math.MaxUint32), out: math.MaxUint32},
 		{in: math.MaxUint32 - 9, out: -1},
@@ -51,14 +54,19 @@ func TestMaxEncodedLen(t *testing.T) {
 		{in: -1, out: -1},
 		{in: -2, out: -1},
 	}
+	// 32 bit platforms have a different threshold.
+	if maxInt == math.MaxInt32 {
+		testSet[2].out = -1
+		testSet[3].out = -1
+	}
 	// Test all sizes up to maxBlockSize.
-	for i := 0; i < maxBlockSize; i++ {
-		testSet = append(testSet, struct{ in, out int }{in: i, out: i + binary.PutVarint([]byte{binary.MaxVarintLen32: 0}, int64(i)) + literalExtraSize(i)})
+	for i := int64(0); i < maxBlockSize; i++ {
+		testSet = append(testSet, struct{ in, out int64 }{in: i, out: i + int64(binary.PutVarint([]byte{binary.MaxVarintLen32: 0}, i)) + literalExtraSize(i)})
 	}
 	for i := range testSet {
 		tt := testSet[i]
 		want := tt.out
-		got := MaxEncodedLen(tt.in)
+		got := int64(MaxEncodedLen(int(tt.in)))
 		if got != want {
 			t.Fatalf("input: %d, want: %d, got: %d", tt.in, want, got)
 		}
