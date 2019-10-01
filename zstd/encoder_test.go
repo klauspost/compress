@@ -97,7 +97,7 @@ func TestEncoder_EncodeAllEncodeXML(t *testing.T) {
 }
 
 func TestEncoderRegression(t *testing.T) {
-	defer timeout(30 * time.Second)()
+	defer timeout(2 * time.Minute)()
 	data, err := ioutil.ReadFile("testdata/comp-crashers.zip")
 	if err != nil {
 		t.Fatal(err)
