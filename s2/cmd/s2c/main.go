@@ -131,7 +131,7 @@ Options:`)
 				elapsed := time.Since(start)
 				mbpersec := (float64(input) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
 				pct := float64(wc.n) * 100 / float64(input)
-				fmt.Printf("%d -> %d [%.02f%%]; %dMB/s\n", input, wc.n, pct, int(mbpersec))
+				fmt.Printf("%d -> %d [%.02f%%]; %.01fMB/s\n", input, wc.n, pct, mbpersec)
 			}
 			if *remove {
 				closeOnce.Do(func() {
