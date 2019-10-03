@@ -279,9 +279,8 @@ func TestDecoderRegression(t *testing.T) {
 		return
 	}
 	defer dec.Close()
-
 	for i, tt := range zr.File {
-		if !strings.HasSuffix(t.Name(), "") || (testing.Short() && i > 10) {
+		if !strings.HasSuffix(tt.Name, "60a0a2c16") || (testing.Short() && i > 10) {
 			continue
 		}
 		t.Run("Reader-"+tt.Name, func(t *testing.T) {
@@ -295,8 +294,38 @@ func TestDecoderRegression(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			got, err := ioutil.ReadAll(dec)
-			t.Log("Received:", len(got), err)
+			got, gotErr := ioutil.ReadAll(dec)
+			t.Log("Received:", len(got), gotErr)
+
+			// Check a fresh instance
+			r, err = tt.Open()
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			decL, err := NewReader(r, WithDecoderConcurrency(1), WithDecoderLowmem(true), WithDecoderMaxMemory(1<<20))
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer decL.Close()
+			got2, gotErr2 := ioutil.ReadAll(decL)
+			t.Log("Fresh Reader received:", len(got2), gotErr2)
+			if gotErr != gotErr2 {
+				if gotErr != nil && gotErr2 != nil && gotErr.Error() != gotErr2.Error() {
+					t.Error(gotErr, "!=", gotErr2)
+				}
+				if (gotErr == nil) != (gotErr2 == nil) {
+					t.Error(gotErr, "!=", gotErr2)
+				}
+			}
+			if !bytes.Equal(got2, got) {
+				if gotErr != nil {
+					t.Log("Buffer mismatch without Reset")
+				} else {
+					t.Error("Buffer mismatch without Reset")
+				}
+			}
 		})
 		t.Run("DecodeAll-"+tt.Name, func(t *testing.T) {
 			r, err := tt.Open()
@@ -308,8 +337,33 @@ func TestDecoderRegression(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			got, err := dec.DecodeAll(in, nil)
-			t.Log("Received:", len(got), err)
+			got, gotErr := dec.DecodeAll(in, nil)
+			t.Log("Received:", len(got), gotErr)
+
+			// Check if we got the same:
+			decL, err := NewReader(nil, WithDecoderConcurrency(1), WithDecoderLowmem(true), WithDecoderMaxMemory(1<<20))
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer decL.Close()
+			got2, gotErr2 := decL.DecodeAll(in, nil)
+			t.Log("Fresh Reader received:", len(got2), gotErr2)
+			if gotErr != gotErr2 {
+				if gotErr != nil && gotErr2 != nil && gotErr.Error() != gotErr2.Error() {
+					t.Error(gotErr, "!=", gotErr2)
+				}
+				if (gotErr == nil) != (gotErr2 == nil) {
+					t.Error(gotErr, "!=", gotErr2)
+				}
+			}
+			if !bytes.Equal(got2, got) {
+				if gotErr != nil {
+					t.Log("Buffer mismatch without Reset")
+				} else {
+					t.Error("Buffer mismatch without Reset")
+				}
+			}
 		})
 	}
 }
