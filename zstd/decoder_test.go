@@ -280,7 +280,7 @@ func TestDecoderRegression(t *testing.T) {
 	}
 	defer dec.Close()
 	for i, tt := range zr.File {
-		if !strings.HasSuffix(tt.Name, "60a0a2c16") || (testing.Short() && i > 10) {
+		if !strings.HasSuffix(tt.Name, "") || (testing.Short() && i > 10) {
 			continue
 		}
 		t.Run("Reader-"+tt.Name, func(t *testing.T) {
