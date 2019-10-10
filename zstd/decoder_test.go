@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -261,6 +262,83 @@ func TestNewDecoderSmallFile(t *testing.T) {
 	}
 	mbpersec := (float64(n) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
 	t.Logf("Decoded %d bytes with %f.2 MB/s", n, mbpersec)
+}
+
+type readAndBlock struct {
+	buf     []byte
+	unblock chan struct{}
+}
+
+func (r *readAndBlock) Read(p []byte) (int, error) {
+	n := copy(p, r.buf)
+	if n == 0 {
+		<-r.unblock
+		return 0, io.EOF
+	}
+	r.buf = r.buf[n:]
+	return n, nil
+}
+
+func TestNewDecoderFlushed(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
+	file := "testdata/z000028.zst"
+	payload, err := ioutil.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload = append(payload, payload...) //2x
+	payload = append(payload, payload...) //4x
+	payload = append(payload, payload...) //8x
+	rng := rand.New(rand.NewSource(0x1337))
+	runs := 100
+	if testing.Short() {
+		runs = 5
+	}
+	enc, err := NewWriter(nil, WithWindowSize(128<<10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer enc.Close()
+	for i := 0; i < runs; i++ {
+		wantSize := rng.Intn(len(payload)-1) + 1
+		t.Run(fmt.Sprint("size-", wantSize), func(t *testing.T) {
+			var encoded bytes.Buffer
+			enc.Reset(&encoded)
+			_, err := enc.Write(payload[:wantSize])
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = enc.Flush()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// We must be able to read back up until the flush...
+			r := readAndBlock{
+				buf:     encoded.Bytes(),
+				unblock: make(chan struct{}),
+			}
+			defer timeout(5 * time.Second)()
+			dec, err := NewReader(&r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer dec.Close()
+			defer close(r.unblock)
+			readBack := 0
+			dst := make([]byte, 1024)
+			for readBack < wantSize {
+				// Read until we have enough.
+				n, err := dec.Read(dst)
+				if err != nil {
+					t.Fatal(err)
+				}
+				readBack += n
+			}
+		})
+	}
 }
 
 func TestDecoderRegression(t *testing.T) {
