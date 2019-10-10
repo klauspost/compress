@@ -81,7 +81,7 @@ func largeDataChunk() []byte {
 	return result
 }
 
-func TestCRCBulkOld(t *testing.T) {
+func TestBulkHash4(t *testing.T) {
 	for _, x := range deflateTests {
 		y := x.out
 		if len(y) >= minMatchLength {
@@ -501,7 +501,7 @@ func TestWriterReset(t *testing.T) {
 		w.d.fill, wref.d.fill = nil, nil
 		w.d.step, wref.d.step = nil, nil
 		w.d.state, wref.d.state = nil, nil
-		w.d.snap, wref.d.snap = nil, nil
+		w.d.fast, wref.d.fast = nil, nil
 
 		// hashMatch is always overwritten when used.
 		if w.d.tokens.n != 0 {

@@ -12,6 +12,7 @@ This package provides various compression algorithms.
 [![fuzzit](https://app.fuzzit.dev/badge?org_id=klauspost)](https://fuzzit.dev)
 
 # changelog
+* Oct 10, 2019: Big deflate rewrite, 30-40% faster with better compression [#105](https://github.com/klauspost/compress/pull/105)
 * Oct 10, 2019: (v1.8.6) zstd: Allow partial reads to get flushed data. [#169](https://github.com/klauspost/compress/pull/169)
 * Oct 3, 2019: Fix inconsistent results on broken zstd streams.
 * Sep 25, 2019: Added `-rm` (remove source files) and `-q` (no output except errors) to `s2c` and `s2d` [commands](https://github.com/klauspost/compress/tree/master/s2#commandline-tools)

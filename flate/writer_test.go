@@ -5,14 +5,98 @@
 package flate
 
 import (
+	"archive/zip"
 	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"math/rand"
 	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 )
+
+func TestWriterRegression(t *testing.T) {
+	data, err := ioutil.ReadFile("testdata/regression.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for level := HuffmanOnly; level <= BestCompression; level++ {
+		t.Run(fmt.Sprint("level_", level), func(t *testing.T) {
+			zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			for _, tt := range zr.File {
+				if !strings.HasSuffix(t.Name(), "") {
+					continue
+				}
+
+				t.Run(tt.Name, func(t *testing.T) {
+					r, err := tt.Open()
+					if err != nil {
+						t.Error(err)
+						return
+					}
+					in, err := ioutil.ReadAll(r)
+					if err != nil {
+						t.Error(err)
+					}
+					msg := "level " + strconv.Itoa(level) + ":"
+					buf := new(bytes.Buffer)
+					fw, err := NewWriter(buf, level)
+					if err != nil {
+						t.Fatal(msg + err.Error())
+					}
+					n, err := fw.Write(in)
+					if n != len(in) {
+						t.Fatal(msg + "short write")
+					}
+					if err != nil {
+						t.Fatal(msg + err.Error())
+					}
+					err = fw.Close()
+					if err != nil {
+						t.Fatal(msg + err.Error())
+					}
+					fr1 := NewReader(buf)
+					data2, err := ioutil.ReadAll(fr1)
+					if err != nil {
+						t.Fatal(msg + err.Error())
+					}
+					if bytes.Compare(in, data2) != 0 {
+						t.Fatal(msg + "not equal")
+					}
+					// Do it again...
+					msg = "level " + strconv.Itoa(level) + " (reset):"
+					buf.Reset()
+					fw.Reset(buf)
+					n, err = fw.Write(in)
+					if n != len(in) {
+						t.Fatal(msg + "short write")
+					}
+					if err != nil {
+						t.Fatal(msg + err.Error())
+					}
+					err = fw.Close()
+					if err != nil {
+						t.Fatal(msg + err.Error())
+					}
+					fr1 = NewReader(buf)
+					data2, err = ioutil.ReadAll(fr1)
+					if err != nil {
+						t.Fatal(msg + err.Error())
+					}
+					if bytes.Compare(in, data2) != 0 {
+						t.Fatal(msg + "not equal")
+					}
+				})
+			}
+		})
+	}
+}
 
 func benchmarkEncoder(b *testing.B, testfile, level, n int) {
 	b.SetBytes(int64(n))
