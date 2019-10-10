@@ -24,6 +24,9 @@ import (
 	"github.com/klauspost/compress/snappy"
 )
 
+const maxUint = ^uint(0)
+const maxInt = int(maxUint >> 1)
+
 var (
 	download     = flag.Bool("download", false, "If true, download any missing files before running benchmarks")
 	testdataDir  = flag.String("testdataDir", "testdata", "Directory containing the test data")
@@ -32,10 +35,10 @@ var (
 
 func TestMaxEncodedLen(t *testing.T) {
 	testSet := []struct {
-		in, out int
+		in, out int64
 	}{
 		{in: 0, out: 1},
-		{in: 1 << 24, out: 1<<24 + binary.PutVarint([]byte{binary.MaxVarintLen32: 0}, int64(1<<24)) + literalExtraSize(1<<24)},
+		{in: 1 << 24, out: 1<<24 + int64(binary.PutVarint([]byte{binary.MaxVarintLen32: 0}, int64(1<<24))) + literalExtraSize(1<<24)},
 		{in: MaxBlockSize, out: math.MaxUint32},
 		{in: math.MaxUint32 - binary.MaxVarintLen32 - literalExtraSize(math.MaxUint32), out: math.MaxUint32},
 		{in: math.MaxUint32 - 9, out: -1},
@@ -51,14 +54,19 @@ func TestMaxEncodedLen(t *testing.T) {
 		{in: -1, out: -1},
 		{in: -2, out: -1},
 	}
+	// 32 bit platforms have a different threshold.
+	if maxInt == math.MaxInt32 {
+		testSet[2].out = -1
+		testSet[3].out = -1
+	}
 	// Test all sizes up to maxBlockSize.
-	for i := 0; i < maxBlockSize; i++ {
-		testSet = append(testSet, struct{ in, out int }{in: i, out: i + binary.PutVarint([]byte{binary.MaxVarintLen32: 0}, int64(i)) + literalExtraSize(i)})
+	for i := int64(0); i < maxBlockSize; i++ {
+		testSet = append(testSet, struct{ in, out int64 }{in: i, out: i + int64(binary.PutVarint([]byte{binary.MaxVarintLen32: 0}, i)) + literalExtraSize(i)})
 	}
 	for i := range testSet {
 		tt := testSet[i]
 		want := tt.out
-		got := MaxEncodedLen(tt.in)
+		got := int64(MaxEncodedLen(int(tt.in)))
 		if got != want {
 			t.Fatalf("input: %d, want: %d, got: %d", tt.in, want, got)
 		}
@@ -616,6 +624,76 @@ func TestSlowForwardCopyOverrun(t *testing.T) {
 					length, offset, d, overrun, dWant)
 			}
 		}
+	}
+}
+
+// TestEncoderSkip will test skipping various sizes and block types.
+func TestEncoderSkip(t *testing.T) {
+	for ti, origLen := range []int{10 << 10, 256 << 10, 2 << 20, 8 << 20} {
+		if testing.Short() && ti > 1 {
+			break
+		}
+		t.Run(fmt.Sprint(origLen), func(t *testing.T) {
+			src := make([]byte, origLen)
+			rng := rand.New(rand.NewSource(1))
+			firstHalf, secondHalf := src[:origLen/2], src[origLen/2:]
+			bonus := secondHalf[len(secondHalf)-origLen/10:]
+			for i := range firstHalf {
+				// Incompressible.
+				firstHalf[i] = uint8(rng.Intn(256))
+			}
+			for i := range secondHalf {
+				// Easy to compress.
+				secondHalf[i] = uint8(i & 32)
+			}
+			for i := range bonus {
+				// Incompressible.
+				bonus[i] = uint8(rng.Intn(256))
+			}
+			var dst bytes.Buffer
+			enc := NewWriter(&dst, WriterBlockSize(64<<10))
+			_, err := io.Copy(enc, bytes.NewBuffer(src))
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = enc.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			compressed := dst.Bytes()
+			dec := NewReader(nil)
+			for i := 0; i < len(src); i += len(src)/20 - 17 {
+				t.Run(fmt.Sprint("skip-", i), func(t *testing.T) {
+					want := src[i:]
+					dec.Reset(bytes.NewBuffer(compressed))
+					// Read some of it first
+					read, err := io.CopyN(ioutil.Discard, dec, int64(len(want)/10))
+					if err != nil {
+						t.Fatal(err)
+					}
+					// skip what we just read.
+					want = want[read:]
+					err = dec.Skip(int64(i))
+					if err != nil {
+						t.Fatal(err)
+					}
+					got, err := ioutil.ReadAll(dec)
+					if err != nil {
+						t.Errorf("Skipping %d returned error: %v", i, err)
+						return
+					}
+					if !bytes.Equal(want, got) {
+						t.Log("got  len:", len(got))
+						t.Log("want len:", len(want))
+						t.Errorf("Skipping %d did not return correct data (content mismatch)", i)
+						return
+					}
+				})
+				if testing.Short() && i > 0 {
+					return
+				}
+			}
+		})
 	}
 }
 

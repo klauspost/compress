@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -263,6 +264,83 @@ func TestNewDecoderSmallFile(t *testing.T) {
 	t.Logf("Decoded %d bytes with %f.2 MB/s", n, mbpersec)
 }
 
+type readAndBlock struct {
+	buf     []byte
+	unblock chan struct{}
+}
+
+func (r *readAndBlock) Read(p []byte) (int, error) {
+	n := copy(p, r.buf)
+	if n == 0 {
+		<-r.unblock
+		return 0, io.EOF
+	}
+	r.buf = r.buf[n:]
+	return n, nil
+}
+
+func TestNewDecoderFlushed(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
+	file := "testdata/z000028.zst"
+	payload, err := ioutil.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload = append(payload, payload...) //2x
+	payload = append(payload, payload...) //4x
+	payload = append(payload, payload...) //8x
+	rng := rand.New(rand.NewSource(0x1337))
+	runs := 100
+	if testing.Short() {
+		runs = 5
+	}
+	enc, err := NewWriter(nil, WithWindowSize(128<<10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer enc.Close()
+	for i := 0; i < runs; i++ {
+		wantSize := rng.Intn(len(payload)-1) + 1
+		t.Run(fmt.Sprint("size-", wantSize), func(t *testing.T) {
+			var encoded bytes.Buffer
+			enc.Reset(&encoded)
+			_, err := enc.Write(payload[:wantSize])
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = enc.Flush()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// We must be able to read back up until the flush...
+			r := readAndBlock{
+				buf:     encoded.Bytes(),
+				unblock: make(chan struct{}),
+			}
+			defer timeout(5 * time.Second)()
+			dec, err := NewReader(&r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer dec.Close()
+			defer close(r.unblock)
+			readBack := 0
+			dst := make([]byte, 1024)
+			for readBack < wantSize {
+				// Read until we have enough.
+				n, err := dec.Read(dst)
+				if err != nil {
+					t.Fatal(err)
+				}
+				readBack += n
+			}
+		})
+	}
+}
+
 func TestDecoderRegression(t *testing.T) {
 	defer timeout(60 * time.Second)()
 	data, err := ioutil.ReadFile("testdata/regression.zip")
@@ -279,9 +357,8 @@ func TestDecoderRegression(t *testing.T) {
 		return
 	}
 	defer dec.Close()
-
-	for _, tt := range zr.File {
-		if !strings.HasSuffix(t.Name(), "") {
+	for i, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, "") || (testing.Short() && i > 10) {
 			continue
 		}
 		t.Run("Reader-"+tt.Name, func(t *testing.T) {
@@ -295,8 +372,38 @@ func TestDecoderRegression(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			got, err := ioutil.ReadAll(dec)
-			t.Log("Received:", len(got), err)
+			got, gotErr := ioutil.ReadAll(dec)
+			t.Log("Received:", len(got), gotErr)
+
+			// Check a fresh instance
+			r, err = tt.Open()
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			decL, err := NewReader(r, WithDecoderConcurrency(1), WithDecoderLowmem(true), WithDecoderMaxMemory(1<<20))
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer decL.Close()
+			got2, gotErr2 := ioutil.ReadAll(decL)
+			t.Log("Fresh Reader received:", len(got2), gotErr2)
+			if gotErr != gotErr2 {
+				if gotErr != nil && gotErr2 != nil && gotErr.Error() != gotErr2.Error() {
+					t.Error(gotErr, "!=", gotErr2)
+				}
+				if (gotErr == nil) != (gotErr2 == nil) {
+					t.Error(gotErr, "!=", gotErr2)
+				}
+			}
+			if !bytes.Equal(got2, got) {
+				if gotErr != nil {
+					t.Log("Buffer mismatch without Reset")
+				} else {
+					t.Error("Buffer mismatch without Reset")
+				}
+			}
 		})
 		t.Run("DecodeAll-"+tt.Name, func(t *testing.T) {
 			r, err := tt.Open()
@@ -308,8 +415,33 @@ func TestDecoderRegression(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			got, err := dec.DecodeAll(in, nil)
-			t.Log("Received:", len(got), err)
+			got, gotErr := dec.DecodeAll(in, nil)
+			t.Log("Received:", len(got), gotErr)
+
+			// Check if we got the same:
+			decL, err := NewReader(nil, WithDecoderConcurrency(1), WithDecoderLowmem(true), WithDecoderMaxMemory(1<<20))
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer decL.Close()
+			got2, gotErr2 := decL.DecodeAll(in, nil)
+			t.Log("Fresh Reader received:", len(got2), gotErr2)
+			if gotErr != gotErr2 {
+				if gotErr != nil && gotErr2 != nil && gotErr.Error() != gotErr2.Error() {
+					t.Error(gotErr, "!=", gotErr2)
+				}
+				if (gotErr == nil) != (gotErr2 == nil) {
+					t.Error(gotErr, "!=", gotErr2)
+				}
+			}
+			if !bytes.Equal(got2, got) {
+				if gotErr != nil {
+					t.Log("Buffer mismatch without Reset")
+				} else {
+					t.Error("Buffer mismatch without Reset")
+				}
+			}
 		})
 	}
 }
@@ -534,8 +666,8 @@ func testDecoderFile(t *testing.T, fn string) {
 		return
 	}
 	defer dec.Close()
-	for _, tt := range zr.File {
-		if !strings.HasSuffix(tt.Name, ".zst") {
+	for i, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, ".zst") || (testing.Short() && i > 20) {
 			continue
 		}
 		t.Run("Reader-"+tt.Name, func(t *testing.T) {
@@ -883,9 +1015,9 @@ func testDecoderDecodeAll(t *testing.T, fn string, dec *Decoder) {
 		want[tt.Name+".zst"], _ = ioutil.ReadAll(r)
 	}
 
-	for _, tt := range zr.File {
+	for i, tt := range zr.File {
 		tt := tt
-		if !strings.HasSuffix(tt.Name, ".zst") {
+		if !strings.HasSuffix(tt.Name, ".zst") || (testing.Short() && i > 20) {
 			continue
 		}
 		t.Run("DecodeAll-"+tt.Name, func(t *testing.T) {

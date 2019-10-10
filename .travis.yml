@@ -7,9 +7,9 @@ os:
   - osx
 
 go:
-  - 1.10.x
   - 1.11.x
   - 1.12.x
+  - 1.13.x
   - master
 
 install:
@@ -18,10 +18,10 @@ install:
 
 script:
  - diff <(gofmt -d .) <(printf "")
- - go test -v -cpu=2 ./...
+ - go test -cpu=2 ./...
  - go test -cpu=2 -tags=noasm ./...
  - go test -cpu=1,4 -short -race ./...
- - GOOS=linux GOARCH=386 go install ./...
+ - go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d && s2c s2c && s2d s2c.s2 && rm s2c && rm s2d && rm s2c.s2
 
 matrix:
   allow_failures:
@@ -40,3 +40,17 @@ jobs:
       go: 1.12.x
       script:
         - ./fuzzit.sh fuzzing
+
+    - stage: 386 linux test
+      go: 1.12.x
+      script:
+        - GOOS=linux GOARCH=386 go test -short ./...
+
+deploy:
+- provider: script
+  skip_cleanup: true
+  script: curl -sL https://git.io/goreleaser | bash
+  on:
+    tags: true
+    condition: $TRAVIS_OS_NAME = linux
+    go: 1.13.x

@@ -177,6 +177,9 @@ func TestCompress4XReuse(t *testing.T) {
 	var s Scratch
 	s.Reuse = ReusePolicyAllow
 	for i := 0; i < 255; i++ {
+		if testing.Short() && i > 10 {
+			break
+		}
 		t.Run(fmt.Sprint("test-", i), func(t *testing.T) {
 			buf0 := make([]byte, BlockSizeMax)
 			for j := range buf0 {
@@ -208,6 +211,9 @@ func TestCompress4XReuseActually(t *testing.T) {
 	var s Scratch
 	s.Reuse = ReusePolicyAllow
 	for i := 0; i < 255; i++ {
+		if testing.Short() && i > 10 {
+			break
+		}
 		t.Run(fmt.Sprint("test-", i), func(t *testing.T) {
 			buf0 := make([]byte, BlockSizeMax)
 			for j := range buf0 {
