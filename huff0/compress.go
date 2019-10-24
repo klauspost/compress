@@ -105,6 +105,9 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 			keepTable := s.cTable
 			s.cTable = s.prevTable
 			s.Out, err = compressor(in)
+			if err != nil {
+				return nil, false, err
+			}
 			s.cTable = keepTable
 			if len(s.Out) >= len(in) {
 				return nil, false, ErrIncompressible
