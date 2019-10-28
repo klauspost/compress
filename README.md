@@ -13,6 +13,7 @@ This package provides various compression algorithms.
 [![fuzzit](https://app.fuzzit.dev/badge?org_id=klauspost)](https://fuzzit.dev)
 
 # changelog
+* Oct 28, 2018 (v1.9.1) ztsd: Fix crash when compressing blocks. [#174](https://github.com/klauspost/compress/pull/174)
 * Oct 24, 2019 (v1.9.0) zstd: Fix rare data corruption [#173](https://github.com/klauspost/compress/pull/173)
 * Oct 24, 2019 zstd: Fix huff0 out of buffer write [#171](https://github.com/klauspost/compress/pull/171) and always return errors [#172](https://github.com/klauspost/compress/pull/172) 
 * Oct 10, 2019: Big deflate rewrite, 30-40% faster with better compression [#105](https://github.com/klauspost/compress/pull/105)
