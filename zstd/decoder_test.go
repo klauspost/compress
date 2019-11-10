@@ -342,7 +342,7 @@ func TestNewDecoderFlushed(t *testing.T) {
 }
 
 func TestDecoderRegression(t *testing.T) {
-	defer timeout(60 * time.Second)()
+	defer timeout(160 * time.Second)()
 	data, err := ioutil.ReadFile("testdata/regression.zip")
 	if err != nil {
 		t.Fatal(err)
@@ -440,6 +440,44 @@ func TestDecoderRegression(t *testing.T) {
 					t.Log("Buffer mismatch without Reset")
 				} else {
 					t.Error("Buffer mismatch without Reset")
+				}
+			}
+		})
+		t.Run("Match-"+tt.Name, func(t *testing.T) {
+			r, err := tt.Open()
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			in, err := ioutil.ReadAll(r)
+			if err != nil {
+				t.Error(err)
+			}
+			got, gotErr := dec.DecodeAll(in, nil)
+			t.Log("Received:", len(got), gotErr)
+
+			// Check a fresh instance
+			decL, err := NewReader(bytes.NewBuffer(in), WithDecoderConcurrency(1), WithDecoderLowmem(true), WithDecoderMaxMemory(1<<20))
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer decL.Close()
+			got2, gotErr2 := ioutil.ReadAll(decL)
+			t.Log("Reader Reader received:", len(got2), gotErr2)
+			if gotErr != gotErr2 {
+				if gotErr != nil && gotErr2 != nil && gotErr.Error() != gotErr2.Error() {
+					t.Error(gotErr, "!=", gotErr2)
+				}
+				if (gotErr == nil) != (gotErr2 == nil) {
+					t.Error(gotErr, "!=", gotErr2)
+				}
+			}
+			if !bytes.Equal(got2, got) {
+				if gotErr != nil {
+					t.Log("Buffer mismatch")
+				} else {
+					t.Error("Buffer mismatch")
 				}
 			}
 		})
