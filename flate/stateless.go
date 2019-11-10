@@ -35,6 +35,11 @@ func (s *statelessWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
+func (s *statelessWriter) Reset(w io.Writer) {
+	s.dst = w
+	s.closed = false
+}
+
 // NewStatelessWriter will do compression but without maintaining any state
 // between Write calls.
 // There will be no memory kept between Write calls,
