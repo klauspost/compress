@@ -22,7 +22,7 @@ import (
 var (
 	faster    = flag.Bool("faster", false, "Compress faster, but with a minor compression loss")
 	cpu       = flag.Int("cpu", runtime.GOMAXPROCS(0), "Compress using this amount of threads")
-	blockSize = flag.String("blocksize", "1M", "Max  block size. Examples: 64K, 256K, 1M, 4M. Must be power of two and <= 4MB")
+	blockSize = flag.String("blocksize", "4M", "Max  block size. Examples: 64K, 256K, 1M, 4M. Must be power of two and <= 4MB")
 	safe      = flag.Bool("safe", false, "Do not overwrite output files")
 	padding   = flag.String("pad", "1", "Pad size to a multiple of this value, Examples: 500, 64K, 256K, 1M, 4M, etc")
 	stdout    = flag.Bool("c", false, "Write all output to stdout. Multiple input files will be concatenated")
