@@ -11,7 +11,7 @@ go get -u github.com/dvyukov/go-fuzz/go-fuzz github.com/dvyukov/go-fuzz/go-fuzz-
 
 ## Install fuzzit specific version for production or latest version for development :
 # https://github.com/fuzzitdev/fuzzit/releases/latest/download/fuzzit_Linux_x86_64
-wget -q -O fuzzit https://github.com/fuzzitdev/fuzzit/releases/download/v2.4.46/fuzzit_Linux_x86_64
+wget -q -O fuzzit https://github.com/fuzzitdev/fuzzit/releases/latest/download/fuzzit_Linux_x86_64
 chmod a+x fuzzit
 
 go-fuzz-build -libfuzzer -o flate.a github.com/klauspost/compress-fuzz/flate
