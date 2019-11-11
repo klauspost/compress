@@ -107,8 +107,8 @@ const (
 
 type huffmanDecoder struct {
 	min      int                       // the minimum code length
-	chunks   *[huffmanNumChunks]uint32 // chunks as described above
-	links    [][]uint32                // overflow links
+	chunks   *[huffmanNumChunks]uint16 // chunks as described above
+	links    [][]uint16                // overflow links
 	linkMask uint32                    // mask the width of the link table
 }
 
@@ -124,7 +124,7 @@ func (h *huffmanDecoder) init(lengths []int) bool {
 	const sanity = false
 
 	if h.chunks == nil {
-		h.chunks = &[huffmanNumChunks]uint32{}
+		h.chunks = &[huffmanNumChunks]uint16{}
 	}
 	if h.min != 0 {
 		*h = huffmanDecoder{chunks: h.chunks, links: h.links}
@@ -191,7 +191,7 @@ func (h *huffmanDecoder) init(lengths []int) bool {
 		// create link tables
 		link := nextcode[huffmanChunkBits+1] >> 1
 		if cap(h.links) < huffmanNumChunks-link {
-			h.links = make([][]uint32, huffmanNumChunks-link)
+			h.links = make([][]uint16, huffmanNumChunks-link)
 		} else {
 			h.links = h.links[:huffmanNumChunks-link]
 		}
@@ -202,9 +202,9 @@ func (h *huffmanDecoder) init(lengths []int) bool {
 			if sanity && h.chunks[reverse] != 0 {
 				panic("impossible: overwriting existing chunk")
 			}
-			h.chunks[reverse] = uint32(off<<huffmanValueShift | (huffmanChunkBits + 1))
+			h.chunks[reverse] = uint16(off<<huffmanValueShift | (huffmanChunkBits + 1))
 			if cap(h.links[off]) < numLinks {
-				h.links[off] = make([]uint32, numLinks)
+				h.links[off] = make([]uint16, numLinks)
 			} else {
 				links := h.links[off][:0]
 				h.links[off] = links[:numLinks]
@@ -220,7 +220,7 @@ func (h *huffmanDecoder) init(lengths []int) bool {
 		}
 		code := nextcode[n]
 		nextcode[n]++
-		chunk := uint32(i<<huffmanValueShift | n)
+		chunk := uint16(i<<huffmanValueShift | n)
 		reverse := int(bits.Reverse16(uint16(code)))
 		reverse >>= uint(16 - n)
 		if n <= huffmanChunkBits {
