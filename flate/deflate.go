@@ -322,8 +322,6 @@ func (d *compressor) writeStoredBlock(buf []byte) error {
 	return d.w.err
 }
 
-const hashmul = 0x1e35a7bd
-
 // hash4 returns a hash representation of the first 4 bytes
 // of the supplied slice.
 // The caller must ensure that len(b) >= 4.
