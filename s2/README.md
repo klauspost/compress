@@ -105,10 +105,10 @@ Options:
   -bench int
     	Run benchmark n times. No output will be written
   -blocksize string
-    	Max  block size. Examples: 64K, 256K, 1M, 4M. Must be power of two and <= 4MB (default "1M")
+    	Max  block size. Examples: 64K, 256K, 1M, 4M. Must be power of two and <= 4MB (default "4M")
   -c	Write all output to stdout. Multiple input files will be concatenated
   -cpu int
-    	Compress using this amount of threads (default 12)
+    	Compress using this amount of threads (default CPU_THREADS])
   -faster
     	Compress faster, but with a minor compression loss
   -help
