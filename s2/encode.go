@@ -592,7 +592,7 @@ func (w *Writer) Close() error {
 			return err
 		}
 		_, err2 := w.writer.Write(frame)
-		err = w.err(err2)
+		_ = w.err(err2)
 	}
 	_ = w.err(errClosed)
 	if err == errClosed {

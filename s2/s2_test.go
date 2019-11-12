@@ -116,7 +116,7 @@ func roundtrip(b, ebuf, dbuf []byte) error {
 	}
 	concat = concat[len(dst):]
 
-	d, err = Decode(nil, concat)
+	d, _ = Decode(nil, concat)
 	want := append(make([]byte, 0, len(b)*3), b...)
 	want = append(want, b...)
 	want = append(want, b...)

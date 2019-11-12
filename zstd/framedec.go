@@ -477,8 +477,9 @@ func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {
 				if n != len(dst)-crcStart {
 					err = io.ErrShortWrite
 				}
+			} else {
+				err = d.checkCRC()
 			}
-			err = d.checkCRC()
 		}
 	}
 	d.history.b = saved
