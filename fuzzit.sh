@@ -48,4 +48,11 @@ clang -fsanitize=fuzzer s2-decompress.a -o s2-decompress-fuzz
 ./fuzzit create job --type ${1} klauspost/compress-s2-compress s2-compress-fuzz
 ./fuzzit create job --type ${1} klauspost/compress-s2-decompress s2-decompress-fuzz
 
-rm flate-fuzz || rm fuzzit || rm huff0-compress-fuzz || rm huff0-decompress-fuzz || rm s2-compress-fuzz || rm s2-decompress-fuzz || rm zstd-compress-fuzz || rm zstd-decompress-fuzz || true
+rm flate-fuzz || true
+rm fuzzit || true
+rm huff0-compress-fuzz || true
+rm huff0-decompress-fuzz || true
+rm s2-compress-fuzz || true
+rm s2-decompress-fuzz || true
+rm zstd-compress-fuzz || true
+rm zstd-decompress-fuzz || true
