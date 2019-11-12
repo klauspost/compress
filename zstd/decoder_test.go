@@ -95,7 +95,7 @@ func TestNewReaderMismatch(t *testing.T) {
 		n, err := io.ReadFull(dec, buf)
 		if err != nil {
 			if err != io.EOF && err != io.ErrUnexpectedEOF {
-				t.Fatal(err)
+				t.Fatal("block", cHash, "err:", err)
 			}
 		}
 		if n > 0 {
