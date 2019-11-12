@@ -476,9 +476,9 @@ func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {
 			if err == nil {
 				if n != len(dst)-crcStart {
 					err = io.ErrShortWrite
+				} else {
+					err = d.checkCRC()
 				}
-			} else {
-				err = d.checkCRC()
 			}
 		}
 	}
