@@ -1087,7 +1087,6 @@ func TestWriterReset(t *testing.T) {
 		if err := w.Flush(); err != nil {
 			t.Errorf("#%d: Flush: %v", i, err)
 			failed = true
-			continue
 			got, err := ioutil.ReadAll(NewReader(buf))
 			if err != nil {
 				t.Errorf("#%d: ReadAll: %v", i, err)
