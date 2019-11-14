@@ -85,6 +85,9 @@ func TestRegressions(t *testing.T) {
 			t.Fatal(err)
 		}
 		data1, err := ioutil.ReadAll(data)
+		if err != nil {
+			t.Fatal(err)
+		}
 		for level := 0; level <= 9; level++ {
 			t.Run(fmt.Sprint(tt.Name+"-level", 1), func(t *testing.T) {
 				buf := new(bytes.Buffer)

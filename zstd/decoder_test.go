@@ -592,6 +592,9 @@ func TestDecoderMultiFrame(t *testing.T) {
 				t.Fatal(err)
 			}
 			got, err := ioutil.ReadAll(dec)
+			if err != nil {
+				t.Fatal(err)
+			}
 			err = dec.Reset(bytes.NewBuffer(in))
 			if err != nil {
 				t.Fatal(err)
@@ -651,6 +654,9 @@ func TestDecoderMultiFrameReset(t *testing.T) {
 				t.Fatal(err)
 			}
 			got, err := ioutil.ReadAll(dec)
+			if err != nil {
+				t.Fatal(err)
+			}
 			err = dec.Reset(bytes.NewBuffer(in))
 			if err != nil {
 				t.Fatal(err)
@@ -792,6 +798,9 @@ func BenchmarkDecoder_DecoderSmall(b *testing.B) {
 				b.Fatal(err)
 			}
 			got, err := ioutil.ReadAll(dec)
+			if err != nil {
+				b.Fatal(err)
+			}
 			b.SetBytes(int64(len(got)))
 			b.ReportAllocs()
 			b.ResetTimer()
@@ -840,6 +849,9 @@ func BenchmarkDecoder_DecodeAll(b *testing.B) {
 				b.Fatal(err)
 			}
 			got, err := dec.DecodeAll(in, nil)
+			if err != nil {
+				b.Fatal(err)
+			}
 			b.SetBytes(int64(len(got)))
 			b.ReportAllocs()
 			b.ResetTimer()

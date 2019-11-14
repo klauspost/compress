@@ -502,6 +502,9 @@ func testEncoderRoundtrip(t *testing.T, file string, wantCRC []byte) {
 					t.Fatal(err)
 				}
 				gotSize, err = io.Copy(io.MultiWriter(fout, d), dec2)
+				if err != nil {
+					t.Fatal(err)
+				}
 			}
 			if wantSize != gotSize {
 				t.Errorf("want size (%d) != got size (%d)", wantSize, gotSize)
@@ -589,6 +592,9 @@ func testEncoderRoundtripWriter(t *testing.T, file string, wantCRC []byte) {
 			t.Fatal(err)
 		}
 		gotSize, err = io.Copy(io.MultiWriter(fout, d), dec2)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	if wantSize != gotSize {
 		t.Errorf("want size (%d) != got size (%d)", wantSize, gotSize)
@@ -675,6 +681,9 @@ func TestEncoder_EncodeAllEmpty(t *testing.T) {
 	var buf bytes.Buffer
 	e.Reset(&buf)
 	err = e.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
 	dst = buf.Bytes()
 	if len(dst) == 0 {
 		t.Fatal("Requested zero frame, but got nothing.")
