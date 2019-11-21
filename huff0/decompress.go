@@ -76,14 +76,15 @@ func ReadTable(in []byte, s *Scratch) (s2 *Scratch, remain []byte, err error) {
 	}
 
 	// collect weight stats
-	var rankStats [tableLogMax + 1]uint32
+	var rankStats [16]uint32
 	weightTotal := uint32(0)
 	for _, v := range s.huffWeight[:s.symbolLen] {
 		if v > tableLogMax {
 			return s, nil, errors.New("corrupt input: weight too large")
 		}
-		rankStats[v]++
-		weightTotal += (1 << (v & 15)) >> 1
+		v2 := v & 15
+		rankStats[v2]++
+		weightTotal += (1 << v2) >> 1
 	}
 	if weightTotal == 0 {
 		return s, nil, errors.New("corrupt input: weights zero")
@@ -134,15 +135,18 @@ func ReadTable(in []byte, s *Scratch) (s2 *Scratch, remain []byte, err error) {
 	if len(s.dt.single) != tSize {
 		s.dt.single = make([]dEntrySingle, tSize)
 	}
-
 	for n, w := range s.huffWeight[:s.symbolLen] {
+		if w == 0 {
+			continue
+		}
 		length := (uint32(1) << w) >> 1
 		d := dEntrySingle{
 			byte:  uint8(n),
 			nBits: s.actualTableLog + 1 - w,
 		}
-		for u := rankStats[w]; u < rankStats[w]+length; u++ {
-			s.dt.single[u] = d
+		single := s.dt.single[rankStats[w] : rankStats[w]+length]
+		for i := range single {
+			single[i] = d
 		}
 		rankStats[w] += length
 	}
@@ -283,10 +287,11 @@ func (s *Scratch) Decompress4X(in []byte, dstSize int) (out []byte, err error) {
 bigloop:
 	for {
 		for i := range br {
-			if br[i].off < 4 {
+			br := &br[i]
+			if br.off < 4 {
 				break bigloop
 			}
-			br[i].fillFast()
+			br.fillFast()
 		}
 		tmp[off] = decode(&br[0])
 		tmp[off+bufoff] = decode(&br[1])
