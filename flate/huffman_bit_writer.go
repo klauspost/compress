@@ -135,7 +135,6 @@ func newHuffmanBitWriter(w io.Writer) *huffmanBitWriter {
 func (w *huffmanBitWriter) reset(writer io.Writer) {
 	w.writer = writer
 	w.bits, w.nbits, w.nbytes, w.err = 0, 0, 0, nil
-	w.bytes = [256]byte{}
 	w.lastHeader = 0
 	w.lastHuffMan = false
 }
