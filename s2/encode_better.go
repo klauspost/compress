@@ -56,10 +56,6 @@ func encodeBlockBetter(dst, src []byte) (d int) {
 		maxSTableSize = 1 << sTableBits
 	)
 
-	// In Go, all array elements are zero-initialized, so there is no advantage
-	// to a smaller tableSize per se. However, it matches the C++ algorithm,
-	// and in the asm versions of this code, we can get away with zeroing only
-	// the first tableSize elements.
 	var lTable [maxLTableSize]uint32
 	var sTable [maxSTableSize]uint32
 

@@ -13,3 +13,6 @@ func emitLiteral(dst, lit []byte) int
 //
 //go:noescape
 func emitRepeat(dst []byte, offset, length int) int
+
+//go:noescape
+func encodeBlockAsm(dst, src []byte) (d int)

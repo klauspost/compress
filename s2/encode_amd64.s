@@ -99,6 +99,7 @@ zero_end:
 //	- SI	&dst[0]
 //	- DI	i
 //	- R11	offset
+//  - RDX   temp
 //
 // The unusual register allocation of local variables, such as R11 for the
 // offset, matches the allocation used at the call site in encodeBlock, which
@@ -107,11 +108,8 @@ TEXT ·emitRepeat(SB), NOSPLIT, $0-48
 	MOVQ dst_base+0(FP), SI
 	MOVQ offset+24(FP), R11
 	MOVQ length+32(FP), AX
-
-	MOVQ AX, DX
-
-	// length -= 4
-	LEAQ -4(AX), AX
+	MOVQ AX, DX             // Copy length
+	LEAQ -4(AX), AX         // length -= 4
 
 	// if length <= 4 (use copied value)
 	CMPL DX, $8
@@ -165,7 +163,6 @@ repeat_two:
 repeat_two_offset:
 	// dst[0] = uint8(offset>>8)<<5 | uint8(length)<<2 | tagCopy1
 	// dst[1] = uint8(offset)
-
 	MOVB R11B, 1(SI)  // Store offset lower byte
 	SARQ $8, R11      // Remove lower
 	SHLL $5, R11      // Shift back up
@@ -180,3 +177,108 @@ repeat_final:
 	// Return the number of bytes written.
 	MOVQ DI, ret+40(FP)
 	RET
+
+// returns the multiplier for 6 bytes hashes in tmp.
+#define hash6mul_tmp(tmp) MOVQ	$227718039650203, tmp
+
+// Create hash of 6 lowest bytes.
+// Multiplier from hash6mul_tmp must be in mul_tmp
+#define hash6(val, mul_tmp) SHLQ $16, val \
+	IMULQ mul_tmp, val \
+	SHRQ  $50, val
+
+// func encodeBlock(dst, src []byte) (d int)
+//
+// "var table [maxTableSize]uint32" takes up 65536 bytes of stack space. An
+// extra 56 bytes, to call other functions, and an extra 64 bytes, to spill
+// local variables (registers) during calls gives 65536 + 56 + 64 = 65656.
+TEXT ·encodeBlockAsm(SB), 0, $65656-56
+#define DST_PTR  DI
+#define SRC_BASE SI
+#define SRC_LEN  R14
+	MOVQ dst_base+0(FP), DST_PTR
+	MOVQ src_base+24(FP), SRC_BASE
+	MOVQ src_len+32(FP), SRC_LEN
+
+	// Clear 64KB
+#define COUNT CX
+#define TABLE BX
+	PXOR X0, X0
+	LEAQ table-65536(SP), TABLE
+	MOVQ $512, COUNT            // 65536/128 = 512
+
+memclr:
+	MOVOU X0, 0(TABLE)
+	MOVOU X0, 16(TABLE)
+	MOVOU X0, 32(TABLE)
+	MOVOU X0, 48(TABLE)
+	MOVOU X0, 64(TABLE)
+	MOVOU X0, 80(TABLE)
+	MOVOU X0, 96(TABLE)
+	MOVOU X0, 112(TABLE)
+	ADDQ  $128, TABLE
+	SUBQ  $1, COUNT
+	JNZ   memclr
+
+#undef COUNT
+#undef TABLE
+
+#define S AX
+#define CV CX
+#define REPEAT DX
+	MOVQ 0(SRC_BASE), CV
+	MOVQ $1, REPEAT
+
+encode_loop:
+#define CANDIDATE R8
+#define TABLE BX
+	LEAQ table-65536(SP), TABLE
+
+search_loop:
+#define HASH_MUL R9
+#define CANDIDATE2 R10
+#define CVONEDOWN R13
+	MOVQ CV, CANDIDATE
+	MOVQ CV, CANDIDATE2
+	SHRQ $8, CANDIDATE2
+	hash6mul_tmp(HASH_MUL)
+	hash6(CANDIDATE, HASH_MUL)
+	MOVQ CANDIDATE2, CVONEDOWN
+	hash6(CANDIDATE2, HASH_MUL)
+
+#undef HASH_MUL
+#define C1_VAL R11
+#define C2_VAL R12
+#define SPLUSONE R15
+	LEAQ 1(S), SPLUSONE
+	MOVD 0(TABLE)(CANDIDATE*4), C1_VAL
+	MOVD 0(TABLE)(CANDIDATE2*4), C2_VAL
+	MOVD S, 0(TABLE)(CANDIDATE*4)
+	MOVD SPLUSONE, 0(TABLE)(CANDIDATE2*4)
+
+#undef TABLE
+#undef SPLUSONE
+#define REPEATVAL R15
+#define REPEATOFF R14
+// LEAQ (SRC_BASE)
+
+// Check repeat
+// MOVQ (), REPEATVAL
+
+#undef REPEATVAL
+#undef REPEATOFF
+#undef CVONEDOWN
+#undef C1_VAL
+#undef C2_VAL
+
+#undef CV
+
+encodeBlockEnd:
+#define DST_BASE AX
+	MOVQ dst_base+0(FP), DST_BASE
+	SUBQ DST_BASE, DST_PTR
+
+#undef DST_BASE
+	MOVQ DST_PTR, d+48(FP)
+	RET
+

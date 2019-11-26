@@ -108,15 +108,10 @@ func hash6(u uint64, h uint8) uint32 {
 func encodeBlock(dst, src []byte) (d int) {
 	// Initialize the hash table.
 	const (
-		tableBits = 14
-
+		tableBits    = 14
 		maxTableSize = 1 << tableBits
 	)
 
-	// In Go, all array elements are zero-initialized, so there is no advantage
-	// to a smaller tableSize per se. However, it matches the C++ algorithm,
-	// and in the asm versions of this code, we can get away with zeroing only
-	// the first tableSize elements.
 	var table [maxTableSize]uint32
 
 	// sLimit is when to stop looking for offset/length copies. The inputMargin
