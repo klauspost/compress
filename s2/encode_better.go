@@ -191,7 +191,6 @@ func encodeBlockBetter(dst, src []byte) (d int) {
 			continue
 		}
 		repeat = offset
-		//fmt.Println(base - nextEmit)
 		d += emitLiteral(dst[d:], src[nextEmit:base])
 		d += emitCopy(dst[d:], offset, s-base)
 
