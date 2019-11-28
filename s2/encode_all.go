@@ -27,18 +27,9 @@ func load64(b []byte, i int) uint64 {
 //
 // It assumes that:
 //	dst is long enough to hold the encoded bytes
-//	1 <= offset && offset <= 65535
-//	4 <= length && length <= 65535
+//	1 <= offset && offset <= math.MaxUint32
+//	4 <= length && length <= 1 << 24
 func emitCopy(dst []byte, offset, length int) int {
-	// The maximum length for a single tagCopy1 or tagCopy2 op is 64 bytes. The
-	// threshold for this loop is a little higher (at 68 = 64 + 4), and the
-	// length emitted down below is is a little lower (at 60 = 64 - 4), because
-	// it's shorter to encode a length 67 copy as a length 60 tagCopy2 followed
-	// by a length 7 tagCopy1 (which encodes as 3+2 bytes) than to encode it as
-	// a length 64 tagCopy2 followed by a length 3 tagCopy2 (which encodes as
-	// 3+3 bytes). The magic 4 in the 64±4 is because the minimum length for a
-	// tagCopy1 op is 4 bytes, which is why a length 3 copy has to be an
-	// encodes-as-3-bytes tagCopy2 instead of an encodes-as-2-bytes tagCopy1.
 	if offset >= 65536 {
 		i := 0
 		if length > 64 {
