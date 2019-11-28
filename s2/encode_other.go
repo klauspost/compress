@@ -161,12 +161,21 @@ func emitRepeat(dst []byte, offset, length int) int {
 		dst[0] = 6<<2 | tagCopy1
 		return 4
 	}
+	const maxRepeat = (1 << 24) - 1
 	length -= 1 << 16
+	left := 0
+	if length > maxRepeat {
+		left = length - maxRepeat
+		length = maxRepeat
+	}
 	dst[4] = uint8(length >> 16)
 	dst[3] = uint8(length >> 8)
 	dst[2] = uint8(length >> 0)
 	dst[1] = 0
 	dst[0] = 7<<2 | tagCopy1
+	if left > 0 {
+		return 5 + emitRepeat(dst[5:], offset, left)
+	}
 	return 5
 }
 

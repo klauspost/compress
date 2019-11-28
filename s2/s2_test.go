@@ -1531,6 +1531,32 @@ func testFile(t *testing.T, i, repeat int) {
 	})
 }
 
+func TestDataRoundtrips(t *testing.T) {
+	test := func(t *testing.T, data []byte) {
+		t.Run("s2", func(t *testing.T) {
+			testWriterRoundtrip(t, data)
+		})
+		t.Run("s2-better", func(t *testing.T) {
+			testWriterRoundtrip(t, data, WriterBetterCompression())
+		})
+		t.Run("block", func(t *testing.T) {
+			d := data
+			testBlockRoundtrip(t, d)
+		})
+		t.Run("block-better", func(t *testing.T) {
+			d := data
+			testBetterBlockRoundtrip(t, d)
+		})
+		t.Run("snappy", func(t *testing.T) {
+			testSnappyDecode(t, data)
+		})
+	}
+	t.Run("longblock", func(t *testing.T) {
+		data := make([]byte, 1<<25)
+		test(t, data)
+	})
+}
+
 // Naming convention is kept similar to what snappy's C++ implementation uses.
 func Benchmark_UFlat0(b *testing.B)  { benchFile(b, 0, true) }
 func Benchmark_UFlat1(b *testing.B)  { benchFile(b, 1, true) }
