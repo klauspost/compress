@@ -13,6 +13,8 @@ This package provides various compression algorithms.
 [![fuzzit](https://app.fuzzit.dev/badge?org_id=klauspost)](https://fuzzit.dev)
 
 # changelog
+* Nov 28, 2018 (v1.9.3) Less allocations in stateless deflate.
+* Nov 28, 2018: 5-20% Faster huff0 decode. Impacts zstd as well. [#184](https://github.com/klauspost/compress/pull/184)
 * Nov 12, 2019 (v1.9.2) Added [Stateless Compression](#stateless-compression) for gzip/deflate.
 * Nov 12, 2019: Fixed zstd decompression of large single blocks. [#180](https://github.com/klauspost/compress/pull/180)
 * Nov 11, 2019: Set default  [s2c](https://github.com/klauspost/compress/tree/master/s2#commandline-tools) block size to 4MB.
