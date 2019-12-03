@@ -106,6 +106,7 @@ func newBlockDec(lowMem bool) *blockDec {
 		input:   make(chan struct{}, 1),
 		history: make(chan *history, 1),
 	}
+	b.decWG.Add(1)
 	go b.startDecoder()
 	return &b
 }
@@ -190,7 +191,6 @@ func (b *blockDec) Close() {
 // decodeAsync will prepare decoding the block when it receives input.
 // This will separate output and history.
 func (b *blockDec) startDecoder() {
-	b.decWG.Add(1)
 	defer b.decWG.Done()
 	for range b.input {
 		//println("blockDec: Got block input")
