@@ -42,6 +42,7 @@ func TestSnappy_ConvertSimple(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer dec.Close()
 	decoded, err := dec.DecodeAll(dst.Bytes(), nil)
 	if err != nil {
 		t.Error(err, len(decoded))
@@ -62,6 +63,7 @@ func TestSnappy_ConvertXML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer dec.Close()
 	in, err := ioutil.ReadAll(dec)
 	if err != nil {
 		t.Fatal(err)
@@ -138,6 +140,7 @@ func TestSnappy_ConvertSilesia(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer dec.Close()
 	decoded, err := dec.DecodeAll(dst.Bytes(), nil)
 	if err != nil {
 		t.Error(err, len(decoded))
