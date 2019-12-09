@@ -391,6 +391,7 @@ func (d *Decoder) Close() {
 // IOReadCloser returns the decoder as an io.ReadCloser for convenience.
 // Any changes to the decoder will be reflected, so the returned ReadCloser
 // can be reused along with the decoder.
+// io.WriterTo is also supported by the returned ReadCloser.
 func (d *Decoder) IOReadCloser() io.ReadCloser {
 	return closeWrapper{d: d}
 }
@@ -398,6 +399,11 @@ func (d *Decoder) IOReadCloser() io.ReadCloser {
 // closeWrapper wraps a function call as a closer.
 type closeWrapper struct {
 	d *Decoder
+}
+
+// WriteTo forwards WriteTo calls to the decoder.
+func (c closeWrapper) WriteTo(w io.Writer) (n int64, err error) {
+	return c.d.WriteTo(w)
 }
 
 // Read forwards read calls to the decoder.
