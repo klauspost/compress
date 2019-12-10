@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 
 	"github.com/klauspost/compress/fse"
 )
@@ -18,11 +19,12 @@ type dEntrySingle struct {
 	entry uint16
 }
 
-// double-symbols decoding
+// double-symbols decoding multiple entries.
 type dEntryDouble struct {
-	seq   uint16
-	nBits uint8
-	len   uint8
+	//  1 to 3 valid values, depending on valid
+	val [3]byte
+	// bits consumed, (valid << 4 )
+	nLenBitsValid uint8
 }
 
 // ReadTable will read a table from the input.
@@ -117,8 +119,6 @@ func ReadTable(in []byte, s *Scratch) (s2 *Scratch, remain []byte, err error) {
 		return s, nil, errors.New("corrupt input: min elt size, even check failed ")
 	}
 
-	// TODO: Choose between single/double symbol decoding
-
 	// Calculate starting value for each rank
 	{
 		var nextRankStart uint32
@@ -127,6 +127,11 @@ func ReadTable(in []byte, s *Scratch) (s2 *Scratch, remain []byte, err error) {
 			nextRankStart += rankStats[n] << (n - 1)
 			rankStats[n] = current
 		}
+	}
+
+	// TODO: Choose between single/double symbol decoding
+	if len(in) > 4096 {
+
 	}
 
 	// fill DTable (always full size)
@@ -149,6 +154,28 @@ func ReadTable(in []byte, s *Scratch) (s2 *Scratch, remain []byte, err error) {
 		rankStats[w] += length
 	}
 	return s, in, nil
+}
+
+// quantDoubleBetter is a precalulated table with the switchover point
+// for destination length given a compression ratio.
+// index = (srclen * 16) / destLen.
+var quantDoubleBetter = [16]int{
+	// 0,1: Impossible, Huffman cannot do  better than 8:1
+	2:  7936,
+	3:  6400,
+	4:  5632,
+	5:  5120,
+	6:  4352,
+	7:  4864,
+	8:  5376,
+	9:  6400,
+	10: 8704,
+	11: 12800,
+	12: 16384,
+	13: 47616,
+	// At very low compression, double is always slower.
+	14: math.MaxInt32,
+	15: math.MaxInt32,
 }
 
 // Decompress1X will decompress a 1X encoded stream.
