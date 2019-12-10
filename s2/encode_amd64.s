@@ -108,8 +108,14 @@ TEXT ·emitRepeat(SB), NOSPLIT, $0-48
 	MOVQ dst_base+0(FP), SI
 	MOVQ offset+24(FP), R11
 	MOVQ length+32(FP), AX
-	MOVQ AX, DX             // Copy length
-	LEAQ -4(AX), AX         // length -= 4
+
+	// bytes written
+	XORQ DI, DI
+
+	// Next
+emit_repeat_again:
+	MOVQ AX, DX     // Copy length
+	LEAQ -4(AX), AX // length -= 4
 
 	// if length <= 4 (use copied value)
 	CMPL DX, $8
@@ -123,11 +129,23 @@ TEXT ·emitRepeat(SB), NOSPLIT, $0-48
 
 cant_repeat_two_offset:
 	CMPL AX, $260
-	JLT  repeat_three // if length < (1<<8)+4
+	JLT  repeat_three  // if length < (1<<8)+4
 	CMPL AX, $65792
-	JLT  repeat_four  // if length < (1 << 16) + (1 << 8)
+	JLT  repeat_four   // if length < (1 << 16) + (1 << 8)
+	CMPL AX, $16842751 // 16777215+65536
+	JLE  repeat_five
 
-	// Must be able to be within 5 bytes.
+	// We have have more than 24 bits
+	// Emit so we have at least 4 bytes left.
+	LEAQ -16842747(AX), AX // length -= (maxRepeat - 4) + 65536
+	MOVW $29, 0(SI)        // dst[0] = 7<<2 | tagCopy1, dst[1] = 0
+	MOVW $65531, 2(SI)     // 0xfffb
+	MOVB $255, 4(SI)
+	ADDQ $5, SI
+	ADDQ $5, DI
+	JMP  emit_repeat_again
+
+// Must be able to be within 5 bytes.
 repeat_five:
 	LEAQ -65536(AX), AX // length -= 65536
 	MOVQ AX, R11
@@ -135,21 +153,21 @@ repeat_five:
 	MOVW AX, 2(SI)      // dst[2] = uint8(length), dst[3] = uint8(length >> 8)
 	SARQ $16, R11       // R11 = length >> 16
 	MOVB R11, 4(SI)     // dst[4] = length >> 16
-	MOVQ $5, DI         // i = 5
+	ADDQ $5, DI         // i += 5
 	JMP  repeat_final
 
 repeat_four:
 	LEAQ -256(AX), AX // length -= 256
 	MOVW $25, 0(SI)   // dst[0] = 6<<2 | tagCopy1, dst[1] = 0
 	MOVW AX, 2(SI)    // dst[2] = uint8(length), dst[3] = uint8(length >> 8)
-	MOVQ $4, DI       // i = 3
+	ADDQ $4, DI       // i += 4
 	JMP  repeat_final
 
 repeat_three:
 	LEAQ -4(AX), AX   // length -= 4
 	MOVW $21, 0(SI)   // dst[0] = 5<<2 | tagCopy1, dst[1] = 0
 	MOVB AX, 2(SI)    // dst[2] = uint8(length)
-	MOVQ $3, DI       // i = 3
+	ADDQ $3, DI       // i += 3
 	JMP  repeat_final
 
 repeat_two:
@@ -157,7 +175,7 @@ repeat_two:
 	SHLL $2, AX
 	ORL  $1, AX
 	MOVW AX, 0(SI)
-	MOVQ $2, DI       // i = 2
+	ADDQ $2, DI       // i += 2
 	JMP  repeat_final
 
 repeat_two_offset:
@@ -170,7 +188,7 @@ repeat_two_offset:
 	ORL  $1, AX       // Add tagCopy1
 	ORL  R11, AX      // OR result
 	MOVB AX, 0(SI)
-	MOVQ $2, DI       // i = 2
+	ADDQ $2, DI       // i += 2
 	JMP  repeat_final
 
 repeat_final:

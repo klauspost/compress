@@ -28,6 +28,12 @@ func TestEncoder_EncodeAllSimple(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+
 	in = append(in, in...)
 	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
@@ -35,16 +41,13 @@ func TestEncoder_EncodeAllSimple(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			defer e.Close()
 			start := time.Now()
 			dst := e.EncodeAll(in, nil)
 			t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
 			mbpersec := (float64(len(in)) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
 			t.Logf("Encoded %d bytes with %.2f MB/s", len(in), mbpersec)
 
-			dec, err := NewReader(nil)
-			if err != nil {
-				t.Fatal(err)
-			}
 			decoded, err := dec.DecodeAll(dst, nil)
 			if err != nil {
 				t.Error(err, len(decoded))
@@ -119,6 +122,7 @@ func TestEncoder_EncodeAllEncodeXML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer dec.Close()
 	in, err := ioutil.ReadAll(dec)
 	if err != nil {
 		t.Fatal(err)
@@ -130,6 +134,7 @@ func TestEncoder_EncodeAllEncodeXML(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			defer e.Close()
 			start := time.Now()
 			dst := e.EncodeAll(in, nil)
 			t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
@@ -183,6 +188,7 @@ func TestEncoderRegression(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
+					defer enc.Close()
 
 					for i, tt := range zr.File {
 						if !strings.HasSuffix(t.Name(), "") {
@@ -245,6 +251,12 @@ func TestEncoder_EncodeAllTwain(t *testing.T) {
 		testWindowSizes = []int{1 << 20}
 	}
 
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+
 	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
 			for _, windowSize := range testWindowSizes {
@@ -253,16 +265,13 @@ func TestEncoder_EncodeAllTwain(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
+					defer e.Close()
 					start := time.Now()
 					dst := e.EncodeAll(in, nil)
 					t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
 					mbpersec := (float64(len(in)) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
 					t.Logf("Encoded %d bytes with %.2f MB/s", len(in), mbpersec)
 
-					dec, err := NewReader(nil)
-					if err != nil {
-						t.Fatal(err)
-					}
 					decoded, err := dec.DecodeAll(dst, nil)
 					if err != nil {
 						t.Error(err, len(decoded))
@@ -288,6 +297,12 @@ func TestEncoder_EncodeAllPi(t *testing.T) {
 		testWindowSizes = []int{1 << 20}
 	}
 
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+
 	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
 			for _, windowSize := range testWindowSizes {
@@ -296,16 +311,13 @@ func TestEncoder_EncodeAllPi(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
+					defer e.Close()
 					start := time.Now()
 					dst := e.EncodeAll(in, nil)
 					t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
 					mbpersec := (float64(len(in)) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
 					t.Logf("Encoded %d bytes with %.2f MB/s", len(in), mbpersec)
 
-					dec, err := NewReader(nil)
-					if err != nil {
-						t.Fatal(err)
-					}
 					decoded, err := dec.DecodeAll(dst, nil)
 					if err != nil {
 						t.Error(err, len(decoded))
@@ -331,6 +343,7 @@ func TestWithEncoderPadding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer d.Close()
 
 	for i := 0; i < n; i++ {
 		padding := (rng.Int() & 0xfff) + 1
@@ -471,11 +484,13 @@ func testEncoderRoundtrip(t *testing.T, file string, wantCRC []byte) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			defer dec2.Close()
 
 			enc, err := NewWriter(pw, WithEncoderCRC(true), WithEncoderLevel(level))
 			if err != nil {
 				t.Fatal(err)
 			}
+			defer enc.Close()
 			var wantSize int64
 			start := time.Now()
 			go func() {
@@ -560,11 +575,13 @@ func testEncoderRoundtripWriter(t *testing.T, file string, wantCRC []byte) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer dec2.Close()
 
 	enc, err := NewWriter(pw, WithEncoderCRC(true))
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer enc.Close()
 	encW := writerWrapper{w: enc}
 	var wantSize int64
 	start := time.Now()
@@ -638,6 +655,7 @@ func TestEncoder_EncodeAllSilesia(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer dec.Close()
 	decoded, err := dec.DecodeAll(dst, nil)
 	if err != nil {
 		t.Error(err, len(decoded))
@@ -659,6 +677,7 @@ func TestEncoder_EncodeAllEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer e.Close()
 	dst := e.EncodeAll(in, nil)
 	if len(dst) == 0 {
 		t.Fatal("Requested zero frame, but got nothing.")
@@ -669,6 +688,7 @@ func TestEncoder_EncodeAllEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer dec.Close()
 	decoded, err := dec.DecodeAll(dst, nil)
 	if err != nil {
 		t.Error(err, len(decoded))
@@ -784,6 +804,7 @@ func BenchmarkEncoder_EncodeAllSimple(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	defer enc.Close()
 	dst := enc.EncodeAll(in, nil)
 	wantSize := len(dst)
 	b.ResetTimer()
@@ -876,6 +897,7 @@ func BenchmarkRandomEncodeAllFastest(b *testing.B) {
 		data[i] = uint8(rng.Intn(256))
 	}
 	enc, _ := NewWriter(nil, WithEncoderLevel(SpeedFastest), WithEncoderConcurrency(1))
+	defer enc.Close()
 	dst := enc.EncodeAll(data, nil)
 	wantSize := len(dst)
 	b.ResetTimer()
@@ -896,6 +918,7 @@ func BenchmarkRandomEncodeAllDefault(b *testing.B) {
 		data[i] = uint8(rng.Intn(256))
 	}
 	enc, _ := NewWriter(nil, WithEncoderLevel(SpeedDefault), WithEncoderConcurrency(1))
+	defer enc.Close()
 	dst := enc.EncodeAll(data, nil)
 	wantSize := len(dst)
 	b.ResetTimer()
@@ -917,6 +940,7 @@ func BenchmarkRandomEncoderFastest(b *testing.B) {
 	}
 	wantSize := int64(len(data))
 	enc, _ := NewWriter(ioutil.Discard, WithEncoderLevel(SpeedFastest))
+	defer enc.Close()
 	n, err := io.Copy(enc, bytes.NewBuffer(data))
 	if err != nil {
 		b.Fatal(err)
@@ -947,6 +971,7 @@ func BenchmarkRandomEncoderDefault(b *testing.B) {
 	}
 	wantSize := int64(len(data))
 	enc, _ := NewWriter(ioutil.Discard, WithEncoderLevel(SpeedDefault))
+	defer enc.Close()
 	n, err := io.Copy(enc, bytes.NewBuffer(data))
 	if err != nil {
 		b.Fatal(err)
