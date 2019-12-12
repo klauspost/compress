@@ -205,12 +205,12 @@ repeat_final:
 	IMULQ mul_tmp, val \
 	SHRQ  $50, val
 
-// func encodeBlock(dst, src []byte) (d int)
+// func encodeBlockAsmBlah(dst, src []byte) (d int)
 //
 // "var table [maxTableSize]uint32" takes up 65536 bytes of stack space. An
 // extra 56 bytes, to call other functions, and an extra 64 bytes, to spill
 // local variables (registers) during calls gives 65536 + 56 + 64 = 65656.
-TEXT ·encodeBlockAsm(SB), 0, $65656-56
+TEXT ·encodeBlockAsmBlah(SB), 0, $65656-56
 #define DST_PTR  DI
 #define SRC_BASE SI
 #define SRC_LEN  R14
