@@ -10,4 +10,4 @@ package s2
 // It assumes that the varint-encoded length of the decompressed bytes has already been written.
 // 
 //go:noescape
-func encodeBlockAsm(dst []byte, src []byte) int
+func genEncodeBlockAsm(dst []byte, src []byte) int

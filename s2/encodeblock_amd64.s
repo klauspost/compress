@@ -6,8 +6,8 @@
 
 #include "textflag.h"
 
-// func encodeBlockAsm(dst []byte, src []byte) int
-TEXT ·encodeBlockAsm(SB), NOSPLIT, $65656-56
+// func genEncodeBlockAsm(dst []byte, src []byte) int
+TEXT ·genEncodeBlockAsm(SB), NOSPLIT, $65656-56
 	MOVQ $0x00000200, AX
 	LEAQ 120(SP), CX
 	XORQ AX, AX
@@ -25,4 +25,6 @@ zeroloop:
 	ADDQ   $0x80, CX
 	DECQ   AX
 	JNZ    zeroloop
+	MOVQ   $0x0000cf1bbcdcbf9b, AX
+	XORQ   AX, AX
 	RET
