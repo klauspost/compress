@@ -28,3 +28,68 @@ zeroloop:
 	MOVQ   $0x0000cf1bbcdcbf9b, AX
 	XORQ   AX, AX
 	RET
+
+// func emitLiteral(dst []byte, lit []byte) int
+TEXT ·emitLiteral(SB), NOSPLIT, $32-56
+	MOVQ dst_base+0(FP), CX
+	MOVQ lit_base+24(FP), DX
+	MOVQ lit_len+32(FP), BX
+	MOVQ BX, AX
+	MOVQ BX, BP
+	SUBL $0x01, BP
+	JC   emitLiteralEndStandalone
+	CMPL BP, $0x3c
+	JLT  oneByteStandalone
+	CMPL BP, $0x00000100
+	JLT  twoBytesStandalone
+	CMPL BP, $0x00010000
+	JLT  threeBytesStandalone
+	CMPL BP, $0x01000000
+	JLT  fourBytesStandalone
+	MOVB $0xfc, (CX)
+	MOVL BP, 1(CX)
+	ADDQ $0x05, AX
+	ADDQ $0x05, CX
+	JMP  memmoveStandalone
+
+fourBytesStandalone:
+	MOVQ BP, SI
+	SHRL $0x10, SI
+	MOVB $0xf8, (CX)
+	MOVW BP, 1(CX)
+	MOVB SI, 3(CX)
+	ADDQ $0x04, AX
+	ADDQ $0x04, CX
+	JMP  memmoveStandalone
+
+threeBytesStandalone:
+	MOVB $0xf4, (CX)
+	MOVW BP, 1(CX)
+	ADDQ $0x03, AX
+	ADDQ $0x03, CX
+	JMP  memmoveStandalone
+
+twoBytesStandalone:
+	MOVB $0xf0, (CX)
+	MOVB BP, 1(CX)
+	ADDQ $0x02, AX
+	ADDQ $0x02, CX
+	JMP  memmoveStandalone
+
+oneByteStandalone:
+	SHLB $0x02, BP
+	MOVB BP, (CX)
+	ADDQ $0x01, AX
+	ADDQ $0x01, CX
+
+memmoveStandalone:
+	MOVQ CX, (SP)
+	MOVQ DX, 8(SP)
+	MOVQ BX, 16(SP)
+	MOVQ AX, 24(SP)
+	CALL runtime·memmove(SB)
+	MOVQ 24(SP), AX
+
+emitLiteralEndStandalone:
+	MOVQ AX, ret+48(FP)
+	RET

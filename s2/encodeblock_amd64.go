@@ -8,6 +8,12 @@ package s2
 
 // encodeBlock encodes a non-empty src to a guaranteed-large-enough dst.
 // It assumes that the varint-encoded length of the decompressed bytes has already been written.
-// 
+//
 //go:noescape
 func genEncodeBlockAsm(dst []byte, src []byte) int
+
+// encodeBlock encodes a non-empty src to a guaranteed-large-enough dst.
+// It assumes that the varint-encoded length of the decompressed bytes has already been written.
+//
+//go:noescape
+func emitLiteral(dst []byte, lit []byte) int
