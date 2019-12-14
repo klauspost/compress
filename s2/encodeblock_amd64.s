@@ -31,11 +31,11 @@ zeroloop:
 
 // func emitLiteral(dst []byte, lit []byte) int
 TEXT ·emitLiteral(SB), NOSPLIT, $32-56
-	MOVQ dst_base+0(FP), CX
-	MOVQ lit_base+24(FP), DX
-	MOVQ lit_len+32(FP), BX
-	MOVQ BX, AX
-	MOVQ BX, BP
+	MOVQ dst_base+0(FP), AX
+	MOVQ lit_base+24(FP), CX
+	MOVQ lit_len+32(FP), DX
+	MOVQ DX, BX
+	MOVQ DX, BP
 	SUBL $0x01, BP
 	JC   emitLiteralEndStandalone
 	CMPL BP, $0x3c
@@ -46,50 +46,337 @@ TEXT ·emitLiteral(SB), NOSPLIT, $32-56
 	JLT  threeBytesStandalone
 	CMPL BP, $0x01000000
 	JLT  fourBytesStandalone
-	MOVB $0xfc, (CX)
-	MOVL BP, 1(CX)
+	MOVB $0xfc, (AX)
+	MOVL BP, 1(AX)
+	ADDQ $0x05, BX
 	ADDQ $0x05, AX
-	ADDQ $0x05, CX
 	JMP  memmoveStandalone
 
 fourBytesStandalone:
 	MOVQ BP, SI
 	SHRL $0x10, SI
-	MOVB $0xf8, (CX)
-	MOVW BP, 1(CX)
-	MOVB SI, 3(CX)
+	MOVB $0xf8, (AX)
+	MOVW BP, 1(AX)
+	MOVB SI, 3(AX)
+	ADDQ $0x04, BX
 	ADDQ $0x04, AX
-	ADDQ $0x04, CX
 	JMP  memmoveStandalone
 
 threeBytesStandalone:
-	MOVB $0xf4, (CX)
-	MOVW BP, 1(CX)
+	MOVB $0xf4, (AX)
+	MOVW BP, 1(AX)
+	ADDQ $0x03, BX
 	ADDQ $0x03, AX
-	ADDQ $0x03, CX
 	JMP  memmoveStandalone
 
 twoBytesStandalone:
-	MOVB $0xf0, (CX)
-	MOVB BP, 1(CX)
+	MOVB $0xf0, (AX)
+	MOVB BP, 1(AX)
+	ADDQ $0x02, BX
 	ADDQ $0x02, AX
-	ADDQ $0x02, CX
 	JMP  memmoveStandalone
 
 oneByteStandalone:
 	SHLB $0x02, BP
-	MOVB BP, (CX)
+	MOVB BP, (AX)
+	ADDQ $0x01, BX
 	ADDQ $0x01, AX
-	ADDQ $0x01, CX
 
 memmoveStandalone:
-	MOVQ CX, (SP)
-	MOVQ DX, 8(SP)
-	MOVQ BX, 16(SP)
-	MOVQ AX, 24(SP)
+	MOVQ AX, (SP)
+	MOVQ CX, 8(SP)
+	MOVQ DX, 16(SP)
+	MOVQ BX, 24(SP)
 	CALL runtime·memmove(SB)
-	MOVQ 24(SP), AX
+	MOVQ 24(SP), BX
 
 emitLiteralEndStandalone:
-	MOVQ AX, ret+48(FP)
+	MOVQ BX, ret+48(FP)
+	RET
+
+// func emitRepeat(dst []byte, offset int, length int) int
+TEXT ·emitRepeat(SB), NOSPLIT, $0-48
+	XORQ BX, BX
+	MOVQ dst_base+0(FP), AX
+	MOVQ offset+24(FP), CX
+	MOVQ length+32(FP), DX
+	MOVQ DX, BP
+	LEAQ -4(DX), DX
+	CMPL BP, $0x08
+	JLE  repeat_twoStandalone
+	CMPL BP, $0x0c
+	JGE  cant_repeat_two_offsetStandalone
+	CMPL CX, $0x00000800
+	JLT  repeat_two_offsetStandalone
+
+cant_repeat_two_offsetStandalone:
+	CMPL DX, $0x00000104
+	JLT  repeat_threeStandalone
+	CMPL DX, $0x00010100
+	JLT  repeat_fourStandalone
+	CMPL DX, $0x0100ffff
+	JLT  repeat_fiveStandalone
+	LEAQ -16842747(DX), DX
+	MOVW $0x001d, (AX)
+	MOVW $0xfffb, 2(AX)
+	MOVB $0xff, 4(AX)
+	ADDQ $0x05, AX
+	ADDQ $0x05, BX
+	JMP  genEmitRepeatEnd
+
+repeat_fiveStandalone:
+	LEAQ -65536(DX), DX
+	MOVQ DX, CX
+	MOVW $0x001d, (AX)
+	MOVW DX, 2(AX)
+	SARQ $0x10, CX
+	MOVB CL, 4(AX)
+	ADDQ $0x05, BX
+	ADDQ $0x05, AX
+	JMP  genEmitRepeatEnd
+
+repeat_fourStandalone:
+	LEAQ -256(DX), DX
+	MOVW $0x0019, (AX)
+	MOVW DX, 2(AX)
+	ADDQ $0x04, BX
+	ADDQ $0x04, AX
+	JMP  genEmitRepeatEnd
+
+repeat_threeStandalone:
+	LEAQ -4(DX), DX
+	MOVW $0x0015, (AX)
+	MOVB DL, 2(AX)
+	ADDQ $0x03, BX
+	ADDQ $0x03, AX
+	JMP  genEmitRepeatEnd
+
+repeat_twoStandalone:
+	SHLL $0x02, DX
+	ORL  $0x01, DX
+	MOVW DX, (AX)
+	ADDQ $0x02, BX
+	ADDQ $0x02, AX
+	JMP  genEmitRepeatEnd
+
+repeat_two_offsetStandalone:
+	MOVB CL, 1(AX)
+	SARL $0x08, CX
+	SHLL $0x05, CX
+	SHLL $0x02, DX
+	ORL  $0x01, DX
+	ORL  CX, DX
+	MOVB DL, (AX)
+	ADDQ $0x02, BX
+	ADDQ $0x02, AX
+
+genEmitRepeatEnd:
+	MOVQ BX, ret+40(FP)
+	RET
+
+// func emitCopy(dst []byte, offset int, length int) int
+TEXT ·emitCopy(SB), NOSPLIT, $0-48
+	XORQ BX, BX
+	MOVQ dst_base+0(FP), AX
+	MOVQ offset+24(FP), CX
+	MOVQ length+32(FP), DX
+	CMPL CX, $0x00010000
+	JL   twoByteOffsetStandalone
+	CMPL DX, $0x40
+	JLE  fourBytesRemainStandalone
+	MOVB $0xff, (AX)
+	MOVD CX, 1(AX)
+	LEAQ -64(DX), DX
+	ADDQ $0x05, BX
+	CMPL DX, $0x04
+	JL   fourBytesRemainStandalone
+	ADDQ $0x05, AX
+	MOVQ DX, BP
+	LEAQ -4(DX), DX
+	CMPL BP, $0x08
+	JLE  repeat_twoStandaloneEmitCopy
+	CMPL BP, $0x0c
+	JGE  cant_repeat_two_offsetStandaloneEmitCopy
+	CMPL CX, $0x00000800
+	JLT  repeat_two_offsetStandaloneEmitCopy
+
+cant_repeat_two_offsetStandaloneEmitCopy:
+	CMPL DX, $0x00000104
+	JLT  repeat_threeStandaloneEmitCopy
+	CMPL DX, $0x00010100
+	JLT  repeat_fourStandaloneEmitCopy
+	CMPL DX, $0x0100ffff
+	JLT  repeat_fiveStandaloneEmitCopy
+	LEAQ -16842747(DX), DX
+	MOVW $0x001d, (AX)
+	MOVW $0xfffb, 2(AX)
+	MOVB $0xff, 4(AX)
+	ADDQ $0x05, AX
+	ADDQ $0x05, BX
+	JMP  genEmitCopyEnd
+
+repeat_fiveStandaloneEmitCopy:
+	LEAQ -65536(DX), DX
+	MOVQ DX, CX
+	MOVW $0x001d, (AX)
+	MOVW DX, 2(AX)
+	SARQ $0x10, CX
+	MOVB CL, 4(AX)
+	ADDQ $0x05, BX
+	ADDQ $0x05, AX
+	JMP  genEmitCopyEnd
+
+repeat_fourStandaloneEmitCopy:
+	LEAQ -256(DX), DX
+	MOVW $0x0019, (AX)
+	MOVW DX, 2(AX)
+	ADDQ $0x04, BX
+	ADDQ $0x04, AX
+	JMP  genEmitCopyEnd
+
+repeat_threeStandaloneEmitCopy:
+	LEAQ -4(DX), DX
+	MOVW $0x0015, (AX)
+	MOVB DL, 2(AX)
+	ADDQ $0x03, BX
+	ADDQ $0x03, AX
+	JMP  genEmitCopyEnd
+
+repeat_twoStandaloneEmitCopy:
+	SHLL $0x02, DX
+	ORL  $0x01, DX
+	MOVW DX, (AX)
+	ADDQ $0x02, BX
+	ADDQ $0x02, AX
+	JMP  genEmitCopyEnd
+
+repeat_two_offsetStandaloneEmitCopy:
+	MOVB CL, 1(AX)
+	SARL $0x08, CX
+	SHLL $0x05, CX
+	SHLL $0x02, DX
+	ORL  $0x01, DX
+	ORL  CX, DX
+	MOVB DL, (AX)
+	ADDQ $0x02, BX
+	ADDQ $0x02, AX
+	JMP  genEmitCopyEnd
+
+fourBytesRemainStandalone:
+	JZ   genEmitCopyEnd
+	LEAQ -1(DX), DX
+	SHLQ $0x02, DX
+	ORQ  $0x03, DX
+	MOVB DL, (AX)
+	MOVD CX, 1(AX)
+	ADDQ $0x05, BX
+	ADDQ $0x05, AX
+	JMP  genEmitCopyEnd
+
+twoByteOffsetStandalone:
+	CMPL DX, $0x40
+	JLE  twoByteOffsetShortStandalone
+	MOVB $0xee, (AX)
+	MOVW CX, 1(AX)
+	LEAQ -60(DX), DX
+	ADDQ $0x03, AX
+	ADDQ $0x03, BX
+	MOVQ DX, BP
+	LEAQ -4(DX), DX
+	CMPL BP, $0x08
+	JLE  repeat_twoStandaloneEmitCopyShort
+	CMPL BP, $0x0c
+	JGE  cant_repeat_two_offsetStandaloneEmitCopyShort
+	CMPL CX, $0x00000800
+	JLT  repeat_two_offsetStandaloneEmitCopyShort
+
+cant_repeat_two_offsetStandaloneEmitCopyShort:
+	CMPL DX, $0x00000104
+	JLT  repeat_threeStandaloneEmitCopyShort
+	CMPL DX, $0x00010100
+	JLT  repeat_fourStandaloneEmitCopyShort
+	CMPL DX, $0x0100ffff
+	JLT  repeat_fiveStandaloneEmitCopyShort
+	LEAQ -16842747(DX), DX
+	MOVW $0x001d, (AX)
+	MOVW $0xfffb, 2(AX)
+	MOVB $0xff, 4(AX)
+	ADDQ $0x05, AX
+	ADDQ $0x05, BX
+	JMP  genEmitCopyEnd
+
+repeat_fiveStandaloneEmitCopyShort:
+	LEAQ -65536(DX), DX
+	MOVQ DX, CX
+	MOVW $0x001d, (AX)
+	MOVW DX, 2(AX)
+	SARQ $0x10, CX
+	MOVB CL, 4(AX)
+	ADDQ $0x05, BX
+	ADDQ $0x05, AX
+	JMP  genEmitCopyEnd
+
+repeat_fourStandaloneEmitCopyShort:
+	LEAQ -256(DX), DX
+	MOVW $0x0019, (AX)
+	MOVW DX, 2(AX)
+	ADDQ $0x04, BX
+	ADDQ $0x04, AX
+	JMP  genEmitCopyEnd
+
+repeat_threeStandaloneEmitCopyShort:
+	LEAQ -4(DX), DX
+	MOVW $0x0015, (AX)
+	MOVB DL, 2(AX)
+	ADDQ $0x03, BX
+	ADDQ $0x03, AX
+	JMP  genEmitCopyEnd
+
+repeat_twoStandaloneEmitCopyShort:
+	SHLL $0x02, DX
+	ORL  $0x01, DX
+	MOVW DX, (AX)
+	ADDQ $0x02, BX
+	ADDQ $0x02, AX
+	JMP  genEmitCopyEnd
+
+repeat_two_offsetStandaloneEmitCopyShort:
+	MOVB CL, 1(AX)
+	SARL $0x08, CX
+	SHLL $0x05, CX
+	SHLL $0x02, DX
+	ORL  $0x01, DX
+	ORL  CX, DX
+	MOVB DL, (AX)
+	ADDQ $0x02, BX
+	ADDQ $0x02, AX
+	JMP  genEmitCopyEnd
+
+twoByteOffsetShortStandalone:
+	CMPL DX, $0x0c
+	JGE  emitCopyThreeStandalone
+	CMPL CX, $0x00000800
+	JGE  emitCopyThreeStandalone
+	MOVB CL, 1(AX)
+	SARL $0x08, CX
+	SHLL $0x05, CX
+	SHLL $0x02, DX
+	ORL  $0x01, DX
+	ORL  CX, DX
+	MOVB DL, (AX)
+	ADDQ $0x02, BX
+	ADDQ $0x02, AX
+	JMP  genEmitCopyEnd
+
+emitCopyThreeStandalone:
+	SUBB $0x01, DL
+	SHLB $0x02, DL
+	ORB  $0x02, DL
+	MOVB DL, (AX)
+	MOVW CX, 1(AX)
+	ADDQ $0x03, BX
+	ADDQ $0x03, AX
+
+genEmitCopyEnd:
+	MOVQ BX, ret+40(FP)
 	RET

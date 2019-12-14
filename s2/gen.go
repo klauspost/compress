@@ -20,6 +20,8 @@ func main() {
 
 	genEncodeBlockAsm()
 	genEmitLiteral()
+	genEmitRepeat()
+	genEmitCopy()
 	Generate()
 }
 
@@ -114,24 +116,27 @@ func (h hashGen) hash(val reg.GPVirtual) {
 
 func genEmitLiteral() {
 	TEXT("emitLiteral", NOSPLIT, "func(dst, lit []byte) int")
-	Doc("encodeBlock encodes a non-empty src to a guaranteed-large-enough dst.",
-		"It assumes that the varint-encoded length of the decompressed bytes has already been written.", "")
+	Doc("emitLiteral writes a literal chunk and returns the number of bytes written.", "",
+		"It assumes that:",
+		"dst is long enough to hold the encoded bytes",
+		"0 <= len(lit) && len(lit) <= math.MaxUint32", "")
 	Pragma("noescape")
 
 	// The 24 bytes of stack space is to call runtime·memmove.
 	stack := AllocLocal(32)
-	retval := GP64().As64()
 
-	dstBase := Load(Param("dst").Base(), GP64())
-	litBase := Load(Param("lit").Base(), GP64())
-	litLen := Load(Param("lit").Len(), GP64())
+	dstBase, litBase, litLen, retval := GP64(), GP64(), GP64(), GP64()
+	Load(Param("dst").Base(), dstBase)
+	Load(Param("lit").Base(), litBase)
+	Load(Param("lit").Len(), litLen)
 	emitLiteral("Standalone", GP64(), GP64(), litLen, retval, dstBase, litBase, stack)
 	Store(retval, ReturnIndex(0))
 	RET()
 }
 
+// emitLiteral can be used for inlining an emitLiteral call.
 // stack must have at least 32 bytes
-func emitLiteral(name string, tmp1, tmp2 reg.GPVirtual, litLen, retval, dstBase, litBase reg.Register, stack Mem) {
+func emitLiteral(name string, tmp1, tmp2, litLen, retval, dstBase, litBase reg.GPVirtual, stack Mem) {
 	n := tmp1
 	n16 := tmp2
 
@@ -206,4 +211,270 @@ func emitLiteral(name string, tmp1, tmp2 reg.GPVirtual, litLen, retval, dstBase,
 	MOVQ(stack.Offset(24), retval)
 
 	Label("emitLiteralEnd" + name)
+}
+
+// genEmitRepeat generates a standlone emitRepeat.
+func genEmitRepeat() {
+	TEXT("emitRepeat", NOSPLIT, "func(dst []byte, offset, length int) int")
+	Doc("emitRepeat writes a repeat chunk and returns the number of bytes written.",
+		"Length must be at least 4 and < 1<<32", "")
+	Pragma("noescape")
+
+	dstBase, offset, length, retval := GP64(), GP64(), GP64(), GP64()
+
+	// retval = 0
+	XORQ(retval, retval)
+
+	Load(Param("dst").Base(), dstBase)
+	Load(Param("offset"), offset)
+	Load(Param("length"), length)
+	emitRepeat("Standalone", length, offset, retval, dstBase, LabelRef("genEmitRepeatEnd"))
+	Label("genEmitRepeatEnd")
+	Store(retval, ReturnIndex(0))
+	RET()
+}
+
+// emitRepeat can be used for inlining an emitRepeat call.
+// length >= 4 and < 1<<32
+// length is modified. dstBase is updated. retval is added to input.
+// Will jump to end label when finished.
+func emitRepeat(name string, length, offset, retval, dstBase reg.GPVirtual, end LabelRef) {
+	Label("emit_repeat_again" + name)
+	tmp := GP64()
+	MOVQ(length, tmp) // Copy length
+	// length -= 4
+	LEAQ(Mem{Base: length, Disp: -4}, length)
+
+	// if length <= 4 (use copied value)
+	CMPL(tmp.As32(), U8(8))
+	JLE(LabelRef("repeat_two" + name))
+
+	// length < 8 && offset < 2048
+	CMPL(tmp.As32(), U8(12))
+	JGE(LabelRef("cant_repeat_two_offset" + name))
+	CMPL(offset.As32(), U32(2048))
+	JLT(LabelRef("repeat_two_offset" + name))
+
+	Label("cant_repeat_two_offset" + name)
+	CMPL(length.As32(), U32(260))
+	JLT(LabelRef("repeat_three" + name)) // if length < (1<<8)+4
+	CMPL(length.As32(), U32(65792))
+	JLT(LabelRef("repeat_four" + name)) // if length < (1 << 16) + (1 << 8)
+	CMPL(length.As32(), U32(16842751))  // 16777215+65536
+	JLT(LabelRef("repeat_five" + name))
+
+	// We have have more than 24 bits
+	// Emit so we have at least 4 bytes left.
+	LEAQ(Mem{Base: length, Disp: -16842747}, length) // length -= (maxRepeat - 4) + 65536
+	MOVW(U16(7<<2|tagCopy1), Mem{Base: dstBase})     // dst[0] = 7<<2 | tagCopy1, dst[1] = 0
+	MOVW(U16(65531), Mem{Base: dstBase, Disp: 2})    // 0xfffb
+	MOVB(U8(255), Mem{Base: dstBase, Disp: 4})
+	ADDQ(U8(5), dstBase)
+	ADDQ(U8(5), retval)
+	JMP(end)
+
+	// Must be able to be within 5 bytes.
+	Label("repeat_five" + name)
+	LEAQ(Mem{Base: length, Disp: -65536}, length) // length -= 65536
+	MOVQ(length, offset)
+	MOVW(U16(7<<2|tagCopy1), Mem{Base: dstBase})     // dst[0] = 7<<2 | tagCopy1, dst[1] = 0
+	MOVW(length.As16(), Mem{Base: dstBase, Disp: 2}) // dst[2] = uint8(length), dst[3] = uint8(length >> 8)
+	SARQ(U8(16), offset)                             // offset = length >> 16
+	MOVB(offset.As8(), Mem{Base: dstBase, Disp: 4})  // dst[4] = length >> 16
+	ADDQ(U8(5), retval)                              // i += 5
+	ADDQ(U8(5), dstBase)                             // dst += 5
+	JMP(end)
+
+	Label("repeat_four" + name)
+	LEAQ(Mem{Base: length, Disp: -256}, length)      // length -= 256
+	MOVW(U16(6<<2|tagCopy1), Mem{Base: dstBase})     // dst[0] = 6<<2 | tagCopy1, dst[1] = 0
+	MOVW(length.As16(), Mem{Base: dstBase, Disp: 2}) // dst[2] = uint8(length), dst[3] = uint8(length >> 8)
+	ADDQ(U8(4), retval)                              // i += 4
+	ADDQ(U8(4), dstBase)                             // dst += 4
+	JMP(end)
+
+	Label("repeat_three" + name)
+	LEAQ(Mem{Base: length, Disp: -4}, length)       // length -= 4
+	MOVW(U16(5<<2|tagCopy1), Mem{Base: dstBase})    // dst[0] = 5<<2 | tagCopy1, dst[1] = 0
+	MOVB(length.As8(), Mem{Base: dstBase, Disp: 2}) // dst[2] = uint8(length)
+	ADDQ(U8(3), retval)                             // i += 3
+	ADDQ(U8(3), dstBase)                            // dst += 3
+	JMP(end)
+
+	Label("repeat_two" + name)
+	// dst[0] = uint8(length)<<2 | tagCopy1, dst[1] = 0
+	SHLL(U8(2), length.As32())
+	ORL(U8(tagCopy1), length.As32())
+	MOVW(length.As16(), Mem{Base: dstBase}) // dst[0] = 7<<2 | tagCopy1, dst[1] = 0
+	ADDQ(U8(2), retval)                     // i += 2
+	ADDQ(U8(2), dstBase)                    // dst += 2
+	JMP(end)
+
+	Label("repeat_two_offset" + name)
+	// dst[0] = uint8(offset>>8)<<5 | uint8(length)<<2 | tagCopy1
+	// dst[1] = uint8(offset)
+	MOVB(offset.As8(), Mem{Base: dstBase, Disp: 1}) // Store offset lower byte
+	SARL(U8(8), offset.As32())                      // Remove lower
+	SHLL(U8(5), offset.As32())                      // Shift back up
+	SHLL(U8(2), length.As32())                      // Place length
+	ORL(U8(tagCopy1), length.As32())                // Add tagCopy1
+	ORL(offset.As32(), length.As32())               // OR result
+	MOVB(length.As8(), Mem{Base: dstBase, Disp: 0})
+	ADDQ(U8(2), retval)  // i += 2
+	ADDQ(U8(2), dstBase) // dst += 2
+	JMP(end)
+}
+
+// emitCopy writes a copy chunk and returns the number of bytes written.
+//
+// It assumes that:
+//	dst is long enough to hold the encoded bytes
+//	1 <= offset && offset <= math.MaxUint32
+//	4 <= length && length <= 1 << 24
+
+// genEmitCopy generates a standlone emitCopy
+func genEmitCopy() {
+	TEXT("emitCopy", NOSPLIT, "func(dst []byte, offset, length int) int")
+	Doc("emitCopy writes a copy chunk and returns the number of bytes written.", "",
+		"It assumes that:",
+		"	dst is long enough to hold the encoded bytes",
+		"	1 <= offset && offset <= math.MaxUint32",
+		"4 <= length && length <= 1 << 24", "")
+	Pragma("noescape")
+
+	dstBase, offset, length, retval := GP64(), GP64(), GP64(), GP64()
+
+	//	i := 0
+	XORQ(retval, retval)
+
+	Load(Param("dst").Base(), dstBase)
+	Load(Param("offset"), offset)
+	Load(Param("length"), length)
+	emitCopy("Standalone", length, offset, retval, dstBase, LabelRef("genEmitCopyEnd"))
+	Label("genEmitCopyEnd")
+	Store(retval, ReturnIndex(0))
+	RET()
+}
+
+const (
+	tagLiteral = 0x00
+	tagCopy1   = 0x01
+	tagCopy2   = 0x02
+	tagCopy4   = 0x03
+)
+
+// emitCopy can be used for inlining an emitCopy call.
+// length is modified (and junk). dstBase is updated. retval is added to input.
+// Will jump to end label when finished.
+func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end LabelRef) {
+	//if offset >= 65536 {
+	CMPL(offset.As32(), U32(65536))
+	JL(LabelRef("twoByteOffset" + name))
+	//	if length > 64 {
+	CMPL(length.As32(), U8(64))
+	JLE(LabelRef("fourBytesRemain" + name))
+	// Emit a length 64 copy, encoded as 5 bytes.
+	//		dst[0] = 63<<2 | tagCopy4
+	MOVB(U8(63<<2|tagCopy4), Mem{Base: dstBase})
+	//		dst[4] = uint8(offset >> 24)
+	//		dst[3] = uint8(offset >> 16)
+	//		dst[2] = uint8(offset >> 8)
+	//		dst[1] = uint8(offset)
+	MOVD(offset, Mem{Base: dstBase, Disp: 1})
+	//		length -= 64
+	LEAQ(Mem{Base: length, Disp: -64}, length)
+	ADDQ(U8(5), retval) // i+=5
+	//		if length >= 4 {
+	CMPL(length.As32(), U8(4))
+	JL(LabelRef("fourBytesRemain" + name))
+
+	// Emit remaining as repeats
+	//	return 5 + emitRepeat(dst[5:], offset, length)
+	ADDQ(U8(5), dstBase)
+	// Inline call to emitRepeat. Will jump to end
+	emitRepeat(name+"EmitCopy", length, offset, retval, dstBase, end)
+
+	// Relies on flags being set before call to here.
+	Label("fourBytesRemain" + name)
+	//	if length == 0 {
+	//		return i
+	//	}
+	JZ(end)
+
+	// Emit a copy, offset encoded as 4 bytes.
+	//	dst[i+0] = uint8(length-1)<<2 | tagCopy4
+	//	dst[i+1] = uint8(offset)
+	//	dst[i+2] = uint8(offset >> 8)
+	//	dst[i+3] = uint8(offset >> 16)
+	//	dst[i+4] = uint8(offset >> 24)
+	LEAQ(Mem{Base: length, Disp: -1}, length)
+	SHLQ(U8(2), length)
+	ORQ(U8(tagCopy4), length)
+	MOVB(length.As8(), Mem{Base: dstBase})
+	MOVD(offset, Mem{Base: dstBase, Disp: 1})
+	//	return i + 5
+	ADDQ(U8(5), retval)
+	ADDQ(U8(5), dstBase)
+	JMP(end)
+
+	Label("twoByteOffset" + name)
+	// Offset no more than 2 bytes.
+
+	//if length > 64 {
+	CMPL(length.As32(), U8(64))
+	JLE(LabelRef("twoByteOffsetShort" + name))
+	// Emit a length 60 copy, encoded as 3 bytes.
+	// Emit remaining as repeat value (minimum 4 bytes).
+	//	dst[2] = uint8(offset >> 8)
+	//	dst[1] = uint8(offset)
+	//	dst[0] = 59<<2 | tagCopy2
+	MOVB(U8(59<<2|tagCopy2), Mem{Base: dstBase})
+	MOVW(offset.As16(), Mem{Base: dstBase, Disp: 1})
+	//	length -= 60
+	LEAQ(Mem{Base: length, Disp: -60}, length)
+
+	// Emit remaining as repeats, at least 4 bytes remain.
+	//	return 3 + emitRepeat(dst[3:], offset, length)
+	//}
+	ADDQ(U8(3), dstBase)
+	ADDQ(U8(3), retval)
+	// Inline call to emitRepeat. Will jump to end
+	emitRepeat(name+"EmitCopyShort", length, offset, retval, dstBase, end)
+
+	Label("twoByteOffsetShort" + name)
+	//if length >= 12 || offset >= 2048 {
+	CMPL(length.As32(), U8(12))
+	JGE(LabelRef("emitCopyThree" + name))
+	CMPL(offset.As32(), U32(2048))
+	JGE(LabelRef("emitCopyThree" + name))
+
+	//Emit the remaining copy, encoded as 2 bytes.
+	// dst[0] = uint8(offset>>8)<<5 | uint8(length)<<2 | tagCopy1
+	// dst[1] = uint8(offset)
+	MOVB(offset.As8(), Mem{Base: dstBase, Disp: 1}) // Store offset lower byte
+	SARL(U8(8), offset.As32())                      // Remove lower
+	SHLL(U8(5), offset.As32())                      // Shift back up
+	SHLL(U8(2), length.As32())                      // Place lenght
+	ORL(U8(1), length.As32())                       // Add tagCopy1
+	ORL(offset.As32(), length.As32())               // OR result
+	MOVB(length.As8(), Mem{Base: dstBase, Disp: 0})
+	ADDQ(U8(2), retval)  // i += 2
+	ADDQ(U8(2), dstBase) // dst += 2
+	// return 2
+	JMP(end)
+
+	Label("emitCopyThree" + name)
+	//	// Emit the remaining copy, encoded as 3 bytes.
+	//	dst[2] = uint8(offset >> 8)
+	//	dst[1] = uint8(offset)
+	//	dst[0] = uint8(length-1)<<2 | tagCopy2
+	SUBB(U8(1), length.As8())
+	SHLB(U8(2), length.As8())
+	ORB(U8(tagCopy2), length.As8())
+	MOVB(length.As8(), Mem{Base: dstBase})
+	MOVW(offset.As16(), Mem{Base: dstBase, Disp: 1})
+	//	return 3
+	ADDQ(U8(3), retval)  // i += 3
+	ADDQ(U8(3), dstBase) // dst += 3
+	JMP(end)
 }
