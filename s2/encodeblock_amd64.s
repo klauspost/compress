@@ -100,6 +100,8 @@ TEXT ·emitRepeat(SB), NOSPLIT, $0-48
 	MOVQ dst_base+0(FP), AX
 	MOVQ offset+24(FP), CX
 	MOVQ length+32(FP), DX
+
+emit_repeat_againStandalone:
 	MOVQ DX, BP
 	LEAQ -4(DX), DX
 	CMPL BP, $0x08
@@ -122,7 +124,7 @@ cant_repeat_two_offsetStandalone:
 	MOVB $0xff, 4(AX)
 	ADDQ $0x05, AX
 	ADDQ $0x05, BX
-	JMP  genEmitRepeatEnd
+	JMP  emit_repeat_againStandalone
 
 repeat_fiveStandalone:
 	LEAQ -65536(DX), DX
@@ -160,11 +162,11 @@ repeat_twoStandalone:
 	JMP  genEmitRepeatEnd
 
 repeat_two_offsetStandalone:
+	XORQ BP, BP
+	LEAQ 1(BP)(DX*4), DX
 	MOVB CL, 1(AX)
 	SARL $0x08, CX
 	SHLL $0x05, CX
-	SHLL $0x02, DX
-	ORL  $0x01, DX
 	ORL  CX, DX
 	MOVB DL, (AX)
 	ADDQ $0x02, BX
@@ -188,9 +190,11 @@ TEXT ·emitCopy(SB), NOSPLIT, $0-48
 	MOVD CX, 1(AX)
 	LEAQ -64(DX), DX
 	ADDQ $0x05, BX
+	ADDQ $0x05, AX
 	CMPL DX, $0x04
 	JL   fourBytesRemainStandalone
-	ADDQ $0x05, AX
+
+emit_repeat_againStandaloneEmitCopy:
 	MOVQ DX, BP
 	LEAQ -4(DX), DX
 	CMPL BP, $0x08
@@ -213,7 +217,7 @@ cant_repeat_two_offsetStandaloneEmitCopy:
 	MOVB $0xff, 4(AX)
 	ADDQ $0x05, AX
 	ADDQ $0x05, BX
-	JMP  genEmitCopyEnd
+	JMP  emit_repeat_againStandaloneEmitCopy
 
 repeat_fiveStandaloneEmitCopy:
 	LEAQ -65536(DX), DX
@@ -251,11 +255,11 @@ repeat_twoStandaloneEmitCopy:
 	JMP  genEmitCopyEnd
 
 repeat_two_offsetStandaloneEmitCopy:
+	XORQ BP, BP
+	LEAQ 1(BP)(DX*4), DX
 	MOVB CL, 1(AX)
 	SARL $0x08, CX
 	SHLL $0x05, CX
-	SHLL $0x02, DX
-	ORL  $0x01, DX
 	ORL  CX, DX
 	MOVB DL, (AX)
 	ADDQ $0x02, BX
@@ -264,9 +268,8 @@ repeat_two_offsetStandaloneEmitCopy:
 
 fourBytesRemainStandalone:
 	JZ   genEmitCopyEnd
-	LEAQ -1(DX), DX
-	SHLQ $0x02, DX
-	ORQ  $0x03, DX
+	MOVB $0x03, BP
+	LEAQ -4(BP)(DX*4), DX
 	MOVB DL, (AX)
 	MOVD CX, 1(AX)
 	ADDQ $0x05, BX
@@ -281,6 +284,8 @@ twoByteOffsetStandalone:
 	LEAQ -60(DX), DX
 	ADDQ $0x03, AX
 	ADDQ $0x03, BX
+
+emit_repeat_againStandaloneEmitCopyShort:
 	MOVQ DX, BP
 	LEAQ -4(DX), DX
 	CMPL BP, $0x08
@@ -303,7 +308,7 @@ cant_repeat_two_offsetStandaloneEmitCopyShort:
 	MOVB $0xff, 4(AX)
 	ADDQ $0x05, AX
 	ADDQ $0x05, BX
-	JMP  genEmitCopyEnd
+	JMP  emit_repeat_againStandaloneEmitCopyShort
 
 repeat_fiveStandaloneEmitCopyShort:
 	LEAQ -65536(DX), DX
@@ -341,11 +346,11 @@ repeat_twoStandaloneEmitCopyShort:
 	JMP  genEmitCopyEnd
 
 repeat_two_offsetStandaloneEmitCopyShort:
+	XORQ BP, BP
+	LEAQ 1(BP)(DX*4), DX
 	MOVB CL, 1(AX)
 	SARL $0x08, CX
 	SHLL $0x05, CX
-	SHLL $0x02, DX
-	ORL  $0x01, DX
 	ORL  CX, DX
 	MOVB DL, (AX)
 	ADDQ $0x02, BX
@@ -357,11 +362,11 @@ twoByteOffsetShortStandalone:
 	JGE  emitCopyThreeStandalone
 	CMPL CX, $0x00000800
 	JGE  emitCopyThreeStandalone
+	MOVB $0x01, BP
+	LEAQ -16(BP)(DX*4), DX
 	MOVB CL, 1(AX)
 	SARL $0x08, CX
 	SHLL $0x05, CX
-	SHLL $0x02, DX
-	ORL  $0x01, DX
 	ORL  CX, DX
 	MOVB DL, (AX)
 	ADDQ $0x02, BX
@@ -369,9 +374,8 @@ twoByteOffsetShortStandalone:
 	JMP  genEmitCopyEnd
 
 emitCopyThreeStandalone:
-	SUBB $0x01, DL
-	SHLB $0x02, DL
-	ORB  $0x02, DL
+	MOVB $0x02, BP
+	LEAQ -4(BP)(DX*4), DX
 	MOVB DL, (AX)
 	MOVW CX, 1(AX)
 	ADDQ $0x03, BX

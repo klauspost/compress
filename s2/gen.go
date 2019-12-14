@@ -272,7 +272,7 @@ func emitRepeat(name string, length, offset, retval, dstBase reg.GPVirtual, end 
 	MOVB(U8(255), Mem{Base: dstBase, Disp: 4})
 	ADDQ(U8(5), dstBase)
 	ADDQ(U8(5), retval)
-	JMP(end)
+	JMP(LabelRef("emit_repeat_again" + name))
 
 	// Must be able to be within 5 bytes.
 	Label("repeat_five" + name)
@@ -312,17 +312,21 @@ func emitRepeat(name string, length, offset, retval, dstBase reg.GPVirtual, end 
 	JMP(end)
 
 	Label("repeat_two_offset" + name)
-	// dst[0] = uint8(offset>>8)<<5 | uint8(length)<<2 | tagCopy1
+	// Emit the remaining copy, encoded as 2 bytes.
 	// dst[1] = uint8(offset)
+	// dst[0] = uint8(offset>>8)<<5 | uint8(length)<<2 | tagCopy1
+	tmp = GP64()
+	XORQ(tmp, tmp)
+	// Use scale and displacement to shift and subtract values from length.
+	LEAQ(Mem{Base: tmp, Index: length, Scale: 4, Disp: tagCopy1}, length)
 	MOVB(offset.As8(), Mem{Base: dstBase, Disp: 1}) // Store offset lower byte
 	SARL(U8(8), offset.As32())                      // Remove lower
 	SHLL(U8(5), offset.As32())                      // Shift back up
-	SHLL(U8(2), length.As32())                      // Place length
-	ORL(U8(tagCopy1), length.As32())                // Add tagCopy1
 	ORL(offset.As32(), length.As32())               // OR result
 	MOVB(length.As8(), Mem{Base: dstBase, Disp: 0})
 	ADDQ(U8(2), retval)  // i += 2
 	ADDQ(U8(2), dstBase) // dst += 2
+
 	JMP(end)
 }
 
@@ -384,14 +388,14 @@ func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end La
 	MOVD(offset, Mem{Base: dstBase, Disp: 1})
 	//		length -= 64
 	LEAQ(Mem{Base: length, Disp: -64}, length)
-	ADDQ(U8(5), retval) // i+=5
+	ADDQ(U8(5), retval)  // i+=5
+	ADDQ(U8(5), dstBase) // dst+=5
 	//		if length >= 4 {
 	CMPL(length.As32(), U8(4))
 	JL(LabelRef("fourBytesRemain" + name))
 
 	// Emit remaining as repeats
 	//	return 5 + emitRepeat(dst[5:], offset, length)
-	ADDQ(U8(5), dstBase)
 	// Inline call to emitRepeat. Will jump to end
 	emitRepeat(name+"EmitCopy", length, offset, retval, dstBase, end)
 
@@ -408,9 +412,10 @@ func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end La
 	//	dst[i+2] = uint8(offset >> 8)
 	//	dst[i+3] = uint8(offset >> 16)
 	//	dst[i+4] = uint8(offset >> 24)
-	LEAQ(Mem{Base: length, Disp: -1}, length)
-	SHLQ(U8(2), length)
-	ORQ(U8(tagCopy4), length)
+	tmp := GP64()
+	MOVB(U8(tagCopy4), tmp.As8())
+	// Use displacement to subtract 1 from upshifted length.
+	LEAQ(Mem{Base: tmp, Disp: -(1 << 2), Index: length, Scale: 4}, length)
 	MOVB(length.As8(), Mem{Base: dstBase})
 	MOVD(offset, Mem{Base: dstBase, Disp: 1})
 	//	return i + 5
@@ -449,14 +454,16 @@ func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end La
 	CMPL(offset.As32(), U32(2048))
 	JGE(LabelRef("emitCopyThree" + name))
 
-	//Emit the remaining copy, encoded as 2 bytes.
-	// dst[0] = uint8(offset>>8)<<5 | uint8(length)<<2 | tagCopy1
+	// Emit the remaining copy, encoded as 2 bytes.
 	// dst[1] = uint8(offset)
+	// dst[0] = uint8(offset>>8)<<5 | uint8(length-4)<<2 | tagCopy1
+	tmp = GP64()
+	MOVB(U8(tagCopy1), tmp.As8())
+	// Use scale and displacement to shift and subtract values from length.
+	LEAQ(Mem{Base: tmp, Index: length, Scale: 4, Disp: -(4 << 2)}, length)
 	MOVB(offset.As8(), Mem{Base: dstBase, Disp: 1}) // Store offset lower byte
 	SARL(U8(8), offset.As32())                      // Remove lower
 	SHLL(U8(5), offset.As32())                      // Shift back up
-	SHLL(U8(2), length.As32())                      // Place lenght
-	ORL(U8(1), length.As32())                       // Add tagCopy1
 	ORL(offset.As32(), length.As32())               // OR result
 	MOVB(length.As8(), Mem{Base: dstBase, Disp: 0})
 	ADDQ(U8(2), retval)  // i += 2
@@ -469,9 +476,9 @@ func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end La
 	//	dst[2] = uint8(offset >> 8)
 	//	dst[1] = uint8(offset)
 	//	dst[0] = uint8(length-1)<<2 | tagCopy2
-	SUBB(U8(1), length.As8())
-	SHLB(U8(2), length.As8())
-	ORB(U8(tagCopy2), length.As8())
+	tmp = GP64()
+	MOVB(U8(tagCopy2), tmp.As8())
+	LEAQ(Mem{Base: tmp, Disp: -(1 << 2), Index: length, Scale: 4}, length)
 	MOVB(length.As8(), Mem{Base: dstBase})
 	MOVW(offset.As16(), Mem{Base: dstBase, Disp: 1})
 	//	return 3
