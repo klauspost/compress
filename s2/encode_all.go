@@ -23,65 +23,6 @@ func load64(b []byte, i int) uint64 {
 		uint64(b[4])<<32 | uint64(b[5])<<40 | uint64(b[6])<<48 | uint64(b[7])<<56
 }
 
-// emitCopy writes a copy chunk and returns the number of bytes written.
-//
-// It assumes that:
-//	dst is long enough to hold the encoded bytes
-//	1 <= offset && offset <= math.MaxUint32
-//	4 <= length && length <= 1 << 24
-func emitCopy(dst []byte, offset, length int) int {
-	if offset >= 65536 {
-		i := 0
-		if length > 64 {
-			// Emit a length 64 copy, encoded as 5 bytes.
-			dst[4] = uint8(offset >> 24)
-			dst[3] = uint8(offset >> 16)
-			dst[2] = uint8(offset >> 8)
-			dst[1] = uint8(offset)
-			dst[0] = 63<<2 | tagCopy4
-			length -= 64
-			if length >= 4 {
-				// Emit remaining as repeats
-				return 5 + emitRepeat(dst[5:], offset, length)
-			}
-			i = 5
-		}
-		if length == 0 {
-			return i
-		}
-		// Emit a copy, offset encoded as 4 bytes.
-		dst[i+0] = uint8(length-1)<<2 | tagCopy4
-		dst[i+1] = uint8(offset)
-		dst[i+2] = uint8(offset >> 8)
-		dst[i+3] = uint8(offset >> 16)
-		dst[i+4] = uint8(offset >> 24)
-		return i + 5
-	}
-
-	// Offset no more than 2 bytes.
-	if length > 64 {
-		// Emit a length 60 copy, encoded as 3 bytes.
-		// Emit remaining as repeat value (minimum 4 bytes).
-		dst[2] = uint8(offset >> 8)
-		dst[1] = uint8(offset)
-		dst[0] = 59<<2 | tagCopy2
-		length -= 60
-		// Emit remaining as repeats, at least 4 bytes remain.
-		return 3 + emitRepeat(dst[3:], offset, length)
-	}
-	if length >= 12 || offset >= 2048 {
-		// Emit the remaining copy, encoded as 3 bytes.
-		dst[2] = uint8(offset >> 8)
-		dst[1] = uint8(offset)
-		dst[0] = uint8(length-1)<<2 | tagCopy2
-		return 3
-	}
-	// Emit the remaining copy, encoded as 2 bytes.
-	dst[1] = uint8(offset)
-	dst[0] = uint8(offset>>8)<<5 | uint8(length-4)<<2 | tagCopy1
-	return 2
-}
-
 // hash6 returns the hash of the lowest 6 bytes of u to fit in a hash table with h bits.
 // Preferably h should be a constant and should always be <64.
 func hash6(u uint64, h uint8) uint32 {

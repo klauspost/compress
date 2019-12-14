@@ -151,11 +151,11 @@ func emitLiteral(name string, tmp1, tmp2, litLen, retval, dstBase, litBase reg.G
 	// Find number of bytes to emit for tag.
 	CMPL(n.As32(), U8(60))
 	JLT(LabelRef("oneByte" + name))
-	CMPL(n.As32(), U32(256))
+	CMPL(n.As32(), U32(1<<8))
 	JLT(LabelRef("twoBytes" + name))
-	CMPL(n.As32(), U32(65536))
+	CMPL(n.As32(), U32(1<<16))
 	JLT(LabelRef("threeBytes" + name))
-	CMPL(n.As32(), U32(16777216))
+	CMPL(n.As32(), U32(1<<24))
 	JLT(LabelRef("fourBytes" + name))
 
 	Label("fiveBytes" + name)
@@ -255,19 +255,20 @@ func emitRepeat(name string, length, offset, retval, dstBase reg.GPVirtual, end 
 	CMPL(offset.As32(), U32(2048))
 	JLT(LabelRef("repeat_two_offset" + name))
 
+	const maxRepeat = ((1 << 24) - 1) + 65536
 	Label("cant_repeat_two_offset" + name)
-	CMPL(length.As32(), U32(260))
+	CMPL(length.As32(), U32((1<<8)+4))
 	JLT(LabelRef("repeat_three" + name)) // if length < (1<<8)+4
-	CMPL(length.As32(), U32(65792))
+	CMPL(length.As32(), U32((1<<16)+(1<<8)))
 	JLT(LabelRef("repeat_four" + name)) // if length < (1 << 16) + (1 << 8)
-	CMPL(length.As32(), U32(16842751))  // 16777215+65536
-	JLT(LabelRef("repeat_five" + name))
+	CMPL(length.As32(), U32(maxRepeat))
+	JLT(LabelRef("repeat_five" + name)) // If less than 24 bits to represent.
 
 	// We have have more than 24 bits
 	// Emit so we have at least 4 bytes left.
-	LEAQ(Mem{Base: length, Disp: -16842747}, length) // length -= (maxRepeat - 4) + 65536
-	MOVW(U16(7<<2|tagCopy1), Mem{Base: dstBase})     // dst[0] = 7<<2 | tagCopy1, dst[1] = 0
-	MOVW(U16(65531), Mem{Base: dstBase, Disp: 2})    // 0xfffb
+	LEAQ(Mem{Base: length, Disp: -(maxRepeat - 4)}, length) // length -= (maxRepeat - 4)
+	MOVW(U16(7<<2|tagCopy1), Mem{Base: dstBase})            // dst[0] = 7<<2 | tagCopy1, dst[1] = 0
+	MOVW(U16(65531), Mem{Base: dstBase, Disp: 2})           // 0xfffb
 	MOVB(U8(255), Mem{Base: dstBase, Disp: 4})
 	ADDQ(U8(5), dstBase)
 	ADDQ(U8(5), retval)
