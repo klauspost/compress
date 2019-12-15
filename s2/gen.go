@@ -182,13 +182,8 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 		}
 		_ = candidate
 	}
+
 	Label("emitRemainder" + name)
-
-	//src := Load(Param("src"), GP64())
-	//dst := Load(Param("dst"), GP64())
-
-	_, _, _, _ = sLimit, dstLimit, nextEmit, repeat
-
 	RET()
 }
 
