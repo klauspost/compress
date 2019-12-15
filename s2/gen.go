@@ -639,6 +639,8 @@ func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end La
 
 // func memmove(to, from unsafe.Pointer, n uintptr)
 // to and from will be at the end, n will be 0.
+// to and from may not overlap.
+// Fairly simplistic for now, can ofc. be extended.
 func genMemMove(name string, to, from, n reg.GPVirtual, end LabelRef) {
 	tmp := GP64()
 	MOVQ(n, tmp)
@@ -680,6 +682,7 @@ func genMemMove(name string, to, from, n reg.GPVirtual, end LabelRef) {
 	JNZ(LabelRef("Loop16" + name))
 	Label("Done16" + name)
 
+	// TODO: Use REP; MOVSB somehow.
 	TESTQ(n, n)
 	JZ(end)
 	Label("Loop1" + name)
