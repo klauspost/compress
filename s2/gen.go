@@ -76,22 +76,25 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 		panic(fmt.Sprintf("tmp stack exceeded", tmpStack))
 	}
 	// Zero table
-	iReg := GP64()
-	MOVQ(U32(tableSize/8/16), iReg)
-	tablePtr := GP64()
-	LEAQ(table, tablePtr)
-	zeroXmm := XMM()
-	PXOR(zeroXmm, zeroXmm)
+	{
+		iReg := GP64()
+		MOVQ(U32(tableSize/8/16), iReg)
+		tablePtr := GP64()
+		LEAQ(table, tablePtr)
+		zeroXmm := XMM()
+		PXOR(zeroXmm, zeroXmm)
 
-	Label("zeroLoop" + name)
-	for i := 0; i < 8; i++ {
-		MOVOU(zeroXmm, Mem{Base: tablePtr}.Offset(i*16))
+		Label("zeroLoop" + name)
+		for i := 0; i < 8; i++ {
+			MOVOU(zeroXmm, Mem{Base: tablePtr, Disp: i * 16})
+		}
+		ADDQ(U8(16*8), tablePtr)
+		DECQ(iReg)
+		JNZ(LabelRef("zeroLoop" + name))
+
+		// nextEmit is where in src the next emitLiteral should start from.
+		MOVL(iReg.As32(), nextEmit)
 	}
-	ADDQ(Imm(16*8), tablePtr)
-	DECQ(iReg)
-	JNZ(LabelRef("zeroLoop" + name))
-	// nextEmit is where in src the next emitLiteral should start from.
-	MOVL(iReg.As32(), nextEmit)
 
 	{
 		const inputMargin = 8
@@ -150,8 +153,8 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 				SHRQ(U8(8), hash1)
 				hasher.hash(hash0)
 				hasher.hash(hash1)
-				MOVL(Mem{Base: tablePtr, Index: hash0, Scale: 1}, candidate.As32())
-				MOVL(Mem{Base: tablePtr, Index: hash1, Scale: 1}, candidate2.As32())
+				MOVL(table.Idx(hash0, 1), candidate.As32())
+				MOVL(table.Idx(hash1, 1), candidate2.As32())
 				MOVL(s.As32(), table.Idx(hash0, 1))
 				tmp := GP64()
 				MOVQ(s, tmp)

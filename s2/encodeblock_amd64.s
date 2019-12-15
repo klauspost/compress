@@ -35,39 +35,39 @@ zeroLoopencodeBlockAsm:
 	MOVB  $0x01, SI
 	MOVL  SI, 68(SP)
 	MOVQ  src_base+24(FP), AX
-	MOVQ  (AX)(SI*1), DX
+	MOVQ  (AX)(SI*1), CX
 	MOVL  64(SP), DI
 	SUBL  SI, DI
 	SHRL  $0x06, DI
-	LEAQ  4(SI)(DI*1), BX
-	MOVQ  $0x0000cf1bbcdcbf9b, BP
-	MOVQ  DX, DI
-	MOVQ  DX, R15
-	SHRQ  $0x08, R15
+	LEAQ  4(SI)(DI*1), DX
+	MOVQ  $0x0000cf1bbcdcbf9b, BX
+	MOVQ  CX, BP
+	MOVQ  CX, DI
+	SHRQ  $0x08, DI
+	SHLQ  $0x10, BP
+	IMULQ BX, BP
+	SHRQ  $0x30, BP
 	SHLQ  $0x10, DI
-	IMULQ BP, DI
+	IMULQ BX, DI
 	SHRQ  $0x30, DI
-	SHLQ  $0x10, R15
-	IMULQ BP, R15
-	SHRQ  $0x30, R15
-	MOVL  (CX)(DI*1), BX
-	MOVL  (CX)(R15*1), CX
-	MOVL  SI, 120(SP)(DI*1)
+	MOVL  120(SP)(BP*1), DX
+	MOVL  120(SP)(DI*1), DX
+	MOVL  SI, 120(SP)(BP*1)
 	MOVQ  SI, R8
 	DECQ  R8
-	MOVL  R8, 120(SP)(R15*1)
-	MOVQ  DX, CX
-	SHRQ  $0x10, CX
-	SHLQ  $0x10, CX
-	IMULQ BP, CX
-	SHRQ  $0x30, CX
+	MOVL  R8, 120(SP)(DI*1)
+	MOVQ  CX, DX
+	SHRQ  $0x10, DX
+	SHLQ  $0x10, DX
+	IMULQ BX, DX
+	SHRQ  $0x30, DX
 	MOVL  68(SP), R10
-	MOVQ  SI, CX
-	SUBQ  CX, R10
-	MOVL  1(AX), CX
-	MOVQ  DX, R9
+	MOVQ  SI, DX
+	SUBQ  DX, R10
+	MOVL  1(AX), DX
+	MOVQ  CX, R9
 	SHLQ  $0x08, R9
-	CMPL  R9, CX
+	CMPL  R9, DX
 	JNE   noRepeatFoundencodeBlockAsm
 	LEAQ  1(SI), R11
 	MOVQ  64(SP), R12
