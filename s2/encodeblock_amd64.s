@@ -13,69 +13,199 @@ TEXT ·encodeBlockAsm(SB), NOSPLIT, $65656-56
 	PXOR X0, X0
 
 zeroLoopencodeBlockAsm:
-	MOVUPS X0, (CX)
-	MOVUPS X0, 16(CX)
-	MOVUPS X0, 32(CX)
-	MOVUPS X0, 48(CX)
-	MOVUPS X0, 64(CX)
-	MOVUPS X0, 80(CX)
-	MOVUPS X0, 96(CX)
-	MOVUPS X0, 112(CX)
-	ADDQ   $0x80, CX
-	DECQ   AX
-	JNZ    zeroLoopencodeBlockAsm
-	MOVL   AX, 64(SP)
-	MOVQ   src_len+32(FP), DX
-	LEAQ   -5(DX), BX
-	LEAQ   -8(DX), BP
-	SHRQ   $0x05, DX
-	SUBL   BX, DX
-	MOVL   BP, 56(SP)
-	MOVL   DX, 60(SP)
-	MOVB   $0x01, SI
-	MOVL   SI, 68(SP)
-	MOVQ   src_base+24(FP), AX
-	MOVQ   (AX)(SI*1), DX
-	MOVL   64(SP), DI
-	SUBL   SI, DI
-	SHRL   $0x06, DI
-	LEAQ   4(SI)(DI*1), BX
-	MOVQ   $0x0000cf1bbcdcbf9b, BP
-	MOVQ   DX, DI
-	MOVQ   DX, R11
-	SHRQ   $0x08, R11
-	SHLQ   $0x10, DI
-	IMULQ  BP, DI
-	SHRQ   $0x30, DI
-	SHLQ   $0x10, R11
-	IMULQ  BP, R11
-	SHRQ   $0x30, R11
-	MOVL   (CX)(DI*1), BX
-	MOVL   (CX)(R11*1), CX
-	MOVL   SI, 120(SP)(DI*1)
-	MOVQ   SI, R8
-	DECQ   R8
-	MOVL   R8, 120(SP)(R11*1)
-	MOVQ   DX, CX
-	SHRQ   $0x10, CX
-	SHLQ   $0x10, CX
-	IMULQ  BP, CX
-	SHRQ   $0x30, CX
-	MOVL   68(SP), R10
-	MOVQ   SI, CX
-	SUBQ   CX, R10
-	MOVL   1(AX), CX
-	MOVQ   DX, R9
-	SHLQ   $0x08, DX
-	CMPL   R9, CX
-	JNE    noRepeatFoundencodeBlockAsm
+	MOVOU X0, (CX)
+	MOVOU X0, 16(CX)
+	MOVOU X0, 32(CX)
+	MOVOU X0, 48(CX)
+	MOVOU X0, 64(CX)
+	MOVOU X0, 80(CX)
+	MOVOU X0, 96(CX)
+	MOVOU X0, 112(CX)
+	ADDQ  $0x80, CX
+	DECQ  AX
+	JNZ   zeroLoopencodeBlockAsm
+	MOVL  AX, 64(SP)
+	MOVQ  src_len+32(FP), DX
+	LEAQ  -5(DX), BX
+	LEAQ  -8(DX), BP
+	SHRQ  $0x05, DX
+	SUBL  BX, DX
+	MOVL  BP, 56(SP)
+	MOVL  DX, 60(SP)
+	MOVB  $0x01, SI
+	MOVL  SI, 68(SP)
+	MOVQ  src_base+24(FP), AX
+	MOVQ  (AX)(SI*1), DX
+	MOVL  64(SP), DI
+	SUBL  SI, DI
+	SHRL  $0x06, DI
+	LEAQ  4(SI)(DI*1), BX
+	MOVQ  $0x0000cf1bbcdcbf9b, BP
+	MOVQ  DX, DI
+	MOVQ  DX, R15
+	SHRQ  $0x08, R15
+	SHLQ  $0x10, DI
+	IMULQ BP, DI
+	SHRQ  $0x30, DI
+	SHLQ  $0x10, R15
+	IMULQ BP, R15
+	SHRQ  $0x30, R15
+	MOVL  (CX)(DI*1), BX
+	MOVL  (CX)(R15*1), CX
+	MOVL  SI, 120(SP)(DI*1)
+	MOVQ  SI, R8
+	DECQ  R8
+	MOVL  R8, 120(SP)(R15*1)
+	MOVQ  DX, CX
+	SHRQ  $0x10, CX
+	SHLQ  $0x10, CX
+	IMULQ BP, CX
+	SHRQ  $0x30, CX
+	MOVL  68(SP), R10
+	MOVQ  SI, CX
+	SUBQ  CX, R10
+	MOVL  1(AX), CX
+	MOVQ  DX, R9
+	SHLQ  $0x08, R9
+	CMPL  R9, CX
+	JNE   noRepeatFoundencodeBlockAsm
+	LEAQ  1(SI), R11
+	MOVQ  64(SP), R12
+	TESTQ R10, R10
+	JZ    extendBackEndencodeBlockAsm
+
+extendBackLoopencodeBlockAsm:
+	CMPQ R11, R12
+	JG   extendBackEndencodeBlockAsm
+	MOVB -1(AX)(R10*1), CL
+	MOVB -1(AX)(R11*1), DL
+	CMPB CL, DL
+	JNE  extendBackEndencodeBlockAsm
+	LEAQ -1(R11), R11
+	DECQ R10
+	JZ   extendBackEndencodeBlockAsm
+	JMP  extendBackLoopencodeBlockAsm
+
+extendBackEndencodeBlockAsm:
+	MOVQ 64(SP), CX
+	MOVQ R11, R13
+	LEAQ (AX)(CX*1), BX
+	SUBQ R13, CX
+	MOVQ dst_base+0(FP), DX
+	XORQ AX, AX
+	MOVQ CX, AX
+	MOVQ CX, R13
+	SUBL $0x01, R13
+	JC   emitLiteralDoneencodeBlockAsm
+	CMPL R13, $0x3c
+	JLT  oneByteRepeat
+	CMPL R13, $0x00000100
+	JLT  twoBytesRepeat
+	CMPL R13, $0x00010000
+	JLT  threeBytesRepeat
+	CMPL R13, $0x01000000
+	JLT  fourBytesRepeat
+	MOVB $0xfc, (DX)
+	MOVL R13, 1(DX)
+	ADDQ $0x05, AX
+	ADDQ $0x05, DX
+	JMP  memmoveRepeat
+
+fourBytesRepeat:
+	MOVQ R13, R14
+	SHRL $0x10, R14
+	MOVB $0xf8, (DX)
+	MOVW R13, 1(DX)
+	MOVB R14, 3(DX)
+	ADDQ $0x04, AX
+	ADDQ $0x04, DX
+	JMP  memmoveRepeat
+
+threeBytesRepeat:
+	MOVB $0xf4, (DX)
+	MOVW R13, 1(DX)
+	ADDQ $0x03, AX
+	ADDQ $0x03, DX
+	JMP  memmoveRepeat
+
+twoBytesRepeat:
+	MOVB $0xf0, (DX)
+	MOVB R13, 1(DX)
+	ADDQ $0x02, AX
+	ADDQ $0x02, DX
+	JMP  memmoveRepeat
+
+oneByteRepeat:
+	SHLB $0x02, R13
+	MOVB R13, (DX)
+	ADDQ $0x01, AX
+	ADDQ $0x01, DX
+
+memmoveRepeat:
+	MOVQ  CX, AX
+	SHRQ  $0x07, AX
+	TESTQ AX, AX
+	JZ    Done128EmitLitMemMoveRepeat
+
+Loop128EmitLitMemMoveRepeat:
+	MOVOU (BX), X0
+	MOVOU 16(BX), X1
+	MOVOU 32(BX), X2
+	MOVOU 48(BX), X3
+	MOVOU 64(BX), X4
+	MOVOU 80(BX), X5
+	MOVOU 96(BX), X6
+	MOVOU 112(BX), X7
+	MOVOU X0, (DX)
+	MOVOU X1, 16(DX)
+	MOVOU X2, 32(DX)
+	MOVOU X3, 48(DX)
+	MOVOU X4, 64(DX)
+	MOVOU X5, 80(DX)
+	MOVOU X6, 96(DX)
+	MOVOU X7, 112(DX)
+	LEAQ  128(BX), BX
+	LEAQ  128(DX), DX
+	LEAQ  -128(CX), CX
+	DECQ  AX
+	JNZ   Loop128EmitLitMemMoveRepeat
+
+Done128EmitLitMemMoveRepeat:
+	MOVQ  CX, AX
+	SHRQ  $0x04, AX
+	TESTQ AX, AX
+	JZ    Done16EmitLitMemMoveRepeat
+
+Loop16EmitLitMemMoveRepeat:
+	MOVOU (BX), X0
+	MOVOU X0, (DX)
+	LEAQ  16(BX), BX
+	LEAQ  16(DX), DX
+	LEAQ  -16(CX), CX
+	DECQ  AX
+	JNZ   Loop16EmitLitMemMoveRepeat
+
+Done16EmitLitMemMoveRepeat:
+	TESTQ CX, CX
+	JZ    emitLiteralDoneencodeBlockAsm
+
+Loop1EmitLitMemMoveRepeat:
+	MOVB (BX), AL
+	MOVB AL, (DX)
+	LEAQ 1(BX), BX
+	LEAQ 1(DX), DX
+	DECQ CX
+	JNZ  Loop1EmitLitMemMoveRepeat
+
+emitLiteralDoneencodeBlockAsm:
+	MOVQ DX, dst_base+0(FP)
 
 noRepeatFoundencodeBlockAsm:
 	NOP
 	RET
 
 // func emitLiteral(dst []byte, lit []byte) int
-TEXT ·emitLiteral(SB), NOSPLIT, $32-56
+TEXT ·emitLiteral(SB), NOSPLIT, $0-56
 	MOVQ dst_base+0(FP), AX
 	MOVQ lit_base+24(FP), CX
 	MOVQ lit_len+32(FP), DX
@@ -128,12 +258,60 @@ oneByteStandalone:
 	ADDQ $0x01, AX
 
 memmoveStandalone:
-	MOVQ AX, (SP)
-	MOVQ CX, 8(SP)
-	MOVQ DX, 16(SP)
-	MOVQ BX, 24(SP)
-	CALL runtime·memmove(SB)
-	MOVQ 24(SP), BX
+	MOVQ  DX, BP
+	SHRQ  $0x07, BP
+	TESTQ BP, BP
+	JZ    Done128EmitLitMemMoveStandalone
+
+Loop128EmitLitMemMoveStandalone:
+	MOVOU (CX), X0
+	MOVOU 16(CX), X1
+	MOVOU 32(CX), X2
+	MOVOU 48(CX), X3
+	MOVOU 64(CX), X4
+	MOVOU 80(CX), X5
+	MOVOU 96(CX), X6
+	MOVOU 112(CX), X7
+	MOVOU X0, (AX)
+	MOVOU X1, 16(AX)
+	MOVOU X2, 32(AX)
+	MOVOU X3, 48(AX)
+	MOVOU X4, 64(AX)
+	MOVOU X5, 80(AX)
+	MOVOU X6, 96(AX)
+	MOVOU X7, 112(AX)
+	LEAQ  128(CX), CX
+	LEAQ  128(AX), AX
+	LEAQ  -128(DX), DX
+	DECQ  BP
+	JNZ   Loop128EmitLitMemMoveStandalone
+
+Done128EmitLitMemMoveStandalone:
+	MOVQ  DX, BP
+	SHRQ  $0x04, BP
+	TESTQ BP, BP
+	JZ    Done16EmitLitMemMoveStandalone
+
+Loop16EmitLitMemMoveStandalone:
+	MOVOU (CX), X0
+	MOVOU X0, (AX)
+	LEAQ  16(CX), CX
+	LEAQ  16(AX), AX
+	LEAQ  -16(DX), DX
+	DECQ  BP
+	JNZ   Loop16EmitLitMemMoveStandalone
+
+Done16EmitLitMemMoveStandalone:
+	TESTQ DX, DX
+	JZ    emitLiteralEndStandalone
+
+Loop1EmitLitMemMoveStandalone:
+	MOVB (CX), BP
+	MOVB BP, (AX)
+	LEAQ 1(CX), CX
+	LEAQ 1(AX), AX
+	DECQ DX
+	JNZ  Loop1EmitLitMemMoveStandalone
 
 emitLiteralEndStandalone:
 	MOVQ BX, ret+48(FP)

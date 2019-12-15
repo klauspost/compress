@@ -66,6 +66,11 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 	tmpStack += 4
 	repeat := stack.Offset(tmpStack)
 	tmpStack += 4
+	dstBaseBasic, err := Param("dst").Base().Resolve()
+	if err != nil {
+		panic(err)
+	}
+	dstBase := dstBaseBasic.Addr
 
 	if tmpStack > extraStack+baseStack {
 		panic(fmt.Sprintf("tmp stack exceeded", tmpStack))
@@ -80,7 +85,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 
 	Label("zeroLoop" + name)
 	for i := 0; i < 8; i++ {
-		MOVUPS(zeroXmm, Mem{Base: tablePtr}.Offset(i*16))
+		MOVOU(zeroXmm, Mem{Base: tablePtr}.Offset(i*16))
 	}
 	ADDQ(Imm(16*8), tablePtr)
 	DECQ(iReg)
@@ -170,11 +175,51 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 				SUBQ(right, rep)
 				MOVL(Mem{Base: src, Index: rep, Disp: checkRep}, right.As32())
 				MOVQ(cv, left)
-				SHLQ(U8(checkRep*8), cv)
+				SHLQ(U8(checkRep*8), left)
 				CMPL(left.As32(), right.As32())
 				JNE(LabelRef("noRepeatFound" + name))
 				{
+					base := GP64()
+					LEAQ(Mem{Base: s, Disp: 1}, base)
+					// Extend back
+					{
+						i := rep
+						ne := GP64()
+						MOVQ(nextEmit, ne)
+						TESTQ(i.As64(), i.As64())
+						JZ(LabelRef("extendBackEnd" + name))
 
+						// I is tested when decremented, so we loop back here.
+						Label("extendBackLoop" + name)
+						CMPQ(base.As64(), ne.As64())
+						JG(LabelRef("extendBackEnd" + name))
+						// if src[i-1] == src[base-1]
+						tmp, tmp2 := GP64(), GP64()
+						MOVB(Mem{Base: src, Index: i, Scale: 1, Disp: -1}, tmp.As8())
+						MOVB(Mem{Base: src, Index: base, Scale: 1, Disp: -1}, tmp2.As8())
+						CMPB(tmp.As8(), tmp2.As8())
+						JNE(LabelRef("extendBackEnd" + name))
+						LEAQ(Mem{Base: base, Disp: -1}, base)
+						DECQ(i)
+						JZ(LabelRef("extendBackEnd" + name))
+						JMP(LabelRef("extendBackLoop" + name))
+					}
+					Label("extendBackEnd" + name)
+					// Base is now at start.
+					// d += emitLiteral(dst[d:], src[nextEmit:base])
+					{
+						tmp1, tmp2, litLen, retval, dstBaseTmp, litBase := GP64(), GP64(), GP64(), GP64(), GP64(), GP64()
+						MOVQ(nextEmit, litLen)
+						MOVQ(base, tmp1)
+						// litBase = src[nextEmit:]
+						LEAQ(Mem{Base: src, Index: litLen, Scale: 1}, litBase)
+						SUBQ(tmp1, litLen) // litlen = base - nextEmit
+						MOVQ(dstBase, dstBaseTmp)
+						XORQ(retval, retval)
+						emitLiteral("Repeat", tmp1, tmp2, litLen, retval, dstBaseTmp, litBase, LabelRef("emitLiteralDone"+name))
+						Label("emitLiteralDone" + name)
+						MOVQ(dstBaseTmp, dstBase)
+					}
 				}
 			}
 			Label("noRepeatFound" + name)
@@ -192,7 +237,10 @@ type ptrSize struct {
 	reg.Register
 }
 
-func (p ptrSize) Offse(off reg.Register) Mem {
+func (p ptrSize) Offset(off reg.Register) Mem {
+	if p.size == 0 {
+		p.size = 1
+	}
 	return Mem{Base: p, Index: off, Scale: p.size}
 }
 
@@ -235,21 +283,19 @@ func genEmitLiteral() {
 		"  0 <= len(lit) && len(lit) <= math.MaxUint32", "")
 	Pragma("noescape")
 
-	// The 24 bytes of stack space is to call runtime·memmove.
-	stack := AllocLocal(32)
-
 	dstBase, litBase, litLen, retval := GP64(), GP64(), GP64(), GP64()
 	Load(Param("dst").Base(), dstBase)
 	Load(Param("lit").Base(), litBase)
 	Load(Param("lit").Len(), litLen)
-	emitLiteral("Standalone", GP64(), GP64(), litLen, retval, dstBase, litBase, stack)
+	emitLiteral("Standalone", GP64(), GP64(), litLen, retval, dstBase, litBase, "emitLiteralEndStandalone")
+	Label("emitLiteralEndStandalone")
 	Store(retval, ReturnIndex(0))
 	RET()
 }
 
 // emitLiteral can be used for inlining an emitLiteral call.
 // stack must have at least 32 bytes
-func emitLiteral(name string, tmp1, tmp2, litLen, retval, dstBase, litBase reg.GPVirtual, stack Mem) {
+func emitLiteral(name string, tmp1, tmp2, litLen, retval, dstBase, litBase reg.GPVirtual, end LabelRef) {
 	n := tmp1
 	n16 := tmp2
 
@@ -259,7 +305,7 @@ func emitLiteral(name string, tmp1, tmp2, litLen, retval, dstBase, litBase reg.G
 
 	SUBL(U8(1), n.As32())
 	// Return if AX was 0
-	JC(LabelRef("emitLiteralEnd" + name))
+	JC(end)
 
 	// Find number of bytes to emit for tag.
 	CMPL(n.As32(), U8(60))
@@ -309,21 +355,9 @@ func emitLiteral(name string, tmp1, tmp2, litLen, retval, dstBase, litBase reg.G
 	ADDQ(U8(1), dstBase)
 
 	Label("memmove" + name)
+
 	// copy(dst[i:], lit)
-	//
-	// This means calling runtime·memmove(&dst[i], &lit[0], len(lit)), so we push
-	// DI, R10 and AX as arguments.
-	MOVQ(dstBase, stack)
-	MOVQ(litBase, stack.Offset(8))
-	MOVQ(litLen, stack.Offset(16))
-
-	// Store retval while calling.
-	MOVQ(retval, stack.Offset(24))
-
-	CALL(LabelRef("runtime·memmove(SB)"))
-	MOVQ(stack.Offset(24), retval)
-
-	Label("emitLiteralEnd" + name)
+	genMemMove("EmitLitMemMove"+name, dstBase, litBase, litLen, end)
 }
 
 // genEmitRepeat generates a standlone emitRepeat.
@@ -598,4 +632,58 @@ func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end La
 	ADDQ(U8(3), retval)  // i += 3
 	ADDQ(U8(3), dstBase) // dst += 3
 	JMP(end)
+}
+
+// func memmove(to, from unsafe.Pointer, n uintptr)
+// to and from will be at the end, n will be 0.
+func genMemMove(name string, to, from, n reg.GPVirtual, end LabelRef) {
+	tmp := GP64()
+	MOVQ(n, tmp)
+	// tmp = n/128
+	SHRQ(U8(7), tmp)
+
+	TESTQ(tmp, tmp)
+	JZ(LabelRef("Done128" + name))
+	Label("Loop128" + name)
+	var xmmregs [8]reg.VecVirtual
+	for i := 0; i < 8; i++ {
+		xmmregs[i] = XMM()
+		MOVOU(Mem{Base: from}.Offset(i*16), xmmregs[i])
+	}
+	for i := 0; i < 8; i++ {
+		MOVOU(xmmregs[i], Mem{Base: to}.Offset(i*16))
+	}
+	LEAQ(Mem{Base: from, Disp: 8 * 16}, from)
+	LEAQ(Mem{Base: to, Disp: 8 * 16}, to)
+	LEAQ(Mem{Base: n, Disp: -128}, n)
+	DECQ(tmp)
+	JNZ(LabelRef("Loop128" + name))
+
+	Label("Done128" + name)
+	MOVQ(n, tmp)
+	// tmp = n/16
+	SHRQ(U8(4), tmp)
+	TESTQ(tmp, tmp)
+	JZ(LabelRef("Done16" + name))
+
+	Label("Loop16" + name)
+	xmm := XMM()
+	MOVOU(Mem{Base: from}, xmm)
+	MOVOU(xmm, Mem{Base: to})
+	LEAQ(Mem{Base: from, Disp: 16}, from)
+	LEAQ(Mem{Base: to, Disp: 16}, to)
+	LEAQ(Mem{Base: n, Disp: -16}, n)
+	DECQ(tmp)
+	JNZ(LabelRef("Loop16" + name))
+	Label("Done16" + name)
+
+	TESTQ(n, n)
+	JZ(end)
+	Label("Loop1" + name)
+	MOVB(Mem{Base: from}, tmp.As8())
+	MOVB(tmp.As8(), Mem{Base: to})
+	LEAQ(Mem{Base: from, Disp: 1}, from)
+	LEAQ(Mem{Base: to, Disp: 1}, to)
+	DECQ(n)
+	JNZ(LabelRef("Loop1" + name))
 }
