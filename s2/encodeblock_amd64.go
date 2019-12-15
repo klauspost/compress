@@ -6,17 +6,17 @@
 
 package s2
 
-// encodeBlock encodes a non-empty src to a guaranteed-large-enough dst.
+// encodeBlockAsm encodes a non-empty src to a guaranteed-large-enough dst.
 // It assumes that the varint-encoded length of the decompressed bytes has already been written.
 // 
 //go:noescape
-func genEncodeBlockAsm(dst []byte, src []byte) int
+func encodeBlockAsm(dst []byte, src []byte) int
 
 // emitLiteral writes a literal chunk and returns the number of bytes written.
 // 
 // It assumes that:
-// dst is long enough to hold the encoded bytes
-// 0 <= len(lit) && len(lit) <= math.MaxUint32
+//   dst is long enough to hold the encoded bytes
+//   0 <= len(lit) && len(lit) <= math.MaxUint32
 // 
 //go:noescape
 func emitLiteral(dst []byte, lit []byte) int
@@ -30,9 +30,9 @@ func emitRepeat(dst []byte, offset int, length int) int
 // emitCopy writes a copy chunk and returns the number of bytes written.
 // 
 // It assumes that:
-// 	dst is long enough to hold the encoded bytes
-// 	1 <= offset && offset <= math.MaxUint32
-// 4 <= length && length <= 1 << 24
+//   dst is long enough to hold the encoded bytes
+//   1 <= offset && offset <= math.MaxUint32
+//   4 <= length && length <= 1 << 24
 // 
 //go:noescape
 func emitCopy(dst []byte, offset int, length int) int

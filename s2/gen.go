@@ -18,37 +18,48 @@ func main() {
 	Constraint(buildtags.Not("noasm").ToConstraint())
 	Constraint(buildtags.Term("gc").ToConstraint())
 
-	genEncodeBlockAsm()
+	genEncodeBlockAsm("encodeBlockAsm", 16, 6)
 	genEmitLiteral()
 	genEmitRepeat()
 	genEmitCopy()
 	Generate()
 }
 
-func genEncodeBlockAsm() {
-	TEXT("genEncodeBlockAsm", NOSPLIT, "func(dst, src []byte) int")
-	Doc("encodeBlock encodes a non-empty src to a guaranteed-large-enough dst.",
+func genEncodeBlockAsm(name string, tableBits, skipLog int) {
+	TEXT(name, NOSPLIT, "func(dst, src []byte) int")
+	Doc(name+" encodes a non-empty src to a guaranteed-large-enough dst.",
 		"It assumes that the varint-encoded length of the decompressed bytes has already been written.", "")
 	Pragma("noescape")
 
 	// "var table [maxTableSize]uint32" takes up 65536 bytes of stack space. An
 	// extra 56 bytes, to call other functions, and an extra 64 bytes, to spill
 	// local variables (registers) during calls gives 65536 + 56 + 64 = 65656.
-	const (
-		tableBits  = 16
-		tableSize  = 1 << 16
-		tableMask  = tableSize - 1
+	var (
+		tableSize = 1 << tableBits
+		//tableMask  = tableSize - 1
 		baseStack  = 56
 		extraStack = 64
 		allocStack = baseStack + extraStack + tableSize
 	)
+	// Memzero needs at least 128 bytes.
+	if tableSize < 128 {
+		panic("tableSize must be at least 128 bytes")
+	}
+
+	lenSrcBasic, err := Param("src").Len().Resolve()
+	if err != nil {
+		panic(err)
+	}
+	lenSrc := lenSrcBasic.Addr
 
 	stack := AllocLocal(allocStack)
 	table := stack.Offset(allocStack - tableSize)
 
 	tmpStack := baseStack
+	// sLimit is when to stop looking for offset/length copies.
 	sLimit := stack.Offset(tmpStack)
 	tmpStack += 4
+	// Bail if we can't compress to at least this.
 	dstLimit := stack.Offset(tmpStack)
 	tmpStack += 4
 	nextEmit := stack.Offset(tmpStack)
@@ -64,28 +75,135 @@ func genEncodeBlockAsm() {
 	MOVQ(U32(tableSize/8/16), iReg)
 	tablePtr := GP64()
 	LEAQ(table, tablePtr)
-	XORQ(iReg, iReg)
 	zeroXmm := XMM()
 	PXOR(zeroXmm, zeroXmm)
 
-	Label("zeroloop")
+	Label("zeroLoop" + name)
 	for i := 0; i < 8; i++ {
 		MOVUPS(zeroXmm, Mem{Base: tablePtr}.Offset(i*16))
 	}
 	ADDQ(Imm(16*8), tablePtr)
 	DECQ(iReg)
-	JNZ(LabelRef("zeroloop"))
+	JNZ(LabelRef("zeroLoop" + name))
+	// nextEmit is where in src the next emitLiteral should start from.
+	MOVL(iReg.As32(), nextEmit)
 
-	hasher := hash6(tableBits)
+	{
+		const inputMargin = 8
+		tmp, tmp2, tmp3 := GP64(), GP64(), GP64()
+		MOVQ(lenSrc, tmp)
+		LEAQ(Mem{Base: tmp, Disp: -5}, tmp2)
+		// sLimit := len(src) - inputMargin
+		LEAQ(Mem{Base: tmp, Disp: -inputMargin}, tmp3)
+		// dstLimit := len(src) - len(src)>>5 - 5
+		SHRQ(U8(5), tmp)
+		SUBL(tmp2.As32(), tmp.As32())
+		MOVL(tmp3.As32(), sLimit)
+		MOVL(tmp.As32(), dstLimit)
+	}
+
+	// s = 1
+	s := GP64()
+	MOVB(U8(1), s.As8())
+	// repeat = 1
+	MOVL(s.As32(), repeat)
+
+	src := GP64()
+	Load(Param("src").Base(), src)
+
+	// Load cv
+	cv := GP64()
+	MOVQ(Mem{Base: src, Index: s, Scale: 1}, cv)
+	Label("mainLoop" + name)
+	{
+		Label("searchLoop" + name)
+		candidate := GP64()
+		{
+			nextS := GP64()
+			// nextS := s + (s-nextEmit)>>6 + 4
+			{
+				tmp := GP64()
+				MOVL(nextEmit, tmp.As32())
+				SUBL(s.As32(), tmp.As32())
+				SHRL(U8(skipLog), tmp.As32())
+				LEAQ(Mem{Base: s, Disp: 4, Index: tmp, Scale: 1}, nextS)
+			}
+			// if nextS > sLimit {goto emitRemainder}
+			// FIXME: failed to allocate registers???
+			if false {
+				tmp := GP64()
+				MOVL(sLimit, tmp.As32())
+				CMPL(nextS.As32(), tmp.As32())
+				JGT(LabelRef("emitRemainder" + name))
+			}
+			candidate2 := GP64()
+			hasher := hash6(tableBits)
+			{
+				hash0, hash1 := GP64(), GP64()
+				MOVQ(cv, hash0)
+				MOVQ(cv, hash1)
+				SHRQ(U8(8), hash1)
+				hasher.hash(hash0)
+				hasher.hash(hash1)
+				MOVL(Mem{Base: tablePtr, Index: hash0, Scale: 1}, candidate.As32())
+				MOVL(Mem{Base: tablePtr, Index: hash1, Scale: 1}, candidate2.As32())
+				MOVL(s.As32(), table.Idx(hash0, 1))
+				tmp := GP64()
+				MOVQ(s, tmp)
+				DECQ(tmp)
+				MOVL(tmp.As32(), table.Idx(hash1, 1))
+			}
+			// hash2 := hash6(cv>>16, tableBits)
+			hash2 := GP64()
+			{
+				MOVQ(cv, hash2)
+				SHRQ(U8(16), hash2)
+				hasher.hash(hash2)
+			}
+			// Check repeat at offset checkRep
+			const checkRep = 1
+			{
+				// if uint32(cv>>(checkRep*8)) == load32(src, s-repeat+checkRep) {
+				left, right, rep := GP64(), GP64(), GP64()
+				MOVL(repeat, rep.As32())
+				MOVQ(s, right)
+				SUBQ(right, rep)
+				MOVL(Mem{Base: src, Index: rep, Disp: checkRep}, right.As32())
+				MOVQ(cv, left)
+				SHLQ(U8(checkRep*8), cv)
+				CMPL(left.As32(), right.As32())
+				JNE(LabelRef("noRepeatFound" + name))
+				{
+
+				}
+			}
+			Label("noRepeatFound" + name)
+			NOP()
+		}
+		_ = candidate
+	}
+	Label("emitRemainder" + name)
 
 	//src := Load(Param("src"), GP64())
-	s := GP64()
-	XORQ(s, s)
 	//dst := Load(Param("dst"), GP64())
 
-	_, _, _, _, _ = sLimit, dstLimit, nextEmit, repeat, hasher
+	_, _, _, _ = sLimit, dstLimit, nextEmit, repeat
 
 	RET()
+}
+
+type ptrSize struct {
+	size uint8
+	reg.Register
+}
+
+func (p ptrSize) Offse(off reg.Register) Mem {
+	return Mem{Base: p, Index: off, Scale: p.size}
+}
+
+func (p ptrSize) OffsetInfo(dst, off reg.Register) {
+	LEAQ(Mem{Base: p, Index: off, Scale: p.size}, dst)
+	return
 }
 
 type hashGen struct {
@@ -118,8 +236,8 @@ func genEmitLiteral() {
 	TEXT("emitLiteral", NOSPLIT, "func(dst, lit []byte) int")
 	Doc("emitLiteral writes a literal chunk and returns the number of bytes written.", "",
 		"It assumes that:",
-		"dst is long enough to hold the encoded bytes",
-		"0 <= len(lit) && len(lit) <= math.MaxUint32", "")
+		"  dst is long enough to hold the encoded bytes",
+		"  0 <= len(lit) && len(lit) <= math.MaxUint32", "")
 	Pragma("noescape")
 
 	// The 24 bytes of stack space is to call runtime·memmove.
@@ -342,9 +460,9 @@ func genEmitCopy() {
 	TEXT("emitCopy", NOSPLIT, "func(dst []byte, offset, length int) int")
 	Doc("emitCopy writes a copy chunk and returns the number of bytes written.", "",
 		"It assumes that:",
-		"	dst is long enough to hold the encoded bytes",
-		"	1 <= offset && offset <= math.MaxUint32",
-		"4 <= length && length <= 1 << 24", "")
+		"  dst is long enough to hold the encoded bytes",
+		"  1 <= offset && offset <= math.MaxUint32",
+		"  4 <= length && length <= 1 << 24", "")
 	Pragma("noescape")
 
 	dstBase, offset, length, retval := GP64(), GP64(), GP64(), GP64()

@@ -6,14 +6,13 @@
 
 #include "textflag.h"
 
-// func genEncodeBlockAsm(dst []byte, src []byte) int
-TEXT ·genEncodeBlockAsm(SB), NOSPLIT, $65656-56
+// func encodeBlockAsm(dst []byte, src []byte) int
+TEXT ·encodeBlockAsm(SB), NOSPLIT, $65656-56
 	MOVQ $0x00000200, AX
 	LEAQ 120(SP), CX
-	XORQ AX, AX
 	PXOR X0, X0
 
-zeroloop:
+zeroLoopencodeBlockAsm:
 	MOVUPS X0, (CX)
 	MOVUPS X0, 16(CX)
 	MOVUPS X0, 32(CX)
@@ -24,9 +23,55 @@ zeroloop:
 	MOVUPS X0, 112(CX)
 	ADDQ   $0x80, CX
 	DECQ   AX
-	JNZ    zeroloop
-	MOVQ   $0x0000cf1bbcdcbf9b, AX
-	XORQ   AX, AX
+	JNZ    zeroLoopencodeBlockAsm
+	MOVL   AX, 64(SP)
+	MOVQ   src_len+32(FP), DX
+	LEAQ   -5(DX), BX
+	LEAQ   -8(DX), BP
+	SHRQ   $0x05, DX
+	SUBL   BX, DX
+	MOVL   BP, 56(SP)
+	MOVL   DX, 60(SP)
+	MOVB   $0x01, SI
+	MOVL   SI, 68(SP)
+	MOVQ   src_base+24(FP), AX
+	MOVQ   (AX)(SI*1), DX
+	MOVL   64(SP), DI
+	SUBL   SI, DI
+	SHRL   $0x06, DI
+	LEAQ   4(SI)(DI*1), BX
+	MOVQ   $0x0000cf1bbcdcbf9b, BP
+	MOVQ   DX, DI
+	MOVQ   DX, R11
+	SHRQ   $0x08, R11
+	SHLQ   $0x10, DI
+	IMULQ  BP, DI
+	SHRQ   $0x30, DI
+	SHLQ   $0x10, R11
+	IMULQ  BP, R11
+	SHRQ   $0x30, R11
+	MOVL   (CX)(DI*1), BX
+	MOVL   (CX)(R11*1), CX
+	MOVL   SI, 120(SP)(DI*1)
+	MOVQ   SI, R8
+	DECQ   R8
+	MOVL   R8, 120(SP)(R11*1)
+	MOVQ   DX, CX
+	SHRQ   $0x10, CX
+	SHLQ   $0x10, CX
+	IMULQ  BP, CX
+	SHRQ   $0x30, CX
+	MOVL   68(SP), R10
+	MOVQ   SI, CX
+	SUBQ   CX, R10
+	MOVL   1(AX), CX
+	MOVQ   DX, R9
+	SHLQ   $0x08, DX
+	CMPL   R9, CX
+	JNE    noRepeatFoundencodeBlockAsm
+
+noRepeatFoundencodeBlockAsm:
+	NOP
 	RET
 
 // func emitLiteral(dst []byte, lit []byte) int
