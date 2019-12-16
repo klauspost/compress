@@ -87,121 +87,123 @@ extendBackLoopencodeBlockAsm:
 	JMP  extendBackLoopencodeBlockAsm
 
 extendBackEndencodeBlockAsm:
-	MOVQ 64(SP), CX
-	MOVQ R11, R13
-	LEAQ (AX)(CX*1), BX
-	SUBQ R13, CX
-	MOVQ dst_base+0(FP), DX
-	XORQ AX, AX
-	MOVQ CX, AX
-	MOVQ CX, R13
+	MOVQ 64(SP), DX
+	MOVQ R11, CX
+	LEAQ (AX)(DX*1), AX
+	SUBQ CX, DX
+	MOVQ dst_base+0(FP), BX
+	XORQ CX, CX
+	MOVQ R11, 64(SP)
+	MOVQ DX, CX
+	MOVQ DX, R13
 	SUBL $0x01, R13
-	JC   emitLiteralDoneencodeBlockAsm
+	JC   emitLiteralDoneRepeatencodeBlockAsm
 	CMPL R13, $0x3c
-	JLT  oneByteRepeat
+	JLT  oneByteRepeatencodeBlockAsm
 	CMPL R13, $0x00000100
-	JLT  twoBytesRepeat
+	JLT  twoBytesRepeatencodeBlockAsm
 	CMPL R13, $0x00010000
-	JLT  threeBytesRepeat
+	JLT  threeBytesRepeatencodeBlockAsm
 	CMPL R13, $0x01000000
-	JLT  fourBytesRepeat
-	MOVB $0xfc, (DX)
-	MOVL R13, 1(DX)
-	ADDQ $0x05, AX
-	ADDQ $0x05, DX
-	JMP  memmoveRepeat
+	JLT  fourBytesRepeatencodeBlockAsm
+	MOVB $0xfc, (BX)
+	MOVL R13, 1(BX)
+	ADDQ $0x05, CX
+	ADDQ $0x05, BX
+	JMP  memmoveRepeatencodeBlockAsm
 
-fourBytesRepeat:
+fourBytesRepeatencodeBlockAsm:
 	MOVQ R13, R14
 	SHRL $0x10, R14
-	MOVB $0xf8, (DX)
-	MOVW R13, 1(DX)
-	MOVB R14, 3(DX)
-	ADDQ $0x04, AX
-	ADDQ $0x04, DX
-	JMP  memmoveRepeat
+	MOVB $0xf8, (BX)
+	MOVW R13, 1(BX)
+	MOVB R14, 3(BX)
+	ADDQ $0x04, CX
+	ADDQ $0x04, BX
+	JMP  memmoveRepeatencodeBlockAsm
 
-threeBytesRepeat:
-	MOVB $0xf4, (DX)
-	MOVW R13, 1(DX)
-	ADDQ $0x03, AX
-	ADDQ $0x03, DX
-	JMP  memmoveRepeat
+threeBytesRepeatencodeBlockAsm:
+	MOVB $0xf4, (BX)
+	MOVW R13, 1(BX)
+	ADDQ $0x03, CX
+	ADDQ $0x03, BX
+	JMP  memmoveRepeatencodeBlockAsm
 
-twoBytesRepeat:
-	MOVB $0xf0, (DX)
-	MOVB R13, 1(DX)
-	ADDQ $0x02, AX
-	ADDQ $0x02, DX
-	JMP  memmoveRepeat
+twoBytesRepeatencodeBlockAsm:
+	MOVB $0xf0, (BX)
+	MOVB R13, 1(BX)
+	ADDQ $0x02, CX
+	ADDQ $0x02, BX
+	JMP  memmoveRepeatencodeBlockAsm
 
-oneByteRepeat:
+oneByteRepeatencodeBlockAsm:
 	SHLB $0x02, R13
-	MOVB R13, (DX)
-	ADDQ $0x01, AX
-	ADDQ $0x01, DX
+	MOVB R13, (BX)
+	ADDQ $0x01, CX
+	ADDQ $0x01, BX
 
-memmoveRepeat:
-	MOVQ  CX, AX
-	SHRQ  $0x07, AX
-	TESTQ AX, AX
-	JZ    Done128EmitLitMemMoveRepeat
-
-Loop128EmitLitMemMoveRepeat:
-	MOVOU (BX), X0
-	MOVOU 16(BX), X1
-	MOVOU 32(BX), X2
-	MOVOU 48(BX), X3
-	MOVOU 64(BX), X4
-	MOVOU 80(BX), X5
-	MOVOU 96(BX), X6
-	MOVOU 112(BX), X7
-	MOVOU X0, (DX)
-	MOVOU X1, 16(DX)
-	MOVOU X2, 32(DX)
-	MOVOU X3, 48(DX)
-	MOVOU X4, 64(DX)
-	MOVOU X5, 80(DX)
-	MOVOU X6, 96(DX)
-	MOVOU X7, 112(DX)
-	LEAQ  128(BX), BX
-	LEAQ  128(DX), DX
-	LEAQ  -128(CX), CX
-	DECQ  AX
-	JNZ   Loop128EmitLitMemMoveRepeat
-
-Done128EmitLitMemMoveRepeat:
-	MOVQ  CX, AX
-	SHRQ  $0x04, AX
-	TESTQ AX, AX
-	JZ    Done16EmitLitMemMoveRepeat
-
-Loop16EmitLitMemMoveRepeat:
-	MOVOU (BX), X0
-	MOVOU X0, (DX)
-	LEAQ  16(BX), BX
-	LEAQ  16(DX), DX
-	LEAQ  -16(CX), CX
-	DECQ  AX
-	JNZ   Loop16EmitLitMemMoveRepeat
-
-Done16EmitLitMemMoveRepeat:
+memmoveRepeatencodeBlockAsm:
+	MOVQ  DX, CX
+	SHRQ  $0x07, CX
 	TESTQ CX, CX
-	JZ    emitLiteralDoneencodeBlockAsm
+	JZ    Done128EmitLitMemMoveRepeatencodeBlockAsm
 
-Loop1EmitLitMemMoveRepeat:
-	MOVB (BX), AL
-	MOVB AL, (DX)
+Loop128EmitLitMemMoveRepeatencodeBlockAsm:
+	MOVOU (AX), X0
+	MOVOU 16(AX), X1
+	MOVOU 32(AX), X2
+	MOVOU 48(AX), X3
+	MOVOU 64(AX), X4
+	MOVOU 80(AX), X5
+	MOVOU 96(AX), X6
+	MOVOU 112(AX), X7
+	MOVOU X0, (BX)
+	MOVOU X1, 16(BX)
+	MOVOU X2, 32(BX)
+	MOVOU X3, 48(BX)
+	MOVOU X4, 64(BX)
+	MOVOU X5, 80(BX)
+	MOVOU X6, 96(BX)
+	MOVOU X7, 112(BX)
+	LEAQ  128(AX), AX
+	LEAQ  128(BX), BX
+	LEAQ  -128(DX), DX
+	DECQ  CX
+	JNZ   Loop128EmitLitMemMoveRepeatencodeBlockAsm
+
+Done128EmitLitMemMoveRepeatencodeBlockAsm:
+	MOVQ  DX, CX
+	SHRQ  $0x04, CX
+	TESTQ CX, CX
+	JZ    Done16EmitLitMemMoveRepeatencodeBlockAsm
+
+Loop16EmitLitMemMoveRepeatencodeBlockAsm:
+	MOVOU (AX), X0
+	MOVOU X0, (BX)
+	LEAQ  16(AX), AX
+	LEAQ  16(BX), BX
+	LEAQ  -16(DX), DX
+	DECQ  CX
+	JNZ   Loop16EmitLitMemMoveRepeatencodeBlockAsm
+
+Done16EmitLitMemMoveRepeatencodeBlockAsm:
+	TESTQ DX, DX
+	JZ    emitLiteralDoneRepeatencodeBlockAsm
+
+Loop1EmitLitMemMoveRepeatencodeBlockAsm:
+	MOVB (AX), CL
+	MOVB CL, (BX)
+	LEAQ 1(AX), AX
 	LEAQ 1(BX), BX
-	LEAQ 1(DX), DX
-	DECQ CX
-	JNZ  Loop1EmitLitMemMoveRepeat
+	DECQ DX
+	JNZ  Loop1EmitLitMemMoveRepeatencodeBlockAsm
 
-emitLiteralDoneencodeBlockAsm:
-	MOVQ DX, dst_base+0(FP)
+emitLiteralDoneRepeatencodeBlockAsm:
+	MOVQ BX, dst_base+0(FP)
 
 noRepeatFoundencodeBlockAsm:
 	NOP
+	MOVQ src_len+32(FP), AX
 	RET
 
 // func emitLiteral(dst []byte, lit []byte) int

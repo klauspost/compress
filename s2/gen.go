@@ -210,19 +210,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 					Label("extendBackEnd" + name)
 					// Base is now at start.
 					// d += emitLiteral(dst[d:], src[nextEmit:base])
-					{
-						tmp1, tmp2, litLen, retval, dstBaseTmp, litBase := GP64(), GP64(), GP64(), GP64(), GP64(), GP64()
-						MOVQ(nextEmit, litLen)
-						MOVQ(base, tmp1)
-						// litBase = src[nextEmit:]
-						LEAQ(Mem{Base: src, Index: litLen, Scale: 1}, litBase)
-						SUBQ(tmp1, litLen) // litlen = base - nextEmit
-						MOVQ(dstBase, dstBaseTmp)
-						XORQ(retval, retval)
-						emitLiteral("Repeat", tmp1, tmp2, litLen, retval, dstBaseTmp, litBase, LabelRef("emitLiteralDone"+name))
-						Label("emitLiteralDone" + name)
-						MOVQ(dstBaseTmp, dstBase)
-					}
+					emitLiterals(nextEmit, base, src, dstBase, "Repeat"+name)
 				}
 			}
 			Label("noRepeatFound" + name)
@@ -232,7 +220,36 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 	}
 
 	Label("emitRemainder" + name)
+
+	// TODO:
+	// if d+len(src)-nextEmit > dstLimit {	return 0
+
+	// d += emitLiteral(dst[d:], src[nextEmit:])
+	emitEnd := GP64()
+	MOVQ(lenSrc, emitEnd)
+	// FIXME: failed to allocate registers
+	if false {
+		emitLiterals(nextEmit, emitEnd, src, dstBase, name+"EmitRemainder")
+	}
 	RET()
+}
+
+// emitLiterals emits literals from nextEmit to base, updates nextEmit, dstBase.
+// src & base are untouched.
+func emitLiterals(nextEmit Mem, base reg.GPVirtual, src reg.GPVirtual, dstBase Mem, name string) {
+	tmp, litLen, retval, dstBaseTmp, litBase := GP64(), GP64(), GP64(), GP64(), GP64()
+	MOVQ(nextEmit, litLen)
+	MOVQ(base, tmp)
+	// litBase = src[nextEmit:]
+	LEAQ(Mem{Base: src, Index: litLen, Scale: 1}, litBase)
+	SUBQ(tmp, litLen) // litlen = base - nextEmit
+	MOVQ(dstBase, dstBaseTmp)
+	XORQ(retval, retval)
+	MOVQ(base, nextEmit)
+	emitLiteral(name, litLen, retval, dstBaseTmp, litBase, LabelRef("emitLiteralDone"+name))
+	Label("emitLiteralDone" + name)
+	// Store updated dstBase
+	MOVQ(dstBaseTmp, dstBase)
 }
 
 type ptrSize struct {
@@ -290,7 +307,7 @@ func genEmitLiteral() {
 	Load(Param("dst").Base(), dstBase)
 	Load(Param("lit").Base(), litBase)
 	Load(Param("lit").Len(), litLen)
-	emitLiteral("Standalone", GP64(), GP64(), litLen, retval, dstBase, litBase, "emitLiteralEndStandalone")
+	emitLiteral("Standalone", litLen, retval, dstBase, litBase, "emitLiteralEndStandalone")
 	Label("emitLiteralEndStandalone")
 	Store(retval, ReturnIndex(0))
 	RET()
@@ -298,9 +315,9 @@ func genEmitLiteral() {
 
 // emitLiteral can be used for inlining an emitLiteral call.
 // stack must have at least 32 bytes
-func emitLiteral(name string, tmp1, tmp2, litLen, retval, dstBase, litBase reg.GPVirtual, end LabelRef) {
-	n := tmp1
-	n16 := tmp2
+func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, end LabelRef) {
+	n := GP64()
+	n16 := GP64()
 
 	// We always add litLen bytes
 	MOVQ(litLen, retval)
