@@ -17,6 +17,7 @@ import (
 	"unicode"
 
 	"github.com/klauspost/compress/s2"
+	"github.com/klauspost/readahead"
 )
 
 var (
@@ -88,6 +89,9 @@ Options:`)
 		func() {
 			var closeOnce sync.Once
 			dstFilename := fmt.Sprintf("%s%s", filename, ".s2")
+			if *bench > 0 {
+				dstFilename = "(discarded)"
+			}
 			if !*quiet {
 				fmt.Println("Compressing", filename, "->", dstFilename)
 			}
@@ -95,7 +99,9 @@ Options:`)
 			file, err := os.Open(filename)
 			exitErr(err)
 			defer closeOnce.Do(func() { file.Close() })
-			src := bufio.NewReaderSize(file, int(sz)*2)
+			src, err := readahead.NewReaderSize(file, *cpu, int(sz))
+			exitErr(err)
+			defer src.Close()
 			finfo, err := file.Stat()
 			exitErr(err)
 			var out io.Writer
