@@ -165,8 +165,8 @@ func emitRepeat(dst []byte, offset, length int) int {
 	length -= 1 << 16
 	left := 0
 	if length > maxRepeat {
-		left = length - maxRepeat
-		length = maxRepeat
+		left = length - maxRepeat + 4
+		length = maxRepeat - 4
 	}
 	dst[4] = uint8(length >> 16)
 	dst[3] = uint8(length >> 8)
