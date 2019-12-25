@@ -433,7 +433,8 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 	}()
 	enc.Reset()
 	blk := enc.Block()
-	single := len(src) > 1<<20
+	// Use single segments when above minimum window and below 1MB.
+	single := len(src) < 1<<20 && len(src) > MinWindowSize
 	if e.o.single != nil {
 		single = *e.o.single
 	}
