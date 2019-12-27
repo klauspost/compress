@@ -476,13 +476,7 @@ func (e *doubleFastEncoder) EncodeNoHist(blk *blockEnc, src []byte) {
 encodeLoop:
 	for {
 		var t int32
-		// We allow the encoder to optionally turn off repeat offsets across blocks
-		canRepeat := len(blk.sequences) > 2
-
 		for {
-			if debug && canRepeat && offset1 == 0 {
-				panic("offset0 was 0")
-			}
 
 			nextHashS := hash5(cv, dFastShortTableBits)
 			nextHashL := hash8(cv, dFastLongTableBits)
@@ -495,8 +489,8 @@ encodeLoop:
 			e.longTable[nextHashL] = entry
 			e.table[nextHashS] = entry
 
-			if canRepeat {
-				if repIndex >= 0 && load3232(src, repIndex) == uint32(cv>>(repOff*8)) {
+			if len(blk.sequences) > 2 {
+				if load3232(src, repIndex) == uint32(cv>>(repOff*8)) {
 					// Consider history as well.
 					var seq seq
 					//length := 4 + e.matchlen(s+4+repOff, repIndex+4, src)
@@ -620,10 +614,6 @@ encodeLoop:
 			panic("s <= t")
 		}
 
-		if debug && canRepeat && int(offset1) > len(src) {
-			panic("invalid offset")
-		}
-
 		// Extend the 4-byte match as long as possible.
 		//l := e.matchlen(s+4, t+4, src) + 4
 		l := int32(matchLen(src[s+4:], src[t+4:])) + 4
@@ -679,7 +669,7 @@ encodeLoop:
 
 		cv = load6432(src, s)
 
-		if !canRepeat {
+		if len(blk.sequences) <= 2 {
 			continue
 		}
 

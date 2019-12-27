@@ -396,13 +396,8 @@ encodeLoop:
 
 		// We will not use repeat offsets across blocks.
 		// By not using them for the first 3 matches
-		canRepeat := len(blk.sequences) > 2
 
 		for {
-			if debug && canRepeat && offset1 == 0 {
-				panic("offset0 was 0")
-			}
-
 			nextHash := hash6(cv, hashLog)
 			nextHash2 := hash6(cv>>8, hashLog)
 			candidate := e.table[nextHash]
@@ -412,7 +407,7 @@ encodeLoop:
 			e.table[nextHash] = tableEntry{offset: s + e.cur, val: uint32(cv)}
 			e.table[nextHash2] = tableEntry{offset: s + e.cur + 1, val: uint32(cv >> 8)}
 
-			if canRepeat && repIndex >= 0 && load3232(src, repIndex) == uint32(cv>>16) {
+			if len(blk.sequences) > 2 && load3232(src, repIndex) == uint32(cv>>16) {
 				// Consider history as well.
 				var seq seq
 				// lenght := 4 + e.matchlen(s+6, repIndex+4, src)
@@ -499,10 +494,6 @@ encodeLoop:
 			panic("s <= t")
 		}
 
-		if debug && canRepeat && int(offset1) > len(src) {
-			panic("invalid offset")
-		}
-
 		// Extend the 4-byte match as long as possible.
 		//l := e.matchlenNoHist(s+4, t+4, src) + 4
 		l := int32(matchLen(src[s+4:], src[t+4:])) + 4
@@ -539,7 +530,7 @@ encodeLoop:
 		cv = load6432(src, s)
 
 		// Check offset 2
-		if o2 := s - offset2; canRepeat && load3232(src, o2) == uint32(cv) {
+		if o2 := s - offset2; len(blk.sequences) > 2 && load3232(src, o2) == uint32(cv) {
 			// We have at least 4 byte match.
 			// No need to check backwards. We come straight from a match
 			//l := 4 + e.matchlenNoHist(s+4, o2+4, src)
