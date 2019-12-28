@@ -439,7 +439,7 @@ func (s *Scratch) buildCTable() error {
 		return fmt.Errorf("internal error: maxNbBits (%d) > tableLogMax (%d)", maxNbBits, tableLogMax)
 	}
 	var nbPerRank [tableLogMax + 1]uint16
-	var valPerRank [tableLogMax + 1]uint16
+	var valPerRank [16]uint16
 	for _, v := range huffNode[:nonNullRank+1] {
 		nbPerRank[v.nbBits]++
 	}
@@ -455,16 +455,17 @@ func (s *Scratch) buildCTable() error {
 	}
 
 	// push nbBits per symbol, symbol order
-	// TODO: changed `s.symbolLen` -> `nonNullRank+1` (micro-opt)
 	for _, v := range huffNode[:nonNullRank+1] {
 		s.cTable[v.symbol].nBits = v.nbBits
 	}
 
 	// assign value within rank, symbol order
-	for n, val := range s.cTable[:s.symbolLen] {
-		v := valPerRank[val.nBits]
-		s.cTable[n].val = v
-		valPerRank[val.nBits] = v + 1
+	t := s.cTable[:s.symbolLen]
+	for n, val := range t {
+		nbits := val.nBits & 15
+		v := valPerRank[nbits]
+		t[n].val = v
+		valPerRank[nbits] = v + 1
 	}
 
 	return nil
