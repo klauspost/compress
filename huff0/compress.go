@@ -163,28 +163,23 @@ func (s *Scratch) compress1xDo(dst, src []byte) ([]byte, error) {
 	for i := len(src) & 3; i > 0; i-- {
 		bw.encSymbol(cTable, src[n+i-1])
 	}
+	n -= 4
 	if s.actualTableLog <= 8 {
-		n -= 4
 		for ; n >= 0; n -= 4 {
 			tmp := src[n : n+4]
 			// tmp should be len 4
 			bw.flush32()
-			bw.encSymbol(cTable, tmp[3])
-			bw.encSymbol(cTable, tmp[2])
-			bw.encSymbol(cTable, tmp[1])
-			bw.encSymbol(cTable, tmp[0])
+			bw.encTwoSymbols(cTable, tmp[3], tmp[2])
+			bw.encTwoSymbols(cTable, tmp[1], tmp[0])
 		}
 	} else {
-		n -= 4
 		for ; n >= 0; n -= 4 {
 			tmp := src[n : n+4]
 			// tmp should be len 4
 			bw.flush32()
-			bw.encSymbol(cTable, tmp[3])
-			bw.encSymbol(cTable, tmp[2])
+			bw.encTwoSymbols(cTable, tmp[3], tmp[2])
 			bw.flush32()
-			bw.encSymbol(cTable, tmp[1])
-			bw.encSymbol(cTable, tmp[0])
+			bw.encTwoSymbols(cTable, tmp[1], tmp[0])
 		}
 	}
 	err := bw.close()
@@ -513,7 +508,7 @@ func (s *Scratch) huffSort() {
 }
 
 func (s *Scratch) setMaxHeight(lastNonNull int) uint8 {
-	maxNbBits := s.TableLog
+	maxNbBits := s.actualTableLog
 	huffNode := s.nodes[1 : huffNodesLen+1]
 	//huffNode = huffNode[: huffNodesLen]
 
