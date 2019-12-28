@@ -489,10 +489,12 @@ func (s *Scratch) huffSort() {
 		r := highBit32(v+1) & 31
 		rank[r].base++
 	}
-	for n := 30; n > 0; n-- {
+	// maxBitLength is log2(BlockSizeMax) + 1
+	const maxBitLength = 18 + 1
+	for n := maxBitLength; n > 0; n-- {
 		rank[n-1].base += rank[n].base
 	}
-	for n := range rank[:] {
+	for n := range rank[:maxBitLength] {
 		rank[n].current = rank[n].base
 	}
 	for n, c := range s.count[:s.symbolLen] {
