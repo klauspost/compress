@@ -36,3 +36,11 @@ func emitRepeat(dst []byte, offset int, length int) int
 //
 //go:noescape
 func emitCopy(dst []byte, offset int, length int) int
+
+// matchLen returns how many bytes match in a and b
+//
+// It assumes that:
+//   len(a) <= len(b)
+//
+//go:noescape
+func matchLen(a []byte, b []byte) int

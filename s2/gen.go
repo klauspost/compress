@@ -1,4 +1,4 @@
-//+build ignore
+//+build generate
 
 //go:generate go run gen.go -out encodeblock_amd64.s -stubs encodeblock_amd64.go
 
@@ -22,6 +22,7 @@ func main() {
 	genEmitLiteral()
 	genEmitRepeat()
 	genEmitCopy()
+	genMatchLen()
 	Generate()
 }
 
@@ -709,4 +710,63 @@ func genMemMove(name string, to, from, n reg.GPVirtual, end LabelRef) {
 	LEAQ(Mem{Base: to, Disp: 1}, to)
 	DECQ(n)
 	JNZ(LabelRef("Loop1" + name))
+}
+
+// genMatchLen generates standalone matchLen.
+func genMatchLen() {
+	TEXT("matchLen", NOSPLIT, "func(a, b []byte) int")
+	Doc("matchLen returns how many bytes match in a and b", "",
+		"It assumes that:",
+		"  len(a) <= len(b)", "")
+	Pragma("noescape")
+
+	aBase, bBase, length := GP64(), GP64(), GP64()
+
+	Load(Param("a").Base(), aBase)
+	Load(Param("b").Base(), bBase)
+	Load(Param("a").Len(), length)
+	l := matchLen("Standalone", Mem{Base: aBase}, Mem{Base: bBase}, length, LabelRef("genMatchLenEnd"))
+	Label("genMatchLenEnd")
+	Store(l, ReturnIndex(0))
+	RET()
+}
+
+func matchLen(name string, a, b Mem, len reg.GPVirtual, end LabelRef) reg.GPVirtual {
+	tmp, matched := GP64(), GP64()
+	XORQ(matched, matched)
+
+	CMPQ(len, U8(8))
+	JL(LabelRef("matchlen_single" + name))
+
+	Label("matchlen_loopback" + name)
+	MOVQ(Mem{Base: a.Base, Index: matched, Scale: 1}, tmp)
+	XORQ(Mem{Base: b.Base, Index: matched, Scale: 1}, tmp)
+	TESTQ(tmp, tmp)
+	JZ(LabelRef("matchlen_loop" + name))
+	// Not all match.
+	BSFQ(tmp, tmp)
+	SARQ(U8(3), tmp)
+	LEAQ(Mem{Base: matched, Index: tmp, Scale: 1}, matched)
+	JMP(end)
+
+	// All 8 byte matched, update and loop.
+	Label("matchlen_loop" + name)
+	LEAQ(Mem{Base: len, Disp: -8}, len)
+	LEAQ(Mem{Base: matched, Disp: 8}, matched)
+	CMPQ(len, U8(8))
+	JGE(LabelRef("matchlen_loopback" + name))
+
+	// Less than 8 bytes left.
+	Label("matchlen_single" + name)
+	TESTQ(len, len)
+	JZ(end)
+	Label("matchlen_single_loopback" + name)
+	MOVB(Mem{Base: a.Base, Index: matched, Scale: 1}, tmp.As8())
+	CMPB(Mem{Base: b.Base, Index: matched, Scale: 1}, tmp.As8())
+	JNE(end)
+	LEAQ(Mem{Base: matched, Disp: 1}, matched)
+	DECQ(len)
+	JNZ(LabelRef("matchlen_single_loopback" + name))
+	JMP(end)
+	return matched
 }

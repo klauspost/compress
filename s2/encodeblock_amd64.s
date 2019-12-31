@@ -609,3 +609,44 @@ emitCopyThreeStandalone:
 genEmitCopyEnd:
 	MOVQ BX, ret+40(FP)
 	RET
+
+// func matchLen(a []byte, b []byte) int
+TEXT ·matchLen(SB), NOSPLIT, $0-56
+	MOVQ a_base+0(FP), AX
+	MOVQ b_base+24(FP), CX
+	MOVQ a_len+8(FP), DX
+	XORQ BP, BP
+	CMPQ DX, $0x08
+	JL   matchlen_singleStandalone
+
+matchlen_loopbackStandalone:
+	MOVQ  (AX)(BP*1), BX
+	XORQ  (CX)(BP*1), BX
+	TESTQ BX, BX
+	JZ    matchlen_loopStandalone
+	BSFQ  BX, BX
+	SARQ  $0x03, BX
+	LEAQ  (BP)(BX*1), BP
+	JMP   genMatchLenEnd
+
+matchlen_loopStandalone:
+	LEAQ -8(DX), DX
+	LEAQ 8(BP), BP
+	CMPQ DX, $0x08
+	JGE  matchlen_loopbackStandalone
+
+matchlen_singleStandalone:
+	TESTQ DX, DX
+	JZ    genMatchLenEnd
+
+matchlen_single_loopbackStandalone:
+	MOVB (AX)(BP*1), BL
+	CMPB (CX)(BP*1), BL
+	JNE  genMatchLenEnd
+	LEAQ 1(BP), BP
+	DECQ DX
+	JNZ  matchlen_single_loopbackStandalone
+
+genMatchLenEnd:
+	MOVQ BP, ret+48(FP)
+	RET

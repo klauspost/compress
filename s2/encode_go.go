@@ -2,6 +2,8 @@
 
 package s2
 
+import "math/bits"
+
 // emitLiteral writes a literal chunk and returns the number of bytes written.
 //
 // It assumes that:
@@ -149,4 +151,40 @@ func emitCopy(dst []byte, offset, length int) int {
 	dst[1] = uint8(offset)
 	dst[0] = uint8(offset>>8)<<5 | uint8(length-4)<<2 | tagCopy1
 	return 2
+}
+
+// matchLen returns how many bytes match in a and b
+//
+// It assumes that:
+//   len(a) <= len(b)
+//
+func matchLen(a []byte, b []byte) int {
+	b = b[:len(a)]
+	var checked int
+	if len(a) > 4 {
+		// Try 4 bytes first
+		if diff := load32(a, 0) ^ load32(b, 0); diff != 0 {
+			return bits.TrailingZeros32(diff) >> 3
+		}
+		// Switch to 8 byte matching.
+		checked = 4
+		a = a[4:]
+		b = b[4:]
+		for len(a) >= 8 {
+			b = b[:len(a)]
+			if diff := load64(a, 0) ^ load64(b, 0); diff != 0 {
+				return checked + (bits.TrailingZeros64(diff) >> 3)
+			}
+			checked += 8
+			a = a[8:]
+			b = b[8:]
+		}
+	}
+	b = b[:len(a)]
+	for i := range a {
+		if a[i] != b[i] {
+			return int(i) + checked
+		}
+	}
+	return len(a) + checked
 }

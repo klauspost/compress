@@ -1582,3 +1582,37 @@ func Benchmark_ZFlat8(b *testing.B)  { benchFile(b, 8, false) }
 func Benchmark_ZFlat9(b *testing.B)  { benchFile(b, 9, false) }
 func Benchmark_ZFlat10(b *testing.B) { benchFile(b, 10, false) }
 func Benchmark_ZFlat11(b *testing.B) { benchFile(b, 11, false) }
+
+func TestMatchLen(t *testing.T) {
+	// ref is a simple, reference implementation of matchLen.
+	ref := func(a, b []byte) int {
+		n := 0
+		for i := range a {
+			if a[i] != b[i] {
+				break
+			}
+			n++
+		}
+		return n
+	}
+
+	nums := []int{0, 1, 2, 7, 8, 9, 29, 30, 31, 32, 33, 34, 38, 39, 40}
+	for yIndex := 40; yIndex > 30; yIndex-- {
+		xxx := bytes.Repeat([]byte("x"), 40)
+		if yIndex < len(xxx) {
+			xxx[yIndex] = 'y'
+		}
+		for _, i := range nums {
+			for _, j := range nums {
+				if i >= j {
+					continue
+				}
+				got := matchLen(xxx[j:], xxx[i:])
+				want := ref(xxx[j:], xxx[i:])
+				if got != want {
+					t.Errorf("yIndex=%d, i=%d, j=%d: got %d, want %d", yIndex, i, j, got, want)
+				}
+			}
+		}
+	}
+}
