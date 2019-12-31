@@ -163,28 +163,23 @@ func (s *Scratch) compress1xDo(dst, src []byte) ([]byte, error) {
 	for i := len(src) & 3; i > 0; i-- {
 		bw.encSymbol(cTable, src[n+i-1])
 	}
+	n -= 4
 	if s.actualTableLog <= 8 {
-		n -= 4
 		for ; n >= 0; n -= 4 {
 			tmp := src[n : n+4]
 			// tmp should be len 4
 			bw.flush32()
-			bw.encSymbol(cTable, tmp[3])
-			bw.encSymbol(cTable, tmp[2])
-			bw.encSymbol(cTable, tmp[1])
-			bw.encSymbol(cTable, tmp[0])
+			bw.encTwoSymbols(cTable, tmp[3], tmp[2])
+			bw.encTwoSymbols(cTable, tmp[1], tmp[0])
 		}
 	} else {
-		n -= 4
 		for ; n >= 0; n -= 4 {
 			tmp := src[n : n+4]
 			// tmp should be len 4
 			bw.flush32()
-			bw.encSymbol(cTable, tmp[3])
-			bw.encSymbol(cTable, tmp[2])
+			bw.encTwoSymbols(cTable, tmp[3], tmp[2])
 			bw.flush32()
-			bw.encSymbol(cTable, tmp[1])
-			bw.encSymbol(cTable, tmp[0])
+			bw.encTwoSymbols(cTable, tmp[1], tmp[0])
 		}
 	}
 	err := bw.close()
@@ -439,7 +434,7 @@ func (s *Scratch) buildCTable() error {
 		return fmt.Errorf("internal error: maxNbBits (%d) > tableLogMax (%d)", maxNbBits, tableLogMax)
 	}
 	var nbPerRank [tableLogMax + 1]uint16
-	var valPerRank [tableLogMax + 1]uint16
+	var valPerRank [16]uint16
 	for _, v := range huffNode[:nonNullRank+1] {
 		nbPerRank[v.nbBits]++
 	}
@@ -455,16 +450,17 @@ func (s *Scratch) buildCTable() error {
 	}
 
 	// push nbBits per symbol, symbol order
-	// TODO: changed `s.symbolLen` -> `nonNullRank+1` (micro-opt)
 	for _, v := range huffNode[:nonNullRank+1] {
 		s.cTable[v.symbol].nBits = v.nbBits
 	}
 
 	// assign value within rank, symbol order
-	for n, val := range s.cTable[:s.symbolLen] {
-		v := valPerRank[val.nBits]
-		s.cTable[n].val = v
-		valPerRank[val.nBits] = v + 1
+	t := s.cTable[:s.symbolLen]
+	for n, val := range t {
+		nbits := val.nBits & 15
+		v := valPerRank[nbits]
+		t[n].val = v
+		valPerRank[nbits] = v + 1
 	}
 
 	return nil
@@ -488,10 +484,12 @@ func (s *Scratch) huffSort() {
 		r := highBit32(v+1) & 31
 		rank[r].base++
 	}
-	for n := 30; n > 0; n-- {
+	// maxBitLength is log2(BlockSizeMax) + 1
+	const maxBitLength = 18 + 1
+	for n := maxBitLength; n > 0; n-- {
 		rank[n-1].base += rank[n].base
 	}
-	for n := range rank[:] {
+	for n := range rank[:maxBitLength] {
 		rank[n].current = rank[n].base
 	}
 	for n, c := range s.count[:s.symbolLen] {
@@ -510,7 +508,7 @@ func (s *Scratch) huffSort() {
 }
 
 func (s *Scratch) setMaxHeight(lastNonNull int) uint8 {
-	maxNbBits := s.TableLog
+	maxNbBits := s.actualTableLog
 	huffNode := s.nodes[1 : huffNodesLen+1]
 	//huffNode = huffNode[: huffNodesLen]
 

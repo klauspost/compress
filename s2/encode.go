@@ -349,9 +349,9 @@ func (w *Writer) ReadFrom(r io.Reader) (n int64, err error) {
 			return 0, err
 		}
 	}
-	w.ibuf = w.ibuf[:w.blockSize]
 	for {
-		n2, err := io.ReadFull(r, w.ibuf)
+		inbuf := w.buffers.Get().([]byte)[:w.blockSize+obufHeaderLen]
+		n2, err := io.ReadFull(r, inbuf[obufHeaderLen:])
 		if err != nil {
 			if err == io.ErrUnexpectedEOF {
 				err = io.EOF
@@ -364,20 +364,17 @@ func (w *Writer) ReadFrom(r io.Reader) (n int64, err error) {
 			break
 		}
 		n += int64(n2)
-		w.ibuf = w.ibuf[:n2]
-		n3, err2 := w.write(w.ibuf)
+		err2 := w.writeFull(inbuf[:n2+obufHeaderLen])
 		if w.err(err2) != nil {
 			break
 		}
-		if n3 != n2 {
-			return n, w.err(errors.New("internal error: size uncompressed size mismatch"))
-		}
+
 		if err != nil {
 			// We got EOF and wrote everything
 			break
 		}
 	}
-	w.ibuf = w.ibuf[:0]
+
 	return n, w.err(nil)
 }
 
@@ -460,6 +457,75 @@ func (w *Writer) write(p []byte) (nRet int, errRet error) {
 		nRet += len(uncompressed)
 	}
 	return nRet, nil
+}
+
+// writeFull is a special version of write that will always write the full buffer.
+// Data to be compressed should start at offset obufHeaderLen and fill the remainder of the buffer.
+// The data will be written as a single block.
+// The caller is not allowed to use inbuf after this function has been called.
+func (w *Writer) writeFull(inbuf []byte) (errRet error) {
+	if err := w.err(nil); err != nil {
+		return err
+	}
+
+	// Spawn goroutine and write block to output channel.
+	if !w.wroteStreamHeader {
+		w.wroteStreamHeader = true
+		hWriter := make(chan result)
+		w.output <- hWriter
+		hWriter <- []byte(magicChunk)
+	}
+
+	// Get an output buffer.
+	obuf := w.buffers.Get().([]byte)[:w.obufLen]
+	uncompressed := inbuf[obufHeaderLen:]
+
+	output := make(chan result)
+	// Queue output now, so we keep order.
+	w.output <- output
+	go func() {
+		checksum := crc(uncompressed)
+
+		// Set to uncompressed.
+		chunkType := uint8(chunkTypeUncompressedData)
+		chunkLen := 4 + len(uncompressed)
+
+		// Attempt compressing.
+		n := binary.PutUvarint(obuf[obufHeaderLen:], uint64(len(uncompressed)))
+		var n2 int
+		if w.better {
+			n2 = encodeBlockBetter(obuf[obufHeaderLen+n:], uncompressed)
+		} else {
+			n2 = encodeBlock(obuf[obufHeaderLen+n:], uncompressed)
+		}
+
+		// Check if we should use this, or store as uncompressed instead.
+		if n2 > 0 {
+			chunkType = uint8(chunkTypeCompressedData)
+			chunkLen = 4 + n + n2
+			obuf = obuf[:obufHeaderLen+n+n2]
+		} else {
+			// Use input as output.
+			obuf, inbuf = inbuf, obuf
+		}
+
+		// Fill in the per-chunk header that comes before the body.
+		obuf[0] = chunkType
+		obuf[1] = uint8(chunkLen >> 0)
+		obuf[2] = uint8(chunkLen >> 8)
+		obuf[3] = uint8(chunkLen >> 16)
+		obuf[4] = uint8(checksum >> 0)
+		obuf[5] = uint8(checksum >> 8)
+		obuf[6] = uint8(checksum >> 16)
+		obuf[7] = uint8(checksum >> 24)
+
+		// Queue final output.
+		output <- obuf
+
+		// Put unused buffer back in pool.
+		w.buffers.Put(inbuf)
+	}()
+	return nil
 }
 
 func (w *Writer) writeSync(p []byte) (nRet int, errRet error) {

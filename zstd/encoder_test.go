@@ -534,7 +534,7 @@ func testEncoderRoundtrip(t *testing.T, file string, wantCRC []byte) {
 			} else {
 				t.Logf("CRC Verified: %#v", gotCRC)
 			}
-			t.Log("Fast Encoder len", wantSize)
+			t.Log("Encoder len", wantSize)
 			mbpersec := (float64(wantSize) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
 			t.Logf("Encoded+Decoded %d bytes with %.2f MB/s", wantSize, mbpersec)
 		})
@@ -800,21 +800,58 @@ func BenchmarkEncoder_EncodeAllSimple(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	enc, err := NewWriter(nil, WithEncoderConcurrency(1))
+	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
+		b.Run(level.String(), func(b *testing.B) {
+			enc, err := NewWriter(nil, WithEncoderConcurrency(1), WithEncoderLevel(level))
+			if err != nil {
+				b.Fatal(err)
+			}
+			defer enc.Close()
+			dst := enc.EncodeAll(in, nil)
+			wantSize := len(dst)
+			b.ResetTimer()
+			b.ReportAllocs()
+			b.SetBytes(int64(len(in)))
+			for i := 0; i < b.N; i++ {
+				dst := enc.EncodeAll(in, dst[:0])
+				if len(dst) != wantSize {
+					b.Fatal(len(dst), "!=", wantSize)
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkEncoder_EncodeAllSimple4K(b *testing.B) {
+	f, err := os.Open("testdata/z000028")
 	if err != nil {
 		b.Fatal(err)
 	}
-	defer enc.Close()
-	dst := enc.EncodeAll(in, nil)
-	wantSize := len(dst)
-	b.ResetTimer()
-	b.ReportAllocs()
-	b.SetBytes(int64(len(in)))
-	for i := 0; i < b.N; i++ {
-		dst := enc.EncodeAll(in, dst[:0])
-		if len(dst) != wantSize {
-			b.Fatal(len(dst), "!=", wantSize)
-		}
+	in, err := ioutil.ReadAll(f)
+	if err != nil {
+		b.Fatal(err)
+	}
+	in = in[:4096]
+
+	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
+		b.Run(level.String(), func(b *testing.B) {
+			enc, err := NewWriter(nil, WithEncoderConcurrency(1), WithEncoderLevel(level))
+			if err != nil {
+				b.Fatal(err)
+			}
+			defer enc.Close()
+			dst := enc.EncodeAll(in, nil)
+			wantSize := len(dst)
+			b.ResetTimer()
+			b.ReportAllocs()
+			b.SetBytes(int64(len(in)))
+			for i := 0; i < b.N; i++ {
+				dst := enc.EncodeAll(in, dst[:0])
+				if len(dst) != wantSize {
+					b.Fatal(len(dst), "!=", wantSize)
+				}
+			}
+		})
 	}
 }
 
