@@ -121,13 +121,13 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 	Load(Param("src").Base(), src)
 
 	// Load cv
-	cv := GP64()
-	MOVQ(Mem{Base: src, Index: s, Scale: 1}, cv)
 	Label("mainLoop" + name)
 	{
 		Label("searchLoop" + name)
 		candidate := GP64()
 		{
+			cv := GP64()
+			MOVQ(Mem{Base: src, Index: s, Scale: 1}, cv)
 			nextS := GP64()
 			// nextS := s + (s-nextEmit)>>6 + 4
 			{
@@ -212,6 +212,67 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 					// Base is now at start.
 					// d += emitLiteral(dst[d:], src[nextEmit:base])
 					emitLiterals(nextEmit, base, src, dstBase, "Repeat"+name)
+
+					// Extend forward
+					{
+						// s += 4 + checkRep
+						LEAQ(Mem{Base: s, Disp: 4 + checkRep}, s)
+
+						// candidate := s - repeat + 4 + checkRep
+						MOVQ(repeat, candidate)
+						SUBQ(s, candidate)
+
+						{
+							// srcLeft = sLimit - s
+							srcLeft := GP64()
+							MOVQ(s, srcLeft)
+							SUBQ(sLimit, srcLeft)
+							// Forward address
+							forwardStart := Mem{Base: src, Index: s, Scale: 1}
+							// End address
+							backStart := Mem{Base: src, Index: candidate, Scale: 1}
+							length := matchLen("Repeat", forwardStart, backStart, srcLeft, LabelRef("repeatExtendForwardEnd"+name))
+							Label("repeatExtendForwardEnd" + name)
+							// s+= length
+							ADDQ(length, s)
+						}
+					}
+					// Emit
+					// FIXME: failed to allocate registers. May be legit.
+					if false {
+						// length = s-base
+						length := base
+						SUBQ(s, length)
+
+						offsetVal := GP64()
+						MOVQ(repeat, offsetVal)
+						n := GP64()
+						XORQ(n, n)
+						dst := GP64()
+						MOVQ(dstBase, dst)
+
+						// if nextEmit > 0
+						tmp := GP32()
+						MOVL(nextEmit, tmp.As32())
+						TESTQ(tmp, tmp)
+						JZ(LabelRef("repeatAsCopy" + name))
+						emitRepeat("matchRepeat", length, offsetVal, n, dst, LabelRef("repeatEndEmit"+name))
+						Label("repeatAsCopy" + name)
+						emitCopy("repeatAsCopy", length, offsetVal, n, dst, LabelRef("repeatEndEmit"+name))
+						Label("repeatEndEmit" + name)
+						// Store new dst and nextEmit
+						MOVQ(dst, dstBase)
+						MOVL(s.As32(), nextEmit)
+					}
+					// if s >= sLimit
+					// FIXME: failed to allocate registers???
+					if false {
+						tmp := GP64()
+						MOVL(sLimit, tmp.As32())
+						CMPL(nextS.As32(), tmp.As32())
+						JGT(LabelRef("emitRemainder" + name))
+					}
+					JMP(LabelRef("searchLoop" + name))
 				}
 			}
 			Label("noRepeatFound" + name)
