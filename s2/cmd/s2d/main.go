@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/s2"
-	"github.com/klauspost/readahead"
+	"github.com/klauspost/compress/s2/cmd/internal/readahead"
 )
 
 var (
