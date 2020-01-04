@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/s2"
+	"github.com/klauspost/compress/s2/cmd/internal/readahead"
 )
 
 var (
@@ -78,6 +79,9 @@ Options:`)
 			fmt.Println("Skipping", filename)
 			continue
 		}
+		if *bench > 0 {
+			dstFilename = "(discarded)"
+		}
 
 		func() {
 			var closeOnce sync.Once
@@ -89,7 +93,9 @@ Options:`)
 			exitErr(err)
 			defer closeOnce.Do(func() { file.Close() })
 			rc := rCounter{in: file}
-			src := bufio.NewReaderSize(&rc, 4<<20)
+			src, err := readahead.NewReaderSize(&rc, 2, 4<<20)
+			exitErr(err)
+			defer src.Close()
 			finfo, err := file.Stat()
 			exitErr(err)
 			mode := finfo.Mode() // use the same mode for the output file
