@@ -92,7 +92,6 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 	}
 
 	// Calculate new table.
-	s.optimalTableLog()
 	err = s.buildCTable()
 	if err != nil {
 		return nil, false, err
@@ -331,7 +330,7 @@ func (s *Scratch) minTableLog() uint8 {
 func (s *Scratch) optimalTableLog() {
 	tableLog := s.TableLog
 	minBits := s.minTableLog()
-	maxBitsSrc := uint8(highBit32(uint32(s.br.remain()-1))) - 2
+	maxBitsSrc := uint8(highBit32(uint32(s.br.remain()-1))) - 1
 	if maxBitsSrc < tableLog {
 		// Accuracy can be reduced
 		tableLog = maxBitsSrc
@@ -358,6 +357,7 @@ type cTableEntry struct {
 const huffNodesMask = huffNodesLen - 1
 
 func (s *Scratch) buildCTable() error {
+	s.optimalTableLog()
 	s.huffSort()
 	if cap(s.cTable) < maxSymbolValue+1 {
 		s.cTable = make([]cTableEntry, s.symbolLen, maxSymbolValue+1)
