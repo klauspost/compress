@@ -2,17 +2,20 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unicode"
 
@@ -37,6 +40,7 @@ var (
 )
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
 	flag.Parse()
 	sz, err := toSize(*blockSize)
 	exitErr(err)
@@ -65,12 +69,21 @@ Options:`)
 	}
 	wr := s2.NewWriter(nil, opts...)
 
+	// capture signal and shut down.
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGTERM)
+	go func() {
+		for range c {
+			cancel()
+		}
+	}()
+
 	// No args, use stdin/stdout
 	if len(args) == 1 && args[0] == "-" {
 		wr.Reset(os.Stdout)
-		_, err := io.Copy(wr, os.Stdin)
-		exitErr(err)
-		exitErr(wr.Close())
+		_, err = wr.ReadFrom(newCtxReader(ctx, os.Stdin))
+		printErr(err)
+		printErr(wr.Close())
 		return
 	}
 	var files []string
@@ -154,6 +167,12 @@ Options:`)
 	}
 }
 
+func printErr(err error) {
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "ERROR:", err.Error())
+	}
+}
+
 func exitErr(err error) {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "ERROR:", err.Error())
@@ -197,4 +216,61 @@ func (w *wCounter) Write(p []byte) (n int, err error) {
 	w.n += n
 	return n, err
 
+}
+
+type readerReq []byte
+
+type readerResp struct {
+	n   int
+	err error
+}
+
+type ctxReader struct {
+	ctx  context.Context
+	req  chan readerReq
+	resp chan readerResp
+}
+
+func newCtxReader(ctx context.Context, r io.Reader) *ctxReader {
+	cr := ctxReader{
+		ctx:  ctx,
+		req:  make(chan readerReq, 1),
+		resp: make(chan readerResp, 1),
+	}
+	go func() {
+		defer close(cr.resp)
+		for req := range cr.req {
+			var resp readerResp
+			resp.n, resp.err = r.Read(req)
+			cr.resp <- resp
+			if resp.err != nil {
+				return
+			}
+		}
+	}()
+	return &cr
+}
+
+func (c *ctxReader) Read(b []byte) (int, error) {
+	select {
+	case <-c.ctx.Done():
+		c.close()
+		return 0, c.ctx.Err()
+	default:
+	}
+	c.req <- b
+	select {
+	case resp := <-c.resp:
+		return resp.n, resp.err
+	case <-c.ctx.Done():
+		c.close()
+		return 0, c.ctx.Err()
+	}
+}
+
+func (c *ctxReader) close() {
+	if c.req != nil {
+		close(c.req)
+		c.req = nil
+	}
 }
