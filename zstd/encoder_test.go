@@ -37,7 +37,7 @@ func TestEncoder_EncodeAllSimple(t *testing.T) {
 	in = append(in, in...)
 	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
-			e, err := NewWriter(nil, WithEncoderLevel(level))
+			e, err := NewWriter(nil, WithEncoderLevel(level), WithEncoderConcurrency(2), WithWindowSize(128<<10), WithZeroFrames(true))
 			if err != nil {
 				t.Fatal(err)
 			}
