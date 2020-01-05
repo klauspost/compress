@@ -105,6 +105,7 @@ type Scratch struct {
 	maxCount       int    // count of the most probable symbol
 	clearCount     bool   // clear count
 	actualTableLog uint8  // Selected tablelog.
+	prevTableLog   uint8  // Tablelog for previous table
 	prevTable      cTable // Table used for previous compression.
 	cTable         cTable // compression table
 	dt             dTable // decompression table
