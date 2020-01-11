@@ -12,7 +12,7 @@ TEXT ·encodeBlockAsm(SB), NOSPLIT, $65656-56
 	LEAQ 120(SP), CX
 	PXOR X0, X0
 
-zeroLoopencodeBlockAsm:
+zero_loop_encodeBlockAsm:
 	MOVOU X0, (CX)
 	MOVOU X0, 16(CX)
 	MOVOU X0, 32(CX)
@@ -23,7 +23,7 @@ zeroLoopencodeBlockAsm:
 	MOVOU X0, 112(CX)
 	ADDQ  $0x80, CX
 	DECQ  AX
-	JNZ   zeroLoopencodeBlockAsm
+	JNZ   zero_loop_encodeBlockAsm
 	MOVL  AX, 64(SP)
 	MOVQ  src_len+32(FP), DX
 	LEAQ  -5(DX), BX
@@ -36,7 +36,7 @@ zeroLoopencodeBlockAsm:
 	MOVL  SI, 68(SP)
 	MOVQ  src_base+24(FP), AX
 
-searchLoopencodeBlockAsm:
+search_loop_encodeBlockAsm:
 	MOVQ  (AX)(SI*1), DX
 	MOVL  64(SP), R8
 	SUBL  SI, R8
@@ -71,25 +71,25 @@ searchLoopencodeBlockAsm:
 	MOVQ  DX, R10
 	SHLQ  $0x08, R10
 	CMPL  R10, CX
-	JNE   noRepeatFoundencodeBlockAsm
+	JNE   no_repeat_found_encodeBlockAsm
 	LEAQ  1(SI), R12
 	MOVL  64(SP), CX
 	TESTQ R11, R11
-	JZ    repeatExtendBackEndencodeBlockAsm
+	JZ    repeat_extend_back_end_encodeBlockAsm
 
-repeatExtendBackLoopencodeBlockAsm:
+repeat_extend_back_loop_encodeBlockAsm:
 	CMPL R12, CX
-	JG   repeatExtendBackEndencodeBlockAsm
+	JG   repeat_extend_back_end_encodeBlockAsm
 	MOVB -1(AX)(R11*1), DL
 	MOVB -1(AX)(R12*1), BL
 	CMPB DL, BL
-	JNE  repeatExtendBackEndencodeBlockAsm
+	JNE  repeat_extend_back_end_encodeBlockAsm
 	LEAQ -1(R12), R12
 	DECQ R11
-	JZ   repeatExtendBackEndencodeBlockAsm
-	JMP  repeatExtendBackLoopencodeBlockAsm
+	JZ   repeat_extend_back_end_encodeBlockAsm
+	JMP  repeat_extend_back_loop_encodeBlockAsm
 
-repeatExtendBackEndencodeBlockAsm:
+repeat_extend_back_end_encodeBlockAsm:
 	MOVQ 64(SP), DX
 	MOVQ R12, CX
 	LEAQ (AX)(DX*1), BX
@@ -100,22 +100,22 @@ repeatExtendBackEndencodeBlockAsm:
 	MOVQ DX, CX
 	MOVQ DX, R13
 	SUBL $0x01, R13
-	JC   emitLiteralDoneRepeatencodeBlockAsm
+	JC   emit_literal_done_repeat_emit_encodeBlockAsm
 	CMPL R13, $0x3c
-	JLT  oneByteRepeatencodeBlockAsm
+	JLT  one_byte_repeat_emit_encodeBlockAsm
 	CMPL R13, $0x00000100
-	JLT  twoBytesRepeatencodeBlockAsm
+	JLT  two_bytes_repeat_emit_encodeBlockAsm
 	CMPL R13, $0x00010000
-	JLT  threeBytesRepeatencodeBlockAsm
+	JLT  three_bytes_repeat_emit_encodeBlockAsm
 	CMPL R13, $0x01000000
-	JLT  fourBytesRepeatencodeBlockAsm
+	JLT  four_bytes_repeat_emit_encodeBlockAsm
 	MOVB $0xfc, (BP)
 	MOVL R13, 1(BP)
 	ADDQ $0x05, CX
 	ADDQ $0x05, BP
-	JMP  memmoveRepeatencodeBlockAsm
+	JMP  memmove_repeat_emit_encodeBlockAsm
 
-fourBytesRepeatencodeBlockAsm:
+four_bytes_repeat_emit_encodeBlockAsm:
 	MOVQ R13, R14
 	SHRL $0x10, R14
 	MOVB $0xf8, (BP)
@@ -123,35 +123,35 @@ fourBytesRepeatencodeBlockAsm:
 	MOVB R14, 3(BP)
 	ADDQ $0x04, CX
 	ADDQ $0x04, BP
-	JMP  memmoveRepeatencodeBlockAsm
+	JMP  memmove_repeat_emit_encodeBlockAsm
 
-threeBytesRepeatencodeBlockAsm:
+three_bytes_repeat_emit_encodeBlockAsm:
 	MOVB $0xf4, (BP)
 	MOVW R13, 1(BP)
 	ADDQ $0x03, CX
 	ADDQ $0x03, BP
-	JMP  memmoveRepeatencodeBlockAsm
+	JMP  memmove_repeat_emit_encodeBlockAsm
 
-twoBytesRepeatencodeBlockAsm:
+two_bytes_repeat_emit_encodeBlockAsm:
 	MOVB $0xf0, (BP)
 	MOVB R13, 1(BP)
 	ADDQ $0x02, CX
 	ADDQ $0x02, BP
-	JMP  memmoveRepeatencodeBlockAsm
+	JMP  memmove_repeat_emit_encodeBlockAsm
 
-oneByteRepeatencodeBlockAsm:
+one_byte_repeat_emit_encodeBlockAsm:
 	SHLB $0x02, R13
 	MOVB R13, (BP)
 	ADDQ $0x01, CX
 	ADDQ $0x01, BP
 
-memmoveRepeatencodeBlockAsm:
+memmove_repeat_emit_encodeBlockAsm:
 	MOVQ  DX, CX
 	SHRQ  $0x07, CX
 	TESTQ CX, CX
-	JZ    Done128EmitLitMemMoveRepeatencodeBlockAsm
+	JZ    done_128_emit_lit_memmove_repeat_emit_encodeBlockAsm
 
-Loop128EmitLitMemMoveRepeatencodeBlockAsm:
+loop_128_emit_lit_memmove_repeat_emit_encodeBlockAsm:
 	MOVOU (BX), X0
 	MOVOU 16(BX), X1
 	MOVOU 32(BX), X2
@@ -172,36 +172,36 @@ Loop128EmitLitMemMoveRepeatencodeBlockAsm:
 	LEAQ  128(BP), BP
 	LEAQ  -128(DX), DX
 	DECQ  CX
-	JNZ   Loop128EmitLitMemMoveRepeatencodeBlockAsm
+	JNZ   loop_128_emit_lit_memmove_repeat_emit_encodeBlockAsm
 
-Done128EmitLitMemMoveRepeatencodeBlockAsm:
+done_128_emit_lit_memmove_repeat_emit_encodeBlockAsm:
 	MOVQ  DX, CX
 	SHRQ  $0x04, CX
 	TESTQ CX, CX
-	JZ    Done16EmitLitMemMoveRepeatencodeBlockAsm
+	JZ    done_16_emit_lit_memmove_repeat_emit_encodeBlockAsm
 
-Loop16EmitLitMemMoveRepeatencodeBlockAsm:
+loop_16_emit_lit_memmove_repeat_emit_encodeBlockAsm:
 	MOVOU (BX), X0
 	MOVOU X0, (BP)
 	LEAQ  16(BX), BX
 	LEAQ  16(BP), BP
 	LEAQ  -16(DX), DX
 	DECQ  CX
-	JNZ   Loop16EmitLitMemMoveRepeatencodeBlockAsm
+	JNZ   loop_16_emit_lit_memmove_repeat_emit_encodeBlockAsm
 
-Done16EmitLitMemMoveRepeatencodeBlockAsm:
+done_16_emit_lit_memmove_repeat_emit_encodeBlockAsm:
 	TESTQ DX, DX
-	JZ    emitLiteralDoneRepeatencodeBlockAsm
+	JZ    emit_literal_done_repeat_emit_encodeBlockAsm
 
-Loop1EmitLitMemMoveRepeatencodeBlockAsm:
+loop_1_emit_lit_memmove_repeat_emit_encodeBlockAsm:
 	MOVB (BX), CL
 	MOVB CL, (BP)
 	LEAQ 1(BX), BX
 	LEAQ 1(BP), BP
 	DECQ DX
-	JNZ  Loop1EmitLitMemMoveRepeatencodeBlockAsm
+	JNZ  loop_1_emit_lit_memmove_repeat_emit_encodeBlockAsm
 
-emitLiteralDoneRepeatencodeBlockAsm:
+emit_literal_done_repeat_emit_encodeBlockAsm:
 	MOVQ BP, dst_base+0(FP)
 	LEAQ 5(SI), SI
 	MOVL 68(SP), CX
@@ -210,41 +210,41 @@ emitLiteralDoneRepeatencodeBlockAsm:
 	SUBQ 56(SP), CX
 	XORQ BX, BX
 	CMPQ CX, $0x08
-	JL   matchlen_singleRepeat
+	JL   matchlen_single_repeat_extend
 
-matchlen_loopbackRepeat:
+matchlen_loopback_repeat_extend:
 	MOVQ  (AX)(BX*1), DX
 	XORQ  (AX)(BX*1), DX
 	TESTQ DX, DX
-	JZ    matchlen_loopRepeat
+	JZ    matchlen_loop_repeat_extend
 	BSFQ  DX, DX
 	SARQ  $0x03, DX
 	LEAQ  (BX)(DX*1), BX
-	JMP   repeatExtendForwardEndencodeBlockAsm
+	JMP   repeat_extend_forward_end_encodeBlockAsm
 
-matchlen_loopRepeat:
+matchlen_loop_repeat_extend:
 	LEAQ -8(CX), CX
 	LEAQ 8(BX), BX
 	CMPQ CX, $0x08
-	JGE  matchlen_loopbackRepeat
+	JGE  matchlen_loopback_repeat_extend
 
-matchlen_singleRepeat:
+matchlen_single_repeat_extend:
 	TESTQ CX, CX
-	JZ    repeatExtendForwardEndencodeBlockAsm
+	JZ    repeat_extend_forward_end_encodeBlockAsm
 
-matchlen_single_loopbackRepeat:
+matchlen_single_loopback_repeat_extend:
 	MOVB (AX)(BX*1), DL
 	CMPB (AX)(BX*1), DL
-	JNE  repeatExtendForwardEndencodeBlockAsm
+	JNE  repeat_extend_forward_end_encodeBlockAsm
 	LEAQ 1(BX), BX
 	DECQ CX
-	JNZ  matchlen_single_loopbackRepeat
+	JNZ  matchlen_single_loopback_repeat_extend
 
-repeatExtendForwardEndencodeBlockAsm:
+repeat_extend_forward_end_encodeBlockAsm:
 	ADDQ BX, SI
-	JMP  searchLoopencodeBlockAsm
+	JMP  search_loop_encodeBlockAsm
 
-noRepeatFoundencodeBlockAsm:
+no_repeat_found_encodeBlockAsm:
 	NOP
 	NOP
 	MOVQ src_len+32(FP), AX
@@ -258,22 +258,22 @@ TEXT ·emitLiteral(SB), NOSPLIT, $0-56
 	MOVQ DX, BX
 	MOVQ DX, BP
 	SUBL $0x01, BP
-	JC   emitLiteralEndStandalone
+	JC   emit_literal_end_standalone
 	CMPL BP, $0x3c
-	JLT  oneByteStandalone
+	JLT  one_byte_standalone
 	CMPL BP, $0x00000100
-	JLT  twoBytesStandalone
+	JLT  two_bytes_standalone
 	CMPL BP, $0x00010000
-	JLT  threeBytesStandalone
+	JLT  three_bytes_standalone
 	CMPL BP, $0x01000000
-	JLT  fourBytesStandalone
+	JLT  four_bytes_standalone
 	MOVB $0xfc, (AX)
 	MOVL BP, 1(AX)
 	ADDQ $0x05, BX
 	ADDQ $0x05, AX
-	JMP  memmoveStandalone
+	JMP  memmove_standalone
 
-fourBytesStandalone:
+four_bytes_standalone:
 	MOVQ BP, SI
 	SHRL $0x10, SI
 	MOVB $0xf8, (AX)
@@ -281,35 +281,35 @@ fourBytesStandalone:
 	MOVB SI, 3(AX)
 	ADDQ $0x04, BX
 	ADDQ $0x04, AX
-	JMP  memmoveStandalone
+	JMP  memmove_standalone
 
-threeBytesStandalone:
+three_bytes_standalone:
 	MOVB $0xf4, (AX)
 	MOVW BP, 1(AX)
 	ADDQ $0x03, BX
 	ADDQ $0x03, AX
-	JMP  memmoveStandalone
+	JMP  memmove_standalone
 
-twoBytesStandalone:
+two_bytes_standalone:
 	MOVB $0xf0, (AX)
 	MOVB BP, 1(AX)
 	ADDQ $0x02, BX
 	ADDQ $0x02, AX
-	JMP  memmoveStandalone
+	JMP  memmove_standalone
 
-oneByteStandalone:
+one_byte_standalone:
 	SHLB $0x02, BP
 	MOVB BP, (AX)
 	ADDQ $0x01, BX
 	ADDQ $0x01, AX
 
-memmoveStandalone:
+memmove_standalone:
 	MOVQ  DX, BP
 	SHRQ  $0x07, BP
 	TESTQ BP, BP
-	JZ    Done128EmitLitMemMoveStandalone
+	JZ    done_128_emit_lit_memmove_standalone
 
-Loop128EmitLitMemMoveStandalone:
+loop_128_emit_lit_memmove_standalone:
 	MOVOU (CX), X0
 	MOVOU 16(CX), X1
 	MOVOU 32(CX), X2
@@ -330,36 +330,36 @@ Loop128EmitLitMemMoveStandalone:
 	LEAQ  128(AX), AX
 	LEAQ  -128(DX), DX
 	DECQ  BP
-	JNZ   Loop128EmitLitMemMoveStandalone
+	JNZ   loop_128_emit_lit_memmove_standalone
 
-Done128EmitLitMemMoveStandalone:
+done_128_emit_lit_memmove_standalone:
 	MOVQ  DX, BP
 	SHRQ  $0x04, BP
 	TESTQ BP, BP
-	JZ    Done16EmitLitMemMoveStandalone
+	JZ    done_16_emit_lit_memmove_standalone
 
-Loop16EmitLitMemMoveStandalone:
+loop_16_emit_lit_memmove_standalone:
 	MOVOU (CX), X0
 	MOVOU X0, (AX)
 	LEAQ  16(CX), CX
 	LEAQ  16(AX), AX
 	LEAQ  -16(DX), DX
 	DECQ  BP
-	JNZ   Loop16EmitLitMemMoveStandalone
+	JNZ   loop_16_emit_lit_memmove_standalone
 
-Done16EmitLitMemMoveStandalone:
+done_16_emit_lit_memmove_standalone:
 	TESTQ DX, DX
-	JZ    emitLiteralEndStandalone
+	JZ    emit_literal_end_standalone
 
-Loop1EmitLitMemMoveStandalone:
+loop_1_emit_lit_memmove_standalone:
 	MOVB (CX), BP
 	MOVB BP, (AX)
 	LEAQ 1(CX), CX
 	LEAQ 1(AX), AX
 	DECQ DX
-	JNZ  Loop1EmitLitMemMoveStandalone
+	JNZ  loop_1_emit_lit_memmove_standalone
 
-emitLiteralEndStandalone:
+emit_literal_end_standalone:
 	MOVQ BX, ret+48(FP)
 	RET
 
@@ -370,32 +370,32 @@ TEXT ·emitRepeat(SB), NOSPLIT, $0-48
 	MOVQ offset+24(FP), CX
 	MOVQ length+32(FP), DX
 
-emit_repeat_againStandalone:
+emit_repeat_again_standalone:
 	MOVQ DX, BP
 	LEAQ -4(DX), DX
 	CMPL BP, $0x08
-	JLE  repeat_twoStandalone
+	JLE  repeat_two_standalone
 	CMPL BP, $0x0c
-	JGE  cant_repeat_two_offsetStandalone
+	JGE  cant_repeat_two_offset_standalone
 	CMPL CX, $0x00000800
-	JLT  repeat_two_offsetStandalone
+	JLT  repeat_two_offset_standalone
 
-cant_repeat_two_offsetStandalone:
+cant_repeat_two_offset_standalone:
 	CMPL DX, $0x00000104
-	JLT  repeat_threeStandalone
+	JLT  repeat_three_standalone
 	CMPL DX, $0x00010100
-	JLT  repeat_fourStandalone
+	JLT  repeat_four_standalone
 	CMPL DX, $0x0100ffff
-	JLT  repeat_fiveStandalone
+	JLT  repeat_five_standalone
 	LEAQ -16842747(DX), DX
 	MOVW $0x001d, (AX)
 	MOVW $0xfffb, 2(AX)
 	MOVB $0xff, 4(AX)
 	ADDQ $0x05, AX
 	ADDQ $0x05, BX
-	JMP  emit_repeat_againStandalone
+	JMP  emit_repeat_again_standalone
 
-repeat_fiveStandalone:
+repeat_five_standalone:
 	LEAQ -65536(DX), DX
 	MOVQ DX, CX
 	MOVW $0x001d, (AX)
@@ -404,33 +404,33 @@ repeat_fiveStandalone:
 	MOVB CL, 4(AX)
 	ADDQ $0x05, BX
 	ADDQ $0x05, AX
-	JMP  genEmitRepeatEnd
+	JMP  gen_emit_repeat_end
 
-repeat_fourStandalone:
+repeat_four_standalone:
 	LEAQ -256(DX), DX
 	MOVW $0x0019, (AX)
 	MOVW DX, 2(AX)
 	ADDQ $0x04, BX
 	ADDQ $0x04, AX
-	JMP  genEmitRepeatEnd
+	JMP  gen_emit_repeat_end
 
-repeat_threeStandalone:
+repeat_three_standalone:
 	LEAQ -4(DX), DX
 	MOVW $0x0015, (AX)
 	MOVB DL, 2(AX)
 	ADDQ $0x03, BX
 	ADDQ $0x03, AX
-	JMP  genEmitRepeatEnd
+	JMP  gen_emit_repeat_end
 
-repeat_twoStandalone:
+repeat_two_standalone:
 	SHLL $0x02, DX
 	ORL  $0x01, DX
 	MOVW DX, (AX)
 	ADDQ $0x02, BX
 	ADDQ $0x02, AX
-	JMP  genEmitRepeatEnd
+	JMP  gen_emit_repeat_end
 
-repeat_two_offsetStandalone:
+repeat_two_offset_standalone:
 	XORQ BP, BP
 	LEAQ 1(BP)(DX*4), DX
 	MOVB CL, 1(AX)
@@ -441,7 +441,7 @@ repeat_two_offsetStandalone:
 	ADDQ $0x02, BX
 	ADDQ $0x02, AX
 
-genEmitRepeatEnd:
+gen_emit_repeat_end:
 	MOVQ BX, ret+40(FP)
 	RET
 
@@ -452,43 +452,43 @@ TEXT ·emitCopy(SB), NOSPLIT, $0-48
 	MOVQ offset+24(FP), CX
 	MOVQ length+32(FP), DX
 	CMPL CX, $0x00010000
-	JL   twoByteOffsetStandalone
+	JL   two_byte_offset_standalone
 	CMPL DX, $0x40
-	JLE  fourBytesRemainStandalone
+	JLE  four_bytes_remain_standalone
 	MOVB $0xff, (AX)
 	MOVD CX, 1(AX)
 	LEAQ -64(DX), DX
 	ADDQ $0x05, BX
 	ADDQ $0x05, AX
 	CMPL DX, $0x04
-	JL   fourBytesRemainStandalone
+	JL   four_bytes_remain_standalone
 
-emit_repeat_againStandaloneEmitCopy:
+emit_repeat_again_standalone_emit_copy:
 	MOVQ DX, BP
 	LEAQ -4(DX), DX
 	CMPL BP, $0x08
-	JLE  repeat_twoStandaloneEmitCopy
+	JLE  repeat_two_standalone_emit_copy
 	CMPL BP, $0x0c
-	JGE  cant_repeat_two_offsetStandaloneEmitCopy
+	JGE  cant_repeat_two_offset_standalone_emit_copy
 	CMPL CX, $0x00000800
-	JLT  repeat_two_offsetStandaloneEmitCopy
+	JLT  repeat_two_offset_standalone_emit_copy
 
-cant_repeat_two_offsetStandaloneEmitCopy:
+cant_repeat_two_offset_standalone_emit_copy:
 	CMPL DX, $0x00000104
-	JLT  repeat_threeStandaloneEmitCopy
+	JLT  repeat_three_standalone_emit_copy
 	CMPL DX, $0x00010100
-	JLT  repeat_fourStandaloneEmitCopy
+	JLT  repeat_four_standalone_emit_copy
 	CMPL DX, $0x0100ffff
-	JLT  repeat_fiveStandaloneEmitCopy
+	JLT  repeat_five_standalone_emit_copy
 	LEAQ -16842747(DX), DX
 	MOVW $0x001d, (AX)
 	MOVW $0xfffb, 2(AX)
 	MOVB $0xff, 4(AX)
 	ADDQ $0x05, AX
 	ADDQ $0x05, BX
-	JMP  emit_repeat_againStandaloneEmitCopy
+	JMP  emit_repeat_again_standalone_emit_copy
 
-repeat_fiveStandaloneEmitCopy:
+repeat_five_standalone_emit_copy:
 	LEAQ -65536(DX), DX
 	MOVQ DX, CX
 	MOVW $0x001d, (AX)
@@ -497,33 +497,33 @@ repeat_fiveStandaloneEmitCopy:
 	MOVB CL, 4(AX)
 	ADDQ $0x05, BX
 	ADDQ $0x05, AX
-	JMP  genEmitCopyEnd
+	JMP  gen_emit_copy_end
 
-repeat_fourStandaloneEmitCopy:
+repeat_four_standalone_emit_copy:
 	LEAQ -256(DX), DX
 	MOVW $0x0019, (AX)
 	MOVW DX, 2(AX)
 	ADDQ $0x04, BX
 	ADDQ $0x04, AX
-	JMP  genEmitCopyEnd
+	JMP  gen_emit_copy_end
 
-repeat_threeStandaloneEmitCopy:
+repeat_three_standalone_emit_copy:
 	LEAQ -4(DX), DX
 	MOVW $0x0015, (AX)
 	MOVB DL, 2(AX)
 	ADDQ $0x03, BX
 	ADDQ $0x03, AX
-	JMP  genEmitCopyEnd
+	JMP  gen_emit_copy_end
 
-repeat_twoStandaloneEmitCopy:
+repeat_two_standalone_emit_copy:
 	SHLL $0x02, DX
 	ORL  $0x01, DX
 	MOVW DX, (AX)
 	ADDQ $0x02, BX
 	ADDQ $0x02, AX
-	JMP  genEmitCopyEnd
+	JMP  gen_emit_copy_end
 
-repeat_two_offsetStandaloneEmitCopy:
+repeat_two_offset_standalone_emit_copy:
 	XORQ BP, BP
 	LEAQ 1(BP)(DX*4), DX
 	MOVB CL, 1(AX)
@@ -533,53 +533,53 @@ repeat_two_offsetStandaloneEmitCopy:
 	MOVB DL, (AX)
 	ADDQ $0x02, BX
 	ADDQ $0x02, AX
-	JMP  genEmitCopyEnd
+	JMP  gen_emit_copy_end
 
-fourBytesRemainStandalone:
-	JZ   genEmitCopyEnd
+four_bytes_remain_standalone:
+	JZ   gen_emit_copy_end
 	MOVB $0x03, BP
 	LEAQ -4(BP)(DX*4), DX
 	MOVB DL, (AX)
 	MOVD CX, 1(AX)
 	ADDQ $0x05, BX
 	ADDQ $0x05, AX
-	JMP  genEmitCopyEnd
+	JMP  gen_emit_copy_end
 
-twoByteOffsetStandalone:
+two_byte_offset_standalone:
 	CMPL DX, $0x40
-	JLE  twoByteOffsetShortStandalone
+	JLE  two_byte_offset_short_standalone
 	MOVB $0xee, (AX)
 	MOVW CX, 1(AX)
 	LEAQ -60(DX), DX
 	ADDQ $0x03, AX
 	ADDQ $0x03, BX
 
-emit_repeat_againStandaloneEmitCopyShort:
+emit_repeat_again_standalone_emit_copy_short:
 	MOVQ DX, BP
 	LEAQ -4(DX), DX
 	CMPL BP, $0x08
-	JLE  repeat_twoStandaloneEmitCopyShort
+	JLE  repeat_two_standalone_emit_copy_short
 	CMPL BP, $0x0c
-	JGE  cant_repeat_two_offsetStandaloneEmitCopyShort
+	JGE  cant_repeat_two_offset_standalone_emit_copy_short
 	CMPL CX, $0x00000800
-	JLT  repeat_two_offsetStandaloneEmitCopyShort
+	JLT  repeat_two_offset_standalone_emit_copy_short
 
-cant_repeat_two_offsetStandaloneEmitCopyShort:
+cant_repeat_two_offset_standalone_emit_copy_short:
 	CMPL DX, $0x00000104
-	JLT  repeat_threeStandaloneEmitCopyShort
+	JLT  repeat_three_standalone_emit_copy_short
 	CMPL DX, $0x00010100
-	JLT  repeat_fourStandaloneEmitCopyShort
+	JLT  repeat_four_standalone_emit_copy_short
 	CMPL DX, $0x0100ffff
-	JLT  repeat_fiveStandaloneEmitCopyShort
+	JLT  repeat_five_standalone_emit_copy_short
 	LEAQ -16842747(DX), DX
 	MOVW $0x001d, (AX)
 	MOVW $0xfffb, 2(AX)
 	MOVB $0xff, 4(AX)
 	ADDQ $0x05, AX
 	ADDQ $0x05, BX
-	JMP  emit_repeat_againStandaloneEmitCopyShort
+	JMP  emit_repeat_again_standalone_emit_copy_short
 
-repeat_fiveStandaloneEmitCopyShort:
+repeat_five_standalone_emit_copy_short:
 	LEAQ -65536(DX), DX
 	MOVQ DX, CX
 	MOVW $0x001d, (AX)
@@ -588,33 +588,33 @@ repeat_fiveStandaloneEmitCopyShort:
 	MOVB CL, 4(AX)
 	ADDQ $0x05, BX
 	ADDQ $0x05, AX
-	JMP  genEmitCopyEnd
+	JMP  gen_emit_copy_end
 
-repeat_fourStandaloneEmitCopyShort:
+repeat_four_standalone_emit_copy_short:
 	LEAQ -256(DX), DX
 	MOVW $0x0019, (AX)
 	MOVW DX, 2(AX)
 	ADDQ $0x04, BX
 	ADDQ $0x04, AX
-	JMP  genEmitCopyEnd
+	JMP  gen_emit_copy_end
 
-repeat_threeStandaloneEmitCopyShort:
+repeat_three_standalone_emit_copy_short:
 	LEAQ -4(DX), DX
 	MOVW $0x0015, (AX)
 	MOVB DL, 2(AX)
 	ADDQ $0x03, BX
 	ADDQ $0x03, AX
-	JMP  genEmitCopyEnd
+	JMP  gen_emit_copy_end
 
-repeat_twoStandaloneEmitCopyShort:
+repeat_two_standalone_emit_copy_short:
 	SHLL $0x02, DX
 	ORL  $0x01, DX
 	MOVW DX, (AX)
 	ADDQ $0x02, BX
 	ADDQ $0x02, AX
-	JMP  genEmitCopyEnd
+	JMP  gen_emit_copy_end
 
-repeat_two_offsetStandaloneEmitCopyShort:
+repeat_two_offset_standalone_emit_copy_short:
 	XORQ BP, BP
 	LEAQ 1(BP)(DX*4), DX
 	MOVB CL, 1(AX)
@@ -624,13 +624,13 @@ repeat_two_offsetStandaloneEmitCopyShort:
 	MOVB DL, (AX)
 	ADDQ $0x02, BX
 	ADDQ $0x02, AX
-	JMP  genEmitCopyEnd
+	JMP  gen_emit_copy_end
 
-twoByteOffsetShortStandalone:
+two_byte_offset_short_standalone:
 	CMPL DX, $0x0c
-	JGE  emitCopyThreeStandalone
+	JGE  emit_copy_three_standalone
 	CMPL CX, $0x00000800
-	JGE  emitCopyThreeStandalone
+	JGE  emit_copy_three_standalone
 	MOVB $0x01, BP
 	LEAQ -16(BP)(DX*4), DX
 	MOVB CL, 1(AX)
@@ -640,9 +640,9 @@ twoByteOffsetShortStandalone:
 	MOVB DL, (AX)
 	ADDQ $0x02, BX
 	ADDQ $0x02, AX
-	JMP  genEmitCopyEnd
+	JMP  gen_emit_copy_end
 
-emitCopyThreeStandalone:
+emit_copy_three_standalone:
 	MOVB $0x02, BP
 	LEAQ -4(BP)(DX*4), DX
 	MOVB DL, (AX)
@@ -650,7 +650,7 @@ emitCopyThreeStandalone:
 	ADDQ $0x03, BX
 	ADDQ $0x03, AX
 
-genEmitCopyEnd:
+gen_emit_copy_end:
 	MOVQ BX, ret+40(FP)
 	RET
 
@@ -661,36 +661,36 @@ TEXT ·matchLen(SB), NOSPLIT, $0-56
 	MOVQ a_len+8(FP), DX
 	XORQ BP, BP
 	CMPQ DX, $0x08
-	JL   matchlen_singleStandalone
+	JL   matchlen_single_standalone
 
-matchlen_loopbackStandalone:
+matchlen_loopback_standalone:
 	MOVQ  (AX)(BP*1), BX
 	XORQ  (CX)(BP*1), BX
 	TESTQ BX, BX
-	JZ    matchlen_loopStandalone
+	JZ    matchlen_loop_standalone
 	BSFQ  BX, BX
 	SARQ  $0x03, BX
 	LEAQ  (BP)(BX*1), BP
-	JMP   genMatchLenEnd
+	JMP   gen_match_len_end
 
-matchlen_loopStandalone:
+matchlen_loop_standalone:
 	LEAQ -8(DX), DX
 	LEAQ 8(BP), BP
 	CMPQ DX, $0x08
-	JGE  matchlen_loopbackStandalone
+	JGE  matchlen_loopback_standalone
 
-matchlen_singleStandalone:
+matchlen_single_standalone:
 	TESTQ DX, DX
-	JZ    genMatchLenEnd
+	JZ    gen_match_len_end
 
-matchlen_single_loopbackStandalone:
+matchlen_single_loopback_standalone:
 	MOVB (AX)(BP*1), BL
 	CMPB (CX)(BP*1), BL
-	JNE  genMatchLenEnd
+	JNE  gen_match_len_end
 	LEAQ 1(BP), BP
 	DECQ DX
-	JNZ  matchlen_single_loopbackStandalone
+	JNZ  matchlen_single_loopback_standalone
 
-genMatchLenEnd:
+gen_match_len_end:
 	MOVQ BP, ret+48(FP)
 	RET
