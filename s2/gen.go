@@ -57,11 +57,11 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 	table := stack.Offset(allocStack - tableSize)
 
 	tmpStack := baseStack
+	// Bail if we can't compress to at least this.
+	dstLimitPtr := stack.Offset(tmpStack)
+	tmpStack += 8
 	// sLimit is when to stop looking for offset/length copies.
 	sLimit := stack.Offset(tmpStack)
-	tmpStack += 4
-	// Bail if we can't compress to at least this.
-	dstLimit := stack.Offset(tmpStack)
 	tmpStack += 4
 	nextEmit := stack.Offset(tmpStack)
 	tmpStack += 4
@@ -110,7 +110,8 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 		SHRQ(U8(5), tmp)
 		SUBL(tmp2.As32(), tmp.As32())
 		MOVL(tmp3.As32(), sLimit)
-		MOVL(tmp.As32(), dstLimit)
+		LEAQ(dstBase.Idx(tmp, 1), tmp)
+		MOVQ(tmp, dstLimitPtr)
 	}
 
 	// s = 1
@@ -354,6 +355,24 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 
 			// Bail if we exceed the maximum size.
 			{
+				// tmp = s-nextEmit
+				tmp := GP64()
+				MOVQ(nextEmit, tmp)
+				SUBQ(s, tmp)
+				LEAQ(dstBase.Idx(tmp, 1), tmp)
+				CMPQ(tmp, dstLimitPtr)
+				JL(LabelRef("match_dst_size_check_" + name))
+				XORQ(tmp, tmp)
+				Store(tmp, ReturnIndex(0))
+				RET()
+			}
+			Label("match_dst_size_check_" + name)
+			if false {
+				base := GP64()
+				MOVL(candidate, base.As32())
+				emitLiterals(nextEmit, base, src, dstBase, "match_emit_"+name)
+			}
+			{
 
 			}
 		}
@@ -363,7 +382,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 	Label("emit_remainder_" + name)
 
 	// TODO:
-	// if d+len(src)-nextEmit > dstLimit {	return 0
+	// if d+len(src)-nextEmit > dstLimitPtr {	return 0
 
 	// d += emitLiteral(dst[d:], src[nextEmit:])
 	emitEnd := GP64()
@@ -372,6 +391,12 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 	if false {
 		emitLiterals(nextEmit, emitEnd, src, dstBase, name+"_emit_remainder")
 	}
+	Label("return_" + name)
+
+	// FIXME, does not return size:
+	length := GP64()
+	XORQ(length, length)
+	Store(length, ReturnIndex(0))
 	RET()
 }
 

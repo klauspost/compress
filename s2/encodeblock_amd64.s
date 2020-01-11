@@ -24,25 +24,26 @@ zero_loop_encodeBlockAsm:
 	ADDQ  $0x80, CX
 	DECQ  AX
 	JNZ   zero_loop_encodeBlockAsm
-	MOVL  AX, 64(SP)
+	MOVL  AX, 68(SP)
 	MOVQ  src_len+32(FP), DX
 	LEAQ  -5(DX), BX
 	LEAQ  -8(DX), BP
 	SHRQ  $0x05, DX
 	SUBL  BX, DX
-	MOVL  BP, 56(SP)
-	MOVL  DX, 60(SP)
+	MOVL  BP, 64(SP)
+	LEAQ  dst_base+0(FP)(DX*1), DX
+	MOVQ  DX, 56(SP)
 	MOVB  $0x01, SI
-	MOVL  SI, 68(SP)
+	MOVL  SI, 72(SP)
 	MOVQ  src_base+24(FP), AX
 
 search_loop_encodeBlockAsm:
 	MOVQ  (AX)(SI*1), DX
-	MOVL  64(SP), R8
+	MOVL  68(SP), R8
 	SUBL  SI, R8
 	SHRL  $0x06, R8
 	LEAQ  4(SI)(R8*1), DI
-	MOVL  DI, 72(SP)
+	MOVL  DI, 76(SP)
 	MOVQ  $0x0000cf1bbcdcbf9b, BX
 	MOVQ  DX, BP
 	MOVQ  DX, R15
@@ -64,7 +65,7 @@ search_loop_encodeBlockAsm:
 	SHLQ  $0x10, CX
 	IMULQ BX, CX
 	SHRQ  $0x30, CX
-	MOVL  68(SP), R11
+	MOVL  72(SP), R11
 	MOVQ  SI, CX
 	SUBQ  CX, R11
 	MOVL  1(AX), CX
@@ -73,7 +74,7 @@ search_loop_encodeBlockAsm:
 	CMPL  R10, CX
 	JNE   no_repeat_found_encodeBlockAsm
 	LEAQ  1(SI), R12
-	MOVL  64(SP), CX
+	MOVL  68(SP), CX
 	TESTQ R11, R11
 	JZ    repeat_extend_back_end_encodeBlockAsm
 
@@ -90,13 +91,13 @@ repeat_extend_back_loop_encodeBlockAsm:
 	JMP  repeat_extend_back_loop_encodeBlockAsm
 
 repeat_extend_back_end_encodeBlockAsm:
-	MOVQ 64(SP), DX
+	MOVQ 68(SP), DX
 	MOVQ R12, CX
 	LEAQ (AX)(DX*1), BX
 	SUBQ CX, DX
 	MOVQ dst_base+0(FP), BP
 	XORQ CX, CX
-	MOVQ R12, 64(SP)
+	MOVQ R12, 68(SP)
 	MOVQ DX, CX
 	MOVQ DX, R13
 	SUBL $0x01, R13
@@ -204,10 +205,10 @@ loop_1_emit_lit_memmove_repeat_emit_encodeBlockAsm:
 emit_literal_done_repeat_emit_encodeBlockAsm:
 	MOVQ BP, dst_base+0(FP)
 	LEAQ 5(SI), SI
-	MOVL 68(SP), CX
+	MOVL 72(SP), CX
 	SUBL SI, CX
 	MOVQ SI, CX
-	SUBQ 56(SP), CX
+	SUBQ 64(SP), CX
 	XORQ BX, BX
 	CMPQ CX, $0x08
 	JL   matchlen_single_repeat_extend
@@ -247,7 +248,19 @@ repeat_extend_forward_end_encodeBlockAsm:
 no_repeat_found_encodeBlockAsm:
 	NOP
 	NOP
+	MOVQ 68(SP), AX
+	SUBQ SI, AX
+	LEAQ dst_base+0(FP)(AX*1), AX
+	CMPQ AX, 56(SP)
+	JL   match_dst_size_check_encodeBlockAsm
+	XORQ AX, AX
+	MOVQ AX, ret+48(FP)
+	RET
+
+match_dst_size_check_encodeBlockAsm:
 	MOVQ src_len+32(FP), AX
+	XORQ AX, AX
+	MOVQ AX, ret+48(FP)
 	RET
 
 // func emitLiteral(dst []byte, lit []byte) int
