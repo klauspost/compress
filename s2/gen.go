@@ -67,6 +67,8 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 	tmpStack += 4
 	repeat := stack.Offset(tmpStack)
 	tmpStack += 4
+	nextSTemp := stack.Offset(tmpStack)
+	tmpStack += 4
 	dstBaseBasic, err := Param("dst").Base().Resolve()
 	if err != nil {
 		panic(err)
@@ -124,7 +126,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 	Label("mainLoop" + name)
 	{
 		Label("searchLoop" + name)
-		candidate := GP64()
+		candidate := GP64().As32()
 		{
 			cv := GP64()
 			MOVQ(Mem{Base: src, Index: s, Scale: 1}, cv)
@@ -145,7 +147,10 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 				CMPL(nextS.As32(), tmp.As32())
 				JGT(LabelRef("emitRemainder" + name))
 			}
-			candidate2 := GP64()
+			// move nextS to stack.
+			MOVL(nextS.As32(), nextSTemp)
+
+			candidate2 := GP64().As32()
 			hasher := hash6(tableBits)
 			{
 				hash0, hash1 := GP64(), GP64()
@@ -154,8 +159,8 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 				SHRQ(U8(8), hash1)
 				hasher.hash(hash0)
 				hasher.hash(hash1)
-				MOVL(table.Idx(hash0, 1), candidate.As32())
-				MOVL(table.Idx(hash1, 1), candidate2.As32())
+				MOVL(table.Idx(hash0, 1), candidate)
+				MOVL(table.Idx(hash1, 1), candidate2)
 				MOVL(s.As32(), table.Idx(hash0, 1))
 				tmp := GP64()
 				MOVQ(s, tmp)
@@ -188,27 +193,27 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 					// Extend back
 					{
 						i := rep
-						ne := GP64()
-						MOVQ(nextEmit, ne)
+						ne := GP64().As32()
+						MOVL(nextEmit, ne)
 						TESTQ(i.As64(), i.As64())
-						JZ(LabelRef("extendBackEnd" + name))
+						JZ(LabelRef("repeatExtendBackEnd" + name))
 
 						// I is tested when decremented, so we loop back here.
-						Label("extendBackLoop" + name)
-						CMPQ(base.As64(), ne.As64())
-						JG(LabelRef("extendBackEnd" + name))
+						Label("repeatExtendBackLoop" + name)
+						CMPL(base.As32(), ne)
+						JG(LabelRef("repeatExtendBackEnd" + name))
 						// if src[i-1] == src[base-1]
 						tmp, tmp2 := GP64(), GP64()
 						MOVB(Mem{Base: src, Index: i, Scale: 1, Disp: -1}, tmp.As8())
 						MOVB(Mem{Base: src, Index: base, Scale: 1, Disp: -1}, tmp2.As8())
 						CMPB(tmp.As8(), tmp2.As8())
-						JNE(LabelRef("extendBackEnd" + name))
+						JNE(LabelRef("repeatExtendBackEnd" + name))
 						LEAQ(Mem{Base: base, Disp: -1}, base)
 						DECQ(i)
-						JZ(LabelRef("extendBackEnd" + name))
-						JMP(LabelRef("extendBackLoop" + name))
+						JZ(LabelRef("repeatExtendBackEnd" + name))
+						JMP(LabelRef("repeatExtendBackLoop" + name))
 					}
-					Label("extendBackEnd" + name)
+					Label("repeatExtendBackEnd" + name)
 					// Base is now at start.
 					// d += emitLiteral(dst[d:], src[nextEmit:base])
 					emitLiterals(nextEmit, base, src, dstBase, "Repeat"+name)
@@ -219,8 +224,8 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 						LEAQ(Mem{Base: s, Disp: 4 + checkRep}, s)
 
 						// candidate := s - repeat + 4 + checkRep
-						MOVQ(repeat, candidate)
-						SUBQ(s, candidate)
+						MOVL(repeat, candidate)
+						SUBL(s.As32(), candidate)
 
 						{
 							// srcLeft = sLimit - s
@@ -265,18 +270,92 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 						MOVL(s.As32(), nextEmit)
 					}
 					// if s >= sLimit
+					// can be omitted.
 					// FIXME: failed to allocate registers???
 					if false {
 						tmp := GP64()
 						MOVL(sLimit, tmp.As32())
-						CMPL(nextS.As32(), tmp.As32())
+						CMPL(s.As32(), tmp.As32())
 						JGT(LabelRef("emitRemainder" + name))
 					}
 					JMP(LabelRef("searchLoop" + name))
 				}
 			}
 			Label("noRepeatFound" + name)
-			NOP()
+			if false {
+				CMPL(Mem{Base: src, Index: candidate, Scale: 1}, cv.As32())
+				JEQ(LabelRef("candidateMatch" + name))
+				// cv >>= 8
+				SHRQ(U8(8), cv)
+
+				// candidate = int(table[hash2])
+				MOVL(table.Idx(hash2, 1), candidate)
+
+				//if uint32(cv>>8) == load32(src, candidate2)
+				CMPL(Mem{Base: src, Index: candidate2, Scale: 1}, cv.As32())
+				JEQ(LabelRef("candidate2Match" + name))
+
+				// table[hash2] = uint32(s + 2)
+				tmp := GP64()
+				LEAQ(Mem{Base: s, Disp: -2}, tmp)
+				MOVL(tmp.As32(), table.Idx(hash2, 1))
+
+				// if uint32(cv>>16) == load32(src, candidate)
+				SHRQ(U8(8), cv)
+				CMPL(Mem{Base: src, Index: candidate, Scale: 1}, cv.As32())
+				JEQ(LabelRef("candidate3Match" + name))
+				// s = nextS
+				MOVL(nextSTemp, s.As32())
+				JMP(LabelRef("searchLoop" + name))
+
+				// Matches candidate3
+				Label("candidate3Match" + name)
+				ADDQ(U8(2), s)
+				JMP(LabelRef("candidateMatch" + name))
+
+				Label("candidate2Match" + name)
+				// table[hash2] = uint32(s + 2)
+				tmp = GP64()
+				LEAQ(Mem{Base: s, Disp: -2}, tmp)
+				MOVL(tmp.As32(), table.Idx(hash2, 1))
+				// s++
+				INCQ(s)
+				MOVL(candidate2, candidate)
+			} else {
+				NOP()
+			}
+			Label("candidateMatch" + name)
+			// We have a match at 's' with src offset in "candidate" that matches at least 4 bytes.
+			// Extend backwards
+			if false {
+				ne := GP64().As32()
+				MOVL(nextEmit, ne)
+				TESTL(candidate, candidate)
+				JZ(LabelRef("matchExtendBackEnd" + name))
+
+				// candidate is tested when decremented, so we loop back here.
+				Label("matchExtendBackLoop" + name)
+				CMPL(s.As32(), ne)
+				JG(LabelRef("matchExtendBackEnd" + name))
+				// if src[candidate-1] == src[s-1]
+				tmp, tmp2 := GP64(), GP64()
+				MOVB(Mem{Base: src, Index: candidate, Scale: 1, Disp: -1}, tmp.As8())
+				MOVB(Mem{Base: src, Index: s, Scale: 1, Disp: -1}, tmp2.As8())
+				CMPB(tmp.As8(), tmp2.As8())
+				JNE(LabelRef("matchExtendBackEnd" + name))
+				LEAQ(Mem{Base: s, Disp: -1}, s)
+				DECL(candidate)
+				JZ(LabelRef("matchExtendBackEnd" + name))
+				JMP(LabelRef("matchExtendBackLoop" + name))
+			} else {
+				NOP()
+			}
+			Label("matchExtendBackEnd" + name)
+
+			// Bail if we exceed the maximum size.
+			{
+
+			}
 		}
 		_ = candidate
 	}

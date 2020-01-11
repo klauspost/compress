@@ -38,10 +38,11 @@ zeroLoopencodeBlockAsm:
 
 searchLoopencodeBlockAsm:
 	MOVQ  (AX)(SI*1), DX
-	MOVL  64(SP), DI
-	SUBL  SI, DI
-	SHRL  $0x06, DI
-	LEAQ  4(SI)(DI*1), CX
+	MOVL  64(SP), R8
+	SUBL  SI, R8
+	SHRL  $0x06, R8
+	LEAQ  4(SI)(R8*1), DI
+	MOVL  DI, 72(SP)
 	MOVQ  $0x0000cf1bbcdcbf9b, BX
 	MOVQ  DX, BP
 	MOVQ  DX, R15
@@ -55,47 +56,47 @@ searchLoopencodeBlockAsm:
 	MOVL  120(SP)(BP*1), CX
 	MOVL  120(SP)(R15*1), CX
 	MOVL  SI, 120(SP)(BP*1)
-	MOVQ  SI, R8
-	DECQ  R8
-	MOVL  R8, 120(SP)(R15*1)
+	MOVQ  SI, R9
+	DECQ  R9
+	MOVL  R9, 120(SP)(R15*1)
 	MOVQ  DX, CX
 	SHRQ  $0x10, CX
 	SHLQ  $0x10, CX
 	IMULQ BX, CX
 	SHRQ  $0x30, CX
-	MOVL  68(SP), R10
+	MOVL  68(SP), R11
 	MOVQ  SI, CX
-	SUBQ  CX, R10
+	SUBQ  CX, R11
 	MOVL  1(AX), CX
-	MOVQ  DX, R9
-	SHLQ  $0x08, R9
-	CMPL  R9, CX
+	MOVQ  DX, R10
+	SHLQ  $0x08, R10
+	CMPL  R10, CX
 	JNE   noRepeatFoundencodeBlockAsm
-	LEAQ  1(SI), R11
-	MOVQ  64(SP), R12
-	TESTQ R10, R10
-	JZ    extendBackEndencodeBlockAsm
+	LEAQ  1(SI), R12
+	MOVL  64(SP), CX
+	TESTQ R11, R11
+	JZ    repeatExtendBackEndencodeBlockAsm
 
-extendBackLoopencodeBlockAsm:
-	CMPQ R11, R12
-	JG   extendBackEndencodeBlockAsm
-	MOVB -1(AX)(R10*1), CL
+repeatExtendBackLoopencodeBlockAsm:
+	CMPL R12, CX
+	JG   repeatExtendBackEndencodeBlockAsm
 	MOVB -1(AX)(R11*1), DL
-	CMPB CL, DL
-	JNE  extendBackEndencodeBlockAsm
-	LEAQ -1(R11), R11
-	DECQ R10
-	JZ   extendBackEndencodeBlockAsm
-	JMP  extendBackLoopencodeBlockAsm
+	MOVB -1(AX)(R12*1), BL
+	CMPB DL, BL
+	JNE  repeatExtendBackEndencodeBlockAsm
+	LEAQ -1(R12), R12
+	DECQ R11
+	JZ   repeatExtendBackEndencodeBlockAsm
+	JMP  repeatExtendBackLoopencodeBlockAsm
 
-extendBackEndencodeBlockAsm:
+repeatExtendBackEndencodeBlockAsm:
 	MOVQ 64(SP), DX
-	MOVQ R11, CX
+	MOVQ R12, CX
 	LEAQ (AX)(DX*1), BX
 	SUBQ CX, DX
 	MOVQ dst_base+0(FP), BP
 	XORQ CX, CX
-	MOVQ R11, 64(SP)
+	MOVQ R12, 64(SP)
 	MOVQ DX, CX
 	MOVQ DX, R13
 	SUBL $0x01, R13
@@ -203,8 +204,8 @@ Loop1EmitLitMemMoveRepeatencodeBlockAsm:
 emitLiteralDoneRepeatencodeBlockAsm:
 	MOVQ BP, dst_base+0(FP)
 	LEAQ 5(SI), SI
-	MOVQ 68(SP), CX
-	SUBQ SI, CX
+	MOVL 68(SP), CX
+	SUBL SI, CX
 	MOVQ SI, CX
 	SUBQ 56(SP), CX
 	XORQ BX, BX
@@ -244,6 +245,7 @@ repeatExtendForwardEndencodeBlockAsm:
 	JMP  searchLoopencodeBlockAsm
 
 noRepeatFoundencodeBlockAsm:
+	NOP
 	NOP
 	MOVQ src_len+32(FP), AX
 	RET
