@@ -252,8 +252,6 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 
 						offsetVal := GP64()
 						MOVQ(repeat, offsetVal)
-						n := GP64()
-						XORQ(n, n)
 						dst := GP64()
 						MOVQ(dstBase, dst)
 
@@ -262,9 +260,9 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 						MOVL(nextEmit, tmp.As32())
 						TESTQ(tmp, tmp)
 						JZ(LabelRef("repeat_as_copy_" + name))
-						emitRepeat("match_repeat_", length, offsetVal, n, dst, LabelRef("repeat_end_emit_"+name))
+						emitRepeat("match_repeat_", length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name))
 						Label("repeat_as_copy_" + name)
-						emitCopy("repeat_as_copy_"+name, length, offsetVal, n, dst, LabelRef("repeat_end_emit_"+name))
+						emitCopy("repeat_as_copy_"+name, length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name))
 						Label("repeat_end_emit_" + name)
 						// Store new dst and nextEmit
 						MOVQ(dst, dstBase)
@@ -371,14 +369,93 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 				base := GP64()
 				MOVL(candidate, base.As32())
 				emitLiterals(nextEmit, base, src, dstBase, "match_emit_"+name)
+			} else {
+				NOP()
 			}
-			{
+			Label("match_nolit_loop_" + name)
+			if false {
+				base := GP64()
+				MOVQ(s, base)
+				// Update repeat
+				{
+					repeatVal := GP64()
+					MOVL(repeat, repeatVal.As32())
+					SUBL(s.As32(), repeatVal.As32())
+					MOVL(repeatVal.As32(), repeat)
+				}
+				// s+=4, candidate+=4
+				LEAQ(Mem{Base: s, Disp: 4}, s)
+				ADDL(U8(4), candidate)
+				// Extend the 4-byte match as long as possible and emit copy.
+				if false {
+					srcLeft := GP64()
+					MOVQ(s, srcLeft)
+					SUBQ(sLimit, srcLeft)
+					length := matchLen("match_nolit_"+name,
+						Mem{Base: src, Index: s, Scale: 1},
+						Mem{Base: src, Index: candidate, Scale: 1},
+						srcLeft,
+						LabelRef("match_nolit_end_"+name),
+					)
+					Label("match_nolit_end_" + name)
+					offset := GP64()
+					MOVQ(repeat, offset)
+					LEAQ(Mem{Base: length, Disp: 4}, length)
+					dst := GP64()
+					MOVQ(dstBase, dst)
+					emitCopy("match_nolit_"+name, length, offset, nil, dst, LabelRef("match_nolit_emitcopy_end_"+name))
+					Label("match_nolit_emitcopy_end_" + name)
+					// s += length
+					MOVQ(dst, dstBase)
+					ADDQ(length, s)
+					MOVL(s.As32(), nextEmit)
+					CMPL(s.As32(), sLimit)
+					JGE(LabelRef("emit_remainder_" + name))
 
+					// Bail if we exceed the maximum size.
+					{
+						CMPQ(dst, dstLimitPtr)
+						JL(LabelRef("match_nolit_dst_ok_" + name))
+						tmp := GP64()
+						XORQ(tmp, tmp)
+						Store(tmp, ReturnIndex(0))
+						RET()
+						Label("match_nolit_dst_ok_" + name)
+					}
+				} else {
+					NOP()
+				}
+				if false {
+					// Check for an immediate match, otherwise start search at s+1
+					x := GP64()
+					// Index s-2
+					MOVQ(Mem{Base: src, Index: s, Scale: 1, Disp: -2}, x)
+					hasher := hash6(tableBits)
+					hash0, hash1 := GP64(), GP64()
+					MOVQ(x, hash0) // s-2
+					SHRQ(U8(16), x)
+					MOVQ(x, hash1) // s
+					hasher.hash(hash0)
+					hasher.hash(hash1)
+					c0, c1 := GP64(), GP64()
+					MOVL(table.Idx(hash0, 1), c0.As32())
+					MOVL(table.Idx(hash1, 1), c1.As32())
+					sm2 := GP64()
+					LEAQ(Mem{Base: s, Disp: -2}, sm2)
+					MOVL(sm2.As32(), table.Idx(hash0, 1))
+					MOVL(s.As32(), table.Idx(hash1, 1))
+					CMPL(Mem{Base: src, Index: hash1}, x.As32())
+					JEQ(LabelRef("match_nolit_loop_" + name))
+
+					INCQ(s)
+				}
+				JMP(LabelRef("search_loop_" + name))
+			} else {
+				NOP()
 			}
 		}
 		_ = candidate
 	}
-
 	Label("emit_remainder_" + name)
 
 	// TODO:
@@ -570,6 +647,7 @@ func genEmitRepeat() {
 // emitRepeat can be used for inlining an emitRepeat call.
 // length >= 4 and < 1<<32
 // length is modified. dstBase is updated. retval is added to input.
+// retval can be nil.
 // Will jump to end label when finished.
 func emitRepeat(name string, length, offset, retval, dstBase reg.GPVirtual, end LabelRef) {
 	Label("emit_repeat_again_" + name)
@@ -604,7 +682,9 @@ func emitRepeat(name string, length, offset, retval, dstBase reg.GPVirtual, end 
 	MOVW(U16(65531), Mem{Base: dstBase, Disp: 2})           // 0xfffb
 	MOVB(U8(255), Mem{Base: dstBase, Disp: 4})
 	ADDQ(U8(5), dstBase)
-	ADDQ(U8(5), retval)
+	if retval != nil {
+		ADDQ(U8(5), retval)
+	}
 	JMP(LabelRef("emit_repeat_again_" + name))
 
 	// Must be able to be within 5 bytes.
@@ -615,24 +695,30 @@ func emitRepeat(name string, length, offset, retval, dstBase reg.GPVirtual, end 
 	MOVW(length.As16(), Mem{Base: dstBase, Disp: 2}) // dst[2] = uint8(length), dst[3] = uint8(length >> 8)
 	SARQ(U8(16), offset)                             // offset = length >> 16
 	MOVB(offset.As8(), Mem{Base: dstBase, Disp: 4})  // dst[4] = length >> 16
-	ADDQ(U8(5), retval)                              // i += 5
-	ADDQ(U8(5), dstBase)                             // dst += 5
+	if retval != nil {
+		ADDQ(U8(5), retval) // i += 5
+	}
+	ADDQ(U8(5), dstBase) // dst += 5
 	JMP(end)
 
 	Label("repeat_four_" + name)
 	LEAQ(Mem{Base: length, Disp: -256}, length)      // length -= 256
 	MOVW(U16(6<<2|tagCopy1), Mem{Base: dstBase})     // dst[0] = 6<<2 | tagCopy1, dst[1] = 0
 	MOVW(length.As16(), Mem{Base: dstBase, Disp: 2}) // dst[2] = uint8(length), dst[3] = uint8(length >> 8)
-	ADDQ(U8(4), retval)                              // i += 4
-	ADDQ(U8(4), dstBase)                             // dst += 4
+	if retval != nil {
+		ADDQ(U8(4), retval) // i += 4
+	}
+	ADDQ(U8(4), dstBase) // dst += 4
 	JMP(end)
 
 	Label("repeat_three_" + name)
 	LEAQ(Mem{Base: length, Disp: -4}, length)       // length -= 4
 	MOVW(U16(5<<2|tagCopy1), Mem{Base: dstBase})    // dst[0] = 5<<2 | tagCopy1, dst[1] = 0
 	MOVB(length.As8(), Mem{Base: dstBase, Disp: 2}) // dst[2] = uint8(length)
-	ADDQ(U8(3), retval)                             // i += 3
-	ADDQ(U8(3), dstBase)                            // dst += 3
+	if retval != nil {
+		ADDQ(U8(3), retval) // i += 3
+	}
+	ADDQ(U8(3), dstBase) // dst += 3
 	JMP(end)
 
 	Label("repeat_two_" + name)
@@ -640,8 +726,10 @@ func emitRepeat(name string, length, offset, retval, dstBase reg.GPVirtual, end 
 	SHLL(U8(2), length.As32())
 	ORL(U8(tagCopy1), length.As32())
 	MOVW(length.As16(), Mem{Base: dstBase}) // dst[0] = 7<<2 | tagCopy1, dst[1] = 0
-	ADDQ(U8(2), retval)                     // i += 2
-	ADDQ(U8(2), dstBase)                    // dst += 2
+	if retval != nil {
+		ADDQ(U8(2), retval) // i += 2
+	}
+	ADDQ(U8(2), dstBase) // dst += 2
 	JMP(end)
 
 	Label("repeat_two_offset_" + name)
@@ -657,7 +745,9 @@ func emitRepeat(name string, length, offset, retval, dstBase reg.GPVirtual, end 
 	SHLL(U8(5), offset.As32())                      // Shift back up
 	ORL(offset.As32(), length.As32())               // OR result
 	MOVB(length.As8(), Mem{Base: dstBase, Disp: 0})
-	ADDQ(U8(2), retval)  // i += 2
+	if retval != nil {
+		ADDQ(U8(2), retval) // i += 2
+	}
 	ADDQ(U8(2), dstBase) // dst += 2
 
 	JMP(end)
@@ -703,6 +793,7 @@ const (
 
 // emitCopy can be used for inlining an emitCopy call.
 // length is modified (and junk). dstBase is updated. retval is added to input.
+// retval can be nil.
 // Will jump to end label when finished.
 func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end LabelRef) {
 	//if offset >= 65536 {
@@ -721,7 +812,9 @@ func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end La
 	MOVD(offset, Mem{Base: dstBase, Disp: 1})
 	//		length -= 64
 	LEAQ(Mem{Base: length, Disp: -64}, length)
-	ADDQ(U8(5), retval)  // i+=5
+	if retval != nil {
+		ADDQ(U8(5), retval) // i+=5
+	}
 	ADDQ(U8(5), dstBase) // dst+=5
 	//		if length >= 4 {
 	CMPL(length.As32(), U8(4))
@@ -752,7 +845,9 @@ func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end La
 	MOVB(length.As8(), Mem{Base: dstBase})
 	MOVD(offset, Mem{Base: dstBase, Disp: 1})
 	//	return i + 5
-	ADDQ(U8(5), retval)
+	if retval != nil {
+		ADDQ(U8(5), retval)
+	}
 	ADDQ(U8(5), dstBase)
 	JMP(end)
 
@@ -776,7 +871,9 @@ func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end La
 	//	return 3 + emitRepeat(dst[3:], offset, length)
 	//}
 	ADDQ(U8(3), dstBase)
-	ADDQ(U8(3), retval)
+	if retval != nil {
+		ADDQ(U8(3), retval)
+	}
 	// Inline call to emitRepeat. Will jump to end
 	emitRepeat(name+"_emit_copy_short", length, offset, retval, dstBase, end)
 
@@ -799,7 +896,9 @@ func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end La
 	SHLL(U8(5), offset.As32())                      // Shift back up
 	ORL(offset.As32(), length.As32())               // OR result
 	MOVB(length.As8(), Mem{Base: dstBase, Disp: 0})
-	ADDQ(U8(2), retval)  // i += 2
+	if retval != nil {
+		ADDQ(U8(2), retval) // i += 2
+	}
 	ADDQ(U8(2), dstBase) // dst += 2
 	// return 2
 	JMP(end)
@@ -815,7 +914,9 @@ func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end La
 	MOVB(length.As8(), Mem{Base: dstBase})
 	MOVW(offset.As16(), Mem{Base: dstBase, Disp: 1})
 	//	return 3
-	ADDQ(U8(3), retval)  // i += 3
+	if retval != nil {
+		ADDQ(U8(3), retval) // i += 3
+	}
 	ADDQ(U8(3), dstBase) // dst += 3
 	JMP(end)
 }
@@ -896,6 +997,9 @@ func genMatchLen() {
 	RET()
 }
 
+// matchLen returns the number of matching bytes of a and b.
+// len is the maximum number of bytes to match.
+// Will jump to end when done and returns the length.
 func matchLen(name string, a, b Mem, len reg.GPVirtual, end LabelRef) reg.GPVirtual {
 	tmp, matched := GP64(), GP64()
 	XORQ(matched, matched)

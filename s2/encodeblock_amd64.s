@@ -258,6 +258,9 @@ no_repeat_found_encodeBlockAsm:
 	RET
 
 match_dst_size_check_encodeBlockAsm:
+	NOP
+	NOP
+	NOP
 	MOVQ src_len+32(FP), AX
 	XORQ AX, AX
 	MOVQ AX, ret+48(FP)
