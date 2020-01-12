@@ -169,9 +169,9 @@ loop_128_emit_lit_memmove_repeat_emit_encodeBlockAsm:
 	MOVOU X5, 80(BP)
 	MOVOU X6, 96(BP)
 	MOVOU X7, 112(BP)
-	LEAQ  128(BX), BX
-	LEAQ  128(BP), BP
 	LEAQ  -128(DX), DX
+	ADDQ  $0x80, BX
+	ADDQ  $0x80, BP
 	DECQ  CX
 	JNZ   loop_128_emit_lit_memmove_repeat_emit_encodeBlockAsm
 
@@ -184,9 +184,9 @@ done_128_emit_lit_memmove_repeat_emit_encodeBlockAsm:
 loop_16_emit_lit_memmove_repeat_emit_encodeBlockAsm:
 	MOVOU (BX), X0
 	MOVOU X0, (BP)
-	LEAQ  16(BX), BX
-	LEAQ  16(BP), BP
 	LEAQ  -16(DX), DX
+	ADDQ  $0x10, BX
+	ADDQ  $0x10, BP
 	DECQ  CX
 	JNZ   loop_16_emit_lit_memmove_repeat_emit_encodeBlockAsm
 
@@ -197,14 +197,14 @@ done_16_emit_lit_memmove_repeat_emit_encodeBlockAsm:
 loop_1_emit_lit_memmove_repeat_emit_encodeBlockAsm:
 	MOVB (BX), CL
 	MOVB CL, (BP)
-	LEAQ 1(BX), BX
-	LEAQ 1(BP), BP
+	INCQ BX
+	INCQ BP
 	DECQ DX
 	JNZ  loop_1_emit_lit_memmove_repeat_emit_encodeBlockAsm
 
 emit_literal_done_repeat_emit_encodeBlockAsm:
 	MOVQ BP, dst_base+0(FP)
-	LEAQ 5(SI), SI
+	ADDQ $0x05, SI
 	MOVL 72(SP), CX
 	SUBL SI, CX
 	MOVQ SI, CX
@@ -258,7 +258,6 @@ no_repeat_found_encodeBlockAsm:
 	RET
 
 match_dst_size_check_encodeBlockAsm:
-	NOP
 	NOP
 	NOP
 	MOVQ src_len+32(FP), AX
@@ -342,9 +341,9 @@ loop_128_emit_lit_memmove_standalone:
 	MOVOU X5, 80(AX)
 	MOVOU X6, 96(AX)
 	MOVOU X7, 112(AX)
-	LEAQ  128(CX), CX
-	LEAQ  128(AX), AX
 	LEAQ  -128(DX), DX
+	ADDQ  $0x80, CX
+	ADDQ  $0x80, AX
 	DECQ  BP
 	JNZ   loop_128_emit_lit_memmove_standalone
 
@@ -357,9 +356,9 @@ done_128_emit_lit_memmove_standalone:
 loop_16_emit_lit_memmove_standalone:
 	MOVOU (CX), X0
 	MOVOU X0, (AX)
-	LEAQ  16(CX), CX
-	LEAQ  16(AX), AX
 	LEAQ  -16(DX), DX
+	ADDQ  $0x10, CX
+	ADDQ  $0x10, AX
 	DECQ  BP
 	JNZ   loop_16_emit_lit_memmove_standalone
 
@@ -370,8 +369,8 @@ done_16_emit_lit_memmove_standalone:
 loop_1_emit_lit_memmove_standalone:
 	MOVB (CX), BP
 	MOVB BP, (AX)
-	LEAQ 1(CX), CX
-	LEAQ 1(AX), AX
+	INCQ CX
+	INCQ AX
 	DECQ DX
 	JNZ  loop_1_emit_lit_memmove_standalone
 
@@ -552,14 +551,15 @@ repeat_two_offset_standalone_emit_copy:
 	JMP  gen_emit_copy_end
 
 four_bytes_remain_standalone:
-	JZ   gen_emit_copy_end
-	MOVB $0x03, BP
-	LEAQ -4(BP)(DX*4), DX
-	MOVB DL, (AX)
-	MOVD CX, 1(AX)
-	ADDQ $0x05, BX
-	ADDQ $0x05, AX
-	JMP  gen_emit_copy_end
+	TESTL DX, DX
+	JZ    gen_emit_copy_end
+	MOVB  $0x03, BP
+	LEAQ  -4(BP)(DX*4), DX
+	MOVB  DL, (AX)
+	MOVD  CX, 1(AX)
+	ADDQ  $0x05, BX
+	ADDQ  $0x05, AX
+	JMP   gen_emit_copy_end
 
 two_byte_offset_standalone:
 	CMPL DX, $0x40
