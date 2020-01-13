@@ -938,6 +938,14 @@ func genMemMove(name string, to, from, n reg.GPVirtual, end LabelRef) {
 	JZ(LabelRef("done_128_" + name))
 	Label("loop_128_" + name)
 	var xmmregs [8]reg.VecVirtual
+
+	// Prefetch destination for next loop.
+	// Prefetching source doesn't provide speedup.
+	// This seems to give a small boost.
+	const preOff = 128
+	PREFETCHT0(Mem{Base: to, Disp: preOff})
+	PREFETCHT0(Mem{Base: to, Disp: preOff + 64})
+
 	for i := 0; i < 8; i++ {
 		xmmregs[i] = XMM()
 		MOVOU(Mem{Base: from}.Offset(i*16), xmmregs[i])

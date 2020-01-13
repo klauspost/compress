@@ -153,27 +153,29 @@ memmove_repeat_emit_encodeBlockAsm:
 	JZ    done_128_emit_lit_memmove_repeat_emit_encodeBlockAsm
 
 loop_128_emit_lit_memmove_repeat_emit_encodeBlockAsm:
-	MOVOU (BX), X0
-	MOVOU 16(BX), X1
-	MOVOU 32(BX), X2
-	MOVOU 48(BX), X3
-	MOVOU 64(BX), X4
-	MOVOU 80(BX), X5
-	MOVOU 96(BX), X6
-	MOVOU 112(BX), X7
-	MOVOU X0, (BP)
-	MOVOU X1, 16(BP)
-	MOVOU X2, 32(BP)
-	MOVOU X3, 48(BP)
-	MOVOU X4, 64(BP)
-	MOVOU X5, 80(BP)
-	MOVOU X6, 96(BP)
-	MOVOU X7, 112(BP)
-	LEAQ  -128(DX), DX
-	ADDQ  $0x80, BX
-	ADDQ  $0x80, BP
-	DECQ  CX
-	JNZ   loop_128_emit_lit_memmove_repeat_emit_encodeBlockAsm
+	PREFETCHT0 128(BP)
+	PREFETCHT0 192(BP)
+	MOVOU      (BX), X0
+	MOVOU      16(BX), X1
+	MOVOU      32(BX), X2
+	MOVOU      48(BX), X3
+	MOVOU      64(BX), X4
+	MOVOU      80(BX), X5
+	MOVOU      96(BX), X6
+	MOVOU      112(BX), X7
+	MOVOU      X0, (BP)
+	MOVOU      X1, 16(BP)
+	MOVOU      X2, 32(BP)
+	MOVOU      X3, 48(BP)
+	MOVOU      X4, 64(BP)
+	MOVOU      X5, 80(BP)
+	MOVOU      X6, 96(BP)
+	MOVOU      X7, 112(BP)
+	LEAQ       -128(DX), DX
+	ADDQ       $0x80, BX
+	ADDQ       $0x80, BP
+	DECQ       CX
+	JNZ        loop_128_emit_lit_memmove_repeat_emit_encodeBlockAsm
 
 done_128_emit_lit_memmove_repeat_emit_encodeBlockAsm:
 	MOVQ  DX, CX
@@ -325,27 +327,29 @@ memmove_standalone:
 	JZ    done_128_emit_lit_memmove_standalone
 
 loop_128_emit_lit_memmove_standalone:
-	MOVOU (CX), X0
-	MOVOU 16(CX), X1
-	MOVOU 32(CX), X2
-	MOVOU 48(CX), X3
-	MOVOU 64(CX), X4
-	MOVOU 80(CX), X5
-	MOVOU 96(CX), X6
-	MOVOU 112(CX), X7
-	MOVOU X0, (AX)
-	MOVOU X1, 16(AX)
-	MOVOU X2, 32(AX)
-	MOVOU X3, 48(AX)
-	MOVOU X4, 64(AX)
-	MOVOU X5, 80(AX)
-	MOVOU X6, 96(AX)
-	MOVOU X7, 112(AX)
-	LEAQ  -128(DX), DX
-	ADDQ  $0x80, CX
-	ADDQ  $0x80, AX
-	DECQ  BP
-	JNZ   loop_128_emit_lit_memmove_standalone
+	PREFETCHT0 128(AX)
+	PREFETCHT0 192(AX)
+	MOVOU      (CX), X0
+	MOVOU      16(CX), X1
+	MOVOU      32(CX), X2
+	MOVOU      48(CX), X3
+	MOVOU      64(CX), X4
+	MOVOU      80(CX), X5
+	MOVOU      96(CX), X6
+	MOVOU      112(CX), X7
+	MOVOU      X0, (AX)
+	MOVOU      X1, 16(AX)
+	MOVOU      X2, 32(AX)
+	MOVOU      X3, 48(AX)
+	MOVOU      X4, 64(AX)
+	MOVOU      X5, 80(AX)
+	MOVOU      X6, 96(AX)
+	MOVOU      X7, 112(AX)
+	LEAQ       -128(DX), DX
+	ADDQ       $0x80, CX
+	ADDQ       $0x80, AX
+	DECQ       BP
+	JNZ        loop_128_emit_lit_memmove_standalone
 
 done_128_emit_lit_memmove_standalone:
 	MOVQ  DX, BP
