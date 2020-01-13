@@ -619,7 +619,7 @@ func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, en
 	Label("memmove_" + name)
 
 	// copy(dst[i:], lit)
-	genMemMove("emit_lit_memmove_"+name, dstBase, litBase, litLen, end)
+	genMemMove2("emit_lit_memmove_"+name, dstBase, litBase, litLen, end)
 }
 
 // genEmitRepeat generates a standlone emitRepeat.
@@ -991,7 +991,8 @@ func genMemMove(name string, to, from, n reg.GPVirtual, end LabelRef) {
 
 func genMemMove2(name string, dst, src, length reg.GPVirtual, end LabelRef) {
 	AX, CX := GP64(), GP64()
-
+	NOP()
+	name += "_memmove_"
 	Label(name + "tail")
 	// move_129through256 or smaller work whether or not the source and the
 	// destination memory regions overlap because they load all data into
@@ -1001,7 +1002,7 @@ func genMemMove2(name string, dst, src, length reg.GPVirtual, end LabelRef) {
 	//
 	// BSR+branch table make almost all memmove/memclr benchmarks worse. Not worth doing.
 	TESTQ(length, length)
-	JEQ(LabelRef(name + "move_0"))
+	JEQ(end)
 	CMPQ(length, U8(2))
 	JBE(LabelRef(name + "move_1or2"))
 	CMPQ(length, U8(4))
@@ -1018,126 +1019,138 @@ func genMemMove2(name string, dst, src, length reg.GPVirtual, end LabelRef) {
 	JBE(LabelRef(name + "move_33through64"))
 	CMPQ(length, U8(128))
 	JBE(LabelRef(name + "move_65through128"))
-	CMPQ(length, U8(256))
+	CMPQ(length, U32(256))
 	JBE(LabelRef(name + "move_129through256"))
 
-	// FIXME: runtime·useAVXmemmove(SB)
+	// TODO: runtime·useAVXmemmove(SB)
 	//TESTB(	U8(1), U8(1))
 	//JNZ(	LabelRef( name+"avxUnaligned"))
 
-	/*
-	 * check and set for backwards
-	 */
-	CMPQ(src, dst)
-	JLS(back)
+	if false {
+		// disabled since we never have overlaps.
+		// check and set for backwards
+		CMPQ(src, dst)
+		JLS(LabelRef(name + "back"))
+	}
 
 	/*
 	 * forward copy loop
 	 */
-forward:
-	CMPQ(length, U32(2048))
-	JLS(LabelRef(name + "move_256through2048"))
+	if false {
+		// Don't check length for now.
+		Label(name + "forward")
+		CMPQ(length, U32(2048))
+		JLS(LabelRef(name + "move_256through2048"))
 
-	// If REP MOVSB isn't fast, don't use it
-	// FIXME: internal∕cpu·X86+const_offsetX86HasERMS(SB)
-	//CMPB(U8(1), U8(1)) // enhanced REP MOVSB/STOSB
-	JMP(LabelRef(name + "fwdBy8"))
-
-	// Check alignment
-	MOVL(src, AX)
-	ORL(dst, AX)
-	TESTL(U8(7), AX)
-	JEQ(LabelRef(name + "fwdBy8"))
-
-	// Do 1 byte at a time
-	MOVQ(length, CX)
-	// FIXME:
-	// REP;	MOVSB
-	RET()
-
-	Label(name + "fwdBy8")
-	// Do 8 bytes at a time
-	MOVQ(length, CX)
-	SHRQ(U8(3), CX)
-	ANDQ(U8(7), length)
-	// FIXME:
-	//REP;	MOVSQ
-	JMP(LabelRef(name + "tail"))
-
-	Label(name + "back")
-	/*
-	 * check overlap
-	 */
-	MOVQ(src, CX)
-	ADDQ(length, CX)
-	CMPQ(CX, dst)
-	JLS(LabelRef(name + "forward"))
-	/*
-	 * whole thing backwards has
-	 * adjusted addresses
-	 */
-	ADDQ(length, dst)
-	ADDQ(length, src)
-	STD()
+		genMemMove(name+"fallback", dst, src, length, end)
+	} else {
+		JMP(LabelRef(name + "move_256through2048"))
+	}
 
 	/*
-	 * copy
-	 */
-	MOVQ(length, CX)
-	SHRQ(U8(3), CX)
-	ANDQ(U8(7), length)
+			// If REP MOVSB isn't fast, don't use it
+			// FIXME: internal∕cpu·X86+const_offsetX86HasERMS(SB)
+			// CMPB(U8(1), U8(1)) // enhanced REP MOVSB/STOSB
+			JMP(LabelRef(name + "fwdBy8"))
 
-	SUBQ(U8(8), dst)
-	SUBQ(U8(8), src)
-	// FIXME:
-	//REP;	MOVSQ
+			// Check alignment
+			MOVL(src.As32(), AX.As32())
+			ORL(dst.As32(), AX.As32())
+			TESTL(U32(7), AX.As32())
+			JEQ(LabelRef(name + "fwdBy8"))
 
-	// FIXME:
-	//CLD()
+			// Do 1 byte at a time
+			// MOVQ(length, CX)
+			// FIXME:
+			// REP;	MOVSB
+			JMP(end)
 
-	ADDQ(U8(8), dst)
-	ADDQ(U8(8), src)
-	SUBQ(length, dst)
-	SUBQ(length, src)
-	JMP(LabelRef(name + "tail"))
+		Label(name + "fwdBy8")
+		// Do 8 bytes at a time
+		MOVQ(length, CX)
+		SHRQ(U8(3), CX)
+		ANDQ(U8(7), length)
+		// FIXME:
+		//REP;	MOVSQ
+		JMP(LabelRef(name + "tail"))
 
-move_1or2:
-	MOVB(Mem{Base: src}, AX)
-	MOVB(Mem{Base: src, Disp: -1, Index: length, Scale: 1}, CX)
-	MOVB(AX, Mem{Base: dst})
-	MOVB(CX, Mem{Base: dst, Disp: -1, Index: length, Scale: 1})
-	RET()
-	Label(name + "move_0")
-	RET()
+		Label(name + "back")
+
+		//check overlap
+		MOVQ(src, CX)
+		ADDQ(length, CX)
+		CMPQ(CX, dst)
+		JLS(LabelRef(name + "forward"))
+
+		//whole thing backwards has
+		//adjusted addresses
+
+		ADDQ(length, dst)
+		ADDQ(length, src)
+		STD()
+
+		//
+		//  copy
+		 //
+		MOVQ(length, CX)
+		SHRQ(U8(3), CX)
+		ANDQ(U8(7), length)
+
+		SUBQ(U8(8), dst)
+		SUBQ(U8(8), src)
+		// FIXME:
+		//REP;	MOVSQ
+
+		// FIXME:
+		//CLD()
+
+		ADDQ(U8(8), dst)
+		ADDQ(U8(8), src)
+		SUBQ(length, dst)
+		SUBQ(length, src)
+		JMP(LabelRef(name + "tail"))
+	*/
+
+	Label(name + "move_1or2")
+	MOVB(Mem{Base: src}, AX.As8())
+	MOVB(Mem{Base: src, Disp: -1, Index: length, Scale: 1}, CX.As8())
+	MOVB(AX.As8(), Mem{Base: dst})
+	MOVB(CX.As8(), Mem{Base: dst, Disp: -1, Index: length, Scale: 1})
+	JMP(end)
+
 	Label(name + "move_4")
-	MOVL(Mem{Base: src}, AX)
-	MOVL(AX, Mem{Base: dst})
-	RET()
+	MOVL(Mem{Base: src}, AX.As32())
+	MOVL(AX.As32(), Mem{Base: dst})
+	JMP(end)
+
 	Label(name + "move_3")
-	MOVW(Mem{Base: src}, AX)
-	MOVB(Mem{Base: src, Disp: 2}, CX)
-	MOVW(AX, Mem{Base: dst})
-	MOVB(CX, Mem{Base: dst, Disp: 2})
-	RET()
+	MOVW(Mem{Base: src}, AX.As16())
+	MOVB(Mem{Base: src, Disp: 2}, CX.As8())
+	MOVW(AX.As16(), Mem{Base: dst})
+	MOVB(CX.As8(), Mem{Base: dst, Disp: 2})
+	JMP(end)
+
 	Label(name + "move_5through7")
 	MOVL(Mem{Base: src}, AX.As32())
 	MOVL(Mem{Base: src, Disp: -4, Index: length, Scale: 1}, CX.As32())
 	MOVL(AX.As32(), Mem{Base: dst})
 	MOVL(CX.As32(), Mem{Base: dst, Disp: -4, Index: length, Scale: 1})
-	RET()
+	JMP(end)
+
 	Label(name + "move_8")
 	// We need a separate case for 8 to make sure we write pointers atomically.
 	MOVQ(Mem{Base: src}, AX)
 	MOVQ(AX, Mem{Base: dst})
-	RET()
+	JMP(end)
+
 	Label(name + "move_9through16")
 	MOVQ(Mem{Base: src}, AX)
 	MOVQ(Mem{Base: src, Disp: -8, Index: length, Scale: 1}, CX)
 	MOVQ(AX, Mem{Base: dst})
 	MOVQ(CX, Mem{Base: dst, Disp: -8, Index: length, Scale: 1})
-	RET()
-	Label(name + "move_17through32")
+	JMP(end)
 
+	Label(name + "move_17through32")
 	X0, X1, X2, X3, X4, X5, X6, X7 := XMM(), XMM(), XMM(), XMM(), XMM(), XMM(), XMM(), XMM()
 	X8, X9, X10, X11, X12, X13, X14, X15 := XMM(), XMM(), XMM(), XMM(), XMM(), XMM(), XMM(), XMM()
 
@@ -1145,7 +1158,8 @@ move_1or2:
 	MOVOU(Mem{Base: src, Disp: -16, Index: length, Scale: 1}, X1)
 	MOVOU(X0, Mem{Base: dst})
 	MOVOU(X1, Mem{Base: dst, Disp: -16, Index: length, Scale: 1})
-	RET()
+	JMP(end)
+
 	Label(name + "move_33through64")
 	MOVOU(Mem{Base: src}, X0)
 	MOVOU(Mem{Base: src, Disp: 16}, X1)
@@ -1155,7 +1169,8 @@ move_1or2:
 	MOVOU(X1, Mem{Base: dst, Disp: 16})
 	MOVOU(X2, Mem{Base: dst, Disp: -32, Index: length, Scale: 1})
 	MOVOU(X3, Mem{Base: dst, Disp: -16, Index: length, Scale: 1})
-	RET()
+	JMP(end)
+
 	Label(name + "move_65through128")
 	MOVOU(Mem{Base: src}, X0)
 	MOVOU(Mem{Base: src, Disp: 16}, X1)
@@ -1173,7 +1188,8 @@ move_1or2:
 	MOVOU(X13, Mem{Base: dst, Index: length, Scale: 1, Disp: -48})
 	MOVOU(X14, Mem{Base: dst, Index: length, Scale: 1, Disp: -32})
 	MOVOU(X15, Mem{Base: dst, Index: length, Scale: 1, Disp: -16})
-	RET()
+	JMP(end)
+
 	Label(name + "move_129through256")
 	MOVOU(Mem{Base: src}, X0)
 	MOVOU(Mem{Base: src, Disp: 16}, X1)
@@ -1207,9 +1223,10 @@ move_1or2:
 	MOVOU(X13, Mem{Base: dst, Index: length, Scale: 1, Disp: -48})
 	MOVOU(X14, Mem{Base: dst, Index: length, Scale: 1, Disp: -32})
 	MOVOU(X15, Mem{Base: dst, Index: length, Scale: 1, Disp: -16})
-	RET()
+	JMP(end)
+
 	Label(name + "move_256through2048")
-	SUBQ(U8(256), length)
+	SUBQ(U32(256), length)
 	MOVOU(Mem{Base: src}, X0)
 	MOVOU(Mem{Base: src, Disp: 16}, X1)
 	MOVOU(Mem{Base: src, Disp: 32}, X2)
@@ -1242,7 +1259,7 @@ move_1or2:
 	MOVOU(X13, Mem{Base: dst, Disp: 208})
 	MOVOU(X14, Mem{Base: dst, Disp: 224})
 	MOVOU(X15, Mem{Base: dst, Disp: 240})
-	CMPQ(length, U8(256))
+	CMPQ(length, U32(256))
 	LEAQ(Mem{Base: src, Disp: 256}, src)
 	LEAQ(Mem{Base: dst, Disp: 256}, dst)
 	JGE(LabelRef(name + "move_256through2048"))
