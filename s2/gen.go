@@ -619,7 +619,7 @@ func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, en
 	Label("memmove_" + name)
 
 	// copy(dst[i:], lit)
-	genMemMove2("emit_lit_memmove_"+name, dstBase, litBase, litLen, end)
+	genMemMove2("emit_lit_memmove_"+name, dstBase, litBase, litLen, end, false)
 }
 
 // genEmitRepeat generates a standlone emitRepeat.
@@ -989,7 +989,9 @@ func genMemMove(name string, to, from, n reg.GPVirtual, end LabelRef) {
 	JNZ(LabelRef("loop_1_" + name))
 }
 
-func genMemMove2(name string, dst, src, length reg.GPVirtual, end LabelRef) {
+// func memmove(to, from unsafe.Pointer, n uintptr)
+// src and dst may not overlap.
+func genMemMove2(name string, dst, src, length reg.GPVirtual, end LabelRef, avx bool) {
 	AX, CX := GP64(), GP64()
 	NOP()
 	name += "_memmove_"
@@ -1022,31 +1024,20 @@ func genMemMove2(name string, dst, src, length reg.GPVirtual, end LabelRef) {
 	CMPQ(length, U32(256))
 	JBE(LabelRef(name + "move_129through256"))
 
-	// TODO: runtime·useAVXmemmove(SB)
-	//TESTB(	U8(1), U8(1))
-	//JNZ(	LabelRef( name+"avxUnaligned"))
-
-	if false {
-		// disabled since we never have overlaps.
-		// check and set for backwards
-		CMPQ(src, dst)
-		JLS(LabelRef(name + "back"))
-	}
-
-	/*
-	 * forward copy loop
-	 */
-	if false {
-		// Don't check length for now.
-		Label(name + "forward")
-		CMPQ(length, U32(2048))
-		JLS(LabelRef(name + "move_256through2048"))
-
-		genMemMove(name+"fallback", dst, src, length, end)
+	if avx {
+		JMP(LabelRef(name + "avxUnaligned"))
 	} else {
-		JMP(LabelRef(name + "move_256through2048"))
-	}
+		if false {
+			// Don't check length for now.
+			Label(name + "forward")
+			CMPQ(length, U32(2048))
+			JLS(LabelRef(name + "move_256through2048"))
 
+			genMemMove(name+"fallback", dst, src, length, end)
+		} else {
+			JMP(LabelRef(name + "move_256through2048"))
+		}
+	}
 	/*
 			// If REP MOVSB isn't fast, don't use it
 			// FIXME: internal∕cpu·X86+const_offsetX86HasERMS(SB)
@@ -1265,248 +1256,168 @@ func genMemMove2(name string, dst, src, length reg.GPVirtual, end LabelRef) {
 	JGE(LabelRef(name + "move_256through2048"))
 	JMP(LabelRef(name + "tail"))
 
-	/*
-		Label("avxUnaligned")
-			// There are two implementations of move algorithm.
-			// The first one for non-overlapped memory regions. It uses forward copying.
-			// The second one for overlapped regions. It uses backward copying
-			MOVQ(	dst, CX)
-			SUBQ(	src, CX)
-			// Now CX contains distance between SRC and DEST
-			CMPQ(	CX, length)
-			// If the distance lesser than region length it means that regions are overlapped
-			JC(	LabelRef( name+"copy_backward"))
+	if avx {
+		Label(name + "avxUnaligned")
+		R8, R10 := GP64(), GP64()
+		// There are two implementations of move algorithm.
+		// The first one for non-overlapped memory regions. It uses forward copying.
+		// We do not support overlapping input
 
-			// Non-temporal copy would be better for big sizes.
-			CMPQ(	length, U32(0x100000))
-			JAE(	LabelRef( name+"gobble_big_data_fwd"))
+		// Non-temporal copy would be better for big sizes.
+		CMPQ(length, U32(0x100000))
+		JAE(LabelRef(name + "gobble_big_data_fwd"))
 
-			// Memory layout on the source side
-			// src                                       CX
-			// |<---------length before correction--------->|
-			// |       |<--length corrected-->|             |
-			// |       |                  |<--- AX  --->|
-			// |<-R11->|                  |<-128 bytes->|
-			// +----------------------------------------+
-			// | Head  | Body             | Tail        |
-			// +-------+------------------+-------------+
-			// ^       ^                  ^
-			// |       |                  |
-			// Save head into Y4          Save tail into X5..X12
-			//         |
-			//         src+R11, where R11 = ((dst & -32) + 32) - dst
-			// Algorithm:
-			// 1. Unaligned save of the tail's 128 bytes
-			// 2. Unaligned save of the head's 32  bytes
-			// 3. Destination-aligned copying of body (128 bytes per iteration)
-			// 4. Put head on the new place
-			// 5. Put the tail on the new place
-			// It can be important to satisfy processor's pipeline requirements for
-			// small sizes as the cost of unaligned memory region copying is
-			// comparable with the cost of main loop. So code is slightly messed there.
-			// There is more clean implementation of that algorithm for bigger sizes
-			// where the cost of unaligned part copying is negligible.
-			// You can see it after gobble_big_data_fwd label.
-			LEAQ(	Mem{Base:src}(length*1), CX)
-			MOVQ(	dst, R10)
-			// CX points to the end of buffer so we need go back slightly. We will use negative offsets there.
-			MOVOU(	-0x80(CX), X5)
-			MOVOU(	-0x70(CX), X6)
-			MOVQ(	U8(0x80), AX)
-			// Align destination address
-			ANDQ(	I64(-32), dst)
-			ADDQ(	U8(32), dst)
-			// Continue tail saving.
-			MOVOU(	-0x60(CX), X7)
-			MOVOU(	-0x50(CX), X8)
-			// Make R11 delta between aligned and unaligned destination addresses.
-			MOVQ(	dst, R11)
-			SUBQ(	R10, R11)
-			// Continue tail saving.
-			MOVOU(	-0x40(CX), X9)
-			MOVOU(	-0x30(CX), X10)
-			// Let's make bytes-to-copy value adjusted as we've prepared unaligned part for copying.
-			SUBQ(	R11, length)
-			// Continue tail saving.
-			MOVOU(	-0x20(CX), X11)
-			MOVOU(	-0x10(CX), X12)
-			// The tail will be put on its place after main body copying.
-			// It's time for the unaligned heading part.
-			VMOVDQU(	Mem{Base:src}, Y4)
-			// Adjust source address to point past head.
-			ADDQ(	R11, src)
-			SUBQ(	AX, length)
-			// Aligned memory copying there
-		gobble_128_loop:
-			VMOVDQU(	Mem{Base:src}, Y0)
-			VMOVDQU(	0x20Mem{Base:src}, Y1)
-			VMOVDQU(	0x40Mem{Base:src}, Y2)
-			VMOVDQU(	0x60Mem{Base:src}, Y3)
-			ADDQ(	AX, src)
-			VMOVDQA(	Y0, Mem{Base:dst})
-			VMOVDQA(	Y1, 0x20Mem{Base:dst})
-			VMOVDQA(	Y2, 0x40Mem{Base:dst})
-			VMOVDQA(	Y3, 0x60Mem{Base:dst})
-			ADDQ(	AX, dst)
-			SUBQ(	AX, length)
-			JA(	LabelRef( name+"gobble_128_loop"))
-			// Now we can store unaligned parts.
-			ADDQ(	AX, length)
-			ADDQ(	dst, length)
-			VMOVDQU(	Y4, (R10))
-			VZEROUPPER()
-				MOVOU	(X5, -0x80(length))
-			MOVOU(	X6, -0x70(length))
-			MOVOU(	X7, -0x60(length))
-			MOVOU(	X8, -0x50(length))
-			MOVOU(	X9, -0x40(length))
-			MOVOU(	X10, -0x30(length))
-			MOVOU(	X11, -0x20(length))
-			MOVOU(	X12, -0x10(length))
-			RET()
+		// Memory layout on the source side
+		// src                                       CX
+		// |<---------length before correction--------->|
+		// |       |<--length corrected-->|             |
+		// |       |                  |<--- AX  --->|
+		// |<-R11->|                  |<-128 bytes->|
+		// +----------------------------------------+
+		// | Head  | Body             | Tail        |
+		// +-------+------------------+-------------+
+		// ^       ^                  ^
+		// |       |                  |
+		// Save head into Y4          Save tail into X5..X12
+		//         |
+		//         src+R11, where R11 = ((dst & -32) + 32) - dst
+		// Algorithm:
+		// 1. Unaligned save of the tail's 128 bytes
+		// 2. Unaligned save of the head's 32  bytes
+		// 3. Destination-aligned copying of body (128 bytes per iteration)
+		// 4. Put head on the new place
+		// 5. Put the tail on the new place
+		// It can be important to satisfy processor's pipeline requirements for
+		// small sizes as the cost of unaligned memory region copying is
+		// comparable with the cost of main loop. So code is slightly messed there.
+		// There is more clean implementation of that algorithm for bigger sizes
+		// where the cost of unaligned part copying is negligible.
+		// You can see it after gobble_big_data_fwd label.
+		Y0, Y1, Y2, Y3, Y4 := YMM(), YMM(), YMM(), YMM(), YMM()
 
-			Label( name+"gobble_big_data_fwd")
-			// There is forward copying for big regions.
-			// It uses non-temporal mov instructions.
-			// Details of this algorithm are commented previously for small sizes.
-			LEAQ(	Mem{Base:src}(length*1), CX)
-			MOVOU(	-0x80Mem{Base:src}(length*1), X5)
-			MOVOU(	-0x70(CX), X6)
-			MOVOU(	-0x60(CX), X7)
-			MOVOU(	-0x50(CX), X8)
-			MOVOU(	-0x40(CX), X9)
-			MOVOU(	-0x30(CX), X10)
-			MOVOU(	-0x20(CX), X11)
-			MOVOU(	-0x10(CX), X12)
-			VMOVDQU(	Mem{Base:src}, Y4)
-			MOVQ(	dst, R8)
-			ANDQ(	$-32, dst)
-			ADDQ(	U8(32), dst)
-			MOVQ(	dst, R10)
-			SUBQ(	R8, R10)
-			SUBQ(	R10, length)
-			ADDQ(	R10, src)
-			LEAQ(	Mem{Base:dst}(length*1), CX)
-			SUBQ(	U8(0)x80, length)
+		LEAQ(Mem{Base: src, Index: length, Scale: 1}, CX)
+		MOVQ(dst, R10)
+		// CX points to the end of buffer so we need go back slightly. We will use negative offsets there.
+		MOVOU(Mem{Base: CX, Disp: -0x80}, X5)
+		MOVOU(Mem{Base: CX, Disp: -0x70}, X6)
+		MOVB(U8(0x80), AX.As8())
+		// Align destination address
 
-			Label( name+"gobble_mem_fwd_loop")
-			PREFETCHNTA( 0x1C0Mem{Base:src})
-			PREFETCHNTA( 0x280Mem{Base:src})
-			// Prefetch values were chosen empirically.
-			// Approach for prefetch usage as in 7.6.6 of [1]
-			// [1] 64-ia-32-architectures-optimization-manual.pdf
-			// https://www.intel.ru/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-optimization-manual.pdf
-			VMOVDQU(	Mem{Base:src}, Y0)
-			VMOVDQU(	0x20Mem{Base:src}, Y1)
-			VMOVDQU(	0x40Mem{Base:src}, Y2)
-			VMOVDQU(	0x60Mem{Base:src}, Y3)
-			ADDQ(	U8(0)x80, src)
-			VMOVNTDQ( Y0, Mem{Base:dst})
-			VMOVNTDQ( Y1, 0x20Mem{Base:dst})
-			VMOVNTDQ( Y2, 0x40Mem{Base:dst})
-			VMOVNTDQ( Y3, 0x60Mem{Base:dst})
-			ADDQ(	U8(0)x80, dst)
-			SUBQ(	U8(0)x80, length)
-			JA(		LabelRef( name+"gobble_mem_fwd_loop"))
-			// NT instructions don't follow the normal cache-coherency rules.
-			// We need SFENCE there to make copied data available timely.
-			SFENCE()
-				VMOVDQU	(Y4, (R8))
-			VZEROUPPER()
-				MOVOU	(X5, -0x80(CX))
-			MOVOU(	X6, -0x70(CX))
-			MOVOU(	X7, -0x60(CX))
-			MOVOU(	X8, -0x50(CX))
-			MOVOU(	X9, -0x40(CX))
-			MOVOU(	X10, -0x30(CX))
-			MOVOU(	X11, -0x20(CX))
-			MOVOU(	X12, -0x10(CX))
-			RET()
+		MOVQ(U64(0xffffffffffffffe0), R8)
+		ANDQ(R8, dst)
 
-		copy_backward:
-			MOVQ(	dst, AX)
-			// Backward copying is about the same as the forward one.
-			// Firstly we load unaligned tail in the beginning of region.
-			MOVOU(	Mem{Base:src}, X5)
-			MOVOU(	0x10Mem{Base:src}, X6)
-			ADDQ(	length, dst)
-			MOVOU(	0x20Mem{Base:src}, X7)
-			MOVOU(	0x30Mem{Base:src}, X8)
-			LEAQ(	-0x20Mem{Base:dst}, R10)
-			MOVQ(	dst, R11)
-			MOVOU(	0x40Mem{Base:src}, X9)
-			MOVOU(	0x50Mem{Base:src}, X10)
-			ANDQ(	U8(0x1F), R11)
-			MOVOU(	0x60Mem{Base:src}, X11)
-			MOVOU(	0x70Mem{Base:src}, X12)
-			XORQ(	R11, dst)
-			// Let's point src to the end of region
-			ADDQ(	length, src)
-			// and load unaligned head into X4.
-			VMOVDQU(	-0x20Mem{Base:src}, Y4)
-			SUBQ(	R11, src)
-			SUBQ(	R11, length)
-			// If there is enough data for non-temporal moves go to special loop
-			CMPQ(	length, U8(0)x100000)
-			JA(		LabelRef( name+"gobble_big_data_bwd"))
-			SUBQ(	U8(0)x80, length)
+		ADDQ(U8(32), dst)
+		// Continue tail saving.
+		MOVOU(Mem{Base: CX, Disp: -0x60}, X7)
+		MOVOU(Mem{Base: CX, Disp: -0x50}, X8)
+		// Make R8 delta between aligned and unaligned destination addresses.
+		MOVQ(dst, R8)
+		SUBQ(R10, R8)
+		// Continue tail saving.
+		MOVOU(Mem{Base: CX, Disp: -0x40}, X9)
+		MOVOU(Mem{Base: CX, Disp: -0x30}, X10)
+		// Let's make bytes-to-copy value adjusted as we've prepared unaligned part for copying.
+		SUBQ(R8, length)
+		// Continue tail saving.
+		MOVOU(Mem{Base: CX, Disp: -0x20}, X11)
+		MOVOU(Mem{Base: CX, Disp: -0x10}, X12)
+		// The tail will be put on its place after main body copying.
+		// It's time for the unaligned heading part.
+		VMOVDQU(Mem{Base: src}, Y4)
+		// Adjust source address to point past head.
+		ADDQ(R8, src)
+		SUBQ(AX, length)
 
-			Label( name+"gobble_mem_bwd_loop")
-			VMOVDQU(	-0x20Mem{Base:src}, Y0)
-			VMOVDQU(	-0x40Mem{Base:src}, Y1)
-			VMOVDQU(	-0x60Mem{Base:src}, Y2)
-			VMOVDQU(	-0x80Mem{Base:src}, Y3)
-			SUBQ(	U8(0)x80, src)
-			VMOVDQA(	Y0, -0x20Mem{Base:dst})
-			VMOVDQA(	Y1, -0x40Mem{Base:dst})
-			VMOVDQA(	Y2, -0x60Mem{Base:dst})
-			VMOVDQA(	Y3, -0x80Mem{Base:dst})
-			SUBQ(	U8(0)x80, dst)
-			SUBQ(	U8(0)x80, length)
-			JA(		LabelRef( name+"gobble_mem_bwd_loop"))
-			// Let's store unaligned data
-			VMOVDQU(	Y4, (R10))
-			VZEROUPPER()
-				MOVOU	(X5, (AX))
-			MOVOU(	X6, 0x10(AX))
-			MOVOU(	X7, 0x20(AX))
-			MOVOU(	X8, 0x30(AX))
-			MOVOU(	X9, 0x40(AX))
-			MOVOU(	X10, 0x50(AX))
-			MOVOU(	X11, 0x60(AX))
-			MOVOU(	X12, 0x70(AX))
-			RET()
+		// Aligned memory copying there
+		Label(name + "gobble_128_loop")
+		VMOVDQU(Mem{Base: src}, Y0)
+		VMOVDQU(Mem{Base: src, Disp: 0x20}, Y1)
+		VMOVDQU(Mem{Base: src, Disp: 0x40}, Y2)
+		VMOVDQU(Mem{Base: src, Disp: 0x60}, Y3)
+		ADDQ(AX, src)
+		VMOVDQA(Y0, Mem{Base: dst})
+		VMOVDQA(Y1, Mem{Base: dst, Disp: 0x20})
+		VMOVDQA(Y2, Mem{Base: dst, Disp: 0x40})
+		VMOVDQA(Y3, Mem{Base: dst, Disp: 0x60})
+		ADDQ(AX, dst)
+		SUBQ(AX, length)
+		JA(LabelRef(name + "gobble_128_loop"))
+		// Now we can store unaligned parts.
+		ADDQ(AX, length)
+		ADDQ(dst, length)
+		VMOVDQU(Y4, Mem{Base: R10})
+		VZEROUPPER()
+		MOVOU(X5, Mem{Base: length, Disp: -0x80})
+		MOVOU(X6, Mem{Base: length, Disp: -0x70})
+		MOVOU(X7, Mem{Base: length, Disp: -0x60})
+		MOVOU(X8, Mem{Base: length, Disp: -0x50})
+		MOVOU(X9, Mem{Base: length, Disp: -0x40})
+		MOVOU(X10, Mem{Base: length, Disp: -0x30})
+		MOVOU(X11, Mem{Base: length, Disp: -0x20})
+		MOVOU(X12, Mem{Base: length, Disp: -0x10})
+		RET()
 
-			Label( name+"gobble_big_data_bwd")
-			SUBQ(	U8(0)x80, length)
-			Label( name+"gobble_big_mem_bwd_loop")
-			PREFETCHNTA( -0x1C0Mem{Base:src})
-			PREFETCHNTA( -0x280Mem{Base:src})
-			VMOVDQU(	-0x20Mem{Base:src}, Y0)
-			VMOVDQU(	-0x40Mem{Base:src}, Y1)
-			VMOVDQU(	-0x60Mem{Base:src}, Y2)
-			VMOVDQU(	-0x80Mem{Base:src}, Y3)
-			SUBQ(	U8(0)x80, src)
-			VMOVNTDQ(	Y0, -0x20Mem{Base:dst})
-			VMOVNTDQ(	Y1, -0x40Mem{Base:dst})
-			VMOVNTDQ(	Y2, -0x60Mem{Base:dst})
-			VMOVNTDQ(	Y3, -0x80Mem{Base:dst})
-			SUBQ(	U8(0)x80, dst)
-			SUBQ(	U8(0)x80, length)
-			JA(	LabelRef( name+"gobble_big_mem_bwd_loop"))
-			SFENCE()
-				VMOVDQU	(Y4, (R10))
-			VZEROUPPER()
-				MOVOU	(X5, (AX))
-			MOVOU(	X6, 0x10(AX))
-			MOVOU(	X7, 0x20(AX))
-			MOVOU(	X8, 0x30(AX))
-			MOVOU(	X9, 0x40(AX))
-			MOVOU(	X10, 0x50(AX))
-			MOVOU(	X11, 0x60(AX))
-			MOVOU(	X12, 0x70(AX))
-			RET()
-	*/
+		Label(name + "gobble_big_data_fwd")
+		// There is forward copying for big regions.
+		// It uses non-temporal mov instructions.
+		// Details of this algorithm are commented previously for small sizes.
+		LEAQ(Mem{Base: src, Index: length, Scale: 1}, CX)
+		MOVOU(Mem{Base: src, Index: length, Scale: 1, Disp: -0x80}, X5)
+		MOVOU(Mem{Base: CX, Disp: -0x70}, X6)
+		MOVOU(Mem{Base: CX, Disp: -0x60}, X7)
+		MOVOU(Mem{Base: CX, Disp: -0x50}, X8)
+		MOVOU(Mem{Base: CX, Disp: -0x40}, X9)
+		MOVOU(Mem{Base: CX, Disp: -0x30}, X10)
+		MOVOU(Mem{Base: CX, Disp: -0x20}, X11)
+		MOVOU(Mem{Base: CX, Disp: -0x10}, X12)
+		VMOVDQU(Mem{Base: src}, Y4)
+		MOVQ(dst, R8)
+		MOVQ(U64(0xffffffffffffffe0), R10)
+		ANDQ(R10, dst)
+
+		ADDQ(U8(32), dst)
+		MOVQ(dst, R10)
+		SUBQ(R8, R10)
+		SUBQ(R10, length)
+		ADDQ(R10, src)
+		LEAQ(Mem{Base: dst, Index: length, Scale: 1}, CX)
+		SUBQ(U8(0x80), length)
+
+		Label(name + "gobble_mem_fwd_loop")
+		PREFETCHNTA(Mem{Base: src, Disp: 0x1c0})
+		PREFETCHNTA(Mem{Base: src, Disp: 0x280})
+		// Prefetch values were chosen empirically.
+		// Approach for prefetch usage as in 7.6.6 of [1]
+		// [1] 64-ia-32-architectures-optimization-manual.pdf
+		// https://www.intel.ru/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-optimization-manual.pdf
+		VMOVDQU(Mem{Base: src}, Y0)
+		VMOVDQU(Mem{Base: src, Disp: 0x20}, Y1)
+		VMOVDQU(Mem{Base: src, Disp: 0x40}, Y2)
+		VMOVDQU(Mem{Base: src, Disp: 0x60}, Y3)
+
+		ADDQ(U8(0x80), src)
+		VMOVNTDQ(Y0, Mem{Base: dst})
+		VMOVNTDQ(Y1, Mem{Base: dst, Disp: 0x20})
+		VMOVNTDQ(Y2, Mem{Base: dst, Disp: 0x20})
+		VMOVNTDQ(Y3, Mem{Base: dst, Disp: 0x60})
+		ADDQ(U8(0x80), dst)
+		SUBQ(U8(0x80), length)
+		JA(LabelRef(name + "gobble_mem_fwd_loop"))
+		// NT instructions don't follow the normal cache-coherency rules.
+		// We need SFENCE there to make copied data available timely.
+		SFENCE()
+		VMOVDQU(Y4, Mem{Base: R8})
+		VZEROUPPER()
+		MOVOU(X5, Mem{Base: CX, Disp: -0x80})
+		MOVOU(X6, Mem{Base: CX, Disp: -0x70})
+		MOVOU(X7, Mem{Base: CX, Disp: -0x60})
+		MOVOU(X8, Mem{Base: CX, Disp: -0x50})
+		MOVOU(X9, Mem{Base: CX, Disp: -0x40})
+		MOVOU(X10, Mem{Base: CX, Disp: -0x30})
+		MOVOU(X11, Mem{Base: CX, Disp: -0x20})
+		MOVOU(X12, Mem{Base: CX, Disp: -0x10})
+		JMP(end)
+	}
 }
 
 // genMatchLen generates standalone matchLen.
