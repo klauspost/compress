@@ -21,6 +21,15 @@ func encodeBlockAsm(dst []byte, src []byte) int
 //go:noescape
 func emitLiteral(dst []byte, lit []byte) int
 
+// emitLiteralAvx writes a literal chunk and returns the number of bytes written.
+//
+// It assumes that:
+//   dst is long enough to hold the encoded bytes
+//   0 <= len(lit) && len(lit) <= math.MaxUint32
+//
+//go:noescape
+func emitLiteralAvx(dst []byte, lit []byte) int
+
 // emitRepeat writes a repeat chunk and returns the number of bytes written.
 // Length must be at least 4 and < 1<<32
 //

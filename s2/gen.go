@@ -488,7 +488,7 @@ func emitLiterals(nextEmit Mem, base reg.GPVirtual, src reg.GPVirtual, dstBase M
 	MOVQ(dstBase, dstBaseTmp)
 	XORQ(retval, retval)
 	MOVQ(base, nextEmit)
-	emitLiteral(name, litLen, retval, dstBaseTmp, litBase, LabelRef("emit_literal_done_"+name))
+	emitLiteral(name, litLen, retval, dstBaseTmp, litBase, LabelRef("emit_literal_done_"+name), false)
 	Label("emit_literal_done_" + name)
 	// Store updated dstBase
 	MOVQ(dstBaseTmp, dstBase)
@@ -549,15 +549,31 @@ func genEmitLiteral() {
 	Load(Param("dst").Base(), dstBase)
 	Load(Param("lit").Base(), litBase)
 	Load(Param("lit").Len(), litLen)
-	emitLiteral("standalone", litLen, retval, dstBase, litBase, "emit_literal_end_standalone")
+	emitLiteral("standalone", litLen, retval, dstBase, litBase, "emit_literal_end_standalone", false)
 	Label("emit_literal_end_standalone")
+	Store(retval, ReturnIndex(0))
+	RET()
+
+	TEXT("emitLiteralAvx", NOSPLIT, "func(dst, lit []byte) int")
+	Doc("emitLiteralAvx writes a literal chunk and returns the number of bytes written.", "",
+		"It assumes that:",
+		"  dst is long enough to hold the encoded bytes",
+		"  0 <= len(lit) && len(lit) <= math.MaxUint32", "")
+	Pragma("noescape")
+
+	dstBase, litBase, litLen, retval = GP64(), GP64(), GP64(), GP64()
+	Load(Param("dst").Base(), dstBase)
+	Load(Param("lit").Base(), litBase)
+	Load(Param("lit").Len(), litLen)
+	emitLiteral("standalone", litLen, retval, dstBase, litBase, "emit_literal_end_avx_standalone", true)
+	Label("emit_literal_end_avx_standalone")
 	Store(retval, ReturnIndex(0))
 	RET()
 }
 
 // emitLiteral can be used for inlining an emitLiteral call.
 // stack must have at least 32 bytes
-func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, end LabelRef) {
+func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, end LabelRef, avx bool) {
 	n := GP64()
 	n16 := GP64()
 
@@ -619,7 +635,7 @@ func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, en
 	Label("memmove_" + name)
 
 	// copy(dst[i:], lit)
-	genMemMove2("emit_lit_memmove_"+name, dstBase, litBase, litLen, end, false)
+	genMemMove2("emit_lit_memmove_"+name, dstBase, litBase, litLen, end, avx)
 }
 
 // genEmitRepeat generates a standlone emitRepeat.
@@ -1300,12 +1316,10 @@ func genMemMove2(name string, dst, src, length reg.GPVirtual, end LabelRef, avx 
 		// CX points to the end of buffer so we need go back slightly. We will use negative offsets there.
 		MOVOU(Mem{Base: CX, Disp: -0x80}, X5)
 		MOVOU(Mem{Base: CX, Disp: -0x70}, X6)
-		MOVB(U8(0x80), AX.As8())
+		MOVQ(U32(0x80), AX)
+
 		// Align destination address
-
-		MOVQ(U64(0xffffffffffffffe0), R8)
-		ANDQ(R8, dst)
-
+		ANDQ(U32(0xffffffe0), dst)
 		ADDQ(U8(32), dst)
 		// Continue tail saving.
 		MOVOU(Mem{Base: CX, Disp: -0x60}, X7)
@@ -1355,7 +1369,7 @@ func genMemMove2(name string, dst, src, length reg.GPVirtual, end LabelRef, avx 
 		MOVOU(X10, Mem{Base: length, Disp: -0x30})
 		MOVOU(X11, Mem{Base: length, Disp: -0x20})
 		MOVOU(X12, Mem{Base: length, Disp: -0x10})
-		RET()
+		JMP(end)
 
 		Label(name + "gobble_big_data_fwd")
 		// There is forward copying for big regions.
@@ -1372,10 +1386,10 @@ func genMemMove2(name string, dst, src, length reg.GPVirtual, end LabelRef, avx 
 		MOVOU(Mem{Base: CX, Disp: -0x10}, X12)
 		VMOVDQU(Mem{Base: src}, Y4)
 		MOVQ(dst, R8)
-		MOVQ(U64(0xffffffffffffffe0), R10)
-		ANDQ(R10, dst)
 
+		ANDQ(U32(0xffffffe0), dst)
 		ADDQ(U8(32), dst)
+
 		MOVQ(dst, R10)
 		SUBQ(R8, R10)
 		SUBQ(R10, length)

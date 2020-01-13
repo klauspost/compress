@@ -618,6 +618,337 @@ emit_literal_end_standalone:
 	MOVQ BX, ret+48(FP)
 	RET
 
+// func emitLiteralAvx(dst []byte, lit []byte) int
+TEXT ·emitLiteralAvx(SB), NOSPLIT, $0-56
+	MOVQ dst_base+0(FP), AX
+	MOVQ lit_base+24(FP), CX
+	MOVQ lit_len+32(FP), DX
+	MOVQ DX, BX
+	MOVQ DX, BP
+	SUBL $0x01, BP
+	JC   emit_literal_end_avx_standalone
+	CMPL BP, $0x3c
+	JLT  one_byte_standalone
+	CMPL BP, $0x00000100
+	JLT  two_bytes_standalone
+	CMPL BP, $0x00010000
+	JLT  three_bytes_standalone
+	CMPL BP, $0x01000000
+	JLT  four_bytes_standalone
+	MOVB $0xfc, (AX)
+	MOVL BP, 1(AX)
+	ADDQ $0x05, BX
+	ADDQ $0x05, AX
+	JMP  memmove_standalone
+
+four_bytes_standalone:
+	MOVQ BP, SI
+	SHRL $0x10, SI
+	MOVB $0xf8, (AX)
+	MOVW BP, 1(AX)
+	MOVB SI, 3(AX)
+	ADDQ $0x04, BX
+	ADDQ $0x04, AX
+	JMP  memmove_standalone
+
+three_bytes_standalone:
+	MOVB $0xf4, (AX)
+	MOVW BP, 1(AX)
+	ADDQ $0x03, BX
+	ADDQ $0x03, AX
+	JMP  memmove_standalone
+
+two_bytes_standalone:
+	MOVB $0xf0, (AX)
+	MOVB BP, 1(AX)
+	ADDQ $0x02, BX
+	ADDQ $0x02, AX
+	JMP  memmove_standalone
+
+one_byte_standalone:
+	SHLB $0x02, BP
+	MOVB BP, (AX)
+	ADDQ $0x01, BX
+	ADDQ $0x01, AX
+
+memmove_standalone:
+	NOP
+
+emit_lit_memmove_standalone_memmove_tail:
+	TESTQ DX, DX
+	JEQ   emit_literal_end_avx_standalone
+	CMPQ  DX, $0x02
+	JBE   emit_lit_memmove_standalone_memmove_move_1or2
+	CMPQ  DX, $0x04
+	JB    emit_lit_memmove_standalone_memmove_move_3
+	JBE   emit_lit_memmove_standalone_memmove_move_4
+	CMPQ  DX, $0x08
+	JB    emit_lit_memmove_standalone_memmove_move_5through7
+	JE    emit_lit_memmove_standalone_memmove_move_8
+	CMPQ  DX, $0x10
+	JBE   emit_lit_memmove_standalone_memmove_move_9through16
+	CMPQ  DX, $0x20
+	JBE   emit_lit_memmove_standalone_memmove_move_17through32
+	CMPQ  DX, $0x40
+	JBE   emit_lit_memmove_standalone_memmove_move_33through64
+	CMPQ  DX, $0x80
+	JBE   emit_lit_memmove_standalone_memmove_move_65through128
+	CMPQ  DX, $0x00000100
+	JBE   emit_lit_memmove_standalone_memmove_move_129through256
+	JMP   emit_lit_memmove_standalone_memmove_avxUnaligned
+
+emit_lit_memmove_standalone_memmove_move_1or2:
+	MOVB (CX), BP
+	MOVB -1(CX)(DX*1), SI
+	MOVB BP, (AX)
+	MOVB SI, -1(AX)(DX*1)
+	JMP  emit_literal_end_avx_standalone
+
+emit_lit_memmove_standalone_memmove_move_4:
+	MOVL (CX), BP
+	MOVL BP, (AX)
+	JMP  emit_literal_end_avx_standalone
+
+emit_lit_memmove_standalone_memmove_move_3:
+	MOVW (CX), BP
+	MOVB 2(CX), SI
+	MOVW BP, (AX)
+	MOVB SI, 2(AX)
+	JMP  emit_literal_end_avx_standalone
+
+emit_lit_memmove_standalone_memmove_move_5through7:
+	MOVL (CX), BP
+	MOVL -4(CX)(DX*1), SI
+	MOVL BP, (AX)
+	MOVL SI, -4(AX)(DX*1)
+	JMP  emit_literal_end_avx_standalone
+
+emit_lit_memmove_standalone_memmove_move_8:
+	MOVQ (CX), BP
+	MOVQ BP, (AX)
+	JMP  emit_literal_end_avx_standalone
+
+emit_lit_memmove_standalone_memmove_move_9through16:
+	MOVQ (CX), BP
+	MOVQ -8(CX)(DX*1), SI
+	MOVQ BP, (AX)
+	MOVQ SI, -8(AX)(DX*1)
+	JMP  emit_literal_end_avx_standalone
+
+emit_lit_memmove_standalone_memmove_move_17through32:
+	MOVOU (CX), X0
+	MOVOU -16(CX)(DX*1), X1
+	MOVOU X0, (AX)
+	MOVOU X1, -16(AX)(DX*1)
+	JMP   emit_literal_end_avx_standalone
+
+emit_lit_memmove_standalone_memmove_move_33through64:
+	MOVOU (CX), X0
+	MOVOU 16(CX), X1
+	MOVOU -32(CX)(DX*1), X2
+	MOVOU -16(CX)(DX*1), X3
+	MOVOU X0, (AX)
+	MOVOU X1, 16(AX)
+	MOVOU X2, -32(AX)(DX*1)
+	MOVOU X3, -16(AX)(DX*1)
+	JMP   emit_literal_end_avx_standalone
+
+emit_lit_memmove_standalone_memmove_move_65through128:
+	MOVOU (CX), X0
+	MOVOU 16(CX), X1
+	MOVOU 32(CX), X2
+	MOVOU 48(CX), X3
+	MOVOU -64(CX)(DX*1), X12
+	MOVOU -48(CX)(DX*1), X13
+	MOVOU -32(CX)(DX*1), X14
+	MOVOU -16(CX)(DX*1), X15
+	MOVOU X0, (AX)
+	MOVOU X1, 16(AX)
+	MOVOU X2, 32(AX)
+	MOVOU X3, 48(AX)
+	MOVOU X12, -64(AX)(DX*1)
+	MOVOU X13, -48(AX)(DX*1)
+	MOVOU X14, -32(AX)(DX*1)
+	MOVOU X15, -16(AX)(DX*1)
+	JMP   emit_literal_end_avx_standalone
+
+emit_lit_memmove_standalone_memmove_move_129through256:
+	MOVOU (CX), X0
+	MOVOU 16(CX), X1
+	MOVOU 32(CX), X2
+	MOVOU 48(CX), X3
+	MOVOU 64(CX), X4
+	MOVOU 80(CX), X5
+	MOVOU 96(CX), X6
+	MOVOU 112(CX), X7
+	MOVOU -128(CX)(DX*1), X8
+	MOVOU -112(CX)(DX*1), X9
+	MOVOU -96(CX)(DX*1), X10
+	MOVOU -80(CX)(DX*1), X11
+	MOVOU -64(CX)(DX*1), X12
+	MOVOU -48(CX)(DX*1), X13
+	MOVOU -32(CX)(DX*1), X14
+	MOVOU -16(CX)(DX*1), X15
+	MOVOU X0, (AX)
+	MOVOU X1, 16(AX)
+	MOVOU X2, 32(AX)
+	MOVOU X3, 48(AX)
+	MOVOU X4, 64(AX)
+	MOVOU X5, 80(AX)
+	MOVOU X6, 96(AX)
+	MOVOU X7, 112(AX)
+	MOVOU X8, -128(AX)(DX*1)
+	MOVOU X9, -112(AX)(DX*1)
+	MOVOU X10, -96(AX)(DX*1)
+	MOVOU X11, -80(AX)(DX*1)
+	MOVOU X12, -64(AX)(DX*1)
+	MOVOU X13, -48(AX)(DX*1)
+	MOVOU X14, -32(AX)(DX*1)
+	MOVOU X15, -16(AX)(DX*1)
+	JMP   emit_literal_end_avx_standalone
+
+emit_lit_memmove_standalone_memmove_move_256through2048:
+	SUBQ  $0x00000100, DX
+	MOVOU (CX), X0
+	MOVOU 16(CX), X1
+	MOVOU 32(CX), X2
+	MOVOU 48(CX), X3
+	MOVOU 64(CX), X4
+	MOVOU 80(CX), X5
+	MOVOU 96(CX), X6
+	MOVOU 112(CX), X7
+	MOVOU 128(CX), X8
+	MOVOU 144(CX), X9
+	MOVOU 160(CX), X10
+	MOVOU 176(CX), X11
+	MOVOU 192(CX), X12
+	MOVOU 208(CX), X13
+	MOVOU 224(CX), X14
+	MOVOU 240(CX), X15
+	MOVOU X0, (AX)
+	MOVOU X1, 16(AX)
+	MOVOU X2, 32(AX)
+	MOVOU X3, 48(AX)
+	MOVOU X4, 64(AX)
+	MOVOU X5, 80(AX)
+	MOVOU X6, 96(AX)
+	MOVOU X7, 112(AX)
+	MOVOU X8, 128(AX)
+	MOVOU X9, 144(AX)
+	MOVOU X10, 160(AX)
+	MOVOU X11, 176(AX)
+	MOVOU X12, 192(AX)
+	MOVOU X13, 208(AX)
+	MOVOU X14, 224(AX)
+	MOVOU X15, 240(AX)
+	CMPQ  DX, $0x00000100
+	LEAQ  256(CX), CX
+	LEAQ  256(AX), AX
+	JGE   emit_lit_memmove_standalone_memmove_move_256through2048
+	JMP   emit_lit_memmove_standalone_memmove_tail
+
+emit_lit_memmove_standalone_memmove_avxUnaligned:
+	CMPQ    DX, $0x00100000
+	JAE     emit_lit_memmove_standalone_memmove_gobble_big_data_fwd
+	LEAQ    (CX)(DX*1), SI
+	MOVQ    AX, R8
+	MOVOU   -128(SI), X5
+	MOVOU   -112(SI), X6
+	MOVQ    $0x00000080, BP
+	ANDQ    $0xffffffe0, AX
+	ADDQ    $0x20, AX
+	MOVOU   -96(SI), X7
+	MOVOU   -80(SI), X8
+	MOVQ    AX, DI
+	SUBQ    R8, DI
+	MOVOU   -64(SI), X9
+	MOVOU   -48(SI), X10
+	SUBQ    DI, DX
+	MOVOU   -32(SI), X11
+	MOVOU   -16(SI), X12
+	VMOVDQU (CX), Y4
+	ADDQ    DI, CX
+	SUBQ    BP, DX
+
+emit_lit_memmove_standalone_memmove_gobble_128_loop:
+	VMOVDQU (CX), Y0
+	VMOVDQU 32(CX), Y1
+	VMOVDQU 64(CX), Y2
+	VMOVDQU 96(CX), Y3
+	ADDQ    BP, CX
+	VMOVDQA Y0, (AX)
+	VMOVDQA Y1, 32(AX)
+	VMOVDQA Y2, 64(AX)
+	VMOVDQA Y3, 96(AX)
+	ADDQ    BP, AX
+	SUBQ    BP, DX
+	JA      emit_lit_memmove_standalone_memmove_gobble_128_loop
+	ADDQ    BP, DX
+	ADDQ    AX, DX
+	VMOVDQU Y4, (R8)
+	VZEROUPPER
+	MOVOU X5, -128(DX)
+	MOVOU X6, -112(DX)
+	MOVOU X7, -96(DX)
+	MOVOU X8, -80(DX)
+	MOVOU X9, -64(DX)
+	MOVOU X10, -48(DX)
+	MOVOU X11, -32(DX)
+	MOVOU X12, -16(DX)
+	JMP   emit_literal_end_avx_standalone
+
+emit_lit_memmove_standalone_memmove_gobble_big_data_fwd:
+	LEAQ    (CX)(DX*1), SI
+	MOVOU   -128(CX)(DX*1), X5
+	MOVOU   -112(SI), X6
+	MOVOU   -96(SI), X7
+	MOVOU   -80(SI), X8
+	MOVOU   -64(SI), X9
+	MOVOU   -48(SI), X10
+	MOVOU   -32(SI), X11
+	MOVOU   -16(SI), X12
+	VMOVDQU (CX), Y4
+	MOVQ    AX, DI
+	ANDQ    $0xffffffe0, AX
+	ADDQ    $0x20, AX
+	MOVQ    AX, R8
+	SUBQ    DI, R8
+	SUBQ    R8, DX
+	ADDQ    R8, CX
+	LEAQ    (AX)(DX*1), SI
+	SUBQ    $0x80, DX
+
+emit_lit_memmove_standalone_memmove_gobble_mem_fwd_loop:
+	PREFETCHNTA 448(CX)
+	PREFETCHNTA 640(CX)
+	VMOVDQU     (CX), Y0
+	VMOVDQU     32(CX), Y1
+	VMOVDQU     64(CX), Y2
+	VMOVDQU     96(CX), Y3
+	ADDQ        $0x80, CX
+	VMOVNTDQ    Y0, (AX)
+	VMOVNTDQ    Y1, 32(AX)
+	VMOVNTDQ    Y2, 32(AX)
+	VMOVNTDQ    Y3, 96(AX)
+	ADDQ        $0x80, AX
+	SUBQ        $0x80, DX
+	JA          emit_lit_memmove_standalone_memmove_gobble_mem_fwd_loop
+	SFENCE
+	VMOVDQU Y4, (DI)
+	VZEROUPPER
+	MOVOU X5, -128(SI)
+	MOVOU X6, -112(SI)
+	MOVOU X7, -96(SI)
+	MOVOU X8, -80(SI)
+	MOVOU X9, -64(SI)
+	MOVOU X10, -48(SI)
+	MOVOU X11, -32(SI)
+	MOVOU X12, -16(SI)
+
+emit_literal_end_avx_standalone:
+	MOVQ BX, ret+48(FP)
+	RET
+
 // func emitRepeat(dst []byte, offset int, length int) int
 TEXT ·emitRepeat(SB), NOSPLIT, $0-48
 	XORQ BX, BX
