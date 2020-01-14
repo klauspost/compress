@@ -350,6 +350,13 @@ func (w *huffmanBitWriter) headerSize() (size, numCodegens int) {
 }
 
 // dynamicSize returns the size of dynamically encoded data in bits.
+func (w *huffmanBitWriter) dynamicReuseSize(litEnc, offEnc *huffmanEncoder) (size int) {
+	size = litEnc.bitLength(w.literalFreq[:]) +
+		offEnc.bitLength(w.offsetFreq[:])
+	return size
+}
+
+// dynamicSize returns the size of dynamically encoded data in bits.
 func (w *huffmanBitWriter) dynamicSize(litEnc, offEnc *huffmanEncoder, extraBits int) (size, numCodegens int) {
 	header, numCodegens := w.headerSize()
 	size = header +
@@ -604,12 +611,11 @@ func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []b
 	if w.lastHeader > 0 {
 		// Estimate size for using a new table
 		newSize := w.lastHeader + tokens.EstimatedBits()
+		newSize += newSize >> w.logReusePenalty
 
 		// The estimated size is calculated as an optimal table.
 		// We add a penalty to make it more realistic and re-use a bit more.
-		newSize += newSize >> (w.logReusePenalty & 31)
-		extra := w.extraBitSize()
-		reuseSize, _ := w.dynamicSize(w.literalEncoding, w.offsetEncoding, extra)
+		reuseSize := w.dynamicReuseSize(w.literalEncoding, w.offsetEncoding) + w.extraBitSize()
 
 		// Check if a new table is better.
 		if newSize < reuseSize {
@@ -622,6 +628,7 @@ func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []b
 		}
 		// Check if we get a reasonable size decrease.
 		if ssize, storable := w.storedSize(input); storable && ssize < (size+size>>4) {
+			//fmt.Println("store")
 			w.writeStoredHeader(len(input), eof)
 			w.writeBytes(input)
 			w.lastHeader = 0
@@ -801,7 +808,7 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 	}
 
 	// Add everything as literals
-	estBits := histogramSize(input, w.literalFreq[:], !eof && !sync) + 15
+	estBits := histogramSize(input, w.literalFreq[:], !eof && !sync) + 15 + w.lastHeader
 
 	// Store bytes, if we don't get a reasonable improvement.
 	ssize, storable := w.storedSize(input)
@@ -812,8 +819,8 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 	}
 
 	if w.lastHeader > 0 {
-		size, _ := w.dynamicSize(w.literalEncoding, huffOffset, w.lastHeader)
-		estBits += estBits >> (w.logReusePenalty)
+		size := w.dynamicReuseSize(w.literalEncoding, huffOffset)
+		estBits += estBits >> w.logReusePenalty
 
 		if estBits < size {
 			// We owe an EOB
