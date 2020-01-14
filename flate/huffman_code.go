@@ -7,7 +7,7 @@ package flate
 import (
 	"math"
 	"math/bits"
-	"sort"
+	"sync"
 )
 
 const (
@@ -25,8 +25,6 @@ type huffmanEncoder struct {
 	codes     []hcode
 	freqcache []literalNode
 	bitCount  [17]int32
-	lns       byLiteral // stored to avoid repeated allocation in generate
-	lfs       byFreq    // stored to avoid repeated allocation in generate
 }
 
 type literalNode struct {
@@ -270,7 +268,7 @@ func (h *huffmanEncoder) assignEncodingAndSize(bitCount []int32, list []literalN
 		// assigned in literal order (not frequency order).
 		chunk := list[len(list)-int(bits):]
 
-		h.lns.sort(chunk)
+		sortbyLiteral(chunk)
 		for _, node := range chunk {
 			h.codes[node.literal] = hcode{code: reverseBits(code, uint8(n)), len: uint16(n)}
 			code++
@@ -315,7 +313,7 @@ func (h *huffmanEncoder) generate(freq []uint16, maxBits int32) {
 		}
 		return
 	}
-	h.lfs.sort(list)
+	sortbyFreq(list)
 
 	// Get the number of literals for each bit count
 	bitCount := h.bitCounts(list, maxBits)
@@ -323,38 +321,167 @@ func (h *huffmanEncoder) generate(freq []uint16, maxBits int32) {
 	h.assignEncodingAndSize(bitCount, list)
 }
 
-type byLiteral []literalNode
+var sortpool = sync.Pool{New: func() interface{} {
+	return &[]literalNode{}
+}}
 
-func (s *byLiteral) sort(a []literalNode) {
-	*s = byLiteral(a)
-	sort.Sort(s)
-}
-
-func (s byLiteral) Len() int { return len(s) }
-
-func (s byLiteral) Less(i, j int) bool {
-	return s[i].literal < s[j].literal
-}
-
-func (s byLiteral) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
-
-type byFreq []literalNode
-
-func (s *byFreq) sort(a []literalNode) {
-	*s = byFreq(a)
-	sort.Sort(s)
-}
-
-func (s byFreq) Len() int { return len(s) }
-
-func (s byFreq) Less(i, j int) bool {
-	if s[i].freq == s[j].freq {
-		return s[i].literal < s[j].literal
+func sortbyLiteral(list []literalNode) {
+	max_len := len(list)
+	t := sortpool.Get().(*[]literalNode)
+	defer sortpool.Put(t)
+	if len(*t) < max_len {
+		*t = make([]literalNode, max_len)
 	}
-	return s[i].freq < s[j].freq
+	tmp := *t
+	for i := 0; i < max_len-max_len&1; i += 2 {
+		if list[i+1].literal < list[i].literal {
+			list[i], list[i+1] = list[i+1], list[i]
+		}
+
+	}
+	for i := 0; i < max_len-max_len&3; i += 4 {
+		if list[i+2].literal < list[i].literal {
+			list[i], list[i+2] = list[i+2], list[i]
+		}
+		if list[i+3].literal < list[i+1].literal {
+			list[i+1], list[i+3] = list[i+3], list[i+1]
+		}
+		if list[i+2].literal < list[i+1].literal {
+			list[i+1], list[i+2] = list[i+2], list[i+1]
+		}
+
+	}
+	if max_len&3 == 3 {
+		i := max_len - 3
+		if list[i+2].literal < list[i].literal {
+			list[i+1], list[i+2] = list[i+2], list[i+1]
+			list[i], list[i+1] = list[i+1], list[i]
+		} else if list[i+2].literal < list[i+1].literal {
+			list[i+1], list[i+2] = list[i+2], list[i+1]
+		}
+	}
+	var step, l, max, r, index, n int
+	step = 4
+	for step < max_len {
+		n++
+		step <<= 1
+		if n&1 == 1 {
+			for i := 0; i < max_len; i += step {
+				l, r, max = i, i+step/2, i+step
+				if max > max_len {
+					max = max_len
+				}
+				for index = i; index < max; index++ {
+					if l == step/2+i || (r < max && list[r].literal < list[l].literal) {
+						tmp[index] = list[r]
+						r++
+					} else {
+						tmp[index] = list[l]
+						l++
+					}
+				}
+			}
+		} else {
+			for i := 0; i < max_len; i += step {
+				l, r, max = i, i+step/2, i+step
+				if max > max_len {
+					max = max_len
+				}
+				for index = i; index < max; index++ {
+					if l == step/2+i || (r < max && tmp[r].literal < tmp[l].literal) {
+						list[index] = tmp[r]
+						r++
+					} else {
+						list[index] = tmp[l]
+						l++
+					}
+				}
+			}
+		}
+	}
+	if n&1 == 1 {
+		copy(list, tmp)
+	}
 }
 
-func (s byFreq) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func sortbyFreq(list []literalNode) {
+	max_len := len(list)
+	t := sortpool.Get().(*[]literalNode)
+	defer sortpool.Put(t)
+	if len(*t) < max_len {
+		*t = make([]literalNode, max_len)
+	}
+	tmp := *t
+	for i := 0; i < max_len-max_len&1; i += 2 {
+		if list[i+1].freq == list[i].freq && list[i+1].literal < list[i].literal || list[i+1].freq < list[i].freq {
+			list[i], list[i+1] = list[i+1], list[i]
+		}
+
+	}
+	for i := 0; i < max_len-max_len&3; i += 4 {
+		if list[i+2].freq == list[i].freq && list[i+2].literal < list[i].literal || list[i+2].freq < list[i].freq {
+			list[i], list[i+2] = list[i+2], list[i]
+		}
+		if list[i+3].freq == list[i+1].freq && list[i+3].literal < list[i+1].literal || list[i+3].freq < list[i+1].freq {
+			list[i+1], list[i+3] = list[i+3], list[i+1]
+		}
+		if list[i+2].freq == list[i+1].freq && list[i+2].literal < list[i+1].literal || list[i+2].freq < list[i+1].freq {
+			list[i+1], list[i+2] = list[i+2], list[i+1]
+		}
+
+	}
+	if max_len&3 == 3 {
+		i := max_len - 3
+		if list[i+2].freq == list[i].freq && list[i+2].literal < list[i].literal || list[i+2].freq < list[i].freq {
+			list[i+1], list[i+2] = list[i+2], list[i+1]
+			list[i], list[i+1] = list[i+1], list[i]
+		} else if list[i+2].freq == list[i+1].freq && list[i+2].literal < list[i+1].literal || list[i+2].freq < list[i+1].freq {
+			list[i+1], list[i+2] = list[i+2], list[i+1]
+		}
+	}
+	var step, l, max, r, index, n int
+	step = 4
+	for step < max_len {
+		n++
+		step <<= 1
+		if n&1 == 1 {
+			for i := 0; i < max_len; i += step {
+				l, r, max = i, i+step/2, i+step
+				if max > max_len {
+					max = max_len
+				}
+				for index = i; index < max; index++ {
+					if l == step/2+i || (r < max && (list[r].freq == list[l].freq && list[r].literal < list[l].literal || list[r].freq < list[l].freq)) {
+						tmp[index] = list[r]
+						r++
+					} else {
+						tmp[index] = list[l]
+						l++
+					}
+				}
+			}
+		} else {
+			for i := 0; i < max_len; i += step {
+				l, r, max = i, i+step/2, i+step
+				if max > max_len {
+					max = max_len
+				}
+				for index = i; index < max; index++ {
+					if l == step/2+i || (r < max && (tmp[r].freq == tmp[l].freq && tmp[r].literal < tmp[l].literal || tmp[r].freq < tmp[l].freq)) {
+						list[index] = tmp[r]
+						r++
+					} else {
+						list[index] = tmp[l]
+						l++
+					}
+				}
+			}
+		}
+	}
+	if n&1 == 1 {
+		copy(list, tmp)
+	}
+}
 
 // histogramSize accumulates a histogram of b in h.
 // An estimated size in bits is returned.
