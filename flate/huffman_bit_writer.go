@@ -628,7 +628,6 @@ func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []b
 		}
 		// Check if we get a reasonable size decrease.
 		if ssize, storable := w.storedSize(input); storable && ssize < (size+size>>4) {
-			//fmt.Println("store")
 			w.writeStoredHeader(len(input), eof)
 			w.writeBytes(input)
 			w.lastHeader = 0
