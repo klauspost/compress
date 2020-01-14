@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/klauspost/compress/snappy"
+	"github.com/klauspost/compress/zstd"
 )
 
 const maxUint = ^uint(0)
@@ -1553,6 +1554,12 @@ func TestDataRoundtrips(t *testing.T) {
 	}
 	t.Run("longblock", func(t *testing.T) {
 		data := make([]byte, 1<<25)
+		test(t, data)
+	})
+	t.Run("4f9e1a0", func(t *testing.T) {
+		comp, _ := ioutil.ReadFile("testdata/4f9e1a0da7915a3d69632f5613ed78bc998a8a23.zst")
+		dec, _ := zstd.NewReader(bytes.NewBuffer(comp))
+		data, _ := ioutil.ReadAll(dec)
 		test(t, data)
 	})
 }

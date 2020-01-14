@@ -572,7 +572,8 @@ func genEmitLiteral() {
 }
 
 // emitLiteral can be used for inlining an emitLiteral call.
-// stack must have at least 32 bytes
+// stack must have at least 32 bytes.
+// Uses 2 GP registers. With AVX 4 registers.
 func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, end LabelRef, avx bool) {
 	n := GP64()
 	n16 := GP64()
@@ -664,6 +665,7 @@ func genEmitRepeat() {
 // length is modified. dstBase is updated. retval is added to input.
 // retval can be nil.
 // Will jump to end label when finished.
+// Uses 1 GP register.
 func emitRepeat(name string, length, offset, retval, dstBase reg.GPVirtual, end LabelRef) {
 	Label("emit_repeat_again_" + name)
 	tmp := GP64()
@@ -810,6 +812,7 @@ const (
 // length is modified (and junk). dstBase is updated. retval is added to input.
 // retval can be nil.
 // Will jump to end label when finished.
+// Uses 2 GP registers.
 func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end LabelRef) {
 	//if offset >= 65536 {
 	CMPL(offset.As32(), U32(65536))
@@ -944,6 +947,7 @@ func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end La
 // to and from will be at the end, n will be 0.
 // to and from may not overlap.
 // Fairly simplistic for now, can ofc. be extended.
+// Uses one GP register and 8 SSE registers.
 func genMemMove(name string, to, from, n reg.GPVirtual, end LabelRef) {
 	tmp := GP64()
 	MOVQ(n, tmp)
@@ -1007,6 +1011,8 @@ func genMemMove(name string, to, from, n reg.GPVirtual, end LabelRef) {
 
 // func memmove(to, from unsafe.Pointer, n uintptr)
 // src and dst may not overlap.
+// Non AVX uses 2 GP register, 16 SSE2 registers.
+// AVX uses 4 GP registers 16 AVX/SSE registers.
 func genMemMove2(name string, dst, src, length reg.GPVirtual, end LabelRef, avx bool) {
 	AX, CX := GP64(), GP64()
 	NOP()
@@ -1456,6 +1462,7 @@ func genMatchLen() {
 // matchLen returns the number of matching bytes of a and b.
 // len is the maximum number of bytes to match.
 // Will jump to end when done and returns the length.
+// Uses 2 GP registers.
 func matchLen(name string, a, b Mem, len reg.GPVirtual, end LabelRef) reg.GPVirtual {
 	tmp, matched := GP64(), GP64()
 	XORQ(matched, matched)
