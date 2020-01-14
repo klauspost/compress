@@ -184,9 +184,7 @@ func (t *tokens) indexTokens(in []token) {
 	t.Reset()
 	for _, tok := range in {
 		if tok < matchType {
-			t.tokens[t.n] = tok
-			t.litHist[tok]++
-			t.n++
+			t.AddLiteral(tok.literal())
 			continue
 		}
 		t.AddMatch(uint32(tok.length()), tok.offset())
@@ -258,7 +256,6 @@ func (t *tokens) EstimatedBits() int {
 			}
 		}
 	}
-
 	return int(shannon) + bits
 }
 

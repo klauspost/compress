@@ -45,6 +45,7 @@ func testBlockHuff(t *testing.T, in, out string) {
 	}
 	var buf bytes.Buffer
 	bw := newHuffmanBitWriter(&buf)
+	bw.logReusePenalty = 8
 	bw.writeBlockHuff(false, all, false)
 	bw.flush()
 	got := buf.Bytes()

@@ -356,6 +356,13 @@ func (s byFreq) Less(i, j int) bool {
 
 func (s byFreq) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
+func atLeastOne(v float32) float32 {
+	if v < 1 {
+		return 1
+	}
+	return v
+}
+
 // histogramSize accumulates a histogram of b in h.
 // An estimated size in bits is returned.
 // Unassigned values are assigned '1' in the histogram.
@@ -365,15 +372,13 @@ func histogramSize(b []byte, h []uint16, fill bool) int {
 	for _, t := range b {
 		h[t]++
 	}
-	invTotal := float32(1.0 / float64(len(b)))
+	invTotal := 1.0 / float32(len(b))
 	shannon := float32(0.0)
-	single := float32(math.Ceil(-math.Log2(float64(invTotal))))
 	for i, v := range h[:] {
 		if v > 0 {
 			n := float32(v)
-			shannon += -mFastLog2(n*invTotal) * n
+			shannon += atLeastOne(-mFastLog2(n*invTotal)) * n
 		} else if fill {
-			shannon += single
 			h[i] = 1
 		}
 	}

@@ -808,7 +808,8 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 	}
 
 	// Add everything as literals
-	estBits := histogramSize(input, w.literalFreq[:], !eof && !sync) + 15 + w.lastHeader
+	const guessHeaderSizeBits = 400
+	estBits := histogramSize(input, w.literalFreq[:], !eof && !sync) + 15 + guessHeaderSizeBits
 
 	// Store bytes, if we don't get a reasonable improvement.
 	ssize, storable := w.storedSize(input)
@@ -819,8 +820,10 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 	}
 
 	if w.lastHeader > 0 {
-		size := w.dynamicReuseSize(w.literalEncoding, huffOffset)
-		estBits += estBits >> w.logReusePenalty
+		size := w.dynamicReuseSize(w.literalEncoding, huffOffset) + w.lastHeader
+		if w.logReusePenalty > 0 {
+			estBits += estBits >> w.logReusePenalty
+		}
 
 		if estBits < size {
 			// We owe an EOB
