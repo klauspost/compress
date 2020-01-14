@@ -365,13 +365,13 @@ func histogramSize(b []byte, h []uint16, fill bool) int {
 	for _, t := range b {
 		h[t]++
 	}
-	invTotal := 1.0 / float64(len(b))
-	shannon := 0.0
-	single := math.Ceil(-math.Log2(invTotal))
+	invTotal := float32(1.0 / float64(len(b)))
+	shannon := float32(0.0)
+	single := float32(math.Ceil(-math.Log2(float64(invTotal))))
 	for i, v := range h[:] {
 		if v > 0 {
-			n := float64(v)
-			shannon += math.Ceil(-math.Log2(n*invTotal) * n)
+			n := float32(v)
+			shannon += -mFastLog2(n*invTotal) * n
 		} else if fill {
 			shannon += single
 			h[i] = 1

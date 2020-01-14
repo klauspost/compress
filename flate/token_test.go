@@ -27,7 +27,7 @@ func loadTestTokens(t testFatal) *tokens {
 func Test_tokens_EstimatedBits(t *testing.T) {
 	tok := loadTestTokens(t)
 	// The estimated size, update if method changes.
-	const expect = 199380
+	const expect = 196635
 	if n := tok.EstimatedBits(); n != expect {
 		t.Error("want:", expect, "bits, got:", n)
 	}
