@@ -1170,7 +1170,7 @@ two_byte_offset_short_standalone:
 	MOVB $0x01, BP
 	LEAQ -16(BP)(DX*4), DX
 	MOVB CL, 1(AX)
-	SARL $0x08, CX
+	SHRL $0x08, CX
 	SHLL $0x05, CX
 	ORL  CX, DX
 	MOVB DL, (AX)

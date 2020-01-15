@@ -494,23 +494,6 @@ func emitLiterals(nextEmit Mem, base reg.GPVirtual, src reg.GPVirtual, dstBase M
 	MOVQ(dstBaseTmp, dstBase)
 }
 
-type ptrSize struct {
-	size uint8
-	reg.Register
-}
-
-func (p ptrSize) Offset(off reg.Register) Mem {
-	if p.size == 0 {
-		p.size = 1
-	}
-	return Mem{Base: p, Index: off, Scale: p.size}
-}
-
-func (p ptrSize) OffsetInfo(dst, off reg.Register) {
-	LEAQ(Mem{Base: p, Index: off, Scale: p.size}, dst)
-	return
-}
-
 type hashGen struct {
 	bytes     int
 	tablebits int
@@ -914,7 +897,7 @@ func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end La
 	// Use scale and displacement to shift and subtract values from length.
 	LEAQ(Mem{Base: tmp, Index: length, Scale: 4, Disp: -(4 << 2)}, length)
 	MOVB(offset.As8(), Mem{Base: dstBase, Disp: 1}) // Store offset lower byte
-	SARL(U8(8), offset.As32())                      // Remove lower
+	SHRL(U8(8), offset.As32())                      // Remove lower
 	SHLL(U8(5), offset.As32())                      // Shift back up
 	ORL(offset.As32(), length.As32())               // OR result
 	MOVB(length.As8(), Mem{Base: dstBase, Disp: 0})
