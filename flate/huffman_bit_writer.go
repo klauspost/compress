@@ -458,12 +458,12 @@ func (w *huffmanBitWriter) writeDynamicHeader(numLiterals int, numOffsets int, n
 
 	i := 0
 	for {
-		var codeWord int = int(w.codegen[i])
+		var codeWord = uint32(w.codegen[i])
 		i++
 		if codeWord == badCode {
 			break
 		}
-		w.writeCode(w.codegenEncoding.codes[uint32(codeWord)])
+		w.writeCode(w.codegenEncoding.codes[codeWord])
 
 		switch codeWord {
 		case 16:
@@ -609,7 +609,8 @@ func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []b
 	var size int
 	// Check if we should reuse.
 	if w.lastHeader > 0 {
-		// Estimate size for using a new table
+		// Estimate size for using a new table.
+		// Use the previous header size as the best estimate.
 		newSize := w.lastHeader + tokens.EstimatedBits()
 		newSize += newSize >> w.logReusePenalty
 
@@ -807,12 +808,15 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 	}
 
 	// Add everything as literals
-	const guessHeaderSizeBits = 400
+	// We have to estimate the header size.
+	// Assume header is around 70 bytes:
+	// https://stackoverflow.com/a/25454430
+	const guessHeaderSizeBits = 70 * 8
 	estBits := histogramSize(input, w.literalFreq[:], !eof && !sync) + 15 + guessHeaderSizeBits
 
 	// Store bytes, if we don't get a reasonable improvement.
 	ssize, storable := w.storedSize(input)
-	if storable && ssize < (estBits+estBits>>4) {
+	if storable && ssize < estBits {
 		w.writeStoredHeader(len(input), eof)
 		w.writeBytes(input)
 		return
@@ -820,9 +824,7 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 
 	if w.lastHeader > 0 {
 		size := w.dynamicReuseSize(w.literalEncoding, huffOffset) + w.lastHeader
-		if w.logReusePenalty > 0 {
-			estBits += estBits >> w.logReusePenalty
-		}
+		estBits += estBits >> w.logReusePenalty
 
 		if estBits < size {
 			// We owe an EOB
