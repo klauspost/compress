@@ -360,34 +360,32 @@ func sortbyLiteral(list []literalNode) {
 			list[i+1], list[i+2] = list[i+2], list[i+1]
 		}
 	}
-	var step, l, max, r, index, n int
+	var step, l, max, r int
 	step = 4
 	for step < max_len {
-		n++
 		step <<= 1
-		if n&1 == 1 {
-			for i := 0; i < max_len; i += step {
-				l, r, max = i, i+step/2, i+step
-				if max > max_len {
-					max = max_len
-				}
-				for index = i; index < max; index++ {
-					if l == step/2+i || (r < max && list[r].literal < list[l].literal) {
-						tmp[index] = list[r]
-						r++
-					} else {
-						tmp[index] = list[l]
-						l++
-					}
+		for i := 0; i < max_len; i += step {
+			l, r, max = i, i+step/2, i+step
+			if max > max_len {
+				max = max_len
+			}
+			for index := i; index < max; index++ {
+				if l == step/2+i || (r < max && list[r].literal < list[l].literal) {
+					tmp[index] = list[r]
+					r++
+				} else {
+					tmp[index] = list[l]
+					l++
 				}
 			}
-		} else {
+		}
+		if step < max_len {
 			for i := 0; i < max_len; i += step {
 				l, r, max = i, i+step/2, i+step
 				if max > max_len {
 					max = max_len
 				}
-				for index = i; index < max; index++ {
+				for index := i; index < max; index++ {
 					if l == step/2+i || (r < max && tmp[r].literal < tmp[l].literal) {
 						list[index] = tmp[r]
 						r++
@@ -397,11 +395,11 @@ func sortbyLiteral(list []literalNode) {
 					}
 				}
 			}
+		} else {
+			copy(list, tmp)
 		}
 	}
-	if n&1 == 1 {
-		copy(list, tmp)
-	}
+
 }
 
 func sortbyFreq(list []literalNode) {
@@ -439,34 +437,32 @@ func sortbyFreq(list []literalNode) {
 			list[i+1], list[i+2] = list[i+2], list[i+1]
 		}
 	}
-	var step, l, max, r, index, n int
+	var step, l, max, r int
 	step = 4
 	for step < max_len {
-		n++
 		step <<= 1
-		if n&1 == 1 {
-			for i := 0; i < max_len; i += step {
-				l, r, max = i, i+step/2, i+step
-				if max > max_len {
-					max = max_len
-				}
-				for index = i; index < max; index++ {
-					if l == step/2+i || (r < max && (list[r].freq == list[l].freq && list[r].literal < list[l].literal || list[r].freq < list[l].freq)) {
-						tmp[index] = list[r]
-						r++
-					} else {
-						tmp[index] = list[l]
-						l++
-					}
+		for i := 0; i < max_len; i += step {
+			l, r, max = i, i+step/2, i+step
+			if max > max_len {
+				max = max_len
+			}
+			for index := i; index < max; index++ {
+				if l == step/2+i || (r < max && (list[r].freq == list[l].freq && list[r].literal < list[l].literal || list[r].freq < list[l].freq)) {
+					tmp[index] = list[r]
+					r++
+				} else {
+					tmp[index] = list[l]
+					l++
 				}
 			}
-		} else {
+		}
+		if step < max_len {
 			for i := 0; i < max_len; i += step {
 				l, r, max = i, i+step/2, i+step
 				if max > max_len {
 					max = max_len
 				}
-				for index = i; index < max; index++ {
+				for index := i; index < max; index++ {
 					if l == step/2+i || (r < max && (tmp[r].freq == tmp[l].freq && tmp[r].literal < tmp[l].literal || tmp[r].freq < tmp[l].freq)) {
 						list[index] = tmp[r]
 						r++
@@ -476,11 +472,11 @@ func sortbyFreq(list []literalNode) {
 					}
 				}
 			}
+		} else {
+			copy(list, tmp)
 		}
 	}
-	if n&1 == 1 {
-		copy(list, tmp)
-	}
+
 }
 
 // histogramSize accumulates a histogram of b in h.
