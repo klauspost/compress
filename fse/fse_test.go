@@ -9,10 +9,9 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/google/go-cmp/cmp"
 )
 
 type inputFn func() ([]byte, error)
@@ -209,14 +208,14 @@ func TestReadNCount(t *testing.T) {
 			}
 			want := s.norm[:s.symbolLen]
 			got := s2.norm[:s2.symbolLen]
-			if !cmp.Equal(want, got) {
+			if !reflect.DeepEqual(want, got) {
 				if s.actualTableLog != s2.actualTableLog {
 					t.Errorf(name+"norm table, want tablelog: %d, got %d", s.actualTableLog, s2.actualTableLog)
 				}
 				if s.symbolLen != s2.symbolLen {
 					t.Errorf(name+"norm table, want size: %d, got %d", s.symbolLen, s2.symbolLen)
 				}
-				t.Errorf(name+"norm table, got delta: \n%s", cmp.Diff(want, got))
+				t.Errorf(name + "norm table, got delta: \n")
 				return
 			}
 			for i, dec := range s2.decTable {
@@ -235,13 +234,13 @@ func TestReadNCount(t *testing.T) {
 					} else {
 						dc = dc[:len(buf0)]
 					}
-					if !cmp.Equal(buf0, dc) {
+					if !bytes.Equal(buf0, dc) {
 						t.Errorf(name+"decompressed, got delta: (in) %v != (out) %v\n", buf0, dc)
 					}
 					return
 				}
-				if !cmp.Equal(buf0, dc) {
-					t.Errorf(name+"decompressed, got delta: \n%s", cmp.Diff(buf0, dc))
+				if !bytes.Equal(buf0, dc) {
+					t.Errorf(name + "decompressed, got delta.")
 				}
 				if !t.Failed() {
 					t.Log("... roundtrip ok!")
