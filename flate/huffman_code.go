@@ -24,8 +24,6 @@ type huffmanEncoder struct {
 	codes     []hcode
 	freqcache []literalNode
 	bitCount  [17]int32
-	//lns       byLiteral // stored to avoid repeated allocation in generate
-	//lfs byFreq // stored to avoid repeated allocation in generate
 }
 
 type literalNode struct {
