@@ -644,7 +644,7 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 		d.fill = (*compressor).fillBlock
 		d.step = (*compressor).store
 	case level == ConstantCompression:
-		d.w.logReusePenalty = uint(7)
+		d.w.logNewTablePenalty = 4
 		d.window = make([]byte, maxStoreBlockSize)
 		d.fill = (*compressor).fillBlock
 		d.step = (*compressor).storeHuff
@@ -652,13 +652,13 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 		level = 5
 		fallthrough
 	case level >= 1 && level <= 6:
-		d.w.logReusePenalty = 8
+		d.w.logNewTablePenalty = 7
 		d.fast = newFastEnc(level)
 		d.window = make([]byte, maxStoreBlockSize)
 		d.fill = (*compressor).fillBlock
 		d.step = (*compressor).storeFast
 	case 7 <= level && level <= 9:
-		d.w.logReusePenalty = 10
+		d.w.logNewTablePenalty = 10
 		d.state = &advancedState{}
 		d.compressionLevel = levels[level]
 		d.initDeflate()
