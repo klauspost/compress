@@ -7,7 +7,6 @@ package flate
 import (
 	"math"
 	"math/bits"
-	"sort"
 )
 
 const (
@@ -25,8 +24,6 @@ type huffmanEncoder struct {
 	codes     []hcode
 	freqcache []literalNode
 	bitCount  [17]int32
-	lns       byLiteral // stored to avoid repeated allocation in generate
-	lfs       byFreq    // stored to avoid repeated allocation in generate
 }
 
 type literalNode struct {
@@ -270,7 +267,7 @@ func (h *huffmanEncoder) assignEncodingAndSize(bitCount []int32, list []literalN
 		// assigned in literal order (not frequency order).
 		chunk := list[len(list)-int(bits):]
 
-		h.lns.sort(chunk)
+		sortByLiteral(chunk)
 		for _, node := range chunk {
 			h.codes[node.literal] = hcode{code: reverseBits(code, uint8(n)), len: uint16(n)}
 			code++
@@ -315,46 +312,13 @@ func (h *huffmanEncoder) generate(freq []uint16, maxBits int32) {
 		}
 		return
 	}
-	h.lfs.sort(list)
+	sortByFreq(list)
 
 	// Get the number of literals for each bit count
 	bitCount := h.bitCounts(list, maxBits)
 	// And do the assignment
 	h.assignEncodingAndSize(bitCount, list)
 }
-
-type byLiteral []literalNode
-
-func (s *byLiteral) sort(a []literalNode) {
-	*s = byLiteral(a)
-	sort.Sort(s)
-}
-
-func (s byLiteral) Len() int { return len(s) }
-
-func (s byLiteral) Less(i, j int) bool {
-	return s[i].literal < s[j].literal
-}
-
-func (s byLiteral) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
-
-type byFreq []literalNode
-
-func (s *byFreq) sort(a []literalNode) {
-	*s = byFreq(a)
-	sort.Sort(s)
-}
-
-func (s byFreq) Len() int { return len(s) }
-
-func (s byFreq) Less(i, j int) bool {
-	if s[i].freq == s[j].freq {
-		return s[i].literal < s[j].literal
-	}
-	return s[i].freq < s[j].freq
-}
-
-func (s byFreq) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
 func atLeastOne(v float32) float32 {
 	if v < 1 {
