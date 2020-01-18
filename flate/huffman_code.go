@@ -320,26 +320,44 @@ func (h *huffmanEncoder) generate(freq []uint16, maxBits int32) {
 	h.assignEncodingAndSize(bitCount, list)
 }
 
+func atLeastOne(v float32) float32 {
+	if v < 1 {
+		return 1
+	}
+	return v
+}
+
 // histogramSize accumulates a histogram of b in h.
 // An estimated size in bits is returned.
 // Unassigned values are assigned '1' in the histogram.
 // len(h) must be >= 256, and h's elements must be all zeroes.
-func histogramSize(b []byte, h []uint16, fill bool) int {
+func histogramSize(b []byte, h []uint16, fill bool) (int, int) {
 	h = h[:256]
 	for _, t := range b {
 		h[t]++
 	}
-	invTotal := 1.0 / float64(len(b))
-	shannon := 0.0
-	single := math.Ceil(-math.Log2(invTotal))
-	for i, v := range h[:] {
-		if v > 0 {
-			n := float64(v)
-			shannon += math.Ceil(-math.Log2(n*invTotal) * n)
-		} else if fill {
-			shannon += single
-			h[i] = 1
+	invTotal := 1.0 / float32(len(b))
+	shannon := float32(0.0)
+	var extra float32
+	if fill {
+		oneBits := atLeastOne(-mFastLog2(invTotal))
+		for i, v := range h[:] {
+			if v > 0 {
+				n := float32(v)
+				shannon += atLeastOne(-mFastLog2(n*invTotal)) * n
+			} else {
+				h[i] = 1
+				extra += oneBits
+			}
+		}
+	} else {
+		for _, v := range h[:] {
+			if v > 0 {
+				n := float32(v)
+				shannon += atLeastOne(-mFastLog2(n*invTotal)) * n
+			}
 		}
 	}
-	return int(shannon + 0.99)
+
+	return int(shannon + 0.99), int(extra + 0.99)
 }
