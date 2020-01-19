@@ -6,6 +6,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 
 	. "github.com/mmcloughlin/avo/build"
 	"github.com/mmcloughlin/avo/buildtags"
@@ -18,7 +19,12 @@ func main() {
 	Constraint(buildtags.Not("noasm").ToConstraint())
 	Constraint(buildtags.Term("gc").ToConstraint())
 
-	genEncodeBlockAsm("encodeBlockAsm", 16, 6)
+	genEncodeBlockAsm("encodeBlockAsm", 16, 6, false)
+	genEncodeBlockAsm("encodeBlockAsm14B", 14, 5, false)
+	genEncodeBlockAsm("encodeBlockAsm12B", 12, 4, false)
+	genEncodeBlockAsm("encodeBlockAsmAvx", 16, 6, true)
+	genEncodeBlockAsm("encodeBlockAsm14BAvx", 14, 5, true)
+	genEncodeBlockAsm("encodeBlockAsm12BAvx", 12, 4, true)
 	genEmitLiteral()
 	genEmitRepeat()
 	genEmitCopy()
@@ -26,7 +32,7 @@ func main() {
 	Generate()
 }
 
-func genEncodeBlockAsm(name string, tableBits, skipLog int) {
+func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 	TEXT(name, NOSPLIT, "func(dst, src []byte) int")
 	Doc(name+" encodes a non-empty src to a guaranteed-large-enough dst.",
 		"It assumes that the varint-encoded length of the decompressed bytes has already been written.", "")
@@ -39,7 +45,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 		tableSize = 1 << tableBits
 		//tableMask  = tableSize - 1
 		baseStack  = 56
-		extraStack = 64
+		extraStack = 24
 		allocStack = baseStack + extraStack + tableSize
 	)
 	// Memzero needs at least 128 bytes.
@@ -69,6 +75,10 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 	tmpStack += 4
 	nextSTemp := stack.Offset(tmpStack)
 	tmpStack += 4
+	if tmpStack-baseStack != extraStack {
+		log.Fatal("adjust extraStack to", tmpStack-baseStack)
+	}
+
 	dstBaseBasic, err := Param("dst").Base().Resolve()
 	if err != nil {
 		panic(err)
@@ -141,8 +151,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 				LEAQ(Mem{Base: s, Disp: 4, Index: tmp, Scale: 1}, nextS)
 			}
 			// if nextS > sLimit {goto emitRemainder}
-			// FIXME: failed to allocate registers???
-			if false {
+			{
 				tmp := GP64()
 				MOVL(sLimit, tmp.As32())
 				CMPL(nextS.As32(), tmp.As32())
@@ -168,9 +177,9 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 				DECQ(tmp)
 				MOVL(tmp.As32(), table.Idx(hash1, 1))
 			}
-			// hash2 := hash6(cv>>16, tableBits)
 			hash2 := GP64()
 			{
+				// hash2 := hash6(cv>>16, tableBits)
 				MOVQ(cv, hash2)
 				SHRQ(U8(16), hash2)
 				hasher.hash(hash2)
@@ -217,7 +226,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 					Label("repeat_extend_back_end_" + name)
 					// Base is now at start.
 					// d += emitLiteral(dst[d:], src[nextEmit:base])
-					emitLiterals(nextEmit, base, src, dstBase, "repeat_emit_"+name)
+					emitLiterals(nextEmit, base, src, dstBase, "repeat_emit_"+name, avx)
 
 					// Extend forward
 					{
@@ -243,8 +252,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 						}
 					}
 					// Emit
-					// FIXME: failed to allocate registers. May be legit.
-					if false {
+					{
 						// length = s-base
 						length := base
 						SUBQ(s, length)
@@ -257,7 +265,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 						// if nextEmit > 0
 						tmp := GP32()
 						MOVL(nextEmit, tmp.As32())
-						TESTQ(tmp, tmp)
+						TESTL(tmp.As32(), tmp.As32())
 						JZ(LabelRef("repeat_as_copy_" + name))
 						emitRepeat("match_repeat_", length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name))
 						Label("repeat_as_copy_" + name)
@@ -269,8 +277,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 					}
 					// if s >= sLimit
 					// can be omitted.
-					// FIXME: failed to allocate registers???
-					if false {
+					{
 						tmp := GP64()
 						MOVL(sLimit, tmp.As32())
 						CMPL(s.As32(), tmp.As32())
@@ -280,7 +287,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 				}
 			}
 			Label("no_repeat_found_" + name)
-			if false {
+			{
 				CMPL(Mem{Base: src, Index: candidate, Scale: 1}, cv.As32())
 				JEQ(LabelRef("candidate_match_" + name))
 				// cv >>= 8
@@ -319,13 +326,12 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 				// s++
 				INCQ(s)
 				MOVL(candidate2, candidate)
-			} else {
-				NOP()
 			}
+
 			Label("candidate_match_" + name)
 			// We have a match at 's' with src offset in "candidate" that matches at least 4 bytes.
 			// Extend backwards
-			if false {
+			{
 				ne := GP64().As32()
 				MOVL(nextEmit, ne)
 				TESTL(candidate, candidate)
@@ -345,8 +351,6 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 				DECL(candidate)
 				JZ(LabelRef("match_extend_back_end_" + name))
 				JMP(LabelRef("match_extend_back_loop_" + name))
-			} else {
-				NOP()
 			}
 			Label("match_extend_back_end_" + name)
 
@@ -359,20 +363,22 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 				LEAQ(dstBase.Idx(tmp, 1), tmp)
 				CMPQ(tmp, dstLimitPtr)
 				JL(LabelRef("match_dst_size_check_" + name))
-				XORQ(tmp, tmp)
-				Store(tmp, ReturnIndex(0))
+				ri, err := ReturnIndex(0).Resolve()
+				if err != nil {
+					panic(err)
+				}
+				MOVQ(U32(0), ri.Addr)
 				RET()
 			}
 			Label("match_dst_size_check_" + name)
-			if false {
+			{
 				base := GP64()
 				MOVL(candidate, base.As32())
-				emitLiterals(nextEmit, base, src, dstBase, "match_emit_"+name)
-			} else {
-				NOP()
+				emitLiterals(nextEmit, base, src, dstBase, "match_emit_"+name, avx)
 			}
+
 			Label("match_nolit_loop_" + name)
-			if false {
+			{
 				base := GP64()
 				MOVQ(s, base)
 				// Update repeat
@@ -386,7 +392,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 				ADDQ(U8(4), s)
 				ADDL(U8(4), candidate)
 				// Extend the 4-byte match as long as possible and emit copy.
-				if false {
+				{
 					srcLeft := GP64()
 					MOVQ(s, srcLeft)
 					SUBQ(sLimit, srcLeft)
@@ -421,10 +427,8 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 						RET()
 						Label("match_nolit_dst_ok_" + name)
 					}
-				} else {
-					NOP()
 				}
-				if false {
+				{
 					// Check for an immediate match, otherwise start search at s+1
 					x := GP64()
 					// Index s-2
@@ -449,8 +453,6 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 					INCQ(s)
 				}
 				JMP(LabelRef("search_loop_" + name))
-			} else {
-				NOP()
 			}
 		}
 		_ = candidate
@@ -463,10 +465,9 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 	// d += emitLiteral(dst[d:], src[nextEmit:])
 	emitEnd := GP64()
 	MOVQ(lenSrc, emitEnd)
-	// FIXME: failed to allocate registers
-	if false {
-		emitLiterals(nextEmit, emitEnd, src, dstBase, name+"_emit_remainder")
-	}
+
+	// Emit final literals.
+	emitLiterals(nextEmit, emitEnd, src, dstBase, "emit_remainder_"+name, avx)
 	Label("return_" + name)
 
 	// FIXME, does not return size:
@@ -478,37 +479,19 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int) {
 
 // emitLiterals emits literals from nextEmit to base, updates nextEmit, dstBase.
 // src & base are untouched.
-func emitLiterals(nextEmit Mem, base reg.GPVirtual, src reg.GPVirtual, dstBase Mem, name string) {
-	tmp, litLen, retval, dstBaseTmp, litBase := GP64(), GP64(), GP64(), GP64(), GP64()
+func emitLiterals(nextEmit Mem, base reg.GPVirtual, src reg.GPVirtual, dstBase Mem, name string, avx bool) {
+	tmp, litLen, dstBaseTmp, litBase := GP64(), GP64(), GP64(), GP64()
 	MOVQ(nextEmit, litLen)
 	MOVQ(base, tmp)
 	// litBase = src[nextEmit:]
 	LEAQ(Mem{Base: src, Index: litLen, Scale: 1}, litBase)
 	SUBQ(tmp, litLen) // litlen = base - nextEmit
 	MOVQ(dstBase, dstBaseTmp)
-	XORQ(retval, retval)
 	MOVQ(base, nextEmit)
-	emitLiteral(name, litLen, retval, dstBaseTmp, litBase, LabelRef("emit_literal_done_"+name), false)
+	emitLiteral(name, litLen, nil, dstBaseTmp, litBase, LabelRef("emit_literal_done_"+name), false)
 	Label("emit_literal_done_" + name)
 	// Store updated dstBase
 	MOVQ(dstBaseTmp, dstBase)
-}
-
-type ptrSize struct {
-	size uint8
-	reg.Register
-}
-
-func (p ptrSize) Offset(off reg.Register) Mem {
-	if p.size == 0 {
-		p.size = 1
-	}
-	return Mem{Base: p, Index: off, Scale: p.size}
-}
-
-func (p ptrSize) OffsetInfo(dst, off reg.Register) {
-	LEAQ(Mem{Base: p, Index: off, Scale: p.size}, dst)
-	return
 }
 
 type hashGen struct {
@@ -573,13 +556,16 @@ func genEmitLiteral() {
 
 // emitLiteral can be used for inlining an emitLiteral call.
 // stack must have at least 32 bytes.
+// retval will contain emitted bytes, but can be nil if this is not interesting.
 // Uses 2 GP registers. With AVX 4 registers.
 func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, end LabelRef, avx bool) {
 	n := GP64()
 	n16 := GP64()
 
 	// We always add litLen bytes
-	MOVQ(litLen, retval)
+	if retval != nil {
+		MOVQ(litLen, retval)
+	}
 	MOVQ(litLen, n)
 
 	SUBL(U8(1), n.As32())
@@ -599,7 +585,9 @@ func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, en
 	Label("five_bytes_" + name)
 	MOVB(U8(252), Mem{Base: dstBase})
 	MOVL(n.As32(), Mem{Base: dstBase, Disp: 1})
-	ADDQ(U8(5), retval)
+	if retval != nil {
+		ADDQ(U8(5), retval)
+	}
 	ADDQ(U8(5), dstBase)
 	JMP(LabelRef("memmove_" + name))
 
@@ -609,34 +597,43 @@ func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, en
 	MOVB(U8(248), Mem{Base: dstBase})
 	MOVW(n.As16(), Mem{Base: dstBase, Disp: 1})
 	MOVB(n16.As8(), Mem{Base: dstBase, Disp: 3})
-	ADDQ(U8(4), retval)
+	if retval != nil {
+		ADDQ(U8(4), retval)
+	}
 	ADDQ(U8(4), dstBase)
 	JMP(LabelRef("memmove_" + name))
 
 	Label("three_bytes_" + name)
 	MOVB(U8(0xf4), Mem{Base: dstBase})
 	MOVW(n.As16(), Mem{Base: dstBase, Disp: 1})
-	ADDQ(U8(3), retval)
+	if retval != nil {
+		ADDQ(U8(3), retval)
+	}
 	ADDQ(U8(3), dstBase)
 	JMP(LabelRef("memmove_" + name))
 
 	Label("two_bytes_" + name)
 	MOVB(U8(0xf0), Mem{Base: dstBase})
 	MOVB(n.As8(), Mem{Base: dstBase, Disp: 1})
-	ADDQ(U8(2), retval)
+	if retval != nil {
+		ADDQ(U8(2), retval)
+	}
 	ADDQ(U8(2), dstBase)
 	JMP(LabelRef("memmove_" + name))
 
 	Label("one_byte_" + name)
 	SHLB(U8(2), n.As8())
 	MOVB(n.As8(), Mem{Base: dstBase})
-	ADDQ(U8(1), retval)
+	if retval != nil {
+		ADDQ(U8(1), retval)
+	}
 	ADDQ(U8(1), dstBase)
 
 	Label("memmove_" + name)
 
 	// copy(dst[i:], lit)
 	genMemMove2("emit_lit_memmove_"+name, dstBase, litBase, litLen, end, avx)
+	return
 }
 
 // genEmitRepeat generates a standlone emitRepeat.
