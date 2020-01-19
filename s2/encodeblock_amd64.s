@@ -8821,8 +8821,6 @@ emit_lit_memmove_standalone_memmove_move_256through2048:
 	JMP   emit_lit_memmove_standalone_memmove_tail
 
 emit_lit_memmove_standalone_memmove_avxUnaligned:
-	CMPQ    DX, $0x00100000
-	JAE     emit_lit_memmove_standalone_memmove_gobble_big_data_fwd
 	LEAQ    (CX)(DX*1), SI
 	MOVQ    AX, R8
 	MOVOU   -128(SI), X5
@@ -8868,55 +8866,6 @@ emit_lit_memmove_standalone_memmove_gobble_128_loop:
 	MOVOU X10, -48(DX)
 	MOVOU X11, -32(DX)
 	MOVOU X12, -16(DX)
-	JMP   emit_literal_end_avx_standalone
-
-emit_lit_memmove_standalone_memmove_gobble_big_data_fwd:
-	LEAQ    (CX)(DX*1), SI
-	MOVOU   -128(CX)(DX*1), X5
-	MOVOU   -112(SI), X6
-	MOVOU   -96(SI), X7
-	MOVOU   -80(SI), X8
-	MOVOU   -64(SI), X9
-	MOVOU   -48(SI), X10
-	MOVOU   -32(SI), X11
-	MOVOU   -16(SI), X12
-	VMOVDQU (CX), Y4
-	MOVQ    AX, DI
-	ANDQ    $0xffffffe0, AX
-	ADDQ    $0x20, AX
-	MOVQ    AX, R8
-	SUBQ    DI, R8
-	SUBQ    R8, DX
-	ADDQ    R8, CX
-	LEAQ    (AX)(DX*1), SI
-	SUBQ    $0x80, DX
-
-emit_lit_memmove_standalone_memmove_gobble_mem_fwd_loop:
-	PREFETCHNTA 448(CX)
-	PREFETCHNTA 640(CX)
-	VMOVDQU     (CX), Y0
-	VMOVDQU     32(CX), Y1
-	VMOVDQU     64(CX), Y2
-	VMOVDQU     96(CX), Y3
-	ADDQ        $0x80, CX
-	VMOVNTDQ    Y0, (AX)
-	VMOVNTDQ    Y1, 32(AX)
-	VMOVNTDQ    Y2, 32(AX)
-	VMOVNTDQ    Y3, 96(AX)
-	ADDQ        $0x80, AX
-	SUBQ        $0x80, DX
-	JA          emit_lit_memmove_standalone_memmove_gobble_mem_fwd_loop
-	SFENCE
-	VMOVDQU Y4, (DI)
-	VZEROUPPER
-	MOVOU X5, -128(SI)
-	MOVOU X6, -112(SI)
-	MOVOU X7, -96(SI)
-	MOVOU X8, -80(SI)
-	MOVOU X9, -64(SI)
-	MOVOU X10, -48(SI)
-	MOVOU X11, -32(SI)
-	MOVOU X12, -16(SI)
 
 emit_literal_end_avx_standalone:
 	MOVQ BX, ret+48(FP)
@@ -9194,7 +9143,7 @@ two_byte_offset_short_standalone:
 	MOVB $0x01, BP
 	LEAQ -16(BP)(DX*4), DX
 	MOVB CL, 1(AX)
-	SARL $0x08, CX
+	SHRL $0x08, CX
 	SHLL $0x05, CX
 	ORL  CX, DX
 	MOVB DL, (AX)

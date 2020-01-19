@@ -911,7 +911,7 @@ func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end La
 	// Use scale and displacement to shift and subtract values from length.
 	LEAQ(Mem{Base: tmp, Index: length, Scale: 4, Disp: -(4 << 2)}, length)
 	MOVB(offset.As8(), Mem{Base: dstBase, Disp: 1}) // Store offset lower byte
-	SARL(U8(8), offset.As32())                      // Remove lower
+	SHRL(U8(8), offset.As32())                      // Remove lower
 	SHLL(U8(5), offset.As32())                      // Shift back up
 	ORL(offset.As32(), length.As32())               // OR result
 	MOVB(length.As8(), Mem{Base: dstBase, Disp: 0})
@@ -1283,8 +1283,13 @@ func genMemMove2(name string, dst, src, length reg.GPVirtual, end LabelRef, avx 
 		// We do not support overlapping input
 
 		// Non-temporal copy would be better for big sizes.
-		CMPQ(length, U32(0x100000))
-		JAE(LabelRef(name + "gobble_big_data_fwd"))
+		// Disabled since big copies are unlikely.
+		// If enabling, test functionality.
+		const enableBigData = false
+		if enableBigData {
+			CMPQ(length, U32(0x100000))
+			JAE(LabelRef(name + "gobble_big_data_fwd"))
+		}
 
 		// Memory layout on the source side
 		// src                                       CX
@@ -1374,66 +1379,68 @@ func genMemMove2(name string, dst, src, length reg.GPVirtual, end LabelRef, avx 
 		MOVOU(X12, Mem{Base: length, Disp: -0x10})
 		JMP(end)
 
-		Label(name + "gobble_big_data_fwd")
-		// There is forward copying for big regions.
-		// It uses non-temporal mov instructions.
-		// Details of this algorithm are commented previously for small sizes.
-		LEAQ(Mem{Base: src, Index: length, Scale: 1}, CX)
-		MOVOU(Mem{Base: src, Index: length, Scale: 1, Disp: -0x80}, X5)
-		MOVOU(Mem{Base: CX, Disp: -0x70}, X6)
-		MOVOU(Mem{Base: CX, Disp: -0x60}, X7)
-		MOVOU(Mem{Base: CX, Disp: -0x50}, X8)
-		MOVOU(Mem{Base: CX, Disp: -0x40}, X9)
-		MOVOU(Mem{Base: CX, Disp: -0x30}, X10)
-		MOVOU(Mem{Base: CX, Disp: -0x20}, X11)
-		MOVOU(Mem{Base: CX, Disp: -0x10}, X12)
-		VMOVDQU(Mem{Base: src}, Y4)
-		MOVQ(dst, R8)
+		if enableBigData {
+			Label(name + "gobble_big_data_fwd")
+			// There is forward copying for big regions.
+			// It uses non-temporal mov instructions.
+			// Details of this algorithm are commented previously for small sizes.
+			LEAQ(Mem{Base: src, Index: length, Scale: 1}, CX)
+			MOVOU(Mem{Base: src, Index: length, Scale: 1, Disp: -0x80}, X5)
+			MOVOU(Mem{Base: CX, Disp: -0x70}, X6)
+			MOVOU(Mem{Base: CX, Disp: -0x60}, X7)
+			MOVOU(Mem{Base: CX, Disp: -0x50}, X8)
+			MOVOU(Mem{Base: CX, Disp: -0x40}, X9)
+			MOVOU(Mem{Base: CX, Disp: -0x30}, X10)
+			MOVOU(Mem{Base: CX, Disp: -0x20}, X11)
+			MOVOU(Mem{Base: CX, Disp: -0x10}, X12)
+			VMOVDQU(Mem{Base: src}, Y4)
+			MOVQ(dst, R8)
 
-		ANDQ(U32(0xffffffe0), dst)
-		ADDQ(U8(32), dst)
+			ANDQ(U32(0xffffffe0), dst)
+			ADDQ(U8(32), dst)
 
-		MOVQ(dst, R10)
-		SUBQ(R8, R10)
-		SUBQ(R10, length)
-		ADDQ(R10, src)
-		LEAQ(Mem{Base: dst, Index: length, Scale: 1}, CX)
-		SUBQ(U8(0x80), length)
+			MOVQ(dst, R10)
+			SUBQ(R8, R10)
+			SUBQ(R10, length)
+			ADDQ(R10, src)
+			LEAQ(Mem{Base: dst, Index: length, Scale: 1}, CX)
+			SUBQ(U8(0x80), length)
 
-		Label(name + "gobble_mem_fwd_loop")
-		PREFETCHNTA(Mem{Base: src, Disp: 0x1c0})
-		PREFETCHNTA(Mem{Base: src, Disp: 0x280})
-		// Prefetch values were chosen empirically.
-		// Approach for prefetch usage as in 7.6.6 of [1]
-		// [1] 64-ia-32-architectures-optimization-manual.pdf
-		// https://www.intel.ru/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-optimization-manual.pdf
-		VMOVDQU(Mem{Base: src}, Y0)
-		VMOVDQU(Mem{Base: src, Disp: 0x20}, Y1)
-		VMOVDQU(Mem{Base: src, Disp: 0x40}, Y2)
-		VMOVDQU(Mem{Base: src, Disp: 0x60}, Y3)
+			Label(name + "gobble_mem_fwd_loop")
+			PREFETCHNTA(Mem{Base: src, Disp: 0x1c0})
+			PREFETCHNTA(Mem{Base: src, Disp: 0x280})
+			// Prefetch values were chosen empirically.
+			// Approach for prefetch usage as in 7.6.6 of [1]
+			// [1] 64-ia-32-architectures-optimization-manual.pdf
+			// https://www.intel.ru/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-optimization-manual.pdf
+			VMOVDQU(Mem{Base: src}, Y0)
+			VMOVDQU(Mem{Base: src, Disp: 0x20}, Y1)
+			VMOVDQU(Mem{Base: src, Disp: 0x40}, Y2)
+			VMOVDQU(Mem{Base: src, Disp: 0x60}, Y3)
 
-		ADDQ(U8(0x80), src)
-		VMOVNTDQ(Y0, Mem{Base: dst})
-		VMOVNTDQ(Y1, Mem{Base: dst, Disp: 0x20})
-		VMOVNTDQ(Y2, Mem{Base: dst, Disp: 0x20})
-		VMOVNTDQ(Y3, Mem{Base: dst, Disp: 0x60})
-		ADDQ(U8(0x80), dst)
-		SUBQ(U8(0x80), length)
-		JA(LabelRef(name + "gobble_mem_fwd_loop"))
-		// NT instructions don't follow the normal cache-coherency rules.
-		// We need SFENCE there to make copied data available timely.
-		SFENCE()
-		VMOVDQU(Y4, Mem{Base: R8})
-		VZEROUPPER()
-		MOVOU(X5, Mem{Base: CX, Disp: -0x80})
-		MOVOU(X6, Mem{Base: CX, Disp: -0x70})
-		MOVOU(X7, Mem{Base: CX, Disp: -0x60})
-		MOVOU(X8, Mem{Base: CX, Disp: -0x50})
-		MOVOU(X9, Mem{Base: CX, Disp: -0x40})
-		MOVOU(X10, Mem{Base: CX, Disp: -0x30})
-		MOVOU(X11, Mem{Base: CX, Disp: -0x20})
-		MOVOU(X12, Mem{Base: CX, Disp: -0x10})
-		JMP(end)
+			ADDQ(U8(0x80), src)
+			VMOVNTDQ(Y0, Mem{Base: dst})
+			VMOVNTDQ(Y1, Mem{Base: dst, Disp: 0x20})
+			VMOVNTDQ(Y2, Mem{Base: dst, Disp: 0x20})
+			VMOVNTDQ(Y3, Mem{Base: dst, Disp: 0x60})
+			ADDQ(U8(0x80), dst)
+			SUBQ(U8(0x80), length)
+			JA(LabelRef(name + "gobble_mem_fwd_loop"))
+			// NT instructions don't follow the normal cache-coherency rules.
+			// We need SFENCE there to make copied data available timely.
+			SFENCE()
+			VMOVDQU(Y4, Mem{Base: R8})
+			VZEROUPPER()
+			MOVOU(X5, Mem{Base: CX, Disp: -0x80})
+			MOVOU(X6, Mem{Base: CX, Disp: -0x70})
+			MOVOU(X7, Mem{Base: CX, Disp: -0x60})
+			MOVOU(X8, Mem{Base: CX, Disp: -0x50})
+			MOVOU(X9, Mem{Base: CX, Disp: -0x40})
+			MOVOU(X10, Mem{Base: CX, Disp: -0x30})
+			MOVOU(X11, Mem{Base: CX, Disp: -0x20})
+			MOVOU(X12, Mem{Base: CX, Disp: -0x10})
+			JMP(end)
+		}
 	}
 }
 
