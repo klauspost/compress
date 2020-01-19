@@ -7,9 +7,9 @@
 #include "textflag.h"
 
 // func encodeBlockAsm(dst []byte, src []byte) int
-TEXT ·encodeBlockAsm(SB), NOSPLIT, $65616-56
+TEXT ·encodeBlockAsm(SB), $65632-56
 	MOVQ $0x00000200, AX
-	LEAQ 80(SP), CX
+	LEAQ 96(SP), CX
 	PXOR X0, X0
 
 zero_loop_encodeBlockAsm:
@@ -24,29 +24,31 @@ zero_loop_encodeBlockAsm:
 	ADDQ  $0x80, CX
 	DECQ  AX
 	JNZ   zero_loop_encodeBlockAsm
-	MOVL  AX, 68(SP)
+	MOVL  AX, 84(SP)
 	MOVQ  src_len+32(FP), AX
 	LEAQ  -5(AX), CX
 	LEAQ  -8(AX), DI
 	SHRQ  $0x05, AX
 	SUBL  CX, AX
-	MOVL  DI, 64(SP)
-	LEAQ  dst_base+0(FP)(AX*1), AX
-	MOVQ  AX, 56(SP)
+	MOVL  DI, 80(SP)
+	MOVQ  dst_base+0(FP), CX
+	MOVQ  CX, 72(SP)
+	LEAQ  (CX)(AX*1), AX
+	MOVQ  AX, 64(SP)
 	MOVB  $0x01, DL
-	MOVL  DX, 72(SP)
+	MOVL  DX, 88(SP)
 	MOVQ  src_base+24(FP), AX
 
 search_loop_encodeBlockAsm:
 	MOVQ  (AX)(DX*1), DI
-	MOVL  68(SP), BX
+	MOVL  84(SP), BX
 	SUBL  DX, BX
 	SHRL  $0x06, BX
 	LEAQ  4(DX)(BX*1), CX
-	MOVL  64(SP), BX
+	MOVL  80(SP), BX
 	CMPL  CX, BX
 	JGT   emit_remainder_encodeBlockAsm
-	MOVL  CX, 76(SP)
+	MOVL  CX, 92(SP)
 	MOVQ  $0x0000cf1bbcdcbf9b, R8
 	MOVQ  DI, R9
 	MOVQ  DI, R10
@@ -57,18 +59,18 @@ search_loop_encodeBlockAsm:
 	SHLQ  $0x10, R10
 	IMULQ R8, R10
 	SHRQ  $0x30, R10
-	MOVL  80(SP)(R9*1), CX
-	MOVL  80(SP)(R10*1), BX
-	MOVL  DX, 80(SP)(R9*1)
+	MOVL  96(SP)(R9*1), CX
+	MOVL  96(SP)(R10*1), BX
+	MOVL  DX, 96(SP)(R9*1)
 	MOVQ  DX, R9
 	DECQ  R9
-	MOVL  R9, 80(SP)(R10*1)
+	MOVL  R9, 96(SP)(R10*1)
 	MOVQ  DI, R9
 	SHRQ  $0x10, R9
 	SHLQ  $0x10, R9
 	IMULQ R8, R9
 	SHRQ  $0x30, R9
-	MOVL  72(SP), BP
+	MOVL  88(SP), BP
 	MOVQ  DX, R10
 	SUBQ  R10, BP
 	MOVL  1(AX), R10
@@ -77,7 +79,7 @@ search_loop_encodeBlockAsm:
 	CMPL  R8, R10
 	JNE   no_repeat_found_encodeBlockAsm
 	LEAQ  1(DX), DI
-	MOVL  68(SP), CX
+	MOVL  84(SP), CX
 	TESTQ BP, BP
 	JZ    repeat_extend_back_end_encodeBlockAsm
 
@@ -94,12 +96,12 @@ repeat_extend_back_loop_encodeBlockAsm:
 	JMP  repeat_extend_back_loop_encodeBlockAsm
 
 repeat_extend_back_end_encodeBlockAsm:
-	MOVQ 68(SP), R8
+	MOVQ 84(SP), R8
 	MOVQ DI, CX
 	LEAQ (AX)(R8*1), R9
 	SUBQ CX, R8
 	MOVQ dst_base+0(FP), CX
-	MOVQ DI, 68(SP)
+	MOVQ DI, 84(SP)
 	MOVQ R8, R10
 	SUBL $0x01, R10
 	JC   emit_literal_done_repeat_emit_encodeBlockAsm
@@ -143,6 +145,7 @@ one_byte_repeat_emit_encodeBlockAsm:
 	ADDQ $0x01, CX
 
 memmove_repeat_emit_encodeBlockAsm:
+	LEAQ (CX)(R8*1), R10
 	NOP
 
 emit_lit_memmove_repeat_emit_encodeBlockAsm_memmove_tail:
@@ -317,14 +320,15 @@ emit_lit_memmove_repeat_emit_encodeBlockAsm_memmove_move_256through2048:
 	LEAQ  256(CX), CX
 	JGE   emit_lit_memmove_repeat_emit_encodeBlockAsm_memmove_move_256through2048
 	JMP   emit_lit_memmove_repeat_emit_encodeBlockAsm_memmove_tail
+	MOVQ  R10, CX
 
 emit_literal_done_repeat_emit_encodeBlockAsm:
 	MOVQ CX, dst_base+0(FP)
 	ADDQ $0x05, DX
-	MOVL 72(SP), CX
+	MOVL 88(SP), CX
 	SUBL DX, CX
 	MOVQ DX, CX
-	SUBQ 64(SP), CX
+	SUBQ 80(SP), CX
 	XORQ R9, R9
 	CMPQ CX, $0x08
 	JL   matchlen_single_repeat_extend
@@ -360,9 +364,9 @@ matchlen_single_loopback_repeat_extend:
 repeat_extend_forward_end_encodeBlockAsm:
 	ADDQ  R9, DX
 	SUBQ  DX, DI
-	MOVQ  72(SP), CX
+	MOVQ  88(SP), CX
 	MOVQ  dst_base+0(FP), R8
-	MOVL  68(SP), BX
+	MOVL  84(SP), BX
 	TESTL BX, BX
 	JZ    repeat_as_copy_encodeBlockAsm
 
@@ -618,8 +622,8 @@ emit_copy_three_repeat_as_copy_encodeBlockAsm:
 
 repeat_end_emit_encodeBlockAsm:
 	MOVQ R8, dst_base+0(FP)
-	MOVL DX, 68(SP)
-	MOVL 64(SP), CX
+	MOVL DX, 84(SP)
+	MOVL 80(SP), CX
 	CMPL DX, CX
 	JGT  emit_remainder_encodeBlockAsm
 	JMP  search_loop_encodeBlockAsm
@@ -628,15 +632,15 @@ no_repeat_found_encodeBlockAsm:
 	CMPL (AX)(CX*1), DI
 	JEQ  candidate_match_encodeBlockAsm
 	SHRQ $0x08, DI
-	MOVL 80(SP)(R9*1), CX
+	MOVL 96(SP)(R9*1), CX
 	CMPL (AX)(BX*1), DI
 	JEQ  candidate2_match_encodeBlockAsm
 	LEAQ -2(DX), R8
-	MOVL R8, 80(SP)(R9*1)
+	MOVL R8, 96(SP)(R9*1)
 	SHRQ $0x08, DI
 	CMPL (AX)(CX*1), DI
 	JEQ  candidate3_match_encodeBlockAsm
-	MOVL 76(SP), DX
+	MOVL 92(SP), DX
 	JMP  search_loop_encodeBlockAsm
 
 candidate3_match_encodeBlockAsm:
@@ -645,12 +649,12 @@ candidate3_match_encodeBlockAsm:
 
 candidate2_match_encodeBlockAsm:
 	LEAQ -2(DX), CX
-	MOVL CX, 80(SP)(R9*1)
+	MOVL CX, 96(SP)(R9*1)
 	INCQ DX
 	MOVL BX, CX
 
 candidate_match_encodeBlockAsm:
-	MOVL  68(SP), BX
+	MOVL  84(SP), BX
 	TESTL CX, CX
 	JZ    match_extend_back_end_encodeBlockAsm
 
@@ -667,22 +671,22 @@ match_extend_back_loop_encodeBlockAsm:
 	JMP  match_extend_back_loop_encodeBlockAsm
 
 match_extend_back_end_encodeBlockAsm:
-	MOVQ 68(SP), DI
+	MOVQ 84(SP), DI
 	SUBQ DX, DI
 	LEAQ dst_base+0(FP)(DI*1), DI
-	CMPQ DI, 56(SP)
+	CMPQ DI, 64(SP)
 	JL   match_dst_size_check_encodeBlockAsm
 	MOVQ $0x00000000, ret+48(FP)
 	RET
 
 match_dst_size_check_encodeBlockAsm:
 	MOVL CX, BX
-	MOVQ 68(SP), R8
+	MOVQ 84(SP), R8
 	MOVQ BX, DI
 	LEAQ (AX)(R8*1), R9
 	SUBQ DI, R8
 	MOVQ dst_base+0(FP), DI
-	MOVQ BX, 68(SP)
+	MOVQ BX, 84(SP)
 	MOVQ R8, R10
 	SUBL $0x01, R10
 	JC   emit_literal_done_match_emit_encodeBlockAsm
@@ -726,6 +730,7 @@ one_byte_match_emit_encodeBlockAsm:
 	ADDQ $0x01, DI
 
 memmove_match_emit_encodeBlockAsm:
+	LEAQ (DI)(R8*1), R10
 	NOP
 
 emit_lit_memmove_match_emit_encodeBlockAsm_memmove_tail:
@@ -900,19 +905,20 @@ emit_lit_memmove_match_emit_encodeBlockAsm_memmove_move_256through2048:
 	LEAQ  256(DI), DI
 	JGE   emit_lit_memmove_match_emit_encodeBlockAsm_memmove_move_256through2048
 	JMP   emit_lit_memmove_match_emit_encodeBlockAsm_memmove_tail
+	MOVQ  R10, DI
 
 emit_literal_done_match_emit_encodeBlockAsm:
 	MOVQ DI, dst_base+0(FP)
 
 match_nolit_loop_encodeBlockAsm:
 	MOVQ DX, DI
-	MOVL 72(SP), BX
+	MOVL 88(SP), BX
 	SUBL DX, BX
-	MOVL BX, 72(SP)
+	MOVL BX, 88(SP)
 	ADDQ $0x04, DX
 	ADDL $0x04, CX
 	MOVQ DX, DI
-	SUBQ 64(SP), DI
+	SUBQ 80(SP), DI
 	XORQ R9, R9
 	CMPQ DI, $0x08
 	JL   matchlen_single_match_nolit_encodeBlockAsm
@@ -946,7 +952,7 @@ matchlen_single_loopback_match_nolit_encodeBlockAsm:
 	JNZ  matchlen_single_loopback_match_nolit_encodeBlockAsm
 
 match_nolit_end_encodeBlockAsm:
-	MOVQ 72(SP), DI
+	MOVQ 88(SP), DI
 	ADDQ $0x04, R9
 	MOVQ dst_base+0(FP), R8
 	CMPL DI, $0x00010000
@@ -1135,13 +1141,12 @@ emit_copy_three_match_nolit_encodeBlockAsm:
 match_nolit_emitcopy_end_encodeBlockAsm:
 	MOVQ R8, dst_base+0(FP)
 	ADDQ R9, DX
-	MOVL DX, 68(SP)
-	CMPL DX, 64(SP)
+	MOVL DX, 84(SP)
+	CMPL DX, 80(SP)
 	JGE  emit_remainder_encodeBlockAsm
-	CMPQ R8, 56(SP)
+	CMPQ R8, 64(SP)
 	JL   match_nolit_dst_ok_encodeBlockAsm
-	XORQ DI, DI
-	MOVQ DI, ret+48(FP)
+	MOVQ $0x00000000, ret+48(FP)
 	RET
 
 match_nolit_dst_ok_encodeBlockAsm:
@@ -1156,24 +1161,34 @@ match_nolit_dst_ok_encodeBlockAsm:
 	SHLQ  $0x10, R10
 	IMULQ R8, R10
 	SHRQ  $0x30, R10
-	MOVL  80(SP)(R9*1), BX
-	MOVL  80(SP)(R10*1), BX
+	MOVL  96(SP)(R9*1), BX
+	MOVL  96(SP)(R10*1), BX
 	LEAQ  -2(DX), R8
-	MOVL  R8, 80(SP)(R9*1)
-	MOVL  DX, 80(SP)(R10*1)
+	MOVL  R8, 96(SP)(R9*1)
+	MOVL  DX, 96(SP)(R10*1)
 	CMPL  (AX), DI
 	JEQ   match_nolit_loop_encodeBlockAsm
 	INCQ  DX
 	JMP   search_loop_encodeBlockAsm
 
 emit_remainder_encodeBlockAsm:
+	MOVQ 84(SP), CX
+	SUBQ src_len+32(FP), CX
+	MOVQ dst_base+0(FP), DX
+	LEAQ (DX)(CX*1), DX
+	CMPQ DX, 64(SP)
+	JL   emit_remainder_ok_encodeBlockAsm
+	MOVQ $0x00000000, ret+48(FP)
+	RET
+
+emit_remainder_ok_encodeBlockAsm:
 	MOVQ src_len+32(FP), CX
-	MOVQ 68(SP), BX
+	MOVQ 84(SP), BX
 	MOVQ CX, DX
 	LEAQ (AX)(BX*1), AX
 	SUBQ DX, BX
 	MOVQ dst_base+0(FP), DX
-	MOVQ CX, 68(SP)
+	MOVQ CX, 84(SP)
 	MOVQ BX, CX
 	SUBL $0x01, CX
 	JC   emit_literal_done_emit_remainder_encodeBlockAsm
@@ -1217,6 +1232,7 @@ one_byte_emit_remainder_encodeBlockAsm:
 	ADDQ $0x01, DX
 
 memmove_emit_remainder_encodeBlockAsm:
+	LEAQ (DX)(BX*1), CX
 	NOP
 
 emit_lit_memmove_emit_remainder_encodeBlockAsm_memmove_tail:
@@ -1391,17 +1407,19 @@ emit_lit_memmove_emit_remainder_encodeBlockAsm_memmove_move_256through2048:
 	LEAQ  256(DX), DX
 	JGE   emit_lit_memmove_emit_remainder_encodeBlockAsm_memmove_move_256through2048
 	JMP   emit_lit_memmove_emit_remainder_encodeBlockAsm_memmove_tail
+	MOVQ  CX, DX
 
 emit_literal_done_emit_remainder_encodeBlockAsm:
 	MOVQ DX, dst_base+0(FP)
-	XORQ AX, AX
+	MOVQ 72(SP), AX
+	SUBQ dst_base+0(FP), AX
 	MOVQ AX, ret+48(FP)
 	RET
 
 // func encodeBlockAsm14B(dst []byte, src []byte) int
-TEXT ·encodeBlockAsm14B(SB), NOSPLIT, $16464-56
+TEXT ·encodeBlockAsm14B(SB), $16480-56
 	MOVQ $0x00000080, AX
-	LEAQ 80(SP), CX
+	LEAQ 96(SP), CX
 	PXOR X0, X0
 
 zero_loop_encodeBlockAsm14B:
@@ -1416,29 +1434,31 @@ zero_loop_encodeBlockAsm14B:
 	ADDQ  $0x80, CX
 	DECQ  AX
 	JNZ   zero_loop_encodeBlockAsm14B
-	MOVL  AX, 68(SP)
+	MOVL  AX, 84(SP)
 	MOVQ  src_len+32(FP), AX
 	LEAQ  -5(AX), CX
 	LEAQ  -8(AX), DI
 	SHRQ  $0x05, AX
 	SUBL  CX, AX
-	MOVL  DI, 64(SP)
-	LEAQ  dst_base+0(FP)(AX*1), AX
-	MOVQ  AX, 56(SP)
+	MOVL  DI, 80(SP)
+	MOVQ  dst_base+0(FP), CX
+	MOVQ  CX, 72(SP)
+	LEAQ  (CX)(AX*1), AX
+	MOVQ  AX, 64(SP)
 	MOVB  $0x01, DL
-	MOVL  DX, 72(SP)
+	MOVL  DX, 88(SP)
 	MOVQ  src_base+24(FP), AX
 
 search_loop_encodeBlockAsm14B:
 	MOVQ  (AX)(DX*1), DI
-	MOVL  68(SP), BX
+	MOVL  84(SP), BX
 	SUBL  DX, BX
 	SHRL  $0x05, BX
 	LEAQ  4(DX)(BX*1), CX
-	MOVL  64(SP), BX
+	MOVL  80(SP), BX
 	CMPL  CX, BX
 	JGT   emit_remainder_encodeBlockAsm14B
-	MOVL  CX, 76(SP)
+	MOVL  CX, 92(SP)
 	MOVQ  $0x0000cf1bbcdcbf9b, R8
 	MOVQ  DI, R9
 	MOVQ  DI, R10
@@ -1449,18 +1469,18 @@ search_loop_encodeBlockAsm14B:
 	SHLQ  $0x10, R10
 	IMULQ R8, R10
 	SHRQ  $0x32, R10
-	MOVL  80(SP)(R9*1), CX
-	MOVL  80(SP)(R10*1), BX
-	MOVL  DX, 80(SP)(R9*1)
+	MOVL  96(SP)(R9*1), CX
+	MOVL  96(SP)(R10*1), BX
+	MOVL  DX, 96(SP)(R9*1)
 	MOVQ  DX, R9
 	DECQ  R9
-	MOVL  R9, 80(SP)(R10*1)
+	MOVL  R9, 96(SP)(R10*1)
 	MOVQ  DI, R9
 	SHRQ  $0x10, R9
 	SHLQ  $0x10, R9
 	IMULQ R8, R9
 	SHRQ  $0x32, R9
-	MOVL  72(SP), BP
+	MOVL  88(SP), BP
 	MOVQ  DX, R10
 	SUBQ  R10, BP
 	MOVL  1(AX), R10
@@ -1469,7 +1489,7 @@ search_loop_encodeBlockAsm14B:
 	CMPL  R8, R10
 	JNE   no_repeat_found_encodeBlockAsm14B
 	LEAQ  1(DX), DI
-	MOVL  68(SP), CX
+	MOVL  84(SP), CX
 	TESTQ BP, BP
 	JZ    repeat_extend_back_end_encodeBlockAsm14B
 
@@ -1486,12 +1506,12 @@ repeat_extend_back_loop_encodeBlockAsm14B:
 	JMP  repeat_extend_back_loop_encodeBlockAsm14B
 
 repeat_extend_back_end_encodeBlockAsm14B:
-	MOVQ 68(SP), R8
+	MOVQ 84(SP), R8
 	MOVQ DI, CX
 	LEAQ (AX)(R8*1), R9
 	SUBQ CX, R8
 	MOVQ dst_base+0(FP), CX
-	MOVQ DI, 68(SP)
+	MOVQ DI, 84(SP)
 	MOVQ R8, R10
 	SUBL $0x01, R10
 	JC   emit_literal_done_repeat_emit_encodeBlockAsm14B
@@ -1535,6 +1555,7 @@ one_byte_repeat_emit_encodeBlockAsm14B:
 	ADDQ $0x01, CX
 
 memmove_repeat_emit_encodeBlockAsm14B:
+	LEAQ (CX)(R8*1), R10
 	NOP
 
 emit_lit_memmove_repeat_emit_encodeBlockAsm14B_memmove_tail:
@@ -1709,14 +1730,15 @@ emit_lit_memmove_repeat_emit_encodeBlockAsm14B_memmove_move_256through2048:
 	LEAQ  256(CX), CX
 	JGE   emit_lit_memmove_repeat_emit_encodeBlockAsm14B_memmove_move_256through2048
 	JMP   emit_lit_memmove_repeat_emit_encodeBlockAsm14B_memmove_tail
+	MOVQ  R10, CX
 
 emit_literal_done_repeat_emit_encodeBlockAsm14B:
 	MOVQ CX, dst_base+0(FP)
 	ADDQ $0x05, DX
-	MOVL 72(SP), CX
+	MOVL 88(SP), CX
 	SUBL DX, CX
 	MOVQ DX, CX
-	SUBQ 64(SP), CX
+	SUBQ 80(SP), CX
 	XORQ R9, R9
 	CMPQ CX, $0x08
 	JL   matchlen_single_repeat_extend
@@ -1752,9 +1774,9 @@ matchlen_single_loopback_repeat_extend:
 repeat_extend_forward_end_encodeBlockAsm14B:
 	ADDQ  R9, DX
 	SUBQ  DX, DI
-	MOVQ  72(SP), CX
+	MOVQ  88(SP), CX
 	MOVQ  dst_base+0(FP), R8
-	MOVL  68(SP), BX
+	MOVL  84(SP), BX
 	TESTL BX, BX
 	JZ    repeat_as_copy_encodeBlockAsm14B
 
@@ -2010,8 +2032,8 @@ emit_copy_three_repeat_as_copy_encodeBlockAsm14B:
 
 repeat_end_emit_encodeBlockAsm14B:
 	MOVQ R8, dst_base+0(FP)
-	MOVL DX, 68(SP)
-	MOVL 64(SP), CX
+	MOVL DX, 84(SP)
+	MOVL 80(SP), CX
 	CMPL DX, CX
 	JGT  emit_remainder_encodeBlockAsm14B
 	JMP  search_loop_encodeBlockAsm14B
@@ -2020,15 +2042,15 @@ no_repeat_found_encodeBlockAsm14B:
 	CMPL (AX)(CX*1), DI
 	JEQ  candidate_match_encodeBlockAsm14B
 	SHRQ $0x08, DI
-	MOVL 80(SP)(R9*1), CX
+	MOVL 96(SP)(R9*1), CX
 	CMPL (AX)(BX*1), DI
 	JEQ  candidate2_match_encodeBlockAsm14B
 	LEAQ -2(DX), R8
-	MOVL R8, 80(SP)(R9*1)
+	MOVL R8, 96(SP)(R9*1)
 	SHRQ $0x08, DI
 	CMPL (AX)(CX*1), DI
 	JEQ  candidate3_match_encodeBlockAsm14B
-	MOVL 76(SP), DX
+	MOVL 92(SP), DX
 	JMP  search_loop_encodeBlockAsm14B
 
 candidate3_match_encodeBlockAsm14B:
@@ -2037,12 +2059,12 @@ candidate3_match_encodeBlockAsm14B:
 
 candidate2_match_encodeBlockAsm14B:
 	LEAQ -2(DX), CX
-	MOVL CX, 80(SP)(R9*1)
+	MOVL CX, 96(SP)(R9*1)
 	INCQ DX
 	MOVL BX, CX
 
 candidate_match_encodeBlockAsm14B:
-	MOVL  68(SP), BX
+	MOVL  84(SP), BX
 	TESTL CX, CX
 	JZ    match_extend_back_end_encodeBlockAsm14B
 
@@ -2059,22 +2081,22 @@ match_extend_back_loop_encodeBlockAsm14B:
 	JMP  match_extend_back_loop_encodeBlockAsm14B
 
 match_extend_back_end_encodeBlockAsm14B:
-	MOVQ 68(SP), DI
+	MOVQ 84(SP), DI
 	SUBQ DX, DI
 	LEAQ dst_base+0(FP)(DI*1), DI
-	CMPQ DI, 56(SP)
+	CMPQ DI, 64(SP)
 	JL   match_dst_size_check_encodeBlockAsm14B
 	MOVQ $0x00000000, ret+48(FP)
 	RET
 
 match_dst_size_check_encodeBlockAsm14B:
 	MOVL CX, BX
-	MOVQ 68(SP), R8
+	MOVQ 84(SP), R8
 	MOVQ BX, DI
 	LEAQ (AX)(R8*1), R9
 	SUBQ DI, R8
 	MOVQ dst_base+0(FP), DI
-	MOVQ BX, 68(SP)
+	MOVQ BX, 84(SP)
 	MOVQ R8, R10
 	SUBL $0x01, R10
 	JC   emit_literal_done_match_emit_encodeBlockAsm14B
@@ -2118,6 +2140,7 @@ one_byte_match_emit_encodeBlockAsm14B:
 	ADDQ $0x01, DI
 
 memmove_match_emit_encodeBlockAsm14B:
+	LEAQ (DI)(R8*1), R10
 	NOP
 
 emit_lit_memmove_match_emit_encodeBlockAsm14B_memmove_tail:
@@ -2292,19 +2315,20 @@ emit_lit_memmove_match_emit_encodeBlockAsm14B_memmove_move_256through2048:
 	LEAQ  256(DI), DI
 	JGE   emit_lit_memmove_match_emit_encodeBlockAsm14B_memmove_move_256through2048
 	JMP   emit_lit_memmove_match_emit_encodeBlockAsm14B_memmove_tail
+	MOVQ  R10, DI
 
 emit_literal_done_match_emit_encodeBlockAsm14B:
 	MOVQ DI, dst_base+0(FP)
 
 match_nolit_loop_encodeBlockAsm14B:
 	MOVQ DX, DI
-	MOVL 72(SP), BX
+	MOVL 88(SP), BX
 	SUBL DX, BX
-	MOVL BX, 72(SP)
+	MOVL BX, 88(SP)
 	ADDQ $0x04, DX
 	ADDL $0x04, CX
 	MOVQ DX, DI
-	SUBQ 64(SP), DI
+	SUBQ 80(SP), DI
 	XORQ R9, R9
 	CMPQ DI, $0x08
 	JL   matchlen_single_match_nolit_encodeBlockAsm14B
@@ -2338,7 +2362,7 @@ matchlen_single_loopback_match_nolit_encodeBlockAsm14B:
 	JNZ  matchlen_single_loopback_match_nolit_encodeBlockAsm14B
 
 match_nolit_end_encodeBlockAsm14B:
-	MOVQ 72(SP), DI
+	MOVQ 88(SP), DI
 	ADDQ $0x04, R9
 	MOVQ dst_base+0(FP), R8
 	CMPL DI, $0x00010000
@@ -2527,13 +2551,12 @@ emit_copy_three_match_nolit_encodeBlockAsm14B:
 match_nolit_emitcopy_end_encodeBlockAsm14B:
 	MOVQ R8, dst_base+0(FP)
 	ADDQ R9, DX
-	MOVL DX, 68(SP)
-	CMPL DX, 64(SP)
+	MOVL DX, 84(SP)
+	CMPL DX, 80(SP)
 	JGE  emit_remainder_encodeBlockAsm14B
-	CMPQ R8, 56(SP)
+	CMPQ R8, 64(SP)
 	JL   match_nolit_dst_ok_encodeBlockAsm14B
-	XORQ DI, DI
-	MOVQ DI, ret+48(FP)
+	MOVQ $0x00000000, ret+48(FP)
 	RET
 
 match_nolit_dst_ok_encodeBlockAsm14B:
@@ -2548,24 +2571,34 @@ match_nolit_dst_ok_encodeBlockAsm14B:
 	SHLQ  $0x10, R10
 	IMULQ R8, R10
 	SHRQ  $0x32, R10
-	MOVL  80(SP)(R9*1), BX
-	MOVL  80(SP)(R10*1), BX
+	MOVL  96(SP)(R9*1), BX
+	MOVL  96(SP)(R10*1), BX
 	LEAQ  -2(DX), R8
-	MOVL  R8, 80(SP)(R9*1)
-	MOVL  DX, 80(SP)(R10*1)
+	MOVL  R8, 96(SP)(R9*1)
+	MOVL  DX, 96(SP)(R10*1)
 	CMPL  (AX), DI
 	JEQ   match_nolit_loop_encodeBlockAsm14B
 	INCQ  DX
 	JMP   search_loop_encodeBlockAsm14B
 
 emit_remainder_encodeBlockAsm14B:
+	MOVQ 84(SP), CX
+	SUBQ src_len+32(FP), CX
+	MOVQ dst_base+0(FP), DX
+	LEAQ (DX)(CX*1), DX
+	CMPQ DX, 64(SP)
+	JL   emit_remainder_ok_encodeBlockAsm14B
+	MOVQ $0x00000000, ret+48(FP)
+	RET
+
+emit_remainder_ok_encodeBlockAsm14B:
 	MOVQ src_len+32(FP), CX
-	MOVQ 68(SP), BX
+	MOVQ 84(SP), BX
 	MOVQ CX, DX
 	LEAQ (AX)(BX*1), AX
 	SUBQ DX, BX
 	MOVQ dst_base+0(FP), DX
-	MOVQ CX, 68(SP)
+	MOVQ CX, 84(SP)
 	MOVQ BX, CX
 	SUBL $0x01, CX
 	JC   emit_literal_done_emit_remainder_encodeBlockAsm14B
@@ -2609,6 +2642,7 @@ one_byte_emit_remainder_encodeBlockAsm14B:
 	ADDQ $0x01, DX
 
 memmove_emit_remainder_encodeBlockAsm14B:
+	LEAQ (DX)(BX*1), CX
 	NOP
 
 emit_lit_memmove_emit_remainder_encodeBlockAsm14B_memmove_tail:
@@ -2783,17 +2817,19 @@ emit_lit_memmove_emit_remainder_encodeBlockAsm14B_memmove_move_256through2048:
 	LEAQ  256(DX), DX
 	JGE   emit_lit_memmove_emit_remainder_encodeBlockAsm14B_memmove_move_256through2048
 	JMP   emit_lit_memmove_emit_remainder_encodeBlockAsm14B_memmove_tail
+	MOVQ  CX, DX
 
 emit_literal_done_emit_remainder_encodeBlockAsm14B:
 	MOVQ DX, dst_base+0(FP)
-	XORQ AX, AX
+	MOVQ 72(SP), AX
+	SUBQ dst_base+0(FP), AX
 	MOVQ AX, ret+48(FP)
 	RET
 
 // func encodeBlockAsm12B(dst []byte, src []byte) int
-TEXT ·encodeBlockAsm12B(SB), NOSPLIT, $4176-56
+TEXT ·encodeBlockAsm12B(SB), $4192-56
 	MOVQ $0x00000020, AX
-	LEAQ 80(SP), CX
+	LEAQ 96(SP), CX
 	PXOR X0, X0
 
 zero_loop_encodeBlockAsm12B:
@@ -2808,29 +2844,31 @@ zero_loop_encodeBlockAsm12B:
 	ADDQ  $0x80, CX
 	DECQ  AX
 	JNZ   zero_loop_encodeBlockAsm12B
-	MOVL  AX, 68(SP)
+	MOVL  AX, 84(SP)
 	MOVQ  src_len+32(FP), AX
 	LEAQ  -5(AX), CX
 	LEAQ  -8(AX), DI
 	SHRQ  $0x05, AX
 	SUBL  CX, AX
-	MOVL  DI, 64(SP)
-	LEAQ  dst_base+0(FP)(AX*1), AX
-	MOVQ  AX, 56(SP)
+	MOVL  DI, 80(SP)
+	MOVQ  dst_base+0(FP), CX
+	MOVQ  CX, 72(SP)
+	LEAQ  (CX)(AX*1), AX
+	MOVQ  AX, 64(SP)
 	MOVB  $0x01, DL
-	MOVL  DX, 72(SP)
+	MOVL  DX, 88(SP)
 	MOVQ  src_base+24(FP), AX
 
 search_loop_encodeBlockAsm12B:
 	MOVQ  (AX)(DX*1), DI
-	MOVL  68(SP), BX
+	MOVL  84(SP), BX
 	SUBL  DX, BX
 	SHRL  $0x04, BX
 	LEAQ  4(DX)(BX*1), CX
-	MOVL  64(SP), BX
+	MOVL  80(SP), BX
 	CMPL  CX, BX
 	JGT   emit_remainder_encodeBlockAsm12B
-	MOVL  CX, 76(SP)
+	MOVL  CX, 92(SP)
 	MOVQ  $0x0000cf1bbcdcbf9b, R8
 	MOVQ  DI, R9
 	MOVQ  DI, R10
@@ -2841,18 +2879,18 @@ search_loop_encodeBlockAsm12B:
 	SHLQ  $0x10, R10
 	IMULQ R8, R10
 	SHRQ  $0x34, R10
-	MOVL  80(SP)(R9*1), CX
-	MOVL  80(SP)(R10*1), BX
-	MOVL  DX, 80(SP)(R9*1)
+	MOVL  96(SP)(R9*1), CX
+	MOVL  96(SP)(R10*1), BX
+	MOVL  DX, 96(SP)(R9*1)
 	MOVQ  DX, R9
 	DECQ  R9
-	MOVL  R9, 80(SP)(R10*1)
+	MOVL  R9, 96(SP)(R10*1)
 	MOVQ  DI, R9
 	SHRQ  $0x10, R9
 	SHLQ  $0x10, R9
 	IMULQ R8, R9
 	SHRQ  $0x34, R9
-	MOVL  72(SP), BP
+	MOVL  88(SP), BP
 	MOVQ  DX, R10
 	SUBQ  R10, BP
 	MOVL  1(AX), R10
@@ -2861,7 +2899,7 @@ search_loop_encodeBlockAsm12B:
 	CMPL  R8, R10
 	JNE   no_repeat_found_encodeBlockAsm12B
 	LEAQ  1(DX), DI
-	MOVL  68(SP), CX
+	MOVL  84(SP), CX
 	TESTQ BP, BP
 	JZ    repeat_extend_back_end_encodeBlockAsm12B
 
@@ -2878,12 +2916,12 @@ repeat_extend_back_loop_encodeBlockAsm12B:
 	JMP  repeat_extend_back_loop_encodeBlockAsm12B
 
 repeat_extend_back_end_encodeBlockAsm12B:
-	MOVQ 68(SP), R8
+	MOVQ 84(SP), R8
 	MOVQ DI, CX
 	LEAQ (AX)(R8*1), R9
 	SUBQ CX, R8
 	MOVQ dst_base+0(FP), CX
-	MOVQ DI, 68(SP)
+	MOVQ DI, 84(SP)
 	MOVQ R8, R10
 	SUBL $0x01, R10
 	JC   emit_literal_done_repeat_emit_encodeBlockAsm12B
@@ -2927,6 +2965,7 @@ one_byte_repeat_emit_encodeBlockAsm12B:
 	ADDQ $0x01, CX
 
 memmove_repeat_emit_encodeBlockAsm12B:
+	LEAQ (CX)(R8*1), R10
 	NOP
 
 emit_lit_memmove_repeat_emit_encodeBlockAsm12B_memmove_tail:
@@ -3101,14 +3140,15 @@ emit_lit_memmove_repeat_emit_encodeBlockAsm12B_memmove_move_256through2048:
 	LEAQ  256(CX), CX
 	JGE   emit_lit_memmove_repeat_emit_encodeBlockAsm12B_memmove_move_256through2048
 	JMP   emit_lit_memmove_repeat_emit_encodeBlockAsm12B_memmove_tail
+	MOVQ  R10, CX
 
 emit_literal_done_repeat_emit_encodeBlockAsm12B:
 	MOVQ CX, dst_base+0(FP)
 	ADDQ $0x05, DX
-	MOVL 72(SP), CX
+	MOVL 88(SP), CX
 	SUBL DX, CX
 	MOVQ DX, CX
-	SUBQ 64(SP), CX
+	SUBQ 80(SP), CX
 	XORQ R9, R9
 	CMPQ CX, $0x08
 	JL   matchlen_single_repeat_extend
@@ -3144,9 +3184,9 @@ matchlen_single_loopback_repeat_extend:
 repeat_extend_forward_end_encodeBlockAsm12B:
 	ADDQ  R9, DX
 	SUBQ  DX, DI
-	MOVQ  72(SP), CX
+	MOVQ  88(SP), CX
 	MOVQ  dst_base+0(FP), R8
-	MOVL  68(SP), BX
+	MOVL  84(SP), BX
 	TESTL BX, BX
 	JZ    repeat_as_copy_encodeBlockAsm12B
 
@@ -3402,8 +3442,8 @@ emit_copy_three_repeat_as_copy_encodeBlockAsm12B:
 
 repeat_end_emit_encodeBlockAsm12B:
 	MOVQ R8, dst_base+0(FP)
-	MOVL DX, 68(SP)
-	MOVL 64(SP), CX
+	MOVL DX, 84(SP)
+	MOVL 80(SP), CX
 	CMPL DX, CX
 	JGT  emit_remainder_encodeBlockAsm12B
 	JMP  search_loop_encodeBlockAsm12B
@@ -3412,15 +3452,15 @@ no_repeat_found_encodeBlockAsm12B:
 	CMPL (AX)(CX*1), DI
 	JEQ  candidate_match_encodeBlockAsm12B
 	SHRQ $0x08, DI
-	MOVL 80(SP)(R9*1), CX
+	MOVL 96(SP)(R9*1), CX
 	CMPL (AX)(BX*1), DI
 	JEQ  candidate2_match_encodeBlockAsm12B
 	LEAQ -2(DX), R8
-	MOVL R8, 80(SP)(R9*1)
+	MOVL R8, 96(SP)(R9*1)
 	SHRQ $0x08, DI
 	CMPL (AX)(CX*1), DI
 	JEQ  candidate3_match_encodeBlockAsm12B
-	MOVL 76(SP), DX
+	MOVL 92(SP), DX
 	JMP  search_loop_encodeBlockAsm12B
 
 candidate3_match_encodeBlockAsm12B:
@@ -3429,12 +3469,12 @@ candidate3_match_encodeBlockAsm12B:
 
 candidate2_match_encodeBlockAsm12B:
 	LEAQ -2(DX), CX
-	MOVL CX, 80(SP)(R9*1)
+	MOVL CX, 96(SP)(R9*1)
 	INCQ DX
 	MOVL BX, CX
 
 candidate_match_encodeBlockAsm12B:
-	MOVL  68(SP), BX
+	MOVL  84(SP), BX
 	TESTL CX, CX
 	JZ    match_extend_back_end_encodeBlockAsm12B
 
@@ -3451,22 +3491,22 @@ match_extend_back_loop_encodeBlockAsm12B:
 	JMP  match_extend_back_loop_encodeBlockAsm12B
 
 match_extend_back_end_encodeBlockAsm12B:
-	MOVQ 68(SP), DI
+	MOVQ 84(SP), DI
 	SUBQ DX, DI
 	LEAQ dst_base+0(FP)(DI*1), DI
-	CMPQ DI, 56(SP)
+	CMPQ DI, 64(SP)
 	JL   match_dst_size_check_encodeBlockAsm12B
 	MOVQ $0x00000000, ret+48(FP)
 	RET
 
 match_dst_size_check_encodeBlockAsm12B:
 	MOVL CX, BX
-	MOVQ 68(SP), R8
+	MOVQ 84(SP), R8
 	MOVQ BX, DI
 	LEAQ (AX)(R8*1), R9
 	SUBQ DI, R8
 	MOVQ dst_base+0(FP), DI
-	MOVQ BX, 68(SP)
+	MOVQ BX, 84(SP)
 	MOVQ R8, R10
 	SUBL $0x01, R10
 	JC   emit_literal_done_match_emit_encodeBlockAsm12B
@@ -3510,6 +3550,7 @@ one_byte_match_emit_encodeBlockAsm12B:
 	ADDQ $0x01, DI
 
 memmove_match_emit_encodeBlockAsm12B:
+	LEAQ (DI)(R8*1), R10
 	NOP
 
 emit_lit_memmove_match_emit_encodeBlockAsm12B_memmove_tail:
@@ -3684,19 +3725,20 @@ emit_lit_memmove_match_emit_encodeBlockAsm12B_memmove_move_256through2048:
 	LEAQ  256(DI), DI
 	JGE   emit_lit_memmove_match_emit_encodeBlockAsm12B_memmove_move_256through2048
 	JMP   emit_lit_memmove_match_emit_encodeBlockAsm12B_memmove_tail
+	MOVQ  R10, DI
 
 emit_literal_done_match_emit_encodeBlockAsm12B:
 	MOVQ DI, dst_base+0(FP)
 
 match_nolit_loop_encodeBlockAsm12B:
 	MOVQ DX, DI
-	MOVL 72(SP), BX
+	MOVL 88(SP), BX
 	SUBL DX, BX
-	MOVL BX, 72(SP)
+	MOVL BX, 88(SP)
 	ADDQ $0x04, DX
 	ADDL $0x04, CX
 	MOVQ DX, DI
-	SUBQ 64(SP), DI
+	SUBQ 80(SP), DI
 	XORQ R9, R9
 	CMPQ DI, $0x08
 	JL   matchlen_single_match_nolit_encodeBlockAsm12B
@@ -3730,7 +3772,7 @@ matchlen_single_loopback_match_nolit_encodeBlockAsm12B:
 	JNZ  matchlen_single_loopback_match_nolit_encodeBlockAsm12B
 
 match_nolit_end_encodeBlockAsm12B:
-	MOVQ 72(SP), DI
+	MOVQ 88(SP), DI
 	ADDQ $0x04, R9
 	MOVQ dst_base+0(FP), R8
 	CMPL DI, $0x00010000
@@ -3919,13 +3961,12 @@ emit_copy_three_match_nolit_encodeBlockAsm12B:
 match_nolit_emitcopy_end_encodeBlockAsm12B:
 	MOVQ R8, dst_base+0(FP)
 	ADDQ R9, DX
-	MOVL DX, 68(SP)
-	CMPL DX, 64(SP)
+	MOVL DX, 84(SP)
+	CMPL DX, 80(SP)
 	JGE  emit_remainder_encodeBlockAsm12B
-	CMPQ R8, 56(SP)
+	CMPQ R8, 64(SP)
 	JL   match_nolit_dst_ok_encodeBlockAsm12B
-	XORQ DI, DI
-	MOVQ DI, ret+48(FP)
+	MOVQ $0x00000000, ret+48(FP)
 	RET
 
 match_nolit_dst_ok_encodeBlockAsm12B:
@@ -3940,24 +3981,34 @@ match_nolit_dst_ok_encodeBlockAsm12B:
 	SHLQ  $0x10, R10
 	IMULQ R8, R10
 	SHRQ  $0x34, R10
-	MOVL  80(SP)(R9*1), BX
-	MOVL  80(SP)(R10*1), BX
+	MOVL  96(SP)(R9*1), BX
+	MOVL  96(SP)(R10*1), BX
 	LEAQ  -2(DX), R8
-	MOVL  R8, 80(SP)(R9*1)
-	MOVL  DX, 80(SP)(R10*1)
+	MOVL  R8, 96(SP)(R9*1)
+	MOVL  DX, 96(SP)(R10*1)
 	CMPL  (AX), DI
 	JEQ   match_nolit_loop_encodeBlockAsm12B
 	INCQ  DX
 	JMP   search_loop_encodeBlockAsm12B
 
 emit_remainder_encodeBlockAsm12B:
+	MOVQ 84(SP), CX
+	SUBQ src_len+32(FP), CX
+	MOVQ dst_base+0(FP), DX
+	LEAQ (DX)(CX*1), DX
+	CMPQ DX, 64(SP)
+	JL   emit_remainder_ok_encodeBlockAsm12B
+	MOVQ $0x00000000, ret+48(FP)
+	RET
+
+emit_remainder_ok_encodeBlockAsm12B:
 	MOVQ src_len+32(FP), CX
-	MOVQ 68(SP), BX
+	MOVQ 84(SP), BX
 	MOVQ CX, DX
 	LEAQ (AX)(BX*1), AX
 	SUBQ DX, BX
 	MOVQ dst_base+0(FP), DX
-	MOVQ CX, 68(SP)
+	MOVQ CX, 84(SP)
 	MOVQ BX, CX
 	SUBL $0x01, CX
 	JC   emit_literal_done_emit_remainder_encodeBlockAsm12B
@@ -4001,6 +4052,7 @@ one_byte_emit_remainder_encodeBlockAsm12B:
 	ADDQ $0x01, DX
 
 memmove_emit_remainder_encodeBlockAsm12B:
+	LEAQ (DX)(BX*1), CX
 	NOP
 
 emit_lit_memmove_emit_remainder_encodeBlockAsm12B_memmove_tail:
@@ -4175,17 +4227,19 @@ emit_lit_memmove_emit_remainder_encodeBlockAsm12B_memmove_move_256through2048:
 	LEAQ  256(DX), DX
 	JGE   emit_lit_memmove_emit_remainder_encodeBlockAsm12B_memmove_move_256through2048
 	JMP   emit_lit_memmove_emit_remainder_encodeBlockAsm12B_memmove_tail
+	MOVQ  CX, DX
 
 emit_literal_done_emit_remainder_encodeBlockAsm12B:
 	MOVQ DX, dst_base+0(FP)
-	XORQ AX, AX
+	MOVQ 72(SP), AX
+	SUBQ dst_base+0(FP), AX
 	MOVQ AX, ret+48(FP)
 	RET
 
 // func encodeBlockAsmAvx(dst []byte, src []byte) int
-TEXT ·encodeBlockAsmAvx(SB), NOSPLIT, $65616-56
+TEXT ·encodeBlockAsmAvx(SB), $65632-56
 	MOVQ $0x00000200, AX
-	LEAQ 80(SP), CX
+	LEAQ 96(SP), CX
 	PXOR X0, X0
 
 zero_loop_encodeBlockAsmAvx:
@@ -4200,29 +4254,31 @@ zero_loop_encodeBlockAsmAvx:
 	ADDQ  $0x80, CX
 	DECQ  AX
 	JNZ   zero_loop_encodeBlockAsmAvx
-	MOVL  AX, 68(SP)
+	MOVL  AX, 84(SP)
 	MOVQ  src_len+32(FP), AX
 	LEAQ  -5(AX), CX
 	LEAQ  -8(AX), DI
 	SHRQ  $0x05, AX
 	SUBL  CX, AX
-	MOVL  DI, 64(SP)
-	LEAQ  dst_base+0(FP)(AX*1), AX
-	MOVQ  AX, 56(SP)
+	MOVL  DI, 80(SP)
+	MOVQ  dst_base+0(FP), CX
+	MOVQ  CX, 72(SP)
+	LEAQ  (CX)(AX*1), AX
+	MOVQ  AX, 64(SP)
 	MOVB  $0x01, DL
-	MOVL  DX, 72(SP)
+	MOVL  DX, 88(SP)
 	MOVQ  src_base+24(FP), AX
 
 search_loop_encodeBlockAsmAvx:
 	MOVQ  (AX)(DX*1), DI
-	MOVL  68(SP), BX
+	MOVL  84(SP), BX
 	SUBL  DX, BX
 	SHRL  $0x06, BX
 	LEAQ  4(DX)(BX*1), CX
-	MOVL  64(SP), BX
+	MOVL  80(SP), BX
 	CMPL  CX, BX
 	JGT   emit_remainder_encodeBlockAsmAvx
-	MOVL  CX, 76(SP)
+	MOVL  CX, 92(SP)
 	MOVQ  $0x0000cf1bbcdcbf9b, R8
 	MOVQ  DI, R9
 	MOVQ  DI, R10
@@ -4233,18 +4289,18 @@ search_loop_encodeBlockAsmAvx:
 	SHLQ  $0x10, R10
 	IMULQ R8, R10
 	SHRQ  $0x30, R10
-	MOVL  80(SP)(R9*1), CX
-	MOVL  80(SP)(R10*1), BX
-	MOVL  DX, 80(SP)(R9*1)
+	MOVL  96(SP)(R9*1), CX
+	MOVL  96(SP)(R10*1), BX
+	MOVL  DX, 96(SP)(R9*1)
 	MOVQ  DX, R9
 	DECQ  R9
-	MOVL  R9, 80(SP)(R10*1)
+	MOVL  R9, 96(SP)(R10*1)
 	MOVQ  DI, R9
 	SHRQ  $0x10, R9
 	SHLQ  $0x10, R9
 	IMULQ R8, R9
 	SHRQ  $0x30, R9
-	MOVL  72(SP), BP
+	MOVL  88(SP), BP
 	MOVQ  DX, R10
 	SUBQ  R10, BP
 	MOVL  1(AX), R10
@@ -4253,7 +4309,7 @@ search_loop_encodeBlockAsmAvx:
 	CMPL  R8, R10
 	JNE   no_repeat_found_encodeBlockAsmAvx
 	LEAQ  1(DX), DI
-	MOVL  68(SP), CX
+	MOVL  84(SP), CX
 	TESTQ BP, BP
 	JZ    repeat_extend_back_end_encodeBlockAsmAvx
 
@@ -4270,12 +4326,12 @@ repeat_extend_back_loop_encodeBlockAsmAvx:
 	JMP  repeat_extend_back_loop_encodeBlockAsmAvx
 
 repeat_extend_back_end_encodeBlockAsmAvx:
-	MOVQ 68(SP), R8
+	MOVQ 84(SP), R8
 	MOVQ DI, CX
 	LEAQ (AX)(R8*1), R9
 	SUBQ CX, R8
 	MOVQ dst_base+0(FP), CX
-	MOVQ DI, 68(SP)
+	MOVQ DI, 84(SP)
 	MOVQ R8, R10
 	SUBL $0x01, R10
 	JC   emit_literal_done_repeat_emit_encodeBlockAsmAvx
@@ -4319,6 +4375,7 @@ one_byte_repeat_emit_encodeBlockAsmAvx:
 	ADDQ $0x01, CX
 
 memmove_repeat_emit_encodeBlockAsmAvx:
+	LEAQ (CX)(R8*1), R10
 	NOP
 
 emit_lit_memmove_repeat_emit_encodeBlockAsmAvx_memmove_tail:
@@ -4493,14 +4550,15 @@ emit_lit_memmove_repeat_emit_encodeBlockAsmAvx_memmove_move_256through2048:
 	LEAQ  256(CX), CX
 	JGE   emit_lit_memmove_repeat_emit_encodeBlockAsmAvx_memmove_move_256through2048
 	JMP   emit_lit_memmove_repeat_emit_encodeBlockAsmAvx_memmove_tail
+	MOVQ  R10, CX
 
 emit_literal_done_repeat_emit_encodeBlockAsmAvx:
 	MOVQ CX, dst_base+0(FP)
 	ADDQ $0x05, DX
-	MOVL 72(SP), CX
+	MOVL 88(SP), CX
 	SUBL DX, CX
 	MOVQ DX, CX
-	SUBQ 64(SP), CX
+	SUBQ 80(SP), CX
 	XORQ R9, R9
 	CMPQ CX, $0x08
 	JL   matchlen_single_repeat_extend
@@ -4536,9 +4594,9 @@ matchlen_single_loopback_repeat_extend:
 repeat_extend_forward_end_encodeBlockAsmAvx:
 	ADDQ  R9, DX
 	SUBQ  DX, DI
-	MOVQ  72(SP), CX
+	MOVQ  88(SP), CX
 	MOVQ  dst_base+0(FP), R8
-	MOVL  68(SP), BX
+	MOVL  84(SP), BX
 	TESTL BX, BX
 	JZ    repeat_as_copy_encodeBlockAsmAvx
 
@@ -4794,8 +4852,8 @@ emit_copy_three_repeat_as_copy_encodeBlockAsmAvx:
 
 repeat_end_emit_encodeBlockAsmAvx:
 	MOVQ R8, dst_base+0(FP)
-	MOVL DX, 68(SP)
-	MOVL 64(SP), CX
+	MOVL DX, 84(SP)
+	MOVL 80(SP), CX
 	CMPL DX, CX
 	JGT  emit_remainder_encodeBlockAsmAvx
 	JMP  search_loop_encodeBlockAsmAvx
@@ -4804,15 +4862,15 @@ no_repeat_found_encodeBlockAsmAvx:
 	CMPL (AX)(CX*1), DI
 	JEQ  candidate_match_encodeBlockAsmAvx
 	SHRQ $0x08, DI
-	MOVL 80(SP)(R9*1), CX
+	MOVL 96(SP)(R9*1), CX
 	CMPL (AX)(BX*1), DI
 	JEQ  candidate2_match_encodeBlockAsmAvx
 	LEAQ -2(DX), R8
-	MOVL R8, 80(SP)(R9*1)
+	MOVL R8, 96(SP)(R9*1)
 	SHRQ $0x08, DI
 	CMPL (AX)(CX*1), DI
 	JEQ  candidate3_match_encodeBlockAsmAvx
-	MOVL 76(SP), DX
+	MOVL 92(SP), DX
 	JMP  search_loop_encodeBlockAsmAvx
 
 candidate3_match_encodeBlockAsmAvx:
@@ -4821,12 +4879,12 @@ candidate3_match_encodeBlockAsmAvx:
 
 candidate2_match_encodeBlockAsmAvx:
 	LEAQ -2(DX), CX
-	MOVL CX, 80(SP)(R9*1)
+	MOVL CX, 96(SP)(R9*1)
 	INCQ DX
 	MOVL BX, CX
 
 candidate_match_encodeBlockAsmAvx:
-	MOVL  68(SP), BX
+	MOVL  84(SP), BX
 	TESTL CX, CX
 	JZ    match_extend_back_end_encodeBlockAsmAvx
 
@@ -4843,22 +4901,22 @@ match_extend_back_loop_encodeBlockAsmAvx:
 	JMP  match_extend_back_loop_encodeBlockAsmAvx
 
 match_extend_back_end_encodeBlockAsmAvx:
-	MOVQ 68(SP), DI
+	MOVQ 84(SP), DI
 	SUBQ DX, DI
 	LEAQ dst_base+0(FP)(DI*1), DI
-	CMPQ DI, 56(SP)
+	CMPQ DI, 64(SP)
 	JL   match_dst_size_check_encodeBlockAsmAvx
 	MOVQ $0x00000000, ret+48(FP)
 	RET
 
 match_dst_size_check_encodeBlockAsmAvx:
 	MOVL CX, BX
-	MOVQ 68(SP), R8
+	MOVQ 84(SP), R8
 	MOVQ BX, DI
 	LEAQ (AX)(R8*1), R9
 	SUBQ DI, R8
 	MOVQ dst_base+0(FP), DI
-	MOVQ BX, 68(SP)
+	MOVQ BX, 84(SP)
 	MOVQ R8, R10
 	SUBL $0x01, R10
 	JC   emit_literal_done_match_emit_encodeBlockAsmAvx
@@ -4902,6 +4960,7 @@ one_byte_match_emit_encodeBlockAsmAvx:
 	ADDQ $0x01, DI
 
 memmove_match_emit_encodeBlockAsmAvx:
+	LEAQ (DI)(R8*1), R10
 	NOP
 
 emit_lit_memmove_match_emit_encodeBlockAsmAvx_memmove_tail:
@@ -5076,19 +5135,20 @@ emit_lit_memmove_match_emit_encodeBlockAsmAvx_memmove_move_256through2048:
 	LEAQ  256(DI), DI
 	JGE   emit_lit_memmove_match_emit_encodeBlockAsmAvx_memmove_move_256through2048
 	JMP   emit_lit_memmove_match_emit_encodeBlockAsmAvx_memmove_tail
+	MOVQ  R10, DI
 
 emit_literal_done_match_emit_encodeBlockAsmAvx:
 	MOVQ DI, dst_base+0(FP)
 
 match_nolit_loop_encodeBlockAsmAvx:
 	MOVQ DX, DI
-	MOVL 72(SP), BX
+	MOVL 88(SP), BX
 	SUBL DX, BX
-	MOVL BX, 72(SP)
+	MOVL BX, 88(SP)
 	ADDQ $0x04, DX
 	ADDL $0x04, CX
 	MOVQ DX, DI
-	SUBQ 64(SP), DI
+	SUBQ 80(SP), DI
 	XORQ R9, R9
 	CMPQ DI, $0x08
 	JL   matchlen_single_match_nolit_encodeBlockAsmAvx
@@ -5122,7 +5182,7 @@ matchlen_single_loopback_match_nolit_encodeBlockAsmAvx:
 	JNZ  matchlen_single_loopback_match_nolit_encodeBlockAsmAvx
 
 match_nolit_end_encodeBlockAsmAvx:
-	MOVQ 72(SP), DI
+	MOVQ 88(SP), DI
 	ADDQ $0x04, R9
 	MOVQ dst_base+0(FP), R8
 	CMPL DI, $0x00010000
@@ -5311,13 +5371,12 @@ emit_copy_three_match_nolit_encodeBlockAsmAvx:
 match_nolit_emitcopy_end_encodeBlockAsmAvx:
 	MOVQ R8, dst_base+0(FP)
 	ADDQ R9, DX
-	MOVL DX, 68(SP)
-	CMPL DX, 64(SP)
+	MOVL DX, 84(SP)
+	CMPL DX, 80(SP)
 	JGE  emit_remainder_encodeBlockAsmAvx
-	CMPQ R8, 56(SP)
+	CMPQ R8, 64(SP)
 	JL   match_nolit_dst_ok_encodeBlockAsmAvx
-	XORQ DI, DI
-	MOVQ DI, ret+48(FP)
+	MOVQ $0x00000000, ret+48(FP)
 	RET
 
 match_nolit_dst_ok_encodeBlockAsmAvx:
@@ -5332,24 +5391,34 @@ match_nolit_dst_ok_encodeBlockAsmAvx:
 	SHLQ  $0x10, R10
 	IMULQ R8, R10
 	SHRQ  $0x30, R10
-	MOVL  80(SP)(R9*1), BX
-	MOVL  80(SP)(R10*1), BX
+	MOVL  96(SP)(R9*1), BX
+	MOVL  96(SP)(R10*1), BX
 	LEAQ  -2(DX), R8
-	MOVL  R8, 80(SP)(R9*1)
-	MOVL  DX, 80(SP)(R10*1)
+	MOVL  R8, 96(SP)(R9*1)
+	MOVL  DX, 96(SP)(R10*1)
 	CMPL  (AX), DI
 	JEQ   match_nolit_loop_encodeBlockAsmAvx
 	INCQ  DX
 	JMP   search_loop_encodeBlockAsmAvx
 
 emit_remainder_encodeBlockAsmAvx:
+	MOVQ 84(SP), CX
+	SUBQ src_len+32(FP), CX
+	MOVQ dst_base+0(FP), DX
+	LEAQ (DX)(CX*1), DX
+	CMPQ DX, 64(SP)
+	JL   emit_remainder_ok_encodeBlockAsmAvx
+	MOVQ $0x00000000, ret+48(FP)
+	RET
+
+emit_remainder_ok_encodeBlockAsmAvx:
 	MOVQ src_len+32(FP), CX
-	MOVQ 68(SP), BX
+	MOVQ 84(SP), BX
 	MOVQ CX, DX
 	LEAQ (AX)(BX*1), AX
 	SUBQ DX, BX
 	MOVQ dst_base+0(FP), DX
-	MOVQ CX, 68(SP)
+	MOVQ CX, 84(SP)
 	MOVQ BX, CX
 	SUBL $0x01, CX
 	JC   emit_literal_done_emit_remainder_encodeBlockAsmAvx
@@ -5393,6 +5462,7 @@ one_byte_emit_remainder_encodeBlockAsmAvx:
 	ADDQ $0x01, DX
 
 memmove_emit_remainder_encodeBlockAsmAvx:
+	LEAQ (DX)(BX*1), CX
 	NOP
 
 emit_lit_memmove_emit_remainder_encodeBlockAsmAvx_memmove_tail:
@@ -5567,17 +5637,19 @@ emit_lit_memmove_emit_remainder_encodeBlockAsmAvx_memmove_move_256through2048:
 	LEAQ  256(DX), DX
 	JGE   emit_lit_memmove_emit_remainder_encodeBlockAsmAvx_memmove_move_256through2048
 	JMP   emit_lit_memmove_emit_remainder_encodeBlockAsmAvx_memmove_tail
+	MOVQ  CX, DX
 
 emit_literal_done_emit_remainder_encodeBlockAsmAvx:
 	MOVQ DX, dst_base+0(FP)
-	XORQ AX, AX
+	MOVQ 72(SP), AX
+	SUBQ dst_base+0(FP), AX
 	MOVQ AX, ret+48(FP)
 	RET
 
 // func encodeBlockAsm14BAvx(dst []byte, src []byte) int
-TEXT ·encodeBlockAsm14BAvx(SB), NOSPLIT, $16464-56
+TEXT ·encodeBlockAsm14BAvx(SB), $16480-56
 	MOVQ $0x00000080, AX
-	LEAQ 80(SP), CX
+	LEAQ 96(SP), CX
 	PXOR X0, X0
 
 zero_loop_encodeBlockAsm14BAvx:
@@ -5592,29 +5664,31 @@ zero_loop_encodeBlockAsm14BAvx:
 	ADDQ  $0x80, CX
 	DECQ  AX
 	JNZ   zero_loop_encodeBlockAsm14BAvx
-	MOVL  AX, 68(SP)
+	MOVL  AX, 84(SP)
 	MOVQ  src_len+32(FP), AX
 	LEAQ  -5(AX), CX
 	LEAQ  -8(AX), DI
 	SHRQ  $0x05, AX
 	SUBL  CX, AX
-	MOVL  DI, 64(SP)
-	LEAQ  dst_base+0(FP)(AX*1), AX
-	MOVQ  AX, 56(SP)
+	MOVL  DI, 80(SP)
+	MOVQ  dst_base+0(FP), CX
+	MOVQ  CX, 72(SP)
+	LEAQ  (CX)(AX*1), AX
+	MOVQ  AX, 64(SP)
 	MOVB  $0x01, DL
-	MOVL  DX, 72(SP)
+	MOVL  DX, 88(SP)
 	MOVQ  src_base+24(FP), AX
 
 search_loop_encodeBlockAsm14BAvx:
 	MOVQ  (AX)(DX*1), DI
-	MOVL  68(SP), BX
+	MOVL  84(SP), BX
 	SUBL  DX, BX
 	SHRL  $0x05, BX
 	LEAQ  4(DX)(BX*1), CX
-	MOVL  64(SP), BX
+	MOVL  80(SP), BX
 	CMPL  CX, BX
 	JGT   emit_remainder_encodeBlockAsm14BAvx
-	MOVL  CX, 76(SP)
+	MOVL  CX, 92(SP)
 	MOVQ  $0x0000cf1bbcdcbf9b, R8
 	MOVQ  DI, R9
 	MOVQ  DI, R10
@@ -5625,18 +5699,18 @@ search_loop_encodeBlockAsm14BAvx:
 	SHLQ  $0x10, R10
 	IMULQ R8, R10
 	SHRQ  $0x32, R10
-	MOVL  80(SP)(R9*1), CX
-	MOVL  80(SP)(R10*1), BX
-	MOVL  DX, 80(SP)(R9*1)
+	MOVL  96(SP)(R9*1), CX
+	MOVL  96(SP)(R10*1), BX
+	MOVL  DX, 96(SP)(R9*1)
 	MOVQ  DX, R9
 	DECQ  R9
-	MOVL  R9, 80(SP)(R10*1)
+	MOVL  R9, 96(SP)(R10*1)
 	MOVQ  DI, R9
 	SHRQ  $0x10, R9
 	SHLQ  $0x10, R9
 	IMULQ R8, R9
 	SHRQ  $0x32, R9
-	MOVL  72(SP), BP
+	MOVL  88(SP), BP
 	MOVQ  DX, R10
 	SUBQ  R10, BP
 	MOVL  1(AX), R10
@@ -5645,7 +5719,7 @@ search_loop_encodeBlockAsm14BAvx:
 	CMPL  R8, R10
 	JNE   no_repeat_found_encodeBlockAsm14BAvx
 	LEAQ  1(DX), DI
-	MOVL  68(SP), CX
+	MOVL  84(SP), CX
 	TESTQ BP, BP
 	JZ    repeat_extend_back_end_encodeBlockAsm14BAvx
 
@@ -5662,12 +5736,12 @@ repeat_extend_back_loop_encodeBlockAsm14BAvx:
 	JMP  repeat_extend_back_loop_encodeBlockAsm14BAvx
 
 repeat_extend_back_end_encodeBlockAsm14BAvx:
-	MOVQ 68(SP), R8
+	MOVQ 84(SP), R8
 	MOVQ DI, CX
 	LEAQ (AX)(R8*1), R9
 	SUBQ CX, R8
 	MOVQ dst_base+0(FP), CX
-	MOVQ DI, 68(SP)
+	MOVQ DI, 84(SP)
 	MOVQ R8, R10
 	SUBL $0x01, R10
 	JC   emit_literal_done_repeat_emit_encodeBlockAsm14BAvx
@@ -5711,6 +5785,7 @@ one_byte_repeat_emit_encodeBlockAsm14BAvx:
 	ADDQ $0x01, CX
 
 memmove_repeat_emit_encodeBlockAsm14BAvx:
+	LEAQ (CX)(R8*1), R10
 	NOP
 
 emit_lit_memmove_repeat_emit_encodeBlockAsm14BAvx_memmove_tail:
@@ -5885,14 +5960,15 @@ emit_lit_memmove_repeat_emit_encodeBlockAsm14BAvx_memmove_move_256through2048:
 	LEAQ  256(CX), CX
 	JGE   emit_lit_memmove_repeat_emit_encodeBlockAsm14BAvx_memmove_move_256through2048
 	JMP   emit_lit_memmove_repeat_emit_encodeBlockAsm14BAvx_memmove_tail
+	MOVQ  R10, CX
 
 emit_literal_done_repeat_emit_encodeBlockAsm14BAvx:
 	MOVQ CX, dst_base+0(FP)
 	ADDQ $0x05, DX
-	MOVL 72(SP), CX
+	MOVL 88(SP), CX
 	SUBL DX, CX
 	MOVQ DX, CX
-	SUBQ 64(SP), CX
+	SUBQ 80(SP), CX
 	XORQ R9, R9
 	CMPQ CX, $0x08
 	JL   matchlen_single_repeat_extend
@@ -5928,9 +6004,9 @@ matchlen_single_loopback_repeat_extend:
 repeat_extend_forward_end_encodeBlockAsm14BAvx:
 	ADDQ  R9, DX
 	SUBQ  DX, DI
-	MOVQ  72(SP), CX
+	MOVQ  88(SP), CX
 	MOVQ  dst_base+0(FP), R8
-	MOVL  68(SP), BX
+	MOVL  84(SP), BX
 	TESTL BX, BX
 	JZ    repeat_as_copy_encodeBlockAsm14BAvx
 
@@ -6186,8 +6262,8 @@ emit_copy_three_repeat_as_copy_encodeBlockAsm14BAvx:
 
 repeat_end_emit_encodeBlockAsm14BAvx:
 	MOVQ R8, dst_base+0(FP)
-	MOVL DX, 68(SP)
-	MOVL 64(SP), CX
+	MOVL DX, 84(SP)
+	MOVL 80(SP), CX
 	CMPL DX, CX
 	JGT  emit_remainder_encodeBlockAsm14BAvx
 	JMP  search_loop_encodeBlockAsm14BAvx
@@ -6196,15 +6272,15 @@ no_repeat_found_encodeBlockAsm14BAvx:
 	CMPL (AX)(CX*1), DI
 	JEQ  candidate_match_encodeBlockAsm14BAvx
 	SHRQ $0x08, DI
-	MOVL 80(SP)(R9*1), CX
+	MOVL 96(SP)(R9*1), CX
 	CMPL (AX)(BX*1), DI
 	JEQ  candidate2_match_encodeBlockAsm14BAvx
 	LEAQ -2(DX), R8
-	MOVL R8, 80(SP)(R9*1)
+	MOVL R8, 96(SP)(R9*1)
 	SHRQ $0x08, DI
 	CMPL (AX)(CX*1), DI
 	JEQ  candidate3_match_encodeBlockAsm14BAvx
-	MOVL 76(SP), DX
+	MOVL 92(SP), DX
 	JMP  search_loop_encodeBlockAsm14BAvx
 
 candidate3_match_encodeBlockAsm14BAvx:
@@ -6213,12 +6289,12 @@ candidate3_match_encodeBlockAsm14BAvx:
 
 candidate2_match_encodeBlockAsm14BAvx:
 	LEAQ -2(DX), CX
-	MOVL CX, 80(SP)(R9*1)
+	MOVL CX, 96(SP)(R9*1)
 	INCQ DX
 	MOVL BX, CX
 
 candidate_match_encodeBlockAsm14BAvx:
-	MOVL  68(SP), BX
+	MOVL  84(SP), BX
 	TESTL CX, CX
 	JZ    match_extend_back_end_encodeBlockAsm14BAvx
 
@@ -6235,22 +6311,22 @@ match_extend_back_loop_encodeBlockAsm14BAvx:
 	JMP  match_extend_back_loop_encodeBlockAsm14BAvx
 
 match_extend_back_end_encodeBlockAsm14BAvx:
-	MOVQ 68(SP), DI
+	MOVQ 84(SP), DI
 	SUBQ DX, DI
 	LEAQ dst_base+0(FP)(DI*1), DI
-	CMPQ DI, 56(SP)
+	CMPQ DI, 64(SP)
 	JL   match_dst_size_check_encodeBlockAsm14BAvx
 	MOVQ $0x00000000, ret+48(FP)
 	RET
 
 match_dst_size_check_encodeBlockAsm14BAvx:
 	MOVL CX, BX
-	MOVQ 68(SP), R8
+	MOVQ 84(SP), R8
 	MOVQ BX, DI
 	LEAQ (AX)(R8*1), R9
 	SUBQ DI, R8
 	MOVQ dst_base+0(FP), DI
-	MOVQ BX, 68(SP)
+	MOVQ BX, 84(SP)
 	MOVQ R8, R10
 	SUBL $0x01, R10
 	JC   emit_literal_done_match_emit_encodeBlockAsm14BAvx
@@ -6294,6 +6370,7 @@ one_byte_match_emit_encodeBlockAsm14BAvx:
 	ADDQ $0x01, DI
 
 memmove_match_emit_encodeBlockAsm14BAvx:
+	LEAQ (DI)(R8*1), R10
 	NOP
 
 emit_lit_memmove_match_emit_encodeBlockAsm14BAvx_memmove_tail:
@@ -6468,19 +6545,20 @@ emit_lit_memmove_match_emit_encodeBlockAsm14BAvx_memmove_move_256through2048:
 	LEAQ  256(DI), DI
 	JGE   emit_lit_memmove_match_emit_encodeBlockAsm14BAvx_memmove_move_256through2048
 	JMP   emit_lit_memmove_match_emit_encodeBlockAsm14BAvx_memmove_tail
+	MOVQ  R10, DI
 
 emit_literal_done_match_emit_encodeBlockAsm14BAvx:
 	MOVQ DI, dst_base+0(FP)
 
 match_nolit_loop_encodeBlockAsm14BAvx:
 	MOVQ DX, DI
-	MOVL 72(SP), BX
+	MOVL 88(SP), BX
 	SUBL DX, BX
-	MOVL BX, 72(SP)
+	MOVL BX, 88(SP)
 	ADDQ $0x04, DX
 	ADDL $0x04, CX
 	MOVQ DX, DI
-	SUBQ 64(SP), DI
+	SUBQ 80(SP), DI
 	XORQ R9, R9
 	CMPQ DI, $0x08
 	JL   matchlen_single_match_nolit_encodeBlockAsm14BAvx
@@ -6514,7 +6592,7 @@ matchlen_single_loopback_match_nolit_encodeBlockAsm14BAvx:
 	JNZ  matchlen_single_loopback_match_nolit_encodeBlockAsm14BAvx
 
 match_nolit_end_encodeBlockAsm14BAvx:
-	MOVQ 72(SP), DI
+	MOVQ 88(SP), DI
 	ADDQ $0x04, R9
 	MOVQ dst_base+0(FP), R8
 	CMPL DI, $0x00010000
@@ -6703,13 +6781,12 @@ emit_copy_three_match_nolit_encodeBlockAsm14BAvx:
 match_nolit_emitcopy_end_encodeBlockAsm14BAvx:
 	MOVQ R8, dst_base+0(FP)
 	ADDQ R9, DX
-	MOVL DX, 68(SP)
-	CMPL DX, 64(SP)
+	MOVL DX, 84(SP)
+	CMPL DX, 80(SP)
 	JGE  emit_remainder_encodeBlockAsm14BAvx
-	CMPQ R8, 56(SP)
+	CMPQ R8, 64(SP)
 	JL   match_nolit_dst_ok_encodeBlockAsm14BAvx
-	XORQ DI, DI
-	MOVQ DI, ret+48(FP)
+	MOVQ $0x00000000, ret+48(FP)
 	RET
 
 match_nolit_dst_ok_encodeBlockAsm14BAvx:
@@ -6724,24 +6801,34 @@ match_nolit_dst_ok_encodeBlockAsm14BAvx:
 	SHLQ  $0x10, R10
 	IMULQ R8, R10
 	SHRQ  $0x32, R10
-	MOVL  80(SP)(R9*1), BX
-	MOVL  80(SP)(R10*1), BX
+	MOVL  96(SP)(R9*1), BX
+	MOVL  96(SP)(R10*1), BX
 	LEAQ  -2(DX), R8
-	MOVL  R8, 80(SP)(R9*1)
-	MOVL  DX, 80(SP)(R10*1)
+	MOVL  R8, 96(SP)(R9*1)
+	MOVL  DX, 96(SP)(R10*1)
 	CMPL  (AX), DI
 	JEQ   match_nolit_loop_encodeBlockAsm14BAvx
 	INCQ  DX
 	JMP   search_loop_encodeBlockAsm14BAvx
 
 emit_remainder_encodeBlockAsm14BAvx:
+	MOVQ 84(SP), CX
+	SUBQ src_len+32(FP), CX
+	MOVQ dst_base+0(FP), DX
+	LEAQ (DX)(CX*1), DX
+	CMPQ DX, 64(SP)
+	JL   emit_remainder_ok_encodeBlockAsm14BAvx
+	MOVQ $0x00000000, ret+48(FP)
+	RET
+
+emit_remainder_ok_encodeBlockAsm14BAvx:
 	MOVQ src_len+32(FP), CX
-	MOVQ 68(SP), BX
+	MOVQ 84(SP), BX
 	MOVQ CX, DX
 	LEAQ (AX)(BX*1), AX
 	SUBQ DX, BX
 	MOVQ dst_base+0(FP), DX
-	MOVQ CX, 68(SP)
+	MOVQ CX, 84(SP)
 	MOVQ BX, CX
 	SUBL $0x01, CX
 	JC   emit_literal_done_emit_remainder_encodeBlockAsm14BAvx
@@ -6785,6 +6872,7 @@ one_byte_emit_remainder_encodeBlockAsm14BAvx:
 	ADDQ $0x01, DX
 
 memmove_emit_remainder_encodeBlockAsm14BAvx:
+	LEAQ (DX)(BX*1), CX
 	NOP
 
 emit_lit_memmove_emit_remainder_encodeBlockAsm14BAvx_memmove_tail:
@@ -6959,17 +7047,19 @@ emit_lit_memmove_emit_remainder_encodeBlockAsm14BAvx_memmove_move_256through2048
 	LEAQ  256(DX), DX
 	JGE   emit_lit_memmove_emit_remainder_encodeBlockAsm14BAvx_memmove_move_256through2048
 	JMP   emit_lit_memmove_emit_remainder_encodeBlockAsm14BAvx_memmove_tail
+	MOVQ  CX, DX
 
 emit_literal_done_emit_remainder_encodeBlockAsm14BAvx:
 	MOVQ DX, dst_base+0(FP)
-	XORQ AX, AX
+	MOVQ 72(SP), AX
+	SUBQ dst_base+0(FP), AX
 	MOVQ AX, ret+48(FP)
 	RET
 
 // func encodeBlockAsm12BAvx(dst []byte, src []byte) int
-TEXT ·encodeBlockAsm12BAvx(SB), NOSPLIT, $4176-56
+TEXT ·encodeBlockAsm12BAvx(SB), $4192-56
 	MOVQ $0x00000020, AX
-	LEAQ 80(SP), CX
+	LEAQ 96(SP), CX
 	PXOR X0, X0
 
 zero_loop_encodeBlockAsm12BAvx:
@@ -6984,29 +7074,31 @@ zero_loop_encodeBlockAsm12BAvx:
 	ADDQ  $0x80, CX
 	DECQ  AX
 	JNZ   zero_loop_encodeBlockAsm12BAvx
-	MOVL  AX, 68(SP)
+	MOVL  AX, 84(SP)
 	MOVQ  src_len+32(FP), AX
 	LEAQ  -5(AX), CX
 	LEAQ  -8(AX), DI
 	SHRQ  $0x05, AX
 	SUBL  CX, AX
-	MOVL  DI, 64(SP)
-	LEAQ  dst_base+0(FP)(AX*1), AX
-	MOVQ  AX, 56(SP)
+	MOVL  DI, 80(SP)
+	MOVQ  dst_base+0(FP), CX
+	MOVQ  CX, 72(SP)
+	LEAQ  (CX)(AX*1), AX
+	MOVQ  AX, 64(SP)
 	MOVB  $0x01, DL
-	MOVL  DX, 72(SP)
+	MOVL  DX, 88(SP)
 	MOVQ  src_base+24(FP), AX
 
 search_loop_encodeBlockAsm12BAvx:
 	MOVQ  (AX)(DX*1), DI
-	MOVL  68(SP), BX
+	MOVL  84(SP), BX
 	SUBL  DX, BX
 	SHRL  $0x04, BX
 	LEAQ  4(DX)(BX*1), CX
-	MOVL  64(SP), BX
+	MOVL  80(SP), BX
 	CMPL  CX, BX
 	JGT   emit_remainder_encodeBlockAsm12BAvx
-	MOVL  CX, 76(SP)
+	MOVL  CX, 92(SP)
 	MOVQ  $0x0000cf1bbcdcbf9b, R8
 	MOVQ  DI, R9
 	MOVQ  DI, R10
@@ -7017,18 +7109,18 @@ search_loop_encodeBlockAsm12BAvx:
 	SHLQ  $0x10, R10
 	IMULQ R8, R10
 	SHRQ  $0x34, R10
-	MOVL  80(SP)(R9*1), CX
-	MOVL  80(SP)(R10*1), BX
-	MOVL  DX, 80(SP)(R9*1)
+	MOVL  96(SP)(R9*1), CX
+	MOVL  96(SP)(R10*1), BX
+	MOVL  DX, 96(SP)(R9*1)
 	MOVQ  DX, R9
 	DECQ  R9
-	MOVL  R9, 80(SP)(R10*1)
+	MOVL  R9, 96(SP)(R10*1)
 	MOVQ  DI, R9
 	SHRQ  $0x10, R9
 	SHLQ  $0x10, R9
 	IMULQ R8, R9
 	SHRQ  $0x34, R9
-	MOVL  72(SP), BP
+	MOVL  88(SP), BP
 	MOVQ  DX, R10
 	SUBQ  R10, BP
 	MOVL  1(AX), R10
@@ -7037,7 +7129,7 @@ search_loop_encodeBlockAsm12BAvx:
 	CMPL  R8, R10
 	JNE   no_repeat_found_encodeBlockAsm12BAvx
 	LEAQ  1(DX), DI
-	MOVL  68(SP), CX
+	MOVL  84(SP), CX
 	TESTQ BP, BP
 	JZ    repeat_extend_back_end_encodeBlockAsm12BAvx
 
@@ -7054,12 +7146,12 @@ repeat_extend_back_loop_encodeBlockAsm12BAvx:
 	JMP  repeat_extend_back_loop_encodeBlockAsm12BAvx
 
 repeat_extend_back_end_encodeBlockAsm12BAvx:
-	MOVQ 68(SP), R8
+	MOVQ 84(SP), R8
 	MOVQ DI, CX
 	LEAQ (AX)(R8*1), R9
 	SUBQ CX, R8
 	MOVQ dst_base+0(FP), CX
-	MOVQ DI, 68(SP)
+	MOVQ DI, 84(SP)
 	MOVQ R8, R10
 	SUBL $0x01, R10
 	JC   emit_literal_done_repeat_emit_encodeBlockAsm12BAvx
@@ -7103,6 +7195,7 @@ one_byte_repeat_emit_encodeBlockAsm12BAvx:
 	ADDQ $0x01, CX
 
 memmove_repeat_emit_encodeBlockAsm12BAvx:
+	LEAQ (CX)(R8*1), R10
 	NOP
 
 emit_lit_memmove_repeat_emit_encodeBlockAsm12BAvx_memmove_tail:
@@ -7277,14 +7370,15 @@ emit_lit_memmove_repeat_emit_encodeBlockAsm12BAvx_memmove_move_256through2048:
 	LEAQ  256(CX), CX
 	JGE   emit_lit_memmove_repeat_emit_encodeBlockAsm12BAvx_memmove_move_256through2048
 	JMP   emit_lit_memmove_repeat_emit_encodeBlockAsm12BAvx_memmove_tail
+	MOVQ  R10, CX
 
 emit_literal_done_repeat_emit_encodeBlockAsm12BAvx:
 	MOVQ CX, dst_base+0(FP)
 	ADDQ $0x05, DX
-	MOVL 72(SP), CX
+	MOVL 88(SP), CX
 	SUBL DX, CX
 	MOVQ DX, CX
-	SUBQ 64(SP), CX
+	SUBQ 80(SP), CX
 	XORQ R9, R9
 	CMPQ CX, $0x08
 	JL   matchlen_single_repeat_extend
@@ -7320,9 +7414,9 @@ matchlen_single_loopback_repeat_extend:
 repeat_extend_forward_end_encodeBlockAsm12BAvx:
 	ADDQ  R9, DX
 	SUBQ  DX, DI
-	MOVQ  72(SP), CX
+	MOVQ  88(SP), CX
 	MOVQ  dst_base+0(FP), R8
-	MOVL  68(SP), BX
+	MOVL  84(SP), BX
 	TESTL BX, BX
 	JZ    repeat_as_copy_encodeBlockAsm12BAvx
 
@@ -7578,8 +7672,8 @@ emit_copy_three_repeat_as_copy_encodeBlockAsm12BAvx:
 
 repeat_end_emit_encodeBlockAsm12BAvx:
 	MOVQ R8, dst_base+0(FP)
-	MOVL DX, 68(SP)
-	MOVL 64(SP), CX
+	MOVL DX, 84(SP)
+	MOVL 80(SP), CX
 	CMPL DX, CX
 	JGT  emit_remainder_encodeBlockAsm12BAvx
 	JMP  search_loop_encodeBlockAsm12BAvx
@@ -7588,15 +7682,15 @@ no_repeat_found_encodeBlockAsm12BAvx:
 	CMPL (AX)(CX*1), DI
 	JEQ  candidate_match_encodeBlockAsm12BAvx
 	SHRQ $0x08, DI
-	MOVL 80(SP)(R9*1), CX
+	MOVL 96(SP)(R9*1), CX
 	CMPL (AX)(BX*1), DI
 	JEQ  candidate2_match_encodeBlockAsm12BAvx
 	LEAQ -2(DX), R8
-	MOVL R8, 80(SP)(R9*1)
+	MOVL R8, 96(SP)(R9*1)
 	SHRQ $0x08, DI
 	CMPL (AX)(CX*1), DI
 	JEQ  candidate3_match_encodeBlockAsm12BAvx
-	MOVL 76(SP), DX
+	MOVL 92(SP), DX
 	JMP  search_loop_encodeBlockAsm12BAvx
 
 candidate3_match_encodeBlockAsm12BAvx:
@@ -7605,12 +7699,12 @@ candidate3_match_encodeBlockAsm12BAvx:
 
 candidate2_match_encodeBlockAsm12BAvx:
 	LEAQ -2(DX), CX
-	MOVL CX, 80(SP)(R9*1)
+	MOVL CX, 96(SP)(R9*1)
 	INCQ DX
 	MOVL BX, CX
 
 candidate_match_encodeBlockAsm12BAvx:
-	MOVL  68(SP), BX
+	MOVL  84(SP), BX
 	TESTL CX, CX
 	JZ    match_extend_back_end_encodeBlockAsm12BAvx
 
@@ -7627,22 +7721,22 @@ match_extend_back_loop_encodeBlockAsm12BAvx:
 	JMP  match_extend_back_loop_encodeBlockAsm12BAvx
 
 match_extend_back_end_encodeBlockAsm12BAvx:
-	MOVQ 68(SP), DI
+	MOVQ 84(SP), DI
 	SUBQ DX, DI
 	LEAQ dst_base+0(FP)(DI*1), DI
-	CMPQ DI, 56(SP)
+	CMPQ DI, 64(SP)
 	JL   match_dst_size_check_encodeBlockAsm12BAvx
 	MOVQ $0x00000000, ret+48(FP)
 	RET
 
 match_dst_size_check_encodeBlockAsm12BAvx:
 	MOVL CX, BX
-	MOVQ 68(SP), R8
+	MOVQ 84(SP), R8
 	MOVQ BX, DI
 	LEAQ (AX)(R8*1), R9
 	SUBQ DI, R8
 	MOVQ dst_base+0(FP), DI
-	MOVQ BX, 68(SP)
+	MOVQ BX, 84(SP)
 	MOVQ R8, R10
 	SUBL $0x01, R10
 	JC   emit_literal_done_match_emit_encodeBlockAsm12BAvx
@@ -7686,6 +7780,7 @@ one_byte_match_emit_encodeBlockAsm12BAvx:
 	ADDQ $0x01, DI
 
 memmove_match_emit_encodeBlockAsm12BAvx:
+	LEAQ (DI)(R8*1), R10
 	NOP
 
 emit_lit_memmove_match_emit_encodeBlockAsm12BAvx_memmove_tail:
@@ -7860,19 +7955,20 @@ emit_lit_memmove_match_emit_encodeBlockAsm12BAvx_memmove_move_256through2048:
 	LEAQ  256(DI), DI
 	JGE   emit_lit_memmove_match_emit_encodeBlockAsm12BAvx_memmove_move_256through2048
 	JMP   emit_lit_memmove_match_emit_encodeBlockAsm12BAvx_memmove_tail
+	MOVQ  R10, DI
 
 emit_literal_done_match_emit_encodeBlockAsm12BAvx:
 	MOVQ DI, dst_base+0(FP)
 
 match_nolit_loop_encodeBlockAsm12BAvx:
 	MOVQ DX, DI
-	MOVL 72(SP), BX
+	MOVL 88(SP), BX
 	SUBL DX, BX
-	MOVL BX, 72(SP)
+	MOVL BX, 88(SP)
 	ADDQ $0x04, DX
 	ADDL $0x04, CX
 	MOVQ DX, DI
-	SUBQ 64(SP), DI
+	SUBQ 80(SP), DI
 	XORQ R9, R9
 	CMPQ DI, $0x08
 	JL   matchlen_single_match_nolit_encodeBlockAsm12BAvx
@@ -7906,7 +8002,7 @@ matchlen_single_loopback_match_nolit_encodeBlockAsm12BAvx:
 	JNZ  matchlen_single_loopback_match_nolit_encodeBlockAsm12BAvx
 
 match_nolit_end_encodeBlockAsm12BAvx:
-	MOVQ 72(SP), DI
+	MOVQ 88(SP), DI
 	ADDQ $0x04, R9
 	MOVQ dst_base+0(FP), R8
 	CMPL DI, $0x00010000
@@ -8095,13 +8191,12 @@ emit_copy_three_match_nolit_encodeBlockAsm12BAvx:
 match_nolit_emitcopy_end_encodeBlockAsm12BAvx:
 	MOVQ R8, dst_base+0(FP)
 	ADDQ R9, DX
-	MOVL DX, 68(SP)
-	CMPL DX, 64(SP)
+	MOVL DX, 84(SP)
+	CMPL DX, 80(SP)
 	JGE  emit_remainder_encodeBlockAsm12BAvx
-	CMPQ R8, 56(SP)
+	CMPQ R8, 64(SP)
 	JL   match_nolit_dst_ok_encodeBlockAsm12BAvx
-	XORQ DI, DI
-	MOVQ DI, ret+48(FP)
+	MOVQ $0x00000000, ret+48(FP)
 	RET
 
 match_nolit_dst_ok_encodeBlockAsm12BAvx:
@@ -8116,24 +8211,34 @@ match_nolit_dst_ok_encodeBlockAsm12BAvx:
 	SHLQ  $0x10, R10
 	IMULQ R8, R10
 	SHRQ  $0x34, R10
-	MOVL  80(SP)(R9*1), BX
-	MOVL  80(SP)(R10*1), BX
+	MOVL  96(SP)(R9*1), BX
+	MOVL  96(SP)(R10*1), BX
 	LEAQ  -2(DX), R8
-	MOVL  R8, 80(SP)(R9*1)
-	MOVL  DX, 80(SP)(R10*1)
+	MOVL  R8, 96(SP)(R9*1)
+	MOVL  DX, 96(SP)(R10*1)
 	CMPL  (AX), DI
 	JEQ   match_nolit_loop_encodeBlockAsm12BAvx
 	INCQ  DX
 	JMP   search_loop_encodeBlockAsm12BAvx
 
 emit_remainder_encodeBlockAsm12BAvx:
+	MOVQ 84(SP), CX
+	SUBQ src_len+32(FP), CX
+	MOVQ dst_base+0(FP), DX
+	LEAQ (DX)(CX*1), DX
+	CMPQ DX, 64(SP)
+	JL   emit_remainder_ok_encodeBlockAsm12BAvx
+	MOVQ $0x00000000, ret+48(FP)
+	RET
+
+emit_remainder_ok_encodeBlockAsm12BAvx:
 	MOVQ src_len+32(FP), CX
-	MOVQ 68(SP), BX
+	MOVQ 84(SP), BX
 	MOVQ CX, DX
 	LEAQ (AX)(BX*1), AX
 	SUBQ DX, BX
 	MOVQ dst_base+0(FP), DX
-	MOVQ CX, 68(SP)
+	MOVQ CX, 84(SP)
 	MOVQ BX, CX
 	SUBL $0x01, CX
 	JC   emit_literal_done_emit_remainder_encodeBlockAsm12BAvx
@@ -8177,6 +8282,7 @@ one_byte_emit_remainder_encodeBlockAsm12BAvx:
 	ADDQ $0x01, DX
 
 memmove_emit_remainder_encodeBlockAsm12BAvx:
+	LEAQ (DX)(BX*1), CX
 	NOP
 
 emit_lit_memmove_emit_remainder_encodeBlockAsm12BAvx_memmove_tail:
@@ -8351,10 +8457,12 @@ emit_lit_memmove_emit_remainder_encodeBlockAsm12BAvx_memmove_move_256through2048
 	LEAQ  256(DX), DX
 	JGE   emit_lit_memmove_emit_remainder_encodeBlockAsm12BAvx_memmove_move_256through2048
 	JMP   emit_lit_memmove_emit_remainder_encodeBlockAsm12BAvx_memmove_tail
+	MOVQ  CX, DX
 
 emit_literal_done_emit_remainder_encodeBlockAsm12BAvx:
 	MOVQ DX, dst_base+0(FP)
-	XORQ AX, AX
+	MOVQ 72(SP), AX
+	SUBQ dst_base+0(FP), AX
 	MOVQ AX, ret+48(FP)
 	RET
 

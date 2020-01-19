@@ -33,19 +33,20 @@ func main() {
 }
 
 func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
-	TEXT(name, NOSPLIT, "func(dst, src []byte) int")
+	TEXT(name, 0, "func(dst, src []byte) int")
 	Doc(name+" encodes a non-empty src to a guaranteed-large-enough dst.",
 		"It assumes that the varint-encoded length of the decompressed bytes has already been written.", "")
 	Pragma("noescape")
 
-	// "var table [maxTableSize]uint32" takes up 65536 bytes of stack space. An
-	// extra 56 bytes, to call other functions, and an extra 64 bytes, to spill
-	// local variables (registers) during calls gives 65536 + 56 + 64 = 65656.
+	// "var table [maxTableSize]uint32" takes up 4 * (1 << tableBits) bytes of stack space.
+	// Extra bytes are added to keep less used values.
 	var (
 		tableSize = 1 << tableBits
-		//tableMask  = tableSize - 1
-		baseStack  = 56
-		extraStack = 24
+		// Keep base stack multiple of 16.
+		baseStack = 64
+		// try to keep extraStack + baseStack multiple of 16
+		// for best chance of table alignment.
+		extraStack = 32
 		allocStack = baseStack + extraStack + tableSize
 	)
 	// Memzero needs at least 128 bytes.
@@ -66,17 +67,25 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 	// Bail if we can't compress to at least this.
 	dstLimitPtr := stack.Offset(tmpStack)
 	tmpStack += 8
+	// dstStartPtr contains the original dst pointer for returning the length
+	dstStartPtr := stack.Offset(tmpStack)
+	tmpStack += 8
 	// sLimit is when to stop looking for offset/length copies.
 	sLimit := stack.Offset(tmpStack)
 	tmpStack += 4
+	// nextEmit keeps track of the point we have emitted to.
 	nextEmit := stack.Offset(tmpStack)
 	tmpStack += 4
+	// Repeat stores the last match offset.
 	repeat := stack.Offset(tmpStack)
 	tmpStack += 4
+	// nextSTemp keeps nextS while other functions are being called.
 	nextSTemp := stack.Offset(tmpStack)
 	tmpStack += 4
+	// Ensure we have the correct extra stack.
+	// Could be automatic, but whatever.
 	if tmpStack-baseStack != extraStack {
-		log.Fatal("adjust extraStack to", tmpStack-baseStack)
+		log.Fatal("adjust extraStack to ", tmpStack-baseStack)
 	}
 
 	dstBaseBasic, err := Param("dst").Base().Resolve()
@@ -120,7 +129,11 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 		SHRQ(U8(5), tmp)
 		SUBL(tmp2.As32(), tmp.As32())
 		MOVL(tmp3.As32(), sLimit)
-		LEAQ(dstBase.Idx(tmp, 1), tmp)
+		dstAddr := GP64()
+		MOVQ(dstBase, dstAddr)
+		// Store dst start address
+		MOVQ(dstAddr, dstStartPtr)
+		LEAQ(Mem{Base: dstAddr, Index: tmp, Scale: 1}, tmp)
 		MOVQ(tmp, dstLimitPtr)
 	}
 
@@ -421,9 +434,11 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 					{
 						CMPQ(dst, dstLimitPtr)
 						JL(LabelRef("match_nolit_dst_ok_" + name))
-						tmp := GP64()
-						XORQ(tmp, tmp)
-						Store(tmp, ReturnIndex(0))
+						ri, err := ReturnIndex(0).Resolve()
+						if err != nil {
+							panic(err)
+						}
+						MOVQ(U32(0), ri.Addr)
 						RET()
 						Label("match_nolit_dst_ok_" + name)
 					}
@@ -459,20 +474,38 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 	}
 	Label("emit_remainder_" + name)
 
-	// TODO:
-	// if d+lenMem{Base:src}-nextEmit > dstLimitPtr {	return 0
-
-	// d += emitLiteral(dst[d:], src[nextEmit:])
+	// Bail if we exceed the maximum size.
+	// if d+len(src)-nextEmit > dstLimitPtr {	return 0
+	{
+		remain := GP64()
+		MOVQ(nextEmit, remain)
+		SUBQ(lenSrc, remain)
+		dst := GP64()
+		MOVQ(dstBase, dst)
+		// dst := dst + (len(src)-nextEmit)
+		LEAQ(Mem{Base: dst, Index: remain, Scale: 1}, dst)
+		CMPQ(dst, dstLimitPtr)
+		JL(LabelRef("emit_remainder_ok_" + name))
+		ri, err := ReturnIndex(0).Resolve()
+		if err != nil {
+			panic(err)
+		}
+		MOVQ(U32(0), ri.Addr)
+		RET()
+		Label("emit_remainder_ok_" + name)
+	}
+	// emitLiteral(dst[d:], src[nextEmit:])
 	emitEnd := GP64()
 	MOVQ(lenSrc, emitEnd)
 
 	// Emit final literals.
 	emitLiterals(nextEmit, emitEnd, src, dstBase, "emit_remainder_"+name, avx)
-	Label("return_" + name)
 
-	// FIXME, does not return size:
+	// length := start - base (ptr arithmetic)
 	length := GP64()
-	XORQ(length, length)
+	MOVQ(dstStartPtr, length)
+	SUBQ(dstBase, length)
+
 	Store(length, ReturnIndex(0))
 	RET()
 }
@@ -488,7 +521,7 @@ func emitLiterals(nextEmit Mem, base reg.GPVirtual, src reg.GPVirtual, dstBase M
 	SUBQ(tmp, litLen) // litlen = base - nextEmit
 	MOVQ(dstBase, dstBaseTmp)
 	MOVQ(base, nextEmit)
-	emitLiteral(name, litLen, nil, dstBaseTmp, litBase, LabelRef("emit_literal_done_"+name), false)
+	emitLiteral(name, litLen, nil, dstBaseTmp, litBase, LabelRef("emit_literal_done_"+name), false, true)
 	Label("emit_literal_done_" + name)
 	// Store updated dstBase
 	MOVQ(dstBaseTmp, dstBase)
@@ -532,7 +565,7 @@ func genEmitLiteral() {
 	Load(Param("dst").Base(), dstBase)
 	Load(Param("lit").Base(), litBase)
 	Load(Param("lit").Len(), litLen)
-	emitLiteral("standalone", litLen, retval, dstBase, litBase, "emit_literal_end_standalone", false)
+	emitLiteral("standalone", litLen, retval, dstBase, litBase, "emit_literal_end_standalone", false, false)
 	Label("emit_literal_end_standalone")
 	Store(retval, ReturnIndex(0))
 	RET()
@@ -548,7 +581,7 @@ func genEmitLiteral() {
 	Load(Param("dst").Base(), dstBase)
 	Load(Param("lit").Base(), litBase)
 	Load(Param("lit").Len(), litLen)
-	emitLiteral("standalone", litLen, retval, dstBase, litBase, "emit_literal_end_avx_standalone", true)
+	emitLiteral("standalone", litLen, retval, dstBase, litBase, "emit_literal_end_avx_standalone", true, false)
 	Label("emit_literal_end_avx_standalone")
 	Store(retval, ReturnIndex(0))
 	RET()
@@ -557,8 +590,10 @@ func genEmitLiteral() {
 // emitLiteral can be used for inlining an emitLiteral call.
 // stack must have at least 32 bytes.
 // retval will contain emitted bytes, but can be nil if this is not interesting.
+// dstBase and litBase are updated.
 // Uses 2 GP registers. With AVX 4 registers.
-func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, end LabelRef, avx bool) {
+// If updateDst is true dstBase will have the updated end pointer and an additional register will be used.
+func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, end LabelRef, avx, updateDst bool) {
 	n := GP64()
 	n16 := GP64()
 
@@ -632,7 +667,18 @@ func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, en
 	Label("memmove_" + name)
 
 	// copy(dst[i:], lit)
-	genMemMove2("emit_lit_memmove_"+name, dstBase, litBase, litLen, end, avx)
+	if true {
+		dstEnd := GP64()
+		if updateDst {
+			LEAQ(Mem{Base: dstBase, Index: litLen, Scale: 1}, dstEnd)
+		}
+		genMemMove2("emit_lit_memmove_"+name, dstBase, litBase, litLen, end, avx)
+		if updateDst {
+			MOVQ(dstEnd, dstBase)
+		}
+	} else {
+		genMemMove("emit_lit_memmove_"+name, dstBase, litBase, litLen, end)
+	}
 	return
 }
 
@@ -1010,6 +1056,7 @@ func genMemMove(name string, to, from, n reg.GPVirtual, end LabelRef) {
 // src and dst may not overlap.
 // Non AVX uses 2 GP register, 16 SSE2 registers.
 // AVX uses 4 GP registers 16 AVX/SSE registers.
+// All passed registers may be updated.
 func genMemMove2(name string, dst, src, length reg.GPVirtual, end LabelRef, avx bool) {
 	AX, CX := GP64(), GP64()
 	NOP()
