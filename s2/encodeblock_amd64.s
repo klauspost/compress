@@ -602,7 +602,7 @@ two_byte_offset_short_repeat_as_copy_encodeBlockAsm:
 	MOVB $0x01, SI
 	LEAQ -16(SI)(DI*4), DI
 	MOVB CL, 1(R8)
-	SARL $0x08, CX
+	SHRL $0x08, CX
 	SHLL $0x05, CX
 	ORL  CX, DI
 	MOVB DI, (R8)
@@ -1118,7 +1118,7 @@ two_byte_offset_short_match_nolit_encodeBlockAsm:
 	MOVB $0x01, SI
 	LEAQ -16(SI)(R9*4), R9
 	MOVB DI, 1(R8)
-	SARL $0x08, DI
+	SHRL $0x08, DI
 	SHLL $0x05, DI
 	ORL  DI, R9
 	MOVB R9, (R8)
@@ -1994,7 +1994,7 @@ two_byte_offset_short_repeat_as_copy_encodeBlockAsm14B:
 	MOVB $0x01, SI
 	LEAQ -16(SI)(DI*4), DI
 	MOVB CL, 1(R8)
-	SARL $0x08, CX
+	SHRL $0x08, CX
 	SHLL $0x05, CX
 	ORL  CX, DI
 	MOVB DI, (R8)
@@ -2510,7 +2510,7 @@ two_byte_offset_short_match_nolit_encodeBlockAsm14B:
 	MOVB $0x01, SI
 	LEAQ -16(SI)(R9*4), R9
 	MOVB DI, 1(R8)
-	SARL $0x08, DI
+	SHRL $0x08, DI
 	SHLL $0x05, DI
 	ORL  DI, R9
 	MOVB R9, (R8)
@@ -3386,7 +3386,7 @@ two_byte_offset_short_repeat_as_copy_encodeBlockAsm12B:
 	MOVB $0x01, SI
 	LEAQ -16(SI)(DI*4), DI
 	MOVB CL, 1(R8)
-	SARL $0x08, CX
+	SHRL $0x08, CX
 	SHLL $0x05, CX
 	ORL  CX, DI
 	MOVB DI, (R8)
@@ -3902,7 +3902,7 @@ two_byte_offset_short_match_nolit_encodeBlockAsm12B:
 	MOVB $0x01, SI
 	LEAQ -16(SI)(R9*4), R9
 	MOVB DI, 1(R8)
-	SARL $0x08, DI
+	SHRL $0x08, DI
 	SHLL $0x05, DI
 	ORL  DI, R9
 	MOVB R9, (R8)
@@ -4778,7 +4778,7 @@ two_byte_offset_short_repeat_as_copy_encodeBlockAsmAvx:
 	MOVB $0x01, SI
 	LEAQ -16(SI)(DI*4), DI
 	MOVB CL, 1(R8)
-	SARL $0x08, CX
+	SHRL $0x08, CX
 	SHLL $0x05, CX
 	ORL  CX, DI
 	MOVB DI, (R8)
@@ -5294,7 +5294,7 @@ two_byte_offset_short_match_nolit_encodeBlockAsmAvx:
 	MOVB $0x01, SI
 	LEAQ -16(SI)(R9*4), R9
 	MOVB DI, 1(R8)
-	SARL $0x08, DI
+	SHRL $0x08, DI
 	SHLL $0x05, DI
 	ORL  DI, R9
 	MOVB R9, (R8)
@@ -6170,7 +6170,7 @@ two_byte_offset_short_repeat_as_copy_encodeBlockAsm14BAvx:
 	MOVB $0x01, SI
 	LEAQ -16(SI)(DI*4), DI
 	MOVB CL, 1(R8)
-	SARL $0x08, CX
+	SHRL $0x08, CX
 	SHLL $0x05, CX
 	ORL  CX, DI
 	MOVB DI, (R8)
@@ -6686,7 +6686,7 @@ two_byte_offset_short_match_nolit_encodeBlockAsm14BAvx:
 	MOVB $0x01, SI
 	LEAQ -16(SI)(R9*4), R9
 	MOVB DI, 1(R8)
-	SARL $0x08, DI
+	SHRL $0x08, DI
 	SHLL $0x05, DI
 	ORL  DI, R9
 	MOVB R9, (R8)
@@ -7562,7 +7562,7 @@ two_byte_offset_short_repeat_as_copy_encodeBlockAsm12BAvx:
 	MOVB $0x01, SI
 	LEAQ -16(SI)(DI*4), DI
 	MOVB CL, 1(R8)
-	SARL $0x08, CX
+	SHRL $0x08, CX
 	SHLL $0x05, CX
 	ORL  CX, DI
 	MOVB DI, (R8)
@@ -8078,7 +8078,7 @@ two_byte_offset_short_match_nolit_encodeBlockAsm12BAvx:
 	MOVB $0x01, SI
 	LEAQ -16(SI)(R9*4), R9
 	MOVB DI, 1(R8)
-	SARL $0x08, DI
+	SHRL $0x08, DI
 	SHLL $0x05, DI
 	ORL  DI, R9
 	MOVB R9, (R8)
