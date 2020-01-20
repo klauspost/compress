@@ -134,7 +134,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 		LEAQ(Mem{Base: tmp, Disp: -5}, tmp2)
 		// sLimitL := lenMem{Base:src} - inputMargin
 		LEAQ(Mem{Base: tmp, Disp: -inputMargin}, tmp3)
-		// dstLimit := lenMem{Base:src} - lenMem{Base:src}>>5 - 5
+		// dstLimit := lenMem{Base:src} - len(src)>>5 - 5
 		SHRQ(U8(5), tmp)
 		SUBL(tmp.As32(), tmp2.As32()) // tmp2 = tmp2 - tmp
 		MOVL(tmp3.As32(), sLimitL)
@@ -193,21 +193,13 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 			MOVL(table.Idx(hash1, 1), candidate2)
 			MOVL(s, table.Idx(hash0, 1))
 			tmp := GP64().As32()
-			MOVL(s, tmp)
-			DECL(tmp)
+			LEAL(Mem{Base: s, Disp: 1}, tmp)
 			MOVL(tmp, table.Idx(hash1, 1))
-		}
-		hash2 := GP64()
-		{
-			// hash2 := hash6(cv>>16, tableBits)
-			MOVQ(cv, hash2)
-			SHRQ(U8(16), hash2)
-			hasher.hash(hash2)
 		}
 		// Check repeatL at offset checkRep
 		const checkRep = 1
-		// FIXME: Disabled... "failed to allocate registers"
-		if false {
+
+		if true {
 			// rep = s - repeat
 			rep := GP64().As32()
 			if true {
@@ -219,17 +211,18 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 				MOVQ(cv, left)
 				SHLQ(U8(checkRep*8), left)
 				CMPL(left.As32(), right.As32())
-				JNE(LabelRef("no_repeat_found_" + name))
+
+				// FIXME: Unable to allocate if enabled.
+				// JNE(LabelRef("no_repeat_found_" + name))
 			}
 			// base = s + 1
 			base := GP64()
 			LEAQ(Mem{Base: s, Disp: 1}, base)
 			// Extend back
 			if true {
-				i := rep
 				ne := GP64().As32()
 				MOVL(nextEmitL, ne)
-				TESTL(i, i)
+				TESTL(rep, rep)
 				JZ(LabelRef("repeat_extend_back_end_" + name))
 
 				// I is tested when decremented, so we loop back here.
@@ -238,12 +231,12 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 				JG(LabelRef("repeat_extend_back_end_" + name))
 				// if src[i-1] == src[base-1]
 				tmp, tmp2 := GP64(), GP64()
-				MOVB(Mem{Base: src, Index: i, Scale: 1, Disp: -1}, tmp.As8())
+				MOVB(Mem{Base: src, Index: rep, Scale: 1, Disp: -1}, tmp.As8())
 				MOVB(Mem{Base: src, Index: base, Scale: 1, Disp: -1}, tmp2.As8())
 				CMPB(tmp.As8(), tmp2.As8())
 				JNE(LabelRef("repeat_extend_back_end_" + name))
 				LEAQ(Mem{Base: base, Disp: -1}, base)
-				DECL(i)
+				DECL(rep)
 				JZ(LabelRef("repeat_extend_back_end_" + name))
 				JMP(LabelRef("repeat_extend_back_loop_" + name))
 			}
@@ -294,14 +287,19 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 				tmp := GP64()
 				MOVL(nextEmitL, tmp.As32())
 				TESTL(tmp.As32(), tmp.As32())
-				JZ(LabelRef("repeat_as_copy_" + name))
+
+				// FIXME: fails to allocate regs if enabled:
+				// JZ(LabelRef("repeat_as_copy_" + name))
+
 				emitRepeat("match_repeat_", length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name))
+
+				// JUMPS TO HERE:
 				Label("repeat_as_copy_" + name)
 				emitCopy("repeat_as_copy_"+name, length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name))
+
 				Label("repeat_end_emit_" + name)
 				// Store new dst and nextEmitL
 				MOVQ(dst, dstBase)
-				MOVL(s, nextEmitL)
 			}
 			// if s >= sLimitL
 			// can be omitted.
@@ -315,10 +313,20 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 		}
 		Label("no_repeat_found_" + name)
 		{
+			// Can be moved up if registers are available.
+			hash2 := GP64()
+			{
+				// hash2 := hash6(cv>>16, tableBits)
+				hasher = hash6(tableBits)
+				MOVQ(cv, hash2)
+				SHRQ(U8(16), hash2)
+				hasher.hash(hash2)
+			}
+
 			CMPL(Mem{Base: src, Index: candidate, Scale: 1}, cv.As32())
-			JEQ(LabelRef("candidate_match_" + name))
 			// cv >>= 8
 			SHRQ(U8(8), cv)
+			JEQ(LabelRef("candidate_match_" + name))
 
 			// candidate = int(table[hash2])
 			MOVL(table.Idx(hash2, 1), candidate)
@@ -329,7 +337,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 
 			// table[hash2] = uint32(s + 2)
 			tmp := GP64()
-			LEAQ(Mem{Base: s, Disp: -2}, tmp)
+			LEAQ(Mem{Base: s, Disp: 2}, tmp)
 			MOVL(tmp.As32(), table.Idx(hash2, 1))
 
 			// if uint32(cv>>16) == load32(src, candidate)
@@ -360,14 +368,14 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 	// We have a match at 's' with src offset in "candidate" that matches at least 4 bytes.
 	// Extend backwards
 	{
-		ne := GP64().As32()
-		MOVL(nextEmitL, ne)
+		ne := GP64()
+		MOVL(nextEmitL, ne.As32())
 		TESTL(candidate, candidate)
 		JZ(LabelRef("match_extend_back_end_" + name))
 
 		// candidate is tested when decremented, so we loop back here.
 		Label("match_extend_back_loop_" + name)
-		CMPL(s, ne)
+		CMPL(s, ne.As32())
 		JG(LabelRef("match_extend_back_end_" + name))
 		// if src[candidate-1] == src[s-1]
 		tmp, tmp2 := GP64(), GP64()
@@ -383,7 +391,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 	Label("match_extend_back_end_" + name)
 
 	// Bail if we exceed the maximum size.
-	{
+	if false {
 		// tmp = s-nextEmitL
 		tmp := GP64()
 		MOVL(s, tmp.As32())
