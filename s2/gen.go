@@ -391,7 +391,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 	Label("match_extend_back_end_" + name)
 
 	// Bail if we exceed the maximum size.
-	if false {
+	if true {
 		// tmp = s-nextEmitL
 		tmp := GP64()
 		MOVL(s, tmp.As32())
