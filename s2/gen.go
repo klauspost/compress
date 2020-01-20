@@ -123,7 +123,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 		DECQ(iReg)
 		JNZ(LabelRef("zero_loop_" + name))
 
-		// nextEmitL is where in src the next emitLiteral should start from.
+		// nextEmit is offset n src where the next emitLiteral should start from.
 		MOVL(iReg.As32(), nextEmitL)
 	}
 
@@ -132,9 +132,9 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 		tmp, tmp2, tmp3 := GP64(), GP64(), GP64()
 		MOVQ(lenSrcQ, tmp)
 		LEAQ(Mem{Base: tmp, Disp: -5}, tmp2)
-		// sLimitL := lenMem{Base:src} - inputMargin
+		// sLimitL := len(src) - inputMargin
 		LEAQ(Mem{Base: tmp, Disp: -inputMargin}, tmp3)
-		// dstLimit := lenMem{Base:src} - len(src)>>5 - 5
+		// dstLimit := len(src) - len(src)>>5 - 5
 		SHRQ(U8(5), tmp)
 		SUBL(tmp.As32(), tmp2.As32()) // tmp2 = tmp2 - tmp
 		MOVL(tmp3.As32(), sLimitL)
@@ -162,7 +162,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 		cv := GP64()
 		MOVQ(Mem{Base: src, Index: s, Scale: 1}, cv)
 		nextS := GP64()
-		// nextS := s + (s-nextEmitL)>>6 + 4
+		// nextS := s + (s-nextEmit)>>6 + 4
 		{
 			tmp := GP64()
 			MOVL(s, tmp.As32())           // tmp = s
@@ -170,7 +170,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 			SHRL(U8(skipLog), tmp.As32()) // tmp = (s - nextEmit) >> skipLog
 			LEAQ(Mem{Base: s, Disp: 4, Index: tmp, Scale: 1}, nextS)
 		}
-		// if nextS > sLimitL {goto emitRemainder}
+		// if nextS > sLimit {goto emitRemainder}
 		{
 			tmp := GP64()
 			MOVL(sLimitL, tmp.As32())
@@ -196,7 +196,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 			LEAL(Mem{Base: s, Disp: 1}, tmp)
 			MOVL(tmp, table.Idx(hash1, 1))
 		}
-		// Check repeatL at offset checkRep
+		// Check repeat at offset checkRep
 		const checkRep = 1
 
 		if true {
@@ -283,7 +283,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 				dst := GP64()
 				MOVQ(dstBase, dst)
 
-				// if nextEmitL > 0
+				// if nextEmit > 0
 				tmp := GP64()
 				MOVL(nextEmitL, tmp.As32())
 				TESTL(tmp.As32(), tmp.As32())
@@ -298,10 +298,10 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 				emitCopy("repeat_as_copy_"+name, length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name))
 
 				Label("repeat_end_emit_" + name)
-				// Store new dst and nextEmitL
+				// Store new dst and nextEmit
 				MOVQ(dst, dstBase)
 			}
-			// if s >= sLimitL
+			// if s >= sLimit
 			// can be omitted.
 			if true {
 				tmp := GP64()
