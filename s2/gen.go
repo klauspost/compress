@@ -261,7 +261,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 						// srcLeft = sLimit - s
 						srcLeft := GP64()
 						MOVQ(s, srcLeft)
-						SUBQ(sLimit, srcLeft)
+						SUBL(sLimit, srcLeft.As32())
 						// Forward address
 						forwardStart := Mem{Base: src, Index: s, Scale: 1}
 						// End address
@@ -279,7 +279,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 					SUBQ(s, length)
 
 					offsetVal := GP64()
-					MOVQ(repeat, offsetVal)
+					MOVL(repeat, offsetVal.As32())
 					dst := GP64()
 					MOVQ(dstBase, dst)
 
@@ -418,7 +418,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 		{
 			srcLeft := GP64()
 			MOVQ(s, srcLeft)
-			SUBQ(sLimit, srcLeft)
+			SUBL(sLimit, srcLeft.As32())
 			length := matchLen("match_nolit_"+name,
 				Mem{Base: src, Index: s, Scale: 1},
 				Mem{Base: src, Index: candidate, Scale: 1},
@@ -427,7 +427,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 			)
 			Label("match_nolit_end_" + name)
 			offset := GP64()
-			MOVQ(repeat, offset)
+			MOVL(repeat, offset.As32())
 			ADDQ(U8(4), length)
 			dst := GP64()
 			MOVQ(dstBase, dst)
@@ -521,15 +521,15 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 // src & base are untouched.
 func emitLiterals(nextEmit Mem, base reg.GPVirtual, src reg.GPVirtual, dstBase Mem, name string, avx bool) {
 	tmp, litLen, dstBaseTmp, litBase := GP64(), GP64(), GP64(), GP64()
-	CMPQ(nextEmit, base)
+	CMPL(nextEmit, base.As32())
 	JEQ(LabelRef("emit_literal_skip_" + name))
-	MOVQ(nextEmit, litLen)
+	MOVL(nextEmit, litLen.As32())
 	MOVQ(base, tmp)
 	// litBase = src[nextEmit:]
 	LEAQ(Mem{Base: src, Index: litLen, Scale: 1}, litBase)
 	SUBQ(tmp, litLen) // litlen = base - nextEmit
 	MOVQ(dstBase, dstBaseTmp)
-	MOVQ(base, nextEmit)
+	MOVL(base.As32(), nextEmit)
 	emitLiteral(name, litLen, nil, dstBaseTmp, litBase, LabelRef("emit_literal_done_"+name), avx, true)
 	Label("emit_literal_done_" + name)
 	// Store updated dstBase
