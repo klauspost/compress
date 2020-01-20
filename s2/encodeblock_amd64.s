@@ -402,6 +402,7 @@ match_nolit_end_encodeBlockAsm:
 	MOVL 24(SP), DI
 	ADDQ $0x04, R10
 	MOVQ dst_base+0(FP), R9
+	ADDL R10, AX
 	CMPL DI, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeBlockAsm
 	CMPL R10, $0x40
@@ -587,7 +588,6 @@ emit_copy_three_match_nolit_encodeBlockAsm:
 
 match_nolit_emitcopy_end_encodeBlockAsm:
 	MOVQ R9, dst_base+0(FP)
-	ADDL R10, AX
 	MOVL AX, 20(SP)
 	CMPL AX, 16(SP)
 	JGE  emit_remainder_encodeBlockAsm
@@ -1263,6 +1263,7 @@ match_nolit_end_encodeBlockAsm14B:
 	MOVL 24(SP), DI
 	ADDQ $0x04, R10
 	MOVQ dst_base+0(FP), R9
+	ADDL R10, AX
 	CMPL DI, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeBlockAsm14B
 	CMPL R10, $0x40
@@ -1448,7 +1449,6 @@ emit_copy_three_match_nolit_encodeBlockAsm14B:
 
 match_nolit_emitcopy_end_encodeBlockAsm14B:
 	MOVQ R9, dst_base+0(FP)
-	ADDL R10, AX
 	MOVL AX, 20(SP)
 	CMPL AX, 16(SP)
 	JGE  emit_remainder_encodeBlockAsm14B
@@ -2124,6 +2124,7 @@ match_nolit_end_encodeBlockAsm12B:
 	MOVL 24(SP), DI
 	ADDQ $0x04, R10
 	MOVQ dst_base+0(FP), R9
+	ADDL R10, AX
 	CMPL DI, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeBlockAsm12B
 	CMPL R10, $0x40
@@ -2309,7 +2310,6 @@ emit_copy_three_match_nolit_encodeBlockAsm12B:
 
 match_nolit_emitcopy_end_encodeBlockAsm12B:
 	MOVQ R9, dst_base+0(FP)
-	ADDL R10, AX
 	MOVL AX, 20(SP)
 	CMPL AX, 16(SP)
 	JGE  emit_remainder_encodeBlockAsm12B
@@ -3033,6 +3033,7 @@ match_nolit_end_encodeBlockAsmAvx:
 	MOVL 24(SP), DI
 	ADDQ $0x04, R10
 	MOVQ dst_base+0(FP), R9
+	ADDL R10, AX
 	CMPL DI, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeBlockAsmAvx
 	CMPL R10, $0x40
@@ -3218,7 +3219,6 @@ emit_copy_three_match_nolit_encodeBlockAsmAvx:
 
 match_nolit_emitcopy_end_encodeBlockAsmAvx:
 	MOVQ R9, dst_base+0(FP)
-	ADDL R10, AX
 	MOVL AX, 20(SP)
 	CMPL AX, 16(SP)
 	JGE  emit_remainder_encodeBlockAsmAvx
@@ -3990,6 +3990,7 @@ match_nolit_end_encodeBlockAsm14BAvx:
 	MOVL 24(SP), DI
 	ADDQ $0x04, R10
 	MOVQ dst_base+0(FP), R9
+	ADDL R10, AX
 	CMPL DI, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeBlockAsm14BAvx
 	CMPL R10, $0x40
@@ -4175,7 +4176,6 @@ emit_copy_three_match_nolit_encodeBlockAsm14BAvx:
 
 match_nolit_emitcopy_end_encodeBlockAsm14BAvx:
 	MOVQ R9, dst_base+0(FP)
-	ADDL R10, AX
 	MOVL AX, 20(SP)
 	CMPL AX, 16(SP)
 	JGE  emit_remainder_encodeBlockAsm14BAvx
@@ -4947,6 +4947,7 @@ match_nolit_end_encodeBlockAsm12BAvx:
 	MOVL 24(SP), DI
 	ADDQ $0x04, R10
 	MOVQ dst_base+0(FP), R9
+	ADDL R10, AX
 	CMPL DI, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeBlockAsm12BAvx
 	CMPL R10, $0x40
@@ -5132,7 +5133,6 @@ emit_copy_three_match_nolit_encodeBlockAsm12BAvx:
 
 match_nolit_emitcopy_end_encodeBlockAsm12BAvx:
 	MOVQ R9, dst_base+0(FP)
-	ADDL R10, AX
 	MOVL AX, 20(SP)
 	CMPL AX, 16(SP)
 	JGE  emit_remainder_encodeBlockAsm12BAvx
