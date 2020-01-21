@@ -49,32 +49,32 @@ func debugval32(v operand.Op) {
 
 var assertCounter int
 
+// insert extra checks here and there.
+const debug = true
+
+// assert will insert code if debug is enabled.
+// The code should jump to 'ok' is assertion is success.
+func assert(fn func(ok LabelRef)) {
+	if debug {
+		caller := [100]uintptr{0}
+		runtime.Callers(2, caller[:])
+		frame, _ := runtime.CallersFrames(caller[:]).Next()
+
+		ok := fmt.Sprintf("assert_check_%d_ok_srcline_%d", assertCounter, frame.Line)
+		fn(LabelRef(ok))
+		// Emit several since delve is imprecise.
+		INT(Imm(3))
+		INT(Imm(3))
+		Label(ok)
+		assertCounter++
+	}
+}
+
 func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 	TEXT(name, 0, "func(dst, src []byte) int")
 	Doc(name+" encodes a non-empty src to a guaranteed-large-enough dst.",
 		"It assumes that the varint-encoded length of the decompressed bytes has already been written.", "")
 	Pragma("noescape")
-
-	// insert extra checks here and there.
-	const debug = true
-
-	// assert will insert code if debug is enabled.
-	// The code should jump to 'ok' is assertion is success.
-	assert := func(fn func(ok LabelRef)) {
-		if debug {
-			caller := [100]uintptr{0}
-			runtime.Callers(2, caller[:])
-			frame, _ := runtime.CallersFrames(caller[:]).Next()
-
-			ok := fmt.Sprintf("assert_check_%d_ok_srcline_%d", assertCounter, frame.Line)
-			fn(LabelRef(ok))
-			// Emit several since delve is imprecise.
-			INT(Imm(3))
-			INT(Imm(3))
-			Label(ok)
-			assertCounter++
-		}
-	}
 
 	var tableSize = 4 * (1 << tableBits)
 	// Memzero needs at least 128 bytes.
@@ -262,7 +262,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 		}
 
 		// En/disable repeat matching.
-		if true {
+		if false {
 			// rep = s - repeat
 			rep := GP32()
 			if true {
@@ -500,8 +500,23 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 	{
 		base := GP64()
 		MOVL(candidate, base.As32())
+		dst := GP64()
+		if debug {
+			MOVQ(dstBaseQ, dst)
+		}
 		emitLiterals(nextEmitL, base, src, dstBaseQ, "match_emit_"+name, avx)
-		NOP()
+		assert(func(ok LabelRef) {
+			wantAtLast := GP64()
+			MOVL(base.As32(), wantAtLast.As32())
+			SUBL(nextEmitL, wantAtLast.As32())
+			// dstNew = dst - dstBefore
+			dstNew := GP64()
+			MOVQ(dstBaseQ, dstNew)
+			SUBQ(dst, dstNew)
+			// if dst >= wantAtLeast: ok
+			CMPQ(dst.As64(), wantAtLast)
+			JGE(ok)
+		})
 	}
 
 	Label("match_nolit_loop_" + name)
@@ -664,6 +679,17 @@ func emitLiterals(nextEmitL Mem, base reg.GPVirtual, src reg.GPVirtual, dstBase 
 	MOVQ(dstBase, dstBaseTmp)
 	emitLiteral(name, litLen, nil, dstBaseTmp, litBase, LabelRef("emit_literal_done_"+name), avx, true)
 	Label("emit_literal_done_" + name)
+
+	// Emitted length must be > litlen.
+	// We have already checked for len(0) above.
+	assert(func(ok LabelRef) {
+		tmp := GP64()
+		MOVQ(dstBaseTmp, tmp)
+		SUBQ(dstBase, tmp) // tmp = dstBaseTmp - dstBase
+		// if tmp > litLen: ok
+		CMPQ(tmp, litLen.As64())
+		JG(ok)
+	})
 	// Store updated dstBase
 	MOVQ(dstBaseTmp, dstBase)
 	Label("emit_literal_skip_" + name)
@@ -817,11 +843,14 @@ func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, en
 		}
 		length := GP64()
 		MOVL(litLen.As32(), length.As32())
-		genMemMove2("emit_lit_memmove_"+name, dstBase, litBase, length, end, avx)
+		genMemMove2("emit_lit_memmove_"+name, dstBase, litBase, length, LabelRef("memmove_end_copy_"+name), avx)
+		Label("memmove_end_copy_" + name)
 		if updateDst {
 			MOVQ(dstEnd, dstBase)
 		}
+		JMP(end)
 	} else {
+		// genMemMove always updates dstBase
 		genMemMove("emit_lit_memmove_"+name, dstBase, litBase, litLen, end)
 	}
 	return
@@ -1137,12 +1166,12 @@ func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end La
 // Fairly simplistic for now, can ofc. be extended.
 // Uses one GP register and 8 SSE registers.
 func genMemMove(name string, to, from, n reg.GPVirtual, end LabelRef) {
-	tmp := GP64()
-	MOVQ(n, tmp)
+	tmp := GP32()
+	MOVL(n.As32(), tmp)
 	// tmp = n/128
-	SHRQ(U8(7), tmp)
+	SHRL(U8(7), tmp)
 
-	TESTQ(tmp, tmp)
+	TESTL(tmp, tmp)
 	JZ(LabelRef("done_128_" + name))
 	Label("loop_128_" + name)
 	var xmmregs [8]reg.VecVirtual
@@ -1161,39 +1190,39 @@ func genMemMove(name string, to, from, n reg.GPVirtual, end LabelRef) {
 	for i := 0; i < 8; i++ {
 		MOVOU(xmmregs[i], Mem{Base: to}.Offset(i*16))
 	}
-	LEAQ(Mem{Base: n, Disp: -128}, n)
+	LEAL(Mem{Base: n, Disp: -128}, n.As32())
 	ADDQ(U8(8*16), from)
 	ADDQ(U8(8*16), to)
-	DECQ(tmp)
+	DECL(tmp)
 	JNZ(LabelRef("loop_128_" + name))
 
 	Label("done_128_" + name)
-	MOVQ(n, tmp)
+	MOVL(n.As32(), tmp)
 	// tmp = n/16
-	SHRQ(U8(4), tmp)
-	TESTQ(tmp, tmp)
+	SHRL(U8(4), tmp)
+	TESTL(tmp, tmp)
 	JZ(LabelRef("done_16_" + name))
 
 	Label("loop_16_" + name)
 	xmm := XMM()
 	MOVOU(Mem{Base: from}, xmm)
 	MOVOU(xmm, Mem{Base: to})
-	LEAQ(Mem{Base: n, Disp: -16}, n)
+	LEAL(Mem{Base: n, Disp: -16}, n.As32())
 	ADDQ(U8(16), from)
 	ADDQ(U8(16), to)
-	DECQ(tmp)
+	DECL(tmp)
 	JNZ(LabelRef("loop_16_" + name))
 	Label("done_16_" + name)
 
 	// TODO: Use REP; MOVSB somehow.
-	TESTQ(n, n)
+	TESTL(n.As32(), n.As32())
 	JZ(end)
 	Label("loop_1_" + name)
 	MOVB(Mem{Base: from}, tmp.As8())
 	MOVB(tmp.As8(), Mem{Base: to})
 	INCQ(from)
 	INCQ(to)
-	DECQ(n)
+	DECL(n.As32())
 	JNZ(LabelRef("loop_1_" + name))
 }
 
