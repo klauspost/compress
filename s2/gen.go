@@ -5,9 +5,6 @@
 package main
 
 import (
-	"fmt"
-	"log"
-
 	. "github.com/mmcloughlin/avo/build"
 	"github.com/mmcloughlin/avo/buildtags"
 	"github.com/mmcloughlin/avo/operand"
@@ -49,12 +46,6 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 	// Extra bytes are added to keep less used values.
 	var (
 		tableSize = 1 << tableBits
-		// Keep base stack multiple of 16.
-		baseStack = 0
-		// try to keep extraStack + baseStack multiple of 16
-		// for best chance of table alignment.
-		extraStack = 32
-		allocStack = baseStack + extraStack + tableSize
 	)
 
 	// Memzero needs at least 128 bytes.
@@ -68,43 +59,32 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 	}
 	lenSrcQ := lenSrcBasic.Addr
 
-	stack := AllocLocal(allocStack)
-	table := stack.Offset(allocStack - tableSize)
+	//	stack := AllocLocal(allocStack)
+	table := AllocLocal(tableSize)
 
-	tmpStack := baseStack
 	// Bail if we can't compress to at least this.
-	dstLimitPtrQ := stack.Offset(tmpStack)
-	tmpStack += 8
+	dstLimitPtrQ := AllocLocal(8)
+
 	// dstStartPtrQ contains the original dst pointer for returning the length
-	dstStartPtrQ := stack.Offset(tmpStack)
-	tmpStack += 8
+	dstStartPtrQ := AllocLocal(8)
+
 	// sLimitL is when to stop looking for offset/length copies.
-	sLimitL := stack.Offset(tmpStack)
-	tmpStack += 4
+	sLimitL := AllocLocal(4)
+
 	// nextEmitL keeps track of the point we have emitted to.
-	nextEmitL := stack.Offset(tmpStack)
-	tmpStack += 4
+	nextEmitL := AllocLocal(4)
+
 	// Repeat stores the last match offset.
-	repeatL := stack.Offset(tmpStack)
-	tmpStack += 4
+	repeatL := AllocLocal(4)
+
 	// nextSTempL keeps nextS while other functions are being called.
-	nextSTempL := stack.Offset(tmpStack)
-	tmpStack += 4
-	// Ensure we have the correct extra stack.
-	// Could be automatic, but whatever.
-	if tmpStack-baseStack != extraStack {
-		log.Fatal("adjust extraStack to ", tmpStack-baseStack)
-	}
+	nextSTempL := AllocLocal(4)
 
 	dstBaseBasic, err := Param("dst").Base().Resolve()
 	if err != nil {
 		panic(err)
 	}
 	dstBase := dstBaseBasic.Addr
-
-	if tmpStack > extraStack+baseStack {
-		panic(fmt.Sprintf("tmp stack exceeded", tmpStack))
-	}
 
 	// Zero table
 	{
