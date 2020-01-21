@@ -262,7 +262,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 		}
 
 		// En/disable repeat matching.
-		if false {
+		if true {
 			// rep = s - repeat
 			rep := GP32()
 			if true {
@@ -272,7 +272,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 				SUBL(repeatL, rep) // rep = s - repeat
 				MOVL(Mem{Base: src, Index: rep, Disp: checkRep}, right.As32())
 				MOVQ(cv, left)
-				SHLQ(U8(checkRep*8), left)
+				SHRQ(U8(checkRep*8), left)
 				CMPL(left.As32(), right.As32())
 
 				JNE(LabelRef("no_repeat_found_" + name))
@@ -280,17 +280,18 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 			// base = s + 1
 			base := GP32()
 			LEAL(Mem{Base: s, Disp: 1}, base)
+			nextEmit := GP32()
+			MOVL(nextEmitL, nextEmit)
+
 			// Extend back
 			if true {
-				ne := GP32()
-				MOVL(nextEmitL, ne)
 				TESTL(rep, rep)
 				JZ(LabelRef("repeat_extend_back_end_" + name))
 
 				// I is tested when decremented, so we loop back here.
 				Label("repeat_extend_back_loop_" + name)
 				// if base <= nextemit {exit}
-				CMPL(base.As32(), ne)
+				CMPL(base.As32(), nextEmit)
 				JLE(LabelRef("repeat_extend_back_end_" + name))
 				// if src[i-1] == src[base-1]
 				tmp, tmp2 := GP64(), GP64()
@@ -317,7 +318,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 
 				// candidate := s - repeat + 4 + checkRep
 				MOVL(s, candidate)
-				SUBL(repeatL, candidate) // candidate = s - repeatL
+				SUBL(repeatL, candidate) // candidate = s - repeat
 				{
 					// srcLeft = sLimitL - s
 					srcLeft := GP32()
@@ -342,7 +343,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 				// length = s-base
 				length := GP32()
 				MOVL(s, length)
-				SUBL(base.As32(), length)
+				SUBL(base.As32(), length) // length = s - base
 
 				offsetVal := GP32()
 				MOVL(repeatL, offsetVal)
@@ -350,10 +351,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 				MOVQ(dstBaseQ, dst)
 
 				// if nextEmit > 0
-				tmp := GP32()
-				MOVL(nextEmitL, tmp)
-				TESTL(tmp, tmp)
-
+				TESTL(nextEmit, nextEmit)
 				JZ(LabelRef("repeat_as_copy_" + name))
 
 				emitRepeat("match_repeat_"+name, length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name))
