@@ -12,17 +12,23 @@ package s2
 //go:noescape
 func encodeBlockAsm(dst []byte, src []byte) int
 
-// encodeBlockAsm14B encodes a non-empty src to a guaranteed-large-enough dst.
-// It assumes that the varint-encoded length of the decompressed bytes has already been written.
-//
-//go:noescape
-func encodeBlockAsm14B(dst []byte, src []byte) int
-
 // encodeBlockAsm12B encodes a non-empty src to a guaranteed-large-enough dst.
 // It assumes that the varint-encoded length of the decompressed bytes has already been written.
 //
 //go:noescape
 func encodeBlockAsm12B(dst []byte, src []byte) int
+
+// encodeBlockAsm10B encodes a non-empty src to a guaranteed-large-enough dst.
+// It assumes that the varint-encoded length of the decompressed bytes has already been written.
+//
+//go:noescape
+func encodeBlockAsm10B(dst []byte, src []byte) int
+
+// encodeBlockAsm8B encodes a non-empty src to a guaranteed-large-enough dst.
+// It assumes that the varint-encoded length of the decompressed bytes has already been written.
+//
+//go:noescape
+func encodeBlockAsm8B(dst []byte, src []byte) int
 
 // encodeBlockAsmAvx encodes a non-empty src to a guaranteed-large-enough dst.
 // It assumes that the varint-encoded length of the decompressed bytes has already been written.
@@ -30,17 +36,23 @@ func encodeBlockAsm12B(dst []byte, src []byte) int
 //go:noescape
 func encodeBlockAsmAvx(dst []byte, src []byte) int
 
-// encodeBlockAsm14BAvx encodes a non-empty src to a guaranteed-large-enough dst.
-// It assumes that the varint-encoded length of the decompressed bytes has already been written.
-//
-//go:noescape
-func encodeBlockAsm14BAvx(dst []byte, src []byte) int
-
 // encodeBlockAsm12BAvx encodes a non-empty src to a guaranteed-large-enough dst.
 // It assumes that the varint-encoded length of the decompressed bytes has already been written.
 //
 //go:noescape
 func encodeBlockAsm12BAvx(dst []byte, src []byte) int
+
+// encodeBlockAsm10BAvx encodes a non-empty src to a guaranteed-large-enough dst.
+// It assumes that the varint-encoded length of the decompressed bytes has already been written.
+//
+//go:noescape
+func encodeBlockAsm10BAvx(dst []byte, src []byte) int
+
+// encodeBlockAsm8BAvx encodes a non-empty src to a guaranteed-large-enough dst.
+// It assumes that the varint-encoded length of the decompressed bytes has already been written.
+//
+//go:noescape
+func encodeBlockAsm8BAvx(dst []byte, src []byte) int
 
 // emitLiteral writes a literal chunk and returns the number of bytes written.
 //
