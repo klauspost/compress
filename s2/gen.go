@@ -289,8 +289,9 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 
 				// I is tested when decremented, so we loop back here.
 				Label("repeat_extend_back_loop_" + name)
+				// if base <= nextemit {exit}
 				CMPL(base.As32(), ne)
-				JG(LabelRef("repeat_extend_back_end_" + name))
+				JLE(LabelRef("repeat_extend_back_end_" + name))
 				// if src[i-1] == src[base-1]
 				tmp, tmp2 := GP64(), GP64()
 				MOVB(Mem{Base: src, Index: rep, Scale: 1, Disp: -1}, tmp.As8())
@@ -324,9 +325,12 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 					SUBL(s, srcLeft)
 
 					// Forward address
-					forwardStart := Mem{Base: src, Index: s, Scale: 1}
+					forwardStart := GP64()
+					LEAQ(Mem{Base: src, Index: s, Scale: 1}, forwardStart)
 					// End address
-					backStart := Mem{Base: src, Index: candidate, Scale: 1}
+					backStart := GP64()
+					LEAQ(Mem{Base: src, Index: candidate, Scale: 1}, backStart)
+
 					length := matchLen("repeat_extend", forwardStart, backStart, srcLeft, LabelRef("repeat_extend_forward_end_"+name))
 					Label("repeat_extend_forward_end_" + name)
 					// s+= length
@@ -458,8 +462,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 	Label("candidate_match_" + name)
 	// We have a match at 's' with src offset in "candidate" that matches at least 4 bytes.
 	// Extend backwards
-	// FIXME: Appears broken
-	if false {
+	if true {
 		ne := GP32()
 		MOVL(nextEmitL, ne)
 		TESTL(candidate, candidate)
@@ -467,8 +470,9 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 
 		// candidate is tested when decremented, so we loop back here.
 		Label("match_extend_back_loop_" + name)
+		// if s <= nextEmit {exit}
 		CMPL(s, ne)
-		JG(LabelRef("match_extend_back_end_" + name))
+		JLE(LabelRef("match_extend_back_end_" + name))
 		// if src[candidate-1] == src[s-1]
 		tmp, tmp2 := GP64(), GP64()
 		MOVB(Mem{Base: src, Index: candidate, Scale: 1, Disp: -1}, tmp.As8())
@@ -541,14 +545,21 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 		ADDL(U8(4), candidate)
 		// Extend the 4-byte match as long as possible and emit copy.
 		{
+			assert(func(ok LabelRef) {
+				// s must be > candidate cannot be equal.
+				CMPL(s, candidate)
+				JG(ok)
+			})
 			// srcLeft = sLimitL - s
-			// TODO: See if len(src) can be used...
+			// TODO: See if len(src) can be used instead of sLimit...
 			srcLeft := GP32()
 			MOVL(sLimitL, srcLeft)
 			SUBL(s, srcLeft)
+			a, b := GP64(), GP64()
+			LEAQ(Mem{Base: src, Index: s, Scale: 1}, a)
+			LEAQ(Mem{Base: src, Index: candidate, Scale: 1}, b)
 			length := matchLen("match_nolit_"+name,
-				Mem{Base: src, Index: s, Scale: 1},
-				Mem{Base: src, Index: candidate, Scale: 1},
+				a, b,
 				srcLeft,
 				LabelRef("match_nolit_end_"+name),
 			)
@@ -557,6 +568,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 			MOVL(repeatL, offset.As32())
 			// s += length (length is destroyed, use it now)
 			ADDL(length.As32(), s)
+
 			// length += 4
 			ADDL(U8(4), length)
 			dst := GP64()
@@ -1698,7 +1710,7 @@ func genMatchLen() {
 	Load(Param("a").Base(), aBase)
 	Load(Param("b").Base(), bBase)
 	Load(Param("a").Len(), length)
-	l := matchLen("standalone", Mem{Base: aBase}, Mem{Base: bBase}, length, LabelRef("gen_match_len_end"))
+	l := matchLen("standalone", aBase, bBase, length, LabelRef("gen_match_len_end"))
 	Label("gen_match_len_end")
 	Store(l.As64(), ReturnIndex(0))
 	RET()
@@ -1708,7 +1720,7 @@ func genMatchLen() {
 // len is the maximum number of bytes to match.
 // Will jump to end when done and returns the length.
 // Uses 2 GP registers.
-func matchLen(name string, a, b Mem, len reg.GPVirtual, end LabelRef) reg.GPVirtual {
+func matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) reg.GPVirtual {
 	tmp, matched := GP64(), GP32()
 	XORL(matched, matched)
 
@@ -1716,8 +1728,8 @@ func matchLen(name string, a, b Mem, len reg.GPVirtual, end LabelRef) reg.GPVirt
 	JL(LabelRef("matchlen_single_" + name))
 
 	Label("matchlen_loopback_" + name)
-	MOVQ(Mem{Base: a.Base, Index: matched, Scale: 1}, tmp)
-	XORQ(Mem{Base: b.Base, Index: matched, Scale: 1}, tmp)
+	MOVQ(Mem{Base: a, Index: matched, Scale: 1}, tmp)
+	XORQ(Mem{Base: b, Index: matched, Scale: 1}, tmp)
 	TESTQ(tmp, tmp)
 	JZ(LabelRef("matchlen_loop_" + name))
 	// Not all match.
@@ -1738,8 +1750,8 @@ func matchLen(name string, a, b Mem, len reg.GPVirtual, end LabelRef) reg.GPVirt
 	TESTL(len.As32(), len.As32())
 	JZ(end)
 	Label("matchlen_single_loopback_" + name)
-	MOVB(Mem{Base: a.Base, Index: matched, Scale: 1}, tmp.As8())
-	CMPB(Mem{Base: b.Base, Index: matched, Scale: 1}, tmp.As8())
+	MOVB(Mem{Base: a, Index: matched, Scale: 1}, tmp.As8())
+	CMPB(Mem{Base: b, Index: matched, Scale: 1}, tmp.As8())
 	JNE(end)
 	LEAL(Mem{Base: matched, Disp: 1}, matched)
 	DECL(len.As32())

@@ -90,18 +90,28 @@ func cmp(a, b []byte) error {
 }
 
 func roundtrip(b, ebuf, dbuf []byte) error {
-	asmEnc := Encode(ebuf, b)
-	goEnc := EncodeGo(make([]byte, len(ebuf)), b)
+	bOrg := make([]byte, len(b))
+	copy(bOrg, b)
+	asmEnc := Encode(nil, b)
+	if err := cmp(bOrg, b); err != nil {
+		return fmt.Errorf("src was changed: %v", err)
+	}
+	goEnc := EncodeGo(nil, b)
+	if err := cmp(bOrg, b); err != nil {
+		return fmt.Errorf("src was changed: %v", err)
+	}
+
 	fmt.Println("asm:", len(asmEnc), "go:", len(goEnc))
-	dGo, err := Decode(dbuf, goEnc)
+	dGo, err := Decode(nil, goEnc)
 	if err != nil {
 		return fmt.Errorf("decoding error: %v", err)
 	}
+
 	if err := cmp(dGo, b); err != nil {
 		return fmt.Errorf("roundtrip mismatch: %v", err)
 	}
 	fmt.Println("decode asm...")
-	d, err := Decode(dbuf, asmEnc)
+	d, err := Decode(nil, asmEnc)
 	if err != nil {
 		return fmt.Errorf("decoding error: %v", err)
 	}
