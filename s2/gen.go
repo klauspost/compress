@@ -397,9 +397,10 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 			})
 
 			CMPL(Mem{Base: src, Index: candidate, Scale: 1}, cv.As32())
+			JEQ(LabelRef("candidate_match_" + name))
+
 			// cv >>= 8
 			SHRQ(U8(8), cv)
-			JEQ(LabelRef("candidate_match_" + name))
 
 			// candidate = int(table[hash2]) - load early.
 			MOVL(table.Idx(hash2, 4), candidate)
@@ -417,33 +418,36 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 				JG(ok)
 			})
 
+			tmp := GP32()
+			LEAL(Mem{Base: s, Disp: 2}, tmp)
+
 			//if uint32(cv>>8) == load32(src, candidate2)
 			CMPL(Mem{Base: src, Index: candidate2, Scale: 1}, cv.As32())
-
 			JEQ(LabelRef("candidate2_match_" + name))
 
 			// table[hash2] = uint32(s + 2)
-			tmp := GP32()
-			LEAL(Mem{Base: s, Disp: 2}, tmp)
 			MOVL(tmp, table.Idx(hash2, 4))
 
-			// if uint32(cv>>16) == load32(src, candidate)
+			// cv >>= 8 (>> 16 total)
 			SHRQ(U8(8), cv)
+
+			// if uint32(cv>>16) == load32(src, candidate)
 			CMPL(Mem{Base: src, Index: candidate, Scale: 1}, cv.As32())
 			JEQ(LabelRef("candidate3_match_" + name))
+
+			// No match found, next loop
 			// s = nextS
 			MOVL(nextSTempL, s)
 			JMP(LabelRef("search_loop_" + name))
 
-			// Matches candidate3
+			// Matches candidate at s + 2 (3rd check)
 			Label("candidate3_match_" + name)
 			ADDL(U8(2), s)
 			JMP(LabelRef("candidate_match_" + name))
 
+			// Match at s + 1 (we calculated the hash, lets store it)
 			Label("candidate2_match_" + name)
 			// table[hash2] = uint32(s + 2)
-			tmp = GP32()
-			LEAL(Mem{Base: s, Disp: 2}, tmp)
 			MOVL(tmp, table.Idx(hash2, 4))
 			// s++
 			INCL(s)
@@ -454,7 +458,8 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 	Label("candidate_match_" + name)
 	// We have a match at 's' with src offset in "candidate" that matches at least 4 bytes.
 	// Extend backwards
-	{
+	// FIXME: Appears broken
+	if false {
 		ne := GP32()
 		MOVL(nextEmitL, ne)
 		TESTL(candidate, candidate)
@@ -498,8 +503,8 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 	}
 	Label("match_dst_size_check_" + name)
 	{
-		base := GP64()
-		MOVL(candidate, base.As32())
+		base := GP32()
+		MOVL(s, base.As32())
 		dst := GP64()
 		if debug {
 			MOVQ(dstBaseQ, dst)
@@ -537,6 +542,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 		// Extend the 4-byte match as long as possible and emit copy.
 		{
 			// srcLeft = sLimitL - s
+			// TODO: See if len(src) can be used...
 			srcLeft := GP32()
 			MOVL(sLimitL, srcLeft)
 			SUBL(s, srcLeft)
@@ -549,11 +555,12 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 			Label("match_nolit_end_" + name)
 			offset := GP64()
 			MOVL(repeatL, offset.As32())
+			// s += length (length is destroyed, use it now)
+			ADDL(length.As32(), s)
+			// length += 4
 			ADDL(U8(4), length)
 			dst := GP64()
 			MOVQ(dstBaseQ, dst)
-			// s += length (lenght is destroyed, use it now)
-			ADDL(length.As32(), s)
 			emitCopy("match_nolit_"+name, length, offset, nil, dst, LabelRef("match_nolit_emitcopy_end_"+name))
 			Label("match_nolit_emitcopy_end_" + name)
 			MOVQ(dst, dstBaseQ)
@@ -642,6 +649,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 	length := GP64()
 	MOVQ(dstBaseQ, length)
 	SUBQ(dstStartPtrQ, length)
+
 	// Assert size is < len(src)
 	assert(func(ok LabelRef) {
 		// if len(src) >= length: ok
@@ -838,20 +846,31 @@ func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, en
 	// copy(dst[i:], lit)
 	if true {
 		dstEnd := GP64()
+		copyEnd := end
 		if updateDst {
+			copyEnd = LabelRef("memmove_end_copy_" + name)
 			LEAQ(Mem{Base: dstBase, Index: litLen, Scale: 1}, dstEnd)
 		}
 		length := GP64()
 		MOVL(litLen.As32(), length.As32())
-		genMemMove2("emit_lit_memmove_"+name, dstBase, litBase, length, LabelRef("memmove_end_copy_"+name), avx)
-		Label("memmove_end_copy_" + name)
+
+		// FIXME: avx updates litBase
+		genMemMove2("emit_lit_memmove_"+name, dstBase, litBase, length, copyEnd, avx)
+
 		if updateDst {
+			Label("memmove_end_copy_" + name)
 			MOVQ(dstEnd, dstBase)
+			JMP(end)
 		}
-		JMP(end)
 	} else {
 		// genMemMove always updates dstBase
+		src := GP64()
+		MOVQ(litBase, src)
 		genMemMove("emit_lit_memmove_"+name, dstBase, litBase, litLen, end)
+	}
+	// Should be unreachable
+	if debug {
+		INT(Imm(3))
 	}
 	return
 }
@@ -1224,6 +1243,7 @@ func genMemMove(name string, to, from, n reg.GPVirtual, end LabelRef) {
 	INCQ(to)
 	DECL(n.As32())
 	JNZ(LabelRef("loop_1_" + name))
+	JMP(end)
 }
 
 // func memmove(to, from unsafe.Pointer, n uintptr)

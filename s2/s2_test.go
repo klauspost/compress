@@ -91,8 +91,16 @@ func cmp(a, b []byte) error {
 
 func roundtrip(b, ebuf, dbuf []byte) error {
 	asmEnc := Encode(ebuf, b)
-	goEnc := EncodeGo(ebuf, b)
+	goEnc := EncodeGo(make([]byte, len(ebuf)), b)
 	fmt.Println("asm:", len(asmEnc), "go:", len(goEnc))
+	dGo, err := Decode(dbuf, goEnc)
+	if err != nil {
+		return fmt.Errorf("decoding error: %v", err)
+	}
+	if err := cmp(dGo, b); err != nil {
+		return fmt.Errorf("roundtrip mismatch: %v", err)
+	}
+	fmt.Println("decode asm...")
 	d, err := Decode(dbuf, asmEnc)
 	if err != nil {
 		return fmt.Errorf("decoding error: %v", err)
