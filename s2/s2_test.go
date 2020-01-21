@@ -90,7 +90,10 @@ func cmp(a, b []byte) error {
 }
 
 func roundtrip(b, ebuf, dbuf []byte) error {
-	d, err := Decode(dbuf, Encode(ebuf, b))
+	asmEnc := Encode(ebuf, b)
+	goEnc := EncodeGo(ebuf, b)
+	fmt.Println("asm:", len(asmEnc), "go:", len(goEnc))
+	d, err := Decode(dbuf, asmEnc)
 	if err != nil {
 		return fmt.Errorf("decoding error: %v", err)
 	}

@@ -3,8 +3,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build !amd64 appengine !gc noasm
-
 package s2
 
 // decode writes the decoding of src to dst. It assumes that the varint-encoded
@@ -12,7 +10,7 @@ package s2
 // equals that length.
 //
 // It returns 0 on success or a decodeErrCodeXxx error code on failure.
-func s2Decode(dst, src []byte) int {
+func s2DecodeGo(dst, src []byte) int {
 	var d, s, length int
 	offset := 0
 	for s < len(src) {
