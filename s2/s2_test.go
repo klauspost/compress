@@ -96,7 +96,7 @@ func roundtrip(b, ebuf, dbuf []byte) error {
 	if err := cmp(bOrg, b); err != nil {
 		return fmt.Errorf("src was changed: %v", err)
 	}
-	goEnc := EncodeGo(nil, b)
+	goEnc := encodeGo(nil, b)
 	if err := cmp(bOrg, b); err != nil {
 		return fmt.Errorf("src was changed: %v", err)
 	}

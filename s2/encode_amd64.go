@@ -8,7 +8,7 @@ import (
 	"encoding/binary"
 )
 
-func EncodeGo(dst, src []byte) []byte {
+func encodeGo(dst, src []byte) []byte {
 	if n := MaxEncodedLen(len(src)); n < 0 {
 		panic(ErrTooLarge)
 	} else if len(dst) < n {
