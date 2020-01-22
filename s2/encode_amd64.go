@@ -64,7 +64,7 @@ func EncodeGo(dst, src []byte) []byte {
 		d += emitLiteral(dst[d:], src)
 		return dst[:d]
 	}
-	n := encodeBlock(dst[d:], src)
+	n := encodeBlockGo(dst[d:], src)
 	if n > 0 {
 		d += n
 		return dst[:d]

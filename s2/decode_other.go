@@ -59,7 +59,7 @@ func s2DecodeGo(dst, src []byte) int {
 				return decodeErrCodeCorrupt
 			}
 			if debug {
-				fmt.Println("literals, length:", length)
+				fmt.Println("literals, length:", length, "d-after:", d+length)
 			}
 
 			copy(dst[d:], src[s:s+length])
@@ -126,7 +126,7 @@ func s2DecodeGo(dst, src []byte) int {
 		}
 
 		if debug {
-			fmt.Println("copy, length:", length, "offset:", offset)
+			fmt.Println("copy, length:", length, "offset:", offset, "d-after:", d+length)
 		}
 
 		// Copy from an earlier sub-slice of dst to a later sub-slice.

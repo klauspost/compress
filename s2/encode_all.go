@@ -38,6 +38,20 @@ func hash6(u uint64, h uint8) uint32 {
 //	len(dst) >= MaxEncodedLen(len(src)) &&
 // 	minNonLiteralBlockSize <= len(src) && len(src) <= maxBlockSize
 func encodeBlock(dst, src []byte) (d int) {
+	if true {
+		return encodeBlockAsm(dst, src)
+	}
+	return encodeBlockGo(dst, src)
+}
+
+// encodeBlockGo encodes a non-empty src to a guaranteed-large-enough dst. It
+// assumes that the varint-encoded length of the decompressed bytes has already
+// been written.
+//
+// It also assumes that:
+//	len(dst) >= MaxEncodedLen(len(src)) &&
+// 	minNonLiteralBlockSize <= len(src) && len(src) <= maxBlockSize
+func encodeBlockGo(dst, src []byte) (d int) {
 	// Initialize the hash table.
 	const (
 		tableBits    = 14
