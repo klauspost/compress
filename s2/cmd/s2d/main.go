@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/s2"
+	"github.com/klauspost/compress/s2/cmd/internal/readahead"
 )
 
 var (
@@ -23,6 +24,9 @@ var (
 	quiet  = flag.Bool("q", false, "Don't write any output to terminal, except errors")
 	bench  = flag.Int("bench", 0, "Run benchmark n times. No output will be written")
 	help   = flag.Bool("help", false, "Display help")
+
+	version = "(dev)"
+	date    = "(unknown)"
 )
 
 func main() {
@@ -32,6 +36,7 @@ func main() {
 	// No args, use stdin/stdout
 	args := flag.Args()
 	if len(args) == 0 || *help {
+		_, _ = fmt.Fprintf(os.Stderr, "s2 decompress v%v, built at %v.\n\n", version, date)
 		_, _ = fmt.Fprintln(os.Stderr, `Usage: s2d [options] file1 file2
 
 Decompresses all files supplied as input. Input files must end with '.s2' or '.snappy'.
@@ -78,6 +83,9 @@ Options:`)
 			fmt.Println("Skipping", filename)
 			continue
 		}
+		if *bench > 0 {
+			dstFilename = "(discarded)"
+		}
 
 		func() {
 			var closeOnce sync.Once
@@ -89,7 +97,9 @@ Options:`)
 			exitErr(err)
 			defer closeOnce.Do(func() { file.Close() })
 			rc := rCounter{in: file}
-			src := bufio.NewReaderSize(&rc, 4<<20)
+			src, err := readahead.NewReaderSize(&rc, 2, 4<<20)
+			exitErr(err)
+			defer src.Close()
 			finfo, err := file.Stat()
 			exitErr(err)
 			mode := finfo.Mode() // use the same mode for the output file

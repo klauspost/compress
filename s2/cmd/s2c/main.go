@@ -17,6 +17,7 @@ import (
 	"unicode"
 
 	"github.com/klauspost/compress/s2"
+	"github.com/klauspost/compress/s2/cmd/internal/readahead"
 )
 
 var (
@@ -30,6 +31,9 @@ var (
 	quiet     = flag.Bool("q", false, "Don't write any output to terminal, except errors")
 	bench     = flag.Int("bench", 0, "Run benchmark n times. No output will be written")
 	help      = flag.Bool("help", false, "Display help")
+
+	version = "(dev)"
+	date    = "(unknown)"
 )
 
 func main() {
@@ -41,6 +45,7 @@ func main() {
 
 	args := flag.Args()
 	if len(args) == 0 || *help {
+		_, _ = fmt.Fprintf(os.Stderr, "s2 compress v%v, built at %v.\n\n", version, date)
 		_, _ = fmt.Fprintln(os.Stderr, `Usage: s2c [options] file1 file2
 
 Compresses all files supplied as input separately.
@@ -88,6 +93,9 @@ Options:`)
 		func() {
 			var closeOnce sync.Once
 			dstFilename := fmt.Sprintf("%s%s", filename, ".s2")
+			if *bench > 0 {
+				dstFilename = "(discarded)"
+			}
 			if !*quiet {
 				fmt.Println("Compressing", filename, "->", dstFilename)
 			}
@@ -95,7 +103,9 @@ Options:`)
 			file, err := os.Open(filename)
 			exitErr(err)
 			defer closeOnce.Do(func() { file.Close() })
-			src := bufio.NewReaderSize(file, int(sz)*2)
+			src, err := readahead.NewReaderSize(file, *cpu, int(sz))
+			exitErr(err)
+			defer src.Close()
 			finfo, err := file.Stat()
 			exitErr(err)
 			var out io.Writer

@@ -1,6 +1,7 @@
 package flate
 
 import (
+	"bytes"
 	"io/ioutil"
 	"testing"
 )
@@ -27,8 +28,17 @@ func loadTestTokens(t testFatal) *tokens {
 func Test_tokens_EstimatedBits(t *testing.T) {
 	tok := loadTestTokens(t)
 	// The estimated size, update if method changes.
-	const expect = 199380
-	if n := tok.EstimatedBits(); n != expect {
+	const expect = 221057
+	n := tok.EstimatedBits()
+	var buf bytes.Buffer
+	wr := newHuffmanBitWriter(&buf)
+	wr.writeBlockDynamic(tok, true, nil, true)
+	if wr.err != nil {
+		t.Fatal(wr.err)
+	}
+	wr.flush()
+	t.Log("got:", n, "actual:", buf.Len()*8, "(header not part of estimate)")
+	if n != expect {
 		t.Error("want:", expect, "bits, got:", n)
 	}
 }

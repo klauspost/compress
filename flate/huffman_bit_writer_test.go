@@ -33,7 +33,9 @@ func TestBlockHuff(t *testing.T) {
 		if strings.HasSuffix(in, ".in") {
 			out = in[:len(in)-len(".in")] + ".golden"
 		}
-		testBlockHuff(t, in, out)
+		t.Run(in, func(t *testing.T) {
+			testBlockHuff(t, in, out)
+		})
 	}
 }
 
@@ -45,6 +47,7 @@ func testBlockHuff(t *testing.T, in, out string) {
 	}
 	var buf bytes.Buffer
 	bw := newHuffmanBitWriter(&buf)
+	bw.logNewTablePenalty = 8
 	bw.writeBlockHuff(false, all, false)
 	bw.flush()
 	got := buf.Bytes()
