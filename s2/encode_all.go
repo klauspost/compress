@@ -30,20 +30,6 @@ func hash6(u uint64, h uint8) uint32 {
 	return uint32(((u << (64 - 48)) * prime6bytes) >> ((64 - h) & 63))
 }
 
-// encodeBlock encodes a non-empty src to a guaranteed-large-enough dst. It
-// assumes that the varint-encoded length of the decompressed bytes has already
-// been written.
-//
-// It also assumes that:
-//	len(dst) >= MaxEncodedLen(len(src)) &&
-// 	minNonLiteralBlockSize <= len(src) && len(src) <= maxBlockSize
-func encodeBlock(dst, src []byte) (d int) {
-	if true {
-		return encodeBlockAsm(dst, src)
-	}
-	return encodeBlockGo(dst, src)
-}
-
 // encodeBlockGo encodes a non-empty src to a guaranteed-large-enough dst. It
 // assumes that the varint-encoded length of the decompressed bytes has already
 // been written.

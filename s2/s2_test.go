@@ -101,7 +101,7 @@ func roundtrip(b, ebuf, dbuf []byte) error {
 		return fmt.Errorf("src was changed: %v", err)
 	}
 
-	fmt.Println("asm:", len(asmEnc), "go:", len(goEnc))
+	//fmt.Println("asm:", len(asmEnc), "go:", len(goEnc))
 	dGo, err := Decode(nil, goEnc)
 	if err != nil {
 		return fmt.Errorf("decoding error: %v", err)
@@ -110,7 +110,8 @@ func roundtrip(b, ebuf, dbuf []byte) error {
 	if err := cmp(dGo, b); err != nil {
 		return fmt.Errorf("roundtrip mismatch: %v", err)
 	}
-	fmt.Println("decode asm...")
+
+	// fmt.Println("decode asm...")
 	d, err := Decode(nil, asmEnc)
 	if err != nil {
 		return fmt.Errorf("decoding error: %v", err)
@@ -1523,7 +1524,7 @@ func testFile(t *testing.T, i, repeat int) {
 	if err := downloadBenchmarkFiles(t, testFiles[i].filename); err != nil {
 		t.Skipf("failed to download testdata: %s", err)
 	}
-	repeat = 0
+
 	if testing.Short() {
 		repeat = 0
 	}

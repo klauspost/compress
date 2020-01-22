@@ -46,6 +46,17 @@ func Encode(dst, src []byte) []byte {
 	return dst[:d]
 }
 
+// encodeBlock encodes a non-empty src to a guaranteed-large-enough dst. It
+// assumes that the varint-encoded length of the decompressed bytes has already
+// been written.
+//
+// It also assumes that:
+//	len(dst) >= MaxEncodedLen(len(src)) &&
+// 	minNonLiteralBlockSize <= len(src) && len(src) <= maxBlockSize
+func encodeBlock(dst, src []byte) (d int) {
+	return encodeBlockGo(dst, src)
+}
+
 // emitLiteral writes a literal chunk and returns the number of bytes written.
 //
 // It assumes that:

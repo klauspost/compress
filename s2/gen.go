@@ -50,7 +50,7 @@ func debugval32(v operand.Op) {
 var assertCounter int
 
 // insert extra checks here and there.
-const debug = true
+const debug = false
 
 // assert will insert code if debug is enabled.
 // The code should jump to 'ok' is assertion is success.
@@ -143,9 +143,6 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 		ADDQ(U8(16*8), tablePtr)
 		DECQ(iReg)
 		JNZ(LabelRef("zero_loop_" + name))
-		assert(func(ok LabelRef) {
-			JMP(ok)
-		})
 	}
 
 	{
@@ -160,10 +157,18 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 		LEAQ(Mem{Base: tmp, Disp: -5}, tmp2)
 		// sLimitL := len(src) - inputMargin
 		LEAQ(Mem{Base: tmp, Disp: -inputMargin}, tmp3)
+		MOVL(tmp3.As32(), sLimitL)
+
 		// dstLimit := len(src) - len(src)>>5 - 5
 		SHRQ(U8(5), tmp)
 		SUBL(tmp.As32(), tmp2.As32()) // tmp2 = tmp2 - tmp
-		MOVL(tmp3.As32(), sLimitL)
+
+		assert(func(ok LabelRef) {
+			// if len(src) > len(src) - len(src)>>5 - 5: ok
+			CMPQ(lenSrcQ, tmp2)
+			JGE(ok)
+		})
+
 		LEAQ(Mem{Base: dstAddr, Index: tmp2, Scale: 1}, tmp2)
 		MOVQ(tmp2, dstLimitPtrQ)
 
@@ -406,6 +411,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 			CMPL(Mem{Base: src, Index: candidate, Scale: 1}, cv.As32())
 			JEQ(LabelRef("candidate_match_" + name))
 
+			tmp := GP32()
 			// cv >>= 8
 			SHRQ(U8(8), cv)
 
@@ -425,7 +431,6 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 				JG(ok)
 			})
 
-			tmp := GP32()
 			LEAL(Mem{Base: s, Disp: 2}, tmp)
 
 			//if uint32(cv>>8) == load32(src, candidate2)
@@ -610,7 +615,6 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 			MOVQ(x, hash1) // s
 			hasher.hash(hash0)
 			hasher.hash(hash1)
-			c0, c1 := GP64(), GP64()
 			sm2 := GP32() // s - 2
 			LEAL(Mem{Base: s, Disp: -2}, sm2)
 			assert(func(ok LabelRef) {
@@ -622,11 +626,10 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 				JL(ok)
 			})
 
-			MOVL(table.Idx(hash0, 4), c0.As32())
-			MOVL(table.Idx(hash1, 4), c1.As32())
+			MOVL(table.Idx(hash1, 4), candidate)
 			MOVL(sm2, table.Idx(hash0, 4))
 			MOVL(s, table.Idx(hash1, 4))
-			CMPL(Mem{Base: src, Index: hash1, Scale: 1}, x.As32())
+			CMPL(Mem{Base: src, Index: candidate, Scale: 1}, x.As32())
 			JEQ(LabelRef("match_nolit_loop_" + name))
 			INCL(s)
 		}
@@ -637,10 +640,11 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 	// Bail if we exceed the maximum size.
 	// if d+len(src)-nextEmitL > dstLimitPtrQ {	return 0
 	{
-		// remain = lenSrc - nextEmitL
+		// remain = len(src) - nextEmit
 		remain := GP64()
 		MOVQ(lenSrcQ, remain)
 		SUBL(nextEmitL, remain.As32())
+
 		dst := GP64()
 		MOVQ(dstBaseQ, dst)
 		// dst := dst + (len(src)-nextEmitL)
@@ -665,6 +669,14 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 	// length := start - base (ptr arithmetic)
 	length := GP64()
 	MOVQ(dstBaseQ, length)
+
+	// Assert size is < limit
+	assert(func(ok LabelRef) {
+		// if dstBaseQ <  dstLimitPtrQ: ok
+		CMPQ(length, dstLimitPtrQ)
+		JL(ok)
+	})
+
 	SUBQ(dstStartPtrQ, length)
 
 	// Assert size is < len(src)

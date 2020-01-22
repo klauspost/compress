@@ -73,3 +73,26 @@ func EncodeGo(dst, src []byte) []byte {
 	d += emitLiteral(dst[d:], src)
 	return dst[:d]
 }
+
+// encodeBlock encodes a non-empty src to a guaranteed-large-enough dst. It
+// assumes that the varint-encoded length of the decompressed bytes has already
+// been written.
+//
+// It also assumes that:
+//	len(dst) >= MaxEncodedLen(len(src)) &&
+// 	minNonLiteralBlockSize <= len(src) && len(src) <= maxBlockSize
+func encodeBlock(dst, src []byte) (d int) {
+	if len(src) >= 32<<10 {
+		return encodeBlockAsm(dst, src)
+	}
+	if len(src) >= 8<<10 {
+		return encodeBlockAsm12B(dst, src)
+	}
+	if len(src) >= 2<<10 {
+		return encodeBlockAsm10B(dst, src)
+	}
+	if len(src) < minNonLiteralBlockSize {
+		return emitLiteral(dst[d:], src)
+	}
+	return encodeBlockAsm8B(dst, src)
+}
