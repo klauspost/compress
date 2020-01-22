@@ -881,7 +881,7 @@ func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, en
 		length := GP64()
 		MOVL(litLen.As32(), length.As32())
 
-		// FIXME: avx updates litBase
+		// updates litBase.
 		genMemMove2("emit_lit_memmove_"+name, dstBase, litBase, length, copyEnd, avx)
 
 		if updateDst {

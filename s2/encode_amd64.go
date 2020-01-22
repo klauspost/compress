@@ -8,6 +8,10 @@ import (
 	"encoding/binary"
 )
 
+func init() {
+	avxAvailable = cpu.avx()
+}
+
 func encodeGo(dst, src []byte) []byte {
 	if n := MaxEncodedLen(len(src)); n < 0 {
 		panic(ErrTooLarge)
@@ -43,6 +47,22 @@ func encodeGo(dst, src []byte) []byte {
 //	len(dst) >= MaxEncodedLen(len(src)) &&
 // 	minNonLiteralBlockSize <= len(src) && len(src) <= maxBlockSize
 func encodeBlock(dst, src []byte) (d int) {
+	if avxAvailable {
+		// Big blocks, use full table...
+		if len(src) >= 32<<10 {
+			return encodeBlockAsmAvx(dst, src)
+		}
+		if len(src) >= 8<<10 {
+			return encodeBlockAsm12BAvx(dst, src)
+		}
+		if len(src) >= 2<<10 {
+			return encodeBlockAsm10BAvx(dst, src)
+		}
+		if len(src) < minNonLiteralBlockSize {
+			return 0
+		}
+		return encodeBlockAsm8BAvx(dst, src)
+	}
 	if len(src) >= 32<<10 {
 		return encodeBlockAsm(dst, src)
 	}
