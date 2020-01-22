@@ -76,6 +76,8 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 		"It assumes that the varint-encoded length of the decompressed bytes has already been written.", "")
 	Pragma("noescape")
 
+	const literalMaxOverhead = 4
+
 	var tableSize = 4 * (1 << tableBits)
 	// Memzero needs at least 128 bytes.
 	if tableSize < 128 {
@@ -156,9 +158,15 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 		LEAQ(Mem{Base: tmp, Disp: -5}, tmp2)
 		// sLimitL := len(src) - inputMargin
 		LEAQ(Mem{Base: tmp, Disp: -inputMargin}, tmp3)
+
+		assert(func(ok LabelRef) {
+			CMPQ(tmp3, lenSrcQ)
+			JL(ok)
+		})
+
 		MOVL(tmp3.As32(), sLimitL)
 
-		// dstLimit := len(src) - len(src)>>5 - 5
+		// dstLimit := (len(src) - 5 ) - len(src)>>5
 		SHRQ(U8(5), tmp)
 		SUBL(tmp.As32(), tmp2.As32()) // tmp2 = tmp2 - tmp
 
@@ -329,11 +337,15 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 					MOVL(s, candidate)
 					SUBL(repeatL, candidate) // candidate = s - repeat
 
-					// srcLeft = sLimitL - s
-					srcLeft := GP32()
-					MOVL(sLimitL, srcLeft)
-					SUBL(s, srcLeft)
-
+					// srcLeft = len(src) - s
+					srcLeft := GP64()
+					MOVQ(lenSrcQ, srcLeft)
+					SUBL(s, srcLeft.As32())
+					assert(func(ok LabelRef) {
+						// if srcleft < maxint32: ok
+						CMPQ(srcLeft, U32(0x7fffffff))
+						JL(ok)
+					})
 					// Forward address
 					forwardStart := GP64()
 					LEAQ(Mem{Base: src, Index: s, Scale: 1}, forwardStart)
@@ -497,7 +509,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 		MOVL(s, tmp.As32())
 		SUBL(nextEmitL, tmp.As32())
 		// tmp = &dst + s-nextEmit
-		LEAQ(Mem{Base: dst, Index: tmp, Scale: 1}, tmp)
+		LEAQ(Mem{Base: dst, Index: tmp, Scale: 1, Disp: literalMaxOverhead}, tmp)
 		CMPQ(tmp, dstLimitPtrQ)
 		JL(LabelRef("match_dst_size_check_" + name))
 		ri, err := ReturnIndex(0).Resolve()
@@ -534,11 +546,16 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 				CMPL(s, candidate)
 				JG(ok)
 			})
-			// srcLeft = sLimitL - s
-			// TODO: See if len(src) can be used instead of sLimit...
-			srcLeft := GP32()
-			MOVL(sLimitL, srcLeft)
-			SUBL(s, srcLeft)
+			// srcLeft = len(src) - s
+			srcLeft := GP64()
+			MOVQ(lenSrcQ, srcLeft)
+			SUBL(s, srcLeft.As32())
+			assert(func(ok LabelRef) {
+				// if srcleft < maxint32: ok
+				CMPQ(srcLeft, U32(0x7fffffff))
+				JL(ok)
+			})
+
 			a, b := GP64(), GP64()
 			LEAQ(Mem{Base: src, Index: s, Scale: 1}, a)
 			LEAQ(Mem{Base: src, Index: candidate, Scale: 1}, b)
@@ -560,6 +577,8 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 			emitCopy("match_nolit_"+name, length, offset, nil, dst, LabelRef("match_nolit_emitcopy_end_"+name))
 			Label("match_nolit_emitcopy_end_" + name)
 			MOVL(s, nextEmitL)
+
+			// if s >= sLimit { end }
 			CMPL(s, sLimitL)
 			JGE(LabelRef("emit_remainder_" + name))
 
@@ -621,7 +640,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 		dstExpect := GP64()
 		// dst := dst + (len(src)-nextEmitL)
 
-		LEAQ(Mem{Base: dst, Index: remain, Scale: 1}, dstExpect)
+		LEAQ(Mem{Base: dst, Index: remain, Scale: 1, Disp: literalMaxOverhead}, dstExpect)
 		CMPQ(dstExpect, dstLimitPtrQ)
 		JL(LabelRef("emit_remainder_ok_" + name))
 		ri, err := ReturnIndex(0).Resolve()

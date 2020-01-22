@@ -328,40 +328,40 @@ emit_literal_done_repeat_emit_encodeBlockAsm:
 	ADDL $0x05, CX
 	MOVL CX, BX
 	SUBL 16(SP), BX
-	MOVL 8(SP), BP
-	SUBL CX, BP
-	LEAQ (DX)(CX*1), R9
-	LEAQ (DX)(BX*1), R10
+	MOVQ src_len+32(FP), R9
+	SUBL CX, R9
+	LEAQ (DX)(CX*1), R10
+	LEAQ (DX)(BX*1), R11
 	XORL BX, BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JL   matchlen_single_repeat_extend
 
 matchlen_loopback_repeat_extend:
-	MOVQ  (R9)(BX*1), R11
-	XORQ  (R10)(BX*1), R11
-	TESTQ R11, R11
+	MOVQ  (R10)(BX*1), R12
+	XORQ  (R11)(BX*1), R12
+	TESTQ R12, R12
 	JZ    matchlen_loop_repeat_extend
-	BSFQ  R11, R11
-	SARQ  $0x03, R11
-	LEAL  (BX)(R11*1), BX
+	BSFQ  R12, R12
+	SARQ  $0x03, R12
+	LEAL  (BX)(R12*1), BX
 	JMP   repeat_extend_forward_end_encodeBlockAsm
 
 matchlen_loop_repeat_extend:
-	LEAL -8(BP), BP
+	LEAL -8(R9), R9
 	LEAL 8(BX), BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JGE  matchlen_loopback_repeat_extend
 
 matchlen_single_repeat_extend:
-	TESTL BP, BP
+	TESTL R9, R9
 	JZ    repeat_extend_forward_end_encodeBlockAsm
 
 matchlen_single_loopback_repeat_extend:
-	MOVB (R9)(BX*1), R11
-	CMPB (R10)(BX*1), R11
+	MOVB (R10)(BX*1), R12
+	CMPB (R11)(BX*1), R12
 	JNE  repeat_extend_forward_end_encodeBlockAsm
 	LEAL 1(BX), BX
-	DECL BP
+	DECL R9
 	JNZ  matchlen_single_loopback_repeat_extend
 
 repeat_extend_forward_end_encodeBlockAsm:
@@ -672,7 +672,7 @@ match_extend_back_loop_encodeBlockAsm:
 match_extend_back_end_encodeBlockAsm:
 	MOVL CX, DI
 	SUBL 12(SP), DI
-	LEAQ (AX)(DI*1), DI
+	LEAQ 4(AX)(DI*1), DI
 	CMPQ DI, (SP)
 	JL   match_dst_size_check_encodeBlockAsm
 	MOVQ $0x00000000, ret+48(FP)
@@ -917,40 +917,40 @@ match_nolit_loop_encodeBlockAsm:
 	MOVL BP, 16(SP)
 	ADDL $0x04, CX
 	ADDL $0x04, BX
-	MOVL 8(SP), BP
-	SUBL CX, BP
-	LEAQ (DX)(CX*1), R9
-	LEAQ (DX)(BX*1), R10
+	MOVQ src_len+32(FP), R9
+	SUBL CX, R9
+	LEAQ (DX)(CX*1), R10
+	LEAQ (DX)(BX*1), R11
 	XORL BX, BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JL   matchlen_single_match_nolit_encodeBlockAsm
 
 matchlen_loopback_match_nolit_encodeBlockAsm:
-	MOVQ  (R9)(BX*1), R11
-	XORQ  (R10)(BX*1), R11
-	TESTQ R11, R11
+	MOVQ  (R10)(BX*1), R12
+	XORQ  (R11)(BX*1), R12
+	TESTQ R12, R12
 	JZ    matchlen_loop_match_nolit_encodeBlockAsm
-	BSFQ  R11, R11
-	SARQ  $0x03, R11
-	LEAL  (BX)(R11*1), BX
+	BSFQ  R12, R12
+	SARQ  $0x03, R12
+	LEAL  (BX)(R12*1), BX
 	JMP   match_nolit_end_encodeBlockAsm
 
 matchlen_loop_match_nolit_encodeBlockAsm:
-	LEAL -8(BP), BP
+	LEAL -8(R9), R9
 	LEAL 8(BX), BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JGE  matchlen_loopback_match_nolit_encodeBlockAsm
 
 matchlen_single_match_nolit_encodeBlockAsm:
-	TESTL BP, BP
+	TESTL R9, R9
 	JZ    match_nolit_end_encodeBlockAsm
 
 matchlen_single_loopback_match_nolit_encodeBlockAsm:
-	MOVB (R9)(BX*1), R11
-	CMPB (R10)(BX*1), R11
+	MOVB (R10)(BX*1), R12
+	CMPB (R11)(BX*1), R12
 	JNE  match_nolit_end_encodeBlockAsm
 	LEAL 1(BX), BX
-	DECL BP
+	DECL R9
 	JNZ  matchlen_single_loopback_match_nolit_encodeBlockAsm
 
 match_nolit_end_encodeBlockAsm:
@@ -1173,7 +1173,7 @@ match_nolit_dst_ok_encodeBlockAsm:
 emit_remainder_encodeBlockAsm:
 	MOVQ src_len+32(FP), CX
 	SUBL 12(SP), CX
-	LEAQ (AX)(CX*1), CX
+	LEAQ 4(AX)(CX*1), CX
 	CMPQ CX, (SP)
 	JL   emit_remainder_ok_encodeBlockAsm
 	MOVQ $0x00000000, ret+48(FP)
@@ -1739,40 +1739,40 @@ emit_literal_done_repeat_emit_encodeBlockAsm12B:
 	ADDL $0x05, CX
 	MOVL CX, BX
 	SUBL 16(SP), BX
-	MOVL 8(SP), BP
-	SUBL CX, BP
-	LEAQ (DX)(CX*1), R9
-	LEAQ (DX)(BX*1), R10
+	MOVQ src_len+32(FP), R9
+	SUBL CX, R9
+	LEAQ (DX)(CX*1), R10
+	LEAQ (DX)(BX*1), R11
 	XORL BX, BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JL   matchlen_single_repeat_extend
 
 matchlen_loopback_repeat_extend:
-	MOVQ  (R9)(BX*1), R11
-	XORQ  (R10)(BX*1), R11
-	TESTQ R11, R11
+	MOVQ  (R10)(BX*1), R12
+	XORQ  (R11)(BX*1), R12
+	TESTQ R12, R12
 	JZ    matchlen_loop_repeat_extend
-	BSFQ  R11, R11
-	SARQ  $0x03, R11
-	LEAL  (BX)(R11*1), BX
+	BSFQ  R12, R12
+	SARQ  $0x03, R12
+	LEAL  (BX)(R12*1), BX
 	JMP   repeat_extend_forward_end_encodeBlockAsm12B
 
 matchlen_loop_repeat_extend:
-	LEAL -8(BP), BP
+	LEAL -8(R9), R9
 	LEAL 8(BX), BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JGE  matchlen_loopback_repeat_extend
 
 matchlen_single_repeat_extend:
-	TESTL BP, BP
+	TESTL R9, R9
 	JZ    repeat_extend_forward_end_encodeBlockAsm12B
 
 matchlen_single_loopback_repeat_extend:
-	MOVB (R9)(BX*1), R11
-	CMPB (R10)(BX*1), R11
+	MOVB (R10)(BX*1), R12
+	CMPB (R11)(BX*1), R12
 	JNE  repeat_extend_forward_end_encodeBlockAsm12B
 	LEAL 1(BX), BX
-	DECL BP
+	DECL R9
 	JNZ  matchlen_single_loopback_repeat_extend
 
 repeat_extend_forward_end_encodeBlockAsm12B:
@@ -2083,7 +2083,7 @@ match_extend_back_loop_encodeBlockAsm12B:
 match_extend_back_end_encodeBlockAsm12B:
 	MOVL CX, DI
 	SUBL 12(SP), DI
-	LEAQ (AX)(DI*1), DI
+	LEAQ 4(AX)(DI*1), DI
 	CMPQ DI, (SP)
 	JL   match_dst_size_check_encodeBlockAsm12B
 	MOVQ $0x00000000, ret+48(FP)
@@ -2328,40 +2328,40 @@ match_nolit_loop_encodeBlockAsm12B:
 	MOVL BP, 16(SP)
 	ADDL $0x04, CX
 	ADDL $0x04, BX
-	MOVL 8(SP), BP
-	SUBL CX, BP
-	LEAQ (DX)(CX*1), R9
-	LEAQ (DX)(BX*1), R10
+	MOVQ src_len+32(FP), R9
+	SUBL CX, R9
+	LEAQ (DX)(CX*1), R10
+	LEAQ (DX)(BX*1), R11
 	XORL BX, BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JL   matchlen_single_match_nolit_encodeBlockAsm12B
 
 matchlen_loopback_match_nolit_encodeBlockAsm12B:
-	MOVQ  (R9)(BX*1), R11
-	XORQ  (R10)(BX*1), R11
-	TESTQ R11, R11
+	MOVQ  (R10)(BX*1), R12
+	XORQ  (R11)(BX*1), R12
+	TESTQ R12, R12
 	JZ    matchlen_loop_match_nolit_encodeBlockAsm12B
-	BSFQ  R11, R11
-	SARQ  $0x03, R11
-	LEAL  (BX)(R11*1), BX
+	BSFQ  R12, R12
+	SARQ  $0x03, R12
+	LEAL  (BX)(R12*1), BX
 	JMP   match_nolit_end_encodeBlockAsm12B
 
 matchlen_loop_match_nolit_encodeBlockAsm12B:
-	LEAL -8(BP), BP
+	LEAL -8(R9), R9
 	LEAL 8(BX), BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JGE  matchlen_loopback_match_nolit_encodeBlockAsm12B
 
 matchlen_single_match_nolit_encodeBlockAsm12B:
-	TESTL BP, BP
+	TESTL R9, R9
 	JZ    match_nolit_end_encodeBlockAsm12B
 
 matchlen_single_loopback_match_nolit_encodeBlockAsm12B:
-	MOVB (R9)(BX*1), R11
-	CMPB (R10)(BX*1), R11
+	MOVB (R10)(BX*1), R12
+	CMPB (R11)(BX*1), R12
 	JNE  match_nolit_end_encodeBlockAsm12B
 	LEAL 1(BX), BX
-	DECL BP
+	DECL R9
 	JNZ  matchlen_single_loopback_match_nolit_encodeBlockAsm12B
 
 match_nolit_end_encodeBlockAsm12B:
@@ -2584,7 +2584,7 @@ match_nolit_dst_ok_encodeBlockAsm12B:
 emit_remainder_encodeBlockAsm12B:
 	MOVQ src_len+32(FP), CX
 	SUBL 12(SP), CX
-	LEAQ (AX)(CX*1), CX
+	LEAQ 4(AX)(CX*1), CX
 	CMPQ CX, (SP)
 	JL   emit_remainder_ok_encodeBlockAsm12B
 	MOVQ $0x00000000, ret+48(FP)
@@ -3150,40 +3150,40 @@ emit_literal_done_repeat_emit_encodeBlockAsm10B:
 	ADDL $0x05, CX
 	MOVL CX, BX
 	SUBL 16(SP), BX
-	MOVL 8(SP), BP
-	SUBL CX, BP
-	LEAQ (DX)(CX*1), R9
-	LEAQ (DX)(BX*1), R10
+	MOVQ src_len+32(FP), R9
+	SUBL CX, R9
+	LEAQ (DX)(CX*1), R10
+	LEAQ (DX)(BX*1), R11
 	XORL BX, BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JL   matchlen_single_repeat_extend
 
 matchlen_loopback_repeat_extend:
-	MOVQ  (R9)(BX*1), R11
-	XORQ  (R10)(BX*1), R11
-	TESTQ R11, R11
+	MOVQ  (R10)(BX*1), R12
+	XORQ  (R11)(BX*1), R12
+	TESTQ R12, R12
 	JZ    matchlen_loop_repeat_extend
-	BSFQ  R11, R11
-	SARQ  $0x03, R11
-	LEAL  (BX)(R11*1), BX
+	BSFQ  R12, R12
+	SARQ  $0x03, R12
+	LEAL  (BX)(R12*1), BX
 	JMP   repeat_extend_forward_end_encodeBlockAsm10B
 
 matchlen_loop_repeat_extend:
-	LEAL -8(BP), BP
+	LEAL -8(R9), R9
 	LEAL 8(BX), BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JGE  matchlen_loopback_repeat_extend
 
 matchlen_single_repeat_extend:
-	TESTL BP, BP
+	TESTL R9, R9
 	JZ    repeat_extend_forward_end_encodeBlockAsm10B
 
 matchlen_single_loopback_repeat_extend:
-	MOVB (R9)(BX*1), R11
-	CMPB (R10)(BX*1), R11
+	MOVB (R10)(BX*1), R12
+	CMPB (R11)(BX*1), R12
 	JNE  repeat_extend_forward_end_encodeBlockAsm10B
 	LEAL 1(BX), BX
-	DECL BP
+	DECL R9
 	JNZ  matchlen_single_loopback_repeat_extend
 
 repeat_extend_forward_end_encodeBlockAsm10B:
@@ -3494,7 +3494,7 @@ match_extend_back_loop_encodeBlockAsm10B:
 match_extend_back_end_encodeBlockAsm10B:
 	MOVL CX, DI
 	SUBL 12(SP), DI
-	LEAQ (AX)(DI*1), DI
+	LEAQ 4(AX)(DI*1), DI
 	CMPQ DI, (SP)
 	JL   match_dst_size_check_encodeBlockAsm10B
 	MOVQ $0x00000000, ret+48(FP)
@@ -3739,40 +3739,40 @@ match_nolit_loop_encodeBlockAsm10B:
 	MOVL BP, 16(SP)
 	ADDL $0x04, CX
 	ADDL $0x04, BX
-	MOVL 8(SP), BP
-	SUBL CX, BP
-	LEAQ (DX)(CX*1), R9
-	LEAQ (DX)(BX*1), R10
+	MOVQ src_len+32(FP), R9
+	SUBL CX, R9
+	LEAQ (DX)(CX*1), R10
+	LEAQ (DX)(BX*1), R11
 	XORL BX, BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JL   matchlen_single_match_nolit_encodeBlockAsm10B
 
 matchlen_loopback_match_nolit_encodeBlockAsm10B:
-	MOVQ  (R9)(BX*1), R11
-	XORQ  (R10)(BX*1), R11
-	TESTQ R11, R11
+	MOVQ  (R10)(BX*1), R12
+	XORQ  (R11)(BX*1), R12
+	TESTQ R12, R12
 	JZ    matchlen_loop_match_nolit_encodeBlockAsm10B
-	BSFQ  R11, R11
-	SARQ  $0x03, R11
-	LEAL  (BX)(R11*1), BX
+	BSFQ  R12, R12
+	SARQ  $0x03, R12
+	LEAL  (BX)(R12*1), BX
 	JMP   match_nolit_end_encodeBlockAsm10B
 
 matchlen_loop_match_nolit_encodeBlockAsm10B:
-	LEAL -8(BP), BP
+	LEAL -8(R9), R9
 	LEAL 8(BX), BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JGE  matchlen_loopback_match_nolit_encodeBlockAsm10B
 
 matchlen_single_match_nolit_encodeBlockAsm10B:
-	TESTL BP, BP
+	TESTL R9, R9
 	JZ    match_nolit_end_encodeBlockAsm10B
 
 matchlen_single_loopback_match_nolit_encodeBlockAsm10B:
-	MOVB (R9)(BX*1), R11
-	CMPB (R10)(BX*1), R11
+	MOVB (R10)(BX*1), R12
+	CMPB (R11)(BX*1), R12
 	JNE  match_nolit_end_encodeBlockAsm10B
 	LEAL 1(BX), BX
-	DECL BP
+	DECL R9
 	JNZ  matchlen_single_loopback_match_nolit_encodeBlockAsm10B
 
 match_nolit_end_encodeBlockAsm10B:
@@ -3995,7 +3995,7 @@ match_nolit_dst_ok_encodeBlockAsm10B:
 emit_remainder_encodeBlockAsm10B:
 	MOVQ src_len+32(FP), CX
 	SUBL 12(SP), CX
-	LEAQ (AX)(CX*1), CX
+	LEAQ 4(AX)(CX*1), CX
 	CMPQ CX, (SP)
 	JL   emit_remainder_ok_encodeBlockAsm10B
 	MOVQ $0x00000000, ret+48(FP)
@@ -4561,40 +4561,40 @@ emit_literal_done_repeat_emit_encodeBlockAsm8B:
 	ADDL $0x05, CX
 	MOVL CX, BX
 	SUBL 16(SP), BX
-	MOVL 8(SP), BP
-	SUBL CX, BP
-	LEAQ (DX)(CX*1), R9
-	LEAQ (DX)(BX*1), R10
+	MOVQ src_len+32(FP), R9
+	SUBL CX, R9
+	LEAQ (DX)(CX*1), R10
+	LEAQ (DX)(BX*1), R11
 	XORL BX, BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JL   matchlen_single_repeat_extend
 
 matchlen_loopback_repeat_extend:
-	MOVQ  (R9)(BX*1), R11
-	XORQ  (R10)(BX*1), R11
-	TESTQ R11, R11
+	MOVQ  (R10)(BX*1), R12
+	XORQ  (R11)(BX*1), R12
+	TESTQ R12, R12
 	JZ    matchlen_loop_repeat_extend
-	BSFQ  R11, R11
-	SARQ  $0x03, R11
-	LEAL  (BX)(R11*1), BX
+	BSFQ  R12, R12
+	SARQ  $0x03, R12
+	LEAL  (BX)(R12*1), BX
 	JMP   repeat_extend_forward_end_encodeBlockAsm8B
 
 matchlen_loop_repeat_extend:
-	LEAL -8(BP), BP
+	LEAL -8(R9), R9
 	LEAL 8(BX), BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JGE  matchlen_loopback_repeat_extend
 
 matchlen_single_repeat_extend:
-	TESTL BP, BP
+	TESTL R9, R9
 	JZ    repeat_extend_forward_end_encodeBlockAsm8B
 
 matchlen_single_loopback_repeat_extend:
-	MOVB (R9)(BX*1), R11
-	CMPB (R10)(BX*1), R11
+	MOVB (R10)(BX*1), R12
+	CMPB (R11)(BX*1), R12
 	JNE  repeat_extend_forward_end_encodeBlockAsm8B
 	LEAL 1(BX), BX
-	DECL BP
+	DECL R9
 	JNZ  matchlen_single_loopback_repeat_extend
 
 repeat_extend_forward_end_encodeBlockAsm8B:
@@ -4905,7 +4905,7 @@ match_extend_back_loop_encodeBlockAsm8B:
 match_extend_back_end_encodeBlockAsm8B:
 	MOVL CX, DI
 	SUBL 12(SP), DI
-	LEAQ (AX)(DI*1), DI
+	LEAQ 4(AX)(DI*1), DI
 	CMPQ DI, (SP)
 	JL   match_dst_size_check_encodeBlockAsm8B
 	MOVQ $0x00000000, ret+48(FP)
@@ -5150,40 +5150,40 @@ match_nolit_loop_encodeBlockAsm8B:
 	MOVL BP, 16(SP)
 	ADDL $0x04, CX
 	ADDL $0x04, BX
-	MOVL 8(SP), BP
-	SUBL CX, BP
-	LEAQ (DX)(CX*1), R9
-	LEAQ (DX)(BX*1), R10
+	MOVQ src_len+32(FP), R9
+	SUBL CX, R9
+	LEAQ (DX)(CX*1), R10
+	LEAQ (DX)(BX*1), R11
 	XORL BX, BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JL   matchlen_single_match_nolit_encodeBlockAsm8B
 
 matchlen_loopback_match_nolit_encodeBlockAsm8B:
-	MOVQ  (R9)(BX*1), R11
-	XORQ  (R10)(BX*1), R11
-	TESTQ R11, R11
+	MOVQ  (R10)(BX*1), R12
+	XORQ  (R11)(BX*1), R12
+	TESTQ R12, R12
 	JZ    matchlen_loop_match_nolit_encodeBlockAsm8B
-	BSFQ  R11, R11
-	SARQ  $0x03, R11
-	LEAL  (BX)(R11*1), BX
+	BSFQ  R12, R12
+	SARQ  $0x03, R12
+	LEAL  (BX)(R12*1), BX
 	JMP   match_nolit_end_encodeBlockAsm8B
 
 matchlen_loop_match_nolit_encodeBlockAsm8B:
-	LEAL -8(BP), BP
+	LEAL -8(R9), R9
 	LEAL 8(BX), BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JGE  matchlen_loopback_match_nolit_encodeBlockAsm8B
 
 matchlen_single_match_nolit_encodeBlockAsm8B:
-	TESTL BP, BP
+	TESTL R9, R9
 	JZ    match_nolit_end_encodeBlockAsm8B
 
 matchlen_single_loopback_match_nolit_encodeBlockAsm8B:
-	MOVB (R9)(BX*1), R11
-	CMPB (R10)(BX*1), R11
+	MOVB (R10)(BX*1), R12
+	CMPB (R11)(BX*1), R12
 	JNE  match_nolit_end_encodeBlockAsm8B
 	LEAL 1(BX), BX
-	DECL BP
+	DECL R9
 	JNZ  matchlen_single_loopback_match_nolit_encodeBlockAsm8B
 
 match_nolit_end_encodeBlockAsm8B:
@@ -5406,7 +5406,7 @@ match_nolit_dst_ok_encodeBlockAsm8B:
 emit_remainder_encodeBlockAsm8B:
 	MOVQ src_len+32(FP), CX
 	SUBL 12(SP), CX
-	LEAQ (AX)(CX*1), CX
+	LEAQ 4(AX)(CX*1), CX
 	CMPQ CX, (SP)
 	JL   emit_remainder_ok_encodeBlockAsm8B
 	MOVQ $0x00000000, ret+48(FP)
@@ -6019,40 +6019,40 @@ emit_literal_done_repeat_emit_encodeBlockAsmAvx:
 	ADDL $0x05, CX
 	MOVL CX, BX
 	SUBL 16(SP), BX
-	MOVL 8(SP), BP
-	SUBL CX, BP
-	LEAQ (DX)(CX*1), R9
-	LEAQ (DX)(BX*1), R10
+	MOVQ src_len+32(FP), R9
+	SUBL CX, R9
+	LEAQ (DX)(CX*1), R10
+	LEAQ (DX)(BX*1), R11
 	XORL BX, BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JL   matchlen_single_repeat_extend
 
 matchlen_loopback_repeat_extend:
-	MOVQ  (R9)(BX*1), R11
-	XORQ  (R10)(BX*1), R11
-	TESTQ R11, R11
+	MOVQ  (R10)(BX*1), R12
+	XORQ  (R11)(BX*1), R12
+	TESTQ R12, R12
 	JZ    matchlen_loop_repeat_extend
-	BSFQ  R11, R11
-	SARQ  $0x03, R11
-	LEAL  (BX)(R11*1), BX
+	BSFQ  R12, R12
+	SARQ  $0x03, R12
+	LEAL  (BX)(R12*1), BX
 	JMP   repeat_extend_forward_end_encodeBlockAsmAvx
 
 matchlen_loop_repeat_extend:
-	LEAL -8(BP), BP
+	LEAL -8(R9), R9
 	LEAL 8(BX), BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JGE  matchlen_loopback_repeat_extend
 
 matchlen_single_repeat_extend:
-	TESTL BP, BP
+	TESTL R9, R9
 	JZ    repeat_extend_forward_end_encodeBlockAsmAvx
 
 matchlen_single_loopback_repeat_extend:
-	MOVB (R9)(BX*1), R11
-	CMPB (R10)(BX*1), R11
+	MOVB (R10)(BX*1), R12
+	CMPB (R11)(BX*1), R12
 	JNE  repeat_extend_forward_end_encodeBlockAsmAvx
 	LEAL 1(BX), BX
-	DECL BP
+	DECL R9
 	JNZ  matchlen_single_loopback_repeat_extend
 
 repeat_extend_forward_end_encodeBlockAsmAvx:
@@ -6363,7 +6363,7 @@ match_extend_back_loop_encodeBlockAsmAvx:
 match_extend_back_end_encodeBlockAsmAvx:
 	MOVL CX, DI
 	SUBL 12(SP), DI
-	LEAQ (AX)(DI*1), DI
+	LEAQ 4(AX)(DI*1), DI
 	CMPQ DI, (SP)
 	JL   match_dst_size_check_encodeBlockAsmAvx
 	MOVQ $0x00000000, ret+48(FP)
@@ -6655,40 +6655,40 @@ match_nolit_loop_encodeBlockAsmAvx:
 	MOVL BP, 16(SP)
 	ADDL $0x04, CX
 	ADDL $0x04, BX
-	MOVL 8(SP), BP
-	SUBL CX, BP
-	LEAQ (DX)(CX*1), R9
-	LEAQ (DX)(BX*1), R10
+	MOVQ src_len+32(FP), R9
+	SUBL CX, R9
+	LEAQ (DX)(CX*1), R10
+	LEAQ (DX)(BX*1), R11
 	XORL BX, BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JL   matchlen_single_match_nolit_encodeBlockAsmAvx
 
 matchlen_loopback_match_nolit_encodeBlockAsmAvx:
-	MOVQ  (R9)(BX*1), R11
-	XORQ  (R10)(BX*1), R11
-	TESTQ R11, R11
+	MOVQ  (R10)(BX*1), R12
+	XORQ  (R11)(BX*1), R12
+	TESTQ R12, R12
 	JZ    matchlen_loop_match_nolit_encodeBlockAsmAvx
-	BSFQ  R11, R11
-	SARQ  $0x03, R11
-	LEAL  (BX)(R11*1), BX
+	BSFQ  R12, R12
+	SARQ  $0x03, R12
+	LEAL  (BX)(R12*1), BX
 	JMP   match_nolit_end_encodeBlockAsmAvx
 
 matchlen_loop_match_nolit_encodeBlockAsmAvx:
-	LEAL -8(BP), BP
+	LEAL -8(R9), R9
 	LEAL 8(BX), BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JGE  matchlen_loopback_match_nolit_encodeBlockAsmAvx
 
 matchlen_single_match_nolit_encodeBlockAsmAvx:
-	TESTL BP, BP
+	TESTL R9, R9
 	JZ    match_nolit_end_encodeBlockAsmAvx
 
 matchlen_single_loopback_match_nolit_encodeBlockAsmAvx:
-	MOVB (R9)(BX*1), R11
-	CMPB (R10)(BX*1), R11
+	MOVB (R10)(BX*1), R12
+	CMPB (R11)(BX*1), R12
 	JNE  match_nolit_end_encodeBlockAsmAvx
 	LEAL 1(BX), BX
-	DECL BP
+	DECL R9
 	JNZ  matchlen_single_loopback_match_nolit_encodeBlockAsmAvx
 
 match_nolit_end_encodeBlockAsmAvx:
@@ -6911,7 +6911,7 @@ match_nolit_dst_ok_encodeBlockAsmAvx:
 emit_remainder_encodeBlockAsmAvx:
 	MOVQ src_len+32(FP), CX
 	SUBL 12(SP), CX
-	LEAQ (AX)(CX*1), CX
+	LEAQ 4(AX)(CX*1), CX
 	CMPQ CX, (SP)
 	JL   emit_remainder_ok_encodeBlockAsmAvx
 	MOVQ $0x00000000, ret+48(FP)
@@ -7571,40 +7571,40 @@ emit_literal_done_repeat_emit_encodeBlockAsm12BAvx:
 	ADDL $0x05, CX
 	MOVL CX, BX
 	SUBL 16(SP), BX
-	MOVL 8(SP), BP
-	SUBL CX, BP
-	LEAQ (DX)(CX*1), R9
-	LEAQ (DX)(BX*1), R10
+	MOVQ src_len+32(FP), R9
+	SUBL CX, R9
+	LEAQ (DX)(CX*1), R10
+	LEAQ (DX)(BX*1), R11
 	XORL BX, BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JL   matchlen_single_repeat_extend
 
 matchlen_loopback_repeat_extend:
-	MOVQ  (R9)(BX*1), R11
-	XORQ  (R10)(BX*1), R11
-	TESTQ R11, R11
+	MOVQ  (R10)(BX*1), R12
+	XORQ  (R11)(BX*1), R12
+	TESTQ R12, R12
 	JZ    matchlen_loop_repeat_extend
-	BSFQ  R11, R11
-	SARQ  $0x03, R11
-	LEAL  (BX)(R11*1), BX
+	BSFQ  R12, R12
+	SARQ  $0x03, R12
+	LEAL  (BX)(R12*1), BX
 	JMP   repeat_extend_forward_end_encodeBlockAsm12BAvx
 
 matchlen_loop_repeat_extend:
-	LEAL -8(BP), BP
+	LEAL -8(R9), R9
 	LEAL 8(BX), BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JGE  matchlen_loopback_repeat_extend
 
 matchlen_single_repeat_extend:
-	TESTL BP, BP
+	TESTL R9, R9
 	JZ    repeat_extend_forward_end_encodeBlockAsm12BAvx
 
 matchlen_single_loopback_repeat_extend:
-	MOVB (R9)(BX*1), R11
-	CMPB (R10)(BX*1), R11
+	MOVB (R10)(BX*1), R12
+	CMPB (R11)(BX*1), R12
 	JNE  repeat_extend_forward_end_encodeBlockAsm12BAvx
 	LEAL 1(BX), BX
-	DECL BP
+	DECL R9
 	JNZ  matchlen_single_loopback_repeat_extend
 
 repeat_extend_forward_end_encodeBlockAsm12BAvx:
@@ -7915,7 +7915,7 @@ match_extend_back_loop_encodeBlockAsm12BAvx:
 match_extend_back_end_encodeBlockAsm12BAvx:
 	MOVL CX, DI
 	SUBL 12(SP), DI
-	LEAQ (AX)(DI*1), DI
+	LEAQ 4(AX)(DI*1), DI
 	CMPQ DI, (SP)
 	JL   match_dst_size_check_encodeBlockAsm12BAvx
 	MOVQ $0x00000000, ret+48(FP)
@@ -8207,40 +8207,40 @@ match_nolit_loop_encodeBlockAsm12BAvx:
 	MOVL BP, 16(SP)
 	ADDL $0x04, CX
 	ADDL $0x04, BX
-	MOVL 8(SP), BP
-	SUBL CX, BP
-	LEAQ (DX)(CX*1), R9
-	LEAQ (DX)(BX*1), R10
+	MOVQ src_len+32(FP), R9
+	SUBL CX, R9
+	LEAQ (DX)(CX*1), R10
+	LEAQ (DX)(BX*1), R11
 	XORL BX, BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JL   matchlen_single_match_nolit_encodeBlockAsm12BAvx
 
 matchlen_loopback_match_nolit_encodeBlockAsm12BAvx:
-	MOVQ  (R9)(BX*1), R11
-	XORQ  (R10)(BX*1), R11
-	TESTQ R11, R11
+	MOVQ  (R10)(BX*1), R12
+	XORQ  (R11)(BX*1), R12
+	TESTQ R12, R12
 	JZ    matchlen_loop_match_nolit_encodeBlockAsm12BAvx
-	BSFQ  R11, R11
-	SARQ  $0x03, R11
-	LEAL  (BX)(R11*1), BX
+	BSFQ  R12, R12
+	SARQ  $0x03, R12
+	LEAL  (BX)(R12*1), BX
 	JMP   match_nolit_end_encodeBlockAsm12BAvx
 
 matchlen_loop_match_nolit_encodeBlockAsm12BAvx:
-	LEAL -8(BP), BP
+	LEAL -8(R9), R9
 	LEAL 8(BX), BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JGE  matchlen_loopback_match_nolit_encodeBlockAsm12BAvx
 
 matchlen_single_match_nolit_encodeBlockAsm12BAvx:
-	TESTL BP, BP
+	TESTL R9, R9
 	JZ    match_nolit_end_encodeBlockAsm12BAvx
 
 matchlen_single_loopback_match_nolit_encodeBlockAsm12BAvx:
-	MOVB (R9)(BX*1), R11
-	CMPB (R10)(BX*1), R11
+	MOVB (R10)(BX*1), R12
+	CMPB (R11)(BX*1), R12
 	JNE  match_nolit_end_encodeBlockAsm12BAvx
 	LEAL 1(BX), BX
-	DECL BP
+	DECL R9
 	JNZ  matchlen_single_loopback_match_nolit_encodeBlockAsm12BAvx
 
 match_nolit_end_encodeBlockAsm12BAvx:
@@ -8463,7 +8463,7 @@ match_nolit_dst_ok_encodeBlockAsm12BAvx:
 emit_remainder_encodeBlockAsm12BAvx:
 	MOVQ src_len+32(FP), CX
 	SUBL 12(SP), CX
-	LEAQ (AX)(CX*1), CX
+	LEAQ 4(AX)(CX*1), CX
 	CMPQ CX, (SP)
 	JL   emit_remainder_ok_encodeBlockAsm12BAvx
 	MOVQ $0x00000000, ret+48(FP)
@@ -9123,40 +9123,40 @@ emit_literal_done_repeat_emit_encodeBlockAsm10BAvx:
 	ADDL $0x05, CX
 	MOVL CX, BX
 	SUBL 16(SP), BX
-	MOVL 8(SP), BP
-	SUBL CX, BP
-	LEAQ (DX)(CX*1), R9
-	LEAQ (DX)(BX*1), R10
+	MOVQ src_len+32(FP), R9
+	SUBL CX, R9
+	LEAQ (DX)(CX*1), R10
+	LEAQ (DX)(BX*1), R11
 	XORL BX, BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JL   matchlen_single_repeat_extend
 
 matchlen_loopback_repeat_extend:
-	MOVQ  (R9)(BX*1), R11
-	XORQ  (R10)(BX*1), R11
-	TESTQ R11, R11
+	MOVQ  (R10)(BX*1), R12
+	XORQ  (R11)(BX*1), R12
+	TESTQ R12, R12
 	JZ    matchlen_loop_repeat_extend
-	BSFQ  R11, R11
-	SARQ  $0x03, R11
-	LEAL  (BX)(R11*1), BX
+	BSFQ  R12, R12
+	SARQ  $0x03, R12
+	LEAL  (BX)(R12*1), BX
 	JMP   repeat_extend_forward_end_encodeBlockAsm10BAvx
 
 matchlen_loop_repeat_extend:
-	LEAL -8(BP), BP
+	LEAL -8(R9), R9
 	LEAL 8(BX), BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JGE  matchlen_loopback_repeat_extend
 
 matchlen_single_repeat_extend:
-	TESTL BP, BP
+	TESTL R9, R9
 	JZ    repeat_extend_forward_end_encodeBlockAsm10BAvx
 
 matchlen_single_loopback_repeat_extend:
-	MOVB (R9)(BX*1), R11
-	CMPB (R10)(BX*1), R11
+	MOVB (R10)(BX*1), R12
+	CMPB (R11)(BX*1), R12
 	JNE  repeat_extend_forward_end_encodeBlockAsm10BAvx
 	LEAL 1(BX), BX
-	DECL BP
+	DECL R9
 	JNZ  matchlen_single_loopback_repeat_extend
 
 repeat_extend_forward_end_encodeBlockAsm10BAvx:
@@ -9467,7 +9467,7 @@ match_extend_back_loop_encodeBlockAsm10BAvx:
 match_extend_back_end_encodeBlockAsm10BAvx:
 	MOVL CX, DI
 	SUBL 12(SP), DI
-	LEAQ (AX)(DI*1), DI
+	LEAQ 4(AX)(DI*1), DI
 	CMPQ DI, (SP)
 	JL   match_dst_size_check_encodeBlockAsm10BAvx
 	MOVQ $0x00000000, ret+48(FP)
@@ -9759,40 +9759,40 @@ match_nolit_loop_encodeBlockAsm10BAvx:
 	MOVL BP, 16(SP)
 	ADDL $0x04, CX
 	ADDL $0x04, BX
-	MOVL 8(SP), BP
-	SUBL CX, BP
-	LEAQ (DX)(CX*1), R9
-	LEAQ (DX)(BX*1), R10
+	MOVQ src_len+32(FP), R9
+	SUBL CX, R9
+	LEAQ (DX)(CX*1), R10
+	LEAQ (DX)(BX*1), R11
 	XORL BX, BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JL   matchlen_single_match_nolit_encodeBlockAsm10BAvx
 
 matchlen_loopback_match_nolit_encodeBlockAsm10BAvx:
-	MOVQ  (R9)(BX*1), R11
-	XORQ  (R10)(BX*1), R11
-	TESTQ R11, R11
+	MOVQ  (R10)(BX*1), R12
+	XORQ  (R11)(BX*1), R12
+	TESTQ R12, R12
 	JZ    matchlen_loop_match_nolit_encodeBlockAsm10BAvx
-	BSFQ  R11, R11
-	SARQ  $0x03, R11
-	LEAL  (BX)(R11*1), BX
+	BSFQ  R12, R12
+	SARQ  $0x03, R12
+	LEAL  (BX)(R12*1), BX
 	JMP   match_nolit_end_encodeBlockAsm10BAvx
 
 matchlen_loop_match_nolit_encodeBlockAsm10BAvx:
-	LEAL -8(BP), BP
+	LEAL -8(R9), R9
 	LEAL 8(BX), BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JGE  matchlen_loopback_match_nolit_encodeBlockAsm10BAvx
 
 matchlen_single_match_nolit_encodeBlockAsm10BAvx:
-	TESTL BP, BP
+	TESTL R9, R9
 	JZ    match_nolit_end_encodeBlockAsm10BAvx
 
 matchlen_single_loopback_match_nolit_encodeBlockAsm10BAvx:
-	MOVB (R9)(BX*1), R11
-	CMPB (R10)(BX*1), R11
+	MOVB (R10)(BX*1), R12
+	CMPB (R11)(BX*1), R12
 	JNE  match_nolit_end_encodeBlockAsm10BAvx
 	LEAL 1(BX), BX
-	DECL BP
+	DECL R9
 	JNZ  matchlen_single_loopback_match_nolit_encodeBlockAsm10BAvx
 
 match_nolit_end_encodeBlockAsm10BAvx:
@@ -10015,7 +10015,7 @@ match_nolit_dst_ok_encodeBlockAsm10BAvx:
 emit_remainder_encodeBlockAsm10BAvx:
 	MOVQ src_len+32(FP), CX
 	SUBL 12(SP), CX
-	LEAQ (AX)(CX*1), CX
+	LEAQ 4(AX)(CX*1), CX
 	CMPQ CX, (SP)
 	JL   emit_remainder_ok_encodeBlockAsm10BAvx
 	MOVQ $0x00000000, ret+48(FP)
@@ -10675,40 +10675,40 @@ emit_literal_done_repeat_emit_encodeBlockAsm8BAvx:
 	ADDL $0x05, CX
 	MOVL CX, BX
 	SUBL 16(SP), BX
-	MOVL 8(SP), BP
-	SUBL CX, BP
-	LEAQ (DX)(CX*1), R9
-	LEAQ (DX)(BX*1), R10
+	MOVQ src_len+32(FP), R9
+	SUBL CX, R9
+	LEAQ (DX)(CX*1), R10
+	LEAQ (DX)(BX*1), R11
 	XORL BX, BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JL   matchlen_single_repeat_extend
 
 matchlen_loopback_repeat_extend:
-	MOVQ  (R9)(BX*1), R11
-	XORQ  (R10)(BX*1), R11
-	TESTQ R11, R11
+	MOVQ  (R10)(BX*1), R12
+	XORQ  (R11)(BX*1), R12
+	TESTQ R12, R12
 	JZ    matchlen_loop_repeat_extend
-	BSFQ  R11, R11
-	SARQ  $0x03, R11
-	LEAL  (BX)(R11*1), BX
+	BSFQ  R12, R12
+	SARQ  $0x03, R12
+	LEAL  (BX)(R12*1), BX
 	JMP   repeat_extend_forward_end_encodeBlockAsm8BAvx
 
 matchlen_loop_repeat_extend:
-	LEAL -8(BP), BP
+	LEAL -8(R9), R9
 	LEAL 8(BX), BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JGE  matchlen_loopback_repeat_extend
 
 matchlen_single_repeat_extend:
-	TESTL BP, BP
+	TESTL R9, R9
 	JZ    repeat_extend_forward_end_encodeBlockAsm8BAvx
 
 matchlen_single_loopback_repeat_extend:
-	MOVB (R9)(BX*1), R11
-	CMPB (R10)(BX*1), R11
+	MOVB (R10)(BX*1), R12
+	CMPB (R11)(BX*1), R12
 	JNE  repeat_extend_forward_end_encodeBlockAsm8BAvx
 	LEAL 1(BX), BX
-	DECL BP
+	DECL R9
 	JNZ  matchlen_single_loopback_repeat_extend
 
 repeat_extend_forward_end_encodeBlockAsm8BAvx:
@@ -11019,7 +11019,7 @@ match_extend_back_loop_encodeBlockAsm8BAvx:
 match_extend_back_end_encodeBlockAsm8BAvx:
 	MOVL CX, DI
 	SUBL 12(SP), DI
-	LEAQ (AX)(DI*1), DI
+	LEAQ 4(AX)(DI*1), DI
 	CMPQ DI, (SP)
 	JL   match_dst_size_check_encodeBlockAsm8BAvx
 	MOVQ $0x00000000, ret+48(FP)
@@ -11311,40 +11311,40 @@ match_nolit_loop_encodeBlockAsm8BAvx:
 	MOVL BP, 16(SP)
 	ADDL $0x04, CX
 	ADDL $0x04, BX
-	MOVL 8(SP), BP
-	SUBL CX, BP
-	LEAQ (DX)(CX*1), R9
-	LEAQ (DX)(BX*1), R10
+	MOVQ src_len+32(FP), R9
+	SUBL CX, R9
+	LEAQ (DX)(CX*1), R10
+	LEAQ (DX)(BX*1), R11
 	XORL BX, BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JL   matchlen_single_match_nolit_encodeBlockAsm8BAvx
 
 matchlen_loopback_match_nolit_encodeBlockAsm8BAvx:
-	MOVQ  (R9)(BX*1), R11
-	XORQ  (R10)(BX*1), R11
-	TESTQ R11, R11
+	MOVQ  (R10)(BX*1), R12
+	XORQ  (R11)(BX*1), R12
+	TESTQ R12, R12
 	JZ    matchlen_loop_match_nolit_encodeBlockAsm8BAvx
-	BSFQ  R11, R11
-	SARQ  $0x03, R11
-	LEAL  (BX)(R11*1), BX
+	BSFQ  R12, R12
+	SARQ  $0x03, R12
+	LEAL  (BX)(R12*1), BX
 	JMP   match_nolit_end_encodeBlockAsm8BAvx
 
 matchlen_loop_match_nolit_encodeBlockAsm8BAvx:
-	LEAL -8(BP), BP
+	LEAL -8(R9), R9
 	LEAL 8(BX), BX
-	CMPL BP, $0x08
+	CMPL R9, $0x08
 	JGE  matchlen_loopback_match_nolit_encodeBlockAsm8BAvx
 
 matchlen_single_match_nolit_encodeBlockAsm8BAvx:
-	TESTL BP, BP
+	TESTL R9, R9
 	JZ    match_nolit_end_encodeBlockAsm8BAvx
 
 matchlen_single_loopback_match_nolit_encodeBlockAsm8BAvx:
-	MOVB (R9)(BX*1), R11
-	CMPB (R10)(BX*1), R11
+	MOVB (R10)(BX*1), R12
+	CMPB (R11)(BX*1), R12
 	JNE  match_nolit_end_encodeBlockAsm8BAvx
 	LEAL 1(BX), BX
-	DECL BP
+	DECL R9
 	JNZ  matchlen_single_loopback_match_nolit_encodeBlockAsm8BAvx
 
 match_nolit_end_encodeBlockAsm8BAvx:
@@ -11567,7 +11567,7 @@ match_nolit_dst_ok_encodeBlockAsm8BAvx:
 emit_remainder_encodeBlockAsm8BAvx:
 	MOVQ src_len+32(FP), CX
 	SUBL 12(SP), CX
-	LEAQ (AX)(CX*1), CX
+	LEAQ 4(AX)(CX*1), CX
 	CMPQ CX, (SP)
 	JL   emit_remainder_ok_encodeBlockAsm8BAvx
 	MOVQ $0x00000000, ret+48(FP)

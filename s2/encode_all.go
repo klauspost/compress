@@ -7,6 +7,7 @@ package s2
 
 import (
 	"bytes"
+	"encoding/binary"
 	"math/bits"
 )
 
@@ -28,6 +29,33 @@ func load64(b []byte, i int) uint64 {
 func hash6(u uint64, h uint8) uint32 {
 	const prime6bytes = 227718039650203
 	return uint32(((u << (64 - 48)) * prime6bytes) >> ((64 - h) & 63))
+}
+
+func encodeGo(dst, src []byte) []byte {
+	if n := MaxEncodedLen(len(src)); n < 0 {
+		panic(ErrTooLarge)
+	} else if len(dst) < n {
+		dst = make([]byte, n)
+	}
+
+	// The block starts with the varint-encoded length of the decompressed bytes.
+	d := binary.PutUvarint(dst, uint64(len(src)))
+
+	if len(src) == 0 {
+		return dst[:d]
+	}
+	if len(src) < minNonLiteralBlockSize {
+		d += emitLiteral(dst[d:], src)
+		return dst[:d]
+	}
+	n := encodeBlockGo(dst[d:], src)
+	if n > 0 {
+		d += n
+		return dst[:d]
+	}
+	// Not compressible
+	d += emitLiteral(dst[d:], src)
+	return dst[:d]
 }
 
 // encodeBlockGo encodes a non-empty src to a guaranteed-large-enough dst. It

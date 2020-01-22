@@ -5,11 +5,12 @@
 package s2
 
 import (
-	"archive/zip"
 	"bytes"
 	"io/ioutil"
 	"strings"
 	"testing"
+
+	"github.com/klauspost/compress/zip"
 )
 
 func TestDecodeRegression(t *testing.T) {
