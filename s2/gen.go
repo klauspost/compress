@@ -538,8 +538,6 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 
 	Label("match_nolit_loop_" + name)
 	{
-		base := GP32()
-		MOVL(s, base)
 		// Update repeat
 		{
 			// repeat = base - candidate

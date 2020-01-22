@@ -923,7 +923,6 @@ emit_literal_done_match_emit_encodeBlockAsm:
 emit_literal_skip_match_emit_encodeBlockAsm:
 match_nolit_loop_encodeBlockAsm:
 	MOVL AX, BP
-	MOVL AX, BP
 	SUBL BX, BP
 	MOVL BP, 24(SP)
 	ADDL $0x04, AX
@@ -2350,7 +2349,6 @@ emit_literal_done_match_emit_encodeBlockAsm12B:
 
 emit_literal_skip_match_emit_encodeBlockAsm12B:
 match_nolit_loop_encodeBlockAsm12B:
-	MOVL AX, BP
 	MOVL AX, BP
 	SUBL BX, BP
 	MOVL BP, 24(SP)
@@ -3779,7 +3777,6 @@ emit_literal_done_match_emit_encodeBlockAsm10B:
 emit_literal_skip_match_emit_encodeBlockAsm10B:
 match_nolit_loop_encodeBlockAsm10B:
 	MOVL AX, BP
-	MOVL AX, BP
 	SUBL BX, BP
 	MOVL BP, 24(SP)
 	ADDL $0x04, AX
@@ -5206,7 +5203,6 @@ emit_literal_done_match_emit_encodeBlockAsm8B:
 
 emit_literal_skip_match_emit_encodeBlockAsm8B:
 match_nolit_loop_encodeBlockAsm8B:
-	MOVL AX, BP
 	MOVL AX, BP
 	SUBL BX, BP
 	MOVL BP, 24(SP)
@@ -6728,7 +6724,6 @@ emit_literal_done_match_emit_encodeBlockAsmAvx:
 
 emit_literal_skip_match_emit_encodeBlockAsmAvx:
 match_nolit_loop_encodeBlockAsmAvx:
-	MOVL AX, BP
 	MOVL AX, BP
 	SUBL BX, BP
 	MOVL BP, 24(SP)
@@ -8298,7 +8293,6 @@ emit_literal_done_match_emit_encodeBlockAsm12BAvx:
 emit_literal_skip_match_emit_encodeBlockAsm12BAvx:
 match_nolit_loop_encodeBlockAsm12BAvx:
 	MOVL AX, BP
-	MOVL AX, BP
 	SUBL BX, BP
 	MOVL BP, 24(SP)
 	ADDL $0x04, AX
@@ -9867,7 +9861,6 @@ emit_literal_done_match_emit_encodeBlockAsm10BAvx:
 emit_literal_skip_match_emit_encodeBlockAsm10BAvx:
 match_nolit_loop_encodeBlockAsm10BAvx:
 	MOVL AX, BP
-	MOVL AX, BP
 	SUBL BX, BP
 	MOVL BP, 24(SP)
 	ADDL $0x04, AX
@@ -11435,7 +11428,6 @@ emit_literal_done_match_emit_encodeBlockAsm8BAvx:
 
 emit_literal_skip_match_emit_encodeBlockAsm8BAvx:
 match_nolit_loop_encodeBlockAsm8BAvx:
-	MOVL AX, BP
 	MOVL AX, BP
 	SUBL BX, BP
 	MOVL BP, 24(SP)
