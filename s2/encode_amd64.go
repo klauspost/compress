@@ -92,7 +92,7 @@ func encodeBlock(dst, src []byte) (d int) {
 		return encodeBlockAsm10B(dst, src)
 	}
 	if len(src) < minNonLiteralBlockSize {
-		return emitLiteral(dst[d:], src)
+		return 0
 	}
 	return encodeBlockAsm8B(dst, src)
 }
