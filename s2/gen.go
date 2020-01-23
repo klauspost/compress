@@ -20,14 +20,25 @@ func main() {
 	Constraint(buildtags.Not("noasm").ToConstraint())
 	Constraint(buildtags.Term("gc").ToConstraint())
 
-	genEncodeBlockAsm("encodeBlockAsm", 14, 6, false)
-	genEncodeBlockAsm("encodeBlockAsm12B", 12, 5, false)
-	genEncodeBlockAsm("encodeBlockAsm10B", 10, 4, false)
-	genEncodeBlockAsm("encodeBlockAsm8B", 8, 4, false)
-	genEncodeBlockAsm("encodeBlockAsmAvx", 14, 5, true)
-	genEncodeBlockAsm("encodeBlockAsm12BAvx", 12, 5, true)
-	genEncodeBlockAsm("encodeBlockAsm10BAvx", 10, 4, true)
-	genEncodeBlockAsm("encodeBlockAsm8BAvx", 8, 4, true)
+	genEncodeBlockAsm("encodeBlockAsm", 14, 6, 6, false, false)
+	genEncodeBlockAsm("encodeBlockAsm12B", 12, 5, 5, false, false)
+	genEncodeBlockAsm("encodeBlockAsm10B", 10, 5, 5, false, false)
+	genEncodeBlockAsm("encodeBlockAsm8B", 8, 4, 4, false, false)
+	genEncodeBlockAsm("encodeBlockAsmAvx", 14, 5, 6, true, false)
+	genEncodeBlockAsm("encodeBlockAsm12BAvx", 12, 5, 5, true, false)
+	genEncodeBlockAsm("encodeBlockAsm10BAvx", 10, 5, 4, true, false)
+	genEncodeBlockAsm("encodeBlockAsm8BAvx", 8, 4, 4, true, false)
+
+	// Snappy compatible
+	genEncodeBlockAsm("encodeSnappyBlockAsm", 14, 6, 6, false, true)
+	genEncodeBlockAsm("encodeSnappyBlockAsm12B", 12, 5, 5, false, true)
+	genEncodeBlockAsm("encodeSnappyBlockAsm10B", 10, 5, 5, false, true)
+	genEncodeBlockAsm("encodeSnappyBlockAsm8B", 8, 4, 4, false, true)
+	genEncodeBlockAsm("encodeSnappyBlockAsmAvx", 14, 6, 6, true, true)
+	genEncodeBlockAsm("encodeSnappyBlockAsm12BAvx", 12, 5, 5, true, true)
+	genEncodeBlockAsm("encodeSnappyBlockAsm10BAvx", 10, 5, 4, true, true)
+	genEncodeBlockAsm("encodeSnappyBlockAsm8BAvx", 8, 4, 4, true, true)
+
 	genEmitLiteral()
 	genEmitRepeat()
 	genEmitCopy()
@@ -70,7 +81,7 @@ func assert(fn func(ok LabelRef)) {
 	}
 }
 
-func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
+func genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes int, avx bool, snappy bool) {
 	TEXT(name, 0, "func(dst, src []byte) int")
 	Doc(name+" encodes a non-empty src to a guaranteed-large-enough dst.",
 		"It assumes that the varint-encoded length of the decompressed bytes has already been written.", "")
@@ -232,7 +243,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 		MOVL(nextS.As32(), nextSTempL)
 
 		candidate2 := GP32()
-		hasher := hash6(tableBits)
+		hasher := hashN(hashBytes, tableBits)
 		{
 			hash0, hash1 := GP64(), GP64()
 			MOVQ(cv, hash0)
@@ -369,15 +380,17 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 				offsetVal := GP32()
 				MOVL(repeatL, offsetVal)
 
-				// if nextEmit == 0 {do copy instead...}
-				TESTL(nextEmit, nextEmit)
-				JZ(LabelRef("repeat_as_copy_" + name))
+				if !snappy {
+					// if nextEmit == 0 {do copy instead...}
+					TESTL(nextEmit, nextEmit)
+					JZ(LabelRef("repeat_as_copy_" + name))
 
-				// Emit as repeat...
-				emitRepeat("match_repeat_"+name, length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name))
+					// Emit as repeat...
+					emitRepeat("match_repeat_"+name, length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name))
 
-				// Emit as copy instead...
-				Label("repeat_as_copy_" + name)
+					// Emit as copy instead...
+					Label("repeat_as_copy_" + name)
+				}
 				emitCopy("repeat_as_copy_"+name, length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name))
 
 				Label("repeat_end_emit_" + name)
@@ -600,7 +613,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog int, avx bool) {
 			x := GP64()
 			// Index s-2
 			MOVQ(Mem{Base: src, Index: s, Scale: 1, Disp: -2}, x)
-			hasher := hash6(tableBits)
+			hasher := hashN(hashBytes, tableBits)
 			hash0, hash1 := GP64(), GP64()
 			MOVQ(x, hash0) // s-2
 			SHRQ(U8(16), x)
@@ -752,14 +765,31 @@ type hashGen struct {
 	mulreg    reg.GPVirtual
 }
 
-// hash uses multiply to get a 'output' hash on the hash of the lowest 'bytes' bytes in value.
-func hash6(tablebits int) hashGen {
+// hashN uses multiply to get a 'output' hash on the hash of the lowest 'bytes' bytes in value.
+func hashN(hashBytes, tablebits int) hashGen {
 	h := hashGen{
-		bytes:     6,
+		bytes:     hashBytes,
 		tablebits: tablebits,
 		mulreg:    GP64(),
 	}
-	MOVQ(Imm(227718039650203), h.mulreg)
+	primebytes := uint64(0)
+	switch hashBytes {
+	case 3:
+		primebytes = 506832829
+	case 4:
+		primebytes = 2654435761
+	case 5:
+		primebytes = 889523592379
+	case 6:
+		primebytes = 227718039650203
+	case 7:
+		primebytes = 58295818150454627
+	case 8:
+		primebytes = 0xcf1bbcdcb7a56463
+	default:
+		panic("invalid hash length")
+	}
+	MOVQ(Imm(primebytes), h.mulreg)
 	return h
 }
 

@@ -4,7 +4,27 @@ package s2
 
 import (
 	"math/bits"
+
+	"github.com/klauspost/compress/snappy"
 )
+
+// EncodeSnappy returns the encoded form of src. The returned slice may be a sub-
+// slice of dst if dst was large enough to hold the entire encoded block.
+// Otherwise, a newly allocated slice will be returned.
+//
+// The output is Snappy compatible and will likely decompress faster.
+//
+// The dst and src must not overlap. It is valid to pass a nil dst.
+//
+// The blocks will require the same amount of memory to decode as encoding,
+// and does not make for concurrent decoding.
+// Also note that blocks do not contain CRC information, so corruption may be undetected.
+//
+// If you need to encode larger amounts of data, consider using
+// the streaming interface which gives all of these features.
+func EncodeSnappy(dst, src []byte) []byte {
+	return snappy.Encode(dst, src)
+}
 
 // encodeBlock encodes a non-empty src to a guaranteed-large-enough dst. It
 // assumes that the varint-encoded length of the decompressed bytes has already

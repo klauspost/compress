@@ -54,6 +54,54 @@ func encodeBlockAsm10BAvx(dst []byte, src []byte) int
 //go:noescape
 func encodeBlockAsm8BAvx(dst []byte, src []byte) int
 
+// encodeSnappyBlockAsm encodes a non-empty src to a guaranteed-large-enough dst.
+// It assumes that the varint-encoded length of the decompressed bytes has already been written.
+//
+//go:noescape
+func encodeSnappyBlockAsm(dst []byte, src []byte) int
+
+// encodeSnappyBlockAsm12B encodes a non-empty src to a guaranteed-large-enough dst.
+// It assumes that the varint-encoded length of the decompressed bytes has already been written.
+//
+//go:noescape
+func encodeSnappyBlockAsm12B(dst []byte, src []byte) int
+
+// encodeSnappyBlockAsm10B encodes a non-empty src to a guaranteed-large-enough dst.
+// It assumes that the varint-encoded length of the decompressed bytes has already been written.
+//
+//go:noescape
+func encodeSnappyBlockAsm10B(dst []byte, src []byte) int
+
+// encodeSnappyBlockAsm8B encodes a non-empty src to a guaranteed-large-enough dst.
+// It assumes that the varint-encoded length of the decompressed bytes has already been written.
+//
+//go:noescape
+func encodeSnappyBlockAsm8B(dst []byte, src []byte) int
+
+// encodeSnappyBlockAsmAvx encodes a non-empty src to a guaranteed-large-enough dst.
+// It assumes that the varint-encoded length of the decompressed bytes has already been written.
+//
+//go:noescape
+func encodeSnappyBlockAsmAvx(dst []byte, src []byte) int
+
+// encodeSnappyBlockAsm12BAvx encodes a non-empty src to a guaranteed-large-enough dst.
+// It assumes that the varint-encoded length of the decompressed bytes has already been written.
+//
+//go:noescape
+func encodeSnappyBlockAsm12BAvx(dst []byte, src []byte) int
+
+// encodeSnappyBlockAsm10BAvx encodes a non-empty src to a guaranteed-large-enough dst.
+// It assumes that the varint-encoded length of the decompressed bytes has already been written.
+//
+//go:noescape
+func encodeSnappyBlockAsm10BAvx(dst []byte, src []byte) int
+
+// encodeSnappyBlockAsm8BAvx encodes a non-empty src to a guaranteed-large-enough dst.
+// It assumes that the varint-encoded length of the decompressed bytes has already been written.
+//
+//go:noescape
+func encodeSnappyBlockAsm8BAvx(dst []byte, src []byte) int
+
 // emitLiteral writes a literal chunk and returns the number of bytes written.
 //
 // It assumes that:
