@@ -291,18 +291,18 @@ func (w *Writer) Reset(writer io.Writer) {
 			if len(in) > 0 {
 				if w.err(nil) == nil {
 					// Don't expose data from previous buffers.
-					in = in[:len(in):len(in)]
+					toWrite := in[:len(in):len(in)]
 					// Write to output.
-					n, err := writer.Write(in)
-					if err == nil && n != len(in) {
+					n, err := writer.Write(toWrite)
+					if err == nil && n != len(toWrite) {
 						err = io.ErrShortBuffer
 					}
 					_ = w.err(err)
 					w.written += int64(n)
 				}
-				if cap(in) >= w.obufLen {
-					w.buffers.Put([]byte(in))
-				}
+			}
+			if cap(in) >= w.obufLen {
+				w.buffers.Put([]byte(in))
 			}
 			// close the incoming write request.
 			// This can be used for synchronizing flushes.
