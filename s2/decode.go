@@ -65,7 +65,7 @@ func Decode(dst, src []byte) ([]byte, error) {
 	} else {
 		dst = make([]byte, dLen)
 	}
-	switch s2DecodeGo(dst, src[s:]) {
+	switch s2Decode(dst, src[s:]) {
 	case 0:
 		return dst, nil
 	case decodeErrCodeUnsupportedLiteralLength:

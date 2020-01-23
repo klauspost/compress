@@ -3,6 +3,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// +build !amd64 appengine !gc noasm
+
 package s2
 
 import "fmt"
@@ -12,7 +14,7 @@ import "fmt"
 // equals that length.
 //
 // It returns 0 on success or a decodeErrCodeXxx error code on failure.
-func s2DecodeGo(dst, src []byte) int {
+func s2Decode(dst, src []byte) int {
 	const debug = false
 	if debug {
 		fmt.Println("Starting decode, dst len:", len(dst))

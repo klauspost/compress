@@ -276,77 +276,112 @@ In rare, worst case scenario Snappy blocks could be significantly bigger than th
 
 ### Standard compression
 
-| Absolute Perf  | Snappy size | S2 Size | Snappy Speed | Snappy Asm | S2 Speed   | Snappy dec | S2 dec     |
-|----------------|-------------|---------|--------------|------------|------------|------------|------------|
-| html           | 22843       | 21094   | 583 MB/s     | 1150 MB/s  | 814 MB/s   | 2870 MB/s  | 3830 MB/s  |
-| urls.10K       | 335492      | 286835  | 336 MB/s     | 514 MB/s   | 472 MB/s   | 1600 MB/s  | 1960 MB/s  |
-| fireworks.jpeg | 123034      | 123100  | 25900 MB/s   | 24800 MB/s | 21600 MB/s | 56900 MB/s | 63500 MB/s |
-| paper-100k.pdf | 85304       | 84237   | 5160 MB/s    | 12400 MB/s | 4820 MB/s  | 24500 MB/s | 22300 MB/s |
-| html_x_4       | 92234       | 21101   | 570 MB/s     | 1080 MB/s  | 2340 MB/s  | 2330 MB/s  | 2370 MB/s  |
-| alice29.txt    | 88034       | 85934   | 218 MB/s     | 425 MB/s   | 292 MB/s   | 965 MB/s   | 1470 MB/s  |
-| asyoulik.txt   | 77503       | 79569   | 208 MB/s     | 392 MB/s   | 301 MB/s   | 922 MB/s   | 1670 MB/s  |
-| lcet10.txt     | 234661      | 220408  | 229 MB/s     | 427 MB/s   | 298 MB/s   | 1030 MB/s  | 1420 MB/s  |
-| plrabn12.txt   | 319267      | 318197  | 199 MB/s     | 354 MB/s   | 277 MB/s   | 873 MB/s   | 1490 MB/s  |
-| geo.protodata  | 23335       | 18696   | 743 MB/s     | 1560 MB/s  | 1160 MB/s  | 3820 MB/s  | 4990 MB/s  |
-| kppkn.gtb      | 69526       | 65109   | 335 MB/s     | 682 MB/s   | 413 MB/s   | 1300 MB/s  | 1470 MB/s  |
+Block compression. Parallel benchmark running on 16 cores, 16 goroutines.
+
+AMD64 assembly is use for both S2 and Snappy.
+
+| Absolute Perf         | Snappy size | S2 Size | Snappy Speed | S2 Speed    | Snappy dec  | S2 dec      |
+|-----------------------|-------------|---------|--------------|-------------|-------------|-------------|
+| html                  | 22843       | 21111   | 16246 MB/s   | 17438 MB/s  | 40972 MB/s  | 49263 MB/s  |
+| urls.10K              | 335492      | 287326  | 7943 MB/s    | 9693 MB/s   | 22523 MB/s  | 26484 MB/s  |
+| fireworks.jpeg        | 123034      | 123100  | 349544 MB/s  | 266024 MB/s | 718321 MB/s | 827552 MB/s |
+| fireworks.jpeg (200B) | 146         | 155     | 8869 MB/s    | 19730 MB/s  | 33691 MB/s  | 52421 MB/s  |
+| paper-100k.pdf        | 85304       | 84459   | 167546 MB/s  | 101263 MB/s | 326905 MB/s | 291944 MB/s |
+| html_x_4              | 92234       | 21113   | 15194 MB/s   | 50670 MB/s  | 30843 MB/s  | 32217 MB/s  |
+| alice29.txt           | 88034       | 85975   | 5936 MB/s    | 6139 MB/s   | 12882 MB/s  | 20044 MB/s  |
+| asyoulik.txt          | 77503       | 79650   | 5517 MB/s    | 6366 MB/s   | 12735 MB/s  | 22806 MB/s  |
+| lcet10.txt            | 234661      | 220670  | 6235 MB/s    | 6067 MB/s   | 14519 MB/s  | 18697 MB/s  |
+| plrabn12.txt          | 319267      | 317985  | 5159 MB/s    | 5726 MB/s   | 11923 MB/s  | 19901 MB/s  |
+| geo.protodata         | 23335       | 18690   | 21220 MB/s   | 26529 MB/s  | 56271 MB/s  | 62540 MB/s  |
+| kppkn.gtb             | 69526       | 65312   | 9732 MB/s    | 8559 MB/s   | 18491 MB/s  | 18969 MB/s  |
+| alice29.txt (128B)    | 80          | 84      | 6691 MB/s    | 15542 MB/s  | 31883 MB/s  | 37851 MB/s  |
+| alice29.txt (1000B)   | 774         | 852     | 12204 MB/s   | 21176 MB/s  | 48056 MB/s  | 100995 MB/s |
+| alice29.txt (10000B)  | 6648        | 7437    | 10044 MB/s   | 13550 MB/s  | 32378 MB/s  | 52489 MB/s  |
+| alice29.txt (20000B)  | 12686       | 13574   | 7733 MB/s    | 11210 MB/s  | 30566 MB/s  | 48503 MB/s  |
 
 
-| Relative Perf  | Snappy size | Asm speed | S2 size improved | S2 Speed | S2 Speed vs. asm | S2 Dec Speed |
-|----------------|-------------|-----------|------------------|----------|------------------|--------------|
-| html           | 22.31%      | 1.97x     | 7.66%            | 1.40x    | 0.71x            | 1.33x        |
-| urls.10K       | 47.78%      | 1.53x     | 14.50%           | 1.40x    | 0.92x            | 1.23x        |
-| fireworks.jpeg | 99.95%      | 0.96x     | -0.05%           | 0.83x    | 0.87x            | 1.12x        |
-| paper-100k.pdf | 83.30%      | 2.40x     | 1.25%            | 0.93x    | 0.39x            | 0.91x        |
-| html_x_4       | 22.52%      | 1.89x     | 77.12%           | 4.11x    | 2.17x            | 1.02x        |
-| alice29.txt    | 57.88%      | 1.95x     | 2.39%            | 1.34x    | 0.69x            | 1.52x        |
-| asyoulik.txt   | 61.91%      | 1.88x     | -2.67%           | 1.45x    | 0.77x            | 1.81x        |
-| lcet10.txt     | 54.99%      | 1.86x     | 6.07%            | 1.30x    | 0.70x            | 1.38x        |
-| plrabn12.txt   | 66.26%      | 1.78x     | 0.34%            | 1.39x    | 0.78x            | 1.71x        |
-| geo.protodata  | 19.68%      | 2.10x     | 19.88%           | 1.56x    | 0.74x            | 1.31x        |
-| kppkn.gtb      | 37.72%      | 2.04x     | 6.35%            | 1.23x    | 0.61x            | 1.13x        |
+| Relative Perf         | Snappy size | S2 size improved | S2 Speed | S2 Dec Speed |
+|-----------------------|-------------|------------------|----------|--------------|
+| html                  | 22.31%      | 7.58%            | 1.07x    | 1.20x        |
+| urls.10K              | 47.78%      | 14.36%           | 1.22x    | 1.18x        |
+| fireworks.jpeg        | 99.95%      | -0.05%           | 0.76x    | 1.15x        |
+| fireworks.jpeg (200B) | 73.00%      | -6.16%           | 2.22x    | 1.56x        |
+| paper-100k.pdf        | 83.30%      | 0.99%            | 0.60x    | 0.89x        |
+| html_x_4              | 22.52%      | 77.11%           | 3.33x    | 1.04x        |
+| alice29.txt           | 57.88%      | 2.34%            | 1.03x    | 1.56x        |
+| asyoulik.txt          | 61.91%      | -2.77%           | 1.15x    | 1.79x        |
+| lcet10.txt            | 54.99%      | 5.96%            | 0.97x    | 1.29x        |
+| plrabn12.txt          | 66.26%      | 0.40%            | 1.11x    | 1.67x        |
+| geo.protodata         | 19.68%      | 19.91%           | 1.25x    | 1.11x        |
+| kppkn.gtb             | 37.72%      | 6.06%            | 0.88x    | 1.03x        |
+| alice29.txt (128B)    | 62.50%      | -5.00%           | 2.32x    | 1.19x        |
+| alice29.txt (1000B)   | 77.40%      | -10.08%          | 1.74x    | 2.10x        |
+| alice29.txt (10000B)  | 66.48%      | -11.87%          | 1.35x    | 1.62x        |
+| alice29.txt (20000B)  | 63.43%      | -7.00%           | 1.45x    | 1.59x        |
 
-In almost all cases there is a size improvement and decompression speed is better, except 1 case.
+Speed is generally at or above Snappy. Small blocks gets a significant speedup, although at the expense of size. 
 
-Except for the PDF and JPEG (mostly incompressible content), the speed is better than the pure Go Snappy. 
-However, looking at the absolute numbers, these cases are still above 4GB/s.
+Decompression speed is better than Snappy, except in one case. 
 
-The worst case compression speed of Snappy (`plrabn12.txt` and `asyoulik.txt`) is significantly improved.
+Since payloads are very small the variance in terms of size is rather big, so they should only be seen as a general guideline.
+
+Size is on average around Snappy, but varies on content type. 
+In cases where compression is worse, it usually is compensated by a speed boost. 
+
 
 ### Better compression
 
-| Absolute Perf  | Snappy size | Better Size | Snappy Speed | Snappy Asm | Better Speed | Snappy dec | Better dec |
-|----------------|-------------|-------------|--------------|------------|--------------|------------|------------|
-| html           | 22843       | 19867       | 583 MB/s     | 1150 MB/s  | 560 MB/s     | 2870 MB/s  | 3100 MB/s  |
-| urls.10K       | 335492      | 256907      | 336 MB/s     | 514 MB/s   | 291 MB/s     | 1600 MB/s  | 1470 MB/s  |
-| fireworks.jpeg | 123034      | 123100      | 25900 MB/s   | 24800 MB/s | 9760 MB/s    | 56900 MB/s | 63300 MB/s |
-| paper-100k.pdf | 85304       | 82915       | 5160 MB/s    | 12400 MB/s | 594 MB/s     | 24500 MB/s | 15000 MB/s |
-| html_x_4       | 92234       | 19875       | 570 MB/s     | 1080 MB/s  | 1750 MB/s    | 2330 MB/s  | 2290 MB/s  |
-| alice29.txt    | 88034       | 73429       | 218 MB/s     | 425 MB/s   | 203 MB/s     | 965 MB/s   | 1290 MB/s  |
-| asyoulik.txt   | 77503       | 66997       | 208 MB/s     | 392 MB/s   | 186 MB/s     | 922 MB/s   | 1120 MB/s  |
-| lcet10.txt     | 234661      | 191969      | 229 MB/s     | 427 MB/s   | 214 MB/s     | 1030 MB/s  | 1230 MB/s  |
-| plrabn12.txt   | 319267      | 272575      | 199 MB/s     | 354 MB/s   | 179 MB/s     | 873 MB/s   | 1000 MB/s  |
-| geo.protodata  | 23335       | 18303       | 743 MB/s     | 1560 MB/s  | 818 MB/s     | 3820 MB/s  | 4510 MB/s  |
-| kppkn.gtb      | 69526       | 61992       | 335 MB/s     | 682 MB/s   | 310 MB/s     | 1300 MB/s  | 1260 MB/s  |
+| Absolute Perf         | Snappy size | Better Size | Snappy Speed | Better Speed | Snappy dec  | Better dec  |
+|-----------------------|-------------|-------------|--------------|--------------|-------------|-------------|
+| html                  | 22843       | 19833       | 16246 MB/s   | 7731 MB/s    | 40972 MB/s  | 40292 MB/s  |
+| urls.10K              | 335492      | 253529      | 7943 MB/s    | 3980 MB/s    | 22523 MB/s  | 20981 MB/s  |
+| fireworks.jpeg        | 123034      | 123100      | 349544 MB/s  | 9760 MB/s    | 718321 MB/s | 823698 MB/s |
+| fireworks.jpeg (200B) | 146         | 142         | 8869 MB/s    | 594 MB/s     | 33691 MB/s  | 30101 MB/s  |
+| paper-100k.pdf        | 85304       | 82915       | 167546 MB/s  | 7470 MB/s    | 326905 MB/s | 198869 MB/s |
+| html_x_4              | 92234       | 19841       | 15194 MB/s   | 23403 MB/s   | 30843 MB/s  | 30937 MB/s  |
+| alice29.txt           | 88034       | 73218       | 5936 MB/s    | 2945 MB/s    | 12882 MB/s  | 16611 MB/s  |
+| asyoulik.txt          | 77503       | 66844       | 5517 MB/s    | 2739 MB/s    | 12735 MB/s  | 14975 MB/s  |
+| lcet10.txt            | 234661      | 190589      | 6235 MB/s    | 3099 MB/s    | 14519 MB/s  | 16634 MB/s  |
+| plrabn12.txt          | 319267      | 270828      | 5159 MB/s    | 2600 MB/s    | 11923 MB/s  | 13382 MB/s  |
+| geo.protodata         | 23335       | 18278       | 21220 MB/s   | 11208 MB/s   | 56271 MB/s  | 57961 MB/s  |
+| kppkn.gtb             | 69526       | 61851       | 9732 MB/s    | 4556 MB/s    | 18491 MB/s  | 16524 MB/s  |
+| alice29.txt (128B)    | 80          | 81          | 6691 MB/s    | 529 MB/s     | 31883 MB/s  | 34225 MB/s  |
+| alice29.txt (1000B)   | 774         | 748         | 12204 MB/s   | 1943 MB/s    | 48056 MB/s  | 42068 MB/s  |
+| alice29.txt (10000B)  | 6648        | 6234        | 10044 MB/s   | 2949 MB/s    | 32378 MB/s  | 28813 MB/s  |
+| alice29.txt (20000B)  | 12686       | 11584       | 7733 MB/s    | 2822 MB/s    | 30566 MB/s  | 27315 MB/s  |
 
 
-| Relative Perf  | Snappy size | Asm speed | Better size | Better Speed | Better vs. asm | Better dec |
-|----------------|-------------|-----------|-------------|--------------|----------------|------------|
-| html           | 22.31%      | 1.97x     | 13.03%      | 0.96x        | 0.49x          | 1.08x      |
-| urls.10K       | 47.78%      | 1.53x     | 23.42%      | 0.87x        | 0.57x          | 0.92x      |
-| fireworks.jpeg | 99.95%      | 0.96x     | -0.05%      | 0.38x        | 0.39x          | 1.11x      |
-| paper-100k.pdf | 83.30%      | 2.40x     | 2.80%       | 0.12x        | 0.05x          | 0.61x      |
-| html_x_4       | 22.52%      | 1.89x     | 78.45%      | 3.07x        | 1.62x          | 0.98x      |
-| alice29.txt    | 57.88%      | 1.95x     | 16.59%      | 0.93x        | 0.48x          | 1.34x      |
-| asyoulik.txt   | 61.91%      | 1.88x     | 13.56%      | 0.89x        | 0.47x          | 1.21x      |
-| lcet10.txt     | 54.99%      | 1.86x     | 18.19%      | 0.93x        | 0.50x          | 1.19x      |
-| plrabn12.txt   | 66.26%      | 1.78x     | 14.62%      | 0.90x        | 0.51x          | 1.15x      |
-| geo.protodata  | 19.68%      | 2.10x     | 21.56%      | 1.10x        | 0.52x          | 1.18x      |
-| kppkn.gtb      | 37.72%      | 2.04x     | 10.84%      | 0.93x        | 0.45x          | 0.97x      |
+| Relative Perf         | Snappy size | Better size | Better Speed | Better dec |
+|-----------------------|-------------|-------------|--------------|------------|
+| html                  | 22.31%      | 13.18%      | 0.48x        | 0.98x      |
+| urls.10K              | 47.78%      | 24.43%      | 0.50x        | 0.93x      |
+| fireworks.jpeg        | 99.95%      | -0.05%      | 0.03x        | 1.15x      |
+| fireworks.jpeg (200B) | 73.00%      | 2.74%       | 0.07x        | 0.89x      |
+| paper-100k.pdf        | 83.30%      | 2.80%       | 0.07x        | 0.61x      |
+| html_x_4              | 22.52%      | 78.49%      | 0.04x        | 1.00x      |
+| alice29.txt           | 57.88%      | 16.83%      | 1.54x        | 1.29x      |
+| asyoulik.txt          | 61.91%      | 13.75%      | 0.50x        | 1.18x      |
+| lcet10.txt            | 54.99%      | 18.78%      | 0.50x        | 1.15x      |
+| plrabn12.txt          | 66.26%      | 15.17%      | 0.50x        | 1.12x      |
+| geo.protodata         | 19.68%      | 21.67%      | 0.50x        | 1.03x      |
+| kppkn.gtb             | 37.72%      | 11.04%      | 0.53x        | 0.89x      |
+| alice29.txt (128B)    | 62.50%      | -1.25%      | 0.47x        | 1.07x      |
+| alice29.txt (1000B)   | 77.40%      | 3.36%       | 0.08x        | 0.88x      |
+| alice29.txt (10000B)  | 66.48%      | 6.23%       | 0.16x        | 0.89x      |
+| alice29.txt (20000B)  | 63.43%      | 8.69%       | 0.29x        | 0.89x      |
 
-Except for the mostly incompressible JPEG image compression is better and usually in the double digits in terms of percentage reduction over Snappy.
+Except for the mostly incompressible JPEG image compression is better and usually in the 
+double digits in terms of percentage reduction over Snappy.
 
-The PDF sample shows a significant slowdown compared to Snappy, as this mode tries harder to compress the data.
+The PDF sample shows a significant slowdown compared to Snappy, as this mode tries harder 
+to compress the data.
 
+This mode aims to provide better compression at the expense of performance and achieves that 
+without a huge performance pentalty, except on very small blocks. 
+
+Decompression speed suffers a little compared to the regular S2 mode, 
+but still manages to be close to Snappy in spite of increased compression.  
+ 
 # Concatenating blocks and streams.
 
 Concatenating streams will concatenate the output of both without recompressing them. 
