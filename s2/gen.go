@@ -391,7 +391,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes int, avx bool,
 					// Emit as copy instead...
 					Label("repeat_as_copy_" + name)
 				}
-				emitCopy("repeat_as_copy_"+name, length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name))
+				emitCopy("repeat_as_copy_"+name, length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name), snappy)
 
 				Label("repeat_end_emit_" + name)
 				// Store new dst and nextEmit
@@ -587,7 +587,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes int, avx bool,
 
 			// length += 4
 			ADDL(U8(4), length)
-			emitCopy("match_nolit_"+name, length, offset, nil, dst, LabelRef("match_nolit_emitcopy_end_"+name))
+			emitCopy("match_nolit_"+name, length, offset, nil, dst, LabelRef("match_nolit_emitcopy_end_"+name), snappy)
 			Label("match_nolit_emitcopy_end_" + name)
 			MOVL(s, nextEmitL)
 
@@ -1104,7 +1104,7 @@ func genEmitCopy() {
 	Load(Param("dst").Base(), dstBase)
 	Load(Param("offset"), offset)
 	Load(Param("length"), length)
-	emitCopy("standalone", length, offset, retval, dstBase, LabelRef("gen_emit_copy_end"))
+	emitCopy("standalone", length, offset, retval, dstBase, LabelRef("gen_emit_copy_end"), false)
 	Label("gen_emit_copy_end")
 	Store(retval, ReturnIndex(0))
 	RET()
@@ -1122,13 +1122,14 @@ const (
 // retval can be nil.
 // Will jump to end label when finished.
 // Uses 2 GP registers.
-func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end LabelRef) {
+func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end LabelRef, snappy bool) {
 	//if offset >= 65536 {
 	CMPL(offset.As32(), U32(65536))
 	JL(LabelRef("two_byte_offset_" + name))
 
 	// offset is >= 65536
 	//	if length <= 64 goto four_bytes_remain_
+	Label("four_bytes_loop_back_" + name)
 	CMPL(length.As32(), U8(64))
 	JLE(LabelRef("four_bytes_remain_" + name))
 
@@ -1154,7 +1155,10 @@ func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end La
 	// Emit remaining as repeats
 	//	return 5 + emitRepeat(dst[5:], offset, length)
 	// Inline call to emitRepeat. Will jump to end
-	emitRepeat(name+"_emit_copy", length, offset, retval, dstBase, end)
+	if !snappy {
+		emitRepeat(name+"_emit_copy", length, offset, retval, dstBase, end)
+	}
+	JMP(LabelRef("four_bytes_loop_back_" + name))
 
 	Label("four_bytes_remain_" + name)
 	//	if length == 0 {
@@ -1206,7 +1210,10 @@ func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end La
 		ADDQ(U8(3), retval)
 	}
 	// Inline call to emitRepeat. Will jump to end
-	emitRepeat(name+"_emit_copy_short", length, offset, retval, dstBase, end)
+	if !snappy {
+		emitRepeat(name+"_emit_copy_short", length, offset, retval, dstBase, end)
+	}
+	JMP(LabelRef("two_byte_offset_" + name))
 
 	Label("two_byte_offset_short_" + name)
 	//if length >= 12 || offset >= 2048 {
