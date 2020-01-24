@@ -37,6 +37,8 @@ func main() {
 	args := flag.Args()
 	if len(args) == 0 || *help {
 		_, _ = fmt.Fprintf(os.Stderr, "s2 decompress v%v, built at %v.\n\n", version, date)
+		_, _ = fmt.Fprintf(os.Stderr, "Copyright (c) 2011 The Snappy-Go Authors. All rights reserved.\n"+
+			"Copyright (c) 2019 Klaus Post. All rights reserved.\n\n")
 		_, _ = fmt.Fprintln(os.Stderr, `Usage: s2d [options] file1 file2
 
 Decompresses all files supplied as input. Input files must end with '.s2' or '.snappy'.

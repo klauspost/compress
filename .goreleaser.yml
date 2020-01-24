@@ -75,3 +75,19 @@ changelog:
     exclude:
     - '^docs:'
     - '^test:'
+
+nfpms:
+  -
+    vendor: Klaus Post
+    homepage: https://github.com/klauspost/compress
+    maintainer: Klaus Post <klauspost@gmail.com>
+    description: S2 Compression Tool
+    license: BSD 3-Clause
+    formats:
+      - deb
+      - rpm
+    replacements:
+      darwin: Darwin
+      linux: Linux
+      freebsd: FreeBSD
+      amd64: x86_64
