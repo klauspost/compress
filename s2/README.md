@@ -16,17 +16,17 @@ This is important so you don't have to worry about spending CPU cycles on alread
 * Concurrent stream compression
 * Faster decompression
 * Ability to quickly skip forward in compressed stream
-* Compatible with Snappy compressed content
+* Compatible with reading Snappy compressed content
 * Offers alternative, more efficient, but slightly slower compression mode.
 * Smaller block size overhead on incompressible blocks.
 * Block concatenation
 * Automatic stream size padding.
+* Snappy compatible block compression.
 
 ## Drawbacks over Snappy
 
 * Not optimized for 32 bit systems.
-* No AMD64 assembler implementation yet, meaning slightly slower compression speed on 1 core CPU.
-* Uses slightly more memory due to larger blocks and concurrency (configurable).
+* Uses slightly more memory (4MB per core) due to larger blocks and concurrency (configurable).
 
 # Usage
 
@@ -68,6 +68,9 @@ func DecodeStream(src io.Reader, dst io.Writer) error
 ```
 
 Similar to the Writer, a Reader can be reused using the `Reset` method.
+
+For the best possible throughput, there is a `EncodeBuffer(buf []byte)` function available.
+However, it requires that the provided buffer isn't used after it is handed over to S2 and until the stream is flushed or closed.  
 
 For smaller data blocks, there is also a non-streaming interface: `Encode()`, `EncodeBetter()` and `Decode()`.
 Do however note that these functions (similar to Snappy) does not provide validation of data, 
@@ -155,38 +158,44 @@ This package is solely aimed at replacing Snappy as a high speed compression pac
 If you are mainly looking for better compression [zstandard](https://github.com/klauspost/compress/tree/master/zstd#zstd)
 gives better compression, but typically at speeds slightly below "better" mode in this package.
 
-Compression is increased compared to Snappy, mostly around 5-20% and the throughput is typically 25-40% increased (single threaded) compared to the non-assembly Go implementation.
+Compression is increased compared to Snappy, mostly around 5-20% and the throughput is typically 25-40% increased (single threaded) compared to the Snappy Go implementation.
+
+Streams are concurrently compressed. The stream will be distributed among all available CPU cores for the best possible throughput.
 
 A "better" compression mode is also available. This allows to trade a bit of speed for a minor compression gain.
 The content compressed in this mode is fully compatible with the standard decoder.
 
-Snappy vs S2 compression speed on 6 core (12 thread) computer, using all threads and a single thread:
+Snappy vs S2 compression speed on 16 core (32 thread) computer, using all threads and a single thread:
 
 | File                                                                                                | S2 speed | S2 throughput | S2 % smaller | S2 decomp | S2 "better" | "better" throughput | "better" % smaller | "better" decomp |
 |-----------------------------------------------------------------------------------------------------|----------|---------------|--------------|-----------|-------------|---------------------|--------------------|-----------------|
-| [rawstudio-mint14.tar](https://files.klauspost.com/compress/rawstudio-mint14.7z)                    | 7.41x    | 3401 MB/s     | 6.98%        | 1.19x     | 3.73x       | 1713 MB/s           | 10.97%             | 0.96x           |
-| (1 CPU)                                                                                             | 1.37x    | 631 MB/s      | -            | 2085 MB/s | 0.67x       | 309 MB/s            | -                  | 1691 MB/s       |
-| [github-june-2days-2019.json](https://files.klauspost.com/compress/github-june-2days-2019.json.zst) | 8.76x    | 4351 MB/s     | 28.79%       | 1.29x     | 6.64x       | 3301 MB/s           | 32.43%             | 1.23x           |
-| (1 CPU)                                                                                             | 1.62x    | 806 MB/s      | -            | 2262 MB/s | 1.08x       | 535 MB/s            | -                  | 2153 MB/s       |
-| [github-ranks-backup.bin](https://files.klauspost.com/compress/github-ranks-backup.bin.zst)         | 7.70x    | 3610 MB/s     | -5.90%       | 1.07x     | 4.65x       | 2179 MB/s           | 5.45%              | 0.93x           |
-| (1 CPU)                                                                                             | 1.26x    | 592 MB/s      | -            | 2053 MB/s | 0.76x       | 356 MB/s            | -                  | 1796 MB/s       |
-| [consensus.db.10gb](https://files.klauspost.com/compress/consensus.db.10gb.zst)                     | 7.17x    | 3494 MB/s     | 14.83%       | 1.03x     | 3.43x       | 1674 MB/s           | 14.79%             | 1.03x           |
-| (1 CPU)                                                                                             | 1.41x    | 687 MB/s      | -            | 2805 MB/s | 0.63x       | 309 MB/s            | -                  | 2796 MB/s       |
-| [adresser.json](https://files.klauspost.com/compress/adresser.json.zst)                             | 5.16x    | 4923 MB/s     | 43.52%       | 1.17x     | 4.67x       | 4456 MB/s           | 47.15%             | 1.19x           |
-| (1 CPU)                                                                                             | 1.76x    | 1675 MB/s     | -            | 3985 MB/s | 1.49x       | 1425 MB/s           | -                  | 4034 MB/s       |
-| [gob-stream](https://files.klauspost.com/compress/gob-stream.7z)                                    | 8.84x    | 4402 MB/s     | 22.24%       | 1.16x     | 6.58x       | 3278 MB/s           | 25.91%             | 1.08x           |
-| (1 CPU)                                                                                             | 1.50x    | 747 MB/s      | -            | 2175 MB/s | 1.06x       | 530 MB/s            | -                  | 2039 MB/s       |
-| [10gb.tar](http://mattmahoney.net/dc/10gb.html)                                                     | 6.73x    | 2715 MB/s     | 1.99%        | 1.04x     | 4.50x       | 1818 MB/s           | 5.68%              | 0.91x           |
-| (1 CPU)                                                                                             | 1.17x    | 472 MB/s      | -            | 1493 MB/s | 0.79x       | 320 MB/s            | -                  | 1312 MB/s       |
-| sharnd.out.2gb                                                                                      | 0.94x    | 5987 MB/s     | 0.01%        | 0.89x     | 0.90x       | 5768 MB/s           | 0.01%              | 0.90x           |
-| (1 CPU)                                                                                             | 1.30x    | 8323 MB/s     | -            | 4222 MB/s | 1.18x       | 7528 MB/s           | -                  | 4266 MB/s       |
-| [enwik9](http://mattmahoney.net/dc/textdata.html)                                                   | 10.02x   | 2337 MB/s     | 3.66%        | 1.35x     | 5.83x       | 1360 MB/s           | 15.37%             | 1.05x           |
-| (1 CPU)                                                                                             | 1.38x    | 321 MB/s      | -            | 1230 MB/s | 0.84x       | 197 MB/s            | -                  | 956 MB/s        |
-| [silesia.tar](http://sun.aei.polsl.pl/~sdeor/corpus/silesia.zip)                                    | 7.72x    | 2464 MB/s     | 5.63%        | 1.22x     | 4.65x       | 1486 MB/s           | 12.42%             | 1.01x           |
-| (1 CPU)                                                                                             | 1.31x    | 418 MB/s      | -            | 1454 MB/s | 0.77x       | 246 MB/s            | -                  | 1210 MB/s       |
+| [rawstudio-mint14.tar](https://files.klauspost.com/compress/rawstudio-mint14.7z)                    | 12.70x   | 10556 MB/s    | 7.35%        | 1.14x     | 4.15x       | 3455 MB/s           | 12.79%             | 0.94x           |
+| (1 CPU)                                                                                             | 1.14x    | 948 MB/s      | -            | 2117 MB/s | 0.42x       | 349 MB/s            | -                  | 1738 MB/s       |
+| [github-june-2days-2019.json](https://files.klauspost.com/compress/github-june-2days-2019.json.zst) | 17.13x   | 14484 MB/s    | 31.60%       | 1.25x     | 10.09x      | 8533 MB/s           | 37.71%             | 1.20x           |
+| (1 CPU)                                                                                             | 1.33x    | 1127 MB/s     | -            | 2401 MB/s | 0.70x       | 589 MB/s            | -                  | 2307 MB/s       |
+| [github-ranks-backup.bin](https://files.klauspost.com/compress/github-ranks-backup.bin.zst)         | 15.14x   | 12000 MB/s    | -5.79%       | 0.98x     | 6.59x       | 5223 MB/s           | 5.80%              | 0.83x           |
+| (1 CPU)                                                                                             | 1.11x    | 877 MB/s      | -            | 2075 MB/s | 0.47x       | 370 MB/s            | -                  | 1764 MB/s       |
+| [consensus.db.10gb](https://files.klauspost.com/compress/consensus.db.10gb.zst)                     | 14.62x   | 12116 MB/s    | 15.90%       | 1.05x     | 5.35x       | 4430 MB/s           | 16.08%             | 1.02x           |
+| (1 CPU)                                                                                             | 1.38x    | 1146 MB/s     | -            | 2967 MB/s | 0.38x       | 312 MB/s            | -                  | 2885 MB/s       |
+| [adresser.json](https://files.klauspost.com/compress/adresser.json.zst)                             | 8.83x    | 17579 MB/s    | 43.86%       | 1.07x     | 6.54x       | 13011 MB/s          | 47.23%             | 1.08x           |
+| (1 CPU)                                                                                             | 1.14x    | 2259 MB/s     | -            | 4141 MB/s | 0.74x       | 1475 MB/s           | -                  | 4184 MB/s       |
+| [gob-stream](https://files.klauspost.com/compress/gob-stream.7z)                                    | 16.72x   | 14019 MB/s    | 24.02%       | 1.12x     | 10.11x      | 8477 MB/s           | 30.48%             | 1.08x           |
+| (1 CPU)                                                                                             | 1.24x    | 1043 MB/s     | -            | 2264 MB/s | 0.70x       | 586 MB/s            | -                  | 2185 MB/s       |
+| [10gb.tar](http://mattmahoney.net/dc/10gb.html)                                                     | 13.33x   | 9254 MB/s     | 1.84%        | 1.03x     | 6.75x       | 4686 MB/s           | 6.72%              | 0.91x           |
+| (1 CPU)                                                                                             | 0.97x    | 672 MB/s      | -            | 1525 MB/s | 0.53x       | 366 MB/s            | -                  | 1347 MB/s       |
+| sharnd.out.2gb                                                                                      | 2.11x    | 12639 MB/s    | 0.01%        | 0.79x     | 1.98x       | 11833 MB/s          | 0.01%              | 0.81x           |
+| (1 CPU)                                                                                             | 0.93x    | 5594 MB/s     | -            | 3813 MB/s | 1.34x       | 8030 MB/s           | -                  | 3900 MB/s       |
+| [enwik9](http://mattmahoney.net/dc/textdata.html)                                                   | 19.34x   | 8220 MB/s     | 3.98%        | 1.29x     | 7.87x       | 3345 MB/s           | 15.82%             | 1.00x           |
+| (1 CPU)                                                                                             | 1.06x    | 452 MB/s      | -            | 1246 MB/s | 0.50x       | 213 MB/s            | -                  | 967 MB/s        |
+| [silesia.tar](http://sun.aei.polsl.pl/~sdeor/corpus/silesia.zip)                                    | 10.48x   | 6124 MB/s     | 5.67%        | 1.12x     | 3.76x       | 2197 MB/s           | 12.60%             | 0.94x           |
+| (1 CPU)                                                                                             | 0.97x    | 568 MB/s      | -            | 1433 MB/s | 0.46x       | 271 MB/s            | -                  | 1203 MB/s       |
+| mb/s                                                                                                |          |               |              |           |             |                     |                    |                 |
+| [enwik10](https://encode.su/threads/3315-enwik10-benchmark-results)                                 | 21.07x   | 9020 MB/s     | 6.36%        | 1.32x     | 6.91x       | 2959 MB/s           | 16.95%             | 1.04x           |
+| (1 CPU)                                                                                             | 1.07x    | 460 MB/s      | -            | 1284 MB/s | 0.51x       | 220 MB/s            | -                  | 1010 MB/s       |
+
 ### Legend
 
-* `S2 speed`: Speed of S2 compared to Snappy, using 6 cores and 1 core.
+* `S2 speed`: Speed of S2 compared to Snappy, using 16 cores and 1 core.
 * `S2 throughput`: Throughput of S2 in MB/s. 
 * `S2 % smaller`: How many percent of the Snappy output size is S2 better.
 * `S2 decomp`: Decompression speed of S2 compared to Snappy and absolute speed.
@@ -204,24 +213,6 @@ The "better" compression mode sees a good improvement in all cases, but usually 
 We only compare to the non-assembly AMD64 version of Snappy, since S2 does not have an assembly implementation yet.
 While this may seem to favour S2 on this platform, it is reasonable to assume that an S2 assembly implementation will gain the same speed.
 Therefore comparing to the non-assembly version gives the best apples-to-apples comparison. 
-
-## Concurrent Stream Compression
-
-Streams are concurrently compressed. The stream will be distributed among all available CPU cores for the best possible throughput.
-
-Snappy vs S2 compression speed on 6 core (12 thread) computer:
-
-| File                        | S2 throughput | S2 % Smaller | S2 throughput |
-|-----------------------------|--------------|--------------|---------------|
-| consensus.db.10gb           | 7.33x        | 14.70%       | 3595 MB/s  |
-| github-ranks-backup.bin     | 7.70x        | -5.90%       | 3610 MB/s  |
-| github-june-2days-2019.json | 8.76x        | 28.79%       | 4351 MB/s  |
-| rawstudio-mint14.tar        | 7.35x        | 6.98%        | 3401 MB/s  |
-| 10gb.tar                    | 6.99x        | 1.99%        | 2819 MB/s  |
-| enwik9                      | 10.02x       | 3.66%        | 2337 MB/s  |
-| sharnd.out.2gb              | 0.94x        | 0.01%        | 5987 MB/s  |
-| adresser.json               | 5.16x        | 45.94%       | 4923 MB/s  |
-| silesia.tar                 | 7.72x        | 5.63%        | 2464 MB/s  |
 
 Incompressible content (`sharnd.out.2gb`, 2GB random data) sees the smallest speedup. 
 This is likely dominated by synchronization overhead, which is confirmed by the fact that single threaded performance is higher (see above). 
@@ -265,17 +256,38 @@ Even though S2 typically compresses better than Snappy, decompression speed is a
 
 ## Block compression
 
+
 When compressing blocks no concurrent compression is performed just as Snappy. 
 This is because blocks are for smaller payloads and generally will not benefit from concurrent compression.
-
-Benchmarking single block performance is subject to a lot more variation since it only tests a limited number of file patterns.
-So individual benchmarks should only be seen as a guideline and the overall picture is more important.
 
 An important change is that incompressible blocks will not be more than at most 10 bytes bigger than the input.
 In rare, worst case scenario Snappy blocks could be significantly bigger than the input.  
 
+### Mixed content blocks
+
+The most reliable is a wide dataset. 
+For this we use `webdevdata.org-2015-01-07-subset`, 53927 files, total input size: 4,014,526,923 bytes. 
+Single goroutine used.
+
+| *                 | Input      | Output     | Reduction | MB/s   |
+|-------------------|------------|------------|-----------|--------|
+| S2                | 4014526923 | 1062282489 | 73.54%    | **861.44** |
+| S2 Better         | 4014526923 | 981221284  | **75.56%** | 399.54 |
+| Snappy            | 4014526923 | 1128667736 | 71.89%    | 741.29 |
+| S2, Snappy Output | 4014526923 | 1093784815 | 72.75%    | 843.66 |
+
+S2 delivers both the best single threaded throuhput with regular mode and the best compression rate with "better" mode. 
+
+When outputting Snappy compatible output it still delivers better throughput (100MB/s more) and better compression.
+
+As can be seen from the other benchmarks decompression should also be easier on the S2 generated output.  
+
 ### Standard compression
 
+Benchmarking single block performance is subject to a lot more variation since it only tests a limited number of file patterns.
+So individual benchmarks should only be seen as a guideline and the overall picture is more important.
+
+S2 size: 1,062,282,489 
 Block compression. Parallel benchmark running on 16 cores, 16 goroutines.
 
 AMD64 assembly is use for both S2 and Snappy.
@@ -330,6 +342,9 @@ In cases where compression is worse, it usually is compensated by a speed boost.
 
 
 ### Better compression
+
+Benchmarking single block performance is subject to a lot more variation since it only tests a limited number of file patterns.
+So individual benchmarks should only be seen as a guideline and the overall picture is more important.
 
 | Absolute Perf         | Snappy size | Better Size | Snappy Speed | Better Speed | Snappy dec  | Better dec  |
 |-----------------------|-------------|-------------|--------------|--------------|-------------|-------------|
