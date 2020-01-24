@@ -380,6 +380,82 @@ func (w *Writer) ReadFrom(r io.Reader) (n int64, err error) {
 	return n, w.err(nil)
 }
 
+// EncodeAll will add the buffer to the stream.
+// This is the fastest way to encode a stream,
+// but it is important the buffer cannot be written to again
+// until Flush or Close has been called.
+func (w *Writer) EncodeBuffer(buf []byte) (err error) {
+	if err := w.err(nil); err != nil {
+		return err
+	}
+
+	if w.concurrency == 1 {
+		_, err := w.writeSync(buf)
+		return err
+	}
+
+	// Spawn goroutine and write block to output channel.
+	if !w.wroteStreamHeader {
+		w.wroteStreamHeader = true
+		hWriter := make(chan result)
+		w.output <- hWriter
+		hWriter <- []byte(magicChunk)
+	}
+
+	for len(buf) > 0 {
+		// Get an output buffer.
+		obuf := w.buffers.Get().([]byte)[:w.obufLen]
+		uncompressed := buf
+		if len(uncompressed) > w.blockSize {
+			uncompressed = uncompressed[:w.blockSize]
+		}
+		buf = buf[len(uncompressed):]
+		output := make(chan result)
+		// Queue output now, so we keep order.
+		w.output <- output
+		go func() {
+			checksum := crc(uncompressed)
+
+			// Set to uncompressed.
+			chunkType := uint8(chunkTypeUncompressedData)
+			chunkLen := 4 + len(uncompressed)
+
+			// Attempt compressing.
+			n := binary.PutUvarint(obuf[obufHeaderLen:], uint64(len(uncompressed)))
+			var n2 int
+			if w.better {
+				n2 = encodeBlockBetter(obuf[obufHeaderLen+n:], uncompressed)
+			} else {
+				n2 = encodeBlock(obuf[obufHeaderLen+n:], uncompressed)
+			}
+
+			// Check if we should use this, or store as uncompressed instead.
+			if n2 > 0 {
+				chunkType = uint8(chunkTypeCompressedData)
+				chunkLen = 4 + n + n2
+				obuf = obuf[:obufHeaderLen+n+n2]
+			} else {
+				// copy uncompressed
+				copy(obuf[obufHeaderLen:], uncompressed)
+			}
+
+			// Fill in the per-chunk header that comes before the body.
+			obuf[0] = chunkType
+			obuf[1] = uint8(chunkLen >> 0)
+			obuf[2] = uint8(chunkLen >> 8)
+			obuf[3] = uint8(chunkLen >> 16)
+			obuf[4] = uint8(checksum >> 0)
+			obuf[5] = uint8(checksum >> 8)
+			obuf[6] = uint8(checksum >> 16)
+			obuf[7] = uint8(checksum >> 24)
+
+			// Queue final output.
+			output <- obuf
+		}()
+	}
+	return nil
+}
+
 func (w *Writer) write(p []byte) (nRet int, errRet error) {
 	if err := w.err(nil); err != nil {
 		return 0, err

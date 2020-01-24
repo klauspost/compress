@@ -1500,7 +1500,9 @@ func benchFile(b *testing.B, i int, decode bool) {
 			b.RunParallel(func(pb *testing.PB) {
 				encoded := Encode(nil, data)
 				once.Do(func() {
-					b.Log(len(encoded), " -> ", len(data))
+					if testing.Verbose() {
+						b.Log(len(encoded), " -> ", len(data))
+					}
 				})
 				tmp := make([]byte, len(data))
 				for pb.Next() {
@@ -1515,7 +1517,9 @@ func benchFile(b *testing.B, i int, decode bool) {
 			b.SetBytes(int64(len(data)))
 			b.ResetTimer()
 			once.Do(func() {
-				b.Log(len(data), " -> ", len(Encode(nil, data)))
+				if testing.Verbose() {
+					b.Log(len(data), " -> ", len(Encode(nil, data)))
+				}
 			})
 			b.RunParallel(func(pb *testing.PB) {
 				dst := make([]byte, MaxEncodedLen(len(data)))
@@ -1544,7 +1548,9 @@ func benchFile(b *testing.B, i int, decode bool) {
 				encoded := EncodeBetter(nil, data)
 				tmp := make([]byte, len(data))
 				once.Do(func() {
-					b.Log(len(encoded), " -> ", len(data))
+					if testing.Verbose() {
+						b.Log(len(encoded), " -> ", len(data))
+					}
 				})
 				for pb.Next() {
 					var err error
@@ -1560,7 +1566,9 @@ func benchFile(b *testing.B, i int, decode bool) {
 
 			b.RunParallel(func(pb *testing.PB) {
 				once.Do(func() {
-					b.Log(len(data), " -> ", len(EncodeBetter(nil, data)))
+					if testing.Verbose() {
+						b.Log(len(data), " -> ", len(EncodeBetter(nil, data)))
+					}
 				})
 				dst := make([]byte, MaxEncodedLen(len(data)))
 				tmp := make([]byte, len(data))
@@ -1598,7 +1606,9 @@ func benchFileSnappy(b *testing.B, i int, decode bool) {
 			b.RunParallel(func(pb *testing.PB) {
 				encoded := snappy.Encode(nil, data)
 				once.Do(func() {
-					b.Log(len(encoded), " -> ", len(data))
+					if testing.Verbose() {
+						b.Log(len(encoded), " -> ", len(data))
+					}
 				})
 				tmp := make([]byte, len(data))
 				for pb.Next() {
@@ -1613,7 +1623,9 @@ func benchFileSnappy(b *testing.B, i int, decode bool) {
 			b.SetBytes(int64(len(data)))
 			b.ResetTimer()
 			once.Do(func() {
-				b.Log(len(data), " -> ", len(snappy.Encode(nil, data)))
+				if testing.Verbose() {
+					b.Log(len(data), " -> ", len(snappy.Encode(nil, data)))
+				}
 			})
 			b.RunParallel(func(pb *testing.PB) {
 				dst := make([]byte, snappy.MaxEncodedLen(len(data)))
@@ -1641,7 +1653,9 @@ func benchFileSnappy(b *testing.B, i int, decode bool) {
 			b.RunParallel(func(pb *testing.PB) {
 				encoded := EncodeSnappy(nil, data)
 				once.Do(func() {
-					b.Log(len(encoded), " -> ", len(data))
+					if testing.Verbose() {
+						b.Log(len(encoded), " -> ", len(data))
+					}
 				})
 				tmp := make([]byte, len(data))
 				for pb.Next() {
@@ -1656,7 +1670,9 @@ func benchFileSnappy(b *testing.B, i int, decode bool) {
 			b.SetBytes(int64(len(data)))
 			b.ResetTimer()
 			once.Do(func() {
-				b.Log(len(data), " -> ", len(EncodeSnappy(nil, data)))
+				if testing.Verbose() {
+					b.Log(len(data), " -> ", len(EncodeSnappy(nil, data)))
+				}
 			})
 			b.RunParallel(func(pb *testing.PB) {
 				dst := make([]byte, snappy.MaxEncodedLen(len(data)))
