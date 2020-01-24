@@ -210,10 +210,6 @@ Machine generated data gets by far the biggest compression boost, with size bein
 
 The "better" compression mode sees a good improvement in all cases, but usually at a performance cost.
 
-We only compare to the non-assembly AMD64 version of Snappy, since S2 does not have an assembly implementation yet.
-While this may seem to favour S2 on this platform, it is reasonable to assume that an S2 assembly implementation will gain the same speed.
-Therefore comparing to the non-assembly version gives the best apples-to-apples comparison. 
-
 Incompressible content (`sharnd.out.2gb`, 2GB random data) sees the smallest speedup. 
 This is likely dominated by synchronization overhead, which is confirmed by the fact that single threaded performance is higher (see above). 
 
@@ -287,7 +283,8 @@ As can be seen from the other benchmarks decompression should also be easier on 
 Benchmarking single block performance is subject to a lot more variation since it only tests a limited number of file patterns.
 So individual benchmarks should only be seen as a guideline and the overall picture is more important.
 
-S2 size: 1,062,282,489 
+These micro-benchmarks are with data in cache and trained branch predictors. For a more realistic benchmark see the mixed content above. 
+
 Block compression. Parallel benchmark running on 16 cores, 16 goroutines.
 
 AMD64 assembly is use for both S2 and Snappy.
@@ -389,7 +386,7 @@ Except for the mostly incompressible JPEG image compression is better and usuall
 double digits in terms of percentage reduction over Snappy.
 
 The PDF sample shows a significant slowdown compared to Snappy, as this mode tries harder 
-to compress the data.
+to compress the data. Very small blocks are also not favorable for better compression, so throughput is way down.
 
 This mode aims to provide better compression at the expense of performance and achieves that 
 without a huge performance pentalty, except on very small blocks. 
