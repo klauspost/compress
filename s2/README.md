@@ -278,7 +278,7 @@ When outputting Snappy compatible output it still delivers better throughput (10
 
 As can be seen from the other benchmarks decompression should also be easier on the S2 generated output.  
 
-### Standard compression
+### Standard block compression
 
 Benchmarking single block performance is subject to a lot more variation since it only tests a limited number of file patterns.
 So individual benchmarks should only be seen as a guideline and the overall picture is more important.
@@ -293,8 +293,8 @@ AMD64 assembly is use for both S2 and Snappy.
 |-----------------------|-------------|---------|--------------|-------------|-------------|-------------|
 | html                  | 22843       | 21111   | 16246 MB/s   | 17438 MB/s  | 40972 MB/s  | 49263 MB/s  |
 | urls.10K              | 335492      | 287326  | 7943 MB/s    | 9693 MB/s   | 22523 MB/s  | 26484 MB/s  |
-| fireworks.jpeg        | 123034      | 123100  | 349544 MB/s  | 266024 MB/s | 718321 MB/s | 827552 MB/s |
-| fireworks.jpeg (200B) | 146         | 155     | 8869 MB/s    | 19730 MB/s  | 33691 MB/s  | 52421 MB/s  |
+| fireworks.jpeg        | 123034      | 123100  | 349544 MB/s  | 273889 MB/s | 718321 MB/s | 827552 MB/s |
+| fireworks.jpeg (200B) | 146         | 155     | 8869 MB/s    | 17773 MB/s  | 33691 MB/s  | 52421 MB/s  |
 | paper-100k.pdf        | 85304       | 84459   | 167546 MB/s  | 101263 MB/s | 326905 MB/s | 291944 MB/s |
 | html_x_4              | 92234       | 21113   | 15194 MB/s   | 50670 MB/s  | 30843 MB/s  | 32217 MB/s  |
 | alice29.txt           | 88034       | 85975   | 5936 MB/s    | 6139 MB/s   | 12882 MB/s  | 20044 MB/s  |
@@ -303,18 +303,18 @@ AMD64 assembly is use for both S2 and Snappy.
 | plrabn12.txt          | 319267      | 317985  | 5159 MB/s    | 5726 MB/s   | 11923 MB/s  | 19901 MB/s  |
 | geo.protodata         | 23335       | 18690   | 21220 MB/s   | 26529 MB/s  | 56271 MB/s  | 62540 MB/s  |
 | kppkn.gtb             | 69526       | 65312   | 9732 MB/s    | 8559 MB/s   | 18491 MB/s  | 18969 MB/s  |
-| alice29.txt (128B)    | 80          | 84      | 6691 MB/s    | 15542 MB/s  | 31883 MB/s  | 37851 MB/s  |
-| alice29.txt (1000B)   | 774         | 852     | 12204 MB/s   | 21176 MB/s  | 48056 MB/s  | 100995 MB/s |
-| alice29.txt (10000B)  | 6648        | 7437    | 10044 MB/s   | 13550 MB/s  | 32378 MB/s  | 52489 MB/s  |
-| alice29.txt (20000B)  | 12686       | 13574   | 7733 MB/s    | 11210 MB/s  | 30566 MB/s  | 48503 MB/s  |
+| alice29.txt (128B)    | 80          | 82      | 6691 MB/s    | 15489 MB/s  | 31883 MB/s  | 38874 MB/s  |
+| alice29.txt (1000B)   | 774         | 774     | 12204 MB/s   | 13000 MB/s  | 48056 MB/s  | 52341 MB/s  |
+| alice29.txt (10000B)  | 6648        | 6933    | 10044 MB/s   | 12806 MB/s  | 32378 MB/s  | 46322 MB/s  |
+| alice29.txt (20000B)  | 12686       | 13574   | 7733 MB/s    | 11210 MB/s  | 30566 MB/s  | 58969 MB/s  |
 
 
 | Relative Perf         | Snappy size | S2 size improved | S2 Speed | S2 Dec Speed |
 |-----------------------|-------------|------------------|----------|--------------|
 | html                  | 22.31%      | 7.58%            | 1.07x    | 1.20x        |
 | urls.10K              | 47.78%      | 14.36%           | 1.22x    | 1.18x        |
-| fireworks.jpeg        | 99.95%      | -0.05%           | 0.76x    | 1.15x        |
-| fireworks.jpeg (200B) | 73.00%      | -6.16%           | 2.22x    | 1.56x        |
+| fireworks.jpeg        | 99.95%      | -0.05%           | 0.78x    | 1.15x        |
+| fireworks.jpeg (200B) | 73.00%      | -6.16%           | 2.00x    | 1.56x        |
 | paper-100k.pdf        | 83.30%      | 0.99%            | 0.60x    | 0.89x        |
 | html_x_4              | 22.52%      | 77.11%           | 3.33x    | 1.04x        |
 | alice29.txt           | 57.88%      | 2.34%            | 1.03x    | 1.56x        |
@@ -323,10 +323,10 @@ AMD64 assembly is use for both S2 and Snappy.
 | plrabn12.txt          | 66.26%      | 0.40%            | 1.11x    | 1.67x        |
 | geo.protodata         | 19.68%      | 19.91%           | 1.25x    | 1.11x        |
 | kppkn.gtb             | 37.72%      | 6.06%            | 0.88x    | 1.03x        |
-| alice29.txt (128B)    | 62.50%      | -5.00%           | 2.32x    | 1.19x        |
-| alice29.txt (1000B)   | 77.40%      | -10.08%          | 1.74x    | 2.10x        |
-| alice29.txt (10000B)  | 66.48%      | -11.87%          | 1.35x    | 1.62x        |
-| alice29.txt (20000B)  | 63.43%      | -7.00%           | 1.45x    | 1.59x        |
+| alice29.txt (128B)    | 62.50%      | -2.50%           | 2.31x    | 1.22x        |
+| alice29.txt (1000B)   | 77.40%      | 0.00%            | 1.07x    | 1.09x        |
+| alice29.txt (10000B)  | 66.48%      | -4.29%           | 1.27x    | 1.43x        |
+| alice29.txt (20000B)  | 63.43%      | -7.00%           | 1.45x    | 1.93x        |
 
 Speed is generally at or above Snappy. Small blocks gets a significant speedup, although at the expense of size. 
 
