@@ -19,9 +19,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/klauspost/compress/snappy"
+	"github.com/klauspost/compress/zstd"
 )
 
 const maxUint = ^uint(0)
@@ -73,23 +75,45 @@ func TestMaxEncodedLen(t *testing.T) {
 	}
 }
 
-func cmp(a, b []byte) error {
-	if bytes.Equal(a, b) {
+func cmp(got, want []byte) error {
+	if bytes.Equal(got, want) {
 		return nil
 	}
-	if len(a) != len(b) {
-		return fmt.Errorf("got %d bytes, want %d", len(a), len(b))
+	if len(got) != len(want) {
+		return fmt.Errorf("got %d bytes, want %d", len(got), len(want))
 	}
-	for i := range a {
-		if a[i] != b[i] {
-			return fmt.Errorf("byte #%d: got 0x%02x, want 0x%02x", i, a[i], b[i])
+	for i := range got {
+		if got[i] != want[i] {
+			return fmt.Errorf("byte #%d: got 0x%02x, want 0x%02x", i, got[i], want[i])
 		}
 	}
 	return nil
 }
 
 func roundtrip(b, ebuf, dbuf []byte) error {
-	d, err := Decode(dbuf, Encode(ebuf, b))
+	bOrg := make([]byte, len(b))
+	copy(bOrg, b)
+	asmEnc := Encode(nil, b)
+	if err := cmp(bOrg, b); err != nil {
+		return fmt.Errorf("src was changed: %v", err)
+	}
+	goEnc := encodeGo(nil, b)
+	if err := cmp(bOrg, b); err != nil {
+		return fmt.Errorf("src was changed: %v", err)
+	}
+
+	//fmt.Println("asm:", len(asmEnc), "go:", len(goEnc))
+	dGo, err := Decode(nil, goEnc)
+	if err != nil {
+		return fmt.Errorf("decoding error: %v", err)
+	}
+
+	if err := cmp(dGo, b); err != nil {
+		return fmt.Errorf("roundtrip mismatch: %v", err)
+	}
+
+	// fmt.Println("decode asm...")
+	d, err := Decode(nil, asmEnc)
 	if err != nil {
 		return fmt.Errorf("decoding error: %v", err)
 	}
@@ -1224,7 +1248,7 @@ func testBlockRoundtrip(t *testing.T, src []byte) {
 		t.Error("decoded len:", len(decoded), "!=", len(src))
 		return
 	}
-	err = cmp(src, decoded)
+	err = cmp(decoded, src)
 	if err != nil {
 		t.Error(err)
 	}
@@ -1397,7 +1421,7 @@ var testFiles = []struct {
 	{"html", "html", 0},
 	{"urls", "urls.10K", 0},
 	{"jpg", "fireworks.jpeg", 0},
-	{"jpg_200", "fireworks.jpeg", 0},
+	{"jpg_200b", "fireworks.jpeg", 200},
 	{"pdf", "paper-100k.pdf", 0},
 	{"html4", "html_x_4", 0},
 	{"txt1", "alice29.txt", 0},
@@ -1406,6 +1430,10 @@ var testFiles = []struct {
 	{"txt4", "plrabn12.txt", 0},
 	{"pb", "geo.protodata", 0},
 	{"gaviota", "kppkn.gtb", 0},
+	{"txt1_128b", "alice29.txt", 128},
+	{"txt1_1000b", "alice29.txt", 1000},
+	{"txt1_10000b", "alice29.txt", 10000},
+	{"txt1_20000b", "alice29.txt", 20000},
 }
 
 const (
@@ -1461,25 +1489,210 @@ func benchFile(b *testing.B, i int, decode bool) {
 	}
 	bDir := filepath.FromSlash(*benchdataDir)
 	data := readFile(b, filepath.Join(bDir, testFiles[i].filename))
-
+	var once sync.Once
 	b.Run("block", func(b *testing.B) {
 		if n := testFiles[i].sizeLimit; 0 < n && n < len(data) {
 			data = data[:n]
 		}
 		if decode {
-			benchDecode(b, data)
+			b.SetBytes(int64(len(data)))
+			b.ResetTimer()
+			b.RunParallel(func(pb *testing.PB) {
+				encoded := Encode(nil, data)
+				once.Do(func() {
+					if testing.Verbose() {
+						b.Log(len(encoded), " -> ", len(data))
+					}
+				})
+				tmp := make([]byte, len(data))
+				for pb.Next() {
+					var err error
+					tmp, err = Decode(tmp, encoded)
+					if err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
 		} else {
-			benchEncode(b, data)
+			b.SetBytes(int64(len(data)))
+			b.ResetTimer()
+			once.Do(func() {
+				if testing.Verbose() {
+					b.Log(len(data), " -> ", len(Encode(nil, data)))
+				}
+			})
+			b.RunParallel(func(pb *testing.PB) {
+				dst := make([]byte, MaxEncodedLen(len(data)))
+				tmp := make([]byte, len(data))
+				for pb.Next() {
+					res := Encode(dst, data)
+					if len(res) == 0 {
+						panic(0)
+					}
+					if false {
+						tmp, _ = Decode(tmp, res)
+						if !bytes.Equal(tmp, data) {
+							panic("wrong")
+						}
+					}
+				}
+			})
 		}
 	})
+	once = sync.Once{}
 	b.Run("block-better", func(b *testing.B) {
 		if decode {
-			benchDecodeBetter(b, data)
+			b.SetBytes(int64(len(data)))
+			b.ResetTimer()
+			b.RunParallel(func(pb *testing.PB) {
+				encoded := EncodeBetter(nil, data)
+				tmp := make([]byte, len(data))
+				once.Do(func() {
+					if testing.Verbose() {
+						b.Log(len(encoded), " -> ", len(data))
+					}
+				})
+				for pb.Next() {
+					var err error
+					tmp, err = Decode(tmp, encoded)
+					if err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
 		} else {
-			benchEncodeBetter(b, data)
+			b.SetBytes(int64(len(data)))
+			b.ResetTimer()
+
+			b.RunParallel(func(pb *testing.PB) {
+				once.Do(func() {
+					if testing.Verbose() {
+						b.Log(len(data), " -> ", len(EncodeBetter(nil, data)))
+					}
+				})
+				dst := make([]byte, MaxEncodedLen(len(data)))
+				tmp := make([]byte, len(data))
+				for pb.Next() {
+					res := EncodeBetter(dst, data)
+					if len(res) == 0 {
+						panic(0)
+					}
+					if false {
+						tmp, _ = Decode(tmp, res)
+						if !bytes.Equal(tmp, data) {
+							panic("wrong")
+						}
+					}
+				}
+			})
 		}
 	})
+}
 
+func benchFileSnappy(b *testing.B, i int, decode bool) {
+	if err := downloadBenchmarkFiles(b, testFiles[i].filename); err != nil {
+		b.Fatalf("failed to download testdata: %s", err)
+	}
+	bDir := filepath.FromSlash(*benchdataDir)
+	data := readFile(b, filepath.Join(bDir, testFiles[i].filename))
+	var once sync.Once
+	if n := testFiles[i].sizeLimit; 0 < n && n < len(data) {
+		data = data[:n]
+	}
+	b.Run("snappy", func(b *testing.B) {
+		if decode {
+			b.SetBytes(int64(len(data)))
+			b.ResetTimer()
+			b.RunParallel(func(pb *testing.PB) {
+				encoded := snappy.Encode(nil, data)
+				once.Do(func() {
+					if testing.Verbose() {
+						b.Log(len(encoded), " -> ", len(data))
+					}
+				})
+				tmp := make([]byte, len(data))
+				for pb.Next() {
+					var err error
+					tmp, err = snappy.Decode(tmp, encoded)
+					if err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
+		} else {
+			b.SetBytes(int64(len(data)))
+			b.ResetTimer()
+			once.Do(func() {
+				if testing.Verbose() {
+					b.Log(len(data), " -> ", len(snappy.Encode(nil, data)))
+				}
+			})
+			b.RunParallel(func(pb *testing.PB) {
+				dst := make([]byte, snappy.MaxEncodedLen(len(data)))
+				tmp := make([]byte, len(data))
+				for pb.Next() {
+					res := snappy.Encode(dst, data)
+					if len(res) == 0 {
+						panic(0)
+					}
+					if false {
+						tmp, _ = snappy.Decode(tmp, res)
+						if !bytes.Equal(tmp, data) {
+							panic("wrong")
+						}
+					}
+				}
+			})
+		}
+	})
+	once = sync.Once{}
+	b.Run("s2-snappy", func(b *testing.B) {
+		if decode {
+			b.SetBytes(int64(len(data)))
+			b.ResetTimer()
+			b.RunParallel(func(pb *testing.PB) {
+				encoded := EncodeSnappy(nil, data)
+				once.Do(func() {
+					if testing.Verbose() {
+						b.Log(len(encoded), " -> ", len(data))
+					}
+				})
+				tmp := make([]byte, len(data))
+				for pb.Next() {
+					var err error
+					tmp, err = snappy.Decode(tmp, encoded)
+					if err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
+		} else {
+			b.SetBytes(int64(len(data)))
+			b.ResetTimer()
+			once.Do(func() {
+				if testing.Verbose() {
+					b.Log(len(data), " -> ", len(EncodeSnappy(nil, data)))
+				}
+			})
+			b.RunParallel(func(pb *testing.PB) {
+				dst := make([]byte, snappy.MaxEncodedLen(len(data)))
+				tmp := make([]byte, len(data))
+				for pb.Next() {
+					res := EncodeSnappy(dst, data)
+					if len(res) == 0 {
+						panic(0)
+					}
+					if false {
+						tmp, _ = snappy.Decode(tmp, res)
+						if !bytes.Equal(tmp, data) {
+							panic("wrong")
+						}
+					}
+				}
+			})
+		}
+	})
+	fmt.Println("")
 }
 
 func TestRoundtrips(t *testing.T) {
@@ -1495,16 +1708,21 @@ func TestRoundtrips(t *testing.T) {
 	testFile(t, 9, 10)
 	testFile(t, 10, 10)
 	testFile(t, 11, 10)
+	testFile(t, 12, 0)
+	testFile(t, 13, 0)
+	testFile(t, 14, 0)
+	testFile(t, 15, 0)
 }
 
 func testFile(t *testing.T, i, repeat int) {
 	if err := downloadBenchmarkFiles(t, testFiles[i].filename); err != nil {
 		t.Skipf("failed to download testdata: %s", err)
 	}
+
 	if testing.Short() {
 		repeat = 0
 	}
-	t.Run(fmt.Sprint(i, "-", testFiles[i].filename), func(t *testing.T) {
+	t.Run(fmt.Sprint(i, "-", testFiles[i].label), func(t *testing.T) {
 		bDir := filepath.FromSlash(*benchdataDir)
 		data := readFile(t, filepath.Join(bDir, testFiles[i].filename))
 		oSize := len(data)
@@ -1555,30 +1773,76 @@ func TestDataRoundtrips(t *testing.T) {
 		data := make([]byte, 1<<25)
 		test(t, data)
 	})
+	t.Run("4f9e1a0", func(t *testing.T) {
+		comp, _ := ioutil.ReadFile("testdata/4f9e1a0da7915a3d69632f5613ed78bc998a8a23.zst")
+		dec, _ := zstd.NewReader(bytes.NewBuffer(comp))
+		data, _ := ioutil.ReadAll(dec)
+		test(t, data)
+	})
 }
 
-// Naming convention is kept similar to what snappy's C++ implementation uses.
-func Benchmark_UFlat0(b *testing.B)  { benchFile(b, 0, true) }
-func Benchmark_UFlat1(b *testing.B)  { benchFile(b, 1, true) }
-func Benchmark_UFlat2(b *testing.B)  { benchFile(b, 2, true) }
-func Benchmark_UFlat3(b *testing.B)  { benchFile(b, 3, true) }
-func Benchmark_UFlat4(b *testing.B)  { benchFile(b, 4, true) }
-func Benchmark_UFlat5(b *testing.B)  { benchFile(b, 5, true) }
-func Benchmark_UFlat6(b *testing.B)  { benchFile(b, 6, true) }
-func Benchmark_UFlat7(b *testing.B)  { benchFile(b, 7, true) }
-func Benchmark_UFlat8(b *testing.B)  { benchFile(b, 8, true) }
-func Benchmark_UFlat9(b *testing.B)  { benchFile(b, 9, true) }
-func Benchmark_UFlat10(b *testing.B) { benchFile(b, 10, true) }
-func Benchmark_UFlat11(b *testing.B) { benchFile(b, 11, true) }
-func Benchmark_ZFlat0(b *testing.B)  { benchFile(b, 0, false) }
-func Benchmark_ZFlat1(b *testing.B)  { benchFile(b, 1, false) }
-func Benchmark_ZFlat2(b *testing.B)  { benchFile(b, 2, false) }
-func Benchmark_ZFlat3(b *testing.B)  { benchFile(b, 3, false) }
-func Benchmark_ZFlat4(b *testing.B)  { benchFile(b, 4, false) }
-func Benchmark_ZFlat5(b *testing.B)  { benchFile(b, 5, false) }
-func Benchmark_ZFlat6(b *testing.B)  { benchFile(b, 6, false) }
-func Benchmark_ZFlat7(b *testing.B)  { benchFile(b, 7, false) }
-func Benchmark_ZFlat8(b *testing.B)  { benchFile(b, 8, false) }
-func Benchmark_ZFlat9(b *testing.B)  { benchFile(b, 9, false) }
-func Benchmark_ZFlat10(b *testing.B) { benchFile(b, 10, false) }
-func Benchmark_ZFlat11(b *testing.B) { benchFile(b, 11, false) }
+func BenchmarkDecodeS2Block(b *testing.B) {
+	for i, _ := range testFiles {
+		b.Run(fmt.Sprint(i, "-", testFiles[i].label), func(b *testing.B) {
+			benchFile(b, i, true)
+		})
+	}
+}
+
+func BenchmarkEncodeS2Block(b *testing.B) {
+	for i, _ := range testFiles {
+		b.Run(fmt.Sprint(i, "-", testFiles[i].label), func(b *testing.B) {
+			benchFile(b, i, false)
+		})
+	}
+}
+
+func BenchmarkDecodeSnappyBlock(b *testing.B) {
+	for i, _ := range testFiles {
+		b.Run(fmt.Sprint(i, "-", testFiles[i].label), func(b *testing.B) {
+			benchFileSnappy(b, i, true)
+		})
+	}
+}
+
+func BenchmarkEncodeSnappyBlock(b *testing.B) {
+	for i, _ := range testFiles {
+		b.Run(fmt.Sprint(i, "-", testFiles[i].label), func(b *testing.B) {
+			benchFileSnappy(b, i, false)
+		})
+	}
+}
+
+func TestMatchLen(t *testing.T) {
+	// ref is a simple, reference implementation of matchLen.
+	ref := func(a, b []byte) int {
+		n := 0
+		for i := range a {
+			if a[i] != b[i] {
+				break
+			}
+			n++
+		}
+		return n
+	}
+
+	nums := []int{0, 1, 2, 7, 8, 9, 29, 30, 31, 32, 33, 34, 38, 39, 40}
+	for yIndex := 40; yIndex > 30; yIndex-- {
+		xxx := bytes.Repeat([]byte("x"), 40)
+		if yIndex < len(xxx) {
+			xxx[yIndex] = 'y'
+		}
+		for _, i := range nums {
+			for _, j := range nums {
+				if i >= j {
+					continue
+				}
+				got := matchLen(xxx[j:], xxx[i:])
+				want := ref(xxx[j:], xxx[i:])
+				if got != want {
+					t.Errorf("yIndex=%d, i=%d, j=%d: got %d, want %d", yIndex, i, j, got, want)
+				}
+			}
+		}
+	}
+}

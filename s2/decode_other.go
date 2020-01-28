@@ -7,12 +7,18 @@
 
 package s2
 
+import "fmt"
+
 // decode writes the decoding of src to dst. It assumes that the varint-encoded
 // length of the decompressed bytes has already been read, and that len(dst)
 // equals that length.
 //
 // It returns 0 on success or a decodeErrCodeXxx error code on failure.
 func s2Decode(dst, src []byte) int {
+	const debug = false
+	if debug {
+		fmt.Println("Starting decode, dst len:", len(dst))
+	}
 	var d, s, length int
 	offset := 0
 	for s < len(src) {
@@ -54,6 +60,10 @@ func s2Decode(dst, src []byte) int {
 			if length > len(dst)-d || length > len(src)-s {
 				return decodeErrCodeCorrupt
 			}
+			if debug {
+				fmt.Println("literals, length:", length, "d-after:", d+length)
+			}
+
 			copy(dst[d:], src[s:s+length])
 			d += length
 			s += length
@@ -67,6 +77,9 @@ func s2Decode(dst, src []byte) int {
 			length = int(src[s-2]) >> 2 & 0x7
 			toffset := int(uint32(src[s-2])&0xe0<<3 | uint32(src[s-1]))
 			if toffset == 0 {
+				if debug {
+					fmt.Print("(repeat) ")
+				}
 				// keep last offset
 				switch length {
 				case 5:
@@ -113,6 +126,11 @@ func s2Decode(dst, src []byte) int {
 		if offset <= 0 || d < offset || length > len(dst)-d {
 			return decodeErrCodeCorrupt
 		}
+
+		if debug {
+			fmt.Println("copy, length:", length, "offset:", offset, "d-after:", d+length)
+		}
+
 		// Copy from an earlier sub-slice of dst to a later sub-slice.
 		// If no overlap, use the built-in copy:
 		if offset > length {

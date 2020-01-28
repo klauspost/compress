@@ -7,9 +7,12 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/pprof"
+	"runtime/trace"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,11 +35,18 @@ var (
 	bench     = flag.Int("bench", 0, "Run benchmark n times. No output will be written")
 	help      = flag.Bool("help", false, "Display help")
 
+	cpuprofile, memprofile, traceprofile string
+
 	version = "(dev)"
 	date    = "(unknown)"
 )
 
 func main() {
+	if false {
+		flag.StringVar(&cpuprofile, "cpuprofile", "", "write cpu profile to file")
+		flag.StringVar(&memprofile, "memprofile", "", "write mem profile to file")
+		flag.StringVar(&traceprofile, "traceprofile", "", "write trace profile to file")
+	}
 	flag.Parse()
 	sz, err := toSize(*blockSize)
 	exitErr(err)
@@ -85,6 +95,34 @@ Options:`)
 		}
 		files = append(files, found...)
 	}
+	if cpuprofile != "" {
+		f, err := os.Create(cpuprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
+	if memprofile != "" {
+		f, err := os.Create(memprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer f.Close()
+		defer pprof.WriteHeapProfile(f)
+	}
+	if traceprofile != "" {
+		f, err := os.Create(traceprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer f.Close()
+		err = trace.Start(f)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer trace.Stop()
+	}
 
 	*quiet = *quiet || *stdout
 	allFiles := files
@@ -105,7 +143,7 @@ Options:`)
 			file, err := os.Open(filename)
 			exitErr(err)
 			defer closeOnce.Do(func() { file.Close() })
-			src, err := readahead.NewReaderSize(file, *cpu, int(sz))
+			src, err := readahead.NewReaderSize(file, *cpu, 1<<20)
 			exitErr(err)
 			defer src.Close()
 			finfo, err := file.Stat()

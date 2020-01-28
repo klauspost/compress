@@ -7,6 +7,7 @@ package s2
 
 import (
 	"bytes"
+	"encoding/binary"
 	"math/bits"
 )
 
@@ -23,162 +24,6 @@ func load64(b []byte, i int) uint64 {
 		uint64(b[4])<<32 | uint64(b[5])<<40 | uint64(b[6])<<48 | uint64(b[7])<<56
 }
 
-// emitLiteral writes a literal chunk and returns the number of bytes written.
-//
-// It assumes that:
-//	dst is long enough to hold the encoded bytes
-//	0 <= len(lit) && len(lit) <= math.MaxUint32
-func emitLiteral(dst, lit []byte) int {
-	if len(lit) == 0 {
-		return 0
-	}
-	i, n := 0, uint(len(lit)-1)
-	switch {
-	case n < 60:
-		dst[0] = uint8(n)<<2 | tagLiteral
-		i = 1
-	case n < 1<<8:
-		dst[1] = uint8(n)
-		dst[0] = 60<<2 | tagLiteral
-		i = 2
-	case n < 1<<16:
-		dst[2] = uint8(n >> 8)
-		dst[1] = uint8(n)
-		dst[0] = 61<<2 | tagLiteral
-		i = 3
-	case n < 1<<24:
-		dst[3] = uint8(n >> 16)
-		dst[2] = uint8(n >> 8)
-		dst[1] = uint8(n)
-		dst[0] = 62<<2 | tagLiteral
-		i = 4
-	default:
-		dst[4] = uint8(n >> 24)
-		dst[3] = uint8(n >> 16)
-		dst[2] = uint8(n >> 8)
-		dst[1] = uint8(n)
-		dst[0] = 63<<2 | tagLiteral
-		i = 5
-	}
-	return i + copy(dst[i:], lit)
-}
-
-// emitCopy writes a copy chunk and returns the number of bytes written.
-//
-// It assumes that:
-//	dst is long enough to hold the encoded bytes
-//	1 <= offset && offset <= 65535
-//	4 <= length && length <= 65535
-func emitCopy(dst []byte, offset, length int) int {
-	// The maximum length for a single tagCopy1 or tagCopy2 op is 64 bytes. The
-	// threshold for this loop is a little higher (at 68 = 64 + 4), and the
-	// length emitted down below is is a little lower (at 60 = 64 - 4), because
-	// it's shorter to encode a length 67 copy as a length 60 tagCopy2 followed
-	// by a length 7 tagCopy1 (which encodes as 3+2 bytes) than to encode it as
-	// a length 64 tagCopy2 followed by a length 3 tagCopy2 (which encodes as
-	// 3+3 bytes). The magic 4 in the 64±4 is because the minimum length for a
-	// tagCopy1 op is 4 bytes, which is why a length 3 copy has to be an
-	// encodes-as-3-bytes tagCopy2 instead of an encodes-as-2-bytes tagCopy1.
-	if offset >= 65536 {
-		i := 0
-		if length > 64 {
-			// Emit a length 64 copy, encoded as 5 bytes.
-			dst[4] = uint8(offset >> 24)
-			dst[3] = uint8(offset >> 16)
-			dst[2] = uint8(offset >> 8)
-			dst[1] = uint8(offset)
-			dst[0] = 63<<2 | tagCopy4
-			length -= 64
-			if length >= 4 {
-				// Emit remaining as repeats
-				return 5 + emitRepeat(dst[5:], offset, length)
-			}
-			i = 5
-		}
-		if length == 0 {
-			return i
-		}
-		// Emit a copy, offset encoded as 4 bytes.
-		dst[i+0] = uint8(length-1)<<2 | tagCopy4
-		dst[i+1] = uint8(offset)
-		dst[i+2] = uint8(offset >> 8)
-		dst[i+3] = uint8(offset >> 16)
-		dst[i+4] = uint8(offset >> 24)
-		return i + 5
-	}
-
-	// Offset no more than 2 bytes.
-	if length > 64 {
-		// Emit a length 60 copy, encoded as 3 bytes.
-		// Emit remaining as repeat value (minimum 4 bytes).
-		dst[2] = uint8(offset >> 8)
-		dst[1] = uint8(offset)
-		dst[0] = 59<<2 | tagCopy2
-		length -= 60
-		// Emit remaining as repeats, at least 4 bytes remain.
-		return 3 + emitRepeat(dst[3:], offset, length)
-	}
-	if length >= 12 || offset >= 2048 {
-		// Emit the remaining copy, encoded as 3 bytes.
-		dst[2] = uint8(offset >> 8)
-		dst[1] = uint8(offset)
-		dst[0] = uint8(length-1)<<2 | tagCopy2
-		return 3
-	}
-	// Emit the remaining copy, encoded as 2 bytes.
-	dst[1] = uint8(offset)
-	dst[0] = uint8(offset>>8)<<5 | uint8(length-4)<<2 | tagCopy1
-	return 2
-}
-
-// emitRepeat writes a copy chunk and returns the number of bytes written.
-func emitRepeat(dst []byte, offset, length int) int {
-	// Repeat offset, make length cheaper
-	length -= 4
-	if length <= 4 {
-		dst[0] = uint8(length)<<2 | tagCopy1
-		dst[1] = 0
-		return 2
-	}
-	if length < 8 && offset < 2048 {
-		// Encode WITH offset
-		dst[1] = uint8(offset)
-		dst[0] = uint8(offset>>8)<<5 | uint8(length)<<2 | tagCopy1
-		return 2
-	}
-	if length < (1<<8)+4 {
-		length -= 4
-		dst[2] = uint8(length)
-		dst[1] = 0
-		dst[0] = 5<<2 | tagCopy1
-		return 3
-	}
-	if length < (1<<16)+(1<<8) {
-		length -= 1 << 8
-		dst[3] = uint8(length >> 8)
-		dst[2] = uint8(length >> 0)
-		dst[1] = 0
-		dst[0] = 6<<2 | tagCopy1
-		return 4
-	}
-	const maxRepeat = (1 << 24) - 1
-	length -= 1 << 16
-	left := 0
-	if length > maxRepeat {
-		left = length - maxRepeat + 4
-		length = maxRepeat - 4
-	}
-	dst[4] = uint8(length >> 16)
-	dst[3] = uint8(length >> 8)
-	dst[2] = uint8(length >> 0)
-	dst[1] = 0
-	dst[0] = 7<<2 | tagCopy1
-	if left > 0 {
-		return 5 + emitRepeat(dst[5:], offset, left)
-	}
-	return 5
-}
-
 // hash6 returns the hash of the lowest 6 bytes of u to fit in a hash table with h bits.
 // Preferably h should be a constant and should always be <64.
 func hash6(u uint64, h uint8) uint32 {
@@ -186,25 +31,47 @@ func hash6(u uint64, h uint8) uint32 {
 	return uint32(((u << (64 - 48)) * prime6bytes) >> ((64 - h) & 63))
 }
 
-// encodeBlock encodes a non-empty src to a guaranteed-large-enough dst. It
+func encodeGo(dst, src []byte) []byte {
+	if n := MaxEncodedLen(len(src)); n < 0 {
+		panic(ErrTooLarge)
+	} else if len(dst) < n {
+		dst = make([]byte, n)
+	}
+
+	// The block starts with the varint-encoded length of the decompressed bytes.
+	d := binary.PutUvarint(dst, uint64(len(src)))
+
+	if len(src) == 0 {
+		return dst[:d]
+	}
+	if len(src) < minNonLiteralBlockSize {
+		d += emitLiteral(dst[d:], src)
+		return dst[:d]
+	}
+	n := encodeBlockGo(dst[d:], src)
+	if n > 0 {
+		d += n
+		return dst[:d]
+	}
+	// Not compressible
+	d += emitLiteral(dst[d:], src)
+	return dst[:d]
+}
+
+// encodeBlockGo encodes a non-empty src to a guaranteed-large-enough dst. It
 // assumes that the varint-encoded length of the decompressed bytes has already
 // been written.
 //
 // It also assumes that:
 //	len(dst) >= MaxEncodedLen(len(src)) &&
 // 	minNonLiteralBlockSize <= len(src) && len(src) <= maxBlockSize
-func encodeBlock(dst, src []byte) (d int) {
+func encodeBlockGo(dst, src []byte) (d int) {
 	// Initialize the hash table.
 	const (
-		tableBits = 14
-
+		tableBits    = 14
 		maxTableSize = 1 << tableBits
 	)
 
-	// In Go, all array elements are zero-initialized, so there is no advantage
-	// to a smaller tableSize per se. However, it matches the C++ algorithm,
-	// and in the asm versions of this code, we can get away with zeroing only
-	// the first tableSize elements.
 	var table [maxTableSize]uint32
 
 	// sLimit is when to stop looking for offset/length copies. The inputMargin

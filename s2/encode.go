@@ -291,18 +291,18 @@ func (w *Writer) Reset(writer io.Writer) {
 			if len(in) > 0 {
 				if w.err(nil) == nil {
 					// Don't expose data from previous buffers.
-					in = in[:len(in):len(in)]
+					toWrite := in[:len(in):len(in)]
 					// Write to output.
-					n, err := writer.Write(in)
-					if err == nil && n != len(in) {
+					n, err := writer.Write(toWrite)
+					if err == nil && n != len(toWrite) {
 						err = io.ErrShortBuffer
 					}
 					_ = w.err(err)
 					w.written += int64(n)
 				}
-				if cap(in) >= w.obufLen {
-					w.buffers.Put([]byte(in))
-				}
+			}
+			if cap(in) >= w.obufLen {
+				w.buffers.Put([]byte(in))
 			}
 			// close the incoming write request.
 			// This can be used for synchronizing flushes.
@@ -378,6 +378,94 @@ func (w *Writer) ReadFrom(r io.Reader) (n int64, err error) {
 	}
 
 	return n, w.err(nil)
+}
+
+// EncodeBuffer will add a buffer to the stream.
+// This is the fastest way to encode a stream,
+// but the input buffer cannot be written to by the caller
+// until this function, Flush or Close has been called.
+//
+// Note that input is not buffered.
+// This means that each write will result in discrete blocks being created.
+// For buffered writes, use the regular Write function.
+func (w *Writer) EncodeBuffer(buf []byte) (err error) {
+	if err := w.err(nil); err != nil {
+		return err
+	}
+
+	// Flush queued data first.
+	if len(w.ibuf) > 0 {
+		err := w.Flush()
+		if err != nil {
+			return err
+		}
+	}
+	if w.concurrency == 1 {
+		_, err := w.writeSync(buf)
+		return err
+	}
+
+	// Spawn goroutine and write block to output channel.
+	if !w.wroteStreamHeader {
+		w.wroteStreamHeader = true
+		hWriter := make(chan result)
+		w.output <- hWriter
+		hWriter <- []byte(magicChunk)
+	}
+
+	for len(buf) > 0 {
+		// Cut input.
+		uncompressed := buf
+		if len(uncompressed) > w.blockSize {
+			uncompressed = uncompressed[:w.blockSize]
+		}
+		buf = buf[len(uncompressed):]
+		// Get an output buffer.
+		obuf := w.buffers.Get().([]byte)[:len(uncompressed)+obufHeaderLen]
+		output := make(chan result)
+		// Queue output now, so we keep order.
+		w.output <- output
+		go func() {
+			checksum := crc(uncompressed)
+
+			// Set to uncompressed.
+			chunkType := uint8(chunkTypeUncompressedData)
+			chunkLen := 4 + len(uncompressed)
+
+			// Attempt compressing.
+			n := binary.PutUvarint(obuf[obufHeaderLen:], uint64(len(uncompressed)))
+			var n2 int
+			if w.better {
+				n2 = encodeBlockBetter(obuf[obufHeaderLen+n:], uncompressed)
+			} else {
+				n2 = encodeBlock(obuf[obufHeaderLen+n:], uncompressed)
+			}
+
+			// Check if we should use this, or store as uncompressed instead.
+			if n2 > 0 {
+				chunkType = uint8(chunkTypeCompressedData)
+				chunkLen = 4 + n + n2
+				obuf = obuf[:obufHeaderLen+n+n2]
+			} else {
+				// copy uncompressed
+				copy(obuf[obufHeaderLen:], uncompressed)
+			}
+
+			// Fill in the per-chunk header that comes before the body.
+			obuf[0] = chunkType
+			obuf[1] = uint8(chunkLen >> 0)
+			obuf[2] = uint8(chunkLen >> 8)
+			obuf[3] = uint8(chunkLen >> 16)
+			obuf[4] = uint8(checksum >> 0)
+			obuf[5] = uint8(checksum >> 8)
+			obuf[6] = uint8(checksum >> 16)
+			obuf[7] = uint8(checksum >> 24)
+
+			// Queue final output.
+			output <- obuf
+		}()
+	}
+	return nil
 }
 
 func (w *Writer) write(p []byte) (nRet int, errRet error) {
@@ -534,19 +622,19 @@ func (w *Writer) writeSync(p []byte) (nRet int, errRet error) {
 	if err := w.err(nil); err != nil {
 		return 0, err
 	}
-	for len(p) > 0 {
-		if !w.wroteStreamHeader {
-			w.wroteStreamHeader = true
-			n, err := w.writer.Write([]byte(magicChunk))
-			if err != nil {
-				return 0, w.err(err)
-			}
-			if n != len(magicChunk) {
-				return 0, w.err(io.ErrShortWrite)
-			}
-			w.written += int64(n)
+	if !w.wroteStreamHeader {
+		w.wroteStreamHeader = true
+		n, err := w.writer.Write([]byte(magicChunk))
+		if err != nil {
+			return 0, w.err(err)
 		}
+		if n != len(magicChunk) {
+			return 0, w.err(io.ErrShortWrite)
+		}
+		w.written += int64(n)
+	}
 
+	for len(p) > 0 {
 		var uncompressed []byte
 		if len(p) > w.blockSize {
 			uncompressed, p = p[:w.blockSize], p[w.blockSize:]
