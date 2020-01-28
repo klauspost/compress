@@ -380,15 +380,26 @@ func (w *Writer) ReadFrom(r io.Reader) (n int64, err error) {
 	return n, w.err(nil)
 }
 
-// EncodeAll will add the buffer to the stream.
+// EncodeBuffer will add a buffer to the stream.
 // This is the fastest way to encode a stream,
-// but it is important the buffer cannot be written to again
-// until Flush or Close has been called.
+// but the input buffer cannot be written to by the caller
+// until this function, Flush or Close has been called.
+//
+// Note that input is not buffered.
+// This means that each write will result in discrete blocks being created.
+// For buffered writes, use the regular Write function.
 func (w *Writer) EncodeBuffer(buf []byte) (err error) {
 	if err := w.err(nil); err != nil {
 		return err
 	}
 
+	// Flush queued data first.
+	if len(w.ibuf) > 0 {
+		err := w.Flush()
+		if err != nil {
+			return err
+		}
+	}
 	if w.concurrency == 1 {
 		_, err := w.writeSync(buf)
 		return err
@@ -403,13 +414,14 @@ func (w *Writer) EncodeBuffer(buf []byte) (err error) {
 	}
 
 	for len(buf) > 0 {
-		// Get an output buffer.
-		obuf := w.buffers.Get().([]byte)[:w.obufLen]
+		// Cut input.
 		uncompressed := buf
 		if len(uncompressed) > w.blockSize {
 			uncompressed = uncompressed[:w.blockSize]
 		}
 		buf = buf[len(uncompressed):]
+		// Get an output buffer.
+		obuf := w.buffers.Get().([]byte)[:len(uncompressed)+obufHeaderLen]
 		output := make(chan result)
 		// Queue output now, so we keep order.
 		w.output <- output
@@ -610,19 +622,19 @@ func (w *Writer) writeSync(p []byte) (nRet int, errRet error) {
 	if err := w.err(nil); err != nil {
 		return 0, err
 	}
-	for len(p) > 0 {
-		if !w.wroteStreamHeader {
-			w.wroteStreamHeader = true
-			n, err := w.writer.Write([]byte(magicChunk))
-			if err != nil {
-				return 0, w.err(err)
-			}
-			if n != len(magicChunk) {
-				return 0, w.err(io.ErrShortWrite)
-			}
-			w.written += int64(n)
+	if !w.wroteStreamHeader {
+		w.wroteStreamHeader = true
+		n, err := w.writer.Write([]byte(magicChunk))
+		if err != nil {
+			return 0, w.err(err)
 		}
+		if n != len(magicChunk) {
+			return 0, w.err(io.ErrShortWrite)
+		}
+		w.written += int64(n)
+	}
 
+	for len(p) > 0 {
 		var uncompressed []byte
 		if len(p) > w.blockSize {
 			uncompressed, p = p[:w.blockSize], p[w.blockSize:]
