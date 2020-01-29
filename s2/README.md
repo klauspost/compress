@@ -39,25 +39,55 @@ Full package documentation:
 [1]: https://godoc.org/github.com/klauspost/compress?status.svg
 [2]: https://godoc.org/github.com/klauspost/compress/s2
 
-Usage is similar to Snappy.
+## Compression
 
 ```Go
-func EncodeStream(src io.Reader, dst io.Writer) error        
+func EncodeStream(src io.Reader, dst io.Writer) error {
     enc := s2.NewWriter(dst)
     _, err := io.Copy(enc, src)
     if err != nil {
         enc.Close()
         return err
     }
+    // Blocks until compression is done.
     return enc.Close() 
 }
 ```
 
-You should always call `enc.Close()`, otherwise you will leak resources and your encode will be incomplete, as with Snappy.
+You should always call `enc.Close()`, otherwise you will leak resources and your encode will be incomplete.
 
 For the best throughput, you should attempt to reuse the `Writer` using the `Reset()` method.
 
 The Writer in S2 is always buffered, therefore `NewBufferedWriter` in Snappy can be replaced with `NewWriter` in S2.
+It is possible to flush any buffered data using the `Flush()` method. 
+This will block until all data sent to the encoder has been written to the output.
+
+S2 also supports the `io.ReaderFrom` interface, which will consume all input from a reader.
+
+As a final method to compress data, if you have a single block of data you would like to have encoded as a stream,
+a slightly more efficient method is to use the `EncodeBuffer` method.
+This will take ownership of the buffer until the stream is closed.
+
+```Go
+func EncodeStream(src []byte, dst io.Writer) error {
+    enc := s2.NewWriter(dst)
+    // The encoder owns the buffer until Flush or Close is called.
+    err := enc.EncodeBuffer(buf)
+    if err != nil {
+        enc.Close()
+        return err
+    }
+    // Blocks until compression is done.
+    return enc.Close()
+}
+```
+
+Each call to `EncodeBuffer` will result in discrete blocks being created without buffering, 
+so it should only be used a single time per stream.
+If you need to write several blocks, you should use the regular io.Writer interface.
+
+
+## Decompression
 
 ```Go
 func DecodeStream(src io.Reader, dst io.Writer) error        
@@ -75,6 +105,21 @@ However, it requires that the provided buffer isn't used after it is handed over
 For smaller data blocks, there is also a non-streaming interface: `Encode()`, `EncodeBetter()` and `Decode()`.
 Do however note that these functions (similar to Snappy) does not provide validation of data, 
 so data corruption may be undetected. Stream encoding provides CRC checks of data.
+
+It is possible to efficiently skip forward in a compressed stream using the `Skip()` method. 
+For big skips the decompressor is able to skip blocks without decompressing them.
+
+## Single Blocks
+
+Similar to Snappy S2 offers single block compression. 
+Blocks do not offer the same flexibility and safety as streams, but may be preferable for very small payloads, less than 100K.
+
+Using a simple `dst := s2.Encode(nil, src)` will compress `src` and return the compressed result. It is possible to provide a destination buffer. If the buffer has a capacity of `s2.MaxEncodedLen(len(src))` it will be used. If not a new will be allocated. Alternatively `EncodeBetter` can also be used for better, but slightly slower compression.
+
+Similarly to decompress a block you can use `dst, err := s2.Decode(nil, src)`. Again an optional destination buffer can be supplied. 
+The `s2.DecodedLen(src)` can be used to get the minimum capacity needed. If that is not satisfied a new buffer will be allocated.
+
+Block function always operate on a single goroutine since it should only be used for small payloads.
 
 # Commandline tools
 
