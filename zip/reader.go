@@ -182,6 +182,16 @@ func (f *File) Open() (io.ReadCloser, error) {
 	return rc, nil
 }
 
+// OpenRaw returns a Reader that returns the *compressed* output of the file.
+func (f *File) OpenRaw() (io.Reader, error) {
+	bodyOffset, err := f.findBodyOffset()
+	if err != nil {
+		return nil, err
+	}
+	size := int64(f.CompressedSize64)
+	return io.NewSectionReader(f.zipr, f.headerOffset+bodyOffset, size), nil
+}
+
 type checksumReader struct {
 	rc    io.ReadCloser
 	hash  hash.Hash32
