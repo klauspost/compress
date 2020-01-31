@@ -12,8 +12,11 @@ go:
   - 1.13.x
   - master
 
+env:
+  - GO111MODULE=off
+
 install:
- - go get -t ./...
+ - go get ./...
  - go get github.com/klauspost/compress-fuzz
 
 script:
