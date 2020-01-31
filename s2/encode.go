@@ -558,6 +558,11 @@ func (w *Writer) writeFull(inbuf []byte) (errRet error) {
 		return err
 	}
 
+	if w.concurrency == 1 {
+		_, err := w.writeSync(inbuf[obufHeaderLen:])
+		return err
+	}
+
 	// Spawn goroutine and write block to output channel.
 	if !w.wroteStreamHeader {
 		w.wroteStreamHeader = true
