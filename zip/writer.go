@@ -20,11 +20,16 @@ var (
 	errLongExtra = errors.New("zip: FileHeader.Extra too long")
 )
 
+type lastWriter interface {
+	Close() error
+	Closed() bool
+}
+
 // Writer implements a zip file writer.
 type Writer struct {
 	cw          *countWriter
 	dir         []*header
-	last        *fileWriter
+	last        lastWriter
 	closed      bool
 	compressors map[uint16]Compressor
 	comment     string
@@ -72,10 +77,10 @@ func (w *Writer) SetComment(comment string) error {
 }
 
 // Close finishes writing the zip file by writing the central directory.
-// It does not close the underlying writer.
+// It does not Close the underlying writer.
 func (w *Writer) Close() error {
-	if w.last != nil && !w.last.closed {
-		if err := w.last.close(); err != nil {
+	if w.last != nil && !w.last.Closed() {
+		if err := w.last.Close(); err != nil {
 			return err
 		}
 		w.last = nil
@@ -222,6 +227,25 @@ func (w *Writer) Create(name string) (io.Writer, error) {
 	return w.CreateHeader(header)
 }
 
+// Copy will copy raw content from input file.
+// Optionally a different name can be given to the new file.
+func (w *Writer) Copy(name string, src *File) error {
+	header := src.FileHeader
+	if name != "" {
+		header.Name = name
+	}
+	raw, err := src.OpenRaw()
+	if err != nil {
+		return err
+	}
+	wr, err := w.CreateHeaderRaw(&header)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(wr, raw)
+	return err
+}
+
 // detectUTF8 reports whether s is a valid UTF-8 string, and whether the string
 // must be considered UTF-8 encoding (i.e., not compatible with CP-437, ASCII,
 // or any other common encoding).
@@ -251,10 +275,10 @@ func detectUTF8(s string) (valid, require bool) {
 //
 // This returns a Writer to which the file contents should be written.
 // The file's contents must be written to the io.Writer before the next
-// call to Create, CreateHeader, or Close.
+// call to Create, Copy, CreateHeader, CreateHeaderRaw or Close.
 func (w *Writer) CreateHeader(fh *FileHeader) (io.Writer, error) {
-	if w.last != nil && !w.last.closed {
-		if err := w.last.close(); err != nil {
+	if w.last != nil && !w.last.Closed() {
+		if err := w.last.Close(); err != nil {
 			return nil, err
 		}
 	}
@@ -319,10 +343,7 @@ func (w *Writer) CreateHeader(fh *FileHeader) (io.Writer, error) {
 		fh.Extra = append(fh.Extra, mbuf[:]...)
 	}
 
-	var (
-		ow io.Writer
-		fw *fileWriter
-	)
+	var ow io.Writer
 	h := &header{
 		FileHeader: fh,
 		offset:     uint64(w.cw.count),
@@ -343,10 +364,11 @@ func (w *Writer) CreateHeader(fh *FileHeader) (io.Writer, error) {
 		fh.UncompressedSize64 = 0
 
 		ow = dirWriter{}
+		w.last = nil
 	} else {
 		fh.Flags |= 0x8 // we will write a data descriptor
 
-		fw = &fileWriter{
+		fw := &fileWriter{
 			zipw:      w.cw,
 			compCount: &countWriter{w: w.cw},
 			crc32:     crc32.NewIEEE(),
@@ -363,13 +385,131 @@ func (w *Writer) CreateHeader(fh *FileHeader) (io.Writer, error) {
 		fw.rawCount = &countWriter{w: fw.comp}
 		fw.header = h
 		ow = fw
+		w.last = fw
 	}
 	w.dir = append(w.dir, h)
 	if err := writeHeader(w.cw, fh); err != nil {
 		return nil, err
 	}
 	// If we're creating a directory, fw is nil.
-	w.last = fw
+	return ow, nil
+}
+
+// CreateHeaderRaw adds a file to the zip archive using the provided FileHeader
+// for the file metadata. Writer takes ownership of fh and may mutate
+// its fields. The caller must not modify fh after calling CreateHeaderRaw.
+//
+// This returns a Writer to which the compressed file contents should be written.
+// The file's contents must be written to the io.Writer before the next
+// call to Create, Copy, CreateHeader, CreateHeaderRaw or Close.
+//
+// Using this requires knowledge of populating the FileHeader correctly.
+// Generally using the Copy() function is recommended.
+func (w *Writer) CreateHeaderRaw(fh *FileHeader) (io.Writer, error) {
+	if w.last != nil && !w.last.Closed() {
+		if err := w.last.Close(); err != nil {
+			return nil, err
+		}
+	}
+	if len(w.dir) > 0 && w.dir[len(w.dir)-1].FileHeader == fh {
+		// See https://golang.org/issue/11144 confusion.
+		return nil, errors.New("archive/zip: invalid duplicate FileHeader")
+	}
+
+	// The ZIP format has a sad state of affairs regarding character encoding.
+	// Officially, the name and comment fields are supposed to be encoded
+	// in CP-437 (which is mostly compatible with ASCII), unless the UTF-8
+	// flag bit is set. However, there are several problems:
+	//
+	//	* Many ZIP readers still do not support UTF-8.
+	//	* If the UTF-8 flag is cleared, several readers simply interpret the
+	//	name and comment fields as whatever the local system encoding is.
+	//
+	// In order to avoid breaking readers without UTF-8 support,
+	// we avoid setting the UTF-8 flag if the strings are CP-437 compatible.
+	// However, if the strings require multibyte UTF-8 encoding and is a
+	// valid UTF-8 string, then we set the UTF-8 bit.
+	//
+	// For the case, where the user explicitly wants to specify the encoding
+	// as UTF-8, they will need to set the flag bit themselves.
+	utf8Valid1, utf8Require1 := detectUTF8(fh.Name)
+	utf8Valid2, utf8Require2 := detectUTF8(fh.Comment)
+	switch {
+	case fh.NonUTF8:
+		fh.Flags &^= 0x800
+	case (utf8Require1 || utf8Require2) && (utf8Valid1 && utf8Valid2):
+		fh.Flags |= 0x800
+	}
+
+	fh.CreatorVersion = fh.CreatorVersion&0xff00 | zipVersion20 // preserve compatibility byte
+	fh.ReaderVersion = zipVersion20
+
+	// If Modified is set, this takes precedence over MS-DOS timestamp fields.
+	if !fh.Modified.IsZero() {
+		// Contrary to the FileHeader.SetModTime method, we intentionally
+		// do not convert to UTC, because we assume the user intends to encode
+		// the date using the specified timezone. A user may want this control
+		// because many legacy ZIP readers interpret the timestamp according
+		// to the local timezone.
+		//
+		// The timezone is only non-UTC if a user directly sets the Modified
+		// field directly themselves. All other approaches sets UTC.
+		fh.ModifiedDate, fh.ModifiedTime = timeToMsDosTime(fh.Modified)
+
+		// Use "extended timestamp" format since this is what Info-ZIP uses.
+		// Nearly every major ZIP implementation uses a different format,
+		// but at least most seem to be able to understand the other formats.
+		//
+		// This format happens to be identical for both local and central header
+		// if modification time is the only timestamp being encoded.
+		var mbuf [9]byte // 2*SizeOf(uint16) + SizeOf(uint8) + SizeOf(uint32)
+		mt := uint32(fh.Modified.Unix())
+		eb := writeBuf(mbuf[:])
+		eb.uint16(extTimeExtraID)
+		eb.uint16(5)  // Size: SizeOf(uint8) + SizeOf(uint32)
+		eb.uint8(1)   // Flags: ModTime
+		eb.uint32(mt) // ModTime
+		fh.Extra = append(fh.Extra, mbuf[:]...)
+	}
+
+	var ow io.Writer
+	h := &header{
+		FileHeader: fh,
+		offset:     uint64(w.cw.count),
+	}
+
+	if strings.HasSuffix(fh.Name, "/") {
+		// Set the compression method to Store to ensure data length is truly zero,
+		// which the writeHeader method always encodes for the size fields.
+		// This is necessary as most compression formats have non-zero lengths
+		// even when compressing an empty string.
+		fh.Method = Store
+		fh.Flags &^= 0x8 // we will not write a data descriptor
+
+		// Explicitly clear sizes as they have no meaning for directories.
+		fh.CompressedSize = 0
+		fh.CompressedSize64 = 0
+		fh.UncompressedSize = 0
+		fh.UncompressedSize64 = 0
+
+		ow = dirWriter{}
+		w.last = nil
+	} else {
+		fh.Flags |= 0x8 // we will write a data descriptor
+
+		fw := &rawWriter{
+			header:   h,
+			zipw:     w.cw,
+			rawCount: &countWriter{w: w.cw},
+		}
+		ow = fw
+		w.last = fw
+	}
+	w.dir = append(w.dir, h)
+	if err := writeHeader(w.cw, fh); err != nil {
+		return nil, err
+	}
+	// If we're creating a directory, fw is nil.
 	return ow, nil
 }
 
@@ -450,7 +590,11 @@ func (w *fileWriter) Write(p []byte) (int, error) {
 	return w.rawCount.Write(p)
 }
 
-func (w *fileWriter) close() error {
+func (w *fileWriter) Closed() bool {
+	return w.closed
+}
+
+func (w *fileWriter) Close() error {
 	if w.closed {
 		return errors.New("zip: file closed twice")
 	}
@@ -473,6 +617,57 @@ func (w *fileWriter) close() error {
 		fh.CompressedSize = uint32(fh.CompressedSize64)
 		fh.UncompressedSize = uint32(fh.UncompressedSize64)
 	}
+
+	// Write data descriptor. This is more complicated than one would
+	// think, see e.g. comments in zipfile.c:putextended() and
+	// http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=7073588.
+	// The approach here is to write 8 byte sizes if needed without
+	// adding a zip64 extra in the local header (too late anyway).
+	var buf []byte
+	if fh.isZip64() {
+		buf = make([]byte, dataDescriptor64Len)
+	} else {
+		buf = make([]byte, dataDescriptorLen)
+	}
+	b := writeBuf(buf)
+	b.uint32(dataDescriptorSignature) // de-facto standard, required by OS X
+	b.uint32(fh.CRC32)
+	if fh.isZip64() {
+		b.uint64(fh.CompressedSize64)
+		b.uint64(fh.UncompressedSize64)
+	} else {
+		b.uint32(fh.CompressedSize)
+		b.uint32(fh.UncompressedSize)
+	}
+	_, err := w.zipw.Write(buf)
+	return err
+}
+
+type rawWriter struct {
+	*header
+	zipw     io.Writer
+	rawCount *countWriter
+	closed   bool
+}
+
+func (w *rawWriter) Write(p []byte) (int, error) {
+	if w.closed {
+		return 0, errors.New("zip: write to closed file")
+	}
+	return w.rawCount.Write(p)
+}
+
+func (w *rawWriter) Closed() bool {
+	return w.closed
+}
+
+func (w *rawWriter) Close() error {
+	if w.closed {
+		return errors.New("zip: file closed twice")
+	}
+	w.closed = true
+	fh := w.FileHeader
+	fh.CompressedSize64 = uint64(w.rawCount.count)
 
 	// Write data descriptor. This is more complicated than one would
 	// think, see e.g. comments in zipfile.c:putextended() and
