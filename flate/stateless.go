@@ -61,6 +61,8 @@ var bitWriterPool = sync.Pool{
 
 // StatelessDeflate allows to compress directly to a Writer without retaining state.
 // When returning everything will be flushed.
+// Up to 8KB of an optional dictionary can be given which is presumed to presumed to precede the block.
+// Longer dictionaries will be truncated and will still produce valid output.
 func StatelessDeflate(out io.Writer, in []byte, eof bool, dict ...byte) error {
 	var dst tokens
 	bw := bitWriterPool.Get().(*huffmanBitWriter)
