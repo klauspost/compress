@@ -210,16 +210,15 @@ func (e *fastGen) matchlenLong(s, t int32, src []byte) int32 {
 
 // Reset the encoding table.
 func (e *fastGen) Reset() {
-	if cap(e.hist) < int(maxMatchOffset*8) {
-		l := maxMatchOffset * 8
-		// Make it at least 1MB.
-		if l < 1<<20 {
-			l = 1 << 20
-		}
-		e.hist = make([]byte, 0, l)
+	const historyAllocMin = maxMatchOffset * 8
+	if cap(e.hist) < historyAllocMin {
+		e.hist = make([]byte, 0, 1<<20)
 	}
-	// We offset current position so everything will be out of reach
-	e.cur += maxMatchOffset + int32(len(e.hist))
+	// We offset current position so everything will be out of reach.
+	// If we are above the buffer reset it will be cleared anyway since len(hist) == 0.
+	if e.cur <= bufferReset {
+		e.cur += maxMatchOffset + int32(len(e.hist))
+	}
 	e.hist = e.hist[:0]
 }
 
