@@ -44,7 +44,7 @@ const (
 
 	bTableBits   = 18                                           // Bits used in the big tables
 	bTableSize   = 1 << bTableBits                              // Size of the table
-	allocHistory = maxMatchOffset * 10                          // Size to preallocate for history.
+	allocHistory = maxStoreBlockSize * 20                       // Size to preallocate for history.
 	bufferReset  = (1 << 31) - allocHistory - maxStoreBlockSize // Reset the buffer offset when reaching this.
 )
 
@@ -210,9 +210,8 @@ func (e *fastGen) matchlenLong(s, t int32, src []byte) int32 {
 
 // Reset the encoding table.
 func (e *fastGen) Reset() {
-	const historyAllocMin = maxMatchOffset * 8
-	if cap(e.hist) < historyAllocMin {
-		e.hist = make([]byte, 0, 1<<20)
+	if cap(e.hist) < allocHistory {
+		e.hist = make([]byte, 0, allocHistory)
 	}
 	// We offset current position so everything will be out of reach.
 	// If we are above the buffer reset it will be cleared anyway since len(hist) == 0.
