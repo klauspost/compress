@@ -279,14 +279,17 @@ func TestWriter_Reset(t *testing.T) {
 	in := buf.Bytes()
 	for l := 0; l < 10; l++ {
 		l := l
+		if testing.Short() && l > 1 {
+			continue
+		}
 		t.Run(fmt.Sprintf("level-%d", l), func(t *testing.T) {
 			t.Parallel()
-			for offset := 1; offset <= 256; offset *= 2 {
+			offset := 1
+			if testing.Short() {
+				offset = 256
+			}
+			for ; offset <= 256; offset *= 2 {
 				// Fail after 'fail' writes
-				if testing.Short() {
-					// Skip...
-					offset = 128
-				}
 				w, err := NewWriter(ioutil.Discard, l)
 				if err != nil {
 					t.Fatalf("NewWriter: level %d: %v", l, err)
