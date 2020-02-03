@@ -27,11 +27,11 @@ func (s *statelessWriter) Close() error {
 	}
 	s.closed = true
 	// Emit EOF block
-	return StatelessDeflate(s.dst, nil, true)
+	return StatelessDeflate(s.dst, nil, true, nil)
 }
 
 func (s *statelessWriter) Write(p []byte) (n int, err error) {
-	err = StatelessDeflate(s.dst, p, false)
+	err = StatelessDeflate(s.dst, p, false, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -63,7 +63,8 @@ var bitWriterPool = sync.Pool{
 // When returning everything will be flushed.
 // Up to 8KB of an optional dictionary can be given which is presumed to presumed to precede the block.
 // Longer dictionaries will be truncated and will still produce valid output.
-func StatelessDeflate(out io.Writer, in []byte, eof bool, dict ...byte) error {
+// Sending nil dictionary is perfectly fine.
+func StatelessDeflate(out io.Writer, in []byte, eof bool, dict []byte) error {
 	var dst tokens
 	bw := bitWriterPool.Get().(*huffmanBitWriter)
 	bw.reset(out)
