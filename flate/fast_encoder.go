@@ -42,10 +42,10 @@ const (
 	baseMatchLength = 3              // The smallest match length per the RFC section 3.2.5
 	maxMatchOffset  = 1 << 15        // The largest match offset
 
-	bTableBits   = 18                                           // Bits used in the big tables
-	bTableSize   = 1 << bTableBits                              // Size of the table
-	allocHistory = maxStoreBlockSize * 20                       // Size to preallocate for history.
-	bufferReset  = (1 << 31) - allocHistory - maxStoreBlockSize // Reset the buffer offset when reaching this.
+	bTableBits   = 18                                               // Bits used in the big tables
+	bTableSize   = 1 << bTableBits                                  // Size of the table
+	allocHistory = maxStoreBlockSize * 20                           // Size to preallocate for history.
+	bufferReset  = (1 << 31) - allocHistory - maxStoreBlockSize - 1 // Reset the buffer offset when reaching this.
 )
 
 const (
