@@ -15,6 +15,8 @@ This package provides various compression algorithms.
 
 # changelog
 
+* Feb 4, 2020: (v1.10.0) Add optional dictionary to [stateless deflate](https://pkg.go.dev/github.com/klauspost/compress/flate?tab=doc#StatelessDeflate). Breaking change, send `nil` for previous behaviour. [#216](https://github.com/klauspost/compress/pull/216)
+* Feb 3, 2020: Fix buffer overflow on repeated small block deflate.  [#218](https://github.com/klauspost/compress/pull/218)
 * Jan 31, 2020: Allow copying content from an existing ZIP file without decompressing+compressing. [#214](https://github.com/klauspost/compress/pull/214)
 * Jan 28, 2020: Added [S2](https://github.com/klauspost/compress/tree/master/s2#s2-compression) AMD64 assembler and various optimizations. Stream speed >10GB/s.  [#186](https://github.com/klauspost/compress/pull/186)
 * Jan 20,2020 (v1.9.8) Optimize gzip/deflate with better size estimates and faster table generation. [#207](https://github.com/klauspost/compress/pull/207) by [luyu6056](https://github.com/luyu6056),  [#206](https://github.com/klauspost/compress/pull/206).

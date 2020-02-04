@@ -138,6 +138,31 @@ func TestRegressions(t *testing.T) {
 				}
 			})
 		}
+		t.Run(tt.Name+"stateless", func(t *testing.T) {
+			// Split into two and use history...
+			buf := new(bytes.Buffer)
+			err = StatelessDeflate(buf, data1[:len(data1)/2], false, nil)
+			if err != nil {
+				t.Error(err)
+			}
+
+			// Use top half as dictionary...
+			dict := data1[:len(data1)/2]
+			err = StatelessDeflate(buf, data1[len(data1)/2:], true, dict)
+			if err != nil {
+				t.Error(err)
+			}
+			t.Log(buf.Len())
+			fr1 := NewReader(buf)
+			data2, err := ioutil.ReadAll(fr1)
+			if err != nil {
+				t.Error(err)
+			}
+			if bytes.Compare(data1, data2) != 0 {
+				fmt.Printf("want:%x\ngot: %x\n", data1, data2)
+				t.Error("not equal")
+			}
+		})
 	}
 }
 
