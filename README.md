@@ -8,12 +8,14 @@ This package provides various compression algorithms.
 * [huff0](https://github.com/klauspost/compress/tree/master/huff0) and [FSE](https://github.com/klauspost/compress/tree/master/fse) implementations for raw entropy encoding.
 * [pgzip](https://github.com/klauspost/pgzip) is a separate package that provides a very fast parallel gzip implementation.
 
+[![Documentation](https://godoc.org/github.com/klauspost/compress?status.svg)](https://pkg.go.dev/github.com/klauspost/compress?tab=subdirectories)
 [![Build Status](https://travis-ci.org/klauspost/compress.svg?branch=master)](https://travis-ci.org/klauspost/compress)
 [![Sourcegraph Badge](https://sourcegraph.com/github.com/klauspost/compress/-/badge.svg)](https://sourcegraph.com/github.com/klauspost/compress?badge)
 [![fuzzit](https://app.fuzzit.dev/badge?org_id=klauspost)](https://fuzzit.dev)
 
 # changelog
 
+* Jan 31, 2020: Allow copying content from an existing ZIP file without decompressing+compressing. [#214](https://github.com/klauspost/compress/pull/214)
 * Jan 28, 2020: Added [S2](https://github.com/klauspost/compress/tree/master/s2#s2-compression) AMD64 assembler and various optimizations. Stream speed >10GB/s.  [#186](https://github.com/klauspost/compress/pull/186)
 * Jan 20,2020 (v1.9.8) Optimize gzip/deflate with better size estimates and faster table generation. [#207](https://github.com/klauspost/compress/pull/207) by [luyu6056](https://github.com/luyu6056),  [#206](https://github.com/klauspost/compress/pull/206).
 * Jan 11, 2020: S2 Encode/Decode will use provided buffer if capacity is big enough. [#204](https://github.com/klauspost/compress/pull/204) 
@@ -118,12 +120,14 @@ This package provides various compression algorithms.
 
 The packages are drop-in replacements for standard libraries. Simply replace the import path to use them:
 
-| old import         | new import                              |
-|--------------------|-----------------------------------------|
-| `compress/gzip`    | `github.com/klauspost/compress/gzip`    |
-| `compress/zlib`    | `github.com/klauspost/compress/zlib`    |
-| `archive/zip`      | `github.com/klauspost/compress/zip`     |
-| `compress/flate`   | `github.com/klauspost/compress/flate`   |
+| old import         | new import                              | Documentation
+|--------------------|-----------------------------------------|--------------------|
+| `compress/gzip`    | `github.com/klauspost/compress/gzip`    | [gzip](https://pkg.go.dev/github.com/klauspost/compress/gzip?tab=doc)
+| `compress/zlib`    | `github.com/klauspost/compress/zlib`    | [zlib](https://pkg.go.dev/github.com/klauspost/compress/zlib?tab=doc)
+| `archive/zip`      | `github.com/klauspost/compress/zip`     | [zip](https://pkg.go.dev/github.com/klauspost/compress/zip?tab=doc)
+| `compress/flate`   | `github.com/klauspost/compress/flate`   | [flate](https://pkg.go.dev/github.com/klauspost/compress/flate?tab=doc)
+
+* Optimized [deflate](https://godoc.org/github.com/klauspost/compress/flate) packages which can be used as a dropin replacement for [gzip](https://godoc.org/github.com/klauspost/compress/gzip), [zip](https://godoc.org/github.com/klauspost/compress/zip) and [zlib](https://godoc.org/github.com/klauspost/compress/zlib).
 
 You may also be interested in [pgzip](https://github.com/klauspost/pgzip), which is a drop in replacement for gzip, which support multithreaded compression on big files and the optimized [crc32](https://github.com/klauspost/crc32) package used by these packages.
 

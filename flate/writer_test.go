@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"math/rand"
 	"runtime"
 	"strconv"
@@ -262,6 +263,75 @@ func TestWriteError(t *testing.T) {
 				return
 			}
 		}
+	}
+}
+
+// Test if errors from the underlying writer is passed upwards.
+func TestWriter_Reset(t *testing.T) {
+	buf := new(bytes.Buffer)
+	n := 65536
+	if !testing.Short() {
+		n *= 4
+	}
+	for i := 0; i < n; i++ {
+		fmt.Fprintf(buf, "asdasfasf%d%dfghfgujyut%dyutyu\n", i, i, i)
+	}
+	in := buf.Bytes()
+	for l := 0; l < 10; l++ {
+		l := l
+		if testing.Short() && l > 1 {
+			continue
+		}
+		t.Run(fmt.Sprintf("level-%d", l), func(t *testing.T) {
+			t.Parallel()
+			offset := 1
+			if testing.Short() {
+				offset = 256
+			}
+			for ; offset <= 256; offset *= 2 {
+				// Fail after 'fail' writes
+				w, err := NewWriter(ioutil.Discard, l)
+				if err != nil {
+					t.Fatalf("NewWriter: level %d: %v", l, err)
+				}
+				if w.d.fast == nil {
+					t.Skip("Not Fast...")
+					return
+				}
+				for i := 0; i < (bufferReset-len(in)-offset-maxMatchOffset)/maxMatchOffset; i++ {
+					// skip ahead to where we are close to wrap around...
+					w.d.fast.Reset()
+				}
+				w.d.fast.Reset()
+				_, err = w.Write(in)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for i := 0; i < 50; i++ {
+					// skip ahead again... This should wrap around...
+					w.d.fast.Reset()
+				}
+				w.d.fast.Reset()
+
+				_, err = w.Write(in)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for i := 0; i < (math.MaxUint32-bufferReset)/maxMatchOffset; i++ {
+					// skip ahead to where we are close to wrap around...
+					w.d.fast.Reset()
+				}
+
+				_, err = w.Write(in)
+				if err != nil {
+					t.Fatal(err)
+				}
+				err = w.Close()
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+		})
 	}
 }
 
