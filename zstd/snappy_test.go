@@ -216,6 +216,7 @@ func BenchmarkSnappy_ConvertXML(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	defer dec.Close()
 	in, err := ioutil.ReadAll(dec)
 	if err != nil {
 		b.Fatal(err)
@@ -258,6 +259,7 @@ func BenchmarkSnappy_Enwik9(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	defer dec.Close()
 	in, err := ioutil.ReadAll(dec)
 	if err != nil {
 		b.Fatal(err)
