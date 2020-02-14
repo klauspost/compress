@@ -141,14 +141,14 @@ func TestRegressions(t *testing.T) {
 		t.Run(tt.Name+"stateless", func(t *testing.T) {
 			// Split into two and use history...
 			buf := new(bytes.Buffer)
-			err = StatelessDeflate(buf, data1[:len(data1)/2], false, nil)
+			_, err = StatelessDeflate(buf, data1[:len(data1)/2], false, nil)
 			if err != nil {
 				t.Error(err)
 			}
 
 			// Use top half as dictionary...
 			dict := data1[:len(data1)/2]
-			err = StatelessDeflate(buf, data1[len(data1)/2:], true, dict)
+			_, err = StatelessDeflate(buf, data1[len(data1)/2:], true, dict)
 			if err != nil {
 				t.Error(err)
 			}

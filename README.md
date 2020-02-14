@@ -15,6 +15,7 @@ This package provides various compression algorithms.
 
 # changelog
 
+* Feb 14, 2020: Return a length from [stateless deflate](https://pkg.go.dev/github.com/klauspost/compress/flate?tab=doc#StatelessDeflate) to indicate the bytes written. Breaking change.
 * Feb 4, 2020: (v1.10.0) Add optional dictionary to [stateless deflate](https://pkg.go.dev/github.com/klauspost/compress/flate?tab=doc#StatelessDeflate). Breaking change, send `nil` for previous behaviour. [#216](https://github.com/klauspost/compress/pull/216)
 * Feb 3, 2020: Fix buffer overflow on repeated small block deflate.  [#218](https://github.com/klauspost/compress/pull/218)
 * Jan 31, 2020: Allow copying content from an existing ZIP file without decompressing+compressing. [#214](https://github.com/klauspost/compress/pull/214)

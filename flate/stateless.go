@@ -27,15 +27,12 @@ func (s *statelessWriter) Close() error {
 	}
 	s.closed = true
 	// Emit EOF block
-	return StatelessDeflate(s.dst, nil, true, nil)
+	_, err := StatelessDeflate(s.dst, nil, true, nil)
+	return err
 }
 
-func (s *statelessWriter) Write(p []byte) (n int, err error) {
-	err = StatelessDeflate(s.dst, p, false, nil)
-	if err != nil {
-		return 0, err
-	}
-	return len(p), nil
+func (s *statelessWriter) Write(p []byte) (int, error) {
+	return StatelessDeflate(s.dst, p, false, nil)
 }
 
 func (s *statelessWriter) Reset(w io.Writer) {
@@ -64,7 +61,7 @@ var bitWriterPool = sync.Pool{
 // Up to 8KB of an optional dictionary can be given which is presumed to presumed to precede the block.
 // Longer dictionaries will be truncated and will still produce valid output.
 // Sending nil dictionary is perfectly fine.
-func StatelessDeflate(out io.Writer, in []byte, eof bool, dict []byte) error {
+func StatelessDeflate(out io.Writer, in []byte, eof bool, dict []byte) (int, error) {
 	var dst tokens
 	bw := bitWriterPool.Get().(*huffmanBitWriter)
 	bw.reset(out)
@@ -78,7 +75,7 @@ func StatelessDeflate(out io.Writer, in []byte, eof bool, dict []byte) error {
 		// Could be faster...
 		bw.writeStoredHeader(0, true)
 		bw.flush()
-		return bw.err
+		return 0, bw.err
 	}
 
 	// Truncate dict
@@ -108,7 +105,7 @@ func StatelessDeflate(out io.Writer, in []byte, eof bool, dict []byte) error {
 		if dst.n == 0 {
 			bw.writeStoredHeader(len(uncompressed), isEof)
 			if bw.err != nil {
-				return bw.err
+				return 0, bw.err
 			}
 			bw.writeBytes(uncompressed)
 		} else if int(dst.n) > len(uncompressed)-len(uncompressed)>>4 {
@@ -123,7 +120,7 @@ func StatelessDeflate(out io.Writer, in []byte, eof bool, dict []byte) error {
 			dst.Reset()
 		}
 		if bw.err != nil {
-			return bw.err
+			return 0, bw.err
 		}
 	}
 	if !eof {
@@ -131,7 +128,7 @@ func StatelessDeflate(out io.Writer, in []byte, eof bool, dict []byte) error {
 		bw.writeStoredHeader(0, false)
 	}
 	bw.flush()
-	return bw.err
+	return len(in), bw.err
 }
 
 func hashSL(u uint32) uint32 {
