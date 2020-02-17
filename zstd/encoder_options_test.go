@@ -131,7 +131,7 @@ func TestWindowSize(t *testing.T) {
 		{1 << 10, false},
 		{(1 << 10) + 1, true},
 		{(1 << 10) * 3, true},
-		{1 << 30, false},
+		{MaxWindowSize, false},
 	}
 	for _, tt := range tests {
 		t.Run(strconv.Itoa(tt.windowSize), func(t *testing.T) {
