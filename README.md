@@ -15,6 +15,9 @@ This package provides various compression algorithms.
 
 # changelog
 
+* Feb 18, 2020: (v1.10.1) Fix zstd crash when resetting multiple times without sending data. [#226](https://github.com/klauspost/compress/pull/226)
+* Feb 16, 2020: deflate: Fix dictionary use on level 1-6. [#224](https://github.com/klauspost/compress/pull/224)
+* Feb 16, 2020: Remove deflate writer reference when closing. [#224](https://github.com/klauspost/compress/pull/224)
 * Feb 4, 2020: (v1.10.0) Add optional dictionary to [stateless deflate](https://pkg.go.dev/github.com/klauspost/compress/flate?tab=doc#StatelessDeflate). Breaking change, send `nil` for previous behaviour. [#216](https://github.com/klauspost/compress/pull/216)
 * Feb 3, 2020: Fix buffer overflow on repeated small block deflate.  [#218](https://github.com/klauspost/compress/pull/218)
 * Jan 31, 2020: Allow copying content from an existing ZIP file without decompressing+compressing. [#214](https://github.com/klauspost/compress/pull/214)
@@ -57,6 +60,9 @@ This package provides various compression algorithms.
 * Aug 26, 2019: (v1.8.1) S2: 1-2% compression increase in "better" compression mode.
 * Aug 26, 2019: zstd: Check maximum size of Huffman 1X compressed literals while decoding.
 * Aug 24, 2019: (v1.8.0) Added [S2 compression](https://github.com/klauspost/compress/tree/master/s2#s2-compression), a high performance replacement for Snappy. 
+
+<details>
+	<summary>See changes prior to v1.8.0</summary> 
 * Aug 21, 2019: (v1.7.6) Fixed minor issues found by fuzzer. One could lead to zstd not decompressing.
 * Aug 18, 2019: Add [fuzzit](https://fuzzit.dev/) continuous fuzzing.
 * Aug 14, 2019: zstd: Skip incompressible data 2x faster.  [#147](https://github.com/klauspost/compress/pull/147)
@@ -112,6 +118,7 @@ This package provides various compression algorithms.
 * Nov 12 2015: Added [io.WriterTo](https://golang.org/pkg/io/#WriterTo) support to gzip/inflate.
 * Nov 11 2015: Merged [CL 16669](https://go-review.googlesource.com/#/c/16669/4): archive/zip: enable overriding (de)compressors per file
 * Oct 15 2015: Added skipping on uncompressible data. Random data speed up >5x.
+</details>
 
 # deflate usage
 
