@@ -49,6 +49,10 @@ This package provides various compression algorithms.
 * Oct 24, 2019 (v1.9.0) zstd: Fix rare data corruption [#173](https://github.com/klauspost/compress/pull/173)
 * Oct 24, 2019 zstd: Fix huff0 out of buffer write [#171](https://github.com/klauspost/compress/pull/171) and always return errors [#172](https://github.com/klauspost/compress/pull/172) 
 * Oct 10, 2019: Big deflate rewrite, 30-40% faster with better compression [#105](https://github.com/klauspost/compress/pull/105)
+
+<details>
+	<summary>See changes prior to v1.9.0</summary>
+
 * Oct 10, 2019: (v1.8.6) zstd: Allow partial reads to get flushed data. [#169](https://github.com/klauspost/compress/pull/169)
 * Oct 3, 2019: Fix inconsistent results on broken zstd streams.
 * Sep 25, 2019: Added `-rm` (remove source files) and `-q` (no output except errors) to `s2c` and `s2d` [commands](https://github.com/klauspost/compress/tree/master/s2#commandline-tools)
@@ -60,9 +64,6 @@ This package provides various compression algorithms.
 * Aug 26, 2019: (v1.8.1) S2: 1-2% compression increase in "better" compression mode.
 * Aug 26, 2019: zstd: Check maximum size of Huffman 1X compressed literals while decoding.
 * Aug 24, 2019: (v1.8.0) Added [S2 compression](https://github.com/klauspost/compress/tree/master/s2#s2-compression), a high performance replacement for Snappy. 
-
-<details>
-	<summary>See changes prior to v1.8.0</summary> 
 * Aug 21, 2019: (v1.7.6) Fixed minor issues found by fuzzer. One could lead to zstd not decompressing.
 * Aug 18, 2019: Add [fuzzit](https://fuzzit.dev/) continuous fuzzing.
 * Aug 14, 2019: zstd: Skip incompressible data 2x faster.  [#147](https://github.com/klauspost/compress/pull/147)
@@ -118,6 +119,7 @@ This package provides various compression algorithms.
 * Nov 12 2015: Added [io.WriterTo](https://golang.org/pkg/io/#WriterTo) support to gzip/inflate.
 * Nov 11 2015: Merged [CL 16669](https://go-review.googlesource.com/#/c/16669/4): archive/zip: enable overriding (de)compressors per file
 * Oct 15 2015: Added skipping on uncompressible data. Random data speed up >5x.
+
 </details>
 
 # deflate usage
