@@ -106,7 +106,7 @@ const (
 )
 
 type huffmanDecoder struct {
-	min      int                       // the minimum code length
+	maxRead  int                       // the minimum code length
 	chunks   *[huffmanNumChunks]uint16 // chunks as described above
 	links    [][]uint16                // overflow links
 	linkMask uint32                    // mask the width of the link table
@@ -126,12 +126,12 @@ func (h *huffmanDecoder) init(lengths []int) bool {
 	if h.chunks == nil {
 		h.chunks = &[huffmanNumChunks]uint16{}
 	}
-	if h.min != 0 {
+	if h.maxRead != 0 {
 		*h = huffmanDecoder{chunks: h.chunks, links: h.links}
 	}
 
 	// Count number of codes of each length,
-	// compute min and max length.
+	// compute maxRead and max length.
 	var count [maxCodeLen]int
 	var min, max int
 	for _, n := range lengths {
@@ -178,7 +178,7 @@ func (h *huffmanDecoder) init(lengths []int) bool {
 		return false
 	}
 
-	h.min = min
+	h.maxRead = min
 	chunks := h.chunks[:]
 	for i := range chunks {
 		chunks[i] = 0
@@ -543,18 +543,18 @@ func (f *decompressor) readHuffman() error {
 		return CorruptInputError(f.roffset)
 	}
 
-	// As an optimization, we can initialize the min bits to read at a time
+	// As an optimization, we can initialize the maxRead bits to read at a time
 	// for the HLIT tree to the length of the EOB marker since we know that
 	// every block must terminate with one. This preserves the property that
 	// we never read any extra bytes after the end of the DEFLATE stream.
-	if f.h1.min < f.bits[endBlockMarker] {
-		f.h1.min = f.bits[endBlockMarker]
-		if !f.final {
-			// If not the final block, the smallest block possible is
-			// a predefined table, BTYPE=01, with a single EOB marker.
-			// This will take up 3 + 7 bits.
-			f.h1.min += 10
-		}
+	if f.h1.maxRead < f.bits[endBlockMarker] {
+		f.h1.maxRead = f.bits[endBlockMarker]
+	}
+	if !f.final {
+		// If not the final block, the smallest block possible is
+		// a predefined table, BTYPE=01, with a single EOB marker.
+		// This will take up 3 + 7 bits.
+		f.h1.maxRead += 10
 	}
 
 	return nil
@@ -834,7 +834,7 @@ func (f *decompressor) huffSym(h *huffmanDecoder) (int, error) {
 	// with single element, huffSym must error on these two edge cases. In both
 	// cases, the chunks slice will be 0 for the invalid sequence, leading it
 	// satisfy the n == 0 check below.
-	n := uint(h.min)
+	n := uint(h.maxRead)
 	// Optimization. Compiler isn't smart enough to keep f.b,f.nb in registers,
 	// but is smart enough to keep local variables in registers, so use nb and b,
 	// inline call to moreBits and reassign b,nb back to f on return.
