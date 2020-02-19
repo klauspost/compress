@@ -549,6 +549,12 @@ func (f *decompressor) readHuffman() error {
 	// we never read any extra bytes after the end of the DEFLATE stream.
 	if f.h1.min < f.bits[endBlockMarker] {
 		f.h1.min = f.bits[endBlockMarker]
+		if !f.final {
+			// If not the final block, the smallest block possible is
+			// a predefined table with a single EOB marker.
+			// This will take up 3 + 7 bits.
+			f.h1.min += 10
+		}
 	}
 
 	return nil
