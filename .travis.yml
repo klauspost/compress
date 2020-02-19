@@ -18,7 +18,7 @@ install:
 
 script:
  - diff <(gofmt -d .) <(printf "")
- - go vet ./...
+ - IS_GO112=`go version | cut -d ' ' -f3 | grep 1.12`; if [ ! -z "$IS_GO112" ]; then echo 'Skipping vet on Go 1.12...'; else go vet ./...; fi
  - go test -cpu=2 ./...
  - go test -cpu=2 -tags=noasm ./...
  - go test -cpu=1,4 -short -race ./...
@@ -27,7 +27,7 @@ script:
 matrix:
   allow_failures:
     - go: 'master'
-  fast_finish: true 
+  fast_finish: true
 
 jobs:
   include:
