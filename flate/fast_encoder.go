@@ -92,7 +92,6 @@ func hash(u uint32) uint32 {
 }
 
 type tableEntry struct {
-	val    uint32
 	offset int32
 }
 
