@@ -553,7 +553,7 @@ func (f *decompressor) readHuffman() error {
 			// If not the final block, the smallest block possible is
 			// a predefined table, BTYPE=01, with a single EOB marker.
 			// This will take up 3 + 7 bits.
-			//f.h1.min += 10
+			f.h1.min += 10
 		}
 	}
 
@@ -732,21 +732,33 @@ copyHistory:
 func (f *decompressor) dataBlock() {
 	// Uncompressed.
 	// Discard current half-byte.
-	f.nb = 0
-	f.b = 0
+	left := (f.nb) & 7
+	f.nb -= left
+	f.b >>= left
+
+	offBytes := f.nb >> 3
+	// Unfilled values will be overwritten.
+	f.buf[0] = uint8(f.b)
+	f.buf[1] = uint8(f.b >> 8)
+	f.buf[2] = uint8(f.b >> 16)
+	f.buf[3] = uint8(f.b >> 24)
+
+	f.roffset += int64(offBytes)
+	f.nb, f.b = 0, 0
 
 	// Length then ones-complement of length.
-	nr, err := io.ReadFull(f.r, f.buf[0:4])
+	nr, err := io.ReadFull(f.r, f.buf[offBytes:4])
 	f.roffset += int64(nr)
 	if err != nil {
 		f.err = noEOF(err)
 		return
 	}
-	n := int(f.buf[0]) | int(f.buf[1])<<8
-	nn := int(f.buf[2]) | int(f.buf[3])<<8
-	if uint16(nn) != uint16(^n) {
+	n := uint16(f.buf[0]) | uint16(f.buf[1])<<8
+	nn := uint16(f.buf[2]) | uint16(f.buf[3])<<8
+	if nn != ^n {
 		if debugDecode {
-			fmt.Println("uint16(nn) != uint16(^n)", nn, ^n)
+			ncomp := ^n
+			fmt.Println("uint16(nn) != uint16(^n)", nn, ncomp)
 		}
 		f.err = CorruptInputError(f.roffset)
 		return
@@ -758,7 +770,7 @@ func (f *decompressor) dataBlock() {
 		return
 	}
 
-	f.copyLen = n
+	f.copyLen = int(n)
 	f.copyData()
 }
 
