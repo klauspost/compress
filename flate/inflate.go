@@ -551,9 +551,9 @@ func (f *decompressor) readHuffman() error {
 		f.h1.min = f.bits[endBlockMarker]
 		if !f.final {
 			// If not the final block, the smallest block possible is
-			// a predefined table with a single EOB marker.
+			// a predefined table, BTYPE=01, with a single EOB marker.
 			// This will take up 3 + 7 bits.
-			f.h1.min += 10
+			//f.h1.min += 10
 		}
 	}
 
