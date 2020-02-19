@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"hash/crc32"
-	"hash/fnv"
 	"strings"
 	"testing"
 )
@@ -131,6 +129,8 @@ func TestBinaryMarshaling(t *testing.T) {
 	}
 }
 
+var sink uint64
+
 func TestAllocs(t *testing.T) {
 	const shortStr = "abcdefghijklmnop"
 	// Sum64([]byte(shortString)) shouldn't allocate because the
@@ -158,121 +158,5 @@ func testAllocs(t *testing.T, fn func()) {
 	t.Helper()
 	if allocs := int(testing.AllocsPerRun(10, fn)); allocs > 0 {
 		t.Fatalf("got %d allocation(s) (want zero)", allocs)
-	}
-}
-
-var sink uint64
-
-var benchmarks = []struct {
-	name         string
-	directBytes  func([]byte) uint64
-	directString func(string) uint64
-	digestBytes  func([]byte) uint64
-	digestString func(string) uint64
-}{
-	{
-		name:         "xxhash",
-		directBytes:  Sum64,
-		directString: Sum64String,
-		digestBytes: func(b []byte) uint64 {
-			h := New()
-			h.Write(b)
-			return h.Sum64()
-		},
-		digestString: func(s string) uint64 {
-			h := New()
-			h.WriteString(s)
-			return h.Sum64()
-		},
-	},
-	{
-		name: "CRC-32",
-		directBytes: func(b []byte) uint64 {
-			return uint64(crc32.ChecksumIEEE(b))
-		},
-		directString: func(s string) uint64 {
-			return uint64(crc32.ChecksumIEEE([]byte(s)))
-		},
-		digestBytes: func(b []byte) uint64 {
-			h := crc32.NewIEEE()
-			h.Write(b)
-			return uint64(h.Sum32())
-		},
-		digestString: func(s string) uint64 {
-			h := crc32.NewIEEE()
-			h.Write([]byte(s))
-			return uint64(h.Sum32())
-		},
-	},
-	{
-		name: "FNV-1a",
-		digestBytes: func(b []byte) uint64 {
-			h := fnv.New64()
-			h.Write(b)
-			return uint64(h.Sum64())
-		},
-		digestString: func(s string) uint64 {
-			h := fnv.New64a()
-			h.Write([]byte(s))
-			return uint64(h.Sum64())
-		},
-	},
-}
-
-func BenchmarkHashes(b *testing.B) {
-	for _, bb := range benchmarks {
-		for _, benchSize := range []struct {
-			name string
-			n    int
-		}{
-			{"5B", 5},
-			{"100B", 100},
-			{"4KB", 4e3},
-			{"10MB", 10e6},
-		} {
-			input := make([]byte, benchSize.n)
-			for i := range input {
-				input[i] = byte(i)
-			}
-			inputString := string(input)
-			if bb.directBytes != nil {
-				name := fmt.Sprintf("%s,direct,bytes,n=%s", bb.name, benchSize.name)
-				b.Run(name, func(b *testing.B) {
-					benchmarkHashBytes(b, input, bb.directBytes)
-				})
-			}
-			if bb.directString != nil {
-				name := fmt.Sprintf("%s,direct,string,n=%s", bb.name, benchSize.name)
-				b.Run(name, func(b *testing.B) {
-					benchmarkHashString(b, inputString, bb.directString)
-				})
-			}
-			if bb.digestBytes != nil {
-				name := fmt.Sprintf("%s,digest,bytes,n=%s", bb.name, benchSize.name)
-				b.Run(name, func(b *testing.B) {
-					benchmarkHashBytes(b, input, bb.digestBytes)
-				})
-			}
-			if bb.digestString != nil {
-				name := fmt.Sprintf("%s,digest,string,n=%s", bb.name, benchSize.name)
-				b.Run(name, func(b *testing.B) {
-					benchmarkHashString(b, inputString, bb.digestString)
-				})
-			}
-		}
-	}
-}
-
-func benchmarkHashBytes(b *testing.B, input []byte, fn func([]byte) uint64) {
-	b.SetBytes(int64(len(input)))
-	for i := 0; i < b.N; i++ {
-		sink = fn(input)
-	}
-}
-
-func benchmarkHashString(b *testing.B, input string, fn func(string) uint64) {
-	b.SetBytes(int64(len(input)))
-	for i := 0; i < b.N; i++ {
-		sink = fn(input)
 	}
 }
