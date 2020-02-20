@@ -106,7 +106,7 @@ const (
 )
 
 type huffmanDecoder struct {
-	maxRead  int                       // the minimum code length
+	maxRead  int                       // the maximum number of bits we can read and not overread
 	chunks   *[huffmanNumChunks]uint16 // chunks as described above
 	links    [][]uint16                // overflow links
 	linkMask uint32                    // mask the width of the link table
