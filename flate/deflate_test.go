@@ -33,24 +33,24 @@ type reverseBitsTest struct {
 }
 
 var deflateTests = []*deflateTest{
-	{[]byte{}, 0, []byte{1, 0, 0, 255, 255}},
-	{[]byte{0x11}, BestCompression, []byte{18, 4, 4, 0, 0, 255, 255}},
-	{[]byte{0x11}, BestCompression, []byte{18, 4, 4, 0, 0, 255, 255}},
-	{[]byte{0x11}, BestCompression, []byte{18, 4, 4, 0, 0, 255, 255}},
+	{[]byte{}, 0, []byte{0x3, 0x0}},
+	{[]byte{0x11}, BestCompression, []byte{0x12, 0x4, 0xc, 0x0}},
+	{[]byte{0x11}, BestCompression, []byte{0x12, 0x4, 0xc, 0x0}},
+	{[]byte{0x11}, BestCompression, []byte{0x12, 0x4, 0xc, 0x0}},
 
-	{[]byte{0x11}, 0, []byte{0, 1, 0, 254, 255, 17, 1, 0, 0, 255, 255}},
-	{[]byte{0x11, 0x12}, 0, []byte{0, 2, 0, 253, 255, 17, 18, 1, 0, 0, 255, 255}},
+	{[]byte{0x11}, 0, []byte{0x0, 0x1, 0x0, 0xfe, 0xff, 0x11, 0x3, 0x0}},
+	{[]byte{0x11, 0x12}, 0, []byte{0x0, 0x2, 0x0, 0xfd, 0xff, 0x11, 0x12, 0x3, 0x0}},
 	{[]byte{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11}, 0,
-		[]byte{0, 8, 0, 247, 255, 17, 17, 17, 17, 17, 17, 17, 17, 1, 0, 0, 255, 255},
+		[]byte{0x0, 0x8, 0x0, 0xf7, 0xff, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x3, 0x0},
 	},
-	{[]byte{}, 1, []byte{1, 0, 0, 255, 255}},
-	{[]byte{0x11}, BestCompression, []byte{18, 4, 4, 0, 0, 255, 255}},
-	{[]byte{0x11, 0x12}, BestCompression, []byte{18, 20, 2, 4, 0, 0, 255, 255}},
-	{[]byte{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11}, BestCompression, []byte{18, 132, 2, 64, 0, 0, 0, 255, 255}},
-	{[]byte{}, 9, []byte{1, 0, 0, 255, 255}},
-	{[]byte{0x11}, 9, []byte{18, 4, 4, 0, 0, 255, 255}},
-	{[]byte{0x11, 0x12}, 9, []byte{18, 20, 2, 4, 0, 0, 255, 255}},
-	{[]byte{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11}, 9, []byte{18, 132, 2, 64, 0, 0, 0, 255, 255}},
+	{[]byte{}, 1, []byte{0x3, 0x0}},
+	{[]byte{0x11}, BestCompression, []byte{0x12, 0x4, 0xc, 0x0}},
+	{[]byte{0x11, 0x12}, BestCompression, []byte{0x12, 0x14, 0x2, 0xc, 0x0}},
+	{[]byte{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11}, BestCompression, []byte{0x12, 0x84, 0x2, 0xc0, 0x0}},
+	{[]byte{}, 9, []byte{0x3, 0x0}},
+	{[]byte{0x11}, 9, []byte{0x12, 0x4, 0xc, 0x0}},
+	{[]byte{0x11, 0x12}, 9, []byte{0x12, 0x14, 0x2, 0xc, 0x0}},
+	{[]byte{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11}, 9, []byte{0x12, 0x84, 0x2, 0xc0, 0x0}},
 }
 
 var deflateInflateTests = []*deflateInflateTest{
@@ -110,7 +110,7 @@ func TestBulkHash4(t *testing.T) {
 }
 
 func TestDeflate(t *testing.T) {
-	for _, h := range deflateTests {
+	for i, h := range deflateTests {
 		var buf bytes.Buffer
 		w, err := NewWriter(&buf, h.level)
 		if err != nil {
@@ -120,7 +120,7 @@ func TestDeflate(t *testing.T) {
 		w.Write(h.in)
 		w.Close()
 		if !bytes.Equal(buf.Bytes(), h.out) {
-			t.Errorf("Deflate(%d, %x) = \n%#v, want \n%#v", h.level, h.in, buf.Bytes(), h.out)
+			t.Errorf("%d: Deflate(%d, %x) = \n%#v, want \n%#v", i, h.level, h.in, buf.Bytes(), h.out)
 		}
 	}
 }
