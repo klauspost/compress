@@ -580,13 +580,58 @@ func (f *decompressor) huffmanBlock() {
 readLiteral:
 	// Read literal and/or (length, distance) according to RFC section 3.2.3.
 	{
-		v, err := f.huffSym(f.hl)
-		if err != nil {
-			f.err = err
-			return
+		var v int
+		{
+			// Inlined v, err := f.huffSym(f.hl)
+			// Since a huffmanDecoder can be empty or be composed of a degenerate tree
+			// with single element, huffSym must error on these two edge cases. In both
+			// cases, the chunks slice will be 0 for the invalid sequence, leading it
+			// satisfy the n == 0 check below.
+			n := uint(f.hl.maxRead)
+			// Optimization. Compiler isn't smart enough to keep f.b,f.nb in registers,
+			// but is smart enough to keep local variables in registers, so use nb and b,
+			// inline call to moreBits and reassign b,nb back to f on return.
+			nb, b := f.nb, f.b
+			for {
+				for nb < n {
+					c, err := f.r.ReadByte()
+					if err != nil {
+						f.b = b
+						f.nb = nb
+						f.err = noEOF(err)
+						return
+					}
+					f.roffset++
+					b |= uint32(c) << (nb & 31)
+					nb += 8
+				}
+				chunk := f.hl.chunks[b&(huffmanNumChunks-1)]
+				n = uint(chunk & huffmanCountMask)
+				if n > huffmanChunkBits {
+					chunk = f.hl.links[chunk>>huffmanValueShift][(b>>huffmanChunkBits)&f.hl.linkMask]
+					n = uint(chunk & huffmanCountMask)
+				}
+				if n <= nb {
+					if n == 0 {
+						f.b = b
+						f.nb = nb
+						if debugDecode {
+							fmt.Println("huffsym: n==0")
+						}
+						f.err = CorruptInputError(f.roffset)
+						return
+					}
+					f.b = b >> (n & 31)
+					f.nb = nb - n
+					v = int(chunk >> huffmanValueShift)
+					break
+				}
+			}
 		}
+
 		var n uint // number of bits extra
 		var length int
+		var err error
 		switch {
 		case v < 256:
 			f.dict.writeByte(byte(v))
