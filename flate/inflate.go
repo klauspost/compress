@@ -342,7 +342,7 @@ func (f *decompressor) nextBlock() {
 		// compressed, fixed Huffman tables
 		f.hl = &fixedHuffmanDecoder
 		f.hd = nil
-		f.huffmanBlock()
+		f.huffmanBlockDecoder()()
 	case 2:
 		// compressed, dynamic Huffman tables
 		if f.err = f.readHuffman(); f.err != nil {
@@ -350,7 +350,7 @@ func (f *decompressor) nextBlock() {
 		}
 		f.hl = &f.h1
 		f.hd = &f.h2
-		f.huffmanBlock()
+		f.huffmanBlockDecoder()()
 	default:
 		// 3 is reserved.
 		if debugDecode {
@@ -564,7 +564,7 @@ func (f *decompressor) readHuffman() error {
 // hl and hd are the Huffman states for the lit/length values
 // and the distance values, respectively. If hd == nil, using the
 // fixed distance encoding associated with fixed Huffman blocks.
-func (f *decompressor) huffmanBlock() {
+func (f *decompressor) huffmanBlockGeneric() {
 	const (
 		stateInit = iota // Zero value must be stateInit
 		stateDict
@@ -637,7 +637,7 @@ readLiteral:
 			f.dict.writeByte(byte(v))
 			if f.dict.availWrite() == 0 {
 				f.toRead = f.dict.readFlush()
-				f.step = (*decompressor).huffmanBlock
+				f.step = (*decompressor).huffmanBlockGeneric
 				f.stepState = stateInit
 				return
 			}
@@ -765,7 +765,7 @@ copyHistory:
 
 		if f.dict.availWrite() == 0 || f.copyLen > 0 {
 			f.toRead = f.dict.readFlush()
-			f.step = (*decompressor).huffmanBlock // We need to continue this work
+			f.step = (*decompressor).huffmanBlockGeneric // We need to continue this work
 			f.stepState = stateDict
 			return
 		}
