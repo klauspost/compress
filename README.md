@@ -16,7 +16,7 @@ This package provides various compression algorithms.
 # changelog
 
 * Feb 27, 2020: (v1.10.2) Close to 50% speedup in inflate (gzip/zip decompression). [#236](https://github.com/klauspost/compress/pull/236) [#234](https://github.com/klauspost/compress/pull/234) [#232](https://github.com/klauspost/compress/pull/232)
-* Feb 23, 2020: Reduce defalte level 1-6 memory usage up to 59%. [#227](https://github.com/klauspost/compress/pull/227)
+* Feb 23, 2020: Reduce deflate level 1-6 memory usage up to 59%. [#227](https://github.com/klauspost/compress/pull/227)
 * Feb 18, 2020: (v1.10.1) Fix zstd crash when resetting multiple times without sending data. [#226](https://github.com/klauspost/compress/pull/226)
 * Feb 16, 2020: deflate: Fix dictionary use on level 1-6. [#224](https://github.com/klauspost/compress/pull/224)
 * Feb 16, 2020: Remove deflate writer reference when closing. [#224](https://github.com/klauspost/compress/pull/224)
