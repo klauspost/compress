@@ -76,6 +76,9 @@ func NewWriter(w io.Writer, opts ...EOption) (*Encoder, error) {
 }
 
 func (e *Encoder) initialize() {
+	if e.o.concurrent == 0 {
+		e.o.setDefault()
+	}
 	e.encoders = make(chan encoder, e.o.concurrent)
 	for i := 0; i < e.o.concurrent; i++ {
 		e.encoders <- e.o.encoder()
@@ -415,9 +418,7 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 		}
 		return dst
 	}
-	e.init.Do(func() {
-		e.initialize()
-	})
+	e.init.Do(e.initialize)
 	enc := <-e.encoders
 	defer func() {
 		// Release encoder reference to last block.
