@@ -71,10 +71,6 @@ func NewWriter(w io.Writer, opts ...EOption) (*Encoder, error) {
 	}
 	if w != nil {
 		e.Reset(w)
-	} else {
-		e.init.Do(func() {
-			e.initialize()
-		})
 	}
 	return &e, nil
 }
@@ -89,9 +85,6 @@ func (e *Encoder) initialize() {
 // Reset will re-initialize the writer and new writes will encode to the supplied writer
 // as a new, independent stream.
 func (e *Encoder) Reset(w io.Writer) {
-	e.init.Do(func() {
-		e.initialize()
-	})
 	s := &e.state
 	s.wg.Wait()
 	s.wWg.Wait()
@@ -423,7 +416,6 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 		return dst
 	}
 	e.init.Do(func() {
-		e.o.setDefault()
 		e.initialize()
 	})
 	enc := <-e.encoders
