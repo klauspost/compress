@@ -1,15 +1,13 @@
 language: go
 
-sudo: false
-
 os:
   - linux
   - osx
 
 go:
-  - 1.11.x
   - 1.12.x
   - 1.13.x
+  - 1.14.x
   - master
 
 env:
@@ -27,12 +25,10 @@ script:
  - go test -cpu=1,4 -short -race ./...
  - go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d && s2c s2c && s2d s2c.s2 && rm s2c && rm s2d && rm s2c.s2
 
-matrix:
+jobs:
   allow_failures:
     - go: 'master'
   fast_finish: true
-
-jobs:
   include:
     - stage: Build, Unit-Tests & Fuzz-Tests
       go: 1.13.x
