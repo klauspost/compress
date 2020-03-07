@@ -372,7 +372,7 @@ encodeLoop:
 			}
 
 			// Store this, since we have it.
-			nextHashS := hash5(cv1>>8, dFastShortTableBits)
+			nextHashS := hash5(cv, dFastShortTableBits)
 			nextHashL := hash8(cv, dFastLongTableBits)
 
 			// We have at least 4 byte match.

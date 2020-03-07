@@ -23,7 +23,7 @@ type tableEntry struct {
 	offset int32
 }
 
-type fastEncoder struct {
+type fastBase struct {
 	o encParams
 	// cur is the offset at the start of hist
 	cur int32
@@ -31,18 +31,22 @@ type fastEncoder struct {
 	maxMatchOff int32
 	hist        []byte
 	crc         *xxhash.Digest
-	table       [tableSize]tableEntry
 	tmp         [8]byte
 	blk         *blockEnc
 }
 
+type fastEncoder struct {
+	fastBase
+	table [tableSize]tableEntry
+}
+
 // CRC returns the underlying CRC writer.
-func (e *fastEncoder) CRC() *xxhash.Digest {
+func (e *fastBase) CRC() *xxhash.Digest {
 	return e.crc
 }
 
 // AppendCRC will append the CRC to the destination slice and return it.
-func (e *fastEncoder) AppendCRC(dst []byte) []byte {
+func (e *fastBase) AppendCRC(dst []byte) []byte {
 	crc := e.crc.Sum(e.tmp[:0])
 	dst = append(dst, crc[7], crc[6], crc[5], crc[4])
 	return dst
@@ -50,7 +54,7 @@ func (e *fastEncoder) AppendCRC(dst []byte) []byte {
 
 // WindowSize returns the window size of the encoder,
 // or a window size small enough to contain the input size, if > 0.
-func (e *fastEncoder) WindowSize(size int) int32 {
+func (e *fastBase) WindowSize(size int) int32 {
 	if size > 0 && size < int(e.maxMatchOff) {
 		b := int32(1) << uint(bits.Len(uint(size)))
 		// Keep minimum window.
@@ -63,7 +67,7 @@ func (e *fastEncoder) WindowSize(size int) int32 {
 }
 
 // Block returns the current block.
-func (e *fastEncoder) Block() *blockEnc {
+func (e *fastBase) Block() *blockEnc {
 	return e.blk
 }
 
@@ -571,7 +575,7 @@ encodeLoop:
 	}
 }
 
-func (e *fastEncoder) addBlock(src []byte) int32 {
+func (e *fastBase) addBlock(src []byte) int32 {
 	if debugAsserts && e.cur > bufferReset {
 		panic(fmt.Sprintf("ecur (%d) > buffer reset (%d)", e.cur, bufferReset))
 	}
@@ -602,17 +606,17 @@ func (e *fastEncoder) addBlock(src []byte) int32 {
 
 // useBlock will replace the block with the provided one,
 // but transfer recent offsets from the previous.
-func (e *fastEncoder) UseBlock(enc *blockEnc) {
+func (e *fastBase) UseBlock(enc *blockEnc) {
 	enc.reset(e.blk)
 	e.blk = enc
 }
 
-func (e *fastEncoder) matchlenNoHist(s, t int32, src []byte) int32 {
+func (e *fastBase) matchlenNoHist(s, t int32, src []byte) int32 {
 	// Extend the match to be as long as possible.
 	return int32(matchLen(src[s:], src[t:]))
 }
 
-func (e *fastEncoder) matchlen(s, t int32, src []byte) int32 {
+func (e *fastBase) matchlen(s, t int32, src []byte) int32 {
 	if debugAsserts {
 		if s < 0 {
 			err := fmt.Sprintf("s (%d) < 0", s)
@@ -637,7 +641,7 @@ func (e *fastEncoder) matchlen(s, t int32, src []byte) int32 {
 }
 
 // Reset the encoding table.
-func (e *fastEncoder) Reset() {
+func (e *fastBase) Reset() {
 	if e.blk == nil {
 		e.blk = &blockEnc{}
 		e.blk.init()
