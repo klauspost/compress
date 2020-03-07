@@ -127,7 +127,7 @@ encodeLoop:
 		var t int32
 		// We allow the encoder to optionally turn off repeat offsets across blocks
 		canRepeat := len(blk.sequences) > 2
-		matched := int32(8)
+		var matched int32
 
 		for {
 			if debugAsserts && canRepeat && offset1 == 0 {
@@ -269,10 +269,12 @@ encodeLoop:
 			}
 			// Find the offsets of our two matches.
 			coffsetL := candidateL.offset - e.cur
+			coffsetLP := candidateL.prev - e.cur
 
 			// Check if we have a long match.
 			if s-coffsetL < e.maxMatchOff && cv == load6432(src, coffsetL) {
 				// Found a long match, at least 8 bytes.
+				matched = e.matchlen(s+8, coffsetL+8, src) + 8
 				t = coffsetL
 				if debugAsserts && s <= t {
 					panic(fmt.Sprintf("s (%d) <= t (%d)", s, t))
@@ -282,15 +284,33 @@ encodeLoop:
 				}
 				if debugMatches {
 					println("long match")
+				}
+
+				if s-coffsetLP < e.maxMatchOff && cv == load6432(src, coffsetLP) {
+					// Found a long match, at least 8 bytes.
+					prevMatch := e.matchlen(s+8, coffsetLP+8, src) + 8
+					if prevMatch > matched {
+						matched = prevMatch
+						t = coffsetLP
+					}
+					if debugAsserts && s <= t {
+						panic(fmt.Sprintf("s (%d) <= t (%d)", s, t))
+					}
+					if debugAsserts && s-t > e.maxMatchOff {
+						panic("s - t >e.maxMatchOff")
+					}
+					if debugMatches {
+						println("long match")
+					}
 				}
 				break
 			}
 
 			// Check if we have a long match on prev.
-			coffsetL = candidateL.prev - e.cur
-			if s-coffsetL < e.maxMatchOff && cv == load6432(src, coffsetL) {
+			if s-coffsetLP < e.maxMatchOff && cv == load6432(src, coffsetLP) {
 				// Found a long match, at least 8 bytes.
-				t = coffsetL
+				matched = e.matchlen(s+8, coffsetLP+8, src) + 8
+				t = coffsetLP
 				if debugAsserts && s <= t {
 					panic(fmt.Sprintf("s (%d) <= t (%d)", s, t))
 				}
@@ -303,12 +323,14 @@ encodeLoop:
 				break
 			}
 
-			coffsetS := s - (candidateS.offset - e.cur)
+			coffsetS := candidateS.offset - e.cur
 
 			// Check if we have a short match.
-			if coffsetS < e.maxMatchOff && uint32(cv) == candidateS.val {
+			if s-coffsetS < e.maxMatchOff && uint32(cv) == candidateS.val {
 				// found a regular match
-				// See if we can find a long match at s+1
+				matched = e.matchlen(s+4, coffsetS+4, src) + 4
+
+				// See if we can find a long match at s+2
 				const checkAt = 1
 				cv := load6432(src, s+checkAt)
 				nextHashL = hash8(cv, betterLongTableBits)
@@ -319,27 +341,35 @@ encodeLoop:
 				e.longTable[nextHashL] = prevEntry{offset: s + checkAt + e.cur, prev: candidateL.offset}
 				if s-coffsetL < e.maxMatchOff && cv == load6432(src, coffsetL) {
 					// Found a long match, at least 8 bytes.
-					t = coffsetL
-					s += checkAt
-					if debugMatches {
-						println("long match (after short)")
+					matchedNext := e.matchlen(s+8+checkAt, coffsetL+8, src) + 8
+					if matchedNext > matched {
+						t = coffsetL
+						s += checkAt
+						matched = matchedNext
+						if debugMatches {
+							println("long match (after short)")
+						}
+						break
 					}
-					break
 				}
 
 				// Check prev long...
 				coffsetL = candidateL.prev - e.cur
 				if s-coffsetL < e.maxMatchOff && cv == load6432(src, coffsetL) {
 					// Found a long match, at least 8 bytes.
-					t = coffsetL
-					s += checkAt
-					if debugMatches {
-						println("long match (after short)")
+					matchedNext := e.matchlen(s+8+checkAt, coffsetL+8, src) + 8
+					if matchedNext > matched {
+						t = coffsetL
+						s += checkAt
+						matched = matchedNext
+						if debugMatches {
+							println("prev long match (after short)")
+						}
+						break
 					}
-					break
 				}
-				matched = 4
-				t = candidateS.offset - e.cur
+
+				t = coffsetS
 				if debugAsserts && s <= t {
 					panic(fmt.Sprintf("s (%d) <= t (%d)", s, t))
 				}
@@ -377,7 +407,7 @@ encodeLoop:
 		}
 
 		// Extend the n-byte match as long as possible.
-		l := e.matchlen(s+matched, t+matched, src) + matched
+		l := matched
 
 		// Extend backwards
 		tMin := s - e.maxMatchOff
