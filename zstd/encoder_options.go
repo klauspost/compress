@@ -133,8 +133,7 @@ const (
 	SpeedDefault
 
 	// SpeedBetterCompression will yield better compression than the default.
-	// Currently it is about zstd level 6-7 with ~ 2x the CPU usage.
-	// The target is at approximately 4x the CPU usage of the default.
+	// Currently it is about zstd level 7-8 with ~ 2x-3x the default CPU usage.
 	// By using this, notice that CPU usage may go up in the future.
 	SpeedBetterCompression
 

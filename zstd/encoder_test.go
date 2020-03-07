@@ -211,7 +211,7 @@ func TestEncoderRegression(t *testing.T) {
 							encoded := enc.EncodeAll(in, nil)
 							got, err := dec.DecodeAll(encoded, nil)
 							if err != nil {
-								t.Logf("error: %v\nwant: %v\ngot:  %v", err, in, got)
+								t.Logf("error: %v\nwant: %v\ngot:  %v", err, len(in), len(got))
 								t.Fatal(err)
 							}
 
