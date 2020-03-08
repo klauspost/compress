@@ -11,9 +11,10 @@ const (
 	betterLongTableSize = 1 << betterLongTableBits // Size of the table
 
 	// Note: Increasing the short table bits or making the hash shorter
-	// can actually lead to compression degredation since it will 'steal' more from the
-	// long match table.
-	betterShortTableBits = 15                        // Bits used in the short match table
+	// can actually lead to compression degradation since it will 'steal' more from the
+	// long match table and match offsets are quite big.
+	// This greatly depends on the type of input.
+	betterShortTableBits = 13                        // Bits used in the short match table
 	betterShortTableSize = 1 << betterShortTableBits // Size of the table
 )
 
@@ -22,6 +23,12 @@ type prevEntry struct {
 	prev   int32
 }
 
+// betterFastEncoder uses 2 tables, one for short matches (5 bytes) and one for long matches.
+// The long match table contains the previous entry with the same hash,
+// effectively making it a "chain" of length 2.
+// When we find a long match we choose between the two values and select the longest.
+// When we find a short match, after checking the long, we check if we can find a long at n+1
+// and that it is longer (lazy matching).
 type betterFastEncoder struct {
 	fastBase
 	table     [betterShortTableSize]tableEntry
@@ -62,16 +69,17 @@ func (e *betterFastEncoder) Encode(blk *blockEnc, src []byte) {
 		}
 		for i := range e.longTable[:] {
 			v := e.longTable[i].offset
+			v2 := e.longTable[i].prev
 			if v < minOff {
 				v = 0
-			} else {
-				v = v - e.cur + e.maxMatchOff
-			}
-			v2 := e.longTable[i].prev
-			if v2 < minOff {
 				v2 = 0
 			} else {
-				v2 = v2 - e.cur + e.maxMatchOff
+				v = v - e.cur + e.maxMatchOff
+				if v2 < minOff {
+					v2 = 0
+				} else {
+					v2 = v2 - e.cur + e.maxMatchOff
+				}
 			}
 			e.longTable[i] = prevEntry{
 				offset: v,
@@ -330,7 +338,7 @@ encodeLoop:
 				// found a regular match
 				matched = e.matchlen(s+4, coffsetS+4, src) + 4
 
-				// See if we can find a long match at s+2
+				// See if we can find a long match at s+1
 				const checkAt = 1
 				cv := load6432(src, s+checkAt)
 				nextHashL = hash8(cv, betterLongTableBits)
@@ -368,7 +376,6 @@ encodeLoop:
 						break
 					}
 				}
-
 				t = coffsetS
 				if debugAsserts && s <= t {
 					panic(fmt.Sprintf("s (%d) <= t (%d)", s, t))
@@ -451,7 +458,6 @@ encodeLoop:
 		}
 
 		cv = load6432(src, s)
-
 		if !canRepeat {
 			continue
 		}

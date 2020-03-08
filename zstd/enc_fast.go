@@ -416,10 +416,10 @@ encodeLoop:
 			if len(blk.sequences) > 2 && load3232(src, repIndex) == uint32(cv>>16) {
 				// Consider history as well.
 				var seq seq
-				// lenght := 4 + e.matchlen(s+6, repIndex+4, src)
-				lenght := 4 + int32(matchLen(src[s+6:], src[repIndex+4:]))
+				// length := 4 + e.matchlen(s+6, repIndex+4, src)
+				length := 4 + int32(matchLen(src[s+6:], src[repIndex+4:]))
 
-				seq.matchLen = uint32(lenght - zstdMinMatch)
+				seq.matchLen = uint32(length - zstdMinMatch)
 
 				// We might be able to match backwards.
 				// Extend as long as we can.
@@ -445,11 +445,11 @@ encodeLoop:
 					println("repeat sequence", seq, "next s:", s)
 				}
 				blk.sequences = append(blk.sequences, seq)
-				s += lenght + 2
+				s += length + 2
 				nextEmit = s
 				if s >= sLimit {
 					if debug {
-						println("repeat ended", s, lenght)
+						println("repeat ended", s, length)
 
 					}
 					break encodeLoop
@@ -630,14 +630,13 @@ func (e *fastBase) matchlen(s, t int32, src []byte) int32 {
 			err := fmt.Sprintf("s (%d) - t (%d) > maxMatchOff (%d)", s, t, e.maxMatchOff)
 			panic(err)
 		}
-	}
-	s1 := int(s) + maxMatchLength - 4
-	if s1 > len(src) {
-		s1 = len(src)
+		if len(src)-int(s) > maxCompressedBlockSize {
+			panic(fmt.Sprintf("len(src)-s (%d) > maxCompressedBlockSize (%d)", len(src)-int(s), maxCompressedBlockSize))
+		}
 	}
 
 	// Extend the match to be as long as possible.
-	return int32(matchLen(src[s:s1], src[t:]))
+	return int32(matchLen(src[s:], src[t:]))
 }
 
 // Reset the encoding table.
