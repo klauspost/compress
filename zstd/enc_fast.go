@@ -416,10 +416,10 @@ encodeLoop:
 			if len(blk.sequences) > 2 && load3232(src, repIndex) == uint32(cv>>16) {
 				// Consider history as well.
 				var seq seq
-				// length := 4 + e.matchlen(s+6, repIndex+4, src)
-				length := 4 + int32(matchLen(src[s+6:], src[repIndex+4:]))
+				// lenght := 4 + e.matchlen(s+6, repIndex+4, src)
+				lenght := 4 + int32(matchLen(src[s+6:], src[repIndex+4:]))
 
-				seq.matchLen = uint32(length - zstdMinMatch)
+				seq.matchLen = uint32(lenght - zstdMinMatch)
 
 				// We might be able to match backwards.
 				// Extend as long as we can.
@@ -445,11 +445,11 @@ encodeLoop:
 					println("repeat sequence", seq, "next s:", s)
 				}
 				blk.sequences = append(blk.sequences, seq)
-				s += length + 2
+				s += lenght + 2
 				nextEmit = s
 				if s >= sLimit {
 					if debug {
-						println("repeat ended", s, length)
+						println("repeat ended", s, lenght)
 
 					}
 					break encodeLoop
