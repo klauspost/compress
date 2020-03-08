@@ -6,6 +6,7 @@ package zstd
 
 import (
 	"fmt"
+	"math"
 	"math/bits"
 
 	"github.com/klauspost/compress/zstd/internal/xxhash"
@@ -169,9 +170,22 @@ encodeLoop:
 			if canRepeat && repIndex >= 0 && load3232(src, repIndex) == uint32(cv>>16) {
 				// Consider history as well.
 				var seq seq
-				lenght := 4 + e.matchlen(s+6, repIndex+4, src)
+				var length int32
+				// length = 4 + e.matchlen(s+6, repIndex+4, src)
+				{
+					a := src[s+6:]
+					b := src[repIndex+4:]
+					endI := len(a) & (math.MaxInt32 - 7)
+					length = int32(endI) + 4
+					for i := 0; i < endI; i += 8 {
+						if diff := load64(a, i) ^ load64(b, i); diff != 0 {
+							length = int32(i+bits.TrailingZeros64(diff)>>3) + 4
+							break
+						}
+					}
+				}
 
-				seq.matchLen = uint32(lenght - zstdMinMatch)
+				seq.matchLen = uint32(length - zstdMinMatch)
 
 				// We might be able to match backwards.
 				// Extend as long as we can.
@@ -197,11 +211,11 @@ encodeLoop:
 					println("repeat sequence", seq, "next s:", s)
 				}
 				blk.sequences = append(blk.sequences, seq)
-				s += lenght + 2
+				s += length + 2
 				nextEmit = s
 				if s >= sLimit {
 					if debug {
-						println("repeat ended", s, lenght)
+						println("repeat ended", s, length)
 
 					}
 					break encodeLoop
@@ -257,7 +271,20 @@ encodeLoop:
 		}
 
 		// Extend the 4-byte match as long as possible.
-		l := e.matchlen(s+4, t+4, src) + 4
+		//l := e.matchlen(s+4, t+4, src) + 4
+		var l int32
+		{
+			a := src[s+4:]
+			b := src[t+4:]
+			endI := len(a) & (math.MaxInt32 - 7)
+			l = int32(endI) + 4
+			for i := 0; i < endI; i += 8 {
+				if diff := load64(a, i) ^ load64(b, i); diff != 0 {
+					l = int32(i+bits.TrailingZeros64(diff)>>3) + 4
+					break
+				}
+			}
+		}
 
 		// Extend backwards
 		tMin := s - e.maxMatchOff
@@ -294,7 +321,20 @@ encodeLoop:
 		if o2 := s - offset2; canRepeat && load3232(src, o2) == uint32(cv) {
 			// We have at least 4 byte match.
 			// No need to check backwards. We come straight from a match
-			l := 4 + e.matchlen(s+4, o2+4, src)
+			//l := 4 + e.matchlen(s+4, o2+4, src)
+			var l int32
+			{
+				a := src[s+4:]
+				b := src[o2+4:]
+				endI := len(a) & (math.MaxInt32 - 7)
+				l = int32(endI) + 4
+				for i := 0; i < endI; i += 8 {
+					if diff := load64(a, i) ^ load64(b, i); diff != 0 {
+						l = int32(i+bits.TrailingZeros64(diff)>>3) + 4
+						break
+					}
+				}
+			}
 
 			// Store this, since we have it.
 			nextHash := hash6(cv, hashLog)
@@ -412,10 +452,23 @@ encodeLoop:
 			if len(blk.sequences) > 2 && load3232(src, repIndex) == uint32(cv>>16) {
 				// Consider history as well.
 				var seq seq
-				// lenght := 4 + e.matchlen(s+6, repIndex+4, src)
-				lenght := 4 + int32(matchLen(src[s+6:], src[repIndex+4:]))
+				// length := 4 + e.matchlen(s+6, repIndex+4, src)
+				// length := 4 + int32(matchLen(src[s+6:], src[repIndex+4:]))
+				var length int32
+				{
+					a := src[s+6:]
+					b := src[repIndex+4:]
+					endI := len(a) & (math.MaxInt32 - 7)
+					length = int32(endI) + 4
+					for i := 0; i < endI; i += 8 {
+						if diff := load64(a, i) ^ load64(b, i); diff != 0 {
+							length = int32(i+bits.TrailingZeros64(diff)>>3) + 4
+							break
+						}
+					}
+				}
 
-				seq.matchLen = uint32(lenght - zstdMinMatch)
+				seq.matchLen = uint32(length - zstdMinMatch)
 
 				// We might be able to match backwards.
 				// Extend as long as we can.
@@ -441,11 +494,11 @@ encodeLoop:
 					println("repeat sequence", seq, "next s:", s)
 				}
 				blk.sequences = append(blk.sequences, seq)
-				s += lenght + 2
+				s += length + 2
 				nextEmit = s
 				if s >= sLimit {
 					if debug {
-						println("repeat ended", s, lenght)
+						println("repeat ended", s, length)
 
 					}
 					break encodeLoop
@@ -498,7 +551,20 @@ encodeLoop:
 
 		// Extend the 4-byte match as long as possible.
 		//l := e.matchlenNoHist(s+4, t+4, src) + 4
-		l := int32(matchLen(src[s+4:], src[t+4:])) + 4
+		// l := int32(matchLen(src[s+4:], src[t+4:])) + 4
+		var l int32
+		{
+			a := src[s+4:]
+			b := src[t+4:]
+			endI := len(a) & (math.MaxInt32 - 7)
+			l = int32(endI) + 4
+			for i := 0; i < endI; i += 8 {
+				if diff := load64(a, i) ^ load64(b, i); diff != 0 {
+					l = int32(i+bits.TrailingZeros64(diff)>>3) + 4
+					break
+				}
+			}
+		}
 
 		// Extend backwards
 		tMin := s - e.maxMatchOff
@@ -536,7 +602,20 @@ encodeLoop:
 			// We have at least 4 byte match.
 			// No need to check backwards. We come straight from a match
 			//l := 4 + e.matchlenNoHist(s+4, o2+4, src)
-			l := 4 + int32(matchLen(src[s+4:], src[o2+4:]))
+			// l := 4 + int32(matchLen(src[s+4:], src[o2+4:]))
+			var l int32
+			{
+				a := src[s+4:]
+				b := src[o2+4:]
+				endI := len(a) & (math.MaxInt32 - 7)
+				l = int32(endI) + 4
+				for i := 0; i < endI; i += 8 {
+					if diff := load64(a, i) ^ load64(b, i); diff != 0 {
+						l = int32(i+bits.TrailingZeros64(diff)>>3) + 4
+						break
+					}
+				}
+			}
 
 			// Store this, since we have it.
 			nextHash := hash6(cv, hashLog)
