@@ -69,7 +69,7 @@ func WithEncoderConcurrency(n int) EOption {
 }
 
 // WithWindowSize will set the maximum allowed back-reference distance.
-// The value must be a power of two between WindowSizeMin and WindowSizeMax.
+// The value must be a power of two between MinWindowSize and MaxWindowSize.
 // A larger value will enable better compression but allocate more memory and,
 // for above-default values, take considerably longer.
 // The default value is determined by the compression level.
