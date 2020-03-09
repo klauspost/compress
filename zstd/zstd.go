@@ -97,31 +97,16 @@ func matchLen(a, b []byte) int {
 			return i + (bits.TrailingZeros64(diff) >> 3)
 		}
 	}
+
 	checked := (len(a) >> 3) << 3
 	a = a[checked:]
 	b = b[checked:]
-	// TODO: We could do a 4 check.
 	for i := range a {
 		if a[i] != b[i] {
-			return int(i) + checked
+			return i + checked
 		}
 	}
 	return len(a) + checked
-}
-
-// matchLen returns a match length in src between index s and t
-func matchLenIn(src []byte, s, t int32) int32 {
-	s1 := len(src)
-	b := src[t:]
-	a := src[s:s1]
-	b = b[:len(a)]
-	// Extend the match to be as long as possible.
-	for i := range a {
-		if a[i] != b[i] {
-			return int32(i)
-		}
-	}
-	return int32(len(a))
 }
 
 func load3232(b []byte, i int32) uint32 {
