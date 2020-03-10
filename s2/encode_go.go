@@ -31,9 +31,11 @@ func EncodeSnappy(dst, src []byte) []byte {
 // been written.
 //
 // It also assumes that:
-//	len(dst) >= MaxEncodedLen(len(src)) &&
-// 	minNonLiteralBlockSize <= len(src) && len(src) <= maxBlockSize
+//	len(dst) >= MaxEncodedLen(len(src))
 func encodeBlock(dst, src []byte) (d int) {
+	if len(src) < minNonLiteralBlockSize {
+		return 0
+	}
 	return encodeBlockGo(dst, src)
 }
 
