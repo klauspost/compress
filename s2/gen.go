@@ -42,6 +42,7 @@ func main() {
 	genEmitLiteral()
 	genEmitRepeat()
 	genEmitCopy()
+	genEmitCopyNoRepeat()
 	genMatchLen()
 	Generate()
 }
@@ -1106,6 +1107,37 @@ func genEmitCopy() {
 	Load(Param("length"), length)
 	emitCopy("standalone", length, offset, retval, dstBase, LabelRef("gen_emit_copy_end"), false)
 	Label("gen_emit_copy_end")
+	Store(retval, ReturnIndex(0))
+	RET()
+}
+
+// emitCopy writes a copy chunk and returns the number of bytes written.
+//
+// It assumes that:
+//	dst is long enough to hold the encoded bytes
+//	1 <= offset && offset <= math.MaxUint32
+//	4 <= length && length <= 1 << 24
+
+// genEmitCopy generates a standlone emitCopy
+func genEmitCopyNoRepeat() {
+	TEXT("emitCopyNoRepeat", NOSPLIT, "func(dst []byte, offset, length int) int")
+	Doc("emitCopyNoRepeat writes a copy chunk and returns the number of bytes written.", "",
+		"It assumes that:",
+		"  dst is long enough to hold the encoded bytes",
+		"  1 <= offset && offset <= math.MaxUint32",
+		"  4 <= length && length <= 1 << 24", "")
+	Pragma("noescape")
+
+	dstBase, offset, length, retval := GP64(), GP64(), GP64(), GP64()
+
+	//	i := 0
+	XORQ(retval, retval)
+
+	Load(Param("dst").Base(), dstBase)
+	Load(Param("offset"), offset)
+	Load(Param("length"), length)
+	emitCopy("standalone_snappy", length, offset, retval, dstBase, "gen_emit_copy_end_snappy", true)
+	Label("gen_emit_copy_end_snappy")
 	Store(retval, ReturnIndex(0))
 	RET()
 }
