@@ -19,6 +19,7 @@ This package provides various compression algorithms.
 * Mar 10, 2020: s2: Fix pure Go block encoder. [#244](https://github.com/klauspost/compress/pull/244)
 * Mar 9, 2020: zstd: Added "better compression" mode. [#240](https://github.com/klauspost/compress/pull/240)
 * Mar 9, 2020: zstd: Improve speed of fastest compression mode by 5-10% [#241](https://github.com/klauspost/compress/pull/241)
+* Feb 28, 2020: zstd: Skip creating encoders when not needed. [#238](https://github.com/klauspost/compress/pull/238)
 * Feb 27, 2020: (v1.10.2) Close to 50% speedup in inflate (gzip/zip decompression). [#236](https://github.com/klauspost/compress/pull/236) [#234](https://github.com/klauspost/compress/pull/234) [#232](https://github.com/klauspost/compress/pull/232)
 * Feb 23, 2020: Reduce deflate level 1-6 memory usage up to 59%. [#227](https://github.com/klauspost/compress/pull/227)
 * Feb 18, 2020: (v1.10.1) Fix zstd crash when resetting multiple times without sending data. [#226](https://github.com/klauspost/compress/pull/226)
