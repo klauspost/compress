@@ -136,6 +136,16 @@ func emitRepeat(dst []byte, offset int, length int) int
 //go:noescape
 func emitCopy(dst []byte, offset int, length int) int
 
+// emitCopyNoRepeat writes a copy chunk and returns the number of bytes written.
+//
+// It assumes that:
+//   dst is long enough to hold the encoded bytes
+//   1 <= offset && offset <= math.MaxUint32
+//   4 <= length && length <= 1 << 24
+//
+//go:noescape
+func emitCopyNoRepeat(dst []byte, offset int, length int) int
+
 // matchLen returns how many bytes match in a and b
 //
 // It assumes that:
