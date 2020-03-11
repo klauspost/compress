@@ -13,12 +13,12 @@ type EOption func(*encoderOptions) error
 // options retains accumulated state of multiple options.
 type encoderOptions struct {
 	concurrent int
-	crc        bool
+	level      EncoderLevel
 	single     *bool
 	pad        int
 	blockSize  int
 	windowSize int
-	level      EncoderLevel
+	crc        bool
 	fullZero   bool
 	noEntropy  bool
 }
