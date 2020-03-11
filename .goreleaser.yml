@@ -73,8 +73,11 @@ changelog:
   sort: asc
   filters:
     exclude:
+    - '^doc:'
     - '^docs:'
     - '^test:'
+    - '^tests:'
+    - '^Update\sREADME.md'
 
 nfpms:
   -
