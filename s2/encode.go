@@ -263,20 +263,21 @@ type Writer struct {
 	// ibuf is a buffer for the incoming (uncompressed) bytes.
 	ibuf []byte
 
-	// wroteStreamHeader is whether we have written the stream header.
-	wroteStreamHeader bool
-	paramsOK          bool
-	better            bool
-
 	blockSize   int
 	obufLen     int
 	concurrency int
 	written     int64
 	output      chan chan result
 	buffers     sync.Pool
-	writerWg    sync.WaitGroup
-	writer      io.Writer
 	pad         int
+
+	writer   io.Writer
+	writerWg sync.WaitGroup
+
+	// wroteStreamHeader is whether we have written the stream header.
+	wroteStreamHeader bool
+	paramsOK          bool
+	better            bool
 }
 
 type result []byte
