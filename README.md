@@ -15,6 +15,7 @@ This package provides various compression algorithms.
 
 # changelog
 
+* Mar 11, 2020: (v1.10.3) s2: Use S2 encoder in pure Go mode for Snappy output as well. [#245](https://github.com/klauspost/compress/pull/245)
 * Mar 10, 2020: s2: Fix pure Go block encoder. [#244](https://github.com/klauspost/compress/pull/244)
 * Mar 9, 2020: zstd: Added "better compression" mode. [#240](https://github.com/klauspost/compress/pull/240)
 * Mar 9, 2020: zstd: Improve speed of fastest compression mode by 5-10% [#241](https://github.com/klauspost/compress/pull/241)
