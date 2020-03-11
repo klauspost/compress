@@ -49,7 +49,7 @@ jobs:
 deploy:
 - provider: script
   skip_cleanup: true
-  script: curl -sL https://git.io/goreleaser | bash || true
+  script: curl -sL https://git.io/goreleaser | VERSION=v0.127.0 bash || true
   on:
     tags: true
     condition: $TRAVIS_OS_NAME = linux
