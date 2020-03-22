@@ -30,6 +30,7 @@ type Encoder struct {
 type encoder interface {
 	Encode(blk *blockEnc, src []byte)
 	EncodeNoHist(blk *blockEnc, src []byte)
+	FillHistory(src []byte)
 	Block() *blockEnc
 	CRC() *xxhash.Digest
 	AppendCRC([]byte) []byte

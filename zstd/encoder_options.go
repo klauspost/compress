@@ -39,11 +39,11 @@ func (o *encoderOptions) setDefault() {
 func (o encoderOptions) encoder() encoder {
 	switch o.level {
 	case SpeedDefault:
-		return &doubleFastEncoder{fastEncoder: fastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize)}}}
+		return &doubleFastEncoder{fastEncoder: fastEncoder{encoderBase: encoderBase{maxMatchOff: int32(o.windowSize)}}}
 	case SpeedBetterCompression:
-		return &betterFastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize)}}
+		return &betterFastEncoder{encoderBase: encoderBase{maxMatchOff: int32(o.windowSize)}}
 	case SpeedFastest:
-		return &fastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize)}}
+		return &fastEncoder{encoderBase: encoderBase{maxMatchOff: int32(o.windowSize)}}
 	}
 	panic("unknown compression level")
 }

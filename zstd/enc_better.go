@@ -30,7 +30,7 @@ type prevEntry struct {
 // When we find a short match, after checking the long, we check if we can find a long at n+1
 // and that it is longer (lazy matching).
 type betterFastEncoder struct {
-	fastBase
+	encoderBase
 	table     [betterShortTableSize]tableEntry
 	longTable [betterLongTableSize]prevEntry
 }
@@ -515,4 +515,34 @@ encodeLoop:
 // we do not need to check for max match length.
 func (e *betterFastEncoder) EncodeNoHist(blk *blockEnc, src []byte) {
 	e.Encode(blk, src)
+}
+
+func (e *betterFastEncoder) FillHistory(src []byte) {
+	if len(src) > int(e.maxMatchOff) {
+		src = src[:len(src)-int(e.maxMatchOff)]
+	}
+	s := e.addBlock(src)
+	src = e.hist
+	sLimit := s - 10
+	off := s + e.cur
+	const hashLog = tableBits
+
+	// Fill every entry, but alternating between short and long.
+	for s < sLimit {
+		cv := load6432(src, s)
+		cv2 := load6432(src, s+2)
+
+		nextHashL := hash8(cv, dFastLongTableBits)
+		nextHashS := hash5(cv>>8, dFastShortTableBits)
+		nextHashL2 := hash8(cv2, dFastLongTableBits)
+		nextHashS2 := hash5(cv2>>8, dFastShortTableBits)
+
+		e.longTable[nextHashL] = prevEntry{offset: off, prev: e.longTable[nextHashL].prev}
+		e.table[nextHashS] = tableEntry{offset: off + 1, val: uint32(cv >> 8)}
+		e.longTable[nextHashL2] = prevEntry{offset: off + 2, prev: e.longTable[nextHashL2].prev}
+		e.table[nextHashS2] = tableEntry{offset: off + 3, val: uint32(cv2 >> 8)}
+
+		off += 4
+		s += 4
+	}
 }

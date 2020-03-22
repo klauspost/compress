@@ -672,3 +672,33 @@ encodeLoop:
 	}
 
 }
+
+func (e *doubleFastEncoder) FillHistory(src []byte) {
+	if len(src) > int(e.maxMatchOff) {
+		src = src[:len(src)-int(e.maxMatchOff)]
+	}
+	s := e.addBlock(src)
+	src = e.hist
+	sLimit := s - 10
+	off := s + e.cur
+	const hashLog = tableBits
+
+	// Fill every entry, but alternate between long and short.
+	for s < sLimit {
+		cv2 := load6432(src, s+2)
+		cv := load6432(src, s)
+
+		nextHashL := hash8(cv, dFastLongTableBits)
+		nextHashS := hash5(cv>>8, dFastShortTableBits)
+		nextHashL2 := hash8(cv2, dFastLongTableBits)
+		nextHashS2 := hash5(cv2>>8, dFastShortTableBits)
+
+		e.longTable[nextHashL] = tableEntry{offset: off, val: uint32(cv)}
+		e.table[nextHashS] = tableEntry{offset: off + 1, val: uint32(cv >> 8)}
+		e.longTable[nextHashL2] = tableEntry{offset: off + 2, val: uint32(cv2)}
+		e.table[nextHashS2] = tableEntry{offset: off + 3, val: uint32(cv2 >> 8)}
+
+		off += 4
+		s += 4
+	}
+}
