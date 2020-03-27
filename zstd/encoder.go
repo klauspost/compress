@@ -172,6 +172,20 @@ func (e *Encoder) nextBlock(final bool) error {
 		return fmt.Errorf("block > maxStoreBlockSize")
 	}
 	if !s.headerWritten {
+		// If we have a single block encode, do a sync compression.
+		if final && len(s.filling) > 0 {
+			s.current = e.EncodeAll(s.filling, s.current[:0])
+			var n2 int
+			n2, s.err = s.w.Write(s.current)
+			if s.err != nil {
+				return s.err
+			}
+			s.nWritten += int64(n2)
+			s.current = s.current[:0]
+			s.filling = s.filling[:0]
+			return nil
+		}
+
 		var tmp [maxHeaderSize]byte
 		fh := frameHeader{
 			ContentSize:   0,
