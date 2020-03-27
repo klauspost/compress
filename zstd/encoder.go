@@ -294,7 +294,9 @@ func (e *Encoder) ReadFrom(r io.Reader) (n int64, err error) {
 	src := e.state.filling
 	for {
 		n2, err := r.Read(src)
-		_, _ = e.state.encoder.CRC().Write(src[:n2])
+		if e.o.crc {
+			_, _ = e.state.encoder.CRC().Write(src[:n2])
+		}
 		// src is now the unfilled part...
 		src = src[n2:]
 		n += int64(n2)
