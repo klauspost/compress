@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
@@ -79,10 +80,13 @@ Options:`)
 
 	// No args, use stdin/stdout
 	if len(args) == 1 && args[0] == "-" {
+		// Catch interrupt, so we don't exit at once.
+		// os.Stdin will return EOF, so we should be able to get everything.
+		signal.Notify(make(chan os.Signal), os.Interrupt)
 		wr.Reset(os.Stdout)
-		_, err := io.Copy(wr, os.Stdin)
-		exitErr(err)
-		exitErr(wr.Close())
+		_, err = wr.ReadFrom(os.Stdin)
+		printErr(err)
+		printErr(wr.Close())
 		return
 	}
 	var files []string
@@ -137,7 +141,7 @@ Options:`)
 				dstFilename = "(discarded)"
 			}
 			if !*quiet {
-				fmt.Println("Compressing", filename, "->", dstFilename)
+				fmt.Print("Compressing ", filename, " -> ", dstFilename)
 			}
 			// Input file.
 			file, err := os.Open(filename)
@@ -181,11 +185,14 @@ Options:`)
 				elapsed := time.Since(start)
 				mbpersec := (float64(input) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
 				pct := float64(wc.n) * 100 / float64(input)
-				fmt.Printf("%d -> %d [%.02f%%]; %.01fMB/s\n", input, wc.n, pct, mbpersec)
+				fmt.Printf(" %d -> %d [%.02f%%]; %.01fMB/s\n", input, wc.n, pct, mbpersec)
 			}
 			if *remove {
 				closeOnce.Do(func() {
 					file.Close()
+					if !*quiet {
+						fmt.Println("Removing", filename)
+					}
 					err := os.Remove(filename)
 					exitErr(err)
 				})
@@ -194,9 +201,15 @@ Options:`)
 	}
 }
 
+func printErr(err error) {
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "\nERROR:", err.Error())
+	}
+}
+
 func exitErr(err error) {
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "ERROR:", err.Error())
+		fmt.Fprintln(os.Stderr, "\nERROR:", err.Error())
 		os.Exit(2)
 	}
 }
