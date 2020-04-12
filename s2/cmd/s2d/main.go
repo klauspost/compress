@@ -19,6 +19,7 @@ import (
 
 var (
 	safe   = flag.Bool("safe", false, "Do not overwrite output files")
+	verify = flag.Bool("verify", false, "Verify files, but do not write output")
 	stdout = flag.Bool("c", false, "Write all output to stdout. Multiple input files will be concatenated")
 	remove = flag.Bool("rm", false, "Delete source file(s) after successful decompression")
 	quiet  = flag.Bool("q", false, "Don't write any output to terminal, except errors")
@@ -86,11 +87,14 @@ Options:`)
 		if *bench > 0 {
 			dstFilename = "(discarded)"
 		}
+		if *verify {
+			dstFilename = "(verify)"
+		}
 
 		func() {
 			var closeOnce sync.Once
 			if !*quiet {
-				fmt.Println("Decompressing", filename, "->", dstFilename)
+				fmt.Print("Decompressing ", filename, " -> ", dstFilename)
 			}
 			// Input file.
 			file, err := os.Open(filename)
@@ -111,7 +115,7 @@ Options:`)
 			}
 			var out io.Writer
 			switch {
-			case *bench > 0:
+			case *bench > 0 || *verify:
 				out = ioutil.Discard
 			case *stdout:
 				out = os.Stdout
@@ -131,11 +135,14 @@ Options:`)
 				elapsed := time.Since(start)
 				mbPerSec := (float64(output) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
 				pct := float64(output) * 100 / float64(rc.n)
-				fmt.Printf("%d -> %d [%.02f%%]; %.01fMB/s\n", rc.n, output, pct, mbPerSec)
+				fmt.Printf(" %d -> %d [%.02f%%]; %.01fMB/s\n", rc.n, output, pct, mbPerSec)
 			}
-			if *remove {
+			if *remove && !*verify {
 				closeOnce.Do(func() {
 					file.Close()
+					if !*quiet {
+						fmt.Println("Removing", filename)
+					}
 					err := os.Remove(filename)
 					exitErr(err)
 				})
@@ -146,7 +153,7 @@ Options:`)
 
 func exitErr(err error) {
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "ERROR:", err.Error())
+		fmt.Fprintln(os.Stderr, "\nERROR:", err.Error())
 		os.Exit(2)
 	}
 }
