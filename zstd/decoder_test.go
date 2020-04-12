@@ -149,6 +149,68 @@ func TestNewDecoder(t *testing.T) {
 	testDecoderDecodeAll(t, "testdata/decoder.zip", dec)
 }
 
+func TestNewDecoderMemory(t *testing.T) {
+	defer timeout(60 * time.Second)()
+	var testdata bytes.Buffer
+	enc, err := NewWriter(&testdata, WithWindowSize(64<<10), WithSingleSegment(false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Write 256KB
+	for i := 0; i < 256; i++ {
+		tmp := strings.Repeat(string([]byte{byte(i)}), 1024)
+		_, err := enc.Write([]byte(tmp))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	err = enc.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var n = 5000
+	if testing.Short() {
+		n = 200
+	}
+
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+
+	var decs = make([]*Decoder, n)
+	for i := range decs {
+		// Wrap in NopCloser to avoid shortcut.
+		input := ioutil.NopCloser(bytes.NewBuffer(testdata.Bytes()))
+		decs[i], err = NewReader(input, WithDecoderConcurrency(1), WithDecoderLowmem(true))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// 32K buffer
+	var tmp [128 << 10]byte
+	for i := range decs {
+		_, err := io.ReadFull(decs[i], tmp[:])
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	runtime.GC()
+	runtime.ReadMemStats(&after)
+	size := (after.HeapInuse - before.HeapInuse) / uint64(n) / 1024
+	t.Log(size, "KiB per decoder")
+	// This is not exact science, but fail if we suddenly get more than 2x what we expect.
+	if size > 221*2 && !testing.Short() {
+		t.Errorf("expected < 221KB per decoder, got %d", size)
+	}
+
+	for _, dec := range decs {
+		dec.Close()
+	}
+}
+
 func TestNewDecoderGood(t *testing.T) {
 	defer timeout(30 * time.Second)()
 	testDecoderFile(t, "testdata/good.zip")
