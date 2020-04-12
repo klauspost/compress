@@ -687,8 +687,11 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		println("initializing sequences:", err)
 		return err
 	}
-
-	err = seqs.decode(nSeqs, br, hist.b)
+	hbytes := hist.b
+	if len(hbytes) > hist.windowSize {
+		hbytes = hbytes[len(hbytes)-hist.windowSize:]
+	}
+	err = seqs.decode(nSeqs, br, hbytes)
 	if err != nil {
 		return err
 	}

@@ -324,8 +324,8 @@ func (d *frameDec) checkCRC() error {
 
 func (d *frameDec) initAsync() {
 	if !d.o.lowMem && !d.SingleSegment {
-		// set max extra size history to 20MB.
-		d.history.maxSize = d.history.windowSize + maxBlockSize*10
+		// set max extra size history to 10MB.
+		d.history.maxSize = d.history.windowSize + maxBlockSize*5
 	}
 	// re-alloc if more than one extra block size.
 	if d.o.lowMem && cap(d.history.b) > d.history.maxSize+maxBlockSize {
