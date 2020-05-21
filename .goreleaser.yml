@@ -51,6 +51,7 @@ builds:
 archives:
   -
     id: s2-binaries
+    name_template: "s2-cmds_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     replacements:
       darwin: Darwin
       linux: Linux
@@ -68,7 +69,7 @@ archives:
 checksum:
   name_template: 'checksums.txt'
 snapshot:
-  name_template: "{{ .Tag }}-next"
+  name_template: "s2-cmds_{{ .Tag }}-next"
 changelog:
   sort: asc
   filters:
