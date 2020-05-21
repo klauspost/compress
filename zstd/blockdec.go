@@ -159,7 +159,7 @@ func (b *blockDec) reset(br byteBuffer, windowSize uint64) error {
 	case blockTypeRaw:
 		b.RLESize = 0
 		// We do not need a destination for raw blocks.
-		maxSize = 0
+		maxSize = -1
 	default:
 		panic("Invalid block type")
 	}
