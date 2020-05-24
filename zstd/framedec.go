@@ -40,7 +40,7 @@ type frameDec struct {
 	FrameContentSize uint64
 	frameDone        sync.WaitGroup
 
-	DictionaryID  uint32
+	DictionaryID  *uint32
 	HasCheckSum   bool
 	SingleSegment bool
 
@@ -142,7 +142,7 @@ func (d *frameDec) reset(br byteBuffer) error {
 
 	// Read Dictionary_ID
 	// https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#dictionary_id
-	d.DictionaryID = 0
+	d.DictionaryID = nil
 	if size := fhd & 3; size != 0 {
 		if size == 3 {
 			size = 4
@@ -154,20 +154,19 @@ func (d *frameDec) reset(br byteBuffer) error {
 			}
 			return io.ErrUnexpectedEOF
 		}
+		var id uint32
 		switch size {
 		case 1:
-			d.DictionaryID = uint32(b[0])
+			id = uint32(b[0])
 		case 2:
-			d.DictionaryID = uint32(b[0]) | (uint32(b[1]) << 8)
+			id = uint32(b[0]) | (uint32(b[1]) << 8)
 		case 4:
-			d.DictionaryID = uint32(b[0]) | (uint32(b[1]) << 8) | (uint32(b[2]) << 16) | (uint32(b[3]) << 24)
+			id = uint32(b[0]) | (uint32(b[1]) << 8) | (uint32(b[2]) << 16) | (uint32(b[3]) << 24)
 		}
 		if debug {
 			println("Dict size", size, "ID:", d.DictionaryID)
 		}
-		if d.DictionaryID != 0 {
-			return ErrUnknownDictionary
-		}
+		d.DictionaryID = &id
 	}
 
 	// Read Frame_Content_Size

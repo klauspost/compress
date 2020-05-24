@@ -33,7 +33,7 @@ type Decoder struct {
 	current decoderState
 
 	// Custom dictionaries
-	dicts map[uint32]struct{}
+	dicts map[uint32]*dict
 
 	// streamWg is the waitgroup for all streams
 	streamWg sync.WaitGroup
@@ -299,6 +299,13 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 		if err == io.EOF {
 			return dst, nil
 		}
+		if frame.DictionaryID != nil {
+			dict, ok := d.dicts[*frame.DictionaryID]
+			if !ok {
+				return nil, ErrUnknownDictionary
+			}
+			frame.history.setDict(dict)
+		}
 		if err != nil {
 			return dst, err
 		}
@@ -393,6 +400,16 @@ func (d *Decoder) Close() {
 	d.current.err = ErrDecoderClosed
 }
 
+// RegisterDict will load a dictionary
+func (d *Decoder) RegisterDict(b []byte) error {
+	dict, err := loadDict(b)
+	if err != nil {
+		return err
+	}
+	d.dicts[dict.id] = dict
+	return nil
+}
+
 // IOReadCloser returns the decoder as an io.ReadCloser for convenience.
 // Any changes to the decoder will be reflected, so the returned ReadCloser
 // can be reused along with the decoder.
@@ -465,6 +482,14 @@ func (d *Decoder) startStreamDecoder(inStream chan decodeStream) {
 			err := frame.reset(&br)
 			if debug && err != nil {
 				println("Frame decoder returned", err)
+			}
+			if err == nil && frame.DictionaryID != nil {
+				dict, ok := d.dicts[*frame.DictionaryID]
+				if !ok {
+					err = ErrUnknownDictionary
+				} else {
+					frame.history.setDict(dict)
+				}
 			}
 			if err != nil {
 				stream.output <- decodeOutput{

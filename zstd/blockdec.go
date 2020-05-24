@@ -687,14 +687,18 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 	//   If only recent offsets were not transferred, this would be an obvious win.
 	// 	 Also, if first 3 sequences don't reference recent offsets, all sequences can be decoded.
 
+	hbytes := hist.b
+	if len(hbytes) > hist.windowSize {
+		hbytes = hbytes[len(hbytes)-hist.windowSize:]
+		// We do not need history any more.
+		hist.dict = nil
+	}
+
 	if err := seqs.initialize(br, hist, literals, b.dst); err != nil {
 		println("initializing sequences:", err)
 		return err
 	}
-	hbytes := hist.b
-	if len(hbytes) > hist.windowSize {
-		hbytes = hbytes[len(hbytes)-hist.windowSize:]
-	}
+
 	err = seqs.decode(nSeqs, br, hbytes)
 	if err != nil {
 		return err
