@@ -17,6 +17,8 @@ type dict struct {
 
 var dictMagic = [4]byte{0x3c, 0x30, 0xa4, 0x37}
 
+// Load a dictionary as described in
+// https://github.com/facebook/zstd/blob/master/doc/zstd_compression_format.md#dictionary-format
 func loadDict(b []byte) (*dict, error) {
 	// Check static field size.
 	if len(b) <= 8+(3*4) {
