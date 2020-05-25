@@ -27,6 +27,9 @@ func loadDict(b []byte) (*dict, error) {
 		return nil, ErrMagicMismatch
 	}
 	d.id = binary.LittleEndian.Uint32(b[4:8])
+	if d.id == 0 {
+		return nil, errors.New("dictionaries cannot have ID 0")
+	}
 	br := byteReader{
 		b:   b[8:],
 		off: 0,

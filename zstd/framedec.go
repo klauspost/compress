@@ -166,7 +166,11 @@ func (d *frameDec) reset(br byteBuffer) error {
 		if debug {
 			println("Dict size", size, "ID:", d.DictionaryID)
 		}
-		d.DictionaryID = &id
+		if id > 0 {
+			// ID 0 means "sorry, no dictionary anyway".
+			// https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#dictionary-format
+			d.DictionaryID = &id
+		}
 	}
 
 	// Read Frame_Content_Size
