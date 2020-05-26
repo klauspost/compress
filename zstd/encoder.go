@@ -82,7 +82,9 @@ func (e *Encoder) initialize() {
 	}
 	e.encoders = make(chan encoder, e.o.concurrent)
 	for i := 0; i < e.o.concurrent; i++ {
-		e.encoders <- e.o.encoder()
+		enc := e.o.encoder()
+		enc.Reset()
+		e.encoders <- enc
 	}
 }
 
@@ -448,7 +450,6 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 		enc.Reset()
 		e.encoders <- enc
 	}()
-	enc.Reset()
 	blk := enc.Block()
 	// Use single segments when above minimum window and below 1MB.
 	single := len(src) < 1<<20 && len(src) > MinWindowSize
