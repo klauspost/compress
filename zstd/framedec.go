@@ -354,8 +354,6 @@ func (d *frameDec) initAsync() {
 // When the frame has finished decoding the *bufio.Reader
 // containing the remaining input will be sent on frameDec.frameDone.
 func (d *frameDec) startDecoder(output chan decodeOutput) {
-	// TODO: Init to dictionary
-	d.history.reset()
 	written := int64(0)
 
 	defer func() {
@@ -448,8 +446,6 @@ func (d *frameDec) startDecoder(output chan decodeOutput) {
 
 // runDecoder will create a sync decoder that will decode a block of data.
 func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {
-	// TODO: Init to dictionary
-	d.history.reset()
 	saved := d.history.b
 
 	// We use the history for output to avoid copying it.

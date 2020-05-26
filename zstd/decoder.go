@@ -402,11 +402,14 @@ func (d *Decoder) Close() {
 
 // RegisterDict will load a dictionary
 func (d *Decoder) RegisterDict(b []byte) error {
-	dict, err := loadDict(b)
+	dc, err := loadDict(b)
 	if err != nil {
 		return err
 	}
-	d.dicts[dict.id] = dict
+	if d.dicts == nil {
+		d.dicts = make(map[uint32]*dict, 1)
+	}
+	d.dicts[dc.id] = dc
 	return nil
 }
 

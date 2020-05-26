@@ -649,7 +649,9 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		}
 	} else {
 		if hist.huffTree != nil && huff != nil {
-			huffDecoderPool.Put(hist.huffTree)
+			if !(hist.dict != nil && hist.dict.litDec != hist.huffTree) {
+				huffDecoderPool.Put(hist.huffTree)
+			}
 			hist.huffTree = nil
 		}
 	}
@@ -691,7 +693,7 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 	if len(hbytes) > hist.windowSize {
 		hbytes = hbytes[len(hbytes)-hist.windowSize:]
 		// We do not need history any more.
-		hist.dict = nil
+		hist.dict.content = nil
 	}
 
 	if err := seqs.initialize(br, hist, literals, b.dst); err != nil {
