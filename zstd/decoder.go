@@ -32,8 +32,9 @@ type Decoder struct {
 	// Current read position used for Reader functionality.
 	current decoderState
 
-	// Custom dictionaries
-	dicts map[uint32]*dict
+	// Custom dictionaries.
+	// Always uses copies.
+	dicts map[uint32]dict
 
 	// streamWg is the waitgroup for all streams
 	streamWg sync.WaitGroup
@@ -304,7 +305,7 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 			if !ok {
 				return nil, ErrUnknownDictionary
 			}
-			frame.history.setDict(dict)
+			frame.history.setDict(&dict)
 		}
 		if err != nil {
 			return dst, err
@@ -407,9 +408,9 @@ func (d *Decoder) RegisterDict(b []byte) error {
 		return err
 	}
 	if d.dicts == nil {
-		d.dicts = make(map[uint32]*dict, 1)
+		d.dicts = make(map[uint32]dict, 1)
 	}
-	d.dicts[dc.id] = dc
+	d.dicts[dc.id] = *dc
 	return nil
 }
 
@@ -491,7 +492,7 @@ func (d *Decoder) startStreamDecoder(inStream chan decodeStream) {
 				if !ok {
 					err = ErrUnknownDictionary
 				} else {
-					frame.history.setDict(dict)
+					frame.history.setDict(&dict)
 				}
 			}
 			if err != nil {

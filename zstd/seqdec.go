@@ -218,7 +218,7 @@ func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
 		}
 
 		if mo == 0 && ml > 0 {
-			return fmt.Errorf("zero matchoff and matchlen > 0")
+			return fmt.Errorf("zero matchoff and matchlen (%d) > 0", ml)
 		}
 
 		// Copy from history.

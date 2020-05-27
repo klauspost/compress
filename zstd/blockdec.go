@@ -693,7 +693,9 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 	if len(hbytes) > hist.windowSize {
 		hbytes = hbytes[len(hbytes)-hist.windowSize:]
 		// We do not need history any more.
-		hist.dict.content = nil
+		if hist.dict != nil {
+			hist.dict.content = nil
+		}
 	}
 
 	if err := seqs.initialize(br, hist, literals, b.dst); err != nil {
