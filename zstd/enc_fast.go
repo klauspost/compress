@@ -725,7 +725,7 @@ func (e *fastBase) matchlen(s, t int32, src []byte) int32 {
 }
 
 // Reset the encoding table.
-func (e *fastBase) Reset() {
+func (e *fastBase) Reset(singleBlock bool) {
 	if e.blk == nil {
 		e.blk = &blockEnc{}
 		e.blk.init()
@@ -738,7 +738,7 @@ func (e *fastBase) Reset() {
 	} else {
 		e.crc.Reset()
 	}
-	if cap(e.hist) < int(e.maxMatchOff*2) {
+	if !singleBlock && cap(e.hist) < int(e.maxMatchOff*2) {
 		l := e.maxMatchOff * 2
 		// Make it at least 1MB.
 		if l < 1<<20 {
