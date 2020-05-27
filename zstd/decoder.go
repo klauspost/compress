@@ -296,6 +296,7 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 	frame.bBuf = input
 
 	for {
+		frame.history.reset()
 		err := frame.reset(&frame.bBuf)
 		if err == io.EOF {
 			return dst, nil

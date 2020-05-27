@@ -198,12 +198,13 @@ func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
 
 		if mo > len(s.out)+len(hist) || mo > s.windowSize {
 			if len(s.dict) == 0 {
-				return fmt.Errorf("match offset (%d) bigger than current history (%d)", mo, len(s.out)+len(hist)+ll)
+				return fmt.Errorf("match offset (%d) bigger than current history (%d)", mo, len(s.out)+len(hist))
 			}
+
 			// we may be in dictionary.
 			dictO := len(s.dict) - (mo - (len(s.out) + len(hist)))
 			if dictO < 0 || dictO >= len(s.dict) {
-				return fmt.Errorf("match offset (%d) bigger than current history (%d)", mo, len(s.out)+len(hist)+ll)
+				return fmt.Errorf("match offset (%d) bigger than current history (%d)", mo, len(s.out)+len(hist))
 			}
 			end := dictO + ml
 			if end > len(s.dict) {
