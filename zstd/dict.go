@@ -13,8 +13,7 @@ import (
 type dict struct {
 	id uint32
 
-	litDec *huff0.Scratch
-	// llEnc, ofEnc, mlEnc *fseEncoder
+	litDec              *huff0.Scratch
 	llDec, ofDec, mlDec sequenceDec
 	offsets             [3]int
 	content             []byte

@@ -37,7 +37,7 @@ func (h *history) reset() {
 	}
 	h.decoders = sequenceDecs{}
 	if h.huffTree != nil {
-		if !(h.dict != nil && h.dict.litDec != h.huffTree) {
+		if h.dict == nil || h.dict.litDec != h.huffTree {
 			huffDecoderPool.Put(h.huffTree)
 		}
 	}

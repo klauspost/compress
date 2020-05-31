@@ -164,7 +164,7 @@ func (d *frameDec) reset(br byteBuffer) error {
 			id = uint32(b[0]) | (uint32(b[1]) << 8) | (uint32(b[2]) << 16) | (uint32(b[3]) << 24)
 		}
 		if debug {
-			println("Dict size", size, "ID:", d.DictionaryID)
+			println("Dict size", size, "ID:", id)
 		}
 		if id > 0 {
 			// ID 0 means "sorry, no dictionary anyway".

@@ -209,8 +209,8 @@ func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
 			end := dictO + ml
 			if end > len(s.dict) {
 				out = append(out, s.dict[dictO:]...)
-				mo -= end - dictO
-				ml -= end - dictO
+				mo -= len(s.dict) - dictO
+				ml -= len(s.dict) - dictO
 			} else {
 				out = append(out, s.dict[dictO:end]...)
 				mo = 0
