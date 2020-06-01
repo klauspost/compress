@@ -62,6 +62,7 @@ type sequenceDecs struct {
 	matchLengths sequenceDec
 	prevOffset   [3]int
 	hist         []byte
+	dict         []byte
 	literals     []byte
 	out          []byte
 	windowSize   int
@@ -85,6 +86,10 @@ func (s *sequenceDecs) initialize(br *bitReader, hist *history, literals, out []
 	s.maxBits = s.litLengths.fse.maxBits + s.offsets.fse.maxBits + s.matchLengths.fse.maxBits
 	s.windowSize = hist.windowSize
 	s.out = out
+	s.dict = nil
+	if hist.dict != nil {
+		s.dict = hist.dict.content
+	}
 	return nil
 }
 
@@ -185,19 +190,37 @@ func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
 		if ml > maxMatchLen {
 			return fmt.Errorf("match len (%d) bigger than max allowed length", ml)
 		}
-		if mo > len(s.out)+len(hist)+ll {
-			return fmt.Errorf("match offset (%d) bigger than current history (%d)", mo, len(s.out)+len(hist)+ll)
-		}
-		if mo > s.windowSize {
-			return fmt.Errorf("match offset (%d) bigger than window size (%d)", mo, s.windowSize)
-		}
-		if mo == 0 && ml > 0 {
-			return fmt.Errorf("zero matchoff and matchlen > 0")
-		}
 
+		// Add literals
 		s.out = append(s.out, s.literals[:ll]...)
 		s.literals = s.literals[ll:]
 		out := s.out
+
+		if mo > len(s.out)+len(hist) || mo > s.windowSize {
+			if len(s.dict) == 0 {
+				return fmt.Errorf("match offset (%d) bigger than current history (%d)", mo, len(s.out)+len(hist))
+			}
+
+			// we may be in dictionary.
+			dictO := len(s.dict) - (mo - (len(s.out) + len(hist)))
+			if dictO < 0 || dictO >= len(s.dict) {
+				return fmt.Errorf("match offset (%d) bigger than current history (%d)", mo, len(s.out)+len(hist))
+			}
+			end := dictO + ml
+			if end > len(s.dict) {
+				out = append(out, s.dict[dictO:]...)
+				mo -= len(s.dict) - dictO
+				ml -= len(s.dict) - dictO
+			} else {
+				out = append(out, s.dict[dictO:end]...)
+				mo = 0
+				ml = 0
+			}
+		}
+
+		if mo == 0 && ml > 0 {
+			return fmt.Errorf("zero matchoff and matchlen (%d) > 0", ml)
+		}
 
 		// Copy from history.
 		// TODO: Blocks without history could be made to ignore this completely.

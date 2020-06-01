@@ -1154,6 +1154,9 @@ func testDecoderDecodeAll(t *testing.T, fn string, dec *Decoder) {
 			if err != nil {
 				t.Error(err)
 			}
+			if len(got) < 10 {
+				t.Fatal("didn't get input back")
+			}
 			got = got[10:]
 			if !bytes.Equal(wantB, got) {
 				if len(wantB)+len(got) < 1000 {
