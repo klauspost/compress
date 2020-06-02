@@ -6,6 +6,7 @@
 package fse
 
 import (
+	"encoding/binary"
 	"errors"
 	"io"
 )
@@ -34,9 +35,8 @@ func (b *bitReader) init(in []byte) error {
 	}
 	b.bitsRead = 64
 	b.value = 0
-	if len(in) > 8 {
-		b.fillFast()
-		b.fillFast()
+	if len(in) >= 8 {
+		b.fillFastStart()
 	} else {
 		b.fill()
 		b.fill()
@@ -96,6 +96,14 @@ func (b *bitReader) fill() {
 		b.bitsRead -= 8
 		b.off--
 	}
+}
+
+// fillFastStart() assumes the bitreader is empty and there is at least 8 bytes to read.
+func (b *bitReader) fillFastStart() {
+	// Do single re-slice to avoid bounds checks.
+	b.value = binary.LittleEndian.Uint64(b.in[b.off-8:])
+	b.bitsRead = 0
+	b.off -= 8
 }
 
 // finished returns true if all bits have been read from the bit stream.

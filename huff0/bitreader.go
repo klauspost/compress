@@ -35,7 +35,7 @@ func (b *bitReader) init(in []byte) error {
 	}
 	b.bitsRead = 64
 	b.value = 0
-	if len(in) > 8 {
+	if len(in) >= 8 {
 		b.fillFastStart()
 	} else {
 		b.fill()
