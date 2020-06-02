@@ -15,8 +15,11 @@ This package provides various compression algorithms.
 
 # changelog
 
+* June 1, 2020 (v1.10.7): Added zstd decompression [dictionary support](https://github.com/klauspost/compress/tree/master/zstd#dictionaries).
+* June 1, 2020: Increase zstd decompression speed up to 1.19x.  [#259](https://github.com/klauspost/compress/pull/259)
+* June 1, 2020: Remove internal reset call in zstd compression and reduce allocations. [#263](https://github.com/klauspost/compress/pull/263)
 * May 21, 2020: (v1.10.6) zstd: Reduce allocations while decoding. [#258](https://github.com/klauspost/compress/pull/258), [#252](https://github.com/klauspost/compress/pull/252)
-* May 21, 2020: zstd: Stricter decoding checks.
+* May 21, 2020: zstd: Stricter decompression checks.
 * April 12, 2020: (v1.10.5) s2-commands: Flush output when receiving SIGINT. [#239](https://github.com/klauspost/compress/pull/239)
 * Apr 8, 2020: (v1.10.4) zstd: Minor/special case optimizations. [#251](https://github.com/klauspost/compress/pull/251),  [#250](https://github.com/klauspost/compress/pull/250),  [#249](https://github.com/klauspost/compress/pull/249),  [#247](https://github.com/klauspost/compress/pull/247)
 * Mar 11, 2020: (v1.10.3) s2: Use S2 encoder in pure Go mode for Snappy output as well. [#245](https://github.com/klauspost/compress/pull/245)
