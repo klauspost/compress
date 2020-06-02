@@ -6,6 +6,7 @@
 package huff0
 
 import (
+	"encoding/binary"
 	"errors"
 	"io"
 )
@@ -35,8 +36,7 @@ func (b *bitReader) init(in []byte) error {
 	b.bitsRead = 64
 	b.value = 0
 	if len(in) > 8 {
-		b.fillFastNC()
-		b.fillFastNC()
+		b.fillFastStart()
 	} else {
 		b.fill()
 		b.fill()
@@ -85,16 +85,12 @@ func (b *bitReader) fillFast() {
 	b.off -= 4
 }
 
-// fillFastNC() will make sure at least 32 bits are available.
-// There must be at least 4 bytes available and > 32 bites must be read.
-func (b *bitReader) fillFastNC() {
+// fillFastStart() assumes the bitreader is empty and there is at least 8 bytes to read.
+func (b *bitReader) fillFastStart() {
 	// Do single re-slice to avoid bounds checks.
-	v := b.in[b.off-4 : b.off]
-	v = v[:4]
-	low := (uint32(v[0])) | (uint32(v[1]) << 8) | (uint32(v[2]) << 16) | (uint32(v[3]) << 24)
-	b.value = (b.value << 32) | uint64(low)
-	b.bitsRead -= 32
-	b.off -= 4
+	b.value = binary.LittleEndian.Uint64(b.in[b.off-8:])
+	b.bitsRead = 0
+	b.off -= 8
 }
 
 // fill() will make sure at least 32 bits are available.

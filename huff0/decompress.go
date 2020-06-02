@@ -426,8 +426,8 @@ func (s *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 		for !br.finished() {
 			// inlined: br.fill()
 			if br.bitsRead >= 32 {
-				if br.off > 4 {
-					v := br.in[br.off-4 : br.off]
+				if br.off >= 4 {
+					v := br.in[br.off-4:]
 					v = v[:4]
 					low := (uint32(v[0])) | (uint32(v[1]) << 8) | (uint32(v[2]) << 16) | (uint32(v[3]) << 24)
 					br.value = (br.value << 32) | uint64(low)
