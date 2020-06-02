@@ -143,7 +143,7 @@ func ReadTable(in []byte, s *Scratch) (s2 *Scratch, remain []byte, err error) {
 		d := dEntrySingle{
 			entry: uint16(s.actualTableLog+1-w) | (uint16(n) << 8),
 		}
-		rank := &rankStats[w&15]
+		rank := &rankStats[w]
 		single := s.dt.single[*rank : *rank+length]
 		for i := range single {
 			single[i] = d
