@@ -34,8 +34,13 @@ func (b *bitReader) init(in []byte) error {
 	}
 	b.bitsRead = 64
 	b.value = 0
-	b.fill()
-	b.fill()
+	if len(in) > 8 {
+		b.fillFastNC()
+		b.fillFastNC()
+	} else {
+		b.fill()
+		b.fill()
+	}
 	b.bitsRead += 8 - uint8(highBit32(uint32(v)))
 	return nil
 }
@@ -73,6 +78,19 @@ func (b *bitReader) fillFast() {
 	}
 	// Do single re-slice to avoid bounds checks.
 	v := b.in[b.off-4 : b.off]
+	v = v[:4]
+	low := (uint32(v[0])) | (uint32(v[1]) << 8) | (uint32(v[2]) << 16) | (uint32(v[3]) << 24)
+	b.value = (b.value << 32) | uint64(low)
+	b.bitsRead -= 32
+	b.off -= 4
+}
+
+// fillFastNC() will make sure at least 32 bits are available.
+// There must be at least 4 bytes available and > 32 bites must be read.
+func (b *bitReader) fillFastNC() {
+	// Do single re-slice to avoid bounds checks.
+	v := b.in[b.off-4 : b.off]
+	v = v[:4]
 	low := (uint32(v[0])) | (uint32(v[1]) << 8) | (uint32(v[2]) << 16) | (uint32(v[3]) << 24)
 	b.value = (b.value << 32) | uint64(low)
 	b.bitsRead -= 32
@@ -85,7 +103,8 @@ func (b *bitReader) fill() {
 		return
 	}
 	if b.off > 4 {
-		v := b.in[b.off-4 : b.off]
+		v := b.in[b.off-4:]
+		v = v[:4]
 		low := (uint32(v[0])) | (uint32(v[1]) << 8) | (uint32(v[2]) << 16) | (uint32(v[3]) << 24)
 		b.value = (b.value << 32) | uint64(low)
 		b.bitsRead -= 32

@@ -83,6 +83,7 @@ func ReadTable(in []byte, s *Scratch) (s2 *Scratch, remain []byte, err error) {
 		}
 		v2 := v & 15
 		rankStats[v2]++
+		// (1 << (v2-1)) is slower since the compiler cannot prove that v2 isn't 0.
 		weightTotal += (1 << v2) >> 1
 	}
 	if weightTotal == 0 {
@@ -142,11 +143,12 @@ func ReadTable(in []byte, s *Scratch) (s2 *Scratch, remain []byte, err error) {
 		d := dEntrySingle{
 			entry: uint16(s.actualTableLog+1-w) | (uint16(n) << 8),
 		}
-		single := s.dt.single[rankStats[w] : rankStats[w]+length]
+		rank := &rankStats[w&15]
+		single := s.dt.single[*rank : *rank+length]
 		for i := range single {
 			single[i] = d
 		}
-		rankStats[w] += length
+		*rank += length
 	}
 	return s, in, nil
 }
@@ -282,18 +284,14 @@ func (s *Scratch) Decompress4X(in []byte, dstSize int) (out []byte, err error) {
 
 	// Decode 2 values from each decoder/loop.
 	const bufoff = 256 / 4
-bigloop:
 	for {
-		for i := range br {
-			br := &br[i]
-			if br.off < 4 {
-				break bigloop
-			}
-			br.fillFast()
+		if br[0].off < 4 || br[1].off < 4 || br[2].off < 4 || br[3].off < 4 {
+			break
 		}
 
 		{
 			const stream = 0
+			br[stream].fillFast()
 			val := br[stream].peekBitsFast(s.actualTableLog)
 			v := single[val&tlMask]
 			br[stream].bitsRead += uint8(v.entry)
@@ -307,6 +305,7 @@ bigloop:
 
 		{
 			const stream = 1
+			br[stream].fillFast()
 			val := br[stream].peekBitsFast(s.actualTableLog)
 			v := single[val&tlMask]
 			br[stream].bitsRead += uint8(v.entry)
@@ -320,6 +319,7 @@ bigloop:
 
 		{
 			const stream = 2
+			br[stream].fillFast()
 			val := br[stream].peekBitsFast(s.actualTableLog)
 			v := single[val&tlMask]
 			br[stream].bitsRead += uint8(v.entry)
@@ -333,6 +333,7 @@ bigloop:
 
 		{
 			const stream = 3
+			br[stream].fillFast()
 			val := br[stream].peekBitsFast(s.actualTableLog)
 			v := single[val&tlMask]
 			br[stream].bitsRead += uint8(v.entry)
@@ -381,7 +382,24 @@ bigloop:
 		offset := dstEvery * i
 		br := &br[i]
 		for !br.finished() {
-			br.fill()
+			// inlined: br.fill()
+			if br.bitsRead >= 32 {
+				if br.off > 4 {
+					v := br.in[br.off-4 : br.off]
+					v = v[:4]
+					low := (uint32(v[0])) | (uint32(v[1]) << 8) | (uint32(v[2]) << 16) | (uint32(v[3]) << 24)
+					br.value = (br.value << 32) | uint64(low)
+					br.bitsRead -= 32
+					br.off -= 4
+				} else {
+					for br.off > 0 {
+						br.value = (br.value << 8) | uint64(br.in[br.off-1])
+						br.bitsRead -= 8
+						br.off--
+					}
+				}
+			}
+			// end inline...
 			if offset >= len(dstOut) {
 				return nil, errors.New("corruption detected: stream overrun 4")
 			}

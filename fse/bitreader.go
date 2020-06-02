@@ -34,8 +34,13 @@ func (b *bitReader) init(in []byte) error {
 	}
 	b.bitsRead = 64
 	b.value = 0
-	b.fill()
-	b.fill()
+	if len(in) > 8 {
+		b.fillFast()
+		b.fillFast()
+	} else {
+		b.fill()
+		b.fill()
+	}
 	b.bitsRead += 8 - uint8(highBits(uint32(v)))
 	return nil
 }
@@ -64,7 +69,8 @@ func (b *bitReader) fillFast() {
 		return
 	}
 	// Do single re-slice to avoid bounds checks.
-	v := b.in[b.off-4 : b.off]
+	v := b.in[b.off-4:]
+	v = v[:4]
 	low := (uint32(v[0])) | (uint32(v[1]) << 8) | (uint32(v[2]) << 16) | (uint32(v[3]) << 24)
 	b.value = (b.value << 32) | uint64(low)
 	b.bitsRead -= 32
@@ -77,7 +83,8 @@ func (b *bitReader) fill() {
 		return
 	}
 	if b.off > 4 {
-		v := b.in[b.off-4 : b.off]
+		v := b.in[b.off-4:]
+		v = v[:4]
 		low := (uint32(v[0])) | (uint32(v[1]) << 8) | (uint32(v[2]) << 16) | (uint32(v[3]) << 24)
 		b.value = (b.value << 32) | uint64(low)
 		b.bitsRead -= 32
@@ -93,7 +100,7 @@ func (b *bitReader) fill() {
 
 // finished returns true if all bits have been read from the bit stream.
 func (b *bitReader) finished() bool {
-	return b.off == 0 && b.bitsRead >= 64
+	return b.bitsRead >= 64 && b.off == 0
 }
 
 // close the bitstream and returns an error if out-of-buffer reads occurred.
