@@ -150,7 +150,7 @@ func (s *fseDecoder) readNCount(b *byteReader, maxSymbol uint16) error {
 			threshold >>= 1
 		}
 
-		if r := b.remain(); r >= 7 || r+int(bitCount>>3) >= 4 {
+		if r := b.remain(); r >= 7 || r-int(bitCount>>3) >= 4 {
 			b.advance(bitCount >> 3)
 			bitCount &= 7
 			// The check above should make sure we can read 32 bits
