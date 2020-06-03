@@ -218,17 +218,6 @@ func (d *Decoder) Decompress1X(dst, src []byte) ([]byte, error) {
 	maxDecodedSize := cap(dst)
 	dst = dst[:0]
 
-	decode := func() byte {
-		val := br.peekBitsFast(d.actualTableLog) /* note : actualTableLog >= 1 */
-		v := d.dt.single[val]
-		br.bitsRead += uint8(v.entry)
-		return uint8(v.entry >> 8)
-	}
-	hasDec := func(v dEntrySingle) byte {
-		br.bitsRead += uint8(v.entry)
-		return uint8(v.entry >> 8)
-	}
-
 	// Avoid bounds check by always having full sized table.
 	const tlSize = 1 << tableLogMax
 	const tlMask = tlSize - 1
@@ -240,11 +229,25 @@ func (d *Decoder) Decompress1X(dst, src []byte) ([]byte, error) {
 
 	for br.off >= 8 {
 		br.fillFast()
-		buf[off+0] = hasDec(dt[br.peekBitsFast(d.actualTableLog)&tlMask])
-		buf[off+1] = hasDec(dt[br.peekBitsFast(d.actualTableLog)&tlMask])
+		v := dt[br.peekBitsFast(d.actualTableLog)&tlMask]
+		br.bitsRead += uint8(v.entry)
+		buf[off+0] = uint8(v.entry >> 8)
+
+		v = dt[br.peekBitsFast(d.actualTableLog)&tlMask]
+		br.bitsRead += uint8(v.entry)
+		buf[off+1] = uint8(v.entry >> 8)
+
+		// Refill
 		br.fillFast()
-		buf[off+2] = hasDec(dt[br.peekBitsFast(d.actualTableLog)&tlMask])
-		buf[off+3] = hasDec(dt[br.peekBitsFast(d.actualTableLog)&tlMask])
+
+		v = dt[br.peekBitsFast(d.actualTableLog)&tlMask]
+		br.bitsRead += uint8(v.entry)
+		buf[off+2] = uint8(v.entry >> 8)
+
+		v = dt[br.peekBitsFast(d.actualTableLog)&tlMask]
+		br.bitsRead += uint8(v.entry)
+		buf[off+3] = uint8(v.entry >> 8)
+
 		off += 4
 		if off == 0 {
 			if len(dst)+256 > maxDecodedSize {
@@ -261,13 +264,35 @@ func (d *Decoder) Decompress1X(dst, src []byte) ([]byte, error) {
 	}
 	dst = append(dst, buf[:off]...)
 
-	for !br.finished() {
-		br.fill()
+	// br < 8, so uint8 is fine
+	bitsLeft := uint8(br.off)*8 + 64 - br.bitsRead
+	for bitsLeft > 0 {
+		// inlined: br.fill()
+		if br.bitsRead >= 32 {
+			if br.off >= 4 {
+				v := br.in[br.off-4:]
+				v = v[:4]
+				low := (uint32(v[0])) | (uint32(v[1]) << 8) | (uint32(v[2]) << 16) | (uint32(v[3]) << 24)
+				br.value = (br.value << 32) | uint64(low)
+				br.bitsRead -= 32
+				br.off -= 4
+			} else {
+				for br.off > 0 {
+					br.value = (br.value << 8) | uint64(br.in[br.off-1])
+					br.bitsRead -= 8
+					br.off--
+				}
+			}
+		}
 		if len(dst) >= maxDecodedSize {
 			br.close()
 			return nil, ErrMaxDecodedSizeExceeded
 		}
-		dst = append(dst, decode())
+		v := d.dt.single[br.peekBitsFast(d.actualTableLog)&tlMask]
+		nBits := uint8(v.entry)
+		br.bitsRead += nBits
+		bitsLeft -= nBits
+		dst = append(dst, uint8(v.entry>>8))
 	}
 	return dst, br.close()
 }
