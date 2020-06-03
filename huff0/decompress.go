@@ -416,7 +416,8 @@ func (s *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 	for i := range br {
 		offset := dstEvery * i
 		br := &br[i]
-		for !br.finished() {
+		bitsLeft := br.off*8 + uint(64-br.bitsRead)
+		for bitsLeft > 0 {
 			// inlined: br.fill()
 			if br.bitsRead >= 32 {
 				if br.off >= 4 {
@@ -442,7 +443,9 @@ func (s *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 			// Read value and increment offset.
 			val := br.peekBitsFast(s.actualTableLog)
 			v := single[val&tlMask].entry
-			br.bitsRead += uint8(v)
+			nBits := uint8(v)
+			br.bitsRead += nBits
+			bitsLeft -= uint(nBits)
 			out[offset] = uint8(v >> 8)
 			offset++
 		}
