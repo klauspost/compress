@@ -25,8 +25,8 @@ type dEntryDouble struct {
 	len   uint8
 }
 
-// Disabled for now...
-const use8BitTables = false
+// Uses special code for all tables that are < 8 bits.
+const use8BitTables = true
 
 // ReadTable will read a table from the input.
 // The size of the input may be larger than the table definition.
@@ -217,7 +217,7 @@ func (d *Decoder) Decompress1X(dst, src []byte) ([]byte, error) {
 	if use8BitTables && d.actualTableLog <= 8 {
 		return d.decompress1X8Bit(dst, src)
 	}
-	var br bitReader
+	var br bitReaderShifted
 	err := br.init(src)
 	if err != nil {
 		return dst, err
