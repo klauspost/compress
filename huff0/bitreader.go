@@ -76,7 +76,8 @@ func (b *bitReader) fillFast() {
 	if b.bitsRead < 32 {
 		return
 	}
-	// Do single re-slice to avoid bounds checks.
+
+	// 2 bounds checks.
 	v := b.in[b.off-4 : b.off]
 	v = v[:4]
 	low := (uint32(v[0])) | (uint32(v[1]) << 8) | (uint32(v[2]) << 16) | (uint32(v[3]) << 24)
