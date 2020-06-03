@@ -312,13 +312,6 @@ func (s *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 	const tlMask = tlSize - 1
 	single := s.dt.single[:tlSize]
 
-	decode := func(br *bitReader) byte {
-		val := br.peekBitsFast(s.actualTableLog) /* note : actualTableLog >= 1 */
-		v := single[val&tlMask]
-		br.bitsRead += uint8(v.entry)
-		return uint8(v.entry >> 8)
-	}
-
 	// Use temp table to avoid bound checks/append penalty.
 	var buf [256]byte
 	var off uint8
@@ -445,7 +438,12 @@ func (s *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 			if offset >= len(out) {
 				return nil, errors.New("corruption detected: stream overrun 4")
 			}
-			out[offset] = decode(br)
+
+			// Read value and increment offset.
+			val := br.peekBitsFast(s.actualTableLog)
+			v := single[val&tlMask].entry
+			br.bitsRead += uint8(v)
+			out[offset] = uint8(v >> 8)
 			offset++
 		}
 		decoded += offset - dstEvery*i
