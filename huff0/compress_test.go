@@ -90,7 +90,7 @@ func init() {
 
 func TestCompressRegression(t *testing.T) {
 	// Match the fuzz function
-	var testInput = func(data []byte) int {
+	var testInput = func(t *testing.T, data []byte) int {
 		var enc Scratch
 		enc.WantLogLess = 5
 		comp, _, err := Compress1X(data, &enc)
@@ -110,10 +110,10 @@ func TestCompressRegression(t *testing.T) {
 		}
 		out, err := dec.Decompress1X(remain)
 		if err != nil {
-			panic(err)
+			t.Error(err)
 		}
 		if !bytes.Equal(out, data) {
-			panic("decompression 1x mismatch")
+			t.Error("decompression 1x mismatch")
 		}
 		// Reuse as 4X
 		enc.Reuse = ReusePolicyAllow
@@ -137,10 +137,10 @@ func TestCompressRegression(t *testing.T) {
 		}
 		out, err = dec.Decompress4X(remain, len(data))
 		if err != nil {
-			panic(err)
+			t.Error(err)
 		}
 		if !bytes.Equal(out, data) {
-			panic("decompression 4x with reuse mismatch")
+			t.Error("decompression 4x with reuse mismatch")
 		}
 
 		enc.Reuse = ReusePolicyNone
@@ -164,10 +164,10 @@ func TestCompressRegression(t *testing.T) {
 		}
 		out, err = dec.Decompress4X(remain, len(data))
 		if err != nil {
-			panic(err)
+			t.Error(err)
 		}
 		if !bytes.Equal(out, data) {
-			panic("decompression 4x mismatch")
+			t.Error("decompression 4x mismatch")
 		}
 
 		// Reuse as 1X
@@ -192,10 +192,10 @@ func TestCompressRegression(t *testing.T) {
 		}
 		out, err = dec.Decompress1X(remain)
 		if err != nil {
-			panic(err)
+			t.Error(err)
 		}
 		if !bytes.Equal(out, data) {
-			panic("decompression 1x with reuse mismatch")
+			t.Error("decompression 1x with reuse mismatch")
 		}
 		return 1
 	}
@@ -205,7 +205,7 @@ func TestCompressRegression(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			testInput(buf0)
+			testInput(t, buf0)
 		})
 	}
 	for _, test := range testfilesExtended {
@@ -214,7 +214,7 @@ func TestCompressRegression(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			testInput(buf0)
+			testInput(t, buf0)
 		})
 	}
 }
