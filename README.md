@@ -15,7 +15,8 @@ This package provides various compression algorithms.
 
 # changelog
 
-* June 1, 2020 (v1.10.7): Added zstd decompression [dictionary support](https://github.com/klauspost/compress/tree/master/zstd#dictionaries).
+* June 5, 2020 (v1.10.8): 1.15x faster zstd block decompression. [#265](https://github.com/klauspost/compress/pull/265)
+* June 1, 2020 (v1.10.7): Added zstd decompression [dictionary support](https://github.com/klauspost/compress/tree/master/zstd#dictionaries)
 * June 1, 2020: Increase zstd decompression speed up to 1.19x.  [#259](https://github.com/klauspost/compress/pull/259)
 * June 1, 2020: Remove internal reset call in zstd compression and reduce allocations. [#263](https://github.com/klauspost/compress/pull/263)
 * May 21, 2020: (v1.10.6) zstd: Reduce allocations while decoding. [#258](https://github.com/klauspost/compress/pull/258), [#252](https://github.com/klauspost/compress/pull/252)
