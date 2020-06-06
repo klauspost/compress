@@ -1015,11 +1015,55 @@ func BenchmarkDecoder_DecodeAllCgo(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				got, err = zstd.Decompress(got[:0], in)
+				got, err = zstd.Decompress(got, in)
 				if err != nil {
 					b.Fatal(err)
 				}
 			}
+		})
+	}
+}
+
+func BenchmarkDecoder_DecodeAllParallelCgo(b *testing.B) {
+	fn := "testdata/benchdecoder.zip"
+	data, err := ioutil.ReadFile(fn)
+	if err != nil {
+		b.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		b.Fatal(err)
+	}
+	for _, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, ".zst") {
+			continue
+		}
+		b.Run(tt.Name, func(b *testing.B) {
+			r, err := tt.Open()
+			if err != nil {
+				b.Fatal(err)
+			}
+			defer r.Close()
+			in, err := ioutil.ReadAll(r)
+			if err != nil {
+				b.Fatal(err)
+			}
+			got, err := zstd.Decompress(nil, in)
+			if err != nil {
+				b.Fatal(err)
+			}
+			b.SetBytes(int64(len(got)))
+			b.ReportAllocs()
+			b.ResetTimer()
+			b.RunParallel(func(pb *testing.PB) {
+				got := make([]byte, len(got))
+				for pb.Next() {
+					got, err = zstd.Decompress(got, in)
+					if err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
 		})
 	}
 }
