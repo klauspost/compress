@@ -1374,19 +1374,225 @@ func genMemMoveShort(name string, dst, src, length reg.GPVirtual, end LabelRef) 
 func genMemMoveLong(name string, dst, src, length reg.GPVirtual, end LabelRef) {
 	name += "large_"
 
+	// These are disabled.
+	// AVX is ever so slightly faster, but it is disabled for simplicity.
+	const branchLoops = false
+	const avx = false && branchLoops
+	if branchLoops {
+		CMPQ(length, U8(128))
+		JBE(LabelRef(name + "move_65through128"))
+		CMPQ(length, U32(256))
+		JBE(LabelRef(name + "move_129through256"))
+		if avx {
+			JMP(LabelRef(name + "avxUnaligned"))
+		} else {
+			JMP(LabelRef(name + "forward_sse"))
+		}
+
+		X0, X1, X2, X3, X4, X5, X6, X7 := XMM(), XMM(), XMM(), XMM(), XMM(), XMM(), XMM(), XMM()
+		X8, X9, X10, X11, X12, X13, X14, X15 := XMM(), XMM(), XMM(), XMM(), XMM(), XMM(), XMM(), XMM()
+		Label(name + "move_65through128")
+		MOVOU(Mem{Base: src}, X0)
+		MOVOU(Mem{Base: src, Disp: 16}, X1)
+		MOVOU(Mem{Base: src, Disp: 32}, X2)
+		MOVOU(Mem{Base: src, Disp: 48}, X3)
+		MOVOU(Mem{Base: src, Index: length, Scale: 1, Disp: -64}, X12)
+		MOVOU(Mem{Base: src, Index: length, Scale: 1, Disp: -48}, X13)
+		MOVOU(Mem{Base: src, Index: length, Scale: 1, Disp: -32}, X14)
+		MOVOU(Mem{Base: src, Index: length, Scale: 1, Disp: -16}, X15)
+		MOVOU(X0, Mem{Base: dst})
+		MOVOU(X1, Mem{Base: dst, Disp: 16})
+		MOVOU(X2, Mem{Base: dst, Disp: 32})
+		MOVOU(X3, Mem{Base: dst, Disp: 48})
+		MOVOU(X12, Mem{Base: dst, Index: length, Scale: 1, Disp: -64})
+		MOVOU(X13, Mem{Base: dst, Index: length, Scale: 1, Disp: -48})
+		MOVOU(X14, Mem{Base: dst, Index: length, Scale: 1, Disp: -32})
+		MOVOU(X15, Mem{Base: dst, Index: length, Scale: 1, Disp: -16})
+		JMP(end)
+
+		Label(name + "move_129through256")
+		MOVOU(Mem{Base: src}, X0)
+		MOVOU(Mem{Base: src, Disp: 16}, X1)
+		MOVOU(Mem{Base: src, Disp: 32}, X2)
+		MOVOU(Mem{Base: src, Disp: 48}, X3)
+		MOVOU(Mem{Base: src, Disp: 64}, X4)
+		MOVOU(Mem{Base: src, Disp: 80}, X5)
+		MOVOU(Mem{Base: src, Disp: 96}, X6)
+		MOVOU(Mem{Base: src, Disp: 112}, X7)
+		MOVOU(Mem{Base: src, Index: length, Scale: 1, Disp: -128}, X8)
+		MOVOU(Mem{Base: src, Index: length, Scale: 1, Disp: -112}, X9)
+		MOVOU(Mem{Base: src, Index: length, Scale: 1, Disp: -96}, X10)
+		MOVOU(Mem{Base: src, Index: length, Scale: 1, Disp: -80}, X11)
+		MOVOU(Mem{Base: src, Index: length, Scale: 1, Disp: -64}, X12)
+		MOVOU(Mem{Base: src, Index: length, Scale: 1, Disp: -48}, X13)
+		MOVOU(Mem{Base: src, Index: length, Scale: 1, Disp: -32}, X14)
+		MOVOU(Mem{Base: src, Index: length, Scale: 1, Disp: -16}, X15)
+		MOVOU(X0, Mem{Base: dst})
+		MOVOU(X1, Mem{Base: dst, Disp: 16})
+		MOVOU(X2, Mem{Base: dst, Disp: 32})
+		MOVOU(X3, Mem{Base: dst, Disp: 48})
+		MOVOU(X4, Mem{Base: dst, Disp: 64})
+		MOVOU(X5, Mem{Base: dst, Disp: 80})
+		MOVOU(X6, Mem{Base: dst, Disp: 96})
+		MOVOU(X7, Mem{Base: dst, Disp: 112})
+		MOVOU(X8, Mem{Base: dst, Index: length, Scale: 1, Disp: -128})
+		MOVOU(X9, Mem{Base: dst, Index: length, Scale: 1, Disp: -112})
+		MOVOU(X10, Mem{Base: dst, Index: length, Scale: 1, Disp: -96})
+		MOVOU(X11, Mem{Base: dst, Index: length, Scale: 1, Disp: -80})
+		MOVOU(X12, Mem{Base: dst, Index: length, Scale: 1, Disp: -64})
+		MOVOU(X13, Mem{Base: dst, Index: length, Scale: 1, Disp: -48})
+		MOVOU(X14, Mem{Base: dst, Index: length, Scale: 1, Disp: -32})
+		MOVOU(X15, Mem{Base: dst, Index: length, Scale: 1, Disp: -16})
+		JMP(end)
+		if avx {
+			Label(name + "avxUnaligned")
+			AX, CX, R8, R10 := GP64(), GP64(), GP64(), GP64()
+			// Memory layout on the source side
+			// src                                       CX
+			// |<---------length before correction--------->|
+			// |       |<--length corrected-->|             |
+			// |       |                  |<--- AX  --->|
+			// |<-R11->|                  |<-128 bytes->|
+			// +----------------------------------------+
+			// | Head  | Body             | Tail        |
+			// +-------+------------------+-------------+
+			// ^       ^                  ^
+			// |       |                  |
+			// Save head into Y4          Save tail into X5..X12
+			//         |
+			//         src+R11, where R11 = ((dst & -32) + 32) - dst
+			// Algorithm:
+			// 1. Unaligned save of the tail's 128 bytes
+			// 2. Unaligned save of the head's 32  bytes
+			// 3. Destination-aligned copying of body (128 bytes per iteration)
+			// 4. Put head on the new place
+			// 5. Put the tail on the new place
+			// It can be important to satisfy processor's pipeline requirements for
+			// small sizes as the cost of unaligned memory region copying is
+			// comparable with the cost of main loop. So code is slightly messed there.
+			// There is more clean implementation of that algorithm for bigger sizes
+			// where the cost of unaligned part copying is negligible.
+			// You can see it after gobble_big_data_fwd label.
+			Y0, Y1, Y2, Y3, Y4 := YMM(), YMM(), YMM(), YMM(), YMM()
+
+			LEAQ(Mem{Base: src, Index: length, Scale: 1}, CX)
+			MOVQ(dst, R10)
+			// CX points to the end of buffer so we need go back slightly. We will use negative offsets there.
+			MOVOU(Mem{Base: CX, Disp: -0x80}, X5)
+			MOVOU(Mem{Base: CX, Disp: -0x70}, X6)
+			MOVQ(U32(0x80), AX)
+
+			// Align destination address
+			ANDQ(U32(0xffffffe0), dst)
+			ADDQ(U8(32), dst)
+			// Continue tail saving.
+			MOVOU(Mem{Base: CX, Disp: -0x60}, X7)
+			MOVOU(Mem{Base: CX, Disp: -0x50}, X8)
+			// Make R8 delta between aligned and unaligned destination addresses.
+			MOVQ(dst, R8)
+			SUBQ(R10, R8)
+			// Continue tail saving.
+			MOVOU(Mem{Base: CX, Disp: -0x40}, X9)
+			MOVOU(Mem{Base: CX, Disp: -0x30}, X10)
+			// Let's make bytes-to-copy value adjusted as we've prepared unaligned part for copying.
+			SUBQ(R8, length)
+			// Continue tail saving.
+			MOVOU(Mem{Base: CX, Disp: -0x20}, X11)
+			MOVOU(Mem{Base: CX, Disp: -0x10}, X12)
+			// The tail will be put on its place after main body copying.
+			// It's time for the unaligned heading part.
+			VMOVDQU(Mem{Base: src}, Y4)
+			// Adjust source address to point past head.
+			ADDQ(R8, src)
+			SUBQ(AX, length)
+
+			// Aligned memory copying there
+			Label(name + "gobble_128_loop")
+			VMOVDQU(Mem{Base: src}, Y0)
+			VMOVDQU(Mem{Base: src, Disp: 0x20}, Y1)
+			VMOVDQU(Mem{Base: src, Disp: 0x40}, Y2)
+			VMOVDQU(Mem{Base: src, Disp: 0x60}, Y3)
+			ADDQ(AX, src)
+			VMOVDQA(Y0, Mem{Base: dst})
+			VMOVDQA(Y1, Mem{Base: dst, Disp: 0x20})
+			VMOVDQA(Y2, Mem{Base: dst, Disp: 0x40})
+			VMOVDQA(Y3, Mem{Base: dst, Disp: 0x60})
+			ADDQ(AX, dst)
+			SUBQ(AX, length)
+			JA(LabelRef(name + "gobble_128_loop"))
+			// Now we can store unaligned parts.
+			ADDQ(AX, length)
+			ADDQ(dst, length)
+			VMOVDQU(Y4, Mem{Base: R10})
+			VZEROUPPER()
+			MOVOU(X5, Mem{Base: length, Disp: -0x80})
+			MOVOU(X6, Mem{Base: length, Disp: -0x70})
+			MOVOU(X7, Mem{Base: length, Disp: -0x60})
+			MOVOU(X8, Mem{Base: length, Disp: -0x50})
+			MOVOU(X9, Mem{Base: length, Disp: -0x40})
+			MOVOU(X10, Mem{Base: length, Disp: -0x30})
+			MOVOU(X11, Mem{Base: length, Disp: -0x20})
+			MOVOU(X12, Mem{Base: length, Disp: -0x10})
+			JMP(end)
+
+			return
+		}
+	}
+
 	// Store start and end for sse_tail
-	X0, X1, X2, X3, X4, X5 := XMM(), XMM(), XMM(), XMM(), XMM(), XMM()
+	Label(name + "forward_sse")
+	X0, X1, X2, X3, X4, X5, X6, X7 := XMM(), XMM(), XMM(), XMM(), XMM(), XMM(), XMM(), XMM()
+	X8, X9, X10, X11 := XMM(), XMM(), XMM(), XMM()
+
 	MOVOU(Mem{Base: src}, X0)
 	MOVOU(Mem{Base: src, Disp: 16}, X1)
 	MOVOU(Mem{Base: src, Disp: -32, Index: length, Scale: 1}, X2)
 	MOVOU(Mem{Base: src, Disp: -16, Index: length, Scale: 1}, X3)
+
 	// forward (only)
 	dstAlign := GP64()
+	bigLoops := GP64()
+	MOVQ(length, bigLoops)
+	SHRQ(U8(6), bigLoops) // bigLoops = length / 128
+
 	MOVQ(dst, dstAlign)
 	ANDL(U32(31), dstAlign.As32())
 	srcOff := GP64()
 	MOVQ(U32(64), srcOff)
 	SUBQ(dstAlign, srcOff)
+
+	// Move 128 bytes/loop
+	Label(name + "big_loop_back")
+	DECQ(bigLoops)
+	JA(LabelRef(name + "forward_sse_loop_32"))
+
+	MOVOU(Mem{Disp: -32, Base: src, Scale: 1, Index: srcOff}, X4)
+	MOVOU(Mem{Disp: -16, Base: src, Scale: 1, Index: srcOff}, X5)
+	MOVOU(Mem{Disp: 0, Base: src, Scale: 1, Index: srcOff}, X6)
+	MOVOU(Mem{Disp: 16, Base: src, Scale: 1, Index: srcOff}, X7)
+	MOVOU(Mem{Disp: 32, Base: src, Scale: 1, Index: srcOff}, X8)
+	MOVOU(Mem{Disp: 48, Base: src, Scale: 1, Index: srcOff}, X9)
+	MOVOU(Mem{Disp: 64, Base: src, Scale: 1, Index: srcOff}, X10)
+	MOVOU(Mem{Disp: 80, Base: src, Scale: 1, Index: srcOff}, X11)
+	MOVOU(X4, Mem{Disp: -32, Base: dst, Scale: 1, Index: srcOff})
+	MOVOU(X5, Mem{Disp: -16, Base: dst, Scale: 1, Index: srcOff})
+	MOVOU(X6, Mem{Disp: 0, Base: dst, Scale: 1, Index: srcOff})
+	MOVOU(X7, Mem{Disp: 16, Base: dst, Scale: 1, Index: srcOff})
+	MOVOU(X8, Mem{Disp: 32, Base: dst, Scale: 1, Index: srcOff})
+	MOVOU(X9, Mem{Disp: 48, Base: dst, Scale: 1, Index: srcOff})
+	MOVOU(X10, Mem{Disp: 64, Base: dst, Scale: 1, Index: srcOff})
+	MOVOU(X11, Mem{Disp: 80, Base: dst, Scale: 1, Index: srcOff})
+	ADDQ(U8(128), srcOff)
+	JMP(LabelRef(name + "big_loop_back"))
+
+	Label(name + "forward_sse_loop_32")
+	MOVOU(Mem{Disp: -32, Base: src, Scale: 1, Index: srcOff}, X4)
+	MOVOU(Mem{Disp: -16, Base: src, Scale: 1, Index: srcOff}, X5)
+	MOVOU(X4, Mem{Disp: -32, Base: dst, Scale: 1, Index: srcOff})
+	MOVOU(X5, Mem{Disp: -16, Base: dst, Scale: 1, Index: srcOff})
+	ADDQ(U8(32), srcOff)
+	CMPQ(length, srcOff)
+	JAE(LabelRef(name + "forward_sse_loop"))
 
 	Label(name + "forward_sse_loop")
 	MOVOU(Mem{Disp: -32, Base: src, Scale: 1, Index: srcOff}, X4)
