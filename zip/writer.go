@@ -218,7 +218,7 @@ func (w *Writer) Close() error {
 // allowed. To create a directory instead of a file, add a trailing
 // slash to the name.
 // The file's contents must be written to the io.Writer before the next
-// call to Create, CreateHeader, or Close.
+// call to Create, CreateHeader, CreateHeaderRaw, or Close.
 func (w *Writer) Create(name string) (io.Writer, error) {
 	header := &FileHeader{
 		Name:   name,
@@ -403,8 +403,10 @@ func (w *Writer) CreateHeader(fh *FileHeader) (io.Writer, error) {
 // The file's contents must be written to the io.Writer before the next
 // call to Create, Copy, CreateHeader, CreateHeaderRaw or Close.
 //
-// Using this requires knowledge of populating the FileHeader correctly.
-// Generally using the Copy() function is recommended.
+// Using this requires knowledge of populating the FileHeader correctly (the
+// UncompressedSize64 and CRC32 fields should be set and valid for the contents
+// written). For copying from an existing zip file, the Copy() function is
+// recommended.
 func (w *Writer) CreateHeaderRaw(fh *FileHeader) (io.Writer, error) {
 	if w.last != nil && !w.last.Closed() {
 		if err := w.last.Close(); err != nil {
@@ -668,6 +670,15 @@ func (w *rawWriter) Close() error {
 	w.closed = true
 	fh := w.FileHeader
 	fh.CompressedSize64 = uint64(w.rawCount.count)
+
+	if fh.isZip64() {
+		fh.CompressedSize = uint32max
+		fh.UncompressedSize = uint32max
+		fh.ReaderVersion = zipVersion45 // requires 4.5 - File uses ZIP64 format extensions
+	} else {
+		fh.CompressedSize = uint32(fh.CompressedSize64)
+		fh.UncompressedSize = uint32(fh.UncompressedSize64)
+	}
 
 	// Write data descriptor. This is more complicated than one would
 	// think, see e.g. comments in zipfile.c:putextended() and
