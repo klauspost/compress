@@ -848,7 +848,7 @@ func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, en
 		ADDQ(U8(5), retval)
 	}
 	ADDQ(U8(5), dstBase)
-	JMP(LabelRef("memmove_" + name))
+	JMP(LabelRef("memmove_long_" + name))
 
 	Label("four_bytes_" + name)
 	MOVL(n, n16)
@@ -878,6 +878,8 @@ func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, en
 		ADDQ(U8(2), retval)
 	}
 	ADDQ(U8(2), dstBase)
+	CMPL(n.As32(), U8(64))
+	JL(LabelRef("memmove_" + name))
 	JMP(LabelRef("memmove_long_" + name))
 
 	Label("one_byte_" + name)
@@ -902,7 +904,7 @@ func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, en
 	MOVL(litLen.As32(), length.As32())
 
 	// updates litBase.
-	genMemMove2("emit_lit_memmove_"+name, dstBase, litBase, length, copyEnd)
+	genMemMoveShort("emit_lit_memmove_"+name, dstBase, litBase, length, copyEnd)
 
 	if updateDst {
 		Label("memmove_end_copy_" + name)
@@ -924,7 +926,7 @@ func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, en
 	MOVL(litLen.As32(), length.As32())
 
 	// updates litBase.
-	genMemMove2("emit_lit_memmove_long_"+name, dstBase, litBase, length, copyEnd)
+	genMemMoveLong("emit_lit_memmove_long_"+name, dstBase, litBase, length, copyEnd)
 
 	if updateDst {
 		Label("memmove_end_copy_long_" + name)
@@ -1285,7 +1287,8 @@ func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end La
 // Non AVX uses 2 GP register, 16 SSE2 registers.
 // AVX uses 4 GP registers 16 AVX/SSE registers.
 // All passed registers may be updated.
-func genMemMove2(name string, dst, src, length reg.GPVirtual, end LabelRef) {
+// Length must be 1 -> 64 bytes
+func genMemMoveShort(name string, dst, src, length reg.GPVirtual, end LabelRef) {
 	AX, CX := GP64(), GP64()
 	name += "_memmove_"
 
@@ -1294,6 +1297,7 @@ func genMemMove2(name string, dst, src, length reg.GPVirtual, end LabelRef) {
 		TESTQ(length, length)
 		JEQ(end)
 	}
+	Label(name + "tail")
 	CMPQ(length, U8(3))
 	JB(LabelRef(name + "move_1or2"))
 	JE(LabelRef(name + "move_3"))
@@ -1303,10 +1307,14 @@ func genMemMove2(name string, dst, src, length reg.GPVirtual, end LabelRef) {
 	JBE(LabelRef(name + "move_8through16"))
 	CMPQ(length, U8(32))
 	JBE(LabelRef(name + "move_17through32"))
-	CMPQ(length, U8(64))
-	JBE(LabelRef(name + "move_33through64"))
+	if debug {
+		CMPQ(length, U8(64))
+		JBE(LabelRef(name + "move_33through64"))
+		INT(U8(3))
+	}
+	JMP(LabelRef(name + "move_33through64"))
 
-	genMemMoveLong(name, dst, src, length, end)
+	//genMemMoveLong(name, dst, src, length, end)
 
 	Label(name + "move_1or2")
 	MOVB(Mem{Base: src}, AX.As8())
@@ -1367,7 +1375,7 @@ func genMemMoveLong(name string, dst, src, length reg.GPVirtual, end LabelRef) {
 	X0, X1, X2, X3, X4, X5 := XMM(), XMM(), XMM(), XMM(), XMM(), XMM()
 	name += "large_"
 
-	//Label(name + "large")
+	// Label(name + "large")
 	// Store start and end for sse_tail
 	MOVOU(Mem{Base: src}, X0)
 	MOVOU(Mem{Base: src, Disp: 16}, X1)

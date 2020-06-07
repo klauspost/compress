@@ -54,8 +54,13 @@ Options:`)
 	}
 	if len(args) == 1 && args[0] == "-" {
 		r.Reset(os.Stdin)
-		_, err := io.Copy(os.Stdout, r)
-		exitErr(err)
+		if !*verify {
+			_, err := io.Copy(os.Stdout, r)
+			exitErr(err)
+		} else {
+			_, err := io.Copy(ioutil.Discard, r)
+			exitErr(err)
+		}
 		return
 	}
 	var files []string
