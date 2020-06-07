@@ -43,7 +43,7 @@ search_loop_encodeBlockAsm:
 	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
-	SHRL  $0x06, BP
+	SHRL  $0x05, BP
 	LEAL  4(CX)(BP*1), BP
 	MOVL  8(SP), DI
 	CMPL  BP, DI
@@ -2339,14 +2339,14 @@ search_loop_encodeBlockAsm10B:
 	CMPL  BP, DI
 	JGT   emit_remainder_encodeBlockAsm10B
 	MOVL  BP, 20(SP)
-	MOVQ  $0x000000cf1bbcdcbb, R8
+	MOVQ  $0x9e3779b1, R8
 	MOVQ  SI, R9
 	MOVQ  SI, R10
 	SHRQ  $0x08, R10
-	SHLQ  $0x18, R9
+	SHLQ  $0x20, R9
 	IMULQ R8, R9
 	SHRQ  $0x36, R9
-	SHLQ  $0x18, R10
+	SHLQ  $0x20, R10
 	IMULQ R8, R10
 	SHRQ  $0x36, R10
 	MOVL  24(SP)(R9*4), BP
@@ -2356,7 +2356,7 @@ search_loop_encodeBlockAsm10B:
 	MOVL  R9, 24(SP)(R10*4)
 	MOVQ  SI, R9
 	SHRQ  $0x10, R9
-	SHLQ  $0x18, R9
+	SHLQ  $0x20, R9
 	IMULQ R8, R9
 	SHRQ  $0x36, R9
 	MOVL  CX, R8
@@ -3265,14 +3265,14 @@ match_nolit_emitcopy_end_encodeBlockAsm10B:
 
 match_nolit_dst_ok_encodeBlockAsm10B:
 	MOVQ  -2(DX)(CX*1), SI
-	MOVQ  $0x000000cf1bbcdcbb, BP
+	MOVQ  $0x9e3779b1, BP
 	MOVQ  SI, DI
 	SHRQ  $0x10, SI
 	MOVQ  SI, R8
-	SHLQ  $0x18, DI
+	SHLQ  $0x20, DI
 	IMULQ BP, DI
 	SHRQ  $0x36, DI
-	SHLQ  $0x18, R8
+	SHLQ  $0x20, R8
 	IMULQ BP, R8
 	SHRQ  $0x36, R8
 	LEAL  -2(CX), R9
@@ -6251,14 +6251,14 @@ search_loop_encodeSnappyBlockAsm10B:
 	CMPL  BP, DI
 	JGT   emit_remainder_encodeSnappyBlockAsm10B
 	MOVL  BP, 20(SP)
-	MOVQ  $0x000000cf1bbcdcbb, R8
+	MOVQ  $0x9e3779b1, R8
 	MOVQ  SI, R9
 	MOVQ  SI, R10
 	SHRQ  $0x08, R10
-	SHLQ  $0x18, R9
+	SHLQ  $0x20, R9
 	IMULQ R8, R9
 	SHRQ  $0x36, R9
-	SHLQ  $0x18, R10
+	SHLQ  $0x20, R10
 	IMULQ R8, R10
 	SHRQ  $0x36, R10
 	MOVL  24(SP)(R9*4), BP
@@ -6268,7 +6268,7 @@ search_loop_encodeSnappyBlockAsm10B:
 	MOVL  R9, 24(SP)(R10*4)
 	MOVQ  SI, R9
 	SHRQ  $0x10, R9
-	SHLQ  $0x18, R9
+	SHLQ  $0x20, R9
 	IMULQ R8, R9
 	SHRQ  $0x36, R9
 	MOVL  CX, R8
@@ -6843,14 +6843,14 @@ match_nolit_emitcopy_end_encodeSnappyBlockAsm10B:
 
 match_nolit_dst_ok_encodeSnappyBlockAsm10B:
 	MOVQ  -2(DX)(CX*1), SI
-	MOVQ  $0x000000cf1bbcdcbb, BP
+	MOVQ  $0x9e3779b1, BP
 	MOVQ  SI, DI
 	SHRQ  $0x10, SI
 	MOVQ  SI, R8
-	SHLQ  $0x18, DI
+	SHLQ  $0x20, DI
 	IMULQ BP, DI
 	SHRQ  $0x36, DI
-	SHLQ  $0x18, R8
+	SHLQ  $0x20, R8
 	IMULQ BP, R8
 	SHRQ  $0x36, R8
 	LEAL  -2(CX), R9

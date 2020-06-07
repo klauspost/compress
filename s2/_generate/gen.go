@@ -17,15 +17,15 @@ func main() {
 	Constraint(buildtags.Not("noasm").ToConstraint())
 	Constraint(buildtags.Term("gc").ToConstraint())
 
-	genEncodeBlockAsm("encodeBlockAsm", 14, 6, 6, false)
+	genEncodeBlockAsm("encodeBlockAsm", 14, 5, 6, false)
 	genEncodeBlockAsm("encodeBlockAsm12B", 12, 5, 5, false)
-	genEncodeBlockAsm("encodeBlockAsm10B", 10, 5, 5, false)
+	genEncodeBlockAsm("encodeBlockAsm10B", 10, 5, 4, false)
 	genEncodeBlockAsm("encodeBlockAsm8B", 8, 4, 4, false)
 
 	// Snappy compatible
 	genEncodeBlockAsm("encodeSnappyBlockAsm", 14, 6, 6, true)
 	genEncodeBlockAsm("encodeSnappyBlockAsm12B", 12, 5, 5, true)
-	genEncodeBlockAsm("encodeSnappyBlockAsm10B", 10, 5, 5, true)
+	genEncodeBlockAsm("encodeSnappyBlockAsm10B", 10, 5, 4, true)
 	genEncodeBlockAsm("encodeSnappyBlockAsm8B", 8, 4, 4, true)
 
 	genEmitLiteral()
@@ -1372,11 +1372,10 @@ func genMemMoveShort(name string, dst, src, length reg.GPVirtual, end LabelRef) 
 // AVX uses 4 GP registers 16 AVX/SSE registers.
 // All passed registers may be updated.
 func genMemMoveLong(name string, dst, src, length reg.GPVirtual, end LabelRef) {
-	X0, X1, X2, X3, X4, X5 := XMM(), XMM(), XMM(), XMM(), XMM(), XMM()
 	name += "large_"
 
-	// Label(name + "large")
 	// Store start and end for sse_tail
+	X0, X1, X2, X3, X4, X5 := XMM(), XMM(), XMM(), XMM(), XMM(), XMM()
 	MOVOU(Mem{Base: src}, X0)
 	MOVOU(Mem{Base: src, Disp: 16}, X1)
 	MOVOU(Mem{Base: src, Disp: -32, Index: length, Scale: 1}, X2)
@@ -1405,6 +1404,7 @@ func genMemMoveLong(name string, dst, src, length reg.GPVirtual, end LabelRef) {
 	MOVOU(X3, Mem{Base: dst, Disp: -16, Index: length, Scale: 1})
 
 	JMP(end)
+	return
 }
 
 // genMatchLen generates standalone matchLen.
