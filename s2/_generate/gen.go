@@ -809,21 +809,6 @@ func genEmitLiteral() {
 	Store(retval, ReturnIndex(0))
 	RET()
 
-	TEXT("emitLiteralAvx", NOSPLIT, "func(dst, lit []byte) int")
-	Doc("emitLiteralAvx writes a literal chunk and returns the number of bytes written.", "",
-		"It assumes that:",
-		"  dst is long enough to hold the encoded bytes",
-		"  0 <= len(lit) && len(lit) <= math.MaxUint32", "")
-	Pragma("noescape")
-
-	dstBase, litBase, litLen, retval = GP64(), GP64(), GP64(), GP64()
-	Load(Param("dst").Base(), dstBase)
-	Load(Param("lit").Base(), litBase)
-	Load(Param("lit").Len(), litLen)
-	emitLiteral("standalone", litLen, retval, dstBase, litBase, "emit_literal_end_avx_standalone", false)
-	Label("emit_literal_end_avx_standalone")
-	Store(retval, ReturnIndex(0))
-	RET()
 }
 
 // emitLiteral can be used for inlining an emitLiteral call.
@@ -1304,15 +1289,11 @@ func genMemMove2(name string, dst, src, length reg.GPVirtual, end LabelRef) {
 	AX, CX := GP64(), GP64()
 	name += "_memmove_"
 
-	// move_129through256 or smaller work whether or not the source and the
-	// destination memory regions overlap because they load all data into
-	// registers before writing it back.  move_256through2048 on the other
-	// hand can be used only when the memory regions don't overlap or the copy
-	// direction is forward.
-	//
-	// BSR+branch table make almost all memmove/memclr benchmarks worse. Not worth doing.
-	TESTQ(length, length)
-	JEQ(end)
+	// Only enable if length can be 0.
+	if false {
+		TESTQ(length, length)
+		JEQ(end)
+	}
 	CMPQ(length, U8(3))
 	JB(LabelRef(name + "move_1or2"))
 	JE(LabelRef(name + "move_3"))
@@ -1324,10 +1305,6 @@ func genMemMove2(name string, dst, src, length reg.GPVirtual, end LabelRef) {
 	JBE(LabelRef(name + "move_17through32"))
 	CMPQ(length, U8(64))
 	JBE(LabelRef(name + "move_33through64"))
-	if false {
-		CMPQ(length, U8(128))
-		JBE(LabelRef(name + "move_65through128"))
-	}
 
 	genMemMoveLong(name, dst, src, length, end)
 
