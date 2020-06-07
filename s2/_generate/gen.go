@@ -1562,10 +1562,10 @@ func genMemMoveLong(name string, dst, src, length reg.GPVirtual, end LabelRef) {
 	SUBQ(dstAlign, srcOff)
 
 	// Move 128 bytes/loop
-	Label(name + "big_loop_back")
 	DECQ(bigLoops)
 	JA(LabelRef(name + "forward_sse_loop_32"))
 
+	Label(name + "big_loop_back")
 	MOVOU(Mem{Disp: -32, Base: src, Scale: 1, Index: srcOff}, X4)
 	MOVOU(Mem{Disp: -16, Base: src, Scale: 1, Index: srcOff}, X5)
 	MOVOU(Mem{Disp: 0, Base: src, Scale: 1, Index: srcOff}, X6)
@@ -1583,7 +1583,8 @@ func genMemMoveLong(name string, dst, src, length reg.GPVirtual, end LabelRef) {
 	MOVOU(X10, Mem{Disp: 64, Base: dst, Scale: 1, Index: srcOff})
 	MOVOU(X11, Mem{Disp: 80, Base: dst, Scale: 1, Index: srcOff})
 	ADDQ(U8(128), srcOff)
-	JMP(LabelRef(name + "big_loop_back"))
+	DECQ(bigLoops)
+	JNA(LabelRef(name + "big_loop_back"))
 
 	Label(name + "forward_sse_loop_32")
 	MOVOU(Mem{Disp: -32, Base: src, Scale: 1, Index: srcOff}, X4)
@@ -1592,16 +1593,7 @@ func genMemMoveLong(name string, dst, src, length reg.GPVirtual, end LabelRef) {
 	MOVOU(X5, Mem{Disp: -16, Base: dst, Scale: 1, Index: srcOff})
 	ADDQ(U8(32), srcOff)
 	CMPQ(length, srcOff)
-	JAE(LabelRef(name + "forward_sse_loop"))
-
-	Label(name + "forward_sse_loop")
-	MOVOU(Mem{Disp: -32, Base: src, Scale: 1, Index: srcOff}, X4)
-	MOVOU(Mem{Disp: -16, Base: src, Scale: 1, Index: srcOff}, X5)
-	MOVOU(X4, Mem{Disp: -32, Base: dst, Scale: 1, Index: srcOff})
-	MOVOU(X5, Mem{Disp: -16, Base: dst, Scale: 1, Index: srcOff})
-	ADDQ(U8(32), srcOff)
-	CMPQ(length, srcOff)
-	JAE(LabelRef(name + "forward_sse_loop"))
+	JAE(LabelRef(name + "forward_sse_loop_32"))
 
 	// sse_tail patches up the beginning and end of the transfer.
 	MOVOU(X0, Mem{Base: dst, Disp: 0})

@@ -219,10 +219,10 @@ memmove_long_repeat_emit_encodeBlockAsm:
 	ANDL  $0x0000001f, R10
 	MOVQ  $0x00000040, R12
 	SUBQ  R10, R12
-
-emit_lit_memmove_long_repeat_emit_encodeBlockAsmlarge_big_loop_back:
 	DECQ  R11
 	JA    emit_lit_memmove_long_repeat_emit_encodeBlockAsmlarge_forward_sse_loop_32
+
+emit_lit_memmove_long_repeat_emit_encodeBlockAsmlarge_big_loop_back:
 	MOVOU -32(R9)(R12*1), X4
 	MOVOU -16(R9)(R12*1), X5
 	MOVOU (R9)(R12*1), X6
@@ -240,7 +240,8 @@ emit_lit_memmove_long_repeat_emit_encodeBlockAsmlarge_big_loop_back:
 	MOVOU X10, 64(AX)(R12*1)
 	MOVOU X11, 80(AX)(R12*1)
 	ADDQ  $0x80, R12
-	JMP   emit_lit_memmove_long_repeat_emit_encodeBlockAsmlarge_big_loop_back
+	DECQ  R11
+	JNA   emit_lit_memmove_long_repeat_emit_encodeBlockAsmlarge_big_loop_back
 
 emit_lit_memmove_long_repeat_emit_encodeBlockAsmlarge_forward_sse_loop_32:
 	MOVOU -32(R9)(R12*1), X4
@@ -249,16 +250,7 @@ emit_lit_memmove_long_repeat_emit_encodeBlockAsmlarge_forward_sse_loop_32:
 	MOVOU X5, -16(AX)(R12*1)
 	ADDQ  $0x20, R12
 	CMPQ  R8, R12
-	JAE   emit_lit_memmove_long_repeat_emit_encodeBlockAsmlarge_forward_sse_loop
-
-emit_lit_memmove_long_repeat_emit_encodeBlockAsmlarge_forward_sse_loop:
-	MOVOU -32(R9)(R12*1), X4
-	MOVOU -16(R9)(R12*1), X5
-	MOVOU X4, -32(AX)(R12*1)
-	MOVOU X5, -16(AX)(R12*1)
-	ADDQ  $0x20, R12
-	CMPQ  R8, R12
-	JAE   emit_lit_memmove_long_repeat_emit_encodeBlockAsmlarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_repeat_emit_encodeBlockAsmlarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(R8*1)
@@ -750,10 +742,10 @@ memmove_long_match_emit_encodeBlockAsm:
 	ANDL  $0x0000001f, R9
 	MOVQ  $0x00000040, R11
 	SUBQ  R9, R11
-
-emit_lit_memmove_long_match_emit_encodeBlockAsmlarge_big_loop_back:
 	DECQ  R10
 	JA    emit_lit_memmove_long_match_emit_encodeBlockAsmlarge_forward_sse_loop_32
+
+emit_lit_memmove_long_match_emit_encodeBlockAsmlarge_big_loop_back:
 	MOVOU -32(SI)(R11*1), X4
 	MOVOU -16(SI)(R11*1), X5
 	MOVOU (SI)(R11*1), X6
@@ -771,7 +763,8 @@ emit_lit_memmove_long_match_emit_encodeBlockAsmlarge_big_loop_back:
 	MOVOU X10, 64(AX)(R11*1)
 	MOVOU X11, 80(AX)(R11*1)
 	ADDQ  $0x80, R11
-	JMP   emit_lit_memmove_long_match_emit_encodeBlockAsmlarge_big_loop_back
+	DECQ  R10
+	JNA   emit_lit_memmove_long_match_emit_encodeBlockAsmlarge_big_loop_back
 
 emit_lit_memmove_long_match_emit_encodeBlockAsmlarge_forward_sse_loop_32:
 	MOVOU -32(SI)(R11*1), X4
@@ -780,16 +773,7 @@ emit_lit_memmove_long_match_emit_encodeBlockAsmlarge_forward_sse_loop_32:
 	MOVOU X5, -16(AX)(R11*1)
 	ADDQ  $0x20, R11
 	CMPQ  R8, R11
-	JAE   emit_lit_memmove_long_match_emit_encodeBlockAsmlarge_forward_sse_loop
-
-emit_lit_memmove_long_match_emit_encodeBlockAsmlarge_forward_sse_loop:
-	MOVOU -32(SI)(R11*1), X4
-	MOVOU -16(SI)(R11*1), X5
-	MOVOU X4, -32(AX)(R11*1)
-	MOVOU X5, -16(AX)(R11*1)
-	ADDQ  $0x20, R11
-	CMPQ  R8, R11
-	JAE   emit_lit_memmove_long_match_emit_encodeBlockAsmlarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_match_emit_encodeBlockAsmlarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(R8*1)
@@ -1198,10 +1182,10 @@ memmove_long_emit_remainder_encodeBlockAsm:
 	ANDL  $0x0000001f, BP
 	MOVQ  $0x00000040, DI
 	SUBQ  BP, DI
-
-emit_lit_memmove_long_emit_remainder_encodeBlockAsmlarge_big_loop_back:
 	DECQ  SI
 	JA    emit_lit_memmove_long_emit_remainder_encodeBlockAsmlarge_forward_sse_loop_32
+
+emit_lit_memmove_long_emit_remainder_encodeBlockAsmlarge_big_loop_back:
 	MOVOU -32(CX)(DI*1), X4
 	MOVOU -16(CX)(DI*1), X5
 	MOVOU (CX)(DI*1), X6
@@ -1219,7 +1203,8 @@ emit_lit_memmove_long_emit_remainder_encodeBlockAsmlarge_big_loop_back:
 	MOVOU X10, 64(AX)(DI*1)
 	MOVOU X11, 80(AX)(DI*1)
 	ADDQ  $0x80, DI
-	JMP   emit_lit_memmove_long_emit_remainder_encodeBlockAsmlarge_big_loop_back
+	DECQ  SI
+	JNA   emit_lit_memmove_long_emit_remainder_encodeBlockAsmlarge_big_loop_back
 
 emit_lit_memmove_long_emit_remainder_encodeBlockAsmlarge_forward_sse_loop_32:
 	MOVOU -32(CX)(DI*1), X4
@@ -1228,16 +1213,7 @@ emit_lit_memmove_long_emit_remainder_encodeBlockAsmlarge_forward_sse_loop_32:
 	MOVOU X5, -16(AX)(DI*1)
 	ADDQ  $0x20, DI
 	CMPQ  BX, DI
-	JAE   emit_lit_memmove_long_emit_remainder_encodeBlockAsmlarge_forward_sse_loop
-
-emit_lit_memmove_long_emit_remainder_encodeBlockAsmlarge_forward_sse_loop:
-	MOVOU -32(CX)(DI*1), X4
-	MOVOU -16(CX)(DI*1), X5
-	MOVOU X4, -32(AX)(DI*1)
-	MOVOU X5, -16(AX)(DI*1)
-	ADDQ  $0x20, DI
-	CMPQ  BX, DI
-	JAE   emit_lit_memmove_long_emit_remainder_encodeBlockAsmlarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_emit_remainder_encodeBlockAsmlarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(BX*1)
@@ -1463,10 +1439,10 @@ memmove_long_repeat_emit_encodeBlockAsm12B:
 	ANDL  $0x0000001f, R10
 	MOVQ  $0x00000040, R12
 	SUBQ  R10, R12
-
-emit_lit_memmove_long_repeat_emit_encodeBlockAsm12Blarge_big_loop_back:
 	DECQ  R11
 	JA    emit_lit_memmove_long_repeat_emit_encodeBlockAsm12Blarge_forward_sse_loop_32
+
+emit_lit_memmove_long_repeat_emit_encodeBlockAsm12Blarge_big_loop_back:
 	MOVOU -32(R9)(R12*1), X4
 	MOVOU -16(R9)(R12*1), X5
 	MOVOU (R9)(R12*1), X6
@@ -1484,7 +1460,8 @@ emit_lit_memmove_long_repeat_emit_encodeBlockAsm12Blarge_big_loop_back:
 	MOVOU X10, 64(AX)(R12*1)
 	MOVOU X11, 80(AX)(R12*1)
 	ADDQ  $0x80, R12
-	JMP   emit_lit_memmove_long_repeat_emit_encodeBlockAsm12Blarge_big_loop_back
+	DECQ  R11
+	JNA   emit_lit_memmove_long_repeat_emit_encodeBlockAsm12Blarge_big_loop_back
 
 emit_lit_memmove_long_repeat_emit_encodeBlockAsm12Blarge_forward_sse_loop_32:
 	MOVOU -32(R9)(R12*1), X4
@@ -1493,16 +1470,7 @@ emit_lit_memmove_long_repeat_emit_encodeBlockAsm12Blarge_forward_sse_loop_32:
 	MOVOU X5, -16(AX)(R12*1)
 	ADDQ  $0x20, R12
 	CMPQ  R8, R12
-	JAE   emit_lit_memmove_long_repeat_emit_encodeBlockAsm12Blarge_forward_sse_loop
-
-emit_lit_memmove_long_repeat_emit_encodeBlockAsm12Blarge_forward_sse_loop:
-	MOVOU -32(R9)(R12*1), X4
-	MOVOU -16(R9)(R12*1), X5
-	MOVOU X4, -32(AX)(R12*1)
-	MOVOU X5, -16(AX)(R12*1)
-	ADDQ  $0x20, R12
-	CMPQ  R8, R12
-	JAE   emit_lit_memmove_long_repeat_emit_encodeBlockAsm12Blarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_repeat_emit_encodeBlockAsm12Blarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(R8*1)
@@ -1994,10 +1962,10 @@ memmove_long_match_emit_encodeBlockAsm12B:
 	ANDL  $0x0000001f, R9
 	MOVQ  $0x00000040, R11
 	SUBQ  R9, R11
-
-emit_lit_memmove_long_match_emit_encodeBlockAsm12Blarge_big_loop_back:
 	DECQ  R10
 	JA    emit_lit_memmove_long_match_emit_encodeBlockAsm12Blarge_forward_sse_loop_32
+
+emit_lit_memmove_long_match_emit_encodeBlockAsm12Blarge_big_loop_back:
 	MOVOU -32(SI)(R11*1), X4
 	MOVOU -16(SI)(R11*1), X5
 	MOVOU (SI)(R11*1), X6
@@ -2015,7 +1983,8 @@ emit_lit_memmove_long_match_emit_encodeBlockAsm12Blarge_big_loop_back:
 	MOVOU X10, 64(AX)(R11*1)
 	MOVOU X11, 80(AX)(R11*1)
 	ADDQ  $0x80, R11
-	JMP   emit_lit_memmove_long_match_emit_encodeBlockAsm12Blarge_big_loop_back
+	DECQ  R10
+	JNA   emit_lit_memmove_long_match_emit_encodeBlockAsm12Blarge_big_loop_back
 
 emit_lit_memmove_long_match_emit_encodeBlockAsm12Blarge_forward_sse_loop_32:
 	MOVOU -32(SI)(R11*1), X4
@@ -2024,16 +1993,7 @@ emit_lit_memmove_long_match_emit_encodeBlockAsm12Blarge_forward_sse_loop_32:
 	MOVOU X5, -16(AX)(R11*1)
 	ADDQ  $0x20, R11
 	CMPQ  R8, R11
-	JAE   emit_lit_memmove_long_match_emit_encodeBlockAsm12Blarge_forward_sse_loop
-
-emit_lit_memmove_long_match_emit_encodeBlockAsm12Blarge_forward_sse_loop:
-	MOVOU -32(SI)(R11*1), X4
-	MOVOU -16(SI)(R11*1), X5
-	MOVOU X4, -32(AX)(R11*1)
-	MOVOU X5, -16(AX)(R11*1)
-	ADDQ  $0x20, R11
-	CMPQ  R8, R11
-	JAE   emit_lit_memmove_long_match_emit_encodeBlockAsm12Blarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_match_emit_encodeBlockAsm12Blarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(R8*1)
@@ -2442,10 +2402,10 @@ memmove_long_emit_remainder_encodeBlockAsm12B:
 	ANDL  $0x0000001f, BP
 	MOVQ  $0x00000040, DI
 	SUBQ  BP, DI
-
-emit_lit_memmove_long_emit_remainder_encodeBlockAsm12Blarge_big_loop_back:
 	DECQ  SI
 	JA    emit_lit_memmove_long_emit_remainder_encodeBlockAsm12Blarge_forward_sse_loop_32
+
+emit_lit_memmove_long_emit_remainder_encodeBlockAsm12Blarge_big_loop_back:
 	MOVOU -32(CX)(DI*1), X4
 	MOVOU -16(CX)(DI*1), X5
 	MOVOU (CX)(DI*1), X6
@@ -2463,7 +2423,8 @@ emit_lit_memmove_long_emit_remainder_encodeBlockAsm12Blarge_big_loop_back:
 	MOVOU X10, 64(AX)(DI*1)
 	MOVOU X11, 80(AX)(DI*1)
 	ADDQ  $0x80, DI
-	JMP   emit_lit_memmove_long_emit_remainder_encodeBlockAsm12Blarge_big_loop_back
+	DECQ  SI
+	JNA   emit_lit_memmove_long_emit_remainder_encodeBlockAsm12Blarge_big_loop_back
 
 emit_lit_memmove_long_emit_remainder_encodeBlockAsm12Blarge_forward_sse_loop_32:
 	MOVOU -32(CX)(DI*1), X4
@@ -2472,16 +2433,7 @@ emit_lit_memmove_long_emit_remainder_encodeBlockAsm12Blarge_forward_sse_loop_32:
 	MOVOU X5, -16(AX)(DI*1)
 	ADDQ  $0x20, DI
 	CMPQ  BX, DI
-	JAE   emit_lit_memmove_long_emit_remainder_encodeBlockAsm12Blarge_forward_sse_loop
-
-emit_lit_memmove_long_emit_remainder_encodeBlockAsm12Blarge_forward_sse_loop:
-	MOVOU -32(CX)(DI*1), X4
-	MOVOU -16(CX)(DI*1), X5
-	MOVOU X4, -32(AX)(DI*1)
-	MOVOU X5, -16(AX)(DI*1)
-	ADDQ  $0x20, DI
-	CMPQ  BX, DI
-	JAE   emit_lit_memmove_long_emit_remainder_encodeBlockAsm12Blarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_emit_remainder_encodeBlockAsm12Blarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(BX*1)
@@ -2707,10 +2659,10 @@ memmove_long_repeat_emit_encodeBlockAsm10B:
 	ANDL  $0x0000001f, R10
 	MOVQ  $0x00000040, R12
 	SUBQ  R10, R12
-
-emit_lit_memmove_long_repeat_emit_encodeBlockAsm10Blarge_big_loop_back:
 	DECQ  R11
 	JA    emit_lit_memmove_long_repeat_emit_encodeBlockAsm10Blarge_forward_sse_loop_32
+
+emit_lit_memmove_long_repeat_emit_encodeBlockAsm10Blarge_big_loop_back:
 	MOVOU -32(R9)(R12*1), X4
 	MOVOU -16(R9)(R12*1), X5
 	MOVOU (R9)(R12*1), X6
@@ -2728,7 +2680,8 @@ emit_lit_memmove_long_repeat_emit_encodeBlockAsm10Blarge_big_loop_back:
 	MOVOU X10, 64(AX)(R12*1)
 	MOVOU X11, 80(AX)(R12*1)
 	ADDQ  $0x80, R12
-	JMP   emit_lit_memmove_long_repeat_emit_encodeBlockAsm10Blarge_big_loop_back
+	DECQ  R11
+	JNA   emit_lit_memmove_long_repeat_emit_encodeBlockAsm10Blarge_big_loop_back
 
 emit_lit_memmove_long_repeat_emit_encodeBlockAsm10Blarge_forward_sse_loop_32:
 	MOVOU -32(R9)(R12*1), X4
@@ -2737,16 +2690,7 @@ emit_lit_memmove_long_repeat_emit_encodeBlockAsm10Blarge_forward_sse_loop_32:
 	MOVOU X5, -16(AX)(R12*1)
 	ADDQ  $0x20, R12
 	CMPQ  R8, R12
-	JAE   emit_lit_memmove_long_repeat_emit_encodeBlockAsm10Blarge_forward_sse_loop
-
-emit_lit_memmove_long_repeat_emit_encodeBlockAsm10Blarge_forward_sse_loop:
-	MOVOU -32(R9)(R12*1), X4
-	MOVOU -16(R9)(R12*1), X5
-	MOVOU X4, -32(AX)(R12*1)
-	MOVOU X5, -16(AX)(R12*1)
-	ADDQ  $0x20, R12
-	CMPQ  R8, R12
-	JAE   emit_lit_memmove_long_repeat_emit_encodeBlockAsm10Blarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_repeat_emit_encodeBlockAsm10Blarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(R8*1)
@@ -3238,10 +3182,10 @@ memmove_long_match_emit_encodeBlockAsm10B:
 	ANDL  $0x0000001f, R9
 	MOVQ  $0x00000040, R11
 	SUBQ  R9, R11
-
-emit_lit_memmove_long_match_emit_encodeBlockAsm10Blarge_big_loop_back:
 	DECQ  R10
 	JA    emit_lit_memmove_long_match_emit_encodeBlockAsm10Blarge_forward_sse_loop_32
+
+emit_lit_memmove_long_match_emit_encodeBlockAsm10Blarge_big_loop_back:
 	MOVOU -32(SI)(R11*1), X4
 	MOVOU -16(SI)(R11*1), X5
 	MOVOU (SI)(R11*1), X6
@@ -3259,7 +3203,8 @@ emit_lit_memmove_long_match_emit_encodeBlockAsm10Blarge_big_loop_back:
 	MOVOU X10, 64(AX)(R11*1)
 	MOVOU X11, 80(AX)(R11*1)
 	ADDQ  $0x80, R11
-	JMP   emit_lit_memmove_long_match_emit_encodeBlockAsm10Blarge_big_loop_back
+	DECQ  R10
+	JNA   emit_lit_memmove_long_match_emit_encodeBlockAsm10Blarge_big_loop_back
 
 emit_lit_memmove_long_match_emit_encodeBlockAsm10Blarge_forward_sse_loop_32:
 	MOVOU -32(SI)(R11*1), X4
@@ -3268,16 +3213,7 @@ emit_lit_memmove_long_match_emit_encodeBlockAsm10Blarge_forward_sse_loop_32:
 	MOVOU X5, -16(AX)(R11*1)
 	ADDQ  $0x20, R11
 	CMPQ  R8, R11
-	JAE   emit_lit_memmove_long_match_emit_encodeBlockAsm10Blarge_forward_sse_loop
-
-emit_lit_memmove_long_match_emit_encodeBlockAsm10Blarge_forward_sse_loop:
-	MOVOU -32(SI)(R11*1), X4
-	MOVOU -16(SI)(R11*1), X5
-	MOVOU X4, -32(AX)(R11*1)
-	MOVOU X5, -16(AX)(R11*1)
-	ADDQ  $0x20, R11
-	CMPQ  R8, R11
-	JAE   emit_lit_memmove_long_match_emit_encodeBlockAsm10Blarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_match_emit_encodeBlockAsm10Blarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(R8*1)
@@ -3686,10 +3622,10 @@ memmove_long_emit_remainder_encodeBlockAsm10B:
 	ANDL  $0x0000001f, BP
 	MOVQ  $0x00000040, DI
 	SUBQ  BP, DI
-
-emit_lit_memmove_long_emit_remainder_encodeBlockAsm10Blarge_big_loop_back:
 	DECQ  SI
 	JA    emit_lit_memmove_long_emit_remainder_encodeBlockAsm10Blarge_forward_sse_loop_32
+
+emit_lit_memmove_long_emit_remainder_encodeBlockAsm10Blarge_big_loop_back:
 	MOVOU -32(CX)(DI*1), X4
 	MOVOU -16(CX)(DI*1), X5
 	MOVOU (CX)(DI*1), X6
@@ -3707,7 +3643,8 @@ emit_lit_memmove_long_emit_remainder_encodeBlockAsm10Blarge_big_loop_back:
 	MOVOU X10, 64(AX)(DI*1)
 	MOVOU X11, 80(AX)(DI*1)
 	ADDQ  $0x80, DI
-	JMP   emit_lit_memmove_long_emit_remainder_encodeBlockAsm10Blarge_big_loop_back
+	DECQ  SI
+	JNA   emit_lit_memmove_long_emit_remainder_encodeBlockAsm10Blarge_big_loop_back
 
 emit_lit_memmove_long_emit_remainder_encodeBlockAsm10Blarge_forward_sse_loop_32:
 	MOVOU -32(CX)(DI*1), X4
@@ -3716,16 +3653,7 @@ emit_lit_memmove_long_emit_remainder_encodeBlockAsm10Blarge_forward_sse_loop_32:
 	MOVOU X5, -16(AX)(DI*1)
 	ADDQ  $0x20, DI
 	CMPQ  BX, DI
-	JAE   emit_lit_memmove_long_emit_remainder_encodeBlockAsm10Blarge_forward_sse_loop
-
-emit_lit_memmove_long_emit_remainder_encodeBlockAsm10Blarge_forward_sse_loop:
-	MOVOU -32(CX)(DI*1), X4
-	MOVOU -16(CX)(DI*1), X5
-	MOVOU X4, -32(AX)(DI*1)
-	MOVOU X5, -16(AX)(DI*1)
-	ADDQ  $0x20, DI
-	CMPQ  BX, DI
-	JAE   emit_lit_memmove_long_emit_remainder_encodeBlockAsm10Blarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_emit_remainder_encodeBlockAsm10Blarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(BX*1)
@@ -3951,10 +3879,10 @@ memmove_long_repeat_emit_encodeBlockAsm8B:
 	ANDL  $0x0000001f, R10
 	MOVQ  $0x00000040, R12
 	SUBQ  R10, R12
-
-emit_lit_memmove_long_repeat_emit_encodeBlockAsm8Blarge_big_loop_back:
 	DECQ  R11
 	JA    emit_lit_memmove_long_repeat_emit_encodeBlockAsm8Blarge_forward_sse_loop_32
+
+emit_lit_memmove_long_repeat_emit_encodeBlockAsm8Blarge_big_loop_back:
 	MOVOU -32(R9)(R12*1), X4
 	MOVOU -16(R9)(R12*1), X5
 	MOVOU (R9)(R12*1), X6
@@ -3972,7 +3900,8 @@ emit_lit_memmove_long_repeat_emit_encodeBlockAsm8Blarge_big_loop_back:
 	MOVOU X10, 64(AX)(R12*1)
 	MOVOU X11, 80(AX)(R12*1)
 	ADDQ  $0x80, R12
-	JMP   emit_lit_memmove_long_repeat_emit_encodeBlockAsm8Blarge_big_loop_back
+	DECQ  R11
+	JNA   emit_lit_memmove_long_repeat_emit_encodeBlockAsm8Blarge_big_loop_back
 
 emit_lit_memmove_long_repeat_emit_encodeBlockAsm8Blarge_forward_sse_loop_32:
 	MOVOU -32(R9)(R12*1), X4
@@ -3981,16 +3910,7 @@ emit_lit_memmove_long_repeat_emit_encodeBlockAsm8Blarge_forward_sse_loop_32:
 	MOVOU X5, -16(AX)(R12*1)
 	ADDQ  $0x20, R12
 	CMPQ  R8, R12
-	JAE   emit_lit_memmove_long_repeat_emit_encodeBlockAsm8Blarge_forward_sse_loop
-
-emit_lit_memmove_long_repeat_emit_encodeBlockAsm8Blarge_forward_sse_loop:
-	MOVOU -32(R9)(R12*1), X4
-	MOVOU -16(R9)(R12*1), X5
-	MOVOU X4, -32(AX)(R12*1)
-	MOVOU X5, -16(AX)(R12*1)
-	ADDQ  $0x20, R12
-	CMPQ  R8, R12
-	JAE   emit_lit_memmove_long_repeat_emit_encodeBlockAsm8Blarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_repeat_emit_encodeBlockAsm8Blarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(R8*1)
@@ -4482,10 +4402,10 @@ memmove_long_match_emit_encodeBlockAsm8B:
 	ANDL  $0x0000001f, R9
 	MOVQ  $0x00000040, R11
 	SUBQ  R9, R11
-
-emit_lit_memmove_long_match_emit_encodeBlockAsm8Blarge_big_loop_back:
 	DECQ  R10
 	JA    emit_lit_memmove_long_match_emit_encodeBlockAsm8Blarge_forward_sse_loop_32
+
+emit_lit_memmove_long_match_emit_encodeBlockAsm8Blarge_big_loop_back:
 	MOVOU -32(SI)(R11*1), X4
 	MOVOU -16(SI)(R11*1), X5
 	MOVOU (SI)(R11*1), X6
@@ -4503,7 +4423,8 @@ emit_lit_memmove_long_match_emit_encodeBlockAsm8Blarge_big_loop_back:
 	MOVOU X10, 64(AX)(R11*1)
 	MOVOU X11, 80(AX)(R11*1)
 	ADDQ  $0x80, R11
-	JMP   emit_lit_memmove_long_match_emit_encodeBlockAsm8Blarge_big_loop_back
+	DECQ  R10
+	JNA   emit_lit_memmove_long_match_emit_encodeBlockAsm8Blarge_big_loop_back
 
 emit_lit_memmove_long_match_emit_encodeBlockAsm8Blarge_forward_sse_loop_32:
 	MOVOU -32(SI)(R11*1), X4
@@ -4512,16 +4433,7 @@ emit_lit_memmove_long_match_emit_encodeBlockAsm8Blarge_forward_sse_loop_32:
 	MOVOU X5, -16(AX)(R11*1)
 	ADDQ  $0x20, R11
 	CMPQ  R8, R11
-	JAE   emit_lit_memmove_long_match_emit_encodeBlockAsm8Blarge_forward_sse_loop
-
-emit_lit_memmove_long_match_emit_encodeBlockAsm8Blarge_forward_sse_loop:
-	MOVOU -32(SI)(R11*1), X4
-	MOVOU -16(SI)(R11*1), X5
-	MOVOU X4, -32(AX)(R11*1)
-	MOVOU X5, -16(AX)(R11*1)
-	ADDQ  $0x20, R11
-	CMPQ  R8, R11
-	JAE   emit_lit_memmove_long_match_emit_encodeBlockAsm8Blarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_match_emit_encodeBlockAsm8Blarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(R8*1)
@@ -4930,10 +4842,10 @@ memmove_long_emit_remainder_encodeBlockAsm8B:
 	ANDL  $0x0000001f, BP
 	MOVQ  $0x00000040, DI
 	SUBQ  BP, DI
-
-emit_lit_memmove_long_emit_remainder_encodeBlockAsm8Blarge_big_loop_back:
 	DECQ  SI
 	JA    emit_lit_memmove_long_emit_remainder_encodeBlockAsm8Blarge_forward_sse_loop_32
+
+emit_lit_memmove_long_emit_remainder_encodeBlockAsm8Blarge_big_loop_back:
 	MOVOU -32(CX)(DI*1), X4
 	MOVOU -16(CX)(DI*1), X5
 	MOVOU (CX)(DI*1), X6
@@ -4951,7 +4863,8 @@ emit_lit_memmove_long_emit_remainder_encodeBlockAsm8Blarge_big_loop_back:
 	MOVOU X10, 64(AX)(DI*1)
 	MOVOU X11, 80(AX)(DI*1)
 	ADDQ  $0x80, DI
-	JMP   emit_lit_memmove_long_emit_remainder_encodeBlockAsm8Blarge_big_loop_back
+	DECQ  SI
+	JNA   emit_lit_memmove_long_emit_remainder_encodeBlockAsm8Blarge_big_loop_back
 
 emit_lit_memmove_long_emit_remainder_encodeBlockAsm8Blarge_forward_sse_loop_32:
 	MOVOU -32(CX)(DI*1), X4
@@ -4960,16 +4873,7 @@ emit_lit_memmove_long_emit_remainder_encodeBlockAsm8Blarge_forward_sse_loop_32:
 	MOVOU X5, -16(AX)(DI*1)
 	ADDQ  $0x20, DI
 	CMPQ  BX, DI
-	JAE   emit_lit_memmove_long_emit_remainder_encodeBlockAsm8Blarge_forward_sse_loop
-
-emit_lit_memmove_long_emit_remainder_encodeBlockAsm8Blarge_forward_sse_loop:
-	MOVOU -32(CX)(DI*1), X4
-	MOVOU -16(CX)(DI*1), X5
-	MOVOU X4, -32(AX)(DI*1)
-	MOVOU X5, -16(AX)(DI*1)
-	ADDQ  $0x20, DI
-	CMPQ  BX, DI
-	JAE   emit_lit_memmove_long_emit_remainder_encodeBlockAsm8Blarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_emit_remainder_encodeBlockAsm8Blarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(BX*1)
@@ -5195,10 +5099,10 @@ memmove_long_repeat_emit_encodeSnappyBlockAsm:
 	ANDL  $0x0000001f, R9
 	MOVQ  $0x00000040, R11
 	SUBQ  R9, R11
-
-emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsmlarge_big_loop_back:
 	DECQ  R10
 	JA    emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsmlarge_forward_sse_loop_32
+
+emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsmlarge_big_loop_back:
 	MOVOU -32(R8)(R11*1), X4
 	MOVOU -16(R8)(R11*1), X5
 	MOVOU (R8)(R11*1), X6
@@ -5216,7 +5120,8 @@ emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsmlarge_big_loop_back:
 	MOVOU X10, 64(AX)(R11*1)
 	MOVOU X11, 80(AX)(R11*1)
 	ADDQ  $0x80, R11
-	JMP   emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsmlarge_big_loop_back
+	DECQ  R10
+	JNA   emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsmlarge_big_loop_back
 
 emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsmlarge_forward_sse_loop_32:
 	MOVOU -32(R8)(R11*1), X4
@@ -5225,16 +5130,7 @@ emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsmlarge_forward_sse_loop_32:
 	MOVOU X5, -16(AX)(R11*1)
 	ADDQ  $0x20, R11
 	CMPQ  DI, R11
-	JAE   emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsmlarge_forward_sse_loop
-
-emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsmlarge_forward_sse_loop:
-	MOVOU -32(R8)(R11*1), X4
-	MOVOU -16(R8)(R11*1), X5
-	MOVOU X4, -32(AX)(R11*1)
-	MOVOU X5, -16(AX)(R11*1)
-	ADDQ  $0x20, R11
-	CMPQ  DI, R11
-	JAE   emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsmlarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsmlarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(DI*1)
@@ -5524,10 +5420,10 @@ memmove_long_match_emit_encodeSnappyBlockAsm:
 	ANDL  $0x0000001f, R9
 	MOVQ  $0x00000040, R11
 	SUBQ  R9, R11
-
-emit_lit_memmove_long_match_emit_encodeSnappyBlockAsmlarge_big_loop_back:
 	DECQ  R10
 	JA    emit_lit_memmove_long_match_emit_encodeSnappyBlockAsmlarge_forward_sse_loop_32
+
+emit_lit_memmove_long_match_emit_encodeSnappyBlockAsmlarge_big_loop_back:
 	MOVOU -32(SI)(R11*1), X4
 	MOVOU -16(SI)(R11*1), X5
 	MOVOU (SI)(R11*1), X6
@@ -5545,7 +5441,8 @@ emit_lit_memmove_long_match_emit_encodeSnappyBlockAsmlarge_big_loop_back:
 	MOVOU X10, 64(AX)(R11*1)
 	MOVOU X11, 80(AX)(R11*1)
 	ADDQ  $0x80, R11
-	JMP   emit_lit_memmove_long_match_emit_encodeSnappyBlockAsmlarge_big_loop_back
+	DECQ  R10
+	JNA   emit_lit_memmove_long_match_emit_encodeSnappyBlockAsmlarge_big_loop_back
 
 emit_lit_memmove_long_match_emit_encodeSnappyBlockAsmlarge_forward_sse_loop_32:
 	MOVOU -32(SI)(R11*1), X4
@@ -5554,16 +5451,7 @@ emit_lit_memmove_long_match_emit_encodeSnappyBlockAsmlarge_forward_sse_loop_32:
 	MOVOU X5, -16(AX)(R11*1)
 	ADDQ  $0x20, R11
 	CMPQ  R8, R11
-	JAE   emit_lit_memmove_long_match_emit_encodeSnappyBlockAsmlarge_forward_sse_loop
-
-emit_lit_memmove_long_match_emit_encodeSnappyBlockAsmlarge_forward_sse_loop:
-	MOVOU -32(SI)(R11*1), X4
-	MOVOU -16(SI)(R11*1), X5
-	MOVOU X4, -32(AX)(R11*1)
-	MOVOU X5, -16(AX)(R11*1)
-	ADDQ  $0x20, R11
-	CMPQ  R8, R11
-	JAE   emit_lit_memmove_long_match_emit_encodeSnappyBlockAsmlarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_match_emit_encodeSnappyBlockAsmlarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(R8*1)
@@ -5840,10 +5728,10 @@ memmove_long_emit_remainder_encodeSnappyBlockAsm:
 	ANDL  $0x0000001f, BP
 	MOVQ  $0x00000040, DI
 	SUBQ  BP, DI
-
-emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsmlarge_big_loop_back:
 	DECQ  SI
 	JA    emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsmlarge_forward_sse_loop_32
+
+emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsmlarge_big_loop_back:
 	MOVOU -32(CX)(DI*1), X4
 	MOVOU -16(CX)(DI*1), X5
 	MOVOU (CX)(DI*1), X6
@@ -5861,7 +5749,8 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsmlarge_big_loop_back:
 	MOVOU X10, 64(AX)(DI*1)
 	MOVOU X11, 80(AX)(DI*1)
 	ADDQ  $0x80, DI
-	JMP   emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsmlarge_big_loop_back
+	DECQ  SI
+	JNA   emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsmlarge_big_loop_back
 
 emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsmlarge_forward_sse_loop_32:
 	MOVOU -32(CX)(DI*1), X4
@@ -5870,16 +5759,7 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsmlarge_forward_sse_loop_
 	MOVOU X5, -16(AX)(DI*1)
 	ADDQ  $0x20, DI
 	CMPQ  BX, DI
-	JAE   emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsmlarge_forward_sse_loop
-
-emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsmlarge_forward_sse_loop:
-	MOVOU -32(CX)(DI*1), X4
-	MOVOU -16(CX)(DI*1), X5
-	MOVOU X4, -32(AX)(DI*1)
-	MOVOU X5, -16(AX)(DI*1)
-	ADDQ  $0x20, DI
-	CMPQ  BX, DI
-	JAE   emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsmlarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsmlarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(BX*1)
@@ -6105,10 +5985,10 @@ memmove_long_repeat_emit_encodeSnappyBlockAsm12B:
 	ANDL  $0x0000001f, R9
 	MOVQ  $0x00000040, R11
 	SUBQ  R9, R11
-
-emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm12Blarge_big_loop_back:
 	DECQ  R10
 	JA    emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm12Blarge_forward_sse_loop_32
+
+emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm12Blarge_big_loop_back:
 	MOVOU -32(R8)(R11*1), X4
 	MOVOU -16(R8)(R11*1), X5
 	MOVOU (R8)(R11*1), X6
@@ -6126,7 +6006,8 @@ emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm12Blarge_big_loop_back:
 	MOVOU X10, 64(AX)(R11*1)
 	MOVOU X11, 80(AX)(R11*1)
 	ADDQ  $0x80, R11
-	JMP   emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm12Blarge_big_loop_back
+	DECQ  R10
+	JNA   emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm12Blarge_big_loop_back
 
 emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm12Blarge_forward_sse_loop_32:
 	MOVOU -32(R8)(R11*1), X4
@@ -6135,16 +6016,7 @@ emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm12Blarge_forward_sse_loop_
 	MOVOU X5, -16(AX)(R11*1)
 	ADDQ  $0x20, R11
 	CMPQ  DI, R11
-	JAE   emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm12Blarge_forward_sse_loop
-
-emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm12Blarge_forward_sse_loop:
-	MOVOU -32(R8)(R11*1), X4
-	MOVOU -16(R8)(R11*1), X5
-	MOVOU X4, -32(AX)(R11*1)
-	MOVOU X5, -16(AX)(R11*1)
-	ADDQ  $0x20, R11
-	CMPQ  DI, R11
-	JAE   emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm12Blarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm12Blarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(DI*1)
@@ -6434,10 +6306,10 @@ memmove_long_match_emit_encodeSnappyBlockAsm12B:
 	ANDL  $0x0000001f, R9
 	MOVQ  $0x00000040, R11
 	SUBQ  R9, R11
-
-emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm12Blarge_big_loop_back:
 	DECQ  R10
 	JA    emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm12Blarge_forward_sse_loop_32
+
+emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm12Blarge_big_loop_back:
 	MOVOU -32(SI)(R11*1), X4
 	MOVOU -16(SI)(R11*1), X5
 	MOVOU (SI)(R11*1), X6
@@ -6455,7 +6327,8 @@ emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm12Blarge_big_loop_back:
 	MOVOU X10, 64(AX)(R11*1)
 	MOVOU X11, 80(AX)(R11*1)
 	ADDQ  $0x80, R11
-	JMP   emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm12Blarge_big_loop_back
+	DECQ  R10
+	JNA   emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm12Blarge_big_loop_back
 
 emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm12Blarge_forward_sse_loop_32:
 	MOVOU -32(SI)(R11*1), X4
@@ -6464,16 +6337,7 @@ emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm12Blarge_forward_sse_loop_3
 	MOVOU X5, -16(AX)(R11*1)
 	ADDQ  $0x20, R11
 	CMPQ  R8, R11
-	JAE   emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm12Blarge_forward_sse_loop
-
-emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm12Blarge_forward_sse_loop:
-	MOVOU -32(SI)(R11*1), X4
-	MOVOU -16(SI)(R11*1), X5
-	MOVOU X4, -32(AX)(R11*1)
-	MOVOU X5, -16(AX)(R11*1)
-	ADDQ  $0x20, R11
-	CMPQ  R8, R11
-	JAE   emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm12Blarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm12Blarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(R8*1)
@@ -6750,10 +6614,10 @@ memmove_long_emit_remainder_encodeSnappyBlockAsm12B:
 	ANDL  $0x0000001f, BP
 	MOVQ  $0x00000040, DI
 	SUBQ  BP, DI
-
-emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm12Blarge_big_loop_back:
 	DECQ  SI
 	JA    emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm12Blarge_forward_sse_loop_32
+
+emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm12Blarge_big_loop_back:
 	MOVOU -32(CX)(DI*1), X4
 	MOVOU -16(CX)(DI*1), X5
 	MOVOU (CX)(DI*1), X6
@@ -6771,7 +6635,8 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm12Blarge_big_loop_back:
 	MOVOU X10, 64(AX)(DI*1)
 	MOVOU X11, 80(AX)(DI*1)
 	ADDQ  $0x80, DI
-	JMP   emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm12Blarge_big_loop_back
+	DECQ  SI
+	JNA   emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm12Blarge_big_loop_back
 
 emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm12Blarge_forward_sse_loop_32:
 	MOVOU -32(CX)(DI*1), X4
@@ -6780,16 +6645,7 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm12Blarge_forward_sse_lo
 	MOVOU X5, -16(AX)(DI*1)
 	ADDQ  $0x20, DI
 	CMPQ  BX, DI
-	JAE   emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm12Blarge_forward_sse_loop
-
-emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm12Blarge_forward_sse_loop:
-	MOVOU -32(CX)(DI*1), X4
-	MOVOU -16(CX)(DI*1), X5
-	MOVOU X4, -32(AX)(DI*1)
-	MOVOU X5, -16(AX)(DI*1)
-	ADDQ  $0x20, DI
-	CMPQ  BX, DI
-	JAE   emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm12Blarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm12Blarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(BX*1)
@@ -7015,10 +6871,10 @@ memmove_long_repeat_emit_encodeSnappyBlockAsm10B:
 	ANDL  $0x0000001f, R9
 	MOVQ  $0x00000040, R11
 	SUBQ  R9, R11
-
-emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm10Blarge_big_loop_back:
 	DECQ  R10
 	JA    emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm10Blarge_forward_sse_loop_32
+
+emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm10Blarge_big_loop_back:
 	MOVOU -32(R8)(R11*1), X4
 	MOVOU -16(R8)(R11*1), X5
 	MOVOU (R8)(R11*1), X6
@@ -7036,7 +6892,8 @@ emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm10Blarge_big_loop_back:
 	MOVOU X10, 64(AX)(R11*1)
 	MOVOU X11, 80(AX)(R11*1)
 	ADDQ  $0x80, R11
-	JMP   emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm10Blarge_big_loop_back
+	DECQ  R10
+	JNA   emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm10Blarge_big_loop_back
 
 emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm10Blarge_forward_sse_loop_32:
 	MOVOU -32(R8)(R11*1), X4
@@ -7045,16 +6902,7 @@ emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm10Blarge_forward_sse_loop_
 	MOVOU X5, -16(AX)(R11*1)
 	ADDQ  $0x20, R11
 	CMPQ  DI, R11
-	JAE   emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm10Blarge_forward_sse_loop
-
-emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm10Blarge_forward_sse_loop:
-	MOVOU -32(R8)(R11*1), X4
-	MOVOU -16(R8)(R11*1), X5
-	MOVOU X4, -32(AX)(R11*1)
-	MOVOU X5, -16(AX)(R11*1)
-	ADDQ  $0x20, R11
-	CMPQ  DI, R11
-	JAE   emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm10Blarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm10Blarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(DI*1)
@@ -7344,10 +7192,10 @@ memmove_long_match_emit_encodeSnappyBlockAsm10B:
 	ANDL  $0x0000001f, R9
 	MOVQ  $0x00000040, R11
 	SUBQ  R9, R11
-
-emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm10Blarge_big_loop_back:
 	DECQ  R10
 	JA    emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm10Blarge_forward_sse_loop_32
+
+emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm10Blarge_big_loop_back:
 	MOVOU -32(SI)(R11*1), X4
 	MOVOU -16(SI)(R11*1), X5
 	MOVOU (SI)(R11*1), X6
@@ -7365,7 +7213,8 @@ emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm10Blarge_big_loop_back:
 	MOVOU X10, 64(AX)(R11*1)
 	MOVOU X11, 80(AX)(R11*1)
 	ADDQ  $0x80, R11
-	JMP   emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm10Blarge_big_loop_back
+	DECQ  R10
+	JNA   emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm10Blarge_big_loop_back
 
 emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm10Blarge_forward_sse_loop_32:
 	MOVOU -32(SI)(R11*1), X4
@@ -7374,16 +7223,7 @@ emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm10Blarge_forward_sse_loop_3
 	MOVOU X5, -16(AX)(R11*1)
 	ADDQ  $0x20, R11
 	CMPQ  R8, R11
-	JAE   emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm10Blarge_forward_sse_loop
-
-emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm10Blarge_forward_sse_loop:
-	MOVOU -32(SI)(R11*1), X4
-	MOVOU -16(SI)(R11*1), X5
-	MOVOU X4, -32(AX)(R11*1)
-	MOVOU X5, -16(AX)(R11*1)
-	ADDQ  $0x20, R11
-	CMPQ  R8, R11
-	JAE   emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm10Blarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm10Blarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(R8*1)
@@ -7660,10 +7500,10 @@ memmove_long_emit_remainder_encodeSnappyBlockAsm10B:
 	ANDL  $0x0000001f, BP
 	MOVQ  $0x00000040, DI
 	SUBQ  BP, DI
-
-emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm10Blarge_big_loop_back:
 	DECQ  SI
 	JA    emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm10Blarge_forward_sse_loop_32
+
+emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm10Blarge_big_loop_back:
 	MOVOU -32(CX)(DI*1), X4
 	MOVOU -16(CX)(DI*1), X5
 	MOVOU (CX)(DI*1), X6
@@ -7681,7 +7521,8 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm10Blarge_big_loop_back:
 	MOVOU X10, 64(AX)(DI*1)
 	MOVOU X11, 80(AX)(DI*1)
 	ADDQ  $0x80, DI
-	JMP   emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm10Blarge_big_loop_back
+	DECQ  SI
+	JNA   emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm10Blarge_big_loop_back
 
 emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm10Blarge_forward_sse_loop_32:
 	MOVOU -32(CX)(DI*1), X4
@@ -7690,16 +7531,7 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm10Blarge_forward_sse_lo
 	MOVOU X5, -16(AX)(DI*1)
 	ADDQ  $0x20, DI
 	CMPQ  BX, DI
-	JAE   emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm10Blarge_forward_sse_loop
-
-emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm10Blarge_forward_sse_loop:
-	MOVOU -32(CX)(DI*1), X4
-	MOVOU -16(CX)(DI*1), X5
-	MOVOU X4, -32(AX)(DI*1)
-	MOVOU X5, -16(AX)(DI*1)
-	ADDQ  $0x20, DI
-	CMPQ  BX, DI
-	JAE   emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm10Blarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm10Blarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(BX*1)
@@ -7925,10 +7757,10 @@ memmove_long_repeat_emit_encodeSnappyBlockAsm8B:
 	ANDL  $0x0000001f, R9
 	MOVQ  $0x00000040, R11
 	SUBQ  R9, R11
-
-emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm8Blarge_big_loop_back:
 	DECQ  R10
 	JA    emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm8Blarge_forward_sse_loop_32
+
+emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm8Blarge_big_loop_back:
 	MOVOU -32(R8)(R11*1), X4
 	MOVOU -16(R8)(R11*1), X5
 	MOVOU (R8)(R11*1), X6
@@ -7946,7 +7778,8 @@ emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm8Blarge_big_loop_back:
 	MOVOU X10, 64(AX)(R11*1)
 	MOVOU X11, 80(AX)(R11*1)
 	ADDQ  $0x80, R11
-	JMP   emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm8Blarge_big_loop_back
+	DECQ  R10
+	JNA   emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm8Blarge_big_loop_back
 
 emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm8Blarge_forward_sse_loop_32:
 	MOVOU -32(R8)(R11*1), X4
@@ -7955,16 +7788,7 @@ emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm8Blarge_forward_sse_loop_3
 	MOVOU X5, -16(AX)(R11*1)
 	ADDQ  $0x20, R11
 	CMPQ  DI, R11
-	JAE   emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm8Blarge_forward_sse_loop
-
-emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm8Blarge_forward_sse_loop:
-	MOVOU -32(R8)(R11*1), X4
-	MOVOU -16(R8)(R11*1), X5
-	MOVOU X4, -32(AX)(R11*1)
-	MOVOU X5, -16(AX)(R11*1)
-	ADDQ  $0x20, R11
-	CMPQ  DI, R11
-	JAE   emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm8Blarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm8Blarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(DI*1)
@@ -8254,10 +8078,10 @@ memmove_long_match_emit_encodeSnappyBlockAsm8B:
 	ANDL  $0x0000001f, R9
 	MOVQ  $0x00000040, R11
 	SUBQ  R9, R11
-
-emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm8Blarge_big_loop_back:
 	DECQ  R10
 	JA    emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm8Blarge_forward_sse_loop_32
+
+emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm8Blarge_big_loop_back:
 	MOVOU -32(SI)(R11*1), X4
 	MOVOU -16(SI)(R11*1), X5
 	MOVOU (SI)(R11*1), X6
@@ -8275,7 +8099,8 @@ emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm8Blarge_big_loop_back:
 	MOVOU X10, 64(AX)(R11*1)
 	MOVOU X11, 80(AX)(R11*1)
 	ADDQ  $0x80, R11
-	JMP   emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm8Blarge_big_loop_back
+	DECQ  R10
+	JNA   emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm8Blarge_big_loop_back
 
 emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm8Blarge_forward_sse_loop_32:
 	MOVOU -32(SI)(R11*1), X4
@@ -8284,16 +8109,7 @@ emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm8Blarge_forward_sse_loop_32
 	MOVOU X5, -16(AX)(R11*1)
 	ADDQ  $0x20, R11
 	CMPQ  R8, R11
-	JAE   emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm8Blarge_forward_sse_loop
-
-emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm8Blarge_forward_sse_loop:
-	MOVOU -32(SI)(R11*1), X4
-	MOVOU -16(SI)(R11*1), X5
-	MOVOU X4, -32(AX)(R11*1)
-	MOVOU X5, -16(AX)(R11*1)
-	ADDQ  $0x20, R11
-	CMPQ  R8, R11
-	JAE   emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm8Blarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm8Blarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(R8*1)
@@ -8570,10 +8386,10 @@ memmove_long_emit_remainder_encodeSnappyBlockAsm8B:
 	ANDL  $0x0000001f, BP
 	MOVQ  $0x00000040, DI
 	SUBQ  BP, DI
-
-emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm8Blarge_big_loop_back:
 	DECQ  SI
 	JA    emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm8Blarge_forward_sse_loop_32
+
+emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm8Blarge_big_loop_back:
 	MOVOU -32(CX)(DI*1), X4
 	MOVOU -16(CX)(DI*1), X5
 	MOVOU (CX)(DI*1), X6
@@ -8591,7 +8407,8 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm8Blarge_big_loop_back:
 	MOVOU X10, 64(AX)(DI*1)
 	MOVOU X11, 80(AX)(DI*1)
 	ADDQ  $0x80, DI
-	JMP   emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm8Blarge_big_loop_back
+	DECQ  SI
+	JNA   emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm8Blarge_big_loop_back
 
 emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm8Blarge_forward_sse_loop_32:
 	MOVOU -32(CX)(DI*1), X4
@@ -8600,16 +8417,7 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm8Blarge_forward_sse_loo
 	MOVOU X5, -16(AX)(DI*1)
 	ADDQ  $0x20, DI
 	CMPQ  BX, DI
-	JAE   emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm8Blarge_forward_sse_loop
-
-emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm8Blarge_forward_sse_loop:
-	MOVOU -32(CX)(DI*1), X4
-	MOVOU -16(CX)(DI*1), X5
-	MOVOU X4, -32(AX)(DI*1)
-	MOVOU X5, -16(AX)(DI*1)
-	ADDQ  $0x20, DI
-	CMPQ  BX, DI
-	JAE   emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm8Blarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm8Blarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(BX*1)
@@ -8748,10 +8556,10 @@ memmove_long_standalone:
 	ANDL  $0x0000001f, BP
 	MOVQ  $0x00000040, DI
 	SUBQ  BP, DI
-
-emit_lit_memmove_long_standalonelarge_big_loop_back:
 	DECQ  SI
 	JA    emit_lit_memmove_long_standalonelarge_forward_sse_loop_32
+
+emit_lit_memmove_long_standalonelarge_big_loop_back:
 	MOVOU -32(CX)(DI*1), X4
 	MOVOU -16(CX)(DI*1), X5
 	MOVOU (CX)(DI*1), X6
@@ -8769,7 +8577,8 @@ emit_lit_memmove_long_standalonelarge_big_loop_back:
 	MOVOU X10, 64(AX)(DI*1)
 	MOVOU X11, 80(AX)(DI*1)
 	ADDQ  $0x80, DI
-	JMP   emit_lit_memmove_long_standalonelarge_big_loop_back
+	DECQ  SI
+	JNA   emit_lit_memmove_long_standalonelarge_big_loop_back
 
 emit_lit_memmove_long_standalonelarge_forward_sse_loop_32:
 	MOVOU -32(CX)(DI*1), X4
@@ -8778,16 +8587,7 @@ emit_lit_memmove_long_standalonelarge_forward_sse_loop_32:
 	MOVOU X5, -16(AX)(DI*1)
 	ADDQ  $0x20, DI
 	CMPQ  DX, DI
-	JAE   emit_lit_memmove_long_standalonelarge_forward_sse_loop
-
-emit_lit_memmove_long_standalonelarge_forward_sse_loop:
-	MOVOU -32(CX)(DI*1), X4
-	MOVOU -16(CX)(DI*1), X5
-	MOVOU X4, -32(AX)(DI*1)
-	MOVOU X5, -16(AX)(DI*1)
-	ADDQ  $0x20, DI
-	CMPQ  DX, DI
-	JAE   emit_lit_memmove_long_standalonelarge_forward_sse_loop
+	JAE   emit_lit_memmove_long_standalonelarge_forward_sse_loop_32
 	MOVOU X0, (AX)
 	MOVOU X1, 16(AX)
 	MOVOU X2, -32(AX)(DX*1)
