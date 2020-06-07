@@ -17,16 +17,16 @@ func main() {
 	Constraint(buildtags.Not("noasm").ToConstraint())
 	Constraint(buildtags.Term("gc").ToConstraint())
 
-	genEncodeBlockAsm("encodeBlockAsm", 14, 6, 6, false, false)
-	genEncodeBlockAsm("encodeBlockAsm12B", 12, 5, 5, false, false)
-	genEncodeBlockAsm("encodeBlockAsm10B", 10, 5, 5, false, false)
-	genEncodeBlockAsm("encodeBlockAsm8B", 8, 4, 4, false, false)
+	genEncodeBlockAsm("encodeBlockAsm", 14, 6, 6, false)
+	genEncodeBlockAsm("encodeBlockAsm12B", 12, 5, 5, false)
+	genEncodeBlockAsm("encodeBlockAsm10B", 10, 5, 5, false)
+	genEncodeBlockAsm("encodeBlockAsm8B", 8, 4, 4, false)
 
 	// Snappy compatible
-	genEncodeBlockAsm("encodeSnappyBlockAsm", 14, 6, 6, false, true)
-	genEncodeBlockAsm("encodeSnappyBlockAsm12B", 12, 5, 5, false, true)
-	genEncodeBlockAsm("encodeSnappyBlockAsm10B", 10, 5, 5, false, true)
-	genEncodeBlockAsm("encodeSnappyBlockAsm8B", 8, 4, 4, false, true)
+	genEncodeBlockAsm("encodeSnappyBlockAsm", 14, 6, 6, true)
+	genEncodeBlockAsm("encodeSnappyBlockAsm12B", 12, 5, 5, true)
+	genEncodeBlockAsm("encodeSnappyBlockAsm10B", 10, 5, 5, true)
+	genEncodeBlockAsm("encodeSnappyBlockAsm8B", 8, 4, 4, true)
 
 	genEmitLiteral()
 	genEmitRepeat()
@@ -71,7 +71,7 @@ func assert(fn func(ok LabelRef)) {
 	}
 }
 
-func genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes int, avx bool, snappy bool) {
+func genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes int, snappy bool) {
 	TEXT(name, 0, "func(dst, src []byte) int")
 	Doc(name+" encodes a non-empty src to a guaranteed-large-enough dst.",
 		"It assumes that the varint-encoded length of the decompressed bytes has already been written.", "")
@@ -325,7 +325,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes int, avx bool,
 			// Base is now at start. Emit until base.
 			// d += emitLiteral(dst[d:], src[nextEmit:base])
 			if true {
-				emitLiteralsDstP(nextEmitL, base, src, dst, "repeat_emit_"+name, avx)
+				emitLiteralsDstP(nextEmitL, base, src, dst, "repeat_emit_"+name)
 			}
 
 			// Extend forward
@@ -526,7 +526,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes int, avx bool,
 	{
 		base := GP32()
 		MOVL(s, base.As32())
-		emitLiteralsDstP(nextEmitL, base, src, dst, "match_emit_"+name, avx)
+		emitLiteralsDstP(nextEmitL, base, src, dst, "match_emit_"+name)
 	}
 
 	Label("match_nolit_loop_" + name)
@@ -659,7 +659,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes int, avx bool,
 	MOVQ(lenSrcQ, emitEnd)
 
 	// Emit final literals.
-	emitLiteralsDstP(nextEmitL, emitEnd, src, dst, "emit_remainder_"+name, avx)
+	emitLiteralsDstP(nextEmitL, emitEnd, src, dst, "emit_remainder_"+name)
 
 	// Assert size is < limit
 	assert(func(ok LabelRef) {
@@ -693,7 +693,7 @@ func genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes int, avx bool,
 // emitLiterals emits literals from nextEmit to base, updates nextEmit, dstBase.
 // Checks if base == nextemit.
 // src & base are untouched.
-func emitLiterals(nextEmitL Mem, base reg.GPVirtual, src reg.GPVirtual, dstBase Mem, name string, avx bool) {
+func emitLiterals(nextEmitL Mem, base reg.GPVirtual, src reg.GPVirtual, dstBase Mem, name string) {
 	nextEmit, litLen, dstBaseTmp, litBase := GP32(), GP32(), GP64(), GP64()
 	MOVL(nextEmitL, nextEmit)
 	CMPL(nextEmit, base.As32())
@@ -709,7 +709,7 @@ func emitLiterals(nextEmitL Mem, base reg.GPVirtual, src reg.GPVirtual, dstBase 
 
 	// Load (and store when we return)
 	MOVQ(dstBase, dstBaseTmp)
-	emitLiteral(name, litLen, nil, dstBaseTmp, litBase, LabelRef("emit_literal_done_"+name), avx, true)
+	emitLiteral(name, litLen, nil, dstBaseTmp, litBase, LabelRef("emit_literal_done_"+name), true)
 	Label("emit_literal_done_" + name)
 
 	// Emitted length must be > litlen.
@@ -730,7 +730,7 @@ func emitLiterals(nextEmitL Mem, base reg.GPVirtual, src reg.GPVirtual, dstBase 
 // emitLiterals emits literals from nextEmit to base, updates nextEmit, dstBase.
 // Checks if base == nextemit.
 // src & base are untouched.
-func emitLiteralsDstP(nextEmitL Mem, base reg.GPVirtual, src, dst reg.GPVirtual, name string, avx bool) {
+func emitLiteralsDstP(nextEmitL Mem, base reg.GPVirtual, src, dst reg.GPVirtual, name string) {
 	nextEmit, litLen, litBase := GP32(), GP32(), GP64()
 	MOVL(nextEmitL, nextEmit)
 	CMPL(nextEmit, base.As32())
@@ -745,7 +745,7 @@ func emitLiteralsDstP(nextEmitL Mem, base reg.GPVirtual, src, dst reg.GPVirtual,
 	SUBL(nextEmit, litLen.As32()) // litlen = base - nextEmit
 
 	// Load (and store when we return)
-	emitLiteral(name, litLen, nil, dst, litBase, LabelRef("emit_literal_done_"+name), avx, true)
+	emitLiteral(name, litLen, nil, dst, litBase, LabelRef("emit_literal_done_"+name), true)
 	Label("emit_literal_done_" + name)
 }
 
@@ -804,7 +804,7 @@ func genEmitLiteral() {
 	Load(Param("dst").Base(), dstBase)
 	Load(Param("lit").Base(), litBase)
 	Load(Param("lit").Len(), litLen)
-	emitLiteral("standalone", litLen, retval, dstBase, litBase, "emit_literal_end_standalone", false, false)
+	emitLiteral("standalone", litLen, retval, dstBase, litBase, "emit_literal_end_standalone", false)
 	Label("emit_literal_end_standalone")
 	Store(retval, ReturnIndex(0))
 	RET()
@@ -820,7 +820,7 @@ func genEmitLiteral() {
 	Load(Param("dst").Base(), dstBase)
 	Load(Param("lit").Base(), litBase)
 	Load(Param("lit").Len(), litLen)
-	emitLiteral("standalone", litLen, retval, dstBase, litBase, "emit_literal_end_avx_standalone", true, false)
+	emitLiteral("standalone", litLen, retval, dstBase, litBase, "emit_literal_end_avx_standalone", false)
 	Label("emit_literal_end_avx_standalone")
 	Store(retval, ReturnIndex(0))
 	RET()
@@ -832,7 +832,7 @@ func genEmitLiteral() {
 // dstBase and litBase are updated.
 // Uses 2 GP registers. With AVX 4 registers.
 // If updateDst is true dstBase will have the updated end pointer and an additional register will be used.
-func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, end LabelRef, avx, updateDst bool) {
+func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, end LabelRef, updateDst bool) {
 	n := GP32()
 	n16 := GP32()
 
@@ -917,7 +917,7 @@ func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, en
 	MOVL(litLen.As32(), length.As32())
 
 	// updates litBase.
-	genMemMove2("emit_lit_memmove_"+name, dstBase, litBase, length, copyEnd, avx)
+	genMemMove2("emit_lit_memmove_"+name, dstBase, litBase, length, copyEnd)
 
 	if updateDst {
 		Label("memmove_end_copy_" + name)
@@ -939,7 +939,7 @@ func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, en
 	MOVL(litLen.As32(), length.As32())
 
 	// updates litBase.
-	genMemMove2("emit_lit_memmove_long_"+name, dstBase, litBase, length, copyEnd, avx)
+	genMemMove2("emit_lit_memmove_long_"+name, dstBase, litBase, length, copyEnd)
 
 	if updateDst {
 		Label("memmove_end_copy_long_" + name)
@@ -1300,12 +1300,10 @@ func emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end La
 // Non AVX uses 2 GP register, 16 SSE2 registers.
 // AVX uses 4 GP registers 16 AVX/SSE registers.
 // All passed registers may be updated.
-func genMemMove2(name string, dst, src, length reg.GPVirtual, end LabelRef, avx bool) {
+func genMemMove2(name string, dst, src, length reg.GPVirtual, end LabelRef) {
 	AX, CX := GP64(), GP64()
 	name += "_memmove_"
 
-	// Disable AVX
-	avx = false
 	// move_129through256 or smaller work whether or not the source and the
 	// destination memory regions overlap because they load all data into
 	// registers before writing it back.  move_256through2048 on the other
@@ -1334,7 +1332,7 @@ func genMemMove2(name string, dst, src, length reg.GPVirtual, end LabelRef, avx 
 		JBE(LabelRef(name + "move_65through128"))
 	}
 
-	genMemMoveLong(name, dst, src, length, end, avx)
+	genMemMoveLong(name, dst, src, length, end)
 
 	Label(name + "move_1or2")
 	MOVB(Mem{Base: src}, AX.As8())
@@ -1402,11 +1400,8 @@ func genMemMove2(name string, dst, src, length reg.GPVirtual, end LabelRef, avx 
 // Non AVX uses 2 GP register, 16 SSE2 registers.
 // AVX uses 4 GP registers 16 AVX/SSE registers.
 // All passed registers may be updated.
-func genMemMoveLong(name string, dst, src, length reg.GPVirtual, end LabelRef, avx bool) {
-	X0, X1, X2, X3, X4, X5, X6, X7 := XMM(), XMM(), XMM(), XMM(), XMM(), XMM(), XMM(), XMM()
-	X8, X9, X10, X11, X12 := XMM(), XMM(), XMM(), XMM(), XMM()
-
-	AX, CX := GP64(), GP64()
+func genMemMoveLong(name string, dst, src, length reg.GPVirtual, end LabelRef) {
+	X0, X1, X2, X3, X4, X5 := XMM(), XMM(), XMM(), XMM(), XMM(), XMM()
 	name += "large_"
 
 	//Label(name + "large")
@@ -1439,174 +1434,6 @@ func genMemMoveLong(name string, dst, src, length reg.GPVirtual, end LabelRef, a
 	MOVOU(X3, Mem{Base: dst, Disp: -16, Index: length, Scale: 1})
 
 	JMP(end)
-
-	if avx {
-		Label(name + "avxUnaligned")
-		R8, R10 := GP64(), GP64()
-		// There are two implementations of move algorithm.
-		// The first one for non-overlapped memory regions. It uses forward copying.
-		// We do not support overlapping input
-
-		// Non-temporal copy would be better for big sizes.
-		// Disabled since big copies are unlikely.
-		// If enabling, test functionality.
-		const enableBigData = false
-		if enableBigData {
-			CMPQ(length, U32(0x100000))
-			JAE(LabelRef(name + "gobble_big_data_fwd"))
-		}
-
-		// Memory layout on the source side
-		// src                                       CX
-		// |<---------length before correction--------->|
-		// |       |<--length corrected-->|             |
-		// |       |                  |<--- AX  --->|
-		// |<-R11->|                  |<-128 bytes->|
-		// +----------------------------------------+
-		// | Head  | Body             | Tail        |
-		// +-------+------------------+-------------+
-		// ^       ^                  ^
-		// |       |                  |
-		// Save head into Y4          Save tail into X5..X12
-		//         |
-		//         src+R11, where R11 = ((dst & -32) + 32) - dst
-		// Algorithm:
-		// 1. Unaligned save of the tail's 128 bytes
-		// 2. Unaligned save of the head's 32  bytes
-		// 3. Destination-aligned copying of body (128 bytes per iteration)
-		// 4. Put head on the new place
-		// 5. Put the tail on the new place
-		// It can be important to satisfy processor's pipeline requirements for
-		// small sizes as the cost of unaligned memory region copying is
-		// comparable with the cost of main loop. So code is slightly messed there.
-		// There is more clean implementation of that algorithm for bigger sizes
-		// where the cost of unaligned part copying is negligible.
-		// You can see it after gobble_big_data_fwd label.
-		Y0, Y1, Y2, Y3, Y4 := YMM(), YMM(), YMM(), YMM(), YMM()
-
-		LEAQ(Mem{Base: src, Index: length, Scale: 1}, CX)
-		MOVQ(dst, R10)
-		// CX points to the end of buffer so we need go back slightly. We will use negative offsets there.
-		MOVOU(Mem{Base: CX, Disp: -0x80}, X5)
-		MOVOU(Mem{Base: CX, Disp: -0x70}, X6)
-		MOVQ(U32(0x80), AX)
-
-		// Align destination address
-		ANDQ(U32(0xffffffe0), dst)
-		ADDQ(U8(32), dst)
-		// Continue tail saving.
-		MOVOU(Mem{Base: CX, Disp: -0x60}, X7)
-		MOVOU(Mem{Base: CX, Disp: -0x50}, X8)
-		// Make R8 delta between aligned and unaligned destination addresses.
-		MOVQ(dst, R8)
-		SUBQ(R10, R8)
-		// Continue tail saving.
-		MOVOU(Mem{Base: CX, Disp: -0x40}, X9)
-		MOVOU(Mem{Base: CX, Disp: -0x30}, X10)
-		// Let's make bytes-to-copy value adjusted as we've prepared unaligned part for copying.
-		SUBQ(R8, length)
-		// Continue tail saving.
-		MOVOU(Mem{Base: CX, Disp: -0x20}, X11)
-		MOVOU(Mem{Base: CX, Disp: -0x10}, X12)
-		// The tail will be put on its place after main body copying.
-		// It's time for the unaligned heading part.
-		VMOVDQU(Mem{Base: src}, Y4)
-		// Adjust source address to point past head.
-		ADDQ(R8, src)
-		SUBQ(AX, length)
-
-		// Aligned memory copying there
-		Label(name + "gobble_128_loop")
-		VMOVDQU(Mem{Base: src}, Y0)
-		VMOVDQU(Mem{Base: src, Disp: 0x20}, Y1)
-		VMOVDQU(Mem{Base: src, Disp: 0x40}, Y2)
-		VMOVDQU(Mem{Base: src, Disp: 0x60}, Y3)
-		ADDQ(AX, src)
-		VMOVDQA(Y0, Mem{Base: dst})
-		VMOVDQA(Y1, Mem{Base: dst, Disp: 0x20})
-		VMOVDQA(Y2, Mem{Base: dst, Disp: 0x40})
-		VMOVDQA(Y3, Mem{Base: dst, Disp: 0x60})
-		ADDQ(AX, dst)
-		SUBQ(AX, length)
-		JA(LabelRef(name + "gobble_128_loop"))
-		// Now we can store unaligned parts.
-		ADDQ(AX, length)
-		ADDQ(dst, length)
-		VMOVDQU(Y4, Mem{Base: R10})
-		VZEROUPPER()
-		MOVOU(X5, Mem{Base: length, Disp: -0x80})
-		MOVOU(X6, Mem{Base: length, Disp: -0x70})
-		MOVOU(X7, Mem{Base: length, Disp: -0x60})
-		MOVOU(X8, Mem{Base: length, Disp: -0x50})
-		MOVOU(X9, Mem{Base: length, Disp: -0x40})
-		MOVOU(X10, Mem{Base: length, Disp: -0x30})
-		MOVOU(X11, Mem{Base: length, Disp: -0x20})
-		MOVOU(X12, Mem{Base: length, Disp: -0x10})
-		JMP(end)
-
-		if enableBigData {
-			Label(name + "gobble_big_data_fwd")
-			// There is forward copying for big regions.
-			// It uses non-temporal mov instructions.
-			// Details of this algorithm are commented previously for small sizes.
-			LEAQ(Mem{Base: src, Index: length, Scale: 1}, CX)
-			MOVOU(Mem{Base: src, Index: length, Scale: 1, Disp: -0x80}, X5)
-			MOVOU(Mem{Base: CX, Disp: -0x70}, X6)
-			MOVOU(Mem{Base: CX, Disp: -0x60}, X7)
-			MOVOU(Mem{Base: CX, Disp: -0x50}, X8)
-			MOVOU(Mem{Base: CX, Disp: -0x40}, X9)
-			MOVOU(Mem{Base: CX, Disp: -0x30}, X10)
-			MOVOU(Mem{Base: CX, Disp: -0x20}, X11)
-			MOVOU(Mem{Base: CX, Disp: -0x10}, X12)
-			VMOVDQU(Mem{Base: src}, Y4)
-			MOVQ(dst, R8)
-
-			ANDQ(U32(0xffffffe0), dst)
-			ADDQ(U8(32), dst)
-
-			MOVQ(dst, R10)
-			SUBQ(R8, R10)
-			SUBQ(R10, length)
-			ADDQ(R10, src)
-			LEAQ(Mem{Base: dst, Index: length, Scale: 1}, CX)
-			SUBQ(U8(0x80), length)
-
-			Label(name + "gobble_mem_fwd_loop")
-			PREFETCHNTA(Mem{Base: src, Disp: 0x1c0})
-			PREFETCHNTA(Mem{Base: src, Disp: 0x280})
-			// Prefetch values were chosen empirically.
-			// Approach for prefetch usage as in 7.6.6 of [1]
-			// [1] 64-ia-32-architectures-optimization-manual.pdf
-			// https://www.intel.ru/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-optimization-manual.pdf
-			VMOVDQU(Mem{Base: src}, Y0)
-			VMOVDQU(Mem{Base: src, Disp: 0x20}, Y1)
-			VMOVDQU(Mem{Base: src, Disp: 0x40}, Y2)
-			VMOVDQU(Mem{Base: src, Disp: 0x60}, Y3)
-
-			ADDQ(U8(0x80), src)
-			VMOVNTDQ(Y0, Mem{Base: dst})
-			VMOVNTDQ(Y1, Mem{Base: dst, Disp: 0x20})
-			VMOVNTDQ(Y2, Mem{Base: dst, Disp: 0x20})
-			VMOVNTDQ(Y3, Mem{Base: dst, Disp: 0x60})
-			ADDQ(U8(0x80), dst)
-			SUBQ(U8(0x80), length)
-			JA(LabelRef(name + "gobble_mem_fwd_loop"))
-			// NT instructions don't follow the normal cache-coherency rules.
-			// We need SFENCE there to make copied data available timely.
-			SFENCE()
-			VMOVDQU(Y4, Mem{Base: R8})
-			VZEROUPPER()
-			MOVOU(X5, Mem{Base: CX, Disp: -0x80})
-			MOVOU(X6, Mem{Base: CX, Disp: -0x70})
-			MOVOU(X7, Mem{Base: CX, Disp: -0x60})
-			MOVOU(X8, Mem{Base: CX, Disp: -0x50})
-			MOVOU(X9, Mem{Base: CX, Disp: -0x40})
-			MOVOU(X10, Mem{Base: CX, Disp: -0x30})
-			MOVOU(X11, Mem{Base: CX, Disp: -0x20})
-			MOVOU(X12, Mem{Base: CX, Disp: -0x10})
-			JMP(end)
-		}
-	}
 }
 
 // genMatchLen generates standalone matchLen.
