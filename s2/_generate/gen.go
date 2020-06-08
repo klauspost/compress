@@ -17,7 +17,7 @@ func main() {
 	Constraint(buildtags.Not("noasm").ToConstraint())
 	Constraint(buildtags.Term("gc").ToConstraint())
 
-	genEncodeBlockAsm("encodeBlockAsm", 14, 5, 6, false)
+	genEncodeBlockAsm("encodeBlockAsm", 14, 6, 6, false)
 	genEncodeBlockAsm("encodeBlockAsm12B", 12, 5, 5, false)
 	genEncodeBlockAsm("encodeBlockAsm10B", 10, 5, 4, false)
 	genEncodeBlockAsm("encodeBlockAsm8B", 8, 4, 4, false)

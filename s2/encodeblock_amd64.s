@@ -43,7 +43,7 @@ search_loop_encodeBlockAsm:
 	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
-	SHRL  $0x05, BP
+	SHRL  $0x06, BP
 	LEAL  4(CX)(BP*1), BP
 	MOVL  8(SP), DI
 	CMPL  BP, DI
