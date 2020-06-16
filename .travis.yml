@@ -30,17 +30,6 @@ jobs:
     - go: 'master'
   fast_finish: true
   include:
-    - stage: Build, Unit-Tests & Fuzz-Tests
-      go: 1.14.x
-      script:
-        - ./fuzzit.sh local-regression
-
-    - stage: Fuzzit (Fuzzing)
-      if: branch = master AND type IN (push)
-      go: 1.14.x
-      script:
-        - ./fuzzit.sh fuzzing
-
     - stage: 386 linux test
       go: 1.14.x
       script:

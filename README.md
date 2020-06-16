@@ -7,14 +7,17 @@ This package provides various compression algorithms.
 * Optimized [deflate](https://godoc.org/github.com/klauspost/compress/flate) packages which can be used as a dropin replacement for [gzip](https://godoc.org/github.com/klauspost/compress/gzip), [zip](https://godoc.org/github.com/klauspost/compress/zip) and [zlib](https://godoc.org/github.com/klauspost/compress/zlib).
 * [huff0](https://github.com/klauspost/compress/tree/master/huff0) and [FSE](https://github.com/klauspost/compress/tree/master/fse) implementations for raw entropy encoding.
 * [pgzip](https://github.com/klauspost/pgzip) is a separate package that provides a very fast parallel gzip implementation.
+* [fuzz package](https://github.com/klauspost/compress-fuzz) for fuzz testing all compressors/decompressors here.
 
 [![Documentation](https://godoc.org/github.com/klauspost/compress?status.svg)](https://pkg.go.dev/github.com/klauspost/compress?tab=subdirectories)
 [![Build Status](https://travis-ci.org/klauspost/compress.svg?branch=master)](https://travis-ci.org/klauspost/compress)
 [![Sourcegraph Badge](https://sourcegraph.com/github.com/klauspost/compress/-/badge.svg)](https://sourcegraph.com/github.com/klauspost/compress?badge)
-[![fuzzit](https://app.fuzzit.dev/badge?org_id=klauspost)](https://fuzzit.dev)
 
 # changelog
 
+* June 16, 2020 (v1.10.9): zstd: API change for specifying dictionaries. See [#268](https://github.com/klauspost/compress/pull/268)
+* June 16, 2020: zip: update CreateHeaderRaw to handle zip64 fields. [#266](https://github.com/klauspost/compress/pull/266)
+* June 16, 2020: Fuzzit tests removed. The service has been purchased and is no longer available.
 * June 5, 2020 (v1.10.8): 1.15x faster zstd block decompression. [#265](https://github.com/klauspost/compress/pull/265)
 * June 1, 2020 (v1.10.7): Added zstd decompression [dictionary support](https://github.com/klauspost/compress/tree/master/zstd#dictionaries)
 * June 1, 2020: Increase zstd decompression speed up to 1.19x.  [#259](https://github.com/klauspost/compress/pull/259)
