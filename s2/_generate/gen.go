@@ -801,10 +801,16 @@ func genEmitLiteral() {
 	Pragma("noescape")
 
 	dstBase, litBase, litLen, retval := GP64(), GP64(), GP64(), GP64()
+	Load(Param("lit").Len(), litLen)
 	Load(Param("dst").Base(), dstBase)
 	Load(Param("lit").Base(), litBase)
-	Load(Param("lit").Len(), litLen)
+	TESTQ(litLen, litLen)
+	JZ(LabelRef("emit_literal_end_standalone_skip"))
 	emitLiteral("standalone", litLen, retval, dstBase, litBase, "emit_literal_end_standalone", false)
+
+	Label("emit_literal_end_standalone_skip")
+	XORQ(retval, retval)
+
 	Label("emit_literal_end_standalone")
 	Store(retval, ReturnIndex(0))
 	RET()
@@ -812,6 +818,7 @@ func genEmitLiteral() {
 }
 
 // emitLiteral can be used for inlining an emitLiteral call.
+// litLen must be > 0.
 // stack must have at least 32 bytes.
 // retval will contain emitted bytes, but can be nil if this is not interesting.
 // dstBase and litBase are updated.
@@ -821,15 +828,18 @@ func emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, en
 	n := GP32()
 	n16 := GP32()
 
+	// litLen must be > 0
+	assert(func(ok LabelRef) {
+		TESTL(litLen.As32(), litLen.As32())
+		JNZ(ok)
+	})
+
 	// We always add litLen bytes
 	if retval != nil {
 		MOVL(litLen.As32(), retval.As32())
 	}
-	MOVL(litLen.As32(), n)
-
-	SUBL(U8(1), n.As32())
-	// Return if AX was 0
-	JC(end)
+	// n = litlen - 1
+	LEAL(Mem{Base: litLen.As32(), Disp: -1}, n)
 
 	// Find number of bytes to emit for tag.
 	CMPL(n.As32(), U8(60))
