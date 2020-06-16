@@ -20,11 +20,7 @@ func TestDecoder_SmallDict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dec, err := NewReader(nil, WithDecoderConcurrency(1))
-	if err != nil {
-		t.Fatal(err)
-		return
-	}
+	var dicts [][]byte
 	for _, tt := range zr.File {
 		if !strings.HasSuffix(tt.Name, ".dict") {
 			continue
@@ -39,11 +35,13 @@ func TestDecoder_SmallDict(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = dec.RegisterDict(in)
-			if err != nil {
-				t.Fatal(tt.Name, err)
-			}
+			dicts = append(dicts, in)
 		}()
+	}
+	dec, err := NewReader(nil, WithDecoderConcurrency(1), WithDecoderDicts(dicts...))
+	if err != nil {
+		t.Fatal(err)
+		return
 	}
 	defer dec.Close()
 	for _, tt := range zr.File {
@@ -84,11 +82,8 @@ func TestDecoder_MoreDicts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dec, err := NewReader(nil, WithDecoderConcurrency(1))
-	if err != nil {
-		t.Fatal(err)
-		return
-	}
+
+	var dicts [][]byte
 	for _, tt := range zr.File {
 		if !strings.HasSuffix(tt.Name, ".dict") {
 			continue
@@ -103,11 +98,13 @@ func TestDecoder_MoreDicts(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = dec.RegisterDict(in)
-			if err != nil {
-				t.Fatal(tt.Name, err)
-			}
+			dicts = append(dicts, in)
 		}()
+	}
+	dec, err := NewReader(nil, WithDecoderConcurrency(1), WithDecoderDicts(dicts...))
+	if err != nil {
+		t.Fatal(err)
+		return
 	}
 	defer dec.Close()
 	for _, tt := range zr.File {
