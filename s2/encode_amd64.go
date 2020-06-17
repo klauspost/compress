@@ -24,22 +24,7 @@ func encodeBlock(dst, src []byte) (d int) {
 		// Use 8 bit table when less than...
 		limit8B = 512
 	)
-	if avxAvailable {
-		// Big blocks, use full table...
-		if len(src) >= limit12B {
-			return encodeBlockAsmAvx(dst, src)
-		}
-		if len(src) >= limit10B {
-			return encodeBlockAsm12BAvx(dst, src)
-		}
-		if len(src) >= limit8B {
-			return encodeBlockAsm10BAvx(dst, src)
-		}
-		if len(src) < minNonLiteralBlockSize {
-			return 0
-		}
-		return encodeBlockAsm8BAvx(dst, src)
-	}
+
 	if len(src) >= limit12B {
 		return encodeBlockAsm(dst, src)
 	}
@@ -71,22 +56,6 @@ func encodeBlockSnappy(dst, src []byte) (d int) {
 		// Use 8 bit table when less than...
 		limit8B = 512
 	)
-	if avxAvailable {
-		// Big blocks, use full table...
-		if len(src) >= limit12B {
-			return encodeSnappyBlockAsmAvx(dst, src)
-		}
-		if len(src) >= limit10B {
-			return encodeSnappyBlockAsm12BAvx(dst, src)
-		}
-		if len(src) >= limit8B {
-			return encodeSnappyBlockAsm10BAvx(dst, src)
-		}
-		if len(src) < minNonLiteralBlockSize {
-			return 0
-		}
-		return encodeSnappyBlockAsm8BAvx(dst, src)
-	}
 	if len(src) >= limit12B {
 		return encodeSnappyBlockAsm(dst, src)
 	}
