@@ -13,6 +13,9 @@ import (
 	"github.com/mmcloughlin/avo/reg"
 )
 
+// insert extra checks here and there.
+const debug = false
+
 func main() {
 	Constraint(buildtags.Not("appengine").ToConstraint())
 	Constraint(buildtags.Not("noasm").ToConstraint())
@@ -57,9 +60,6 @@ func debugval32(v Op) {
 }
 
 var assertCounter int
-
-// insert extra checks here and there.
-const debug = false
 
 // assert will insert code if debug is enabled.
 // The code should jump to 'ok' is assertion is success.
@@ -1678,6 +1678,9 @@ func (o options) genMatchLen() {
 // Will jump to end when done and returns the length.
 // Uses 2 GP registers.
 func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) reg.GPVirtual {
+	if false {
+		return o.matchLenAlt(name, a, b, len, end)
+	}
 	tmp, tmp2, matched := GP64(), GP64(), GP32()
 	XORL(matched, matched)
 
@@ -1715,7 +1718,7 @@ func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) re
 	Label("matchlen_short_" + name)
 	if true {
 		SUBL(U8(4), len.As32())
-		JC(end)
+		JC(LabelRef("matchlen_single_resume_" + name))
 
 		Label("matchlen_four_loopback_" + name)
 		assert(func(ok LabelRef) {
@@ -1725,8 +1728,14 @@ func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) re
 
 		MOVL(Mem{Base: a}, tmp.As32())
 		XORL(Mem{Base: b}, tmp.As32())
-		// We don't care about the exact length.
-		JNZ(end)
+		{
+			JZ(LabelRef("matchlen_four_loopback_next" + name))
+			BSFL(tmp.As32(), tmp.As32())
+			SARQ(U8(3), tmp)
+			LEAL(Mem{Base: matched, Index: tmp, Scale: 1}, matched)
+			JMP(end)
+		}
+		Label("matchlen_four_loopback_next" + name)
 		ADDL(U8(4), matched)
 		ADDQ(U8(4), a)
 		ADDQ(U8(4), b)
@@ -1735,6 +1744,7 @@ func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) re
 	}
 
 	// Test one at the time
+	Label("matchlen_single_resume_" + name)
 	if true {
 		// Less than 16 bytes left.
 		ADDL(U8(4), len.As32())
@@ -1751,6 +1761,50 @@ func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) re
 		DECL(len.As32())
 		JNZ(LabelRef("matchlen_single_loopback_" + name))
 	}
+	JMP(end)
+	return matched
+}
+
+// matchLen returns the number of matching bytes of a and b.
+// len is the maximum number of bytes to match.
+// Will jump to end when done and returns the length.
+// Uses 2 GP registers.
+func (o options) matchLenAlt(name string, a, b, len reg.GPVirtual, end LabelRef) reg.GPVirtual {
+	tmp, matched := GP64(), GP32()
+	XORL(matched, matched)
+
+	CMPL(len.As32(), U8(8))
+	JL(LabelRef("matchlen_single_" + name))
+
+	Label("matchlen_loopback_" + name)
+	MOVQ(Mem{Base: a, Index: matched, Scale: 1}, tmp)
+	XORQ(Mem{Base: b, Index: matched, Scale: 1}, tmp)
+	TESTQ(tmp, tmp)
+	JZ(LabelRef("matchlen_loop_" + name))
+	// Not all match.
+	BSFQ(tmp, tmp)
+	SARQ(U8(3), tmp)
+	LEAL(Mem{Base: matched, Index: tmp, Scale: 1}, matched)
+	JMP(end)
+
+	// All 8 byte matched, update and loop.
+	Label("matchlen_loop_" + name)
+	LEAL(Mem{Base: len, Disp: -8}, len.As32())
+	LEAL(Mem{Base: matched, Disp: 8}, matched)
+	CMPL(len.As32(), U8(8))
+	JGE(LabelRef("matchlen_loopback_" + name))
+
+	// Less than 8 bytes left.
+	Label("matchlen_single_" + name)
+	TESTL(len.As32(), len.As32())
+	JZ(end)
+	Label("matchlen_single_loopback_" + name)
+	MOVB(Mem{Base: a, Index: matched, Scale: 1}, tmp.As8())
+	CMPB(Mem{Base: b, Index: matched, Scale: 1}, tmp.As8())
+	JNE(end)
+	LEAL(Mem{Base: matched, Disp: 1}, matched)
+	DECL(len.As32())
+	JNZ(LabelRef("matchlen_single_loopback_" + name))
 	JMP(end)
 	return matched
 }

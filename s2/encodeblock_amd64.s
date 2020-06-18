@@ -300,17 +300,25 @@ matchlen_loop_repeat_extend:
 
 matchlen_short_repeat_extend:
 	SUBL $0x04, R8
-	JC   repeat_extend_forward_end_encodeBlockAsm
+	JC   matchlen_single_resume_repeat_extend
 
 matchlen_four_loopback_repeat_extend:
-	MOVL  (R9), R10
-	XORL  (BP), R10
-	JNZ   repeat_extend_forward_end_encodeBlockAsm
-	ADDL  $0x04, R12
-	ADDQ  $0x04, R9
-	ADDQ  $0x04, BP
-	SUBL  $0x04, R8
-	JNC   matchlen_four_loopback_repeat_extend
+	MOVL (R9), R10
+	XORL (BP), R10
+	JZ   matchlen_four_loopback_nextrepeat_extend
+	BSFL R10, R10
+	SARQ $0x03, R10
+	LEAL (R12)(R10*1), R12
+	JMP  repeat_extend_forward_end_encodeBlockAsm
+
+matchlen_four_loopback_nextrepeat_extend:
+	ADDL $0x04, R12
+	ADDQ $0x04, R9
+	ADDQ $0x04, BP
+	SUBL $0x04, R8
+	JNC  matchlen_four_loopback_repeat_extend
+
+matchlen_single_resume_repeat_extend:
 	ADDL  $0x04, R8
 	TESTL R8, R8
 	JZ    repeat_extend_forward_end_encodeBlockAsm
@@ -855,17 +863,25 @@ matchlen_loop_match_nolit_encodeBlockAsm:
 
 matchlen_short_match_nolit_encodeBlockAsm:
 	SUBL $0x04, SI
-	JC   match_nolit_end_encodeBlockAsm
+	JC   matchlen_single_resume_match_nolit_encodeBlockAsm
 
 matchlen_four_loopback_match_nolit_encodeBlockAsm:
-	MOVL  (DI), R8
-	XORL  (BP), R8
-	JNZ   match_nolit_end_encodeBlockAsm
-	ADDL  $0x04, R10
-	ADDQ  $0x04, DI
-	ADDQ  $0x04, BP
-	SUBL  $0x04, SI
-	JNC   matchlen_four_loopback_match_nolit_encodeBlockAsm
+	MOVL (DI), R8
+	XORL (BP), R8
+	JZ   matchlen_four_loopback_nextmatch_nolit_encodeBlockAsm
+	BSFL R8, R8
+	SARQ $0x03, R8
+	LEAL (R10)(R8*1), R10
+	JMP  match_nolit_end_encodeBlockAsm
+
+matchlen_four_loopback_nextmatch_nolit_encodeBlockAsm:
+	ADDL $0x04, R10
+	ADDQ $0x04, DI
+	ADDQ $0x04, BP
+	SUBL $0x04, SI
+	JNC  matchlen_four_loopback_match_nolit_encodeBlockAsm
+
+matchlen_single_resume_match_nolit_encodeBlockAsm:
 	ADDL  $0x04, SI
 	TESTL SI, SI
 	JZ    match_nolit_end_encodeBlockAsm
@@ -1579,17 +1595,25 @@ matchlen_loop_repeat_extend:
 
 matchlen_short_repeat_extend:
 	SUBL $0x04, R8
-	JC   repeat_extend_forward_end_encodeBlockAsm12B
+	JC   matchlen_single_resume_repeat_extend
 
 matchlen_four_loopback_repeat_extend:
-	MOVL  (R9), R10
-	XORL  (BP), R10
-	JNZ   repeat_extend_forward_end_encodeBlockAsm12B
-	ADDL  $0x04, R12
-	ADDQ  $0x04, R9
-	ADDQ  $0x04, BP
-	SUBL  $0x04, R8
-	JNC   matchlen_four_loopback_repeat_extend
+	MOVL (R9), R10
+	XORL (BP), R10
+	JZ   matchlen_four_loopback_nextrepeat_extend
+	BSFL R10, R10
+	SARQ $0x03, R10
+	LEAL (R12)(R10*1), R12
+	JMP  repeat_extend_forward_end_encodeBlockAsm12B
+
+matchlen_four_loopback_nextrepeat_extend:
+	ADDL $0x04, R12
+	ADDQ $0x04, R9
+	ADDQ $0x04, BP
+	SUBL $0x04, R8
+	JNC  matchlen_four_loopback_repeat_extend
+
+matchlen_single_resume_repeat_extend:
 	ADDL  $0x04, R8
 	TESTL R8, R8
 	JZ    repeat_extend_forward_end_encodeBlockAsm12B
@@ -2134,17 +2158,25 @@ matchlen_loop_match_nolit_encodeBlockAsm12B:
 
 matchlen_short_match_nolit_encodeBlockAsm12B:
 	SUBL $0x04, SI
-	JC   match_nolit_end_encodeBlockAsm12B
+	JC   matchlen_single_resume_match_nolit_encodeBlockAsm12B
 
 matchlen_four_loopback_match_nolit_encodeBlockAsm12B:
-	MOVL  (DI), R8
-	XORL  (BP), R8
-	JNZ   match_nolit_end_encodeBlockAsm12B
-	ADDL  $0x04, R10
-	ADDQ  $0x04, DI
-	ADDQ  $0x04, BP
-	SUBL  $0x04, SI
-	JNC   matchlen_four_loopback_match_nolit_encodeBlockAsm12B
+	MOVL (DI), R8
+	XORL (BP), R8
+	JZ   matchlen_four_loopback_nextmatch_nolit_encodeBlockAsm12B
+	BSFL R8, R8
+	SARQ $0x03, R8
+	LEAL (R10)(R8*1), R10
+	JMP  match_nolit_end_encodeBlockAsm12B
+
+matchlen_four_loopback_nextmatch_nolit_encodeBlockAsm12B:
+	ADDL $0x04, R10
+	ADDQ $0x04, DI
+	ADDQ $0x04, BP
+	SUBL $0x04, SI
+	JNC  matchlen_four_loopback_match_nolit_encodeBlockAsm12B
+
+matchlen_single_resume_match_nolit_encodeBlockAsm12B:
 	ADDL  $0x04, SI
 	TESTL SI, SI
 	JZ    match_nolit_end_encodeBlockAsm12B
@@ -2858,17 +2890,25 @@ matchlen_loop_repeat_extend:
 
 matchlen_short_repeat_extend:
 	SUBL $0x04, R8
-	JC   repeat_extend_forward_end_encodeBlockAsm10B
+	JC   matchlen_single_resume_repeat_extend
 
 matchlen_four_loopback_repeat_extend:
-	MOVL  (R9), R10
-	XORL  (BP), R10
-	JNZ   repeat_extend_forward_end_encodeBlockAsm10B
-	ADDL  $0x04, R12
-	ADDQ  $0x04, R9
-	ADDQ  $0x04, BP
-	SUBL  $0x04, R8
-	JNC   matchlen_four_loopback_repeat_extend
+	MOVL (R9), R10
+	XORL (BP), R10
+	JZ   matchlen_four_loopback_nextrepeat_extend
+	BSFL R10, R10
+	SARQ $0x03, R10
+	LEAL (R12)(R10*1), R12
+	JMP  repeat_extend_forward_end_encodeBlockAsm10B
+
+matchlen_four_loopback_nextrepeat_extend:
+	ADDL $0x04, R12
+	ADDQ $0x04, R9
+	ADDQ $0x04, BP
+	SUBL $0x04, R8
+	JNC  matchlen_four_loopback_repeat_extend
+
+matchlen_single_resume_repeat_extend:
 	ADDL  $0x04, R8
 	TESTL R8, R8
 	JZ    repeat_extend_forward_end_encodeBlockAsm10B
@@ -3413,17 +3453,25 @@ matchlen_loop_match_nolit_encodeBlockAsm10B:
 
 matchlen_short_match_nolit_encodeBlockAsm10B:
 	SUBL $0x04, SI
-	JC   match_nolit_end_encodeBlockAsm10B
+	JC   matchlen_single_resume_match_nolit_encodeBlockAsm10B
 
 matchlen_four_loopback_match_nolit_encodeBlockAsm10B:
-	MOVL  (DI), R8
-	XORL  (BP), R8
-	JNZ   match_nolit_end_encodeBlockAsm10B
-	ADDL  $0x04, R10
-	ADDQ  $0x04, DI
-	ADDQ  $0x04, BP
-	SUBL  $0x04, SI
-	JNC   matchlen_four_loopback_match_nolit_encodeBlockAsm10B
+	MOVL (DI), R8
+	XORL (BP), R8
+	JZ   matchlen_four_loopback_nextmatch_nolit_encodeBlockAsm10B
+	BSFL R8, R8
+	SARQ $0x03, R8
+	LEAL (R10)(R8*1), R10
+	JMP  match_nolit_end_encodeBlockAsm10B
+
+matchlen_four_loopback_nextmatch_nolit_encodeBlockAsm10B:
+	ADDL $0x04, R10
+	ADDQ $0x04, DI
+	ADDQ $0x04, BP
+	SUBL $0x04, SI
+	JNC  matchlen_four_loopback_match_nolit_encodeBlockAsm10B
+
+matchlen_single_resume_match_nolit_encodeBlockAsm10B:
 	ADDL  $0x04, SI
 	TESTL SI, SI
 	JZ    match_nolit_end_encodeBlockAsm10B
@@ -4137,17 +4185,25 @@ matchlen_loop_repeat_extend:
 
 matchlen_short_repeat_extend:
 	SUBL $0x04, R8
-	JC   repeat_extend_forward_end_encodeBlockAsm8B
+	JC   matchlen_single_resume_repeat_extend
 
 matchlen_four_loopback_repeat_extend:
-	MOVL  (R9), R10
-	XORL  (BP), R10
-	JNZ   repeat_extend_forward_end_encodeBlockAsm8B
-	ADDL  $0x04, R12
-	ADDQ  $0x04, R9
-	ADDQ  $0x04, BP
-	SUBL  $0x04, R8
-	JNC   matchlen_four_loopback_repeat_extend
+	MOVL (R9), R10
+	XORL (BP), R10
+	JZ   matchlen_four_loopback_nextrepeat_extend
+	BSFL R10, R10
+	SARQ $0x03, R10
+	LEAL (R12)(R10*1), R12
+	JMP  repeat_extend_forward_end_encodeBlockAsm8B
+
+matchlen_four_loopback_nextrepeat_extend:
+	ADDL $0x04, R12
+	ADDQ $0x04, R9
+	ADDQ $0x04, BP
+	SUBL $0x04, R8
+	JNC  matchlen_four_loopback_repeat_extend
+
+matchlen_single_resume_repeat_extend:
 	ADDL  $0x04, R8
 	TESTL R8, R8
 	JZ    repeat_extend_forward_end_encodeBlockAsm8B
@@ -4692,17 +4748,25 @@ matchlen_loop_match_nolit_encodeBlockAsm8B:
 
 matchlen_short_match_nolit_encodeBlockAsm8B:
 	SUBL $0x04, SI
-	JC   match_nolit_end_encodeBlockAsm8B
+	JC   matchlen_single_resume_match_nolit_encodeBlockAsm8B
 
 matchlen_four_loopback_match_nolit_encodeBlockAsm8B:
-	MOVL  (DI), R8
-	XORL  (BP), R8
-	JNZ   match_nolit_end_encodeBlockAsm8B
-	ADDL  $0x04, R10
-	ADDQ  $0x04, DI
-	ADDQ  $0x04, BP
-	SUBL  $0x04, SI
-	JNC   matchlen_four_loopback_match_nolit_encodeBlockAsm8B
+	MOVL (DI), R8
+	XORL (BP), R8
+	JZ   matchlen_four_loopback_nextmatch_nolit_encodeBlockAsm8B
+	BSFL R8, R8
+	SARQ $0x03, R8
+	LEAL (R10)(R8*1), R10
+	JMP  match_nolit_end_encodeBlockAsm8B
+
+matchlen_four_loopback_nextmatch_nolit_encodeBlockAsm8B:
+	ADDL $0x04, R10
+	ADDQ $0x04, DI
+	ADDQ $0x04, BP
+	SUBL $0x04, SI
+	JNC  matchlen_four_loopback_match_nolit_encodeBlockAsm8B
+
+matchlen_single_resume_match_nolit_encodeBlockAsm8B:
 	ADDL  $0x04, SI
 	TESTL SI, SI
 	JZ    match_nolit_end_encodeBlockAsm8B
@@ -5416,17 +5480,25 @@ matchlen_loop_repeat_extend:
 
 matchlen_short_repeat_extend:
 	SUBL $0x04, DI
-	JC   repeat_extend_forward_end_encodeSnappyBlockAsm
+	JC   matchlen_single_resume_repeat_extend
 
 matchlen_four_loopback_repeat_extend:
-	MOVL  (R8), R9
-	XORL  (BP), R9
-	JNZ   repeat_extend_forward_end_encodeSnappyBlockAsm
-	ADDL  $0x04, R11
-	ADDQ  $0x04, R8
-	ADDQ  $0x04, BP
-	SUBL  $0x04, DI
-	JNC   matchlen_four_loopback_repeat_extend
+	MOVL (R8), R9
+	XORL (BP), R9
+	JZ   matchlen_four_loopback_nextrepeat_extend
+	BSFL R9, R9
+	SARQ $0x03, R9
+	LEAL (R11)(R9*1), R11
+	JMP  repeat_extend_forward_end_encodeSnappyBlockAsm
+
+matchlen_four_loopback_nextrepeat_extend:
+	ADDL $0x04, R11
+	ADDQ $0x04, R8
+	ADDQ $0x04, BP
+	SUBL $0x04, DI
+	JNC  matchlen_four_loopback_repeat_extend
+
+matchlen_single_resume_repeat_extend:
 	ADDL  $0x04, DI
 	TESTL DI, DI
 	JZ    repeat_extend_forward_end_encodeSnappyBlockAsm
@@ -5769,17 +5841,25 @@ matchlen_loop_match_nolit_encodeSnappyBlockAsm:
 
 matchlen_short_match_nolit_encodeSnappyBlockAsm:
 	SUBL $0x04, SI
-	JC   match_nolit_end_encodeSnappyBlockAsm
+	JC   matchlen_single_resume_match_nolit_encodeSnappyBlockAsm
 
 matchlen_four_loopback_match_nolit_encodeSnappyBlockAsm:
-	MOVL  (DI), R8
-	XORL  (BP), R8
-	JNZ   match_nolit_end_encodeSnappyBlockAsm
-	ADDL  $0x04, R10
-	ADDQ  $0x04, DI
-	ADDQ  $0x04, BP
-	SUBL  $0x04, SI
-	JNC   matchlen_four_loopback_match_nolit_encodeSnappyBlockAsm
+	MOVL (DI), R8
+	XORL (BP), R8
+	JZ   matchlen_four_loopback_nextmatch_nolit_encodeSnappyBlockAsm
+	BSFL R8, R8
+	SARQ $0x03, R8
+	LEAL (R10)(R8*1), R10
+	JMP  match_nolit_end_encodeSnappyBlockAsm
+
+matchlen_four_loopback_nextmatch_nolit_encodeSnappyBlockAsm:
+	ADDL $0x04, R10
+	ADDQ $0x04, DI
+	ADDQ $0x04, BP
+	SUBL $0x04, SI
+	JNC  matchlen_four_loopback_match_nolit_encodeSnappyBlockAsm
+
+matchlen_single_resume_match_nolit_encodeSnappyBlockAsm:
 	ADDL  $0x04, SI
 	TESTL SI, SI
 	JZ    match_nolit_end_encodeSnappyBlockAsm
@@ -6361,17 +6441,25 @@ matchlen_loop_repeat_extend:
 
 matchlen_short_repeat_extend:
 	SUBL $0x04, DI
-	JC   repeat_extend_forward_end_encodeSnappyBlockAsm12B
+	JC   matchlen_single_resume_repeat_extend
 
 matchlen_four_loopback_repeat_extend:
-	MOVL  (R8), R9
-	XORL  (BP), R9
-	JNZ   repeat_extend_forward_end_encodeSnappyBlockAsm12B
-	ADDL  $0x04, R11
-	ADDQ  $0x04, R8
-	ADDQ  $0x04, BP
-	SUBL  $0x04, DI
-	JNC   matchlen_four_loopback_repeat_extend
+	MOVL (R8), R9
+	XORL (BP), R9
+	JZ   matchlen_four_loopback_nextrepeat_extend
+	BSFL R9, R9
+	SARQ $0x03, R9
+	LEAL (R11)(R9*1), R11
+	JMP  repeat_extend_forward_end_encodeSnappyBlockAsm12B
+
+matchlen_four_loopback_nextrepeat_extend:
+	ADDL $0x04, R11
+	ADDQ $0x04, R8
+	ADDQ $0x04, BP
+	SUBL $0x04, DI
+	JNC  matchlen_four_loopback_repeat_extend
+
+matchlen_single_resume_repeat_extend:
 	ADDL  $0x04, DI
 	TESTL DI, DI
 	JZ    repeat_extend_forward_end_encodeSnappyBlockAsm12B
@@ -6714,17 +6802,25 @@ matchlen_loop_match_nolit_encodeSnappyBlockAsm12B:
 
 matchlen_short_match_nolit_encodeSnappyBlockAsm12B:
 	SUBL $0x04, SI
-	JC   match_nolit_end_encodeSnappyBlockAsm12B
+	JC   matchlen_single_resume_match_nolit_encodeSnappyBlockAsm12B
 
 matchlen_four_loopback_match_nolit_encodeSnappyBlockAsm12B:
-	MOVL  (DI), R8
-	XORL  (BP), R8
-	JNZ   match_nolit_end_encodeSnappyBlockAsm12B
-	ADDL  $0x04, R10
-	ADDQ  $0x04, DI
-	ADDQ  $0x04, BP
-	SUBL  $0x04, SI
-	JNC   matchlen_four_loopback_match_nolit_encodeSnappyBlockAsm12B
+	MOVL (DI), R8
+	XORL (BP), R8
+	JZ   matchlen_four_loopback_nextmatch_nolit_encodeSnappyBlockAsm12B
+	BSFL R8, R8
+	SARQ $0x03, R8
+	LEAL (R10)(R8*1), R10
+	JMP  match_nolit_end_encodeSnappyBlockAsm12B
+
+matchlen_four_loopback_nextmatch_nolit_encodeSnappyBlockAsm12B:
+	ADDL $0x04, R10
+	ADDQ $0x04, DI
+	ADDQ $0x04, BP
+	SUBL $0x04, SI
+	JNC  matchlen_four_loopback_match_nolit_encodeSnappyBlockAsm12B
+
+matchlen_single_resume_match_nolit_encodeSnappyBlockAsm12B:
 	ADDL  $0x04, SI
 	TESTL SI, SI
 	JZ    match_nolit_end_encodeSnappyBlockAsm12B
@@ -7306,17 +7402,25 @@ matchlen_loop_repeat_extend:
 
 matchlen_short_repeat_extend:
 	SUBL $0x04, DI
-	JC   repeat_extend_forward_end_encodeSnappyBlockAsm10B
+	JC   matchlen_single_resume_repeat_extend
 
 matchlen_four_loopback_repeat_extend:
-	MOVL  (R8), R9
-	XORL  (BP), R9
-	JNZ   repeat_extend_forward_end_encodeSnappyBlockAsm10B
-	ADDL  $0x04, R11
-	ADDQ  $0x04, R8
-	ADDQ  $0x04, BP
-	SUBL  $0x04, DI
-	JNC   matchlen_four_loopback_repeat_extend
+	MOVL (R8), R9
+	XORL (BP), R9
+	JZ   matchlen_four_loopback_nextrepeat_extend
+	BSFL R9, R9
+	SARQ $0x03, R9
+	LEAL (R11)(R9*1), R11
+	JMP  repeat_extend_forward_end_encodeSnappyBlockAsm10B
+
+matchlen_four_loopback_nextrepeat_extend:
+	ADDL $0x04, R11
+	ADDQ $0x04, R8
+	ADDQ $0x04, BP
+	SUBL $0x04, DI
+	JNC  matchlen_four_loopback_repeat_extend
+
+matchlen_single_resume_repeat_extend:
 	ADDL  $0x04, DI
 	TESTL DI, DI
 	JZ    repeat_extend_forward_end_encodeSnappyBlockAsm10B
@@ -7659,17 +7763,25 @@ matchlen_loop_match_nolit_encodeSnappyBlockAsm10B:
 
 matchlen_short_match_nolit_encodeSnappyBlockAsm10B:
 	SUBL $0x04, SI
-	JC   match_nolit_end_encodeSnappyBlockAsm10B
+	JC   matchlen_single_resume_match_nolit_encodeSnappyBlockAsm10B
 
 matchlen_four_loopback_match_nolit_encodeSnappyBlockAsm10B:
-	MOVL  (DI), R8
-	XORL  (BP), R8
-	JNZ   match_nolit_end_encodeSnappyBlockAsm10B
-	ADDL  $0x04, R10
-	ADDQ  $0x04, DI
-	ADDQ  $0x04, BP
-	SUBL  $0x04, SI
-	JNC   matchlen_four_loopback_match_nolit_encodeSnappyBlockAsm10B
+	MOVL (DI), R8
+	XORL (BP), R8
+	JZ   matchlen_four_loopback_nextmatch_nolit_encodeSnappyBlockAsm10B
+	BSFL R8, R8
+	SARQ $0x03, R8
+	LEAL (R10)(R8*1), R10
+	JMP  match_nolit_end_encodeSnappyBlockAsm10B
+
+matchlen_four_loopback_nextmatch_nolit_encodeSnappyBlockAsm10B:
+	ADDL $0x04, R10
+	ADDQ $0x04, DI
+	ADDQ $0x04, BP
+	SUBL $0x04, SI
+	JNC  matchlen_four_loopback_match_nolit_encodeSnappyBlockAsm10B
+
+matchlen_single_resume_match_nolit_encodeSnappyBlockAsm10B:
 	ADDL  $0x04, SI
 	TESTL SI, SI
 	JZ    match_nolit_end_encodeSnappyBlockAsm10B
@@ -8251,17 +8363,25 @@ matchlen_loop_repeat_extend:
 
 matchlen_short_repeat_extend:
 	SUBL $0x04, DI
-	JC   repeat_extend_forward_end_encodeSnappyBlockAsm8B
+	JC   matchlen_single_resume_repeat_extend
 
 matchlen_four_loopback_repeat_extend:
-	MOVL  (R8), R9
-	XORL  (BP), R9
-	JNZ   repeat_extend_forward_end_encodeSnappyBlockAsm8B
-	ADDL  $0x04, R11
-	ADDQ  $0x04, R8
-	ADDQ  $0x04, BP
-	SUBL  $0x04, DI
-	JNC   matchlen_four_loopback_repeat_extend
+	MOVL (R8), R9
+	XORL (BP), R9
+	JZ   matchlen_four_loopback_nextrepeat_extend
+	BSFL R9, R9
+	SARQ $0x03, R9
+	LEAL (R11)(R9*1), R11
+	JMP  repeat_extend_forward_end_encodeSnappyBlockAsm8B
+
+matchlen_four_loopback_nextrepeat_extend:
+	ADDL $0x04, R11
+	ADDQ $0x04, R8
+	ADDQ $0x04, BP
+	SUBL $0x04, DI
+	JNC  matchlen_four_loopback_repeat_extend
+
+matchlen_single_resume_repeat_extend:
 	ADDL  $0x04, DI
 	TESTL DI, DI
 	JZ    repeat_extend_forward_end_encodeSnappyBlockAsm8B
@@ -8604,17 +8724,25 @@ matchlen_loop_match_nolit_encodeSnappyBlockAsm8B:
 
 matchlen_short_match_nolit_encodeSnappyBlockAsm8B:
 	SUBL $0x04, SI
-	JC   match_nolit_end_encodeSnappyBlockAsm8B
+	JC   matchlen_single_resume_match_nolit_encodeSnappyBlockAsm8B
 
 matchlen_four_loopback_match_nolit_encodeSnappyBlockAsm8B:
-	MOVL  (DI), R8
-	XORL  (BP), R8
-	JNZ   match_nolit_end_encodeSnappyBlockAsm8B
-	ADDL  $0x04, R10
-	ADDQ  $0x04, DI
-	ADDQ  $0x04, BP
-	SUBL  $0x04, SI
-	JNC   matchlen_four_loopback_match_nolit_encodeSnappyBlockAsm8B
+	MOVL (DI), R8
+	XORL (BP), R8
+	JZ   matchlen_four_loopback_nextmatch_nolit_encodeSnappyBlockAsm8B
+	BSFL R8, R8
+	SARQ $0x03, R8
+	LEAL (R10)(R8*1), R10
+	JMP  match_nolit_end_encodeSnappyBlockAsm8B
+
+matchlen_four_loopback_nextmatch_nolit_encodeSnappyBlockAsm8B:
+	ADDL $0x04, R10
+	ADDQ $0x04, DI
+	ADDQ $0x04, BP
+	SUBL $0x04, SI
+	JNC  matchlen_four_loopback_match_nolit_encodeSnappyBlockAsm8B
+
+matchlen_single_resume_match_nolit_encodeSnappyBlockAsm8B:
 	ADDL  $0x04, SI
 	TESTL SI, SI
 	JZ    match_nolit_end_encodeSnappyBlockAsm8B
@@ -9483,17 +9611,25 @@ matchlen_loop_standalone:
 
 matchlen_short_standalone:
 	SUBL $0x04, DX
-	JC   gen_match_len_end
+	JC   matchlen_single_resume_standalone
 
 matchlen_four_loopback_standalone:
-	MOVL  (AX), BX
-	XORL  (CX), BX
-	JNZ   gen_match_len_end
-	ADDL  $0x04, SI
-	ADDQ  $0x04, AX
-	ADDQ  $0x04, CX
-	SUBL  $0x04, DX
-	JNC   matchlen_four_loopback_standalone
+	MOVL (AX), BX
+	XORL (CX), BX
+	JZ   matchlen_four_loopback_nextstandalone
+	BSFL BX, BX
+	SARQ $0x03, BX
+	LEAL (SI)(BX*1), SI
+	JMP  gen_match_len_end
+
+matchlen_four_loopback_nextstandalone:
+	ADDL $0x04, SI
+	ADDQ $0x04, AX
+	ADDQ $0x04, CX
+	SUBL $0x04, DX
+	JNC  matchlen_four_loopback_standalone
+
+matchlen_single_resume_standalone:
 	ADDL  $0x04, DX
 	TESTL DX, DX
 	JZ    gen_match_len_end

@@ -1826,7 +1826,7 @@ func TestMatchLen(t *testing.T) {
 	}
 
 	// We allow slightly shorter matches at the end of slices
-	const maxBelow = 3
+	const maxBelow = 0
 	nums := []int{0, 1, 2, 7, 8, 9, 16, 20, 29, 30, 31, 32, 33, 34, 38, 39, 40}
 	for yIndex := 40; yIndex > 30; yIndex-- {
 		xxx := bytes.Repeat([]byte("x"), 40)
