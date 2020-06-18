@@ -400,11 +400,8 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes in
 				MOVL(s, nextEmitL)
 			}
 			// if s >= sLimit
-			// can be omitted.
-			assert(func(ok LabelRef) {
-				CMPL(s, sLimitL)
-				JGE(ok)
-			})
+			CMPL(s, sLimitL)
+			JGE(LabelRef("emit_remainder_" + name))
 			JMP(LabelRef("search_loop_" + name))
 		}
 		Label("no_repeat_found_" + name)
