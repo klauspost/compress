@@ -597,8 +597,6 @@ emit_copy_three_repeat_as_copy_encodeBlockAsm:
 
 repeat_end_emit_encodeBlockAsm:
 	MOVL CX, 12(SP)
-	CMPL CX, 8(SP)
-	JGE  emit_remainder_encodeBlockAsm
 	JMP  search_loop_encodeBlockAsm
 
 no_repeat_found_encodeBlockAsm:
@@ -1892,8 +1890,6 @@ emit_copy_three_repeat_as_copy_encodeBlockAsm12B:
 
 repeat_end_emit_encodeBlockAsm12B:
 	MOVL CX, 12(SP)
-	CMPL CX, 8(SP)
-	JGE  emit_remainder_encodeBlockAsm12B
 	JMP  search_loop_encodeBlockAsm12B
 
 no_repeat_found_encodeBlockAsm12B:
@@ -3187,8 +3183,6 @@ emit_copy_three_repeat_as_copy_encodeBlockAsm10B:
 
 repeat_end_emit_encodeBlockAsm10B:
 	MOVL CX, 12(SP)
-	CMPL CX, 8(SP)
-	JGE  emit_remainder_encodeBlockAsm10B
 	JMP  search_loop_encodeBlockAsm10B
 
 no_repeat_found_encodeBlockAsm10B:
@@ -4482,8 +4476,6 @@ emit_copy_three_repeat_as_copy_encodeBlockAsm8B:
 
 repeat_end_emit_encodeBlockAsm8B:
 	MOVL CX, 12(SP)
-	CMPL CX, 8(SP)
-	JGE  emit_remainder_encodeBlockAsm8B
 	JMP  search_loop_encodeBlockAsm8B
 
 no_repeat_found_encodeBlockAsm8B:
@@ -5575,8 +5567,6 @@ emit_copy_three_repeat_as_copy_encodeSnappyBlockAsm:
 
 repeat_end_emit_encodeSnappyBlockAsm:
 	MOVL CX, 12(SP)
-	CMPL CX, 8(SP)
-	JGE  emit_remainder_encodeSnappyBlockAsm
 	JMP  search_loop_encodeSnappyBlockAsm
 
 no_repeat_found_encodeSnappyBlockAsm:
@@ -6536,8 +6526,6 @@ emit_copy_three_repeat_as_copy_encodeSnappyBlockAsm12B:
 
 repeat_end_emit_encodeSnappyBlockAsm12B:
 	MOVL CX, 12(SP)
-	CMPL CX, 8(SP)
-	JGE  emit_remainder_encodeSnappyBlockAsm12B
 	JMP  search_loop_encodeSnappyBlockAsm12B
 
 no_repeat_found_encodeSnappyBlockAsm12B:
@@ -7497,8 +7485,6 @@ emit_copy_three_repeat_as_copy_encodeSnappyBlockAsm10B:
 
 repeat_end_emit_encodeSnappyBlockAsm10B:
 	MOVL CX, 12(SP)
-	CMPL CX, 8(SP)
-	JGE  emit_remainder_encodeSnappyBlockAsm10B
 	JMP  search_loop_encodeSnappyBlockAsm10B
 
 no_repeat_found_encodeSnappyBlockAsm10B:
@@ -8458,8 +8444,6 @@ emit_copy_three_repeat_as_copy_encodeSnappyBlockAsm8B:
 
 repeat_end_emit_encodeSnappyBlockAsm8B:
 	MOVL CX, 12(SP)
-	CMPL CX, 8(SP)
-	JGE  emit_remainder_encodeSnappyBlockAsm8B
 	JMP  search_loop_encodeSnappyBlockAsm8B
 
 no_repeat_found_encodeSnappyBlockAsm8B:

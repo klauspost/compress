@@ -396,8 +396,8 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes in
 				// Store new dst and nextEmit
 				MOVL(s, nextEmitL)
 			}
-			// if s >= sLimit
-			{
+			// if s >= sLimit is picked up on next loop.
+			if false {
 				CMPL(s.As32(), sLimitL)
 				JGE(LabelRef("emit_remainder_" + name))
 			}
@@ -1676,7 +1676,7 @@ func (o options) genMatchLen() {
 // matchLen returns the number of matching bytes of a and b.
 // len is the maximum number of bytes to match.
 // Will jump to end when done and returns the length.
-// Uses 2 GP registers.
+// Uses 3 GP registers.
 func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) reg.GPVirtual {
 	if false {
 		return o.matchLenAlt(name, a, b, len, end)
