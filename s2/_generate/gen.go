@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"runtime"
 
 	. "github.com/mmcloughlin/avo/build"
@@ -58,7 +59,7 @@ func debugval32(v Op) {
 var assertCounter int
 
 // insert extra checks here and there.
-const debug = false
+const debug = true
 
 // assert will insert code if debug is enabled.
 // The code should jump to 'ok' is assertion is success.
@@ -1656,7 +1657,8 @@ func (o options) genMatchLen() {
 // matchLen returns the number of matching bytes of a and b.
 // len is the maximum number of bytes to match.
 // Will jump to end when done and returns the length.
-// Uses 2 GP registers.
+// all passed registers are updated.
+// Uses 3 GP registers.
 func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) reg.GPVirtual {
 	tmp, tmp2, matched := GP64(), GP64(), GP32()
 	XORL(matched, matched)
@@ -1698,6 +1700,11 @@ func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) re
 		JC(end)
 
 		Label("matchlen_four_loopback_" + name)
+		assert(func(ok LabelRef) {
+			CMPL(len.As32(), U32(math.MaxInt32))
+			JL(ok)
+		})
+
 		MOVL(Mem{Base: a}, tmp.As32())
 		XORL(Mem{Base: b}, tmp.As32())
 		// We don't care about the exact length.
