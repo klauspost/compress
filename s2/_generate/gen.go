@@ -368,6 +368,7 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes in
 					LEAQ(Mem{Base: src, Index: candidate, Scale: 1}, backStart)
 
 					length := o.matchLen("repeat_extend", forwardStart, backStart, srcLeft, LabelRef("repeat_extend_forward_end_"+name))
+					forwardStart, backStart, srcLeft = nil, nil, nil
 					Label("repeat_extend_forward_end_" + name)
 					// s+= length
 					ADDL(length.As32(), s)
@@ -578,6 +579,12 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes in
 				LabelRef("match_nolit_end_"+name),
 			)
 			Label("match_nolit_end_" + name)
+			assert(func(ok LabelRef) {
+				CMPL(length.As32(), U32(math.MaxInt32))
+				JL(ok)
+			})
+			a, b, srcLeft = nil, nil, nil
+
 			// s += length (length is destroyed, use it now)
 			ADDL(length.As32(), s)
 
@@ -586,7 +593,7 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes in
 			MOVL(repeatL, offset.As32())
 
 			// length += 4
-			ADDL(U8(4), length)
+			ADDL(U8(4), length.As32())
 			o.emitCopy("match_nolit_"+name, length, offset, nil, dst, LabelRef("match_nolit_emitcopy_end_"+name))
 			Label("match_nolit_emitcopy_end_" + name)
 			MOVL(s, nextEmitL)
@@ -610,14 +617,14 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes in
 		}
 		{
 			// Check for an immediate match, otherwise start search at s+1
-			next := GP64()
+			x := GP64()
 			// Index s-2
-			MOVQ(Mem{Base: src, Index: s, Scale: 1, Disp: -2}, next)
+			MOVQ(Mem{Base: src, Index: s, Scale: 1, Disp: -2}, x)
 			hasher := hashN(hashBytes, tableBits)
 			hash0, hash1 := GP64(), GP64()
-			MOVQ(next, hash0) // s-2
-			SHRQ(U8(16), next)
-			MOVQ(next, hash1) // s
+			MOVQ(x, hash0) // s-2
+			SHRQ(U8(16), x)
+			MOVQ(x, hash1) // s
 			hasher.hash(hash0)
 			hasher.hash(hash1)
 			sm2 := GP32() // s - 2
@@ -634,7 +641,7 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes in
 			MOVL(table.Idx(hash1, 4), candidate)
 			MOVL(sm2, table.Idx(hash0, 4))
 			MOVL(s, table.Idx(hash1, 4))
-			CMPL(Mem{Base: src, Index: candidate, Scale: 1}, next.As32())
+			CMPL(Mem{Base: src, Index: candidate, Scale: 1}, x.As32())
 			JEQ(LabelRef("match_nolit_loop_" + name))
 			INCL(s)
 		}
@@ -903,7 +910,7 @@ func (o options) emitLiteral(name string, litLen, retval, dstBase, litBase reg.G
 	JMP(LabelRef("memmove_long_" + name))
 
 	Label("one_byte_" + name)
-	SHLQ(U8(2), n.As64())
+	SHLB(U8(2), n.As8())
 	MOVB(n.As8(), Mem{Base: dstBase})
 	if retval != nil {
 		ADDQ(U8(1), retval)
@@ -1061,8 +1068,8 @@ func (o options) emitRepeat(name string, length, offset, retval, dstBase reg.GPV
 
 	Label("repeat_two_" + name)
 	// dst[0] = uint8(length)<<2 | tagCopy1, dst[1] = 0
-	SHLQ(U8(2), length.As64())
-	ORQ(U8(tagCopy1), length.As64())
+	SHLL(U8(2), length.As32())
+	ORL(U8(tagCopy1), length.As32())
 	MOVW(length.As16(), Mem{Base: dstBase}) // dst[0] = 7<<2 | tagCopy1, dst[1] = 0
 	if retval != nil {
 		ADDQ(U8(2), retval) // i += 2
@@ -1077,11 +1084,11 @@ func (o options) emitRepeat(name string, length, offset, retval, dstBase reg.GPV
 	tmp = GP64()
 	XORQ(tmp, tmp)
 	// Use scale and displacement to shift and subtract values from length.
-	LEAQ(Mem{Base: tmp, Index: length, Scale: 4, Disp: tagCopy1}, length.As64())
+	LEAL(Mem{Base: tmp, Index: length, Scale: 4, Disp: tagCopy1}, length.As32())
 	MOVB(offset.As8(), Mem{Base: dstBase, Disp: 1}) // Store offset lower byte
-	SARQ(U8(8), offset.As64())                      // Remove lower
-	SHLQ(U8(5), offset.As64())                      // Shift back up
-	ORQ(offset.As64(), length.As64())               // OR result
+	SARL(U8(8), offset.As32())                      // Remove lower
+	SHLL(U8(5), offset.As32())                      // Shift back up
+	ORL(offset.As32(), length.As32())               // OR result
 	MOVB(length.As8(), Mem{Base: dstBase, Disp: 0})
 	if retval != nil {
 		ADDQ(U8(2), retval) // i += 2
@@ -1271,11 +1278,11 @@ func (o options) emitCopy(name string, length, offset, retval, dstBase reg.GPVir
 	tmp = GP64()
 	MOVB(U8(tagCopy1), tmp.As8())
 	// Use scale and displacement to shift and subtract values from length.
-	LEAQ(Mem{Base: tmp, Index: length, Scale: 4, Disp: -(4 << 2)}, length.As64())
+	LEAL(Mem{Base: tmp, Index: length, Scale: 4, Disp: -(4 << 2)}, length.As32())
 	MOVB(offset.As8(), Mem{Base: dstBase, Disp: 1}) // Store offset lower byte
-	SHRQ(U8(8), offset.As64())                      // Remove lower
-	SHLQ(U8(5), offset.As64())                      // Shift back up
-	ORQ(offset.As64(), length.As64())               // OR result
+	SHRL(U8(8), offset.As32())                      // Remove lower
+	SHLL(U8(5), offset.As32())                      // Shift back up
+	ORL(offset.As32(), length.As32())               // OR result
 	MOVB(length.As8(), Mem{Base: dstBase, Disp: 0})
 	if retval != nil {
 		ADDQ(U8(2), retval) // i += 2
@@ -1657,27 +1664,26 @@ func (o options) genMatchLen() {
 // matchLen returns the number of matching bytes of a and b.
 // len is the maximum number of bytes to match.
 // Will jump to end when done and returns the length.
-// all passed registers are updated.
-// Uses 3 GP registers.
+// Uses 2 GP registers.
 func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) reg.GPVirtual {
 	tmp, tmp2, matched := GP64(), GP64(), GP32()
 	XORL(matched, matched)
 
 	CMPL(len.As32(), U8(16))
-	JL(LabelRef("matchlen_four_" + name))
+	JB(LabelRef("matchlen_four_" + name))
 
 	Label("matchlen_loopback_" + name)
 	MOVQ(Mem{Base: a}, tmp)
 	MOVQ(Mem{Base: a, Disp: 8}, tmp2)
 	XORQ(Mem{Base: b, Disp: 0}, tmp)
 	XORQ(Mem{Base: b, Disp: 8}, tmp2)
-	endTest := func(tmp reg.GPVirtual, disp int, dst LabelRef) {
-		TESTQ(tmp, tmp)
-		JZ(dst)
+	endTest := func(xored reg.GPVirtual, disp int, ok LabelRef) {
+		TESTQ(xored, xored)
+		JZ(ok)
 		// Not all match.
-		BSFQ(tmp, tmp)
-		SARQ(U8(3), tmp)
-		LEAL(Mem{Base: matched, Index: tmp, Scale: 1, Disp: disp}, matched)
+		BSFQ(xored, xored)
+		SARQ(U8(3), xored)
+		LEAL(Mem{Base: matched, Index: xored, Scale: 1, Disp: disp}, matched)
 		JMP(end)
 	}
 	endTest(tmp, 0, LabelRef("matchlen_loop_tmp2_"+name))
@@ -1691,7 +1697,7 @@ func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) re
 	ADDQ(U8(16), a)
 	ADDQ(U8(16), b)
 	CMPL(len.As32(), U8(16))
-	JGE(LabelRef("matchlen_loopback_" + name))
+	JAE(LabelRef("matchlen_loopback_" + name))
 
 	// Test 4 bytes at the time...
 	Label("matchlen_four_" + name)
@@ -1734,6 +1740,5 @@ func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) re
 		JNZ(LabelRef("matchlen_single_loopback_" + name))
 	}
 	JMP(end)
-
 	return matched
 }

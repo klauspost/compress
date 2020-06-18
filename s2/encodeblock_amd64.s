@@ -31,20 +31,20 @@ zero_loop_encodeBlockAsm:
 	LEAQ  -5(CX), DX
 	LEAQ  -8(CX), BP
 	CMPQ  BP, src_len+32(FP)
-	JL    assert_check_0_ok_srcline_175
+	JL    assert_check_0_ok_srcline_176
 	INT   $0x03
 	INT   $0x03
 
-assert_check_0_ok_srcline_175:
+assert_check_0_ok_srcline_176:
 	MOVL BP, 8(SP)
 	SHRQ $0x05, CX
 	SUBL CX, DX
 	CMPQ src_len+32(FP), DX
-	JGE  assert_check_1_ok_srcline_186
+	JGE  assert_check_1_ok_srcline_187
 	INT  $0x03
 	INT  $0x03
 
-assert_check_1_ok_srcline_186:
+assert_check_1_ok_srcline_187:
 	LEAQ (AX)(DX*1), DX
 	MOVQ DX, (SP)
 	MOVL $0x00000001, CX
@@ -54,18 +54,18 @@ assert_check_1_ok_srcline_186:
 search_loop_encodeBlockAsm:
 	MOVQ src_base+24(FP), BP
 	CMPQ BP, DX
-	JEQ  assert_check_2_ok_srcline_212
+	JEQ  assert_check_2_ok_srcline_213
 	INT  $0x03
 	INT  $0x03
 
-assert_check_2_ok_srcline_212:
+assert_check_2_ok_srcline_213:
 	MOVQ src_len+32(FP), BP
 	CMPQ BP, CX
-	JG   assert_check_3_ok_srcline_219
+	JG   assert_check_3_ok_srcline_220
 	INT  $0x03
 	INT  $0x03
 
-assert_check_3_ok_srcline_219:
+assert_check_3_ok_srcline_220:
 	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
@@ -88,17 +88,17 @@ assert_check_3_ok_srcline_219:
 	MOVL  24(SP)(R9*4), BP
 	MOVL  24(SP)(R10*4), DI
 	CMPQ  R9, $0x00010000
-	JL    assert_check_4_ok_srcline_258
+	JL    assert_check_4_ok_srcline_259
 	INT   $0x03
 	INT   $0x03
 
-assert_check_4_ok_srcline_258:
+assert_check_4_ok_srcline_259:
 	CMPQ R10, $0x00010000
-	JL   assert_check_5_ok_srcline_262
+	JL   assert_check_5_ok_srcline_263
 	INT  $0x03
 	INT  $0x03
 
-assert_check_5_ok_srcline_262:
+assert_check_5_ok_srcline_263:
 	MOVL  CX, 24(SP)(R9*4)
 	LEAL  1(CX), R9
 	MOVL  R9, 24(SP)(R10*4)
@@ -108,11 +108,11 @@ assert_check_5_ok_srcline_262:
 	IMULQ R8, R9
 	SHRQ  $0x32, R9
 	CMPQ  R9, $0x00010000
-	JL    assert_check_6_ok_srcline_281
+	JL    assert_check_6_ok_srcline_282
 	INT   $0x03
 	INT   $0x03
 
-assert_check_6_ok_srcline_281:
+assert_check_6_ok_srcline_282:
 	MOVL CX, R8
 	SUBL 16(SP), R8
 	MOVL 1(DX)(R8*1), R10
@@ -146,11 +146,11 @@ repeat_extend_back_end_encodeBlockAsm:
 	LEAQ  (DX)(BP*1), R9
 	SUBL  BP, R8
 	TESTL R8, R8
-	JNZ   assert_check_7_ok_srcline_841
+	JNZ   assert_check_7_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_7_ok_srcline_841:
+assert_check_7_ok_srcline_849:
 	LEAL -1(R8), BP
 	CMPL BP, $0x3c
 	JLT  one_byte_repeat_emit_encodeBlockAsm
@@ -189,7 +189,7 @@ two_bytes_repeat_emit_encodeBlockAsm:
 	JMP  memmove_long_repeat_emit_encodeBlockAsm
 
 one_byte_repeat_emit_encodeBlockAsm:
-	SHLQ $0x02, BP
+	SHLB $0x02, BP
 	MOVB BP, (AX)
 	ADDQ $0x01, AX
 
@@ -321,61 +321,15 @@ emit_literal_done_repeat_emit_encodeBlockAsm:
 	MOVQ src_len+32(FP), R8
 	SUBL CX, R8
 	CMPQ R8, $0x7fffffff
-	JL   assert_check_8_ok_srcline_357
+	JL   assert_check_8_ok_srcline_358
 	INT  $0x03
 	INT  $0x03
 
-assert_check_8_ok_srcline_357:
-	LEAQ (DX)(CX*1), R9
-	LEAQ (DX)(BP*1), BP
-	XORL R12, R12
-	CMPL R8, $0x10
-	JL   matchlen_four_repeat_extend
-
-matchlen_loopback_repeat_extend:
-	MOVQ  (R9), R10
-	MOVQ  8(R9), R11
-	XORQ  (BP), R10
-	XORQ  8(BP), R11
-	TESTQ R10, R10
-	JZ    matchlen_loop_tmp2_repeat_extend
-	BSFQ  R10, R10
-	SARQ  $0x03, R10
-	LEAL  (R12)(R10*1), R12
-	JMP   repeat_extend_forward_end_encodeBlockAsm
-
-matchlen_loop_tmp2_repeat_extend:
-	TESTQ R11, R11
-	JZ    matchlen_loop_repeat_extend
-	BSFQ  R11, R11
-	SARQ  $0x03, R11
-	LEAL  8(R12)(R11*1), R12
-	JMP   repeat_extend_forward_end_encodeBlockAsm
-
-matchlen_loop_repeat_extend:
-	SUBL $0x10, R8
-	ADDL $0x10, R12
-	ADDQ $0x10, R9
-	ADDQ $0x10, BP
-	CMPL R8, $0x10
-	JGE  matchlen_loopback_repeat_extend
-
-matchlen_four_repeat_extend:
-	SUBL $0x04, R8
-	JC   repeat_extend_forward_end_encodeBlockAsm
-
-matchlen_four_loopback_repeat_extend:
-	MOVL (R9), R10
-	XORL (BP), R10
-	JNZ  repeat_extend_forward_end_encodeBlockAsm
-	ADDL $0x04, R12
-	ADDQ $0x04, R9
-	ADDQ $0x04, BP
-	SUBL $0x04, R8
-	JNC  matchlen_four_loopback_repeat_extend
-
-repeat_extend_forward_end_encodeBlockAsm:
-	ADDL  R12, CX
+assert_check_8_ok_srcline_358:
+	LEAQ  (DX)(CX*1), R8
+	LEAQ  (DX)(BP*1), BP
+	XORQ  BP, BP
+	ADDL  BP, CX
 	MOVL  CX, BP
 	SUBL  SI, BP
 	MOVL  16(SP), SI
@@ -431,19 +385,19 @@ repeat_three_match_repeat_encodeBlockAsm:
 	JMP  repeat_end_emit_encodeBlockAsm
 
 repeat_two_match_repeat_encodeBlockAsm:
-	SHLQ $0x02, BP
-	ORQ  $0x01, BP
+	SHLL $0x02, BP
+	ORL  $0x01, BP
 	MOVW BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm
 
 repeat_two_offset_match_repeat_encodeBlockAsm:
 	XORQ DI, DI
-	LEAQ 1(DI)(BP*4), BP
+	LEAL 1(DI)(BP*4), BP
 	MOVB SI, 1(AX)
-	SARQ $0x08, SI
-	SHLQ $0x05, SI
-	ORQ  SI, BP
+	SARL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
 	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm
@@ -511,19 +465,19 @@ repeat_three_repeat_as_copy_encodeBlockAsm_emit_copy:
 	JMP  repeat_end_emit_encodeBlockAsm
 
 repeat_two_repeat_as_copy_encodeBlockAsm_emit_copy:
-	SHLQ $0x02, BP
-	ORQ  $0x01, BP
+	SHLL $0x02, BP
+	ORL  $0x01, BP
 	MOVW BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm
 
 repeat_two_offset_repeat_as_copy_encodeBlockAsm_emit_copy:
 	XORQ DI, DI
-	LEAQ 1(DI)(BP*4), BP
+	LEAL 1(DI)(BP*4), BP
 	MOVB SI, 1(AX)
-	SARQ $0x08, SI
-	SHLQ $0x05, SI
-	ORQ  SI, BP
+	SARL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
 	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm
@@ -596,19 +550,19 @@ repeat_three_repeat_as_copy_encodeBlockAsm_emit_copy_short:
 	JMP  repeat_end_emit_encodeBlockAsm
 
 repeat_two_repeat_as_copy_encodeBlockAsm_emit_copy_short:
-	SHLQ $0x02, BP
-	ORQ  $0x01, BP
+	SHLL $0x02, BP
+	ORL  $0x01, BP
 	MOVW BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm
 
 repeat_two_offset_repeat_as_copy_encodeBlockAsm_emit_copy_short:
 	XORQ DI, DI
-	LEAQ 1(DI)(BP*4), BP
+	LEAL 1(DI)(BP*4), BP
 	MOVB SI, 1(AX)
-	SARQ $0x08, SI
-	SHLQ $0x05, SI
-	ORQ  SI, BP
+	SARL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
 	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm
@@ -620,11 +574,11 @@ two_byte_offset_short_repeat_as_copy_encodeBlockAsm:
 	CMPL SI, $0x00000800
 	JGE  emit_copy_three_repeat_as_copy_encodeBlockAsm
 	MOVB $0x01, BL
-	LEAQ -16(BX)(BP*4), BP
+	LEAL -16(BX)(BP*4), BP
 	MOVB SI, 1(AX)
-	SHRQ $0x08, SI
-	SHLQ $0x05, SI
-	ORQ  SI, BP
+	SHRL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
 	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm
@@ -645,48 +599,48 @@ repeat_end_emit_encodeBlockAsm:
 no_repeat_found_encodeBlockAsm:
 	MOVQ src_len+32(FP), R8
 	CMPL R8, BP
-	JG   assert_check_9_ok_srcline_410
+	JG   assert_check_9_ok_srcline_412
 	INT  $0x03
 	INT  $0x03
 
-assert_check_9_ok_srcline_410:
+assert_check_9_ok_srcline_412:
 	CMPL CX, BP
-	JG   assert_check_10_ok_srcline_416
+	JG   assert_check_10_ok_srcline_418
 	INT  $0x03
 	INT  $0x03
 
-assert_check_10_ok_srcline_416:
+assert_check_10_ok_srcline_418:
 	MOVQ src_len+32(FP), R8
 	CMPL R8, DI
-	JG   assert_check_11_ok_srcline_420
+	JG   assert_check_11_ok_srcline_422
 	INT  $0x03
 	INT  $0x03
 
-assert_check_11_ok_srcline_420:
+assert_check_11_ok_srcline_422:
 	CMPL CX, DI
-	JG   assert_check_12_ok_srcline_426
+	JG   assert_check_12_ok_srcline_428
 	INT  $0x03
 	INT  $0x03
 
-assert_check_12_ok_srcline_426:
+assert_check_12_ok_srcline_428:
 	CMPL (DX)(BP*1), SI
 	JEQ  candidate_match_encodeBlockAsm
 	SHRQ $0x08, SI
 	MOVL 24(SP)(R9*4), BP
 	MOVQ src_len+32(FP), R8
 	CMPL R8, BP
-	JG   assert_check_13_ok_srcline_440
+	JG   assert_check_13_ok_srcline_442
 	INT  $0x03
 	INT  $0x03
 
-assert_check_13_ok_srcline_440:
+assert_check_13_ok_srcline_442:
 	LEAL 2(CX), R8
 	CMPL R8, BP
-	JG   assert_check_14_ok_srcline_446
+	JG   assert_check_14_ok_srcline_448
 	INT  $0x03
 	INT  $0x03
 
-assert_check_14_ok_srcline_446:
+assert_check_14_ok_srcline_448:
 	LEAL 2(CX), R8
 	CMPL (DX)(DI*1), SI
 	JEQ  candidate2_match_encodeBlockAsm
@@ -742,11 +696,11 @@ match_dst_size_check_encodeBlockAsm:
 	LEAQ  (DX)(DI*1), SI
 	SUBL  DI, R8
 	TESTL R8, R8
-	JNZ   assert_check_15_ok_srcline_841
+	JNZ   assert_check_15_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_15_ok_srcline_841:
+assert_check_15_ok_srcline_849:
 	LEAL -1(R8), DI
 	CMPL DI, $0x3c
 	JLT  one_byte_match_emit_encodeBlockAsm
@@ -785,7 +739,7 @@ two_bytes_match_emit_encodeBlockAsm:
 	JMP  memmove_long_match_emit_encodeBlockAsm
 
 one_byte_match_emit_encodeBlockAsm:
-	SHLQ $0x02, DI
+	SHLB $0x02, DI
 	MOVB DI, (AX)
 	ADDQ $0x01, AX
 
@@ -918,102 +872,62 @@ match_nolit_loop_encodeBlockAsm:
 	ADDL $0x04, CX
 	ADDL $0x04, BP
 	CMPL CX, BP
-	JG   assert_check_16_ok_srcline_556
+	JG   assert_check_16_ok_srcline_558
 	INT  $0x03
 	INT  $0x03
 
-assert_check_16_ok_srcline_556:
+assert_check_16_ok_srcline_558:
 	MOVQ src_len+32(FP), SI
 	SUBL CX, SI
 	CMPQ SI, $0x7fffffff
-	JL   assert_check_17_ok_srcline_565
+	JL   assert_check_17_ok_srcline_567
 	INT  $0x03
 	INT  $0x03
 
-assert_check_17_ok_srcline_565:
-	LEAQ (DX)(CX*1), DI
+assert_check_17_ok_srcline_567:
+	LEAQ (DX)(CX*1), SI
 	LEAQ (DX)(BP*1), BP
-	XORL R10, R10
-	CMPL SI, $0x10
-	JL   matchlen_four_match_nolit_encodeBlockAsm
+	XORQ BP, BP
+	CMPL BP, $0x7fffffff
+	JL   assert_check_18_ok_srcline_582
+	INT  $0x03
+	INT  $0x03
 
-matchlen_loopback_match_nolit_encodeBlockAsm:
-	MOVQ  (DI), R8
-	MOVQ  8(DI), R9
-	XORQ  (BP), R8
-	XORQ  8(BP), R9
-	TESTQ R8, R8
-	JZ    matchlen_loop_tmp2_match_nolit_encodeBlockAsm
-	BSFQ  R8, R8
-	SARQ  $0x03, R8
-	LEAL  (R10)(R8*1), R10
-	JMP   match_nolit_end_encodeBlockAsm
-
-matchlen_loop_tmp2_match_nolit_encodeBlockAsm:
-	TESTQ R9, R9
-	JZ    matchlen_loop_match_nolit_encodeBlockAsm
-	BSFQ  R9, R9
-	SARQ  $0x03, R9
-	LEAL  8(R10)(R9*1), R10
-	JMP   match_nolit_end_encodeBlockAsm
-
-matchlen_loop_match_nolit_encodeBlockAsm:
-	SUBL $0x10, SI
-	ADDL $0x10, R10
-	ADDQ $0x10, DI
-	ADDQ $0x10, BP
-	CMPL SI, $0x10
-	JGE  matchlen_loopback_match_nolit_encodeBlockAsm
-
-matchlen_four_match_nolit_encodeBlockAsm:
-	SUBL $0x04, SI
-	JC   match_nolit_end_encodeBlockAsm
-
-matchlen_four_loopback_match_nolit_encodeBlockAsm:
-	MOVL (DI), R8
-	XORL (BP), R8
-	JNZ  match_nolit_end_encodeBlockAsm
-	ADDL $0x04, R10
-	ADDQ $0x04, DI
-	ADDQ $0x04, BP
-	SUBL $0x04, SI
-	JNC  matchlen_four_loopback_match_nolit_encodeBlockAsm
-
-match_nolit_end_encodeBlockAsm:
-	ADDL R10, CX
-	MOVL 16(SP), BP
-	ADDL $0x04, R10
-	CMPL BP, $0x00010000
+assert_check_18_ok_srcline_582:
+	ADDL BP, CX
+	MOVL 16(SP), SI
+	ADDL $0x04, BP
+	CMPL SI, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeBlockAsm
 
 four_bytes_loop_back_match_nolit_encodeBlockAsm:
-	CMPL R10, $0x40
+	CMPL BP, $0x40
 	JLE  four_bytes_remain_match_nolit_encodeBlockAsm
 	MOVB $0xff, (AX)
-	MOVL BP, 1(AX)
-	LEAL -64(R10), R10
+	MOVL SI, 1(AX)
+	LEAL -64(BP), BP
 	ADDQ $0x05, AX
-	CMPL R10, $0x04
+	CMPL BP, $0x04
 	JL   four_bytes_remain_match_nolit_encodeBlockAsm
 
 emit_repeat_again_match_nolit_encodeBlockAsm_emit_copy:
-	MOVL R10, SI
-	LEAL -4(R10), R10
-	CMPL SI, $0x08
+	MOVL BP, DI
+	LEAL -4(BP), BP
+	CMPL DI, $0x08
 	JLE  repeat_two_match_nolit_encodeBlockAsm_emit_copy
-	CMPL SI, $0x0c
+	CMPL DI, $0x0c
 	JGE  cant_repeat_two_offset_match_nolit_encodeBlockAsm_emit_copy
-	CMPL BP, $0x00000800
+	CMPL SI, $0x00000800
 	JLT  repeat_two_offset_match_nolit_encodeBlockAsm_emit_copy
 
 cant_repeat_two_offset_match_nolit_encodeBlockAsm_emit_copy:
-	CMPL R10, $0x00000104
+	CMPL BP, $0x00000104
 	JLT  repeat_three_match_nolit_encodeBlockAsm_emit_copy
-	CMPL R10, $0x00010100
+	CMPL BP, $0x00010100
 	JLT  repeat_four_match_nolit_encodeBlockAsm_emit_copy
-	CMPL R10, $0x0100ffff
+	CMPL BP, $0x0100ffff
 	JLT  repeat_five_match_nolit_encodeBlockAsm_emit_copy
-	LEAL -16842747(R10), R10
+	LEAL -16842747(BP), BP
 	MOVW $0x001d, (AX)
 	MOVW $0xfffb, 2(AX)
 	MOVB $0xff, 4(AX)
@@ -1021,84 +935,84 @@ cant_repeat_two_offset_match_nolit_encodeBlockAsm_emit_copy:
 	JMP  emit_repeat_again_match_nolit_encodeBlockAsm_emit_copy
 
 repeat_five_match_nolit_encodeBlockAsm_emit_copy:
-	LEAL -65536(R10), R10
-	MOVL R10, BP
+	LEAL -65536(BP), BP
+	MOVL BP, SI
 	MOVW $0x001d, (AX)
-	MOVW R10, 2(AX)
-	SARL $0x10, BP
-	MOVB BP, 4(AX)
+	MOVW BP, 2(AX)
+	SARL $0x10, SI
+	MOVB SI, 4(AX)
 	ADDQ $0x05, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm
 
 repeat_four_match_nolit_encodeBlockAsm_emit_copy:
-	LEAL -256(R10), R10
+	LEAL -256(BP), BP
 	MOVW $0x0019, (AX)
-	MOVW R10, 2(AX)
+	MOVW BP, 2(AX)
 	ADDQ $0x04, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm
 
 repeat_three_match_nolit_encodeBlockAsm_emit_copy:
-	LEAL -4(R10), R10
+	LEAL -4(BP), BP
 	MOVW $0x0015, (AX)
-	MOVB R10, 2(AX)
+	MOVB BP, 2(AX)
 	ADDQ $0x03, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm
 
 repeat_two_match_nolit_encodeBlockAsm_emit_copy:
-	SHLQ $0x02, R10
-	ORQ  $0x01, R10
-	MOVW R10, (AX)
+	SHLL $0x02, BP
+	ORL  $0x01, BP
+	MOVW BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm
 
 repeat_two_offset_match_nolit_encodeBlockAsm_emit_copy:
-	XORQ SI, SI
-	LEAQ 1(SI)(R10*4), R10
-	MOVB BP, 1(AX)
-	SARQ $0x08, BP
-	SHLQ $0x05, BP
-	ORQ  BP, R10
-	MOVB R10, (AX)
+	XORQ DI, DI
+	LEAL 1(DI)(BP*4), BP
+	MOVB SI, 1(AX)
+	SARL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
+	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm
 	JMP four_bytes_loop_back_match_nolit_encodeBlockAsm
 
 four_bytes_remain_match_nolit_encodeBlockAsm:
-	TESTL R10, R10
+	TESTL BP, BP
 	JZ    match_nolit_emitcopy_end_encodeBlockAsm
 	MOVB  $0x03, BL
-	LEAL  -4(BX)(R10*4), R10
-	MOVB  R10, (AX)
-	MOVL  BP, 1(AX)
+	LEAL  -4(BX)(BP*4), BP
+	MOVB  BP, (AX)
+	MOVL  SI, 1(AX)
 	ADDQ  $0x05, AX
 	JMP   match_nolit_emitcopy_end_encodeBlockAsm
 
 two_byte_offset_match_nolit_encodeBlockAsm:
-	CMPL R10, $0x40
+	CMPL BP, $0x40
 	JLE  two_byte_offset_short_match_nolit_encodeBlockAsm
 	MOVB $0xee, (AX)
-	MOVW BP, 1(AX)
-	LEAL -60(R10), R10
+	MOVW SI, 1(AX)
+	LEAL -60(BP), BP
 	ADDQ $0x03, AX
 
 emit_repeat_again_match_nolit_encodeBlockAsm_emit_copy_short:
-	MOVL R10, SI
-	LEAL -4(R10), R10
-	CMPL SI, $0x08
+	MOVL BP, DI
+	LEAL -4(BP), BP
+	CMPL DI, $0x08
 	JLE  repeat_two_match_nolit_encodeBlockAsm_emit_copy_short
-	CMPL SI, $0x0c
+	CMPL DI, $0x0c
 	JGE  cant_repeat_two_offset_match_nolit_encodeBlockAsm_emit_copy_short
-	CMPL BP, $0x00000800
+	CMPL SI, $0x00000800
 	JLT  repeat_two_offset_match_nolit_encodeBlockAsm_emit_copy_short
 
 cant_repeat_two_offset_match_nolit_encodeBlockAsm_emit_copy_short:
-	CMPL R10, $0x00000104
+	CMPL BP, $0x00000104
 	JLT  repeat_three_match_nolit_encodeBlockAsm_emit_copy_short
-	CMPL R10, $0x00010100
+	CMPL BP, $0x00010100
 	JLT  repeat_four_match_nolit_encodeBlockAsm_emit_copy_short
-	CMPL R10, $0x0100ffff
+	CMPL BP, $0x0100ffff
 	JLT  repeat_five_match_nolit_encodeBlockAsm_emit_copy_short
-	LEAL -16842747(R10), R10
+	LEAL -16842747(BP), BP
 	MOVW $0x001d, (AX)
 	MOVW $0xfffb, 2(AX)
 	MOVB $0xff, 4(AX)
@@ -1106,68 +1020,68 @@ cant_repeat_two_offset_match_nolit_encodeBlockAsm_emit_copy_short:
 	JMP  emit_repeat_again_match_nolit_encodeBlockAsm_emit_copy_short
 
 repeat_five_match_nolit_encodeBlockAsm_emit_copy_short:
-	LEAL -65536(R10), R10
-	MOVL R10, BP
+	LEAL -65536(BP), BP
+	MOVL BP, SI
 	MOVW $0x001d, (AX)
-	MOVW R10, 2(AX)
-	SARL $0x10, BP
-	MOVB BP, 4(AX)
+	MOVW BP, 2(AX)
+	SARL $0x10, SI
+	MOVB SI, 4(AX)
 	ADDQ $0x05, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm
 
 repeat_four_match_nolit_encodeBlockAsm_emit_copy_short:
-	LEAL -256(R10), R10
+	LEAL -256(BP), BP
 	MOVW $0x0019, (AX)
-	MOVW R10, 2(AX)
+	MOVW BP, 2(AX)
 	ADDQ $0x04, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm
 
 repeat_three_match_nolit_encodeBlockAsm_emit_copy_short:
-	LEAL -4(R10), R10
+	LEAL -4(BP), BP
 	MOVW $0x0015, (AX)
-	MOVB R10, 2(AX)
+	MOVB BP, 2(AX)
 	ADDQ $0x03, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm
 
 repeat_two_match_nolit_encodeBlockAsm_emit_copy_short:
-	SHLQ $0x02, R10
-	ORQ  $0x01, R10
-	MOVW R10, (AX)
+	SHLL $0x02, BP
+	ORL  $0x01, BP
+	MOVW BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm
 
 repeat_two_offset_match_nolit_encodeBlockAsm_emit_copy_short:
-	XORQ SI, SI
-	LEAQ 1(SI)(R10*4), R10
-	MOVB BP, 1(AX)
-	SARQ $0x08, BP
-	SHLQ $0x05, BP
-	ORQ  BP, R10
-	MOVB R10, (AX)
+	XORQ DI, DI
+	LEAL 1(DI)(BP*4), BP
+	MOVB SI, 1(AX)
+	SARL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
+	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm
 	JMP two_byte_offset_match_nolit_encodeBlockAsm
 
 two_byte_offset_short_match_nolit_encodeBlockAsm:
-	CMPL R10, $0x0c
+	CMPL BP, $0x0c
 	JGE  emit_copy_three_match_nolit_encodeBlockAsm
-	CMPL BP, $0x00000800
+	CMPL SI, $0x00000800
 	JGE  emit_copy_three_match_nolit_encodeBlockAsm
 	MOVB $0x01, BL
-	LEAQ -16(BX)(R10*4), R10
-	MOVB BP, 1(AX)
-	SHRQ $0x08, BP
-	SHLQ $0x05, BP
-	ORQ  BP, R10
-	MOVB R10, (AX)
+	LEAL -16(BX)(BP*4), BP
+	MOVB SI, 1(AX)
+	SHRL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
+	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm
 
 emit_copy_three_match_nolit_encodeBlockAsm:
 	MOVB $0x02, BL
-	LEAL -4(BX)(R10*4), R10
-	MOVB R10, (AX)
-	MOVW BP, 1(AX)
+	LEAL -4(BX)(BP*4), BP
+	MOVB BP, (AX)
+	MOVW SI, 1(AX)
 	ADDQ $0x03, AX
 
 match_nolit_emitcopy_end_encodeBlockAsm:
@@ -1193,17 +1107,17 @@ match_nolit_dst_ok_encodeBlockAsm:
 	SHRQ  $0x32, R8
 	LEAL  -2(CX), R9
 	CMPQ  DI, $0x00010000
-	JL    assert_check_18_ok_srcline_624
+	JL    assert_check_19_ok_srcline_632
 	INT   $0x03
 	INT   $0x03
 
-assert_check_18_ok_srcline_624:
+assert_check_19_ok_srcline_632:
 	CMPQ R8, $0x00010000
-	JL   assert_check_19_ok_srcline_628
+	JL   assert_check_20_ok_srcline_636
 	INT  $0x03
 	INT  $0x03
 
-assert_check_19_ok_srcline_628:
+assert_check_20_ok_srcline_636:
 	MOVL 24(SP)(R8*4), BP
 	MOVL R9, 24(SP)(DI*4)
 	MOVL CX, 24(SP)(R8*4)
@@ -1231,11 +1145,11 @@ emit_remainder_ok_encodeBlockAsm:
 	LEAQ  (DX)(BX*1), CX
 	SUBL  BX, BP
 	TESTL BP, BP
-	JNZ   assert_check_20_ok_srcline_841
+	JNZ   assert_check_21_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_20_ok_srcline_841:
+assert_check_21_ok_srcline_849:
 	LEAL -1(BP), DX
 	CMPL DX, $0x3c
 	JLT  one_byte_emit_remainder_encodeBlockAsm
@@ -1274,7 +1188,7 @@ two_bytes_emit_remainder_encodeBlockAsm:
 	JMP  memmove_long_emit_remainder_encodeBlockAsm
 
 one_byte_emit_remainder_encodeBlockAsm:
-	SHLQ $0x02, DX
+	SHLB $0x02, DL
 	MOVB DL, (AX)
 	ADDQ $0x01, AX
 
@@ -1403,25 +1317,25 @@ emit_lit_memmove_long_emit_remainder_encodeBlockAsmlarge_forward_sse_loop_32:
 
 emit_literal_done_emit_remainder_encodeBlockAsm:
 	CMPQ AX, (SP)
-	JL   assert_check_21_ok_srcline_674
+	JL   assert_check_22_ok_srcline_682
 	INT  $0x03
 	INT  $0x03
 
-assert_check_21_ok_srcline_674:
+assert_check_22_ok_srcline_682:
 	MOVQ dst_base+0(FP), CX
 	SUBQ CX, AX
 	CMPQ src_len+32(FP), AX
-	JGE  assert_check_22_ok_srcline_687
+	JGE  assert_check_23_ok_srcline_695
 	INT  $0x03
 	INT  $0x03
 
-assert_check_22_ok_srcline_687:
+assert_check_23_ok_srcline_695:
 	CMPQ dst_len+8(FP), AX
-	JGE  assert_check_23_ok_srcline_693
+	JGE  assert_check_24_ok_srcline_701
 	INT  $0x03
 	INT  $0x03
 
-assert_check_23_ok_srcline_693:
+assert_check_24_ok_srcline_701:
 	MOVQ AX, ret+48(FP)
 	RET
 
@@ -1450,20 +1364,20 @@ zero_loop_encodeBlockAsm12B:
 	LEAQ  -5(CX), DX
 	LEAQ  -8(CX), BP
 	CMPQ  BP, src_len+32(FP)
-	JL    assert_check_24_ok_srcline_175
+	JL    assert_check_25_ok_srcline_176
 	INT   $0x03
 	INT   $0x03
 
-assert_check_24_ok_srcline_175:
+assert_check_25_ok_srcline_176:
 	MOVL BP, 8(SP)
 	SHRQ $0x05, CX
 	SUBL CX, DX
 	CMPQ src_len+32(FP), DX
-	JGE  assert_check_25_ok_srcline_186
+	JGE  assert_check_26_ok_srcline_187
 	INT  $0x03
 	INT  $0x03
 
-assert_check_25_ok_srcline_186:
+assert_check_26_ok_srcline_187:
 	LEAQ (AX)(DX*1), DX
 	MOVQ DX, (SP)
 	MOVL $0x00000001, CX
@@ -1473,18 +1387,18 @@ assert_check_25_ok_srcline_186:
 search_loop_encodeBlockAsm12B:
 	MOVQ src_base+24(FP), BP
 	CMPQ BP, DX
-	JEQ  assert_check_26_ok_srcline_212
+	JEQ  assert_check_27_ok_srcline_213
 	INT  $0x03
 	INT  $0x03
 
-assert_check_26_ok_srcline_212:
+assert_check_27_ok_srcline_213:
 	MOVQ src_len+32(FP), BP
 	CMPQ BP, CX
-	JG   assert_check_27_ok_srcline_219
+	JG   assert_check_28_ok_srcline_220
 	INT  $0x03
 	INT  $0x03
 
-assert_check_27_ok_srcline_219:
+assert_check_28_ok_srcline_220:
 	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
@@ -1507,17 +1421,17 @@ assert_check_27_ok_srcline_219:
 	MOVL  24(SP)(R9*4), BP
 	MOVL  24(SP)(R10*4), DI
 	CMPQ  R9, $0x00004000
-	JL    assert_check_28_ok_srcline_258
+	JL    assert_check_29_ok_srcline_259
 	INT   $0x03
 	INT   $0x03
 
-assert_check_28_ok_srcline_258:
+assert_check_29_ok_srcline_259:
 	CMPQ R10, $0x00004000
-	JL   assert_check_29_ok_srcline_262
+	JL   assert_check_30_ok_srcline_263
 	INT  $0x03
 	INT  $0x03
 
-assert_check_29_ok_srcline_262:
+assert_check_30_ok_srcline_263:
 	MOVL  CX, 24(SP)(R9*4)
 	LEAL  1(CX), R9
 	MOVL  R9, 24(SP)(R10*4)
@@ -1527,11 +1441,11 @@ assert_check_29_ok_srcline_262:
 	IMULQ R8, R9
 	SHRQ  $0x34, R9
 	CMPQ  R9, $0x00004000
-	JL    assert_check_30_ok_srcline_281
+	JL    assert_check_31_ok_srcline_282
 	INT   $0x03
 	INT   $0x03
 
-assert_check_30_ok_srcline_281:
+assert_check_31_ok_srcline_282:
 	MOVL CX, R8
 	SUBL 16(SP), R8
 	MOVL 1(DX)(R8*1), R10
@@ -1565,11 +1479,11 @@ repeat_extend_back_end_encodeBlockAsm12B:
 	LEAQ  (DX)(BP*1), R9
 	SUBL  BP, R8
 	TESTL R8, R8
-	JNZ   assert_check_31_ok_srcline_841
+	JNZ   assert_check_32_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_31_ok_srcline_841:
+assert_check_32_ok_srcline_849:
 	LEAL -1(R8), BP
 	CMPL BP, $0x3c
 	JLT  one_byte_repeat_emit_encodeBlockAsm12B
@@ -1608,7 +1522,7 @@ two_bytes_repeat_emit_encodeBlockAsm12B:
 	JMP  memmove_long_repeat_emit_encodeBlockAsm12B
 
 one_byte_repeat_emit_encodeBlockAsm12B:
-	SHLQ $0x02, BP
+	SHLB $0x02, BP
 	MOVB BP, (AX)
 	ADDQ $0x01, AX
 
@@ -1740,61 +1654,15 @@ emit_literal_done_repeat_emit_encodeBlockAsm12B:
 	MOVQ src_len+32(FP), R8
 	SUBL CX, R8
 	CMPQ R8, $0x7fffffff
-	JL   assert_check_32_ok_srcline_357
+	JL   assert_check_33_ok_srcline_358
 	INT  $0x03
 	INT  $0x03
 
-assert_check_32_ok_srcline_357:
-	LEAQ (DX)(CX*1), R9
-	LEAQ (DX)(BP*1), BP
-	XORL R12, R12
-	CMPL R8, $0x10
-	JL   matchlen_four_repeat_extend
-
-matchlen_loopback_repeat_extend:
-	MOVQ  (R9), R10
-	MOVQ  8(R9), R11
-	XORQ  (BP), R10
-	XORQ  8(BP), R11
-	TESTQ R10, R10
-	JZ    matchlen_loop_tmp2_repeat_extend
-	BSFQ  R10, R10
-	SARQ  $0x03, R10
-	LEAL  (R12)(R10*1), R12
-	JMP   repeat_extend_forward_end_encodeBlockAsm12B
-
-matchlen_loop_tmp2_repeat_extend:
-	TESTQ R11, R11
-	JZ    matchlen_loop_repeat_extend
-	BSFQ  R11, R11
-	SARQ  $0x03, R11
-	LEAL  8(R12)(R11*1), R12
-	JMP   repeat_extend_forward_end_encodeBlockAsm12B
-
-matchlen_loop_repeat_extend:
-	SUBL $0x10, R8
-	ADDL $0x10, R12
-	ADDQ $0x10, R9
-	ADDQ $0x10, BP
-	CMPL R8, $0x10
-	JGE  matchlen_loopback_repeat_extend
-
-matchlen_four_repeat_extend:
-	SUBL $0x04, R8
-	JC   repeat_extend_forward_end_encodeBlockAsm12B
-
-matchlen_four_loopback_repeat_extend:
-	MOVL (R9), R10
-	XORL (BP), R10
-	JNZ  repeat_extend_forward_end_encodeBlockAsm12B
-	ADDL $0x04, R12
-	ADDQ $0x04, R9
-	ADDQ $0x04, BP
-	SUBL $0x04, R8
-	JNC  matchlen_four_loopback_repeat_extend
-
-repeat_extend_forward_end_encodeBlockAsm12B:
-	ADDL  R12, CX
+assert_check_33_ok_srcline_358:
+	LEAQ  (DX)(CX*1), R8
+	LEAQ  (DX)(BP*1), BP
+	XORQ  BP, BP
+	ADDL  BP, CX
 	MOVL  CX, BP
 	SUBL  SI, BP
 	MOVL  16(SP), SI
@@ -1850,19 +1718,19 @@ repeat_three_match_repeat_encodeBlockAsm12B:
 	JMP  repeat_end_emit_encodeBlockAsm12B
 
 repeat_two_match_repeat_encodeBlockAsm12B:
-	SHLQ $0x02, BP
-	ORQ  $0x01, BP
+	SHLL $0x02, BP
+	ORL  $0x01, BP
 	MOVW BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm12B
 
 repeat_two_offset_match_repeat_encodeBlockAsm12B:
 	XORQ DI, DI
-	LEAQ 1(DI)(BP*4), BP
+	LEAL 1(DI)(BP*4), BP
 	MOVB SI, 1(AX)
-	SARQ $0x08, SI
-	SHLQ $0x05, SI
-	ORQ  SI, BP
+	SARL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
 	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm12B
@@ -1930,19 +1798,19 @@ repeat_three_repeat_as_copy_encodeBlockAsm12B_emit_copy:
 	JMP  repeat_end_emit_encodeBlockAsm12B
 
 repeat_two_repeat_as_copy_encodeBlockAsm12B_emit_copy:
-	SHLQ $0x02, BP
-	ORQ  $0x01, BP
+	SHLL $0x02, BP
+	ORL  $0x01, BP
 	MOVW BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm12B
 
 repeat_two_offset_repeat_as_copy_encodeBlockAsm12B_emit_copy:
 	XORQ DI, DI
-	LEAQ 1(DI)(BP*4), BP
+	LEAL 1(DI)(BP*4), BP
 	MOVB SI, 1(AX)
-	SARQ $0x08, SI
-	SHLQ $0x05, SI
-	ORQ  SI, BP
+	SARL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
 	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm12B
@@ -2015,19 +1883,19 @@ repeat_three_repeat_as_copy_encodeBlockAsm12B_emit_copy_short:
 	JMP  repeat_end_emit_encodeBlockAsm12B
 
 repeat_two_repeat_as_copy_encodeBlockAsm12B_emit_copy_short:
-	SHLQ $0x02, BP
-	ORQ  $0x01, BP
+	SHLL $0x02, BP
+	ORL  $0x01, BP
 	MOVW BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm12B
 
 repeat_two_offset_repeat_as_copy_encodeBlockAsm12B_emit_copy_short:
 	XORQ DI, DI
-	LEAQ 1(DI)(BP*4), BP
+	LEAL 1(DI)(BP*4), BP
 	MOVB SI, 1(AX)
-	SARQ $0x08, SI
-	SHLQ $0x05, SI
-	ORQ  SI, BP
+	SARL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
 	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm12B
@@ -2039,11 +1907,11 @@ two_byte_offset_short_repeat_as_copy_encodeBlockAsm12B:
 	CMPL SI, $0x00000800
 	JGE  emit_copy_three_repeat_as_copy_encodeBlockAsm12B
 	MOVB $0x01, BL
-	LEAQ -16(BX)(BP*4), BP
+	LEAL -16(BX)(BP*4), BP
 	MOVB SI, 1(AX)
-	SHRQ $0x08, SI
-	SHLQ $0x05, SI
-	ORQ  SI, BP
+	SHRL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
 	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm12B
@@ -2064,48 +1932,48 @@ repeat_end_emit_encodeBlockAsm12B:
 no_repeat_found_encodeBlockAsm12B:
 	MOVQ src_len+32(FP), R8
 	CMPL R8, BP
-	JG   assert_check_33_ok_srcline_410
+	JG   assert_check_34_ok_srcline_412
 	INT  $0x03
 	INT  $0x03
 
-assert_check_33_ok_srcline_410:
+assert_check_34_ok_srcline_412:
 	CMPL CX, BP
-	JG   assert_check_34_ok_srcline_416
+	JG   assert_check_35_ok_srcline_418
 	INT  $0x03
 	INT  $0x03
 
-assert_check_34_ok_srcline_416:
+assert_check_35_ok_srcline_418:
 	MOVQ src_len+32(FP), R8
 	CMPL R8, DI
-	JG   assert_check_35_ok_srcline_420
+	JG   assert_check_36_ok_srcline_422
 	INT  $0x03
 	INT  $0x03
 
-assert_check_35_ok_srcline_420:
+assert_check_36_ok_srcline_422:
 	CMPL CX, DI
-	JG   assert_check_36_ok_srcline_426
+	JG   assert_check_37_ok_srcline_428
 	INT  $0x03
 	INT  $0x03
 
-assert_check_36_ok_srcline_426:
+assert_check_37_ok_srcline_428:
 	CMPL (DX)(BP*1), SI
 	JEQ  candidate_match_encodeBlockAsm12B
 	SHRQ $0x08, SI
 	MOVL 24(SP)(R9*4), BP
 	MOVQ src_len+32(FP), R8
 	CMPL R8, BP
-	JG   assert_check_37_ok_srcline_440
+	JG   assert_check_38_ok_srcline_442
 	INT  $0x03
 	INT  $0x03
 
-assert_check_37_ok_srcline_440:
+assert_check_38_ok_srcline_442:
 	LEAL 2(CX), R8
 	CMPL R8, BP
-	JG   assert_check_38_ok_srcline_446
+	JG   assert_check_39_ok_srcline_448
 	INT  $0x03
 	INT  $0x03
 
-assert_check_38_ok_srcline_446:
+assert_check_39_ok_srcline_448:
 	LEAL 2(CX), R8
 	CMPL (DX)(DI*1), SI
 	JEQ  candidate2_match_encodeBlockAsm12B
@@ -2161,11 +2029,11 @@ match_dst_size_check_encodeBlockAsm12B:
 	LEAQ  (DX)(DI*1), SI
 	SUBL  DI, R8
 	TESTL R8, R8
-	JNZ   assert_check_39_ok_srcline_841
+	JNZ   assert_check_40_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_39_ok_srcline_841:
+assert_check_40_ok_srcline_849:
 	LEAL -1(R8), DI
 	CMPL DI, $0x3c
 	JLT  one_byte_match_emit_encodeBlockAsm12B
@@ -2204,7 +2072,7 @@ two_bytes_match_emit_encodeBlockAsm12B:
 	JMP  memmove_long_match_emit_encodeBlockAsm12B
 
 one_byte_match_emit_encodeBlockAsm12B:
-	SHLQ $0x02, DI
+	SHLB $0x02, DI
 	MOVB DI, (AX)
 	ADDQ $0x01, AX
 
@@ -2337,102 +2205,62 @@ match_nolit_loop_encodeBlockAsm12B:
 	ADDL $0x04, CX
 	ADDL $0x04, BP
 	CMPL CX, BP
-	JG   assert_check_40_ok_srcline_556
+	JG   assert_check_41_ok_srcline_558
 	INT  $0x03
 	INT  $0x03
 
-assert_check_40_ok_srcline_556:
+assert_check_41_ok_srcline_558:
 	MOVQ src_len+32(FP), SI
 	SUBL CX, SI
 	CMPQ SI, $0x7fffffff
-	JL   assert_check_41_ok_srcline_565
+	JL   assert_check_42_ok_srcline_567
 	INT  $0x03
 	INT  $0x03
 
-assert_check_41_ok_srcline_565:
-	LEAQ (DX)(CX*1), DI
+assert_check_42_ok_srcline_567:
+	LEAQ (DX)(CX*1), SI
 	LEAQ (DX)(BP*1), BP
-	XORL R10, R10
-	CMPL SI, $0x10
-	JL   matchlen_four_match_nolit_encodeBlockAsm12B
+	XORQ BP, BP
+	CMPL BP, $0x7fffffff
+	JL   assert_check_43_ok_srcline_582
+	INT  $0x03
+	INT  $0x03
 
-matchlen_loopback_match_nolit_encodeBlockAsm12B:
-	MOVQ  (DI), R8
-	MOVQ  8(DI), R9
-	XORQ  (BP), R8
-	XORQ  8(BP), R9
-	TESTQ R8, R8
-	JZ    matchlen_loop_tmp2_match_nolit_encodeBlockAsm12B
-	BSFQ  R8, R8
-	SARQ  $0x03, R8
-	LEAL  (R10)(R8*1), R10
-	JMP   match_nolit_end_encodeBlockAsm12B
-
-matchlen_loop_tmp2_match_nolit_encodeBlockAsm12B:
-	TESTQ R9, R9
-	JZ    matchlen_loop_match_nolit_encodeBlockAsm12B
-	BSFQ  R9, R9
-	SARQ  $0x03, R9
-	LEAL  8(R10)(R9*1), R10
-	JMP   match_nolit_end_encodeBlockAsm12B
-
-matchlen_loop_match_nolit_encodeBlockAsm12B:
-	SUBL $0x10, SI
-	ADDL $0x10, R10
-	ADDQ $0x10, DI
-	ADDQ $0x10, BP
-	CMPL SI, $0x10
-	JGE  matchlen_loopback_match_nolit_encodeBlockAsm12B
-
-matchlen_four_match_nolit_encodeBlockAsm12B:
-	SUBL $0x04, SI
-	JC   match_nolit_end_encodeBlockAsm12B
-
-matchlen_four_loopback_match_nolit_encodeBlockAsm12B:
-	MOVL (DI), R8
-	XORL (BP), R8
-	JNZ  match_nolit_end_encodeBlockAsm12B
-	ADDL $0x04, R10
-	ADDQ $0x04, DI
-	ADDQ $0x04, BP
-	SUBL $0x04, SI
-	JNC  matchlen_four_loopback_match_nolit_encodeBlockAsm12B
-
-match_nolit_end_encodeBlockAsm12B:
-	ADDL R10, CX
-	MOVL 16(SP), BP
-	ADDL $0x04, R10
-	CMPL BP, $0x00010000
+assert_check_43_ok_srcline_582:
+	ADDL BP, CX
+	MOVL 16(SP), SI
+	ADDL $0x04, BP
+	CMPL SI, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeBlockAsm12B
 
 four_bytes_loop_back_match_nolit_encodeBlockAsm12B:
-	CMPL R10, $0x40
+	CMPL BP, $0x40
 	JLE  four_bytes_remain_match_nolit_encodeBlockAsm12B
 	MOVB $0xff, (AX)
-	MOVL BP, 1(AX)
-	LEAL -64(R10), R10
+	MOVL SI, 1(AX)
+	LEAL -64(BP), BP
 	ADDQ $0x05, AX
-	CMPL R10, $0x04
+	CMPL BP, $0x04
 	JL   four_bytes_remain_match_nolit_encodeBlockAsm12B
 
 emit_repeat_again_match_nolit_encodeBlockAsm12B_emit_copy:
-	MOVL R10, SI
-	LEAL -4(R10), R10
-	CMPL SI, $0x08
+	MOVL BP, DI
+	LEAL -4(BP), BP
+	CMPL DI, $0x08
 	JLE  repeat_two_match_nolit_encodeBlockAsm12B_emit_copy
-	CMPL SI, $0x0c
+	CMPL DI, $0x0c
 	JGE  cant_repeat_two_offset_match_nolit_encodeBlockAsm12B_emit_copy
-	CMPL BP, $0x00000800
+	CMPL SI, $0x00000800
 	JLT  repeat_two_offset_match_nolit_encodeBlockAsm12B_emit_copy
 
 cant_repeat_two_offset_match_nolit_encodeBlockAsm12B_emit_copy:
-	CMPL R10, $0x00000104
+	CMPL BP, $0x00000104
 	JLT  repeat_three_match_nolit_encodeBlockAsm12B_emit_copy
-	CMPL R10, $0x00010100
+	CMPL BP, $0x00010100
 	JLT  repeat_four_match_nolit_encodeBlockAsm12B_emit_copy
-	CMPL R10, $0x0100ffff
+	CMPL BP, $0x0100ffff
 	JLT  repeat_five_match_nolit_encodeBlockAsm12B_emit_copy
-	LEAL -16842747(R10), R10
+	LEAL -16842747(BP), BP
 	MOVW $0x001d, (AX)
 	MOVW $0xfffb, 2(AX)
 	MOVB $0xff, 4(AX)
@@ -2440,84 +2268,84 @@ cant_repeat_two_offset_match_nolit_encodeBlockAsm12B_emit_copy:
 	JMP  emit_repeat_again_match_nolit_encodeBlockAsm12B_emit_copy
 
 repeat_five_match_nolit_encodeBlockAsm12B_emit_copy:
-	LEAL -65536(R10), R10
-	MOVL R10, BP
+	LEAL -65536(BP), BP
+	MOVL BP, SI
 	MOVW $0x001d, (AX)
-	MOVW R10, 2(AX)
-	SARL $0x10, BP
-	MOVB BP, 4(AX)
+	MOVW BP, 2(AX)
+	SARL $0x10, SI
+	MOVB SI, 4(AX)
 	ADDQ $0x05, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm12B
 
 repeat_four_match_nolit_encodeBlockAsm12B_emit_copy:
-	LEAL -256(R10), R10
+	LEAL -256(BP), BP
 	MOVW $0x0019, (AX)
-	MOVW R10, 2(AX)
+	MOVW BP, 2(AX)
 	ADDQ $0x04, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm12B
 
 repeat_three_match_nolit_encodeBlockAsm12B_emit_copy:
-	LEAL -4(R10), R10
+	LEAL -4(BP), BP
 	MOVW $0x0015, (AX)
-	MOVB R10, 2(AX)
+	MOVB BP, 2(AX)
 	ADDQ $0x03, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm12B
 
 repeat_two_match_nolit_encodeBlockAsm12B_emit_copy:
-	SHLQ $0x02, R10
-	ORQ  $0x01, R10
-	MOVW R10, (AX)
+	SHLL $0x02, BP
+	ORL  $0x01, BP
+	MOVW BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm12B
 
 repeat_two_offset_match_nolit_encodeBlockAsm12B_emit_copy:
-	XORQ SI, SI
-	LEAQ 1(SI)(R10*4), R10
-	MOVB BP, 1(AX)
-	SARQ $0x08, BP
-	SHLQ $0x05, BP
-	ORQ  BP, R10
-	MOVB R10, (AX)
+	XORQ DI, DI
+	LEAL 1(DI)(BP*4), BP
+	MOVB SI, 1(AX)
+	SARL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
+	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm12B
 	JMP four_bytes_loop_back_match_nolit_encodeBlockAsm12B
 
 four_bytes_remain_match_nolit_encodeBlockAsm12B:
-	TESTL R10, R10
+	TESTL BP, BP
 	JZ    match_nolit_emitcopy_end_encodeBlockAsm12B
 	MOVB  $0x03, BL
-	LEAL  -4(BX)(R10*4), R10
-	MOVB  R10, (AX)
-	MOVL  BP, 1(AX)
+	LEAL  -4(BX)(BP*4), BP
+	MOVB  BP, (AX)
+	MOVL  SI, 1(AX)
 	ADDQ  $0x05, AX
 	JMP   match_nolit_emitcopy_end_encodeBlockAsm12B
 
 two_byte_offset_match_nolit_encodeBlockAsm12B:
-	CMPL R10, $0x40
+	CMPL BP, $0x40
 	JLE  two_byte_offset_short_match_nolit_encodeBlockAsm12B
 	MOVB $0xee, (AX)
-	MOVW BP, 1(AX)
-	LEAL -60(R10), R10
+	MOVW SI, 1(AX)
+	LEAL -60(BP), BP
 	ADDQ $0x03, AX
 
 emit_repeat_again_match_nolit_encodeBlockAsm12B_emit_copy_short:
-	MOVL R10, SI
-	LEAL -4(R10), R10
-	CMPL SI, $0x08
+	MOVL BP, DI
+	LEAL -4(BP), BP
+	CMPL DI, $0x08
 	JLE  repeat_two_match_nolit_encodeBlockAsm12B_emit_copy_short
-	CMPL SI, $0x0c
+	CMPL DI, $0x0c
 	JGE  cant_repeat_two_offset_match_nolit_encodeBlockAsm12B_emit_copy_short
-	CMPL BP, $0x00000800
+	CMPL SI, $0x00000800
 	JLT  repeat_two_offset_match_nolit_encodeBlockAsm12B_emit_copy_short
 
 cant_repeat_two_offset_match_nolit_encodeBlockAsm12B_emit_copy_short:
-	CMPL R10, $0x00000104
+	CMPL BP, $0x00000104
 	JLT  repeat_three_match_nolit_encodeBlockAsm12B_emit_copy_short
-	CMPL R10, $0x00010100
+	CMPL BP, $0x00010100
 	JLT  repeat_four_match_nolit_encodeBlockAsm12B_emit_copy_short
-	CMPL R10, $0x0100ffff
+	CMPL BP, $0x0100ffff
 	JLT  repeat_five_match_nolit_encodeBlockAsm12B_emit_copy_short
-	LEAL -16842747(R10), R10
+	LEAL -16842747(BP), BP
 	MOVW $0x001d, (AX)
 	MOVW $0xfffb, 2(AX)
 	MOVB $0xff, 4(AX)
@@ -2525,68 +2353,68 @@ cant_repeat_two_offset_match_nolit_encodeBlockAsm12B_emit_copy_short:
 	JMP  emit_repeat_again_match_nolit_encodeBlockAsm12B_emit_copy_short
 
 repeat_five_match_nolit_encodeBlockAsm12B_emit_copy_short:
-	LEAL -65536(R10), R10
-	MOVL R10, BP
+	LEAL -65536(BP), BP
+	MOVL BP, SI
 	MOVW $0x001d, (AX)
-	MOVW R10, 2(AX)
-	SARL $0x10, BP
-	MOVB BP, 4(AX)
+	MOVW BP, 2(AX)
+	SARL $0x10, SI
+	MOVB SI, 4(AX)
 	ADDQ $0x05, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm12B
 
 repeat_four_match_nolit_encodeBlockAsm12B_emit_copy_short:
-	LEAL -256(R10), R10
+	LEAL -256(BP), BP
 	MOVW $0x0019, (AX)
-	MOVW R10, 2(AX)
+	MOVW BP, 2(AX)
 	ADDQ $0x04, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm12B
 
 repeat_three_match_nolit_encodeBlockAsm12B_emit_copy_short:
-	LEAL -4(R10), R10
+	LEAL -4(BP), BP
 	MOVW $0x0015, (AX)
-	MOVB R10, 2(AX)
+	MOVB BP, 2(AX)
 	ADDQ $0x03, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm12B
 
 repeat_two_match_nolit_encodeBlockAsm12B_emit_copy_short:
-	SHLQ $0x02, R10
-	ORQ  $0x01, R10
-	MOVW R10, (AX)
+	SHLL $0x02, BP
+	ORL  $0x01, BP
+	MOVW BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm12B
 
 repeat_two_offset_match_nolit_encodeBlockAsm12B_emit_copy_short:
-	XORQ SI, SI
-	LEAQ 1(SI)(R10*4), R10
-	MOVB BP, 1(AX)
-	SARQ $0x08, BP
-	SHLQ $0x05, BP
-	ORQ  BP, R10
-	MOVB R10, (AX)
+	XORQ DI, DI
+	LEAL 1(DI)(BP*4), BP
+	MOVB SI, 1(AX)
+	SARL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
+	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm12B
 	JMP two_byte_offset_match_nolit_encodeBlockAsm12B
 
 two_byte_offset_short_match_nolit_encodeBlockAsm12B:
-	CMPL R10, $0x0c
+	CMPL BP, $0x0c
 	JGE  emit_copy_three_match_nolit_encodeBlockAsm12B
-	CMPL BP, $0x00000800
+	CMPL SI, $0x00000800
 	JGE  emit_copy_three_match_nolit_encodeBlockAsm12B
 	MOVB $0x01, BL
-	LEAQ -16(BX)(R10*4), R10
-	MOVB BP, 1(AX)
-	SHRQ $0x08, BP
-	SHLQ $0x05, BP
-	ORQ  BP, R10
-	MOVB R10, (AX)
+	LEAL -16(BX)(BP*4), BP
+	MOVB SI, 1(AX)
+	SHRL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
+	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm12B
 
 emit_copy_three_match_nolit_encodeBlockAsm12B:
 	MOVB $0x02, BL
-	LEAL -4(BX)(R10*4), R10
-	MOVB R10, (AX)
-	MOVW BP, 1(AX)
+	LEAL -4(BX)(BP*4), BP
+	MOVB BP, (AX)
+	MOVW SI, 1(AX)
 	ADDQ $0x03, AX
 
 match_nolit_emitcopy_end_encodeBlockAsm12B:
@@ -2612,17 +2440,17 @@ match_nolit_dst_ok_encodeBlockAsm12B:
 	SHRQ  $0x34, R8
 	LEAL  -2(CX), R9
 	CMPQ  DI, $0x00004000
-	JL    assert_check_42_ok_srcline_624
+	JL    assert_check_44_ok_srcline_632
 	INT   $0x03
 	INT   $0x03
 
-assert_check_42_ok_srcline_624:
+assert_check_44_ok_srcline_632:
 	CMPQ R8, $0x00004000
-	JL   assert_check_43_ok_srcline_628
+	JL   assert_check_45_ok_srcline_636
 	INT  $0x03
 	INT  $0x03
 
-assert_check_43_ok_srcline_628:
+assert_check_45_ok_srcline_636:
 	MOVL 24(SP)(R8*4), BP
 	MOVL R9, 24(SP)(DI*4)
 	MOVL CX, 24(SP)(R8*4)
@@ -2650,11 +2478,11 @@ emit_remainder_ok_encodeBlockAsm12B:
 	LEAQ  (DX)(BX*1), CX
 	SUBL  BX, BP
 	TESTL BP, BP
-	JNZ   assert_check_44_ok_srcline_841
+	JNZ   assert_check_46_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_44_ok_srcline_841:
+assert_check_46_ok_srcline_849:
 	LEAL -1(BP), DX
 	CMPL DX, $0x3c
 	JLT  one_byte_emit_remainder_encodeBlockAsm12B
@@ -2693,7 +2521,7 @@ two_bytes_emit_remainder_encodeBlockAsm12B:
 	JMP  memmove_long_emit_remainder_encodeBlockAsm12B
 
 one_byte_emit_remainder_encodeBlockAsm12B:
-	SHLQ $0x02, DX
+	SHLB $0x02, DL
 	MOVB DL, (AX)
 	ADDQ $0x01, AX
 
@@ -2822,25 +2650,25 @@ emit_lit_memmove_long_emit_remainder_encodeBlockAsm12Blarge_forward_sse_loop_32:
 
 emit_literal_done_emit_remainder_encodeBlockAsm12B:
 	CMPQ AX, (SP)
-	JL   assert_check_45_ok_srcline_674
+	JL   assert_check_47_ok_srcline_682
 	INT  $0x03
 	INT  $0x03
 
-assert_check_45_ok_srcline_674:
+assert_check_47_ok_srcline_682:
 	MOVQ dst_base+0(FP), CX
 	SUBQ CX, AX
 	CMPQ src_len+32(FP), AX
-	JGE  assert_check_46_ok_srcline_687
+	JGE  assert_check_48_ok_srcline_695
 	INT  $0x03
 	INT  $0x03
 
-assert_check_46_ok_srcline_687:
+assert_check_48_ok_srcline_695:
 	CMPQ dst_len+8(FP), AX
-	JGE  assert_check_47_ok_srcline_693
+	JGE  assert_check_49_ok_srcline_701
 	INT  $0x03
 	INT  $0x03
 
-assert_check_47_ok_srcline_693:
+assert_check_49_ok_srcline_701:
 	MOVQ AX, ret+48(FP)
 	RET
 
@@ -2869,20 +2697,20 @@ zero_loop_encodeBlockAsm10B:
 	LEAQ  -5(CX), DX
 	LEAQ  -8(CX), BP
 	CMPQ  BP, src_len+32(FP)
-	JL    assert_check_48_ok_srcline_175
+	JL    assert_check_50_ok_srcline_176
 	INT   $0x03
 	INT   $0x03
 
-assert_check_48_ok_srcline_175:
+assert_check_50_ok_srcline_176:
 	MOVL BP, 8(SP)
 	SHRQ $0x05, CX
 	SUBL CX, DX
 	CMPQ src_len+32(FP), DX
-	JGE  assert_check_49_ok_srcline_186
+	JGE  assert_check_51_ok_srcline_187
 	INT  $0x03
 	INT  $0x03
 
-assert_check_49_ok_srcline_186:
+assert_check_51_ok_srcline_187:
 	LEAQ (AX)(DX*1), DX
 	MOVQ DX, (SP)
 	MOVL $0x00000001, CX
@@ -2892,18 +2720,18 @@ assert_check_49_ok_srcline_186:
 search_loop_encodeBlockAsm10B:
 	MOVQ src_base+24(FP), BP
 	CMPQ BP, DX
-	JEQ  assert_check_50_ok_srcline_212
+	JEQ  assert_check_52_ok_srcline_213
 	INT  $0x03
 	INT  $0x03
 
-assert_check_50_ok_srcline_212:
+assert_check_52_ok_srcline_213:
 	MOVQ src_len+32(FP), BP
 	CMPQ BP, CX
-	JG   assert_check_51_ok_srcline_219
+	JG   assert_check_53_ok_srcline_220
 	INT  $0x03
 	INT  $0x03
 
-assert_check_51_ok_srcline_219:
+assert_check_53_ok_srcline_220:
 	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
@@ -2926,17 +2754,17 @@ assert_check_51_ok_srcline_219:
 	MOVL  24(SP)(R9*4), BP
 	MOVL  24(SP)(R10*4), DI
 	CMPQ  R9, $0x00001000
-	JL    assert_check_52_ok_srcline_258
+	JL    assert_check_54_ok_srcline_259
 	INT   $0x03
 	INT   $0x03
 
-assert_check_52_ok_srcline_258:
+assert_check_54_ok_srcline_259:
 	CMPQ R10, $0x00001000
-	JL   assert_check_53_ok_srcline_262
+	JL   assert_check_55_ok_srcline_263
 	INT  $0x03
 	INT  $0x03
 
-assert_check_53_ok_srcline_262:
+assert_check_55_ok_srcline_263:
 	MOVL  CX, 24(SP)(R9*4)
 	LEAL  1(CX), R9
 	MOVL  R9, 24(SP)(R10*4)
@@ -2946,11 +2774,11 @@ assert_check_53_ok_srcline_262:
 	IMULQ R8, R9
 	SHRQ  $0x36, R9
 	CMPQ  R9, $0x00001000
-	JL    assert_check_54_ok_srcline_281
+	JL    assert_check_56_ok_srcline_282
 	INT   $0x03
 	INT   $0x03
 
-assert_check_54_ok_srcline_281:
+assert_check_56_ok_srcline_282:
 	MOVL CX, R8
 	SUBL 16(SP), R8
 	MOVL 1(DX)(R8*1), R10
@@ -2984,11 +2812,11 @@ repeat_extend_back_end_encodeBlockAsm10B:
 	LEAQ  (DX)(BP*1), R9
 	SUBL  BP, R8
 	TESTL R8, R8
-	JNZ   assert_check_55_ok_srcline_841
+	JNZ   assert_check_57_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_55_ok_srcline_841:
+assert_check_57_ok_srcline_849:
 	LEAL -1(R8), BP
 	CMPL BP, $0x3c
 	JLT  one_byte_repeat_emit_encodeBlockAsm10B
@@ -3027,7 +2855,7 @@ two_bytes_repeat_emit_encodeBlockAsm10B:
 	JMP  memmove_long_repeat_emit_encodeBlockAsm10B
 
 one_byte_repeat_emit_encodeBlockAsm10B:
-	SHLQ $0x02, BP
+	SHLB $0x02, BP
 	MOVB BP, (AX)
 	ADDQ $0x01, AX
 
@@ -3159,61 +2987,15 @@ emit_literal_done_repeat_emit_encodeBlockAsm10B:
 	MOVQ src_len+32(FP), R8
 	SUBL CX, R8
 	CMPQ R8, $0x7fffffff
-	JL   assert_check_56_ok_srcline_357
+	JL   assert_check_58_ok_srcline_358
 	INT  $0x03
 	INT  $0x03
 
-assert_check_56_ok_srcline_357:
-	LEAQ (DX)(CX*1), R9
-	LEAQ (DX)(BP*1), BP
-	XORL R12, R12
-	CMPL R8, $0x10
-	JL   matchlen_four_repeat_extend
-
-matchlen_loopback_repeat_extend:
-	MOVQ  (R9), R10
-	MOVQ  8(R9), R11
-	XORQ  (BP), R10
-	XORQ  8(BP), R11
-	TESTQ R10, R10
-	JZ    matchlen_loop_tmp2_repeat_extend
-	BSFQ  R10, R10
-	SARQ  $0x03, R10
-	LEAL  (R12)(R10*1), R12
-	JMP   repeat_extend_forward_end_encodeBlockAsm10B
-
-matchlen_loop_tmp2_repeat_extend:
-	TESTQ R11, R11
-	JZ    matchlen_loop_repeat_extend
-	BSFQ  R11, R11
-	SARQ  $0x03, R11
-	LEAL  8(R12)(R11*1), R12
-	JMP   repeat_extend_forward_end_encodeBlockAsm10B
-
-matchlen_loop_repeat_extend:
-	SUBL $0x10, R8
-	ADDL $0x10, R12
-	ADDQ $0x10, R9
-	ADDQ $0x10, BP
-	CMPL R8, $0x10
-	JGE  matchlen_loopback_repeat_extend
-
-matchlen_four_repeat_extend:
-	SUBL $0x04, R8
-	JC   repeat_extend_forward_end_encodeBlockAsm10B
-
-matchlen_four_loopback_repeat_extend:
-	MOVL (R9), R10
-	XORL (BP), R10
-	JNZ  repeat_extend_forward_end_encodeBlockAsm10B
-	ADDL $0x04, R12
-	ADDQ $0x04, R9
-	ADDQ $0x04, BP
-	SUBL $0x04, R8
-	JNC  matchlen_four_loopback_repeat_extend
-
-repeat_extend_forward_end_encodeBlockAsm10B:
-	ADDL  R12, CX
+assert_check_58_ok_srcline_358:
+	LEAQ  (DX)(CX*1), R8
+	LEAQ  (DX)(BP*1), BP
+	XORQ  BP, BP
+	ADDL  BP, CX
 	MOVL  CX, BP
 	SUBL  SI, BP
 	MOVL  16(SP), SI
@@ -3269,19 +3051,19 @@ repeat_three_match_repeat_encodeBlockAsm10B:
 	JMP  repeat_end_emit_encodeBlockAsm10B
 
 repeat_two_match_repeat_encodeBlockAsm10B:
-	SHLQ $0x02, BP
-	ORQ  $0x01, BP
+	SHLL $0x02, BP
+	ORL  $0x01, BP
 	MOVW BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm10B
 
 repeat_two_offset_match_repeat_encodeBlockAsm10B:
 	XORQ DI, DI
-	LEAQ 1(DI)(BP*4), BP
+	LEAL 1(DI)(BP*4), BP
 	MOVB SI, 1(AX)
-	SARQ $0x08, SI
-	SHLQ $0x05, SI
-	ORQ  SI, BP
+	SARL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
 	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm10B
@@ -3349,19 +3131,19 @@ repeat_three_repeat_as_copy_encodeBlockAsm10B_emit_copy:
 	JMP  repeat_end_emit_encodeBlockAsm10B
 
 repeat_two_repeat_as_copy_encodeBlockAsm10B_emit_copy:
-	SHLQ $0x02, BP
-	ORQ  $0x01, BP
+	SHLL $0x02, BP
+	ORL  $0x01, BP
 	MOVW BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm10B
 
 repeat_two_offset_repeat_as_copy_encodeBlockAsm10B_emit_copy:
 	XORQ DI, DI
-	LEAQ 1(DI)(BP*4), BP
+	LEAL 1(DI)(BP*4), BP
 	MOVB SI, 1(AX)
-	SARQ $0x08, SI
-	SHLQ $0x05, SI
-	ORQ  SI, BP
+	SARL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
 	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm10B
@@ -3434,19 +3216,19 @@ repeat_three_repeat_as_copy_encodeBlockAsm10B_emit_copy_short:
 	JMP  repeat_end_emit_encodeBlockAsm10B
 
 repeat_two_repeat_as_copy_encodeBlockAsm10B_emit_copy_short:
-	SHLQ $0x02, BP
-	ORQ  $0x01, BP
+	SHLL $0x02, BP
+	ORL  $0x01, BP
 	MOVW BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm10B
 
 repeat_two_offset_repeat_as_copy_encodeBlockAsm10B_emit_copy_short:
 	XORQ DI, DI
-	LEAQ 1(DI)(BP*4), BP
+	LEAL 1(DI)(BP*4), BP
 	MOVB SI, 1(AX)
-	SARQ $0x08, SI
-	SHLQ $0x05, SI
-	ORQ  SI, BP
+	SARL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
 	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm10B
@@ -3458,11 +3240,11 @@ two_byte_offset_short_repeat_as_copy_encodeBlockAsm10B:
 	CMPL SI, $0x00000800
 	JGE  emit_copy_three_repeat_as_copy_encodeBlockAsm10B
 	MOVB $0x01, BL
-	LEAQ -16(BX)(BP*4), BP
+	LEAL -16(BX)(BP*4), BP
 	MOVB SI, 1(AX)
-	SHRQ $0x08, SI
-	SHLQ $0x05, SI
-	ORQ  SI, BP
+	SHRL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
 	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm10B
@@ -3483,48 +3265,48 @@ repeat_end_emit_encodeBlockAsm10B:
 no_repeat_found_encodeBlockAsm10B:
 	MOVQ src_len+32(FP), R8
 	CMPL R8, BP
-	JG   assert_check_57_ok_srcline_410
+	JG   assert_check_59_ok_srcline_412
 	INT  $0x03
 	INT  $0x03
 
-assert_check_57_ok_srcline_410:
+assert_check_59_ok_srcline_412:
 	CMPL CX, BP
-	JG   assert_check_58_ok_srcline_416
+	JG   assert_check_60_ok_srcline_418
 	INT  $0x03
 	INT  $0x03
 
-assert_check_58_ok_srcline_416:
+assert_check_60_ok_srcline_418:
 	MOVQ src_len+32(FP), R8
 	CMPL R8, DI
-	JG   assert_check_59_ok_srcline_420
+	JG   assert_check_61_ok_srcline_422
 	INT  $0x03
 	INT  $0x03
 
-assert_check_59_ok_srcline_420:
+assert_check_61_ok_srcline_422:
 	CMPL CX, DI
-	JG   assert_check_60_ok_srcline_426
+	JG   assert_check_62_ok_srcline_428
 	INT  $0x03
 	INT  $0x03
 
-assert_check_60_ok_srcline_426:
+assert_check_62_ok_srcline_428:
 	CMPL (DX)(BP*1), SI
 	JEQ  candidate_match_encodeBlockAsm10B
 	SHRQ $0x08, SI
 	MOVL 24(SP)(R9*4), BP
 	MOVQ src_len+32(FP), R8
 	CMPL R8, BP
-	JG   assert_check_61_ok_srcline_440
+	JG   assert_check_63_ok_srcline_442
 	INT  $0x03
 	INT  $0x03
 
-assert_check_61_ok_srcline_440:
+assert_check_63_ok_srcline_442:
 	LEAL 2(CX), R8
 	CMPL R8, BP
-	JG   assert_check_62_ok_srcline_446
+	JG   assert_check_64_ok_srcline_448
 	INT  $0x03
 	INT  $0x03
 
-assert_check_62_ok_srcline_446:
+assert_check_64_ok_srcline_448:
 	LEAL 2(CX), R8
 	CMPL (DX)(DI*1), SI
 	JEQ  candidate2_match_encodeBlockAsm10B
@@ -3580,11 +3362,11 @@ match_dst_size_check_encodeBlockAsm10B:
 	LEAQ  (DX)(DI*1), SI
 	SUBL  DI, R8
 	TESTL R8, R8
-	JNZ   assert_check_63_ok_srcline_841
+	JNZ   assert_check_65_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_63_ok_srcline_841:
+assert_check_65_ok_srcline_849:
 	LEAL -1(R8), DI
 	CMPL DI, $0x3c
 	JLT  one_byte_match_emit_encodeBlockAsm10B
@@ -3623,7 +3405,7 @@ two_bytes_match_emit_encodeBlockAsm10B:
 	JMP  memmove_long_match_emit_encodeBlockAsm10B
 
 one_byte_match_emit_encodeBlockAsm10B:
-	SHLQ $0x02, DI
+	SHLB $0x02, DI
 	MOVB DI, (AX)
 	ADDQ $0x01, AX
 
@@ -3756,102 +3538,62 @@ match_nolit_loop_encodeBlockAsm10B:
 	ADDL $0x04, CX
 	ADDL $0x04, BP
 	CMPL CX, BP
-	JG   assert_check_64_ok_srcline_556
+	JG   assert_check_66_ok_srcline_558
 	INT  $0x03
 	INT  $0x03
 
-assert_check_64_ok_srcline_556:
+assert_check_66_ok_srcline_558:
 	MOVQ src_len+32(FP), SI
 	SUBL CX, SI
 	CMPQ SI, $0x7fffffff
-	JL   assert_check_65_ok_srcline_565
+	JL   assert_check_67_ok_srcline_567
 	INT  $0x03
 	INT  $0x03
 
-assert_check_65_ok_srcline_565:
-	LEAQ (DX)(CX*1), DI
+assert_check_67_ok_srcline_567:
+	LEAQ (DX)(CX*1), SI
 	LEAQ (DX)(BP*1), BP
-	XORL R10, R10
-	CMPL SI, $0x10
-	JL   matchlen_four_match_nolit_encodeBlockAsm10B
+	XORQ BP, BP
+	CMPL BP, $0x7fffffff
+	JL   assert_check_68_ok_srcline_582
+	INT  $0x03
+	INT  $0x03
 
-matchlen_loopback_match_nolit_encodeBlockAsm10B:
-	MOVQ  (DI), R8
-	MOVQ  8(DI), R9
-	XORQ  (BP), R8
-	XORQ  8(BP), R9
-	TESTQ R8, R8
-	JZ    matchlen_loop_tmp2_match_nolit_encodeBlockAsm10B
-	BSFQ  R8, R8
-	SARQ  $0x03, R8
-	LEAL  (R10)(R8*1), R10
-	JMP   match_nolit_end_encodeBlockAsm10B
-
-matchlen_loop_tmp2_match_nolit_encodeBlockAsm10B:
-	TESTQ R9, R9
-	JZ    matchlen_loop_match_nolit_encodeBlockAsm10B
-	BSFQ  R9, R9
-	SARQ  $0x03, R9
-	LEAL  8(R10)(R9*1), R10
-	JMP   match_nolit_end_encodeBlockAsm10B
-
-matchlen_loop_match_nolit_encodeBlockAsm10B:
-	SUBL $0x10, SI
-	ADDL $0x10, R10
-	ADDQ $0x10, DI
-	ADDQ $0x10, BP
-	CMPL SI, $0x10
-	JGE  matchlen_loopback_match_nolit_encodeBlockAsm10B
-
-matchlen_four_match_nolit_encodeBlockAsm10B:
-	SUBL $0x04, SI
-	JC   match_nolit_end_encodeBlockAsm10B
-
-matchlen_four_loopback_match_nolit_encodeBlockAsm10B:
-	MOVL (DI), R8
-	XORL (BP), R8
-	JNZ  match_nolit_end_encodeBlockAsm10B
-	ADDL $0x04, R10
-	ADDQ $0x04, DI
-	ADDQ $0x04, BP
-	SUBL $0x04, SI
-	JNC  matchlen_four_loopback_match_nolit_encodeBlockAsm10B
-
-match_nolit_end_encodeBlockAsm10B:
-	ADDL R10, CX
-	MOVL 16(SP), BP
-	ADDL $0x04, R10
-	CMPL BP, $0x00010000
+assert_check_68_ok_srcline_582:
+	ADDL BP, CX
+	MOVL 16(SP), SI
+	ADDL $0x04, BP
+	CMPL SI, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeBlockAsm10B
 
 four_bytes_loop_back_match_nolit_encodeBlockAsm10B:
-	CMPL R10, $0x40
+	CMPL BP, $0x40
 	JLE  four_bytes_remain_match_nolit_encodeBlockAsm10B
 	MOVB $0xff, (AX)
-	MOVL BP, 1(AX)
-	LEAL -64(R10), R10
+	MOVL SI, 1(AX)
+	LEAL -64(BP), BP
 	ADDQ $0x05, AX
-	CMPL R10, $0x04
+	CMPL BP, $0x04
 	JL   four_bytes_remain_match_nolit_encodeBlockAsm10B
 
 emit_repeat_again_match_nolit_encodeBlockAsm10B_emit_copy:
-	MOVL R10, SI
-	LEAL -4(R10), R10
-	CMPL SI, $0x08
+	MOVL BP, DI
+	LEAL -4(BP), BP
+	CMPL DI, $0x08
 	JLE  repeat_two_match_nolit_encodeBlockAsm10B_emit_copy
-	CMPL SI, $0x0c
+	CMPL DI, $0x0c
 	JGE  cant_repeat_two_offset_match_nolit_encodeBlockAsm10B_emit_copy
-	CMPL BP, $0x00000800
+	CMPL SI, $0x00000800
 	JLT  repeat_two_offset_match_nolit_encodeBlockAsm10B_emit_copy
 
 cant_repeat_two_offset_match_nolit_encodeBlockAsm10B_emit_copy:
-	CMPL R10, $0x00000104
+	CMPL BP, $0x00000104
 	JLT  repeat_three_match_nolit_encodeBlockAsm10B_emit_copy
-	CMPL R10, $0x00010100
+	CMPL BP, $0x00010100
 	JLT  repeat_four_match_nolit_encodeBlockAsm10B_emit_copy
-	CMPL R10, $0x0100ffff
+	CMPL BP, $0x0100ffff
 	JLT  repeat_five_match_nolit_encodeBlockAsm10B_emit_copy
-	LEAL -16842747(R10), R10
+	LEAL -16842747(BP), BP
 	MOVW $0x001d, (AX)
 	MOVW $0xfffb, 2(AX)
 	MOVB $0xff, 4(AX)
@@ -3859,84 +3601,84 @@ cant_repeat_two_offset_match_nolit_encodeBlockAsm10B_emit_copy:
 	JMP  emit_repeat_again_match_nolit_encodeBlockAsm10B_emit_copy
 
 repeat_five_match_nolit_encodeBlockAsm10B_emit_copy:
-	LEAL -65536(R10), R10
-	MOVL R10, BP
+	LEAL -65536(BP), BP
+	MOVL BP, SI
 	MOVW $0x001d, (AX)
-	MOVW R10, 2(AX)
-	SARL $0x10, BP
-	MOVB BP, 4(AX)
+	MOVW BP, 2(AX)
+	SARL $0x10, SI
+	MOVB SI, 4(AX)
 	ADDQ $0x05, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm10B
 
 repeat_four_match_nolit_encodeBlockAsm10B_emit_copy:
-	LEAL -256(R10), R10
+	LEAL -256(BP), BP
 	MOVW $0x0019, (AX)
-	MOVW R10, 2(AX)
+	MOVW BP, 2(AX)
 	ADDQ $0x04, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm10B
 
 repeat_three_match_nolit_encodeBlockAsm10B_emit_copy:
-	LEAL -4(R10), R10
+	LEAL -4(BP), BP
 	MOVW $0x0015, (AX)
-	MOVB R10, 2(AX)
+	MOVB BP, 2(AX)
 	ADDQ $0x03, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm10B
 
 repeat_two_match_nolit_encodeBlockAsm10B_emit_copy:
-	SHLQ $0x02, R10
-	ORQ  $0x01, R10
-	MOVW R10, (AX)
+	SHLL $0x02, BP
+	ORL  $0x01, BP
+	MOVW BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm10B
 
 repeat_two_offset_match_nolit_encodeBlockAsm10B_emit_copy:
-	XORQ SI, SI
-	LEAQ 1(SI)(R10*4), R10
-	MOVB BP, 1(AX)
-	SARQ $0x08, BP
-	SHLQ $0x05, BP
-	ORQ  BP, R10
-	MOVB R10, (AX)
+	XORQ DI, DI
+	LEAL 1(DI)(BP*4), BP
+	MOVB SI, 1(AX)
+	SARL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
+	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm10B
 	JMP four_bytes_loop_back_match_nolit_encodeBlockAsm10B
 
 four_bytes_remain_match_nolit_encodeBlockAsm10B:
-	TESTL R10, R10
+	TESTL BP, BP
 	JZ    match_nolit_emitcopy_end_encodeBlockAsm10B
 	MOVB  $0x03, BL
-	LEAL  -4(BX)(R10*4), R10
-	MOVB  R10, (AX)
-	MOVL  BP, 1(AX)
+	LEAL  -4(BX)(BP*4), BP
+	MOVB  BP, (AX)
+	MOVL  SI, 1(AX)
 	ADDQ  $0x05, AX
 	JMP   match_nolit_emitcopy_end_encodeBlockAsm10B
 
 two_byte_offset_match_nolit_encodeBlockAsm10B:
-	CMPL R10, $0x40
+	CMPL BP, $0x40
 	JLE  two_byte_offset_short_match_nolit_encodeBlockAsm10B
 	MOVB $0xee, (AX)
-	MOVW BP, 1(AX)
-	LEAL -60(R10), R10
+	MOVW SI, 1(AX)
+	LEAL -60(BP), BP
 	ADDQ $0x03, AX
 
 emit_repeat_again_match_nolit_encodeBlockAsm10B_emit_copy_short:
-	MOVL R10, SI
-	LEAL -4(R10), R10
-	CMPL SI, $0x08
+	MOVL BP, DI
+	LEAL -4(BP), BP
+	CMPL DI, $0x08
 	JLE  repeat_two_match_nolit_encodeBlockAsm10B_emit_copy_short
-	CMPL SI, $0x0c
+	CMPL DI, $0x0c
 	JGE  cant_repeat_two_offset_match_nolit_encodeBlockAsm10B_emit_copy_short
-	CMPL BP, $0x00000800
+	CMPL SI, $0x00000800
 	JLT  repeat_two_offset_match_nolit_encodeBlockAsm10B_emit_copy_short
 
 cant_repeat_two_offset_match_nolit_encodeBlockAsm10B_emit_copy_short:
-	CMPL R10, $0x00000104
+	CMPL BP, $0x00000104
 	JLT  repeat_three_match_nolit_encodeBlockAsm10B_emit_copy_short
-	CMPL R10, $0x00010100
+	CMPL BP, $0x00010100
 	JLT  repeat_four_match_nolit_encodeBlockAsm10B_emit_copy_short
-	CMPL R10, $0x0100ffff
+	CMPL BP, $0x0100ffff
 	JLT  repeat_five_match_nolit_encodeBlockAsm10B_emit_copy_short
-	LEAL -16842747(R10), R10
+	LEAL -16842747(BP), BP
 	MOVW $0x001d, (AX)
 	MOVW $0xfffb, 2(AX)
 	MOVB $0xff, 4(AX)
@@ -3944,68 +3686,68 @@ cant_repeat_two_offset_match_nolit_encodeBlockAsm10B_emit_copy_short:
 	JMP  emit_repeat_again_match_nolit_encodeBlockAsm10B_emit_copy_short
 
 repeat_five_match_nolit_encodeBlockAsm10B_emit_copy_short:
-	LEAL -65536(R10), R10
-	MOVL R10, BP
+	LEAL -65536(BP), BP
+	MOVL BP, SI
 	MOVW $0x001d, (AX)
-	MOVW R10, 2(AX)
-	SARL $0x10, BP
-	MOVB BP, 4(AX)
+	MOVW BP, 2(AX)
+	SARL $0x10, SI
+	MOVB SI, 4(AX)
 	ADDQ $0x05, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm10B
 
 repeat_four_match_nolit_encodeBlockAsm10B_emit_copy_short:
-	LEAL -256(R10), R10
+	LEAL -256(BP), BP
 	MOVW $0x0019, (AX)
-	MOVW R10, 2(AX)
+	MOVW BP, 2(AX)
 	ADDQ $0x04, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm10B
 
 repeat_three_match_nolit_encodeBlockAsm10B_emit_copy_short:
-	LEAL -4(R10), R10
+	LEAL -4(BP), BP
 	MOVW $0x0015, (AX)
-	MOVB R10, 2(AX)
+	MOVB BP, 2(AX)
 	ADDQ $0x03, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm10B
 
 repeat_two_match_nolit_encodeBlockAsm10B_emit_copy_short:
-	SHLQ $0x02, R10
-	ORQ  $0x01, R10
-	MOVW R10, (AX)
+	SHLL $0x02, BP
+	ORL  $0x01, BP
+	MOVW BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm10B
 
 repeat_two_offset_match_nolit_encodeBlockAsm10B_emit_copy_short:
-	XORQ SI, SI
-	LEAQ 1(SI)(R10*4), R10
-	MOVB BP, 1(AX)
-	SARQ $0x08, BP
-	SHLQ $0x05, BP
-	ORQ  BP, R10
-	MOVB R10, (AX)
+	XORQ DI, DI
+	LEAL 1(DI)(BP*4), BP
+	MOVB SI, 1(AX)
+	SARL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
+	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm10B
 	JMP two_byte_offset_match_nolit_encodeBlockAsm10B
 
 two_byte_offset_short_match_nolit_encodeBlockAsm10B:
-	CMPL R10, $0x0c
+	CMPL BP, $0x0c
 	JGE  emit_copy_three_match_nolit_encodeBlockAsm10B
-	CMPL BP, $0x00000800
+	CMPL SI, $0x00000800
 	JGE  emit_copy_three_match_nolit_encodeBlockAsm10B
 	MOVB $0x01, BL
-	LEAQ -16(BX)(R10*4), R10
-	MOVB BP, 1(AX)
-	SHRQ $0x08, BP
-	SHLQ $0x05, BP
-	ORQ  BP, R10
-	MOVB R10, (AX)
+	LEAL -16(BX)(BP*4), BP
+	MOVB SI, 1(AX)
+	SHRL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
+	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm10B
 
 emit_copy_three_match_nolit_encodeBlockAsm10B:
 	MOVB $0x02, BL
-	LEAL -4(BX)(R10*4), R10
-	MOVB R10, (AX)
-	MOVW BP, 1(AX)
+	LEAL -4(BX)(BP*4), BP
+	MOVB BP, (AX)
+	MOVW SI, 1(AX)
 	ADDQ $0x03, AX
 
 match_nolit_emitcopy_end_encodeBlockAsm10B:
@@ -4031,17 +3773,17 @@ match_nolit_dst_ok_encodeBlockAsm10B:
 	SHRQ  $0x36, R8
 	LEAL  -2(CX), R9
 	CMPQ  DI, $0x00001000
-	JL    assert_check_66_ok_srcline_624
+	JL    assert_check_69_ok_srcline_632
 	INT   $0x03
 	INT   $0x03
 
-assert_check_66_ok_srcline_624:
+assert_check_69_ok_srcline_632:
 	CMPQ R8, $0x00001000
-	JL   assert_check_67_ok_srcline_628
+	JL   assert_check_70_ok_srcline_636
 	INT  $0x03
 	INT  $0x03
 
-assert_check_67_ok_srcline_628:
+assert_check_70_ok_srcline_636:
 	MOVL 24(SP)(R8*4), BP
 	MOVL R9, 24(SP)(DI*4)
 	MOVL CX, 24(SP)(R8*4)
@@ -4069,11 +3811,11 @@ emit_remainder_ok_encodeBlockAsm10B:
 	LEAQ  (DX)(BX*1), CX
 	SUBL  BX, BP
 	TESTL BP, BP
-	JNZ   assert_check_68_ok_srcline_841
+	JNZ   assert_check_71_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_68_ok_srcline_841:
+assert_check_71_ok_srcline_849:
 	LEAL -1(BP), DX
 	CMPL DX, $0x3c
 	JLT  one_byte_emit_remainder_encodeBlockAsm10B
@@ -4112,7 +3854,7 @@ two_bytes_emit_remainder_encodeBlockAsm10B:
 	JMP  memmove_long_emit_remainder_encodeBlockAsm10B
 
 one_byte_emit_remainder_encodeBlockAsm10B:
-	SHLQ $0x02, DX
+	SHLB $0x02, DL
 	MOVB DL, (AX)
 	ADDQ $0x01, AX
 
@@ -4241,25 +3983,25 @@ emit_lit_memmove_long_emit_remainder_encodeBlockAsm10Blarge_forward_sse_loop_32:
 
 emit_literal_done_emit_remainder_encodeBlockAsm10B:
 	CMPQ AX, (SP)
-	JL   assert_check_69_ok_srcline_674
+	JL   assert_check_72_ok_srcline_682
 	INT  $0x03
 	INT  $0x03
 
-assert_check_69_ok_srcline_674:
+assert_check_72_ok_srcline_682:
 	MOVQ dst_base+0(FP), CX
 	SUBQ CX, AX
 	CMPQ src_len+32(FP), AX
-	JGE  assert_check_70_ok_srcline_687
+	JGE  assert_check_73_ok_srcline_695
 	INT  $0x03
 	INT  $0x03
 
-assert_check_70_ok_srcline_687:
+assert_check_73_ok_srcline_695:
 	CMPQ dst_len+8(FP), AX
-	JGE  assert_check_71_ok_srcline_693
+	JGE  assert_check_74_ok_srcline_701
 	INT  $0x03
 	INT  $0x03
 
-assert_check_71_ok_srcline_693:
+assert_check_74_ok_srcline_701:
 	MOVQ AX, ret+48(FP)
 	RET
 
@@ -4288,20 +4030,20 @@ zero_loop_encodeBlockAsm8B:
 	LEAQ  -5(CX), DX
 	LEAQ  -8(CX), BP
 	CMPQ  BP, src_len+32(FP)
-	JL    assert_check_72_ok_srcline_175
+	JL    assert_check_75_ok_srcline_176
 	INT   $0x03
 	INT   $0x03
 
-assert_check_72_ok_srcline_175:
+assert_check_75_ok_srcline_176:
 	MOVL BP, 8(SP)
 	SHRQ $0x05, CX
 	SUBL CX, DX
 	CMPQ src_len+32(FP), DX
-	JGE  assert_check_73_ok_srcline_186
+	JGE  assert_check_76_ok_srcline_187
 	INT  $0x03
 	INT  $0x03
 
-assert_check_73_ok_srcline_186:
+assert_check_76_ok_srcline_187:
 	LEAQ (AX)(DX*1), DX
 	MOVQ DX, (SP)
 	MOVL $0x00000001, CX
@@ -4311,18 +4053,18 @@ assert_check_73_ok_srcline_186:
 search_loop_encodeBlockAsm8B:
 	MOVQ src_base+24(FP), BP
 	CMPQ BP, DX
-	JEQ  assert_check_74_ok_srcline_212
+	JEQ  assert_check_77_ok_srcline_213
 	INT  $0x03
 	INT  $0x03
 
-assert_check_74_ok_srcline_212:
+assert_check_77_ok_srcline_213:
 	MOVQ src_len+32(FP), BP
 	CMPQ BP, CX
-	JG   assert_check_75_ok_srcline_219
+	JG   assert_check_78_ok_srcline_220
 	INT  $0x03
 	INT  $0x03
 
-assert_check_75_ok_srcline_219:
+assert_check_78_ok_srcline_220:
 	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
@@ -4345,17 +4087,17 @@ assert_check_75_ok_srcline_219:
 	MOVL  24(SP)(R9*4), BP
 	MOVL  24(SP)(R10*4), DI
 	CMPQ  R9, $0x00000400
-	JL    assert_check_76_ok_srcline_258
+	JL    assert_check_79_ok_srcline_259
 	INT   $0x03
 	INT   $0x03
 
-assert_check_76_ok_srcline_258:
+assert_check_79_ok_srcline_259:
 	CMPQ R10, $0x00000400
-	JL   assert_check_77_ok_srcline_262
+	JL   assert_check_80_ok_srcline_263
 	INT  $0x03
 	INT  $0x03
 
-assert_check_77_ok_srcline_262:
+assert_check_80_ok_srcline_263:
 	MOVL  CX, 24(SP)(R9*4)
 	LEAL  1(CX), R9
 	MOVL  R9, 24(SP)(R10*4)
@@ -4365,11 +4107,11 @@ assert_check_77_ok_srcline_262:
 	IMULQ R8, R9
 	SHRQ  $0x38, R9
 	CMPQ  R9, $0x00000400
-	JL    assert_check_78_ok_srcline_281
+	JL    assert_check_81_ok_srcline_282
 	INT   $0x03
 	INT   $0x03
 
-assert_check_78_ok_srcline_281:
+assert_check_81_ok_srcline_282:
 	MOVL CX, R8
 	SUBL 16(SP), R8
 	MOVL 1(DX)(R8*1), R10
@@ -4403,11 +4145,11 @@ repeat_extend_back_end_encodeBlockAsm8B:
 	LEAQ  (DX)(BP*1), R9
 	SUBL  BP, R8
 	TESTL R8, R8
-	JNZ   assert_check_79_ok_srcline_841
+	JNZ   assert_check_82_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_79_ok_srcline_841:
+assert_check_82_ok_srcline_849:
 	LEAL -1(R8), BP
 	CMPL BP, $0x3c
 	JLT  one_byte_repeat_emit_encodeBlockAsm8B
@@ -4446,7 +4188,7 @@ two_bytes_repeat_emit_encodeBlockAsm8B:
 	JMP  memmove_long_repeat_emit_encodeBlockAsm8B
 
 one_byte_repeat_emit_encodeBlockAsm8B:
-	SHLQ $0x02, BP
+	SHLB $0x02, BP
 	MOVB BP, (AX)
 	ADDQ $0x01, AX
 
@@ -4578,61 +4320,15 @@ emit_literal_done_repeat_emit_encodeBlockAsm8B:
 	MOVQ src_len+32(FP), R8
 	SUBL CX, R8
 	CMPQ R8, $0x7fffffff
-	JL   assert_check_80_ok_srcline_357
+	JL   assert_check_83_ok_srcline_358
 	INT  $0x03
 	INT  $0x03
 
-assert_check_80_ok_srcline_357:
-	LEAQ (DX)(CX*1), R9
-	LEAQ (DX)(BP*1), BP
-	XORL R12, R12
-	CMPL R8, $0x10
-	JL   matchlen_four_repeat_extend
-
-matchlen_loopback_repeat_extend:
-	MOVQ  (R9), R10
-	MOVQ  8(R9), R11
-	XORQ  (BP), R10
-	XORQ  8(BP), R11
-	TESTQ R10, R10
-	JZ    matchlen_loop_tmp2_repeat_extend
-	BSFQ  R10, R10
-	SARQ  $0x03, R10
-	LEAL  (R12)(R10*1), R12
-	JMP   repeat_extend_forward_end_encodeBlockAsm8B
-
-matchlen_loop_tmp2_repeat_extend:
-	TESTQ R11, R11
-	JZ    matchlen_loop_repeat_extend
-	BSFQ  R11, R11
-	SARQ  $0x03, R11
-	LEAL  8(R12)(R11*1), R12
-	JMP   repeat_extend_forward_end_encodeBlockAsm8B
-
-matchlen_loop_repeat_extend:
-	SUBL $0x10, R8
-	ADDL $0x10, R12
-	ADDQ $0x10, R9
-	ADDQ $0x10, BP
-	CMPL R8, $0x10
-	JGE  matchlen_loopback_repeat_extend
-
-matchlen_four_repeat_extend:
-	SUBL $0x04, R8
-	JC   repeat_extend_forward_end_encodeBlockAsm8B
-
-matchlen_four_loopback_repeat_extend:
-	MOVL (R9), R10
-	XORL (BP), R10
-	JNZ  repeat_extend_forward_end_encodeBlockAsm8B
-	ADDL $0x04, R12
-	ADDQ $0x04, R9
-	ADDQ $0x04, BP
-	SUBL $0x04, R8
-	JNC  matchlen_four_loopback_repeat_extend
-
-repeat_extend_forward_end_encodeBlockAsm8B:
-	ADDL  R12, CX
+assert_check_83_ok_srcline_358:
+	LEAQ  (DX)(CX*1), R8
+	LEAQ  (DX)(BP*1), BP
+	XORQ  BP, BP
+	ADDL  BP, CX
 	MOVL  CX, BP
 	SUBL  SI, BP
 	MOVL  16(SP), SI
@@ -4688,19 +4384,19 @@ repeat_three_match_repeat_encodeBlockAsm8B:
 	JMP  repeat_end_emit_encodeBlockAsm8B
 
 repeat_two_match_repeat_encodeBlockAsm8B:
-	SHLQ $0x02, BP
-	ORQ  $0x01, BP
+	SHLL $0x02, BP
+	ORL  $0x01, BP
 	MOVW BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm8B
 
 repeat_two_offset_match_repeat_encodeBlockAsm8B:
 	XORQ DI, DI
-	LEAQ 1(DI)(BP*4), BP
+	LEAL 1(DI)(BP*4), BP
 	MOVB SI, 1(AX)
-	SARQ $0x08, SI
-	SHLQ $0x05, SI
-	ORQ  SI, BP
+	SARL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
 	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm8B
@@ -4768,19 +4464,19 @@ repeat_three_repeat_as_copy_encodeBlockAsm8B_emit_copy:
 	JMP  repeat_end_emit_encodeBlockAsm8B
 
 repeat_two_repeat_as_copy_encodeBlockAsm8B_emit_copy:
-	SHLQ $0x02, BP
-	ORQ  $0x01, BP
+	SHLL $0x02, BP
+	ORL  $0x01, BP
 	MOVW BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm8B
 
 repeat_two_offset_repeat_as_copy_encodeBlockAsm8B_emit_copy:
 	XORQ DI, DI
-	LEAQ 1(DI)(BP*4), BP
+	LEAL 1(DI)(BP*4), BP
 	MOVB SI, 1(AX)
-	SARQ $0x08, SI
-	SHLQ $0x05, SI
-	ORQ  SI, BP
+	SARL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
 	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm8B
@@ -4853,19 +4549,19 @@ repeat_three_repeat_as_copy_encodeBlockAsm8B_emit_copy_short:
 	JMP  repeat_end_emit_encodeBlockAsm8B
 
 repeat_two_repeat_as_copy_encodeBlockAsm8B_emit_copy_short:
-	SHLQ $0x02, BP
-	ORQ  $0x01, BP
+	SHLL $0x02, BP
+	ORL  $0x01, BP
 	MOVW BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm8B
 
 repeat_two_offset_repeat_as_copy_encodeBlockAsm8B_emit_copy_short:
 	XORQ DI, DI
-	LEAQ 1(DI)(BP*4), BP
+	LEAL 1(DI)(BP*4), BP
 	MOVB SI, 1(AX)
-	SARQ $0x08, SI
-	SHLQ $0x05, SI
-	ORQ  SI, BP
+	SARL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
 	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm8B
@@ -4877,11 +4573,11 @@ two_byte_offset_short_repeat_as_copy_encodeBlockAsm8B:
 	CMPL SI, $0x00000800
 	JGE  emit_copy_three_repeat_as_copy_encodeBlockAsm8B
 	MOVB $0x01, BL
-	LEAQ -16(BX)(BP*4), BP
+	LEAL -16(BX)(BP*4), BP
 	MOVB SI, 1(AX)
-	SHRQ $0x08, SI
-	SHLQ $0x05, SI
-	ORQ  SI, BP
+	SHRL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
 	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm8B
@@ -4902,48 +4598,48 @@ repeat_end_emit_encodeBlockAsm8B:
 no_repeat_found_encodeBlockAsm8B:
 	MOVQ src_len+32(FP), R8
 	CMPL R8, BP
-	JG   assert_check_81_ok_srcline_410
+	JG   assert_check_84_ok_srcline_412
 	INT  $0x03
 	INT  $0x03
 
-assert_check_81_ok_srcline_410:
+assert_check_84_ok_srcline_412:
 	CMPL CX, BP
-	JG   assert_check_82_ok_srcline_416
+	JG   assert_check_85_ok_srcline_418
 	INT  $0x03
 	INT  $0x03
 
-assert_check_82_ok_srcline_416:
+assert_check_85_ok_srcline_418:
 	MOVQ src_len+32(FP), R8
 	CMPL R8, DI
-	JG   assert_check_83_ok_srcline_420
+	JG   assert_check_86_ok_srcline_422
 	INT  $0x03
 	INT  $0x03
 
-assert_check_83_ok_srcline_420:
+assert_check_86_ok_srcline_422:
 	CMPL CX, DI
-	JG   assert_check_84_ok_srcline_426
+	JG   assert_check_87_ok_srcline_428
 	INT  $0x03
 	INT  $0x03
 
-assert_check_84_ok_srcline_426:
+assert_check_87_ok_srcline_428:
 	CMPL (DX)(BP*1), SI
 	JEQ  candidate_match_encodeBlockAsm8B
 	SHRQ $0x08, SI
 	MOVL 24(SP)(R9*4), BP
 	MOVQ src_len+32(FP), R8
 	CMPL R8, BP
-	JG   assert_check_85_ok_srcline_440
+	JG   assert_check_88_ok_srcline_442
 	INT  $0x03
 	INT  $0x03
 
-assert_check_85_ok_srcline_440:
+assert_check_88_ok_srcline_442:
 	LEAL 2(CX), R8
 	CMPL R8, BP
-	JG   assert_check_86_ok_srcline_446
+	JG   assert_check_89_ok_srcline_448
 	INT  $0x03
 	INT  $0x03
 
-assert_check_86_ok_srcline_446:
+assert_check_89_ok_srcline_448:
 	LEAL 2(CX), R8
 	CMPL (DX)(DI*1), SI
 	JEQ  candidate2_match_encodeBlockAsm8B
@@ -4999,11 +4695,11 @@ match_dst_size_check_encodeBlockAsm8B:
 	LEAQ  (DX)(DI*1), SI
 	SUBL  DI, R8
 	TESTL R8, R8
-	JNZ   assert_check_87_ok_srcline_841
+	JNZ   assert_check_90_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_87_ok_srcline_841:
+assert_check_90_ok_srcline_849:
 	LEAL -1(R8), DI
 	CMPL DI, $0x3c
 	JLT  one_byte_match_emit_encodeBlockAsm8B
@@ -5042,7 +4738,7 @@ two_bytes_match_emit_encodeBlockAsm8B:
 	JMP  memmove_long_match_emit_encodeBlockAsm8B
 
 one_byte_match_emit_encodeBlockAsm8B:
-	SHLQ $0x02, DI
+	SHLB $0x02, DI
 	MOVB DI, (AX)
 	ADDQ $0x01, AX
 
@@ -5175,102 +4871,62 @@ match_nolit_loop_encodeBlockAsm8B:
 	ADDL $0x04, CX
 	ADDL $0x04, BP
 	CMPL CX, BP
-	JG   assert_check_88_ok_srcline_556
+	JG   assert_check_91_ok_srcline_558
 	INT  $0x03
 	INT  $0x03
 
-assert_check_88_ok_srcline_556:
+assert_check_91_ok_srcline_558:
 	MOVQ src_len+32(FP), SI
 	SUBL CX, SI
 	CMPQ SI, $0x7fffffff
-	JL   assert_check_89_ok_srcline_565
+	JL   assert_check_92_ok_srcline_567
 	INT  $0x03
 	INT  $0x03
 
-assert_check_89_ok_srcline_565:
-	LEAQ (DX)(CX*1), DI
+assert_check_92_ok_srcline_567:
+	LEAQ (DX)(CX*1), SI
 	LEAQ (DX)(BP*1), BP
-	XORL R10, R10
-	CMPL SI, $0x10
-	JL   matchlen_four_match_nolit_encodeBlockAsm8B
+	XORQ BP, BP
+	CMPL BP, $0x7fffffff
+	JL   assert_check_93_ok_srcline_582
+	INT  $0x03
+	INT  $0x03
 
-matchlen_loopback_match_nolit_encodeBlockAsm8B:
-	MOVQ  (DI), R8
-	MOVQ  8(DI), R9
-	XORQ  (BP), R8
-	XORQ  8(BP), R9
-	TESTQ R8, R8
-	JZ    matchlen_loop_tmp2_match_nolit_encodeBlockAsm8B
-	BSFQ  R8, R8
-	SARQ  $0x03, R8
-	LEAL  (R10)(R8*1), R10
-	JMP   match_nolit_end_encodeBlockAsm8B
-
-matchlen_loop_tmp2_match_nolit_encodeBlockAsm8B:
-	TESTQ R9, R9
-	JZ    matchlen_loop_match_nolit_encodeBlockAsm8B
-	BSFQ  R9, R9
-	SARQ  $0x03, R9
-	LEAL  8(R10)(R9*1), R10
-	JMP   match_nolit_end_encodeBlockAsm8B
-
-matchlen_loop_match_nolit_encodeBlockAsm8B:
-	SUBL $0x10, SI
-	ADDL $0x10, R10
-	ADDQ $0x10, DI
-	ADDQ $0x10, BP
-	CMPL SI, $0x10
-	JGE  matchlen_loopback_match_nolit_encodeBlockAsm8B
-
-matchlen_four_match_nolit_encodeBlockAsm8B:
-	SUBL $0x04, SI
-	JC   match_nolit_end_encodeBlockAsm8B
-
-matchlen_four_loopback_match_nolit_encodeBlockAsm8B:
-	MOVL (DI), R8
-	XORL (BP), R8
-	JNZ  match_nolit_end_encodeBlockAsm8B
-	ADDL $0x04, R10
-	ADDQ $0x04, DI
-	ADDQ $0x04, BP
-	SUBL $0x04, SI
-	JNC  matchlen_four_loopback_match_nolit_encodeBlockAsm8B
-
-match_nolit_end_encodeBlockAsm8B:
-	ADDL R10, CX
-	MOVL 16(SP), BP
-	ADDL $0x04, R10
-	CMPL BP, $0x00010000
+assert_check_93_ok_srcline_582:
+	ADDL BP, CX
+	MOVL 16(SP), SI
+	ADDL $0x04, BP
+	CMPL SI, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeBlockAsm8B
 
 four_bytes_loop_back_match_nolit_encodeBlockAsm8B:
-	CMPL R10, $0x40
+	CMPL BP, $0x40
 	JLE  four_bytes_remain_match_nolit_encodeBlockAsm8B
 	MOVB $0xff, (AX)
-	MOVL BP, 1(AX)
-	LEAL -64(R10), R10
+	MOVL SI, 1(AX)
+	LEAL -64(BP), BP
 	ADDQ $0x05, AX
-	CMPL R10, $0x04
+	CMPL BP, $0x04
 	JL   four_bytes_remain_match_nolit_encodeBlockAsm8B
 
 emit_repeat_again_match_nolit_encodeBlockAsm8B_emit_copy:
-	MOVL R10, SI
-	LEAL -4(R10), R10
-	CMPL SI, $0x08
+	MOVL BP, DI
+	LEAL -4(BP), BP
+	CMPL DI, $0x08
 	JLE  repeat_two_match_nolit_encodeBlockAsm8B_emit_copy
-	CMPL SI, $0x0c
+	CMPL DI, $0x0c
 	JGE  cant_repeat_two_offset_match_nolit_encodeBlockAsm8B_emit_copy
-	CMPL BP, $0x00000800
+	CMPL SI, $0x00000800
 	JLT  repeat_two_offset_match_nolit_encodeBlockAsm8B_emit_copy
 
 cant_repeat_two_offset_match_nolit_encodeBlockAsm8B_emit_copy:
-	CMPL R10, $0x00000104
+	CMPL BP, $0x00000104
 	JLT  repeat_three_match_nolit_encodeBlockAsm8B_emit_copy
-	CMPL R10, $0x00010100
+	CMPL BP, $0x00010100
 	JLT  repeat_four_match_nolit_encodeBlockAsm8B_emit_copy
-	CMPL R10, $0x0100ffff
+	CMPL BP, $0x0100ffff
 	JLT  repeat_five_match_nolit_encodeBlockAsm8B_emit_copy
-	LEAL -16842747(R10), R10
+	LEAL -16842747(BP), BP
 	MOVW $0x001d, (AX)
 	MOVW $0xfffb, 2(AX)
 	MOVB $0xff, 4(AX)
@@ -5278,84 +4934,84 @@ cant_repeat_two_offset_match_nolit_encodeBlockAsm8B_emit_copy:
 	JMP  emit_repeat_again_match_nolit_encodeBlockAsm8B_emit_copy
 
 repeat_five_match_nolit_encodeBlockAsm8B_emit_copy:
-	LEAL -65536(R10), R10
-	MOVL R10, BP
+	LEAL -65536(BP), BP
+	MOVL BP, SI
 	MOVW $0x001d, (AX)
-	MOVW R10, 2(AX)
-	SARL $0x10, BP
-	MOVB BP, 4(AX)
+	MOVW BP, 2(AX)
+	SARL $0x10, SI
+	MOVB SI, 4(AX)
 	ADDQ $0x05, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm8B
 
 repeat_four_match_nolit_encodeBlockAsm8B_emit_copy:
-	LEAL -256(R10), R10
+	LEAL -256(BP), BP
 	MOVW $0x0019, (AX)
-	MOVW R10, 2(AX)
+	MOVW BP, 2(AX)
 	ADDQ $0x04, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm8B
 
 repeat_three_match_nolit_encodeBlockAsm8B_emit_copy:
-	LEAL -4(R10), R10
+	LEAL -4(BP), BP
 	MOVW $0x0015, (AX)
-	MOVB R10, 2(AX)
+	MOVB BP, 2(AX)
 	ADDQ $0x03, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm8B
 
 repeat_two_match_nolit_encodeBlockAsm8B_emit_copy:
-	SHLQ $0x02, R10
-	ORQ  $0x01, R10
-	MOVW R10, (AX)
+	SHLL $0x02, BP
+	ORL  $0x01, BP
+	MOVW BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm8B
 
 repeat_two_offset_match_nolit_encodeBlockAsm8B_emit_copy:
-	XORQ SI, SI
-	LEAQ 1(SI)(R10*4), R10
-	MOVB BP, 1(AX)
-	SARQ $0x08, BP
-	SHLQ $0x05, BP
-	ORQ  BP, R10
-	MOVB R10, (AX)
+	XORQ DI, DI
+	LEAL 1(DI)(BP*4), BP
+	MOVB SI, 1(AX)
+	SARL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
+	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm8B
 	JMP four_bytes_loop_back_match_nolit_encodeBlockAsm8B
 
 four_bytes_remain_match_nolit_encodeBlockAsm8B:
-	TESTL R10, R10
+	TESTL BP, BP
 	JZ    match_nolit_emitcopy_end_encodeBlockAsm8B
 	MOVB  $0x03, BL
-	LEAL  -4(BX)(R10*4), R10
-	MOVB  R10, (AX)
-	MOVL  BP, 1(AX)
+	LEAL  -4(BX)(BP*4), BP
+	MOVB  BP, (AX)
+	MOVL  SI, 1(AX)
 	ADDQ  $0x05, AX
 	JMP   match_nolit_emitcopy_end_encodeBlockAsm8B
 
 two_byte_offset_match_nolit_encodeBlockAsm8B:
-	CMPL R10, $0x40
+	CMPL BP, $0x40
 	JLE  two_byte_offset_short_match_nolit_encodeBlockAsm8B
 	MOVB $0xee, (AX)
-	MOVW BP, 1(AX)
-	LEAL -60(R10), R10
+	MOVW SI, 1(AX)
+	LEAL -60(BP), BP
 	ADDQ $0x03, AX
 
 emit_repeat_again_match_nolit_encodeBlockAsm8B_emit_copy_short:
-	MOVL R10, SI
-	LEAL -4(R10), R10
-	CMPL SI, $0x08
+	MOVL BP, DI
+	LEAL -4(BP), BP
+	CMPL DI, $0x08
 	JLE  repeat_two_match_nolit_encodeBlockAsm8B_emit_copy_short
-	CMPL SI, $0x0c
+	CMPL DI, $0x0c
 	JGE  cant_repeat_two_offset_match_nolit_encodeBlockAsm8B_emit_copy_short
-	CMPL BP, $0x00000800
+	CMPL SI, $0x00000800
 	JLT  repeat_two_offset_match_nolit_encodeBlockAsm8B_emit_copy_short
 
 cant_repeat_two_offset_match_nolit_encodeBlockAsm8B_emit_copy_short:
-	CMPL R10, $0x00000104
+	CMPL BP, $0x00000104
 	JLT  repeat_three_match_nolit_encodeBlockAsm8B_emit_copy_short
-	CMPL R10, $0x00010100
+	CMPL BP, $0x00010100
 	JLT  repeat_four_match_nolit_encodeBlockAsm8B_emit_copy_short
-	CMPL R10, $0x0100ffff
+	CMPL BP, $0x0100ffff
 	JLT  repeat_five_match_nolit_encodeBlockAsm8B_emit_copy_short
-	LEAL -16842747(R10), R10
+	LEAL -16842747(BP), BP
 	MOVW $0x001d, (AX)
 	MOVW $0xfffb, 2(AX)
 	MOVB $0xff, 4(AX)
@@ -5363,68 +5019,68 @@ cant_repeat_two_offset_match_nolit_encodeBlockAsm8B_emit_copy_short:
 	JMP  emit_repeat_again_match_nolit_encodeBlockAsm8B_emit_copy_short
 
 repeat_five_match_nolit_encodeBlockAsm8B_emit_copy_short:
-	LEAL -65536(R10), R10
-	MOVL R10, BP
+	LEAL -65536(BP), BP
+	MOVL BP, SI
 	MOVW $0x001d, (AX)
-	MOVW R10, 2(AX)
-	SARL $0x10, BP
-	MOVB BP, 4(AX)
+	MOVW BP, 2(AX)
+	SARL $0x10, SI
+	MOVB SI, 4(AX)
 	ADDQ $0x05, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm8B
 
 repeat_four_match_nolit_encodeBlockAsm8B_emit_copy_short:
-	LEAL -256(R10), R10
+	LEAL -256(BP), BP
 	MOVW $0x0019, (AX)
-	MOVW R10, 2(AX)
+	MOVW BP, 2(AX)
 	ADDQ $0x04, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm8B
 
 repeat_three_match_nolit_encodeBlockAsm8B_emit_copy_short:
-	LEAL -4(R10), R10
+	LEAL -4(BP), BP
 	MOVW $0x0015, (AX)
-	MOVB R10, 2(AX)
+	MOVB BP, 2(AX)
 	ADDQ $0x03, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm8B
 
 repeat_two_match_nolit_encodeBlockAsm8B_emit_copy_short:
-	SHLQ $0x02, R10
-	ORQ  $0x01, R10
-	MOVW R10, (AX)
+	SHLL $0x02, BP
+	ORL  $0x01, BP
+	MOVW BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm8B
 
 repeat_two_offset_match_nolit_encodeBlockAsm8B_emit_copy_short:
-	XORQ SI, SI
-	LEAQ 1(SI)(R10*4), R10
-	MOVB BP, 1(AX)
-	SARQ $0x08, BP
-	SHLQ $0x05, BP
-	ORQ  BP, R10
-	MOVB R10, (AX)
+	XORQ DI, DI
+	LEAL 1(DI)(BP*4), BP
+	MOVB SI, 1(AX)
+	SARL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
+	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm8B
 	JMP two_byte_offset_match_nolit_encodeBlockAsm8B
 
 two_byte_offset_short_match_nolit_encodeBlockAsm8B:
-	CMPL R10, $0x0c
+	CMPL BP, $0x0c
 	JGE  emit_copy_three_match_nolit_encodeBlockAsm8B
-	CMPL BP, $0x00000800
+	CMPL SI, $0x00000800
 	JGE  emit_copy_three_match_nolit_encodeBlockAsm8B
 	MOVB $0x01, BL
-	LEAQ -16(BX)(R10*4), R10
-	MOVB BP, 1(AX)
-	SHRQ $0x08, BP
-	SHLQ $0x05, BP
-	ORQ  BP, R10
-	MOVB R10, (AX)
+	LEAL -16(BX)(BP*4), BP
+	MOVB SI, 1(AX)
+	SHRL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
+	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm8B
 
 emit_copy_three_match_nolit_encodeBlockAsm8B:
 	MOVB $0x02, BL
-	LEAL -4(BX)(R10*4), R10
-	MOVB R10, (AX)
-	MOVW BP, 1(AX)
+	LEAL -4(BX)(BP*4), BP
+	MOVB BP, (AX)
+	MOVW SI, 1(AX)
 	ADDQ $0x03, AX
 
 match_nolit_emitcopy_end_encodeBlockAsm8B:
@@ -5450,17 +5106,17 @@ match_nolit_dst_ok_encodeBlockAsm8B:
 	SHRQ  $0x38, R8
 	LEAL  -2(CX), R9
 	CMPQ  DI, $0x00000400
-	JL    assert_check_90_ok_srcline_624
+	JL    assert_check_94_ok_srcline_632
 	INT   $0x03
 	INT   $0x03
 
-assert_check_90_ok_srcline_624:
+assert_check_94_ok_srcline_632:
 	CMPQ R8, $0x00000400
-	JL   assert_check_91_ok_srcline_628
+	JL   assert_check_95_ok_srcline_636
 	INT  $0x03
 	INT  $0x03
 
-assert_check_91_ok_srcline_628:
+assert_check_95_ok_srcline_636:
 	MOVL 24(SP)(R8*4), BP
 	MOVL R9, 24(SP)(DI*4)
 	MOVL CX, 24(SP)(R8*4)
@@ -5488,11 +5144,11 @@ emit_remainder_ok_encodeBlockAsm8B:
 	LEAQ  (DX)(BX*1), CX
 	SUBL  BX, BP
 	TESTL BP, BP
-	JNZ   assert_check_92_ok_srcline_841
+	JNZ   assert_check_96_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_92_ok_srcline_841:
+assert_check_96_ok_srcline_849:
 	LEAL -1(BP), DX
 	CMPL DX, $0x3c
 	JLT  one_byte_emit_remainder_encodeBlockAsm8B
@@ -5531,7 +5187,7 @@ two_bytes_emit_remainder_encodeBlockAsm8B:
 	JMP  memmove_long_emit_remainder_encodeBlockAsm8B
 
 one_byte_emit_remainder_encodeBlockAsm8B:
-	SHLQ $0x02, DX
+	SHLB $0x02, DL
 	MOVB DL, (AX)
 	ADDQ $0x01, AX
 
@@ -5660,25 +5316,25 @@ emit_lit_memmove_long_emit_remainder_encodeBlockAsm8Blarge_forward_sse_loop_32:
 
 emit_literal_done_emit_remainder_encodeBlockAsm8B:
 	CMPQ AX, (SP)
-	JL   assert_check_93_ok_srcline_674
+	JL   assert_check_97_ok_srcline_682
 	INT  $0x03
 	INT  $0x03
 
-assert_check_93_ok_srcline_674:
+assert_check_97_ok_srcline_682:
 	MOVQ dst_base+0(FP), CX
 	SUBQ CX, AX
 	CMPQ src_len+32(FP), AX
-	JGE  assert_check_94_ok_srcline_687
+	JGE  assert_check_98_ok_srcline_695
 	INT  $0x03
 	INT  $0x03
 
-assert_check_94_ok_srcline_687:
+assert_check_98_ok_srcline_695:
 	CMPQ dst_len+8(FP), AX
-	JGE  assert_check_95_ok_srcline_693
+	JGE  assert_check_99_ok_srcline_701
 	INT  $0x03
 	INT  $0x03
 
-assert_check_95_ok_srcline_693:
+assert_check_99_ok_srcline_701:
 	MOVQ AX, ret+48(FP)
 	RET
 
@@ -5707,20 +5363,20 @@ zero_loop_encodeSnappyBlockAsm:
 	LEAQ  -5(CX), DX
 	LEAQ  -8(CX), BP
 	CMPQ  BP, src_len+32(FP)
-	JL    assert_check_96_ok_srcline_175
+	JL    assert_check_100_ok_srcline_176
 	INT   $0x03
 	INT   $0x03
 
-assert_check_96_ok_srcline_175:
+assert_check_100_ok_srcline_176:
 	MOVL BP, 8(SP)
 	SHRQ $0x05, CX
 	SUBL CX, DX
 	CMPQ src_len+32(FP), DX
-	JGE  assert_check_97_ok_srcline_186
+	JGE  assert_check_101_ok_srcline_187
 	INT  $0x03
 	INT  $0x03
 
-assert_check_97_ok_srcline_186:
+assert_check_101_ok_srcline_187:
 	LEAQ (AX)(DX*1), DX
 	MOVQ DX, (SP)
 	MOVL $0x00000001, CX
@@ -5730,18 +5386,18 @@ assert_check_97_ok_srcline_186:
 search_loop_encodeSnappyBlockAsm:
 	MOVQ src_base+24(FP), BP
 	CMPQ BP, DX
-	JEQ  assert_check_98_ok_srcline_212
+	JEQ  assert_check_102_ok_srcline_213
 	INT  $0x03
 	INT  $0x03
 
-assert_check_98_ok_srcline_212:
+assert_check_102_ok_srcline_213:
 	MOVQ src_len+32(FP), BP
 	CMPQ BP, CX
-	JG   assert_check_99_ok_srcline_219
+	JG   assert_check_103_ok_srcline_220
 	INT  $0x03
 	INT  $0x03
 
-assert_check_99_ok_srcline_219:
+assert_check_103_ok_srcline_220:
 	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
@@ -5764,17 +5420,17 @@ assert_check_99_ok_srcline_219:
 	MOVL  24(SP)(R9*4), BP
 	MOVL  24(SP)(R10*4), DI
 	CMPQ  R9, $0x00010000
-	JL    assert_check_100_ok_srcline_258
+	JL    assert_check_104_ok_srcline_259
 	INT   $0x03
 	INT   $0x03
 
-assert_check_100_ok_srcline_258:
+assert_check_104_ok_srcline_259:
 	CMPQ R10, $0x00010000
-	JL   assert_check_101_ok_srcline_262
+	JL   assert_check_105_ok_srcline_263
 	INT  $0x03
 	INT  $0x03
 
-assert_check_101_ok_srcline_262:
+assert_check_105_ok_srcline_263:
 	MOVL  CX, 24(SP)(R9*4)
 	LEAL  1(CX), R9
 	MOVL  R9, 24(SP)(R10*4)
@@ -5784,11 +5440,11 @@ assert_check_101_ok_srcline_262:
 	IMULQ R8, R9
 	SHRQ  $0x32, R9
 	CMPQ  R9, $0x00010000
-	JL    assert_check_102_ok_srcline_281
+	JL    assert_check_106_ok_srcline_282
 	INT   $0x03
 	INT   $0x03
 
-assert_check_102_ok_srcline_281:
+assert_check_106_ok_srcline_282:
 	MOVL CX, R8
 	SUBL 16(SP), R8
 	MOVL 1(DX)(R8*1), R10
@@ -5822,11 +5478,11 @@ repeat_extend_back_end_encodeSnappyBlockAsm:
 	LEAQ  (DX)(BP*1), R8
 	SUBL  BP, DI
 	TESTL DI, DI
-	JNZ   assert_check_103_ok_srcline_841
+	JNZ   assert_check_107_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_103_ok_srcline_841:
+assert_check_107_ok_srcline_849:
 	LEAL -1(DI), BP
 	CMPL BP, $0x3c
 	JLT  one_byte_repeat_emit_encodeSnappyBlockAsm
@@ -5865,7 +5521,7 @@ two_bytes_repeat_emit_encodeSnappyBlockAsm:
 	JMP  memmove_long_repeat_emit_encodeSnappyBlockAsm
 
 one_byte_repeat_emit_encodeSnappyBlockAsm:
-	SHLQ $0x02, BP
+	SHLB $0x02, BP
 	MOVB BP, (AX)
 	ADDQ $0x01, AX
 
@@ -5997,61 +5653,15 @@ emit_literal_done_repeat_emit_encodeSnappyBlockAsm:
 	MOVQ src_len+32(FP), DI
 	SUBL CX, DI
 	CMPQ DI, $0x7fffffff
-	JL   assert_check_104_ok_srcline_357
+	JL   assert_check_108_ok_srcline_358
 	INT  $0x03
 	INT  $0x03
 
-assert_check_104_ok_srcline_357:
-	LEAQ (DX)(CX*1), R8
+assert_check_108_ok_srcline_358:
+	LEAQ (DX)(CX*1), DI
 	LEAQ (DX)(BP*1), BP
-	XORL R11, R11
-	CMPL DI, $0x10
-	JL   matchlen_four_repeat_extend
-
-matchlen_loopback_repeat_extend:
-	MOVQ  (R8), R9
-	MOVQ  8(R8), R10
-	XORQ  (BP), R9
-	XORQ  8(BP), R10
-	TESTQ R9, R9
-	JZ    matchlen_loop_tmp2_repeat_extend
-	BSFQ  R9, R9
-	SARQ  $0x03, R9
-	LEAL  (R11)(R9*1), R11
-	JMP   repeat_extend_forward_end_encodeSnappyBlockAsm
-
-matchlen_loop_tmp2_repeat_extend:
-	TESTQ R10, R10
-	JZ    matchlen_loop_repeat_extend
-	BSFQ  R10, R10
-	SARQ  $0x03, R10
-	LEAL  8(R11)(R10*1), R11
-	JMP   repeat_extend_forward_end_encodeSnappyBlockAsm
-
-matchlen_loop_repeat_extend:
-	SUBL $0x10, DI
-	ADDL $0x10, R11
-	ADDQ $0x10, R8
-	ADDQ $0x10, BP
-	CMPL DI, $0x10
-	JGE  matchlen_loopback_repeat_extend
-
-matchlen_four_repeat_extend:
-	SUBL $0x04, DI
-	JC   repeat_extend_forward_end_encodeSnappyBlockAsm
-
-matchlen_four_loopback_repeat_extend:
-	MOVL (R8), R9
-	XORL (BP), R9
-	JNZ  repeat_extend_forward_end_encodeSnappyBlockAsm
-	ADDL $0x04, R11
-	ADDQ $0x04, R8
-	ADDQ $0x04, BP
-	SUBL $0x04, DI
-	JNC  matchlen_four_loopback_repeat_extend
-
-repeat_extend_forward_end_encodeSnappyBlockAsm:
-	ADDL R11, CX
+	XORQ BP, BP
+	ADDL BP, CX
 	MOVL CX, BP
 	SUBL SI, BP
 	MOVL 16(SP), SI
@@ -6094,11 +5704,11 @@ two_byte_offset_short_repeat_as_copy_encodeSnappyBlockAsm:
 	CMPL SI, $0x00000800
 	JGE  emit_copy_three_repeat_as_copy_encodeSnappyBlockAsm
 	MOVB $0x01, BL
-	LEAQ -16(BX)(BP*4), BP
+	LEAL -16(BX)(BP*4), BP
 	MOVB SI, 1(AX)
-	SHRQ $0x08, SI
-	SHLQ $0x05, SI
-	ORQ  SI, BP
+	SHRL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
 	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeSnappyBlockAsm
@@ -6119,48 +5729,48 @@ repeat_end_emit_encodeSnappyBlockAsm:
 no_repeat_found_encodeSnappyBlockAsm:
 	MOVQ src_len+32(FP), R8
 	CMPL R8, BP
-	JG   assert_check_105_ok_srcline_410
+	JG   assert_check_109_ok_srcline_412
 	INT  $0x03
 	INT  $0x03
 
-assert_check_105_ok_srcline_410:
+assert_check_109_ok_srcline_412:
 	CMPL CX, BP
-	JG   assert_check_106_ok_srcline_416
+	JG   assert_check_110_ok_srcline_418
 	INT  $0x03
 	INT  $0x03
 
-assert_check_106_ok_srcline_416:
+assert_check_110_ok_srcline_418:
 	MOVQ src_len+32(FP), R8
 	CMPL R8, DI
-	JG   assert_check_107_ok_srcline_420
+	JG   assert_check_111_ok_srcline_422
 	INT  $0x03
 	INT  $0x03
 
-assert_check_107_ok_srcline_420:
+assert_check_111_ok_srcline_422:
 	CMPL CX, DI
-	JG   assert_check_108_ok_srcline_426
+	JG   assert_check_112_ok_srcline_428
 	INT  $0x03
 	INT  $0x03
 
-assert_check_108_ok_srcline_426:
+assert_check_112_ok_srcline_428:
 	CMPL (DX)(BP*1), SI
 	JEQ  candidate_match_encodeSnappyBlockAsm
 	SHRQ $0x08, SI
 	MOVL 24(SP)(R9*4), BP
 	MOVQ src_len+32(FP), R8
 	CMPL R8, BP
-	JG   assert_check_109_ok_srcline_440
+	JG   assert_check_113_ok_srcline_442
 	INT  $0x03
 	INT  $0x03
 
-assert_check_109_ok_srcline_440:
+assert_check_113_ok_srcline_442:
 	LEAL 2(CX), R8
 	CMPL R8, BP
-	JG   assert_check_110_ok_srcline_446
+	JG   assert_check_114_ok_srcline_448
 	INT  $0x03
 	INT  $0x03
 
-assert_check_110_ok_srcline_446:
+assert_check_114_ok_srcline_448:
 	LEAL 2(CX), R8
 	CMPL (DX)(DI*1), SI
 	JEQ  candidate2_match_encodeSnappyBlockAsm
@@ -6216,11 +5826,11 @@ match_dst_size_check_encodeSnappyBlockAsm:
 	LEAQ  (DX)(DI*1), SI
 	SUBL  DI, R8
 	TESTL R8, R8
-	JNZ   assert_check_111_ok_srcline_841
+	JNZ   assert_check_115_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_111_ok_srcline_841:
+assert_check_115_ok_srcline_849:
 	LEAL -1(R8), DI
 	CMPL DI, $0x3c
 	JLT  one_byte_match_emit_encodeSnappyBlockAsm
@@ -6259,7 +5869,7 @@ two_bytes_match_emit_encodeSnappyBlockAsm:
 	JMP  memmove_long_match_emit_encodeSnappyBlockAsm
 
 one_byte_match_emit_encodeSnappyBlockAsm:
-	SHLQ $0x02, DI
+	SHLB $0x02, DI
 	MOVB DI, (AX)
 	ADDQ $0x01, AX
 
@@ -6392,124 +6002,84 @@ match_nolit_loop_encodeSnappyBlockAsm:
 	ADDL $0x04, CX
 	ADDL $0x04, BP
 	CMPL CX, BP
-	JG   assert_check_112_ok_srcline_556
+	JG   assert_check_116_ok_srcline_558
 	INT  $0x03
 	INT  $0x03
 
-assert_check_112_ok_srcline_556:
+assert_check_116_ok_srcline_558:
 	MOVQ src_len+32(FP), SI
 	SUBL CX, SI
 	CMPQ SI, $0x7fffffff
-	JL   assert_check_113_ok_srcline_565
+	JL   assert_check_117_ok_srcline_567
 	INT  $0x03
 	INT  $0x03
 
-assert_check_113_ok_srcline_565:
-	LEAQ (DX)(CX*1), DI
+assert_check_117_ok_srcline_567:
+	LEAQ (DX)(CX*1), SI
 	LEAQ (DX)(BP*1), BP
-	XORL R10, R10
-	CMPL SI, $0x10
-	JL   matchlen_four_match_nolit_encodeSnappyBlockAsm
+	XORQ BP, BP
+	CMPL BP, $0x7fffffff
+	JL   assert_check_118_ok_srcline_582
+	INT  $0x03
+	INT  $0x03
 
-matchlen_loopback_match_nolit_encodeSnappyBlockAsm:
-	MOVQ  (DI), R8
-	MOVQ  8(DI), R9
-	XORQ  (BP), R8
-	XORQ  8(BP), R9
-	TESTQ R8, R8
-	JZ    matchlen_loop_tmp2_match_nolit_encodeSnappyBlockAsm
-	BSFQ  R8, R8
-	SARQ  $0x03, R8
-	LEAL  (R10)(R8*1), R10
-	JMP   match_nolit_end_encodeSnappyBlockAsm
-
-matchlen_loop_tmp2_match_nolit_encodeSnappyBlockAsm:
-	TESTQ R9, R9
-	JZ    matchlen_loop_match_nolit_encodeSnappyBlockAsm
-	BSFQ  R9, R9
-	SARQ  $0x03, R9
-	LEAL  8(R10)(R9*1), R10
-	JMP   match_nolit_end_encodeSnappyBlockAsm
-
-matchlen_loop_match_nolit_encodeSnappyBlockAsm:
-	SUBL $0x10, SI
-	ADDL $0x10, R10
-	ADDQ $0x10, DI
-	ADDQ $0x10, BP
-	CMPL SI, $0x10
-	JGE  matchlen_loopback_match_nolit_encodeSnappyBlockAsm
-
-matchlen_four_match_nolit_encodeSnappyBlockAsm:
-	SUBL $0x04, SI
-	JC   match_nolit_end_encodeSnappyBlockAsm
-
-matchlen_four_loopback_match_nolit_encodeSnappyBlockAsm:
-	MOVL (DI), R8
-	XORL (BP), R8
-	JNZ  match_nolit_end_encodeSnappyBlockAsm
-	ADDL $0x04, R10
-	ADDQ $0x04, DI
-	ADDQ $0x04, BP
-	SUBL $0x04, SI
-	JNC  matchlen_four_loopback_match_nolit_encodeSnappyBlockAsm
-
-match_nolit_end_encodeSnappyBlockAsm:
-	ADDL R10, CX
-	MOVL 16(SP), BP
-	ADDL $0x04, R10
-	CMPL BP, $0x00010000
+assert_check_118_ok_srcline_582:
+	ADDL BP, CX
+	MOVL 16(SP), SI
+	ADDL $0x04, BP
+	CMPL SI, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeSnappyBlockAsm
 
 four_bytes_loop_back_match_nolit_encodeSnappyBlockAsm:
-	CMPL R10, $0x40
+	CMPL BP, $0x40
 	JLE  four_bytes_remain_match_nolit_encodeSnappyBlockAsm
 	MOVB $0xff, (AX)
-	MOVL BP, 1(AX)
-	LEAL -64(R10), R10
+	MOVL SI, 1(AX)
+	LEAL -64(BP), BP
 	ADDQ $0x05, AX
-	CMPL R10, $0x04
+	CMPL BP, $0x04
 	JL   four_bytes_remain_match_nolit_encodeSnappyBlockAsm
 	JMP  four_bytes_loop_back_match_nolit_encodeSnappyBlockAsm
 
 four_bytes_remain_match_nolit_encodeSnappyBlockAsm:
-	TESTL R10, R10
+	TESTL BP, BP
 	JZ    match_nolit_emitcopy_end_encodeSnappyBlockAsm
 	MOVB  $0x03, BL
-	LEAL  -4(BX)(R10*4), R10
-	MOVB  R10, (AX)
-	MOVL  BP, 1(AX)
+	LEAL  -4(BX)(BP*4), BP
+	MOVB  BP, (AX)
+	MOVL  SI, 1(AX)
 	ADDQ  $0x05, AX
 	JMP   match_nolit_emitcopy_end_encodeSnappyBlockAsm
 
 two_byte_offset_match_nolit_encodeSnappyBlockAsm:
-	CMPL R10, $0x40
+	CMPL BP, $0x40
 	JLE  two_byte_offset_short_match_nolit_encodeSnappyBlockAsm
 	MOVB $0xee, (AX)
-	MOVW BP, 1(AX)
-	LEAL -60(R10), R10
+	MOVW SI, 1(AX)
+	LEAL -60(BP), BP
 	ADDQ $0x03, AX
 	JMP  two_byte_offset_match_nolit_encodeSnappyBlockAsm
 
 two_byte_offset_short_match_nolit_encodeSnappyBlockAsm:
-	CMPL R10, $0x0c
+	CMPL BP, $0x0c
 	JGE  emit_copy_three_match_nolit_encodeSnappyBlockAsm
-	CMPL BP, $0x00000800
+	CMPL SI, $0x00000800
 	JGE  emit_copy_three_match_nolit_encodeSnappyBlockAsm
 	MOVB $0x01, BL
-	LEAQ -16(BX)(R10*4), R10
-	MOVB BP, 1(AX)
-	SHRQ $0x08, BP
-	SHLQ $0x05, BP
-	ORQ  BP, R10
-	MOVB R10, (AX)
+	LEAL -16(BX)(BP*4), BP
+	MOVB SI, 1(AX)
+	SHRL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
+	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeSnappyBlockAsm
 
 emit_copy_three_match_nolit_encodeSnappyBlockAsm:
 	MOVB $0x02, BL
-	LEAL -4(BX)(R10*4), R10
-	MOVB R10, (AX)
-	MOVW BP, 1(AX)
+	LEAL -4(BX)(BP*4), BP
+	MOVB BP, (AX)
+	MOVW SI, 1(AX)
 	ADDQ $0x03, AX
 
 match_nolit_emitcopy_end_encodeSnappyBlockAsm:
@@ -6535,17 +6105,17 @@ match_nolit_dst_ok_encodeSnappyBlockAsm:
 	SHRQ  $0x32, R8
 	LEAL  -2(CX), R9
 	CMPQ  DI, $0x00010000
-	JL    assert_check_114_ok_srcline_624
+	JL    assert_check_119_ok_srcline_632
 	INT   $0x03
 	INT   $0x03
 
-assert_check_114_ok_srcline_624:
+assert_check_119_ok_srcline_632:
 	CMPQ R8, $0x00010000
-	JL   assert_check_115_ok_srcline_628
+	JL   assert_check_120_ok_srcline_636
 	INT  $0x03
 	INT  $0x03
 
-assert_check_115_ok_srcline_628:
+assert_check_120_ok_srcline_636:
 	MOVL 24(SP)(R8*4), BP
 	MOVL R9, 24(SP)(DI*4)
 	MOVL CX, 24(SP)(R8*4)
@@ -6573,11 +6143,11 @@ emit_remainder_ok_encodeSnappyBlockAsm:
 	LEAQ  (DX)(BX*1), CX
 	SUBL  BX, BP
 	TESTL BP, BP
-	JNZ   assert_check_116_ok_srcline_841
+	JNZ   assert_check_121_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_116_ok_srcline_841:
+assert_check_121_ok_srcline_849:
 	LEAL -1(BP), DX
 	CMPL DX, $0x3c
 	JLT  one_byte_emit_remainder_encodeSnappyBlockAsm
@@ -6616,7 +6186,7 @@ two_bytes_emit_remainder_encodeSnappyBlockAsm:
 	JMP  memmove_long_emit_remainder_encodeSnappyBlockAsm
 
 one_byte_emit_remainder_encodeSnappyBlockAsm:
-	SHLQ $0x02, DX
+	SHLB $0x02, DL
 	MOVB DL, (AX)
 	ADDQ $0x01, AX
 
@@ -6745,25 +6315,25 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsmlarge_forward_sse_loop_
 
 emit_literal_done_emit_remainder_encodeSnappyBlockAsm:
 	CMPQ AX, (SP)
-	JL   assert_check_117_ok_srcline_674
+	JL   assert_check_122_ok_srcline_682
 	INT  $0x03
 	INT  $0x03
 
-assert_check_117_ok_srcline_674:
+assert_check_122_ok_srcline_682:
 	MOVQ dst_base+0(FP), CX
 	SUBQ CX, AX
 	CMPQ src_len+32(FP), AX
-	JGE  assert_check_118_ok_srcline_687
+	JGE  assert_check_123_ok_srcline_695
 	INT  $0x03
 	INT  $0x03
 
-assert_check_118_ok_srcline_687:
+assert_check_123_ok_srcline_695:
 	CMPQ dst_len+8(FP), AX
-	JGE  assert_check_119_ok_srcline_693
+	JGE  assert_check_124_ok_srcline_701
 	INT  $0x03
 	INT  $0x03
 
-assert_check_119_ok_srcline_693:
+assert_check_124_ok_srcline_701:
 	MOVQ AX, ret+48(FP)
 	RET
 
@@ -6792,20 +6362,20 @@ zero_loop_encodeSnappyBlockAsm12B:
 	LEAQ  -5(CX), DX
 	LEAQ  -8(CX), BP
 	CMPQ  BP, src_len+32(FP)
-	JL    assert_check_120_ok_srcline_175
+	JL    assert_check_125_ok_srcline_176
 	INT   $0x03
 	INT   $0x03
 
-assert_check_120_ok_srcline_175:
+assert_check_125_ok_srcline_176:
 	MOVL BP, 8(SP)
 	SHRQ $0x05, CX
 	SUBL CX, DX
 	CMPQ src_len+32(FP), DX
-	JGE  assert_check_121_ok_srcline_186
+	JGE  assert_check_126_ok_srcline_187
 	INT  $0x03
 	INT  $0x03
 
-assert_check_121_ok_srcline_186:
+assert_check_126_ok_srcline_187:
 	LEAQ (AX)(DX*1), DX
 	MOVQ DX, (SP)
 	MOVL $0x00000001, CX
@@ -6815,18 +6385,18 @@ assert_check_121_ok_srcline_186:
 search_loop_encodeSnappyBlockAsm12B:
 	MOVQ src_base+24(FP), BP
 	CMPQ BP, DX
-	JEQ  assert_check_122_ok_srcline_212
+	JEQ  assert_check_127_ok_srcline_213
 	INT  $0x03
 	INT  $0x03
 
-assert_check_122_ok_srcline_212:
+assert_check_127_ok_srcline_213:
 	MOVQ src_len+32(FP), BP
 	CMPQ BP, CX
-	JG   assert_check_123_ok_srcline_219
+	JG   assert_check_128_ok_srcline_220
 	INT  $0x03
 	INT  $0x03
 
-assert_check_123_ok_srcline_219:
+assert_check_128_ok_srcline_220:
 	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
@@ -6849,17 +6419,17 @@ assert_check_123_ok_srcline_219:
 	MOVL  24(SP)(R9*4), BP
 	MOVL  24(SP)(R10*4), DI
 	CMPQ  R9, $0x00004000
-	JL    assert_check_124_ok_srcline_258
+	JL    assert_check_129_ok_srcline_259
 	INT   $0x03
 	INT   $0x03
 
-assert_check_124_ok_srcline_258:
+assert_check_129_ok_srcline_259:
 	CMPQ R10, $0x00004000
-	JL   assert_check_125_ok_srcline_262
+	JL   assert_check_130_ok_srcline_263
 	INT  $0x03
 	INT  $0x03
 
-assert_check_125_ok_srcline_262:
+assert_check_130_ok_srcline_263:
 	MOVL  CX, 24(SP)(R9*4)
 	LEAL  1(CX), R9
 	MOVL  R9, 24(SP)(R10*4)
@@ -6869,11 +6439,11 @@ assert_check_125_ok_srcline_262:
 	IMULQ R8, R9
 	SHRQ  $0x34, R9
 	CMPQ  R9, $0x00004000
-	JL    assert_check_126_ok_srcline_281
+	JL    assert_check_131_ok_srcline_282
 	INT   $0x03
 	INT   $0x03
 
-assert_check_126_ok_srcline_281:
+assert_check_131_ok_srcline_282:
 	MOVL CX, R8
 	SUBL 16(SP), R8
 	MOVL 1(DX)(R8*1), R10
@@ -6907,11 +6477,11 @@ repeat_extend_back_end_encodeSnappyBlockAsm12B:
 	LEAQ  (DX)(BP*1), R8
 	SUBL  BP, DI
 	TESTL DI, DI
-	JNZ   assert_check_127_ok_srcline_841
+	JNZ   assert_check_132_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_127_ok_srcline_841:
+assert_check_132_ok_srcline_849:
 	LEAL -1(DI), BP
 	CMPL BP, $0x3c
 	JLT  one_byte_repeat_emit_encodeSnappyBlockAsm12B
@@ -6950,7 +6520,7 @@ two_bytes_repeat_emit_encodeSnappyBlockAsm12B:
 	JMP  memmove_long_repeat_emit_encodeSnappyBlockAsm12B
 
 one_byte_repeat_emit_encodeSnappyBlockAsm12B:
-	SHLQ $0x02, BP
+	SHLB $0x02, BP
 	MOVB BP, (AX)
 	ADDQ $0x01, AX
 
@@ -7082,61 +6652,15 @@ emit_literal_done_repeat_emit_encodeSnappyBlockAsm12B:
 	MOVQ src_len+32(FP), DI
 	SUBL CX, DI
 	CMPQ DI, $0x7fffffff
-	JL   assert_check_128_ok_srcline_357
+	JL   assert_check_133_ok_srcline_358
 	INT  $0x03
 	INT  $0x03
 
-assert_check_128_ok_srcline_357:
-	LEAQ (DX)(CX*1), R8
+assert_check_133_ok_srcline_358:
+	LEAQ (DX)(CX*1), DI
 	LEAQ (DX)(BP*1), BP
-	XORL R11, R11
-	CMPL DI, $0x10
-	JL   matchlen_four_repeat_extend
-
-matchlen_loopback_repeat_extend:
-	MOVQ  (R8), R9
-	MOVQ  8(R8), R10
-	XORQ  (BP), R9
-	XORQ  8(BP), R10
-	TESTQ R9, R9
-	JZ    matchlen_loop_tmp2_repeat_extend
-	BSFQ  R9, R9
-	SARQ  $0x03, R9
-	LEAL  (R11)(R9*1), R11
-	JMP   repeat_extend_forward_end_encodeSnappyBlockAsm12B
-
-matchlen_loop_tmp2_repeat_extend:
-	TESTQ R10, R10
-	JZ    matchlen_loop_repeat_extend
-	BSFQ  R10, R10
-	SARQ  $0x03, R10
-	LEAL  8(R11)(R10*1), R11
-	JMP   repeat_extend_forward_end_encodeSnappyBlockAsm12B
-
-matchlen_loop_repeat_extend:
-	SUBL $0x10, DI
-	ADDL $0x10, R11
-	ADDQ $0x10, R8
-	ADDQ $0x10, BP
-	CMPL DI, $0x10
-	JGE  matchlen_loopback_repeat_extend
-
-matchlen_four_repeat_extend:
-	SUBL $0x04, DI
-	JC   repeat_extend_forward_end_encodeSnappyBlockAsm12B
-
-matchlen_four_loopback_repeat_extend:
-	MOVL (R8), R9
-	XORL (BP), R9
-	JNZ  repeat_extend_forward_end_encodeSnappyBlockAsm12B
-	ADDL $0x04, R11
-	ADDQ $0x04, R8
-	ADDQ $0x04, BP
-	SUBL $0x04, DI
-	JNC  matchlen_four_loopback_repeat_extend
-
-repeat_extend_forward_end_encodeSnappyBlockAsm12B:
-	ADDL R11, CX
+	XORQ BP, BP
+	ADDL BP, CX
 	MOVL CX, BP
 	SUBL SI, BP
 	MOVL 16(SP), SI
@@ -7179,11 +6703,11 @@ two_byte_offset_short_repeat_as_copy_encodeSnappyBlockAsm12B:
 	CMPL SI, $0x00000800
 	JGE  emit_copy_three_repeat_as_copy_encodeSnappyBlockAsm12B
 	MOVB $0x01, BL
-	LEAQ -16(BX)(BP*4), BP
+	LEAL -16(BX)(BP*4), BP
 	MOVB SI, 1(AX)
-	SHRQ $0x08, SI
-	SHLQ $0x05, SI
-	ORQ  SI, BP
+	SHRL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
 	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeSnappyBlockAsm12B
@@ -7204,48 +6728,48 @@ repeat_end_emit_encodeSnappyBlockAsm12B:
 no_repeat_found_encodeSnappyBlockAsm12B:
 	MOVQ src_len+32(FP), R8
 	CMPL R8, BP
-	JG   assert_check_129_ok_srcline_410
+	JG   assert_check_134_ok_srcline_412
 	INT  $0x03
 	INT  $0x03
 
-assert_check_129_ok_srcline_410:
+assert_check_134_ok_srcline_412:
 	CMPL CX, BP
-	JG   assert_check_130_ok_srcline_416
+	JG   assert_check_135_ok_srcline_418
 	INT  $0x03
 	INT  $0x03
 
-assert_check_130_ok_srcline_416:
+assert_check_135_ok_srcline_418:
 	MOVQ src_len+32(FP), R8
 	CMPL R8, DI
-	JG   assert_check_131_ok_srcline_420
+	JG   assert_check_136_ok_srcline_422
 	INT  $0x03
 	INT  $0x03
 
-assert_check_131_ok_srcline_420:
+assert_check_136_ok_srcline_422:
 	CMPL CX, DI
-	JG   assert_check_132_ok_srcline_426
+	JG   assert_check_137_ok_srcline_428
 	INT  $0x03
 	INT  $0x03
 
-assert_check_132_ok_srcline_426:
+assert_check_137_ok_srcline_428:
 	CMPL (DX)(BP*1), SI
 	JEQ  candidate_match_encodeSnappyBlockAsm12B
 	SHRQ $0x08, SI
 	MOVL 24(SP)(R9*4), BP
 	MOVQ src_len+32(FP), R8
 	CMPL R8, BP
-	JG   assert_check_133_ok_srcline_440
+	JG   assert_check_138_ok_srcline_442
 	INT  $0x03
 	INT  $0x03
 
-assert_check_133_ok_srcline_440:
+assert_check_138_ok_srcline_442:
 	LEAL 2(CX), R8
 	CMPL R8, BP
-	JG   assert_check_134_ok_srcline_446
+	JG   assert_check_139_ok_srcline_448
 	INT  $0x03
 	INT  $0x03
 
-assert_check_134_ok_srcline_446:
+assert_check_139_ok_srcline_448:
 	LEAL 2(CX), R8
 	CMPL (DX)(DI*1), SI
 	JEQ  candidate2_match_encodeSnappyBlockAsm12B
@@ -7301,11 +6825,11 @@ match_dst_size_check_encodeSnappyBlockAsm12B:
 	LEAQ  (DX)(DI*1), SI
 	SUBL  DI, R8
 	TESTL R8, R8
-	JNZ   assert_check_135_ok_srcline_841
+	JNZ   assert_check_140_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_135_ok_srcline_841:
+assert_check_140_ok_srcline_849:
 	LEAL -1(R8), DI
 	CMPL DI, $0x3c
 	JLT  one_byte_match_emit_encodeSnappyBlockAsm12B
@@ -7344,7 +6868,7 @@ two_bytes_match_emit_encodeSnappyBlockAsm12B:
 	JMP  memmove_long_match_emit_encodeSnappyBlockAsm12B
 
 one_byte_match_emit_encodeSnappyBlockAsm12B:
-	SHLQ $0x02, DI
+	SHLB $0x02, DI
 	MOVB DI, (AX)
 	ADDQ $0x01, AX
 
@@ -7477,124 +7001,84 @@ match_nolit_loop_encodeSnappyBlockAsm12B:
 	ADDL $0x04, CX
 	ADDL $0x04, BP
 	CMPL CX, BP
-	JG   assert_check_136_ok_srcline_556
+	JG   assert_check_141_ok_srcline_558
 	INT  $0x03
 	INT  $0x03
 
-assert_check_136_ok_srcline_556:
+assert_check_141_ok_srcline_558:
 	MOVQ src_len+32(FP), SI
 	SUBL CX, SI
 	CMPQ SI, $0x7fffffff
-	JL   assert_check_137_ok_srcline_565
+	JL   assert_check_142_ok_srcline_567
 	INT  $0x03
 	INT  $0x03
 
-assert_check_137_ok_srcline_565:
-	LEAQ (DX)(CX*1), DI
+assert_check_142_ok_srcline_567:
+	LEAQ (DX)(CX*1), SI
 	LEAQ (DX)(BP*1), BP
-	XORL R10, R10
-	CMPL SI, $0x10
-	JL   matchlen_four_match_nolit_encodeSnappyBlockAsm12B
+	XORQ BP, BP
+	CMPL BP, $0x7fffffff
+	JL   assert_check_143_ok_srcline_582
+	INT  $0x03
+	INT  $0x03
 
-matchlen_loopback_match_nolit_encodeSnappyBlockAsm12B:
-	MOVQ  (DI), R8
-	MOVQ  8(DI), R9
-	XORQ  (BP), R8
-	XORQ  8(BP), R9
-	TESTQ R8, R8
-	JZ    matchlen_loop_tmp2_match_nolit_encodeSnappyBlockAsm12B
-	BSFQ  R8, R8
-	SARQ  $0x03, R8
-	LEAL  (R10)(R8*1), R10
-	JMP   match_nolit_end_encodeSnappyBlockAsm12B
-
-matchlen_loop_tmp2_match_nolit_encodeSnappyBlockAsm12B:
-	TESTQ R9, R9
-	JZ    matchlen_loop_match_nolit_encodeSnappyBlockAsm12B
-	BSFQ  R9, R9
-	SARQ  $0x03, R9
-	LEAL  8(R10)(R9*1), R10
-	JMP   match_nolit_end_encodeSnappyBlockAsm12B
-
-matchlen_loop_match_nolit_encodeSnappyBlockAsm12B:
-	SUBL $0x10, SI
-	ADDL $0x10, R10
-	ADDQ $0x10, DI
-	ADDQ $0x10, BP
-	CMPL SI, $0x10
-	JGE  matchlen_loopback_match_nolit_encodeSnappyBlockAsm12B
-
-matchlen_four_match_nolit_encodeSnappyBlockAsm12B:
-	SUBL $0x04, SI
-	JC   match_nolit_end_encodeSnappyBlockAsm12B
-
-matchlen_four_loopback_match_nolit_encodeSnappyBlockAsm12B:
-	MOVL (DI), R8
-	XORL (BP), R8
-	JNZ  match_nolit_end_encodeSnappyBlockAsm12B
-	ADDL $0x04, R10
-	ADDQ $0x04, DI
-	ADDQ $0x04, BP
-	SUBL $0x04, SI
-	JNC  matchlen_four_loopback_match_nolit_encodeSnappyBlockAsm12B
-
-match_nolit_end_encodeSnappyBlockAsm12B:
-	ADDL R10, CX
-	MOVL 16(SP), BP
-	ADDL $0x04, R10
-	CMPL BP, $0x00010000
+assert_check_143_ok_srcline_582:
+	ADDL BP, CX
+	MOVL 16(SP), SI
+	ADDL $0x04, BP
+	CMPL SI, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeSnappyBlockAsm12B
 
 four_bytes_loop_back_match_nolit_encodeSnappyBlockAsm12B:
-	CMPL R10, $0x40
+	CMPL BP, $0x40
 	JLE  four_bytes_remain_match_nolit_encodeSnappyBlockAsm12B
 	MOVB $0xff, (AX)
-	MOVL BP, 1(AX)
-	LEAL -64(R10), R10
+	MOVL SI, 1(AX)
+	LEAL -64(BP), BP
 	ADDQ $0x05, AX
-	CMPL R10, $0x04
+	CMPL BP, $0x04
 	JL   four_bytes_remain_match_nolit_encodeSnappyBlockAsm12B
 	JMP  four_bytes_loop_back_match_nolit_encodeSnappyBlockAsm12B
 
 four_bytes_remain_match_nolit_encodeSnappyBlockAsm12B:
-	TESTL R10, R10
+	TESTL BP, BP
 	JZ    match_nolit_emitcopy_end_encodeSnappyBlockAsm12B
 	MOVB  $0x03, BL
-	LEAL  -4(BX)(R10*4), R10
-	MOVB  R10, (AX)
-	MOVL  BP, 1(AX)
+	LEAL  -4(BX)(BP*4), BP
+	MOVB  BP, (AX)
+	MOVL  SI, 1(AX)
 	ADDQ  $0x05, AX
 	JMP   match_nolit_emitcopy_end_encodeSnappyBlockAsm12B
 
 two_byte_offset_match_nolit_encodeSnappyBlockAsm12B:
-	CMPL R10, $0x40
+	CMPL BP, $0x40
 	JLE  two_byte_offset_short_match_nolit_encodeSnappyBlockAsm12B
 	MOVB $0xee, (AX)
-	MOVW BP, 1(AX)
-	LEAL -60(R10), R10
+	MOVW SI, 1(AX)
+	LEAL -60(BP), BP
 	ADDQ $0x03, AX
 	JMP  two_byte_offset_match_nolit_encodeSnappyBlockAsm12B
 
 two_byte_offset_short_match_nolit_encodeSnappyBlockAsm12B:
-	CMPL R10, $0x0c
+	CMPL BP, $0x0c
 	JGE  emit_copy_three_match_nolit_encodeSnappyBlockAsm12B
-	CMPL BP, $0x00000800
+	CMPL SI, $0x00000800
 	JGE  emit_copy_three_match_nolit_encodeSnappyBlockAsm12B
 	MOVB $0x01, BL
-	LEAQ -16(BX)(R10*4), R10
-	MOVB BP, 1(AX)
-	SHRQ $0x08, BP
-	SHLQ $0x05, BP
-	ORQ  BP, R10
-	MOVB R10, (AX)
+	LEAL -16(BX)(BP*4), BP
+	MOVB SI, 1(AX)
+	SHRL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
+	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeSnappyBlockAsm12B
 
 emit_copy_three_match_nolit_encodeSnappyBlockAsm12B:
 	MOVB $0x02, BL
-	LEAL -4(BX)(R10*4), R10
-	MOVB R10, (AX)
-	MOVW BP, 1(AX)
+	LEAL -4(BX)(BP*4), BP
+	MOVB BP, (AX)
+	MOVW SI, 1(AX)
 	ADDQ $0x03, AX
 
 match_nolit_emitcopy_end_encodeSnappyBlockAsm12B:
@@ -7620,17 +7104,17 @@ match_nolit_dst_ok_encodeSnappyBlockAsm12B:
 	SHRQ  $0x34, R8
 	LEAL  -2(CX), R9
 	CMPQ  DI, $0x00004000
-	JL    assert_check_138_ok_srcline_624
+	JL    assert_check_144_ok_srcline_632
 	INT   $0x03
 	INT   $0x03
 
-assert_check_138_ok_srcline_624:
+assert_check_144_ok_srcline_632:
 	CMPQ R8, $0x00004000
-	JL   assert_check_139_ok_srcline_628
+	JL   assert_check_145_ok_srcline_636
 	INT  $0x03
 	INT  $0x03
 
-assert_check_139_ok_srcline_628:
+assert_check_145_ok_srcline_636:
 	MOVL 24(SP)(R8*4), BP
 	MOVL R9, 24(SP)(DI*4)
 	MOVL CX, 24(SP)(R8*4)
@@ -7658,11 +7142,11 @@ emit_remainder_ok_encodeSnappyBlockAsm12B:
 	LEAQ  (DX)(BX*1), CX
 	SUBL  BX, BP
 	TESTL BP, BP
-	JNZ   assert_check_140_ok_srcline_841
+	JNZ   assert_check_146_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_140_ok_srcline_841:
+assert_check_146_ok_srcline_849:
 	LEAL -1(BP), DX
 	CMPL DX, $0x3c
 	JLT  one_byte_emit_remainder_encodeSnappyBlockAsm12B
@@ -7701,7 +7185,7 @@ two_bytes_emit_remainder_encodeSnappyBlockAsm12B:
 	JMP  memmove_long_emit_remainder_encodeSnappyBlockAsm12B
 
 one_byte_emit_remainder_encodeSnappyBlockAsm12B:
-	SHLQ $0x02, DX
+	SHLB $0x02, DL
 	MOVB DL, (AX)
 	ADDQ $0x01, AX
 
@@ -7830,25 +7314,25 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm12Blarge_forward_sse_lo
 
 emit_literal_done_emit_remainder_encodeSnappyBlockAsm12B:
 	CMPQ AX, (SP)
-	JL   assert_check_141_ok_srcline_674
+	JL   assert_check_147_ok_srcline_682
 	INT  $0x03
 	INT  $0x03
 
-assert_check_141_ok_srcline_674:
+assert_check_147_ok_srcline_682:
 	MOVQ dst_base+0(FP), CX
 	SUBQ CX, AX
 	CMPQ src_len+32(FP), AX
-	JGE  assert_check_142_ok_srcline_687
+	JGE  assert_check_148_ok_srcline_695
 	INT  $0x03
 	INT  $0x03
 
-assert_check_142_ok_srcline_687:
+assert_check_148_ok_srcline_695:
 	CMPQ dst_len+8(FP), AX
-	JGE  assert_check_143_ok_srcline_693
+	JGE  assert_check_149_ok_srcline_701
 	INT  $0x03
 	INT  $0x03
 
-assert_check_143_ok_srcline_693:
+assert_check_149_ok_srcline_701:
 	MOVQ AX, ret+48(FP)
 	RET
 
@@ -7877,20 +7361,20 @@ zero_loop_encodeSnappyBlockAsm10B:
 	LEAQ  -5(CX), DX
 	LEAQ  -8(CX), BP
 	CMPQ  BP, src_len+32(FP)
-	JL    assert_check_144_ok_srcline_175
+	JL    assert_check_150_ok_srcline_176
 	INT   $0x03
 	INT   $0x03
 
-assert_check_144_ok_srcline_175:
+assert_check_150_ok_srcline_176:
 	MOVL BP, 8(SP)
 	SHRQ $0x05, CX
 	SUBL CX, DX
 	CMPQ src_len+32(FP), DX
-	JGE  assert_check_145_ok_srcline_186
+	JGE  assert_check_151_ok_srcline_187
 	INT  $0x03
 	INT  $0x03
 
-assert_check_145_ok_srcline_186:
+assert_check_151_ok_srcline_187:
 	LEAQ (AX)(DX*1), DX
 	MOVQ DX, (SP)
 	MOVL $0x00000001, CX
@@ -7900,18 +7384,18 @@ assert_check_145_ok_srcline_186:
 search_loop_encodeSnappyBlockAsm10B:
 	MOVQ src_base+24(FP), BP
 	CMPQ BP, DX
-	JEQ  assert_check_146_ok_srcline_212
+	JEQ  assert_check_152_ok_srcline_213
 	INT  $0x03
 	INT  $0x03
 
-assert_check_146_ok_srcline_212:
+assert_check_152_ok_srcline_213:
 	MOVQ src_len+32(FP), BP
 	CMPQ BP, CX
-	JG   assert_check_147_ok_srcline_219
+	JG   assert_check_153_ok_srcline_220
 	INT  $0x03
 	INT  $0x03
 
-assert_check_147_ok_srcline_219:
+assert_check_153_ok_srcline_220:
 	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
@@ -7934,17 +7418,17 @@ assert_check_147_ok_srcline_219:
 	MOVL  24(SP)(R9*4), BP
 	MOVL  24(SP)(R10*4), DI
 	CMPQ  R9, $0x00001000
-	JL    assert_check_148_ok_srcline_258
+	JL    assert_check_154_ok_srcline_259
 	INT   $0x03
 	INT   $0x03
 
-assert_check_148_ok_srcline_258:
+assert_check_154_ok_srcline_259:
 	CMPQ R10, $0x00001000
-	JL   assert_check_149_ok_srcline_262
+	JL   assert_check_155_ok_srcline_263
 	INT  $0x03
 	INT  $0x03
 
-assert_check_149_ok_srcline_262:
+assert_check_155_ok_srcline_263:
 	MOVL  CX, 24(SP)(R9*4)
 	LEAL  1(CX), R9
 	MOVL  R9, 24(SP)(R10*4)
@@ -7954,11 +7438,11 @@ assert_check_149_ok_srcline_262:
 	IMULQ R8, R9
 	SHRQ  $0x36, R9
 	CMPQ  R9, $0x00001000
-	JL    assert_check_150_ok_srcline_281
+	JL    assert_check_156_ok_srcline_282
 	INT   $0x03
 	INT   $0x03
 
-assert_check_150_ok_srcline_281:
+assert_check_156_ok_srcline_282:
 	MOVL CX, R8
 	SUBL 16(SP), R8
 	MOVL 1(DX)(R8*1), R10
@@ -7992,11 +7476,11 @@ repeat_extend_back_end_encodeSnappyBlockAsm10B:
 	LEAQ  (DX)(BP*1), R8
 	SUBL  BP, DI
 	TESTL DI, DI
-	JNZ   assert_check_151_ok_srcline_841
+	JNZ   assert_check_157_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_151_ok_srcline_841:
+assert_check_157_ok_srcline_849:
 	LEAL -1(DI), BP
 	CMPL BP, $0x3c
 	JLT  one_byte_repeat_emit_encodeSnappyBlockAsm10B
@@ -8035,7 +7519,7 @@ two_bytes_repeat_emit_encodeSnappyBlockAsm10B:
 	JMP  memmove_long_repeat_emit_encodeSnappyBlockAsm10B
 
 one_byte_repeat_emit_encodeSnappyBlockAsm10B:
-	SHLQ $0x02, BP
+	SHLB $0x02, BP
 	MOVB BP, (AX)
 	ADDQ $0x01, AX
 
@@ -8167,61 +7651,15 @@ emit_literal_done_repeat_emit_encodeSnappyBlockAsm10B:
 	MOVQ src_len+32(FP), DI
 	SUBL CX, DI
 	CMPQ DI, $0x7fffffff
-	JL   assert_check_152_ok_srcline_357
+	JL   assert_check_158_ok_srcline_358
 	INT  $0x03
 	INT  $0x03
 
-assert_check_152_ok_srcline_357:
-	LEAQ (DX)(CX*1), R8
+assert_check_158_ok_srcline_358:
+	LEAQ (DX)(CX*1), DI
 	LEAQ (DX)(BP*1), BP
-	XORL R11, R11
-	CMPL DI, $0x10
-	JL   matchlen_four_repeat_extend
-
-matchlen_loopback_repeat_extend:
-	MOVQ  (R8), R9
-	MOVQ  8(R8), R10
-	XORQ  (BP), R9
-	XORQ  8(BP), R10
-	TESTQ R9, R9
-	JZ    matchlen_loop_tmp2_repeat_extend
-	BSFQ  R9, R9
-	SARQ  $0x03, R9
-	LEAL  (R11)(R9*1), R11
-	JMP   repeat_extend_forward_end_encodeSnappyBlockAsm10B
-
-matchlen_loop_tmp2_repeat_extend:
-	TESTQ R10, R10
-	JZ    matchlen_loop_repeat_extend
-	BSFQ  R10, R10
-	SARQ  $0x03, R10
-	LEAL  8(R11)(R10*1), R11
-	JMP   repeat_extend_forward_end_encodeSnappyBlockAsm10B
-
-matchlen_loop_repeat_extend:
-	SUBL $0x10, DI
-	ADDL $0x10, R11
-	ADDQ $0x10, R8
-	ADDQ $0x10, BP
-	CMPL DI, $0x10
-	JGE  matchlen_loopback_repeat_extend
-
-matchlen_four_repeat_extend:
-	SUBL $0x04, DI
-	JC   repeat_extend_forward_end_encodeSnappyBlockAsm10B
-
-matchlen_four_loopback_repeat_extend:
-	MOVL (R8), R9
-	XORL (BP), R9
-	JNZ  repeat_extend_forward_end_encodeSnappyBlockAsm10B
-	ADDL $0x04, R11
-	ADDQ $0x04, R8
-	ADDQ $0x04, BP
-	SUBL $0x04, DI
-	JNC  matchlen_four_loopback_repeat_extend
-
-repeat_extend_forward_end_encodeSnappyBlockAsm10B:
-	ADDL R11, CX
+	XORQ BP, BP
+	ADDL BP, CX
 	MOVL CX, BP
 	SUBL SI, BP
 	MOVL 16(SP), SI
@@ -8264,11 +7702,11 @@ two_byte_offset_short_repeat_as_copy_encodeSnappyBlockAsm10B:
 	CMPL SI, $0x00000800
 	JGE  emit_copy_three_repeat_as_copy_encodeSnappyBlockAsm10B
 	MOVB $0x01, BL
-	LEAQ -16(BX)(BP*4), BP
+	LEAL -16(BX)(BP*4), BP
 	MOVB SI, 1(AX)
-	SHRQ $0x08, SI
-	SHLQ $0x05, SI
-	ORQ  SI, BP
+	SHRL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
 	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeSnappyBlockAsm10B
@@ -8289,48 +7727,48 @@ repeat_end_emit_encodeSnappyBlockAsm10B:
 no_repeat_found_encodeSnappyBlockAsm10B:
 	MOVQ src_len+32(FP), R8
 	CMPL R8, BP
-	JG   assert_check_153_ok_srcline_410
+	JG   assert_check_159_ok_srcline_412
 	INT  $0x03
 	INT  $0x03
 
-assert_check_153_ok_srcline_410:
+assert_check_159_ok_srcline_412:
 	CMPL CX, BP
-	JG   assert_check_154_ok_srcline_416
+	JG   assert_check_160_ok_srcline_418
 	INT  $0x03
 	INT  $0x03
 
-assert_check_154_ok_srcline_416:
+assert_check_160_ok_srcline_418:
 	MOVQ src_len+32(FP), R8
 	CMPL R8, DI
-	JG   assert_check_155_ok_srcline_420
+	JG   assert_check_161_ok_srcline_422
 	INT  $0x03
 	INT  $0x03
 
-assert_check_155_ok_srcline_420:
+assert_check_161_ok_srcline_422:
 	CMPL CX, DI
-	JG   assert_check_156_ok_srcline_426
+	JG   assert_check_162_ok_srcline_428
 	INT  $0x03
 	INT  $0x03
 
-assert_check_156_ok_srcline_426:
+assert_check_162_ok_srcline_428:
 	CMPL (DX)(BP*1), SI
 	JEQ  candidate_match_encodeSnappyBlockAsm10B
 	SHRQ $0x08, SI
 	MOVL 24(SP)(R9*4), BP
 	MOVQ src_len+32(FP), R8
 	CMPL R8, BP
-	JG   assert_check_157_ok_srcline_440
+	JG   assert_check_163_ok_srcline_442
 	INT  $0x03
 	INT  $0x03
 
-assert_check_157_ok_srcline_440:
+assert_check_163_ok_srcline_442:
 	LEAL 2(CX), R8
 	CMPL R8, BP
-	JG   assert_check_158_ok_srcline_446
+	JG   assert_check_164_ok_srcline_448
 	INT  $0x03
 	INT  $0x03
 
-assert_check_158_ok_srcline_446:
+assert_check_164_ok_srcline_448:
 	LEAL 2(CX), R8
 	CMPL (DX)(DI*1), SI
 	JEQ  candidate2_match_encodeSnappyBlockAsm10B
@@ -8386,11 +7824,11 @@ match_dst_size_check_encodeSnappyBlockAsm10B:
 	LEAQ  (DX)(DI*1), SI
 	SUBL  DI, R8
 	TESTL R8, R8
-	JNZ   assert_check_159_ok_srcline_841
+	JNZ   assert_check_165_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_159_ok_srcline_841:
+assert_check_165_ok_srcline_849:
 	LEAL -1(R8), DI
 	CMPL DI, $0x3c
 	JLT  one_byte_match_emit_encodeSnappyBlockAsm10B
@@ -8429,7 +7867,7 @@ two_bytes_match_emit_encodeSnappyBlockAsm10B:
 	JMP  memmove_long_match_emit_encodeSnappyBlockAsm10B
 
 one_byte_match_emit_encodeSnappyBlockAsm10B:
-	SHLQ $0x02, DI
+	SHLB $0x02, DI
 	MOVB DI, (AX)
 	ADDQ $0x01, AX
 
@@ -8562,124 +8000,84 @@ match_nolit_loop_encodeSnappyBlockAsm10B:
 	ADDL $0x04, CX
 	ADDL $0x04, BP
 	CMPL CX, BP
-	JG   assert_check_160_ok_srcline_556
+	JG   assert_check_166_ok_srcline_558
 	INT  $0x03
 	INT  $0x03
 
-assert_check_160_ok_srcline_556:
+assert_check_166_ok_srcline_558:
 	MOVQ src_len+32(FP), SI
 	SUBL CX, SI
 	CMPQ SI, $0x7fffffff
-	JL   assert_check_161_ok_srcline_565
+	JL   assert_check_167_ok_srcline_567
 	INT  $0x03
 	INT  $0x03
 
-assert_check_161_ok_srcline_565:
-	LEAQ (DX)(CX*1), DI
+assert_check_167_ok_srcline_567:
+	LEAQ (DX)(CX*1), SI
 	LEAQ (DX)(BP*1), BP
-	XORL R10, R10
-	CMPL SI, $0x10
-	JL   matchlen_four_match_nolit_encodeSnappyBlockAsm10B
+	XORQ BP, BP
+	CMPL BP, $0x7fffffff
+	JL   assert_check_168_ok_srcline_582
+	INT  $0x03
+	INT  $0x03
 
-matchlen_loopback_match_nolit_encodeSnappyBlockAsm10B:
-	MOVQ  (DI), R8
-	MOVQ  8(DI), R9
-	XORQ  (BP), R8
-	XORQ  8(BP), R9
-	TESTQ R8, R8
-	JZ    matchlen_loop_tmp2_match_nolit_encodeSnappyBlockAsm10B
-	BSFQ  R8, R8
-	SARQ  $0x03, R8
-	LEAL  (R10)(R8*1), R10
-	JMP   match_nolit_end_encodeSnappyBlockAsm10B
-
-matchlen_loop_tmp2_match_nolit_encodeSnappyBlockAsm10B:
-	TESTQ R9, R9
-	JZ    matchlen_loop_match_nolit_encodeSnappyBlockAsm10B
-	BSFQ  R9, R9
-	SARQ  $0x03, R9
-	LEAL  8(R10)(R9*1), R10
-	JMP   match_nolit_end_encodeSnappyBlockAsm10B
-
-matchlen_loop_match_nolit_encodeSnappyBlockAsm10B:
-	SUBL $0x10, SI
-	ADDL $0x10, R10
-	ADDQ $0x10, DI
-	ADDQ $0x10, BP
-	CMPL SI, $0x10
-	JGE  matchlen_loopback_match_nolit_encodeSnappyBlockAsm10B
-
-matchlen_four_match_nolit_encodeSnappyBlockAsm10B:
-	SUBL $0x04, SI
-	JC   match_nolit_end_encodeSnappyBlockAsm10B
-
-matchlen_four_loopback_match_nolit_encodeSnappyBlockAsm10B:
-	MOVL (DI), R8
-	XORL (BP), R8
-	JNZ  match_nolit_end_encodeSnappyBlockAsm10B
-	ADDL $0x04, R10
-	ADDQ $0x04, DI
-	ADDQ $0x04, BP
-	SUBL $0x04, SI
-	JNC  matchlen_four_loopback_match_nolit_encodeSnappyBlockAsm10B
-
-match_nolit_end_encodeSnappyBlockAsm10B:
-	ADDL R10, CX
-	MOVL 16(SP), BP
-	ADDL $0x04, R10
-	CMPL BP, $0x00010000
+assert_check_168_ok_srcline_582:
+	ADDL BP, CX
+	MOVL 16(SP), SI
+	ADDL $0x04, BP
+	CMPL SI, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeSnappyBlockAsm10B
 
 four_bytes_loop_back_match_nolit_encodeSnappyBlockAsm10B:
-	CMPL R10, $0x40
+	CMPL BP, $0x40
 	JLE  four_bytes_remain_match_nolit_encodeSnappyBlockAsm10B
 	MOVB $0xff, (AX)
-	MOVL BP, 1(AX)
-	LEAL -64(R10), R10
+	MOVL SI, 1(AX)
+	LEAL -64(BP), BP
 	ADDQ $0x05, AX
-	CMPL R10, $0x04
+	CMPL BP, $0x04
 	JL   four_bytes_remain_match_nolit_encodeSnappyBlockAsm10B
 	JMP  four_bytes_loop_back_match_nolit_encodeSnappyBlockAsm10B
 
 four_bytes_remain_match_nolit_encodeSnappyBlockAsm10B:
-	TESTL R10, R10
+	TESTL BP, BP
 	JZ    match_nolit_emitcopy_end_encodeSnappyBlockAsm10B
 	MOVB  $0x03, BL
-	LEAL  -4(BX)(R10*4), R10
-	MOVB  R10, (AX)
-	MOVL  BP, 1(AX)
+	LEAL  -4(BX)(BP*4), BP
+	MOVB  BP, (AX)
+	MOVL  SI, 1(AX)
 	ADDQ  $0x05, AX
 	JMP   match_nolit_emitcopy_end_encodeSnappyBlockAsm10B
 
 two_byte_offset_match_nolit_encodeSnappyBlockAsm10B:
-	CMPL R10, $0x40
+	CMPL BP, $0x40
 	JLE  two_byte_offset_short_match_nolit_encodeSnappyBlockAsm10B
 	MOVB $0xee, (AX)
-	MOVW BP, 1(AX)
-	LEAL -60(R10), R10
+	MOVW SI, 1(AX)
+	LEAL -60(BP), BP
 	ADDQ $0x03, AX
 	JMP  two_byte_offset_match_nolit_encodeSnappyBlockAsm10B
 
 two_byte_offset_short_match_nolit_encodeSnappyBlockAsm10B:
-	CMPL R10, $0x0c
+	CMPL BP, $0x0c
 	JGE  emit_copy_three_match_nolit_encodeSnappyBlockAsm10B
-	CMPL BP, $0x00000800
+	CMPL SI, $0x00000800
 	JGE  emit_copy_three_match_nolit_encodeSnappyBlockAsm10B
 	MOVB $0x01, BL
-	LEAQ -16(BX)(R10*4), R10
-	MOVB BP, 1(AX)
-	SHRQ $0x08, BP
-	SHLQ $0x05, BP
-	ORQ  BP, R10
-	MOVB R10, (AX)
+	LEAL -16(BX)(BP*4), BP
+	MOVB SI, 1(AX)
+	SHRL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
+	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeSnappyBlockAsm10B
 
 emit_copy_three_match_nolit_encodeSnappyBlockAsm10B:
 	MOVB $0x02, BL
-	LEAL -4(BX)(R10*4), R10
-	MOVB R10, (AX)
-	MOVW BP, 1(AX)
+	LEAL -4(BX)(BP*4), BP
+	MOVB BP, (AX)
+	MOVW SI, 1(AX)
 	ADDQ $0x03, AX
 
 match_nolit_emitcopy_end_encodeSnappyBlockAsm10B:
@@ -8705,17 +8103,17 @@ match_nolit_dst_ok_encodeSnappyBlockAsm10B:
 	SHRQ  $0x36, R8
 	LEAL  -2(CX), R9
 	CMPQ  DI, $0x00001000
-	JL    assert_check_162_ok_srcline_624
+	JL    assert_check_169_ok_srcline_632
 	INT   $0x03
 	INT   $0x03
 
-assert_check_162_ok_srcline_624:
+assert_check_169_ok_srcline_632:
 	CMPQ R8, $0x00001000
-	JL   assert_check_163_ok_srcline_628
+	JL   assert_check_170_ok_srcline_636
 	INT  $0x03
 	INT  $0x03
 
-assert_check_163_ok_srcline_628:
+assert_check_170_ok_srcline_636:
 	MOVL 24(SP)(R8*4), BP
 	MOVL R9, 24(SP)(DI*4)
 	MOVL CX, 24(SP)(R8*4)
@@ -8743,11 +8141,11 @@ emit_remainder_ok_encodeSnappyBlockAsm10B:
 	LEAQ  (DX)(BX*1), CX
 	SUBL  BX, BP
 	TESTL BP, BP
-	JNZ   assert_check_164_ok_srcline_841
+	JNZ   assert_check_171_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_164_ok_srcline_841:
+assert_check_171_ok_srcline_849:
 	LEAL -1(BP), DX
 	CMPL DX, $0x3c
 	JLT  one_byte_emit_remainder_encodeSnappyBlockAsm10B
@@ -8786,7 +8184,7 @@ two_bytes_emit_remainder_encodeSnappyBlockAsm10B:
 	JMP  memmove_long_emit_remainder_encodeSnappyBlockAsm10B
 
 one_byte_emit_remainder_encodeSnappyBlockAsm10B:
-	SHLQ $0x02, DX
+	SHLB $0x02, DL
 	MOVB DL, (AX)
 	ADDQ $0x01, AX
 
@@ -8915,25 +8313,25 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm10Blarge_forward_sse_lo
 
 emit_literal_done_emit_remainder_encodeSnappyBlockAsm10B:
 	CMPQ AX, (SP)
-	JL   assert_check_165_ok_srcline_674
+	JL   assert_check_172_ok_srcline_682
 	INT  $0x03
 	INT  $0x03
 
-assert_check_165_ok_srcline_674:
+assert_check_172_ok_srcline_682:
 	MOVQ dst_base+0(FP), CX
 	SUBQ CX, AX
 	CMPQ src_len+32(FP), AX
-	JGE  assert_check_166_ok_srcline_687
+	JGE  assert_check_173_ok_srcline_695
 	INT  $0x03
 	INT  $0x03
 
-assert_check_166_ok_srcline_687:
+assert_check_173_ok_srcline_695:
 	CMPQ dst_len+8(FP), AX
-	JGE  assert_check_167_ok_srcline_693
+	JGE  assert_check_174_ok_srcline_701
 	INT  $0x03
 	INT  $0x03
 
-assert_check_167_ok_srcline_693:
+assert_check_174_ok_srcline_701:
 	MOVQ AX, ret+48(FP)
 	RET
 
@@ -8962,20 +8360,20 @@ zero_loop_encodeSnappyBlockAsm8B:
 	LEAQ  -5(CX), DX
 	LEAQ  -8(CX), BP
 	CMPQ  BP, src_len+32(FP)
-	JL    assert_check_168_ok_srcline_175
+	JL    assert_check_175_ok_srcline_176
 	INT   $0x03
 	INT   $0x03
 
-assert_check_168_ok_srcline_175:
+assert_check_175_ok_srcline_176:
 	MOVL BP, 8(SP)
 	SHRQ $0x05, CX
 	SUBL CX, DX
 	CMPQ src_len+32(FP), DX
-	JGE  assert_check_169_ok_srcline_186
+	JGE  assert_check_176_ok_srcline_187
 	INT  $0x03
 	INT  $0x03
 
-assert_check_169_ok_srcline_186:
+assert_check_176_ok_srcline_187:
 	LEAQ (AX)(DX*1), DX
 	MOVQ DX, (SP)
 	MOVL $0x00000001, CX
@@ -8985,18 +8383,18 @@ assert_check_169_ok_srcline_186:
 search_loop_encodeSnappyBlockAsm8B:
 	MOVQ src_base+24(FP), BP
 	CMPQ BP, DX
-	JEQ  assert_check_170_ok_srcline_212
+	JEQ  assert_check_177_ok_srcline_213
 	INT  $0x03
 	INT  $0x03
 
-assert_check_170_ok_srcline_212:
+assert_check_177_ok_srcline_213:
 	MOVQ src_len+32(FP), BP
 	CMPQ BP, CX
-	JG   assert_check_171_ok_srcline_219
+	JG   assert_check_178_ok_srcline_220
 	INT  $0x03
 	INT  $0x03
 
-assert_check_171_ok_srcline_219:
+assert_check_178_ok_srcline_220:
 	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
@@ -9019,17 +8417,17 @@ assert_check_171_ok_srcline_219:
 	MOVL  24(SP)(R9*4), BP
 	MOVL  24(SP)(R10*4), DI
 	CMPQ  R9, $0x00000400
-	JL    assert_check_172_ok_srcline_258
+	JL    assert_check_179_ok_srcline_259
 	INT   $0x03
 	INT   $0x03
 
-assert_check_172_ok_srcline_258:
+assert_check_179_ok_srcline_259:
 	CMPQ R10, $0x00000400
-	JL   assert_check_173_ok_srcline_262
+	JL   assert_check_180_ok_srcline_263
 	INT  $0x03
 	INT  $0x03
 
-assert_check_173_ok_srcline_262:
+assert_check_180_ok_srcline_263:
 	MOVL  CX, 24(SP)(R9*4)
 	LEAL  1(CX), R9
 	MOVL  R9, 24(SP)(R10*4)
@@ -9039,11 +8437,11 @@ assert_check_173_ok_srcline_262:
 	IMULQ R8, R9
 	SHRQ  $0x38, R9
 	CMPQ  R9, $0x00000400
-	JL    assert_check_174_ok_srcline_281
+	JL    assert_check_181_ok_srcline_282
 	INT   $0x03
 	INT   $0x03
 
-assert_check_174_ok_srcline_281:
+assert_check_181_ok_srcline_282:
 	MOVL CX, R8
 	SUBL 16(SP), R8
 	MOVL 1(DX)(R8*1), R10
@@ -9077,11 +8475,11 @@ repeat_extend_back_end_encodeSnappyBlockAsm8B:
 	LEAQ  (DX)(BP*1), R8
 	SUBL  BP, DI
 	TESTL DI, DI
-	JNZ   assert_check_175_ok_srcline_841
+	JNZ   assert_check_182_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_175_ok_srcline_841:
+assert_check_182_ok_srcline_849:
 	LEAL -1(DI), BP
 	CMPL BP, $0x3c
 	JLT  one_byte_repeat_emit_encodeSnappyBlockAsm8B
@@ -9120,7 +8518,7 @@ two_bytes_repeat_emit_encodeSnappyBlockAsm8B:
 	JMP  memmove_long_repeat_emit_encodeSnappyBlockAsm8B
 
 one_byte_repeat_emit_encodeSnappyBlockAsm8B:
-	SHLQ $0x02, BP
+	SHLB $0x02, BP
 	MOVB BP, (AX)
 	ADDQ $0x01, AX
 
@@ -9252,61 +8650,15 @@ emit_literal_done_repeat_emit_encodeSnappyBlockAsm8B:
 	MOVQ src_len+32(FP), DI
 	SUBL CX, DI
 	CMPQ DI, $0x7fffffff
-	JL   assert_check_176_ok_srcline_357
+	JL   assert_check_183_ok_srcline_358
 	INT  $0x03
 	INT  $0x03
 
-assert_check_176_ok_srcline_357:
-	LEAQ (DX)(CX*1), R8
+assert_check_183_ok_srcline_358:
+	LEAQ (DX)(CX*1), DI
 	LEAQ (DX)(BP*1), BP
-	XORL R11, R11
-	CMPL DI, $0x10
-	JL   matchlen_four_repeat_extend
-
-matchlen_loopback_repeat_extend:
-	MOVQ  (R8), R9
-	MOVQ  8(R8), R10
-	XORQ  (BP), R9
-	XORQ  8(BP), R10
-	TESTQ R9, R9
-	JZ    matchlen_loop_tmp2_repeat_extend
-	BSFQ  R9, R9
-	SARQ  $0x03, R9
-	LEAL  (R11)(R9*1), R11
-	JMP   repeat_extend_forward_end_encodeSnappyBlockAsm8B
-
-matchlen_loop_tmp2_repeat_extend:
-	TESTQ R10, R10
-	JZ    matchlen_loop_repeat_extend
-	BSFQ  R10, R10
-	SARQ  $0x03, R10
-	LEAL  8(R11)(R10*1), R11
-	JMP   repeat_extend_forward_end_encodeSnappyBlockAsm8B
-
-matchlen_loop_repeat_extend:
-	SUBL $0x10, DI
-	ADDL $0x10, R11
-	ADDQ $0x10, R8
-	ADDQ $0x10, BP
-	CMPL DI, $0x10
-	JGE  matchlen_loopback_repeat_extend
-
-matchlen_four_repeat_extend:
-	SUBL $0x04, DI
-	JC   repeat_extend_forward_end_encodeSnappyBlockAsm8B
-
-matchlen_four_loopback_repeat_extend:
-	MOVL (R8), R9
-	XORL (BP), R9
-	JNZ  repeat_extend_forward_end_encodeSnappyBlockAsm8B
-	ADDL $0x04, R11
-	ADDQ $0x04, R8
-	ADDQ $0x04, BP
-	SUBL $0x04, DI
-	JNC  matchlen_four_loopback_repeat_extend
-
-repeat_extend_forward_end_encodeSnappyBlockAsm8B:
-	ADDL R11, CX
+	XORQ BP, BP
+	ADDL BP, CX
 	MOVL CX, BP
 	SUBL SI, BP
 	MOVL 16(SP), SI
@@ -9349,11 +8701,11 @@ two_byte_offset_short_repeat_as_copy_encodeSnappyBlockAsm8B:
 	CMPL SI, $0x00000800
 	JGE  emit_copy_three_repeat_as_copy_encodeSnappyBlockAsm8B
 	MOVB $0x01, BL
-	LEAQ -16(BX)(BP*4), BP
+	LEAL -16(BX)(BP*4), BP
 	MOVB SI, 1(AX)
-	SHRQ $0x08, SI
-	SHLQ $0x05, SI
-	ORQ  SI, BP
+	SHRL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
 	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeSnappyBlockAsm8B
@@ -9374,48 +8726,48 @@ repeat_end_emit_encodeSnappyBlockAsm8B:
 no_repeat_found_encodeSnappyBlockAsm8B:
 	MOVQ src_len+32(FP), R8
 	CMPL R8, BP
-	JG   assert_check_177_ok_srcline_410
+	JG   assert_check_184_ok_srcline_412
 	INT  $0x03
 	INT  $0x03
 
-assert_check_177_ok_srcline_410:
+assert_check_184_ok_srcline_412:
 	CMPL CX, BP
-	JG   assert_check_178_ok_srcline_416
+	JG   assert_check_185_ok_srcline_418
 	INT  $0x03
 	INT  $0x03
 
-assert_check_178_ok_srcline_416:
+assert_check_185_ok_srcline_418:
 	MOVQ src_len+32(FP), R8
 	CMPL R8, DI
-	JG   assert_check_179_ok_srcline_420
+	JG   assert_check_186_ok_srcline_422
 	INT  $0x03
 	INT  $0x03
 
-assert_check_179_ok_srcline_420:
+assert_check_186_ok_srcline_422:
 	CMPL CX, DI
-	JG   assert_check_180_ok_srcline_426
+	JG   assert_check_187_ok_srcline_428
 	INT  $0x03
 	INT  $0x03
 
-assert_check_180_ok_srcline_426:
+assert_check_187_ok_srcline_428:
 	CMPL (DX)(BP*1), SI
 	JEQ  candidate_match_encodeSnappyBlockAsm8B
 	SHRQ $0x08, SI
 	MOVL 24(SP)(R9*4), BP
 	MOVQ src_len+32(FP), R8
 	CMPL R8, BP
-	JG   assert_check_181_ok_srcline_440
+	JG   assert_check_188_ok_srcline_442
 	INT  $0x03
 	INT  $0x03
 
-assert_check_181_ok_srcline_440:
+assert_check_188_ok_srcline_442:
 	LEAL 2(CX), R8
 	CMPL R8, BP
-	JG   assert_check_182_ok_srcline_446
+	JG   assert_check_189_ok_srcline_448
 	INT  $0x03
 	INT  $0x03
 
-assert_check_182_ok_srcline_446:
+assert_check_189_ok_srcline_448:
 	LEAL 2(CX), R8
 	CMPL (DX)(DI*1), SI
 	JEQ  candidate2_match_encodeSnappyBlockAsm8B
@@ -9471,11 +8823,11 @@ match_dst_size_check_encodeSnappyBlockAsm8B:
 	LEAQ  (DX)(DI*1), SI
 	SUBL  DI, R8
 	TESTL R8, R8
-	JNZ   assert_check_183_ok_srcline_841
+	JNZ   assert_check_190_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_183_ok_srcline_841:
+assert_check_190_ok_srcline_849:
 	LEAL -1(R8), DI
 	CMPL DI, $0x3c
 	JLT  one_byte_match_emit_encodeSnappyBlockAsm8B
@@ -9514,7 +8866,7 @@ two_bytes_match_emit_encodeSnappyBlockAsm8B:
 	JMP  memmove_long_match_emit_encodeSnappyBlockAsm8B
 
 one_byte_match_emit_encodeSnappyBlockAsm8B:
-	SHLQ $0x02, DI
+	SHLB $0x02, DI
 	MOVB DI, (AX)
 	ADDQ $0x01, AX
 
@@ -9647,124 +8999,84 @@ match_nolit_loop_encodeSnappyBlockAsm8B:
 	ADDL $0x04, CX
 	ADDL $0x04, BP
 	CMPL CX, BP
-	JG   assert_check_184_ok_srcline_556
+	JG   assert_check_191_ok_srcline_558
 	INT  $0x03
 	INT  $0x03
 
-assert_check_184_ok_srcline_556:
+assert_check_191_ok_srcline_558:
 	MOVQ src_len+32(FP), SI
 	SUBL CX, SI
 	CMPQ SI, $0x7fffffff
-	JL   assert_check_185_ok_srcline_565
+	JL   assert_check_192_ok_srcline_567
 	INT  $0x03
 	INT  $0x03
 
-assert_check_185_ok_srcline_565:
-	LEAQ (DX)(CX*1), DI
+assert_check_192_ok_srcline_567:
+	LEAQ (DX)(CX*1), SI
 	LEAQ (DX)(BP*1), BP
-	XORL R10, R10
-	CMPL SI, $0x10
-	JL   matchlen_four_match_nolit_encodeSnappyBlockAsm8B
+	XORQ BP, BP
+	CMPL BP, $0x7fffffff
+	JL   assert_check_193_ok_srcline_582
+	INT  $0x03
+	INT  $0x03
 
-matchlen_loopback_match_nolit_encodeSnappyBlockAsm8B:
-	MOVQ  (DI), R8
-	MOVQ  8(DI), R9
-	XORQ  (BP), R8
-	XORQ  8(BP), R9
-	TESTQ R8, R8
-	JZ    matchlen_loop_tmp2_match_nolit_encodeSnappyBlockAsm8B
-	BSFQ  R8, R8
-	SARQ  $0x03, R8
-	LEAL  (R10)(R8*1), R10
-	JMP   match_nolit_end_encodeSnappyBlockAsm8B
-
-matchlen_loop_tmp2_match_nolit_encodeSnappyBlockAsm8B:
-	TESTQ R9, R9
-	JZ    matchlen_loop_match_nolit_encodeSnappyBlockAsm8B
-	BSFQ  R9, R9
-	SARQ  $0x03, R9
-	LEAL  8(R10)(R9*1), R10
-	JMP   match_nolit_end_encodeSnappyBlockAsm8B
-
-matchlen_loop_match_nolit_encodeSnappyBlockAsm8B:
-	SUBL $0x10, SI
-	ADDL $0x10, R10
-	ADDQ $0x10, DI
-	ADDQ $0x10, BP
-	CMPL SI, $0x10
-	JGE  matchlen_loopback_match_nolit_encodeSnappyBlockAsm8B
-
-matchlen_four_match_nolit_encodeSnappyBlockAsm8B:
-	SUBL $0x04, SI
-	JC   match_nolit_end_encodeSnappyBlockAsm8B
-
-matchlen_four_loopback_match_nolit_encodeSnappyBlockAsm8B:
-	MOVL (DI), R8
-	XORL (BP), R8
-	JNZ  match_nolit_end_encodeSnappyBlockAsm8B
-	ADDL $0x04, R10
-	ADDQ $0x04, DI
-	ADDQ $0x04, BP
-	SUBL $0x04, SI
-	JNC  matchlen_four_loopback_match_nolit_encodeSnappyBlockAsm8B
-
-match_nolit_end_encodeSnappyBlockAsm8B:
-	ADDL R10, CX
-	MOVL 16(SP), BP
-	ADDL $0x04, R10
-	CMPL BP, $0x00010000
+assert_check_193_ok_srcline_582:
+	ADDL BP, CX
+	MOVL 16(SP), SI
+	ADDL $0x04, BP
+	CMPL SI, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeSnappyBlockAsm8B
 
 four_bytes_loop_back_match_nolit_encodeSnappyBlockAsm8B:
-	CMPL R10, $0x40
+	CMPL BP, $0x40
 	JLE  four_bytes_remain_match_nolit_encodeSnappyBlockAsm8B
 	MOVB $0xff, (AX)
-	MOVL BP, 1(AX)
-	LEAL -64(R10), R10
+	MOVL SI, 1(AX)
+	LEAL -64(BP), BP
 	ADDQ $0x05, AX
-	CMPL R10, $0x04
+	CMPL BP, $0x04
 	JL   four_bytes_remain_match_nolit_encodeSnappyBlockAsm8B
 	JMP  four_bytes_loop_back_match_nolit_encodeSnappyBlockAsm8B
 
 four_bytes_remain_match_nolit_encodeSnappyBlockAsm8B:
-	TESTL R10, R10
+	TESTL BP, BP
 	JZ    match_nolit_emitcopy_end_encodeSnappyBlockAsm8B
 	MOVB  $0x03, BL
-	LEAL  -4(BX)(R10*4), R10
-	MOVB  R10, (AX)
-	MOVL  BP, 1(AX)
+	LEAL  -4(BX)(BP*4), BP
+	MOVB  BP, (AX)
+	MOVL  SI, 1(AX)
 	ADDQ  $0x05, AX
 	JMP   match_nolit_emitcopy_end_encodeSnappyBlockAsm8B
 
 two_byte_offset_match_nolit_encodeSnappyBlockAsm8B:
-	CMPL R10, $0x40
+	CMPL BP, $0x40
 	JLE  two_byte_offset_short_match_nolit_encodeSnappyBlockAsm8B
 	MOVB $0xee, (AX)
-	MOVW BP, 1(AX)
-	LEAL -60(R10), R10
+	MOVW SI, 1(AX)
+	LEAL -60(BP), BP
 	ADDQ $0x03, AX
 	JMP  two_byte_offset_match_nolit_encodeSnappyBlockAsm8B
 
 two_byte_offset_short_match_nolit_encodeSnappyBlockAsm8B:
-	CMPL R10, $0x0c
+	CMPL BP, $0x0c
 	JGE  emit_copy_three_match_nolit_encodeSnappyBlockAsm8B
-	CMPL BP, $0x00000800
+	CMPL SI, $0x00000800
 	JGE  emit_copy_three_match_nolit_encodeSnappyBlockAsm8B
 	MOVB $0x01, BL
-	LEAQ -16(BX)(R10*4), R10
-	MOVB BP, 1(AX)
-	SHRQ $0x08, BP
-	SHLQ $0x05, BP
-	ORQ  BP, R10
-	MOVB R10, (AX)
+	LEAL -16(BX)(BP*4), BP
+	MOVB SI, 1(AX)
+	SHRL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, BP
+	MOVB BP, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeSnappyBlockAsm8B
 
 emit_copy_three_match_nolit_encodeSnappyBlockAsm8B:
 	MOVB $0x02, BL
-	LEAL -4(BX)(R10*4), R10
-	MOVB R10, (AX)
-	MOVW BP, 1(AX)
+	LEAL -4(BX)(BP*4), BP
+	MOVB BP, (AX)
+	MOVW SI, 1(AX)
 	ADDQ $0x03, AX
 
 match_nolit_emitcopy_end_encodeSnappyBlockAsm8B:
@@ -9790,17 +9102,17 @@ match_nolit_dst_ok_encodeSnappyBlockAsm8B:
 	SHRQ  $0x38, R8
 	LEAL  -2(CX), R9
 	CMPQ  DI, $0x00000400
-	JL    assert_check_186_ok_srcline_624
+	JL    assert_check_194_ok_srcline_632
 	INT   $0x03
 	INT   $0x03
 
-assert_check_186_ok_srcline_624:
+assert_check_194_ok_srcline_632:
 	CMPQ R8, $0x00000400
-	JL   assert_check_187_ok_srcline_628
+	JL   assert_check_195_ok_srcline_636
 	INT  $0x03
 	INT  $0x03
 
-assert_check_187_ok_srcline_628:
+assert_check_195_ok_srcline_636:
 	MOVL 24(SP)(R8*4), BP
 	MOVL R9, 24(SP)(DI*4)
 	MOVL CX, 24(SP)(R8*4)
@@ -9828,11 +9140,11 @@ emit_remainder_ok_encodeSnappyBlockAsm8B:
 	LEAQ  (DX)(BX*1), CX
 	SUBL  BX, BP
 	TESTL BP, BP
-	JNZ   assert_check_188_ok_srcline_841
+	JNZ   assert_check_196_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_188_ok_srcline_841:
+assert_check_196_ok_srcline_849:
 	LEAL -1(BP), DX
 	CMPL DX, $0x3c
 	JLT  one_byte_emit_remainder_encodeSnappyBlockAsm8B
@@ -9871,7 +9183,7 @@ two_bytes_emit_remainder_encodeSnappyBlockAsm8B:
 	JMP  memmove_long_emit_remainder_encodeSnappyBlockAsm8B
 
 one_byte_emit_remainder_encodeSnappyBlockAsm8B:
-	SHLQ $0x02, DX
+	SHLB $0x02, DL
 	MOVB DL, (AX)
 	ADDQ $0x01, AX
 
@@ -10000,25 +9312,25 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm8Blarge_forward_sse_loo
 
 emit_literal_done_emit_remainder_encodeSnappyBlockAsm8B:
 	CMPQ AX, (SP)
-	JL   assert_check_189_ok_srcline_674
+	JL   assert_check_197_ok_srcline_682
 	INT  $0x03
 	INT  $0x03
 
-assert_check_189_ok_srcline_674:
+assert_check_197_ok_srcline_682:
 	MOVQ dst_base+0(FP), CX
 	SUBQ CX, AX
 	CMPQ src_len+32(FP), AX
-	JGE  assert_check_190_ok_srcline_687
+	JGE  assert_check_198_ok_srcline_695
 	INT  $0x03
 	INT  $0x03
 
-assert_check_190_ok_srcline_687:
+assert_check_198_ok_srcline_695:
 	CMPQ dst_len+8(FP), AX
-	JGE  assert_check_191_ok_srcline_693
+	JGE  assert_check_199_ok_srcline_701
 	INT  $0x03
 	INT  $0x03
 
-assert_check_191_ok_srcline_693:
+assert_check_199_ok_srcline_701:
 	MOVQ AX, ret+48(FP)
 	RET
 
@@ -10031,11 +9343,11 @@ TEXT ·emitLiteral(SB), NOSPLIT, $0-56
 	TESTQ DX, DX
 	JZ    emit_literal_end_standalone_skip
 	TESTL DX, DX
-	JNZ   assert_check_192_ok_srcline_841
+	JNZ   assert_check_200_ok_srcline_849
 	INT   $0x03
 	INT   $0x03
 
-assert_check_192_ok_srcline_841:
+assert_check_200_ok_srcline_849:
 	MOVL DX, BX
 	LEAL -1(DX), BP
 	CMPL BP, $0x3c
@@ -10079,7 +9391,7 @@ two_bytes_standalone:
 	JMP  memmove_long_standalone
 
 one_byte_standalone:
-	SHLQ $0x02, BP
+	SHLB $0x02, BP
 	MOVB BP, (AX)
 	ADDQ $0x01, BX
 	ADDQ $0x01, AX
@@ -10268,8 +9580,8 @@ repeat_three_standalone:
 	JMP  gen_emit_repeat_end
 
 repeat_two_standalone:
-	SHLQ $0x02, DX
-	ORQ  $0x01, DX
+	SHLL $0x02, DX
+	ORL  $0x01, DX
 	MOVW DX, (AX)
 	ADDQ $0x02, BX
 	ADDQ $0x02, AX
@@ -10277,11 +9589,11 @@ repeat_two_standalone:
 
 repeat_two_offset_standalone:
 	XORQ BP, BP
-	LEAQ 1(BP)(DX*4), DX
+	LEAL 1(BP)(DX*4), DX
 	MOVB CL, 1(AX)
-	SARQ $0x08, CX
-	SHLQ $0x05, CX
-	ORQ  CX, DX
+	SARL $0x08, CX
+	SHLL $0x05, CX
+	ORL  CX, DX
 	MOVB DL, (AX)
 	ADDQ $0x02, BX
 	ADDQ $0x02, AX
@@ -10363,8 +9675,8 @@ repeat_three_standalone_emit_copy:
 	JMP  gen_emit_copy_end
 
 repeat_two_standalone_emit_copy:
-	SHLQ $0x02, DX
-	ORQ  $0x01, DX
+	SHLL $0x02, DX
+	ORL  $0x01, DX
 	MOVW DX, (AX)
 	ADDQ $0x02, BX
 	ADDQ $0x02, AX
@@ -10372,11 +9684,11 @@ repeat_two_standalone_emit_copy:
 
 repeat_two_offset_standalone_emit_copy:
 	XORQ BP, BP
-	LEAQ 1(BP)(DX*4), DX
+	LEAL 1(BP)(DX*4), DX
 	MOVB CL, 1(AX)
-	SARQ $0x08, CX
-	SHLQ $0x05, CX
-	ORQ  CX, DX
+	SARL $0x08, CX
+	SHLL $0x05, CX
+	ORL  CX, DX
 	MOVB DL, (AX)
 	ADDQ $0x02, BX
 	ADDQ $0x02, AX
@@ -10456,8 +9768,8 @@ repeat_three_standalone_emit_copy_short:
 	JMP  gen_emit_copy_end
 
 repeat_two_standalone_emit_copy_short:
-	SHLQ $0x02, DX
-	ORQ  $0x01, DX
+	SHLL $0x02, DX
+	ORL  $0x01, DX
 	MOVW DX, (AX)
 	ADDQ $0x02, BX
 	ADDQ $0x02, AX
@@ -10465,11 +9777,11 @@ repeat_two_standalone_emit_copy_short:
 
 repeat_two_offset_standalone_emit_copy_short:
 	XORQ BP, BP
-	LEAQ 1(BP)(DX*4), DX
+	LEAL 1(BP)(DX*4), DX
 	MOVB CL, 1(AX)
-	SARQ $0x08, CX
-	SHLQ $0x05, CX
-	ORQ  CX, DX
+	SARL $0x08, CX
+	SHLL $0x05, CX
+	ORL  CX, DX
 	MOVB DL, (AX)
 	ADDQ $0x02, BX
 	ADDQ $0x02, AX
@@ -10482,11 +9794,11 @@ two_byte_offset_short_standalone:
 	CMPL CX, $0x00000800
 	JGE  emit_copy_three_standalone
 	MOVB $0x01, BP
-	LEAQ -16(BP)(DX*4), DX
+	LEAL -16(BP)(DX*4), DX
 	MOVB CL, 1(AX)
-	SHRQ $0x08, CX
-	SHLQ $0x05, CX
-	ORQ  CX, DX
+	SHRL $0x08, CX
+	SHLL $0x05, CX
+	ORL  CX, DX
 	MOVB DL, (AX)
 	ADDQ $0x02, BX
 	ADDQ $0x02, AX
@@ -10552,11 +9864,11 @@ two_byte_offset_short_standalone_snappy:
 	CMPL CX, $0x00000800
 	JGE  emit_copy_three_standalone_snappy
 	MOVB $0x01, BP
-	LEAQ -16(BP)(DX*4), DX
+	LEAL -16(BP)(DX*4), DX
 	MOVB CL, 1(AX)
-	SHRQ $0x08, CX
-	SHLQ $0x05, CX
-	ORQ  CX, DX
+	SHRL $0x08, CX
+	SHLL $0x05, CX
+	ORL  CX, DX
 	MOVB DL, (AX)
 	ADDQ $0x02, BX
 	ADDQ $0x02, AX
@@ -10577,54 +9889,8 @@ gen_emit_copy_end_snappy:
 // func matchLen(a []byte, b []byte) int
 TEXT ·matchLen(SB), NOSPLIT, $0-56
 	MOVQ a_base+0(FP), AX
-	MOVQ b_base+24(FP), CX
-	MOVQ a_len+8(FP), DX
-	XORL SI, SI
-	CMPL DX, $0x10
-	JL   matchlen_four_standalone
-
-matchlen_loopback_standalone:
-	MOVQ  (AX), BX
-	MOVQ  8(AX), BP
-	XORQ  (CX), BX
-	XORQ  8(CX), BP
-	TESTQ BX, BX
-	JZ    matchlen_loop_tmp2_standalone
-	BSFQ  BX, BX
-	SARQ  $0x03, BX
-	LEAL  (SI)(BX*1), SI
-	JMP   gen_match_len_end
-
-matchlen_loop_tmp2_standalone:
-	TESTQ BP, BP
-	JZ    matchlen_loop_standalone
-	BSFQ  BP, BP
-	SARQ  $0x03, BP
-	LEAL  8(SI)(BP*1), SI
-	JMP   gen_match_len_end
-
-matchlen_loop_standalone:
-	SUBL $0x10, DX
-	ADDL $0x10, SI
-	ADDQ $0x10, AX
-	ADDQ $0x10, CX
-	CMPL DX, $0x10
-	JGE  matchlen_loopback_standalone
-
-matchlen_four_standalone:
-	SUBL $0x04, DX
-	JC   gen_match_len_end
-
-matchlen_four_loopback_standalone:
-	MOVL (AX), BX
-	XORL (CX), BX
-	JNZ  gen_match_len_end
-	ADDL $0x04, SI
-	ADDQ $0x04, AX
-	ADDQ $0x04, CX
-	SUBL $0x04, DX
-	JNC  matchlen_four_loopback_standalone
-
-gen_match_len_end:
-	MOVQ SI, ret+48(FP)
+	MOVQ b_base+24(FP), AX
+	MOVQ a_len+8(FP), AX
+	XORQ AX, AX
+	MOVQ AX, ret+48(FP)
 	RET
