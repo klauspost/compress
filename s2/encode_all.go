@@ -70,6 +70,8 @@ func encodeBlockGo(dst, src []byte) (d int) {
 	const (
 		tableBits    = 14
 		maxTableSize = 1 << tableBits
+
+		debug = false
 	)
 
 	var table [maxTableSize]uint32
@@ -131,6 +133,17 @@ func encodeBlockGo(dst, src []byte) (d int) {
 					s += 8
 					candidate += 8
 				}
+				if debug {
+					// Validate match.
+					if s <= candidate {
+						panic("s <= candidate")
+					}
+					a := src[base:s]
+					b := src[base-repeat : base-repeat+(s-base)]
+					if !bytes.Equal(a, b) {
+						panic("mismatch")
+					}
+				}
 				if nextEmit > 0 {
 					// same as `add := emitCopy(dst[d:], repeat, s-base)` but skips storing offset.
 					d += emitRepeat(dst[d:], repeat, s-base)
@@ -167,7 +180,8 @@ func encodeBlockGo(dst, src []byte) (d int) {
 			s = nextS
 		}
 
-		// Extend backwards
+		// Extend backwards.
+		// The top bytes will be rechecked to get the full match.
 		for candidate > 0 && s > nextEmit && src[candidate-1] == src[s-1] {
 			candidate--
 			s--
@@ -211,8 +225,11 @@ func encodeBlockGo(dst, src []byte) (d int) {
 			}
 
 			d += emitCopy(dst[d:], repeat, s-base)
-			if false {
+			if debug {
 				// Validate match.
+				if s <= candidate {
+					panic("s <= candidate")
+				}
 				a := src[base:s]
 				b := src[base-repeat : base-repeat+(s-base)]
 				if !bytes.Equal(a, b) {
@@ -236,6 +253,9 @@ func encodeBlockGo(dst, src []byte) (d int) {
 			candidate = int(table[currHash])
 			table[m2Hash] = uint32(s - 2)
 			table[currHash] = uint32(s)
+			if debug && s == candidate {
+				panic("s == candidate")
+			}
 			if uint32(x>>16) != load32(src, candidate) {
 				cv = load64(src, s+1)
 				s++

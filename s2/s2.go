@@ -101,8 +101,6 @@ const (
 
 var crcTable = crc32.MakeTable(crc32.Castagnoli)
 
-var avxAvailable bool
-
 // crc implements the checksum specified in section 3 of
 // https://github.com/google/snappy/blob/master/framing_format.txt
 func crc(b []byte) uint32 {

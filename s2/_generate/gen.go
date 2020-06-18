@@ -59,7 +59,7 @@ func debugval32(v Op) {
 var assertCounter int
 
 // insert extra checks here and there.
-const debug = true
+const debug = false
 
 // assert will insert code if debug is enabled.
 // The code should jump to 'ok' is assertion is success.
@@ -192,9 +192,6 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes in
 
 		LEAQ(Mem{Base: dst, Index: tmp2, Scale: 1}, tmp2)
 		MOVQ(tmp2, dstLimitPtrQ)
-
-		// Store dst start address
-		//MOVQ(dstAddr, dstStartPtrQ)
 	}
 
 	// s = 1
@@ -237,10 +234,8 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes in
 		}
 		// if nextS > sLimit {goto emitRemainder}
 		{
-			tmp := GP32()
-			MOVL(sLimitL, tmp.As32())
-			CMPL(nextS.As32(), tmp.As32())
-			JGT(LabelRef("emit_remainder_" + name))
+			CMPL(nextS.As32(), sLimitL)
+			JGE(LabelRef("emit_remainder_" + name))
 		}
 		// move nextS to stack.
 		MOVL(nextS.As32(), nextSTempL)
@@ -402,8 +397,10 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes in
 				MOVL(s, nextEmitL)
 			}
 			// if s >= sLimit
-			CMPL(s, sLimitL)
-			JGE(LabelRef("emit_remainder_" + name))
+			{
+				CMPL(s.As32(), sLimitL)
+				JGE(LabelRef("emit_remainder_" + name))
+			}
 			JMP(LabelRef("search_loop_" + name))
 		}
 		Label("no_repeat_found_" + name)
@@ -599,8 +596,10 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes in
 			MOVL(s, nextEmitL)
 
 			// if s >= sLimit { end }
-			CMPL(s, sLimitL)
-			JGE(LabelRef("emit_remainder_" + name))
+			{
+				CMPL(s.As32(), sLimitL)
+				JGE(LabelRef("emit_remainder_" + name))
+			}
 
 			// Bail if we exceed the maximum size.
 			{
@@ -1324,6 +1323,14 @@ func (o options) genMemMoveShort(name string, dst, src, length reg.GPVirtual, en
 		TESTQ(length, length)
 		JEQ(end)
 	}
+	assert(func(ok LabelRef) {
+		CMPQ(length, U8(64))
+		JBE(ok)
+	})
+	assert(func(ok LabelRef) {
+		TESTQ(length, length)
+		JNZ(ok)
+	})
 	Label(name + "tail")
 	CMPQ(length, U8(3))
 	JB(LabelRef(name + "move_1or2"))
@@ -1400,6 +1407,11 @@ func (o options) genMemMoveShort(name string, dst, src, length reg.GPVirtual, en
 // All passed registers may be updated.
 func (o options) genMemMoveLong(name string, dst, src, length reg.GPVirtual, end LabelRef) {
 	name += "large_"
+
+	assert(func(ok LabelRef) {
+		CMPQ(length, U8(64))
+		JAE(ok)
+	})
 
 	// These are disabled.
 	// AVX is ever so slightly faster, but it is disabled for simplicity.
@@ -1670,7 +1682,7 @@ func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) re
 	XORL(matched, matched)
 
 	CMPL(len.As32(), U8(16))
-	JB(LabelRef("matchlen_four_" + name))
+	JB(LabelRef("matchlen_short_" + name))
 
 	Label("matchlen_loopback_" + name)
 	MOVQ(Mem{Base: a}, tmp)
@@ -1700,7 +1712,7 @@ func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) re
 	JAE(LabelRef("matchlen_loopback_" + name))
 
 	// Test 4 bytes at the time...
-	Label("matchlen_four_" + name)
+	Label("matchlen_short_" + name)
 	if true {
 		SUBL(U8(4), len.As32())
 		JC(end)
@@ -1723,9 +1735,9 @@ func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) re
 	}
 
 	// Test one at the time
-	if false {
+	if true {
 		// Less than 16 bytes left.
-		Label("matchlen_single_" + name)
+		ADDL(U8(4), len.As32())
 		TESTL(len.As32(), len.As32())
 		JZ(end)
 

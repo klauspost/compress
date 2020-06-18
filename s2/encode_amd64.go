@@ -4,10 +4,6 @@
 
 package s2
 
-func init() {
-	avxAvailable = cpu.avx()
-}
-
 // encodeBlock encodes a non-empty src to a guaranteed-large-enough dst. It
 // assumes that the varint-encoded length of the decompressed bytes has already
 // been written.
