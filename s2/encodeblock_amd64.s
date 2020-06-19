@@ -1089,27 +1089,28 @@ match_nolit_emitcopy_end_encodeBlockAsm:
 	MOVL CX, 12(SP)
 	CMPL CX, 8(SP)
 	JGE  emit_remainder_encodeBlockAsm
+	MOVQ -2(DX)(CX*1), SI
 	CMPQ AX, (SP)
 	JL   match_nolit_dst_ok_encodeBlockAsm
 	MOVQ $0x00000000, ret+48(FP)
 	RET
 
 match_nolit_dst_ok_encodeBlockAsm:
-	MOVQ  -2(DX)(CX*1), SI
-	MOVQ  $0x0000cf1bbcdcbf9b, BP
+	MOVQ  $0x0000cf1bbcdcbf9b, R8
 	MOVQ  SI, DI
 	SHRQ  $0x10, SI
-	MOVQ  SI, R8
+	MOVQ  SI, BP
 	SHLQ  $0x10, DI
-	IMULQ BP, DI
+	IMULQ R8, DI
 	SHRQ  $0x32, DI
-	SHLQ  $0x10, R8
-	IMULQ BP, R8
-	SHRQ  $0x32, R8
-	LEAL  -2(CX), R9
-	MOVL  24(SP)(R8*4), BP
-	MOVL  R9, 24(SP)(DI*4)
-	MOVL  CX, 24(SP)(R8*4)
+	SHLQ  $0x10, BP
+	IMULQ R8, BP
+	SHRQ  $0x32, BP
+	LEAL  -2(CX), R8
+	LEAQ  24(SP)(BP*4), R9
+	MOVL  (R9), BP
+	MOVL  R8, 24(SP)(DI*4)
+	MOVL  CX, (R9)
 	CMPL  (DX)(BP*1), SI
 	JEQ   match_nolit_loop_encodeBlockAsm
 	INCL  CX
@@ -2382,27 +2383,28 @@ match_nolit_emitcopy_end_encodeBlockAsm12B:
 	MOVL CX, 12(SP)
 	CMPL CX, 8(SP)
 	JGE  emit_remainder_encodeBlockAsm12B
+	MOVQ -2(DX)(CX*1), SI
 	CMPQ AX, (SP)
 	JL   match_nolit_dst_ok_encodeBlockAsm12B
 	MOVQ $0x00000000, ret+48(FP)
 	RET
 
 match_nolit_dst_ok_encodeBlockAsm12B:
-	MOVQ  -2(DX)(CX*1), SI
-	MOVQ  $0x000000cf1bbcdcbb, BP
+	MOVQ  $0x000000cf1bbcdcbb, R8
 	MOVQ  SI, DI
 	SHRQ  $0x10, SI
-	MOVQ  SI, R8
+	MOVQ  SI, BP
 	SHLQ  $0x18, DI
-	IMULQ BP, DI
+	IMULQ R8, DI
 	SHRQ  $0x34, DI
-	SHLQ  $0x18, R8
-	IMULQ BP, R8
-	SHRQ  $0x34, R8
-	LEAL  -2(CX), R9
-	MOVL  24(SP)(R8*4), BP
-	MOVL  R9, 24(SP)(DI*4)
-	MOVL  CX, 24(SP)(R8*4)
+	SHLQ  $0x18, BP
+	IMULQ R8, BP
+	SHRQ  $0x34, BP
+	LEAL  -2(CX), R8
+	LEAQ  24(SP)(BP*4), R9
+	MOVL  (R9), BP
+	MOVL  R8, 24(SP)(DI*4)
+	MOVL  CX, (R9)
 	CMPL  (DX)(BP*1), SI
 	JEQ   match_nolit_loop_encodeBlockAsm12B
 	INCL  CX
@@ -3675,27 +3677,28 @@ match_nolit_emitcopy_end_encodeBlockAsm10B:
 	MOVL CX, 12(SP)
 	CMPL CX, 8(SP)
 	JGE  emit_remainder_encodeBlockAsm10B
+	MOVQ -2(DX)(CX*1), SI
 	CMPQ AX, (SP)
 	JL   match_nolit_dst_ok_encodeBlockAsm10B
 	MOVQ $0x00000000, ret+48(FP)
 	RET
 
 match_nolit_dst_ok_encodeBlockAsm10B:
-	MOVQ  -2(DX)(CX*1), SI
-	MOVQ  $0x9e3779b1, BP
+	MOVQ  $0x9e3779b1, R8
 	MOVQ  SI, DI
 	SHRQ  $0x10, SI
-	MOVQ  SI, R8
+	MOVQ  SI, BP
 	SHLQ  $0x20, DI
-	IMULQ BP, DI
+	IMULQ R8, DI
 	SHRQ  $0x36, DI
-	SHLQ  $0x20, R8
-	IMULQ BP, R8
-	SHRQ  $0x36, R8
-	LEAL  -2(CX), R9
-	MOVL  24(SP)(R8*4), BP
-	MOVL  R9, 24(SP)(DI*4)
-	MOVL  CX, 24(SP)(R8*4)
+	SHLQ  $0x20, BP
+	IMULQ R8, BP
+	SHRQ  $0x36, BP
+	LEAL  -2(CX), R8
+	LEAQ  24(SP)(BP*4), R9
+	MOVL  (R9), BP
+	MOVL  R8, 24(SP)(DI*4)
+	MOVL  CX, (R9)
 	CMPL  (DX)(BP*1), SI
 	JEQ   match_nolit_loop_encodeBlockAsm10B
 	INCL  CX
@@ -4968,27 +4971,28 @@ match_nolit_emitcopy_end_encodeBlockAsm8B:
 	MOVL CX, 12(SP)
 	CMPL CX, 8(SP)
 	JGE  emit_remainder_encodeBlockAsm8B
+	MOVQ -2(DX)(CX*1), SI
 	CMPQ AX, (SP)
 	JL   match_nolit_dst_ok_encodeBlockAsm8B
 	MOVQ $0x00000000, ret+48(FP)
 	RET
 
 match_nolit_dst_ok_encodeBlockAsm8B:
-	MOVQ  -2(DX)(CX*1), SI
-	MOVQ  $0x9e3779b1, BP
+	MOVQ  $0x9e3779b1, R8
 	MOVQ  SI, DI
 	SHRQ  $0x10, SI
-	MOVQ  SI, R8
+	MOVQ  SI, BP
 	SHLQ  $0x20, DI
-	IMULQ BP, DI
+	IMULQ R8, DI
 	SHRQ  $0x38, DI
-	SHLQ  $0x20, R8
-	IMULQ BP, R8
-	SHRQ  $0x38, R8
-	LEAL  -2(CX), R9
-	MOVL  24(SP)(R8*4), BP
-	MOVL  R9, 24(SP)(DI*4)
-	MOVL  CX, 24(SP)(R8*4)
+	SHLQ  $0x20, BP
+	IMULQ R8, BP
+	SHRQ  $0x38, BP
+	LEAL  -2(CX), R8
+	LEAQ  24(SP)(BP*4), R9
+	MOVL  (R9), BP
+	MOVL  R8, 24(SP)(DI*4)
+	MOVL  CX, (R9)
 	CMPL  (DX)(BP*1), SI
 	JEQ   match_nolit_loop_encodeBlockAsm8B
 	INCL  CX
@@ -5927,27 +5931,28 @@ match_nolit_emitcopy_end_encodeSnappyBlockAsm:
 	MOVL CX, 12(SP)
 	CMPL CX, 8(SP)
 	JGE  emit_remainder_encodeSnappyBlockAsm
+	MOVQ -2(DX)(CX*1), SI
 	CMPQ AX, (SP)
 	JL   match_nolit_dst_ok_encodeSnappyBlockAsm
 	MOVQ $0x00000000, ret+48(FP)
 	RET
 
 match_nolit_dst_ok_encodeSnappyBlockAsm:
-	MOVQ  -2(DX)(CX*1), SI
-	MOVQ  $0x0000cf1bbcdcbf9b, BP
+	MOVQ  $0x0000cf1bbcdcbf9b, R8
 	MOVQ  SI, DI
 	SHRQ  $0x10, SI
-	MOVQ  SI, R8
+	MOVQ  SI, BP
 	SHLQ  $0x10, DI
-	IMULQ BP, DI
+	IMULQ R8, DI
 	SHRQ  $0x32, DI
-	SHLQ  $0x10, R8
-	IMULQ BP, R8
-	SHRQ  $0x32, R8
-	LEAL  -2(CX), R9
-	MOVL  24(SP)(R8*4), BP
-	MOVL  R9, 24(SP)(DI*4)
-	MOVL  CX, 24(SP)(R8*4)
+	SHLQ  $0x10, BP
+	IMULQ R8, BP
+	SHRQ  $0x32, BP
+	LEAL  -2(CX), R8
+	LEAQ  24(SP)(BP*4), R9
+	MOVL  (R9), BP
+	MOVL  R8, 24(SP)(DI*4)
+	MOVL  CX, (R9)
 	CMPL  (DX)(BP*1), SI
 	JEQ   match_nolit_loop_encodeSnappyBlockAsm
 	INCL  CX
@@ -6886,27 +6891,28 @@ match_nolit_emitcopy_end_encodeSnappyBlockAsm12B:
 	MOVL CX, 12(SP)
 	CMPL CX, 8(SP)
 	JGE  emit_remainder_encodeSnappyBlockAsm12B
+	MOVQ -2(DX)(CX*1), SI
 	CMPQ AX, (SP)
 	JL   match_nolit_dst_ok_encodeSnappyBlockAsm12B
 	MOVQ $0x00000000, ret+48(FP)
 	RET
 
 match_nolit_dst_ok_encodeSnappyBlockAsm12B:
-	MOVQ  -2(DX)(CX*1), SI
-	MOVQ  $0x000000cf1bbcdcbb, BP
+	MOVQ  $0x000000cf1bbcdcbb, R8
 	MOVQ  SI, DI
 	SHRQ  $0x10, SI
-	MOVQ  SI, R8
+	MOVQ  SI, BP
 	SHLQ  $0x18, DI
-	IMULQ BP, DI
+	IMULQ R8, DI
 	SHRQ  $0x34, DI
-	SHLQ  $0x18, R8
-	IMULQ BP, R8
-	SHRQ  $0x34, R8
-	LEAL  -2(CX), R9
-	MOVL  24(SP)(R8*4), BP
-	MOVL  R9, 24(SP)(DI*4)
-	MOVL  CX, 24(SP)(R8*4)
+	SHLQ  $0x18, BP
+	IMULQ R8, BP
+	SHRQ  $0x34, BP
+	LEAL  -2(CX), R8
+	LEAQ  24(SP)(BP*4), R9
+	MOVL  (R9), BP
+	MOVL  R8, 24(SP)(DI*4)
+	MOVL  CX, (R9)
 	CMPL  (DX)(BP*1), SI
 	JEQ   match_nolit_loop_encodeSnappyBlockAsm12B
 	INCL  CX
@@ -7845,27 +7851,28 @@ match_nolit_emitcopy_end_encodeSnappyBlockAsm10B:
 	MOVL CX, 12(SP)
 	CMPL CX, 8(SP)
 	JGE  emit_remainder_encodeSnappyBlockAsm10B
+	MOVQ -2(DX)(CX*1), SI
 	CMPQ AX, (SP)
 	JL   match_nolit_dst_ok_encodeSnappyBlockAsm10B
 	MOVQ $0x00000000, ret+48(FP)
 	RET
 
 match_nolit_dst_ok_encodeSnappyBlockAsm10B:
-	MOVQ  -2(DX)(CX*1), SI
-	MOVQ  $0x9e3779b1, BP
+	MOVQ  $0x9e3779b1, R8
 	MOVQ  SI, DI
 	SHRQ  $0x10, SI
-	MOVQ  SI, R8
+	MOVQ  SI, BP
 	SHLQ  $0x20, DI
-	IMULQ BP, DI
+	IMULQ R8, DI
 	SHRQ  $0x36, DI
-	SHLQ  $0x20, R8
-	IMULQ BP, R8
-	SHRQ  $0x36, R8
-	LEAL  -2(CX), R9
-	MOVL  24(SP)(R8*4), BP
-	MOVL  R9, 24(SP)(DI*4)
-	MOVL  CX, 24(SP)(R8*4)
+	SHLQ  $0x20, BP
+	IMULQ R8, BP
+	SHRQ  $0x36, BP
+	LEAL  -2(CX), R8
+	LEAQ  24(SP)(BP*4), R9
+	MOVL  (R9), BP
+	MOVL  R8, 24(SP)(DI*4)
+	MOVL  CX, (R9)
 	CMPL  (DX)(BP*1), SI
 	JEQ   match_nolit_loop_encodeSnappyBlockAsm10B
 	INCL  CX
@@ -8804,27 +8811,28 @@ match_nolit_emitcopy_end_encodeSnappyBlockAsm8B:
 	MOVL CX, 12(SP)
 	CMPL CX, 8(SP)
 	JGE  emit_remainder_encodeSnappyBlockAsm8B
+	MOVQ -2(DX)(CX*1), SI
 	CMPQ AX, (SP)
 	JL   match_nolit_dst_ok_encodeSnappyBlockAsm8B
 	MOVQ $0x00000000, ret+48(FP)
 	RET
 
 match_nolit_dst_ok_encodeSnappyBlockAsm8B:
-	MOVQ  -2(DX)(CX*1), SI
-	MOVQ  $0x9e3779b1, BP
+	MOVQ  $0x9e3779b1, R8
 	MOVQ  SI, DI
 	SHRQ  $0x10, SI
-	MOVQ  SI, R8
+	MOVQ  SI, BP
 	SHLQ  $0x20, DI
-	IMULQ BP, DI
+	IMULQ R8, DI
 	SHRQ  $0x38, DI
-	SHLQ  $0x20, R8
-	IMULQ BP, R8
-	SHRQ  $0x38, R8
-	LEAL  -2(CX), R9
-	MOVL  24(SP)(R8*4), BP
-	MOVL  R9, 24(SP)(DI*4)
-	MOVL  CX, 24(SP)(R8*4)
+	SHLQ  $0x20, BP
+	IMULQ R8, BP
+	SHRQ  $0x38, BP
+	LEAL  -2(CX), R8
+	LEAQ  24(SP)(BP*4), R9
+	MOVL  (R9), BP
+	MOVL  R8, 24(SP)(DI*4)
+	MOVL  CX, (R9)
 	CMPL  (DX)(BP*1), SI
 	JEQ   match_nolit_loop_encodeSnappyBlockAsm8B
 	INCL  CX

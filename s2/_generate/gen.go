@@ -536,7 +536,7 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes in
 		MOVL(s, base.As32())
 		o.emitLiteralsDstP(nextEmitL, base, src, dst, "match_emit_"+name)
 	}
-
+	cv := GP64()
 	Label("match_nolit_loop_" + name)
 	{
 		// Update repeat
@@ -593,14 +593,15 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes in
 			ADDL(U8(4), length.As32())
 			o.emitCopy("match_nolit_"+name, length, offset, nil, dst, LabelRef("match_nolit_emitcopy_end_"+name))
 			Label("match_nolit_emitcopy_end_" + name)
-			MOVL(s, nextEmitL)
 
 			// if s >= sLimit { end }
 			{
 				CMPL(s.As32(), sLimitL)
 				JGE(LabelRef("emit_remainder_" + name))
 			}
-
+			// Start load s-2 as early as possible...
+			MOVQ(Mem{Base: src, Index: s, Scale: 1, Disp: -2}, cv)
+			MOVL(s, nextEmitL)
 			// Bail if we exceed the maximum size.
 			{
 				CMPQ(dst, dstLimitPtrQ)
@@ -614,16 +615,15 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes in
 				Label("match_nolit_dst_ok_" + name)
 			}
 		}
+		// cv must be set to value at s-2 before arriving here
 		{
 			// Check for an immediate match, otherwise start search at s+1
-			x := GP64()
 			// Index s-2
-			MOVQ(Mem{Base: src, Index: s, Scale: 1, Disp: -2}, x)
 			hasher := hashN(hashBytes, tableBits)
 			hash0, hash1 := GP64(), GP64()
-			MOVQ(x, hash0) // s-2
-			SHRQ(U8(16), x)
-			MOVQ(x, hash1) // s
+			MOVQ(cv, hash0) // src[s-2]
+			SHRQ(U8(16), cv)
+			MOVQ(cv, hash1) // src[s]
 			hasher.hash(hash0)
 			hasher.hash(hash1)
 			sm2 := GP32() // s - 2
@@ -636,11 +636,12 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes in
 				CMPQ(hash1, U32(tableSize))
 				JL(ok)
 			})
-
-			MOVL(table.Idx(hash1, 4), candidate)
+			addr := GP64()
+			LEAQ(table.Idx(hash1, 4), addr)
+			MOVL(Mem{Base: addr}, candidate)
 			MOVL(sm2, table.Idx(hash0, 4))
-			MOVL(s, table.Idx(hash1, 4))
-			CMPL(Mem{Base: src, Index: candidate, Scale: 1}, x.As32())
+			MOVL(s, Mem{Base: addr})
+			CMPL(Mem{Base: src, Index: candidate, Scale: 1}, cv.As32())
 			JEQ(LabelRef("match_nolit_loop_" + name))
 			INCL(s)
 		}
@@ -1716,7 +1717,9 @@ func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) re
 
 	// Test 4 bytes at the time...
 	Label("matchlen_short_" + name)
+	lenoff := 0
 	if true {
+		lenoff = 4
 		SUBL(U8(4), len.As32())
 		JC(LabelRef("matchlen_single_resume_" + name))
 
@@ -1747,7 +1750,9 @@ func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) re
 	Label("matchlen_single_resume_" + name)
 	if true {
 		// Less than 16 bytes left.
-		ADDL(U8(4), len.As32())
+		if lenoff > 0 {
+			ADDL(U8(lenoff), len.As32())
+		}
 		TESTL(len.As32(), len.As32())
 		JZ(end)
 
