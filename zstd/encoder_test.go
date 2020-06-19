@@ -927,9 +927,9 @@ func BenchmarkEncoder_EncodeAllPi(b *testing.B) {
 	}
 }
 
-func BenchmarkRandomEncodeAllFastest(b *testing.B) {
+func BenchmarkRandom4KEncodeAllFastest(b *testing.B) {
 	rng := rand.New(rand.NewSource(1))
-	data := make([]byte, 10<<20)
+	data := make([]byte, 4<<10)
 	for i := range data {
 		data[i] = uint8(rng.Intn(256))
 	}
@@ -948,12 +948,29 @@ func BenchmarkRandomEncodeAllFastest(b *testing.B) {
 	}
 }
 
-func BenchmarkRandomEncodeAllDefault(b *testing.B) {
+func BenchmarkRandom10MBEncodeAllFastest(b *testing.B) {
 	rng := rand.New(rand.NewSource(1))
 	data := make([]byte, 10<<20)
-	for i := range data {
-		data[i] = uint8(rng.Intn(256))
+	rng.Read(data)
+	enc, _ := NewWriter(nil, WithEncoderLevel(SpeedFastest), WithEncoderConcurrency(1))
+	defer enc.Close()
+	dst := enc.EncodeAll(data, nil)
+	wantSize := len(dst)
+	b.ResetTimer()
+	b.ReportAllocs()
+	b.SetBytes(int64(len(data)))
+	for i := 0; i < b.N; i++ {
+		dst := enc.EncodeAll(data, dst[:0])
+		if len(dst) != wantSize {
+			b.Fatal(len(dst), "!=", wantSize)
+		}
 	}
+}
+
+func BenchmarkRandom4KEncodeAllDefault(b *testing.B) {
+	rng := rand.New(rand.NewSource(1))
+	data := make([]byte, 4<<10)
+	rng.Read(data)
 	enc, _ := NewWriter(nil, WithEncoderLevel(SpeedDefault), WithEncoderConcurrency(1))
 	defer enc.Close()
 	dst := enc.EncodeAll(data, nil)
@@ -969,12 +986,29 @@ func BenchmarkRandomEncodeAllDefault(b *testing.B) {
 	}
 }
 
-func BenchmarkRandomEncoderFastest(b *testing.B) {
+func BenchmarkRandomEncodeAllDefault(b *testing.B) {
 	rng := rand.New(rand.NewSource(1))
 	data := make([]byte, 10<<20)
-	for i := range data {
-		data[i] = uint8(rng.Intn(256))
+	rng.Read(data)
+	enc, _ := NewWriter(nil, WithEncoderLevel(SpeedDefault), WithEncoderConcurrency(1))
+	defer enc.Close()
+	dst := enc.EncodeAll(data, nil)
+	wantSize := len(dst)
+	b.ResetTimer()
+	b.ReportAllocs()
+	b.SetBytes(int64(len(data)))
+	for i := 0; i < b.N; i++ {
+		dst := enc.EncodeAll(data, dst[:0])
+		if len(dst) != wantSize {
+			b.Fatal(len(dst), "!=", wantSize)
+		}
 	}
+}
+
+func BenchmarkRandom10MBEncoderFastest(b *testing.B) {
+	rng := rand.New(rand.NewSource(1))
+	data := make([]byte, 10<<20)
+	rng.Read(data)
 	wantSize := int64(len(data))
 	enc, _ := NewWriter(ioutil.Discard, WithEncoderLevel(SpeedFastest))
 	defer enc.Close()
@@ -1003,9 +1037,7 @@ func BenchmarkRandomEncoderFastest(b *testing.B) {
 func BenchmarkRandomEncoderDefault(b *testing.B) {
 	rng := rand.New(rand.NewSource(1))
 	data := make([]byte, 10<<20)
-	for i := range data {
-		data[i] = uint8(rng.Intn(256))
-	}
+	rng.Read(data)
 	wantSize := int64(len(data))
 	enc, _ := NewWriter(ioutil.Discard, WithEncoderLevel(SpeedDefault))
 	defer enc.Close()
