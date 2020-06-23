@@ -15,6 +15,7 @@ This package provides various compression algorithms.
 
 # changelog
 
+* June 23, 2020 (v1.10.10) zstd: Skip entropy compression in fastest mode when no matches. [#270](https://github.com/klauspost/compress/pull/270)
 * June 16, 2020 (v1.10.9): zstd: API change for specifying dictionaries. See [#268](https://github.com/klauspost/compress/pull/268)
 * June 16, 2020: zip: update CreateHeaderRaw to handle zip64 fields. [#266](https://github.com/klauspost/compress/pull/266)
 * June 16, 2020: Fuzzit tests removed. The service has been purchased and is no longer available.
