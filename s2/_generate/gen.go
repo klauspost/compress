@@ -592,6 +592,7 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes in
 
 			// length += 4
 			ADDL(U8(4), length.As32())
+			MOVL(s, nextEmitL) // nextEmit = s
 			o.emitCopy("match_nolit_"+name, length, offset, nil, dst, LabelRef("match_nolit_emitcopy_end_"+name))
 			Label("match_nolit_emitcopy_end_" + name)
 
@@ -602,7 +603,6 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes in
 			}
 			// Start load s-2 as early as possible...
 			MOVQ(Mem{Base: src, Index: s, Scale: 1, Disp: -2}, cv)
-			MOVL(s, nextEmitL)
 			// Bail if we exceed the maximum size.
 			{
 				CMPQ(dst, dstLimitPtrQ)

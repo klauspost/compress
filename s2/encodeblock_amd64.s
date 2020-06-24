@@ -828,6 +828,7 @@ match_nolit_end_encodeBlockAsm:
 	ADDL R9, CX
 	MOVL 16(SP), BP
 	ADDL $0x04, R9
+	MOVL CX, 12(SP)
 	CMPL BP, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeBlockAsm
 
@@ -1019,7 +1020,6 @@ match_nolit_emitcopy_end_encodeBlockAsm:
 	CMPL CX, 8(SP)
 	JGE  emit_remainder_encodeBlockAsm
 	MOVQ -2(DX)(CX*1), SI
-	MOVL CX, 12(SP)
 	CMPQ AX, (SP)
 	JL   match_nolit_dst_ok_encodeBlockAsm
 	MOVQ $0x00000000, ret+48(FP)
@@ -2052,6 +2052,7 @@ match_nolit_end_encodeBlockAsm12B:
 	ADDL R9, CX
 	MOVL 16(SP), BP
 	ADDL $0x04, R9
+	MOVL CX, 12(SP)
 	CMPL BP, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeBlockAsm12B
 
@@ -2243,7 +2244,6 @@ match_nolit_emitcopy_end_encodeBlockAsm12B:
 	CMPL CX, 8(SP)
 	JGE  emit_remainder_encodeBlockAsm12B
 	MOVQ -2(DX)(CX*1), SI
-	MOVL CX, 12(SP)
 	CMPQ AX, (SP)
 	JL   match_nolit_dst_ok_encodeBlockAsm12B
 	MOVQ $0x00000000, ret+48(FP)
@@ -3276,6 +3276,7 @@ match_nolit_end_encodeBlockAsm10B:
 	ADDL R9, CX
 	MOVL 16(SP), BP
 	ADDL $0x04, R9
+	MOVL CX, 12(SP)
 	CMPL BP, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeBlockAsm10B
 
@@ -3467,7 +3468,6 @@ match_nolit_emitcopy_end_encodeBlockAsm10B:
 	CMPL CX, 8(SP)
 	JGE  emit_remainder_encodeBlockAsm10B
 	MOVQ -2(DX)(CX*1), SI
-	MOVL CX, 12(SP)
 	CMPQ AX, (SP)
 	JL   match_nolit_dst_ok_encodeBlockAsm10B
 	MOVQ $0x00000000, ret+48(FP)
@@ -4500,6 +4500,7 @@ match_nolit_end_encodeBlockAsm8B:
 	ADDL R9, CX
 	MOVL 16(SP), BP
 	ADDL $0x04, R9
+	MOVL CX, 12(SP)
 	CMPL BP, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeBlockAsm8B
 
@@ -4691,7 +4692,6 @@ match_nolit_emitcopy_end_encodeBlockAsm8B:
 	CMPL CX, 8(SP)
 	JGE  emit_remainder_encodeBlockAsm8B
 	MOVQ -2(DX)(CX*1), SI
-	MOVL CX, 12(SP)
 	CMPQ AX, (SP)
 	JL   match_nolit_dst_ok_encodeBlockAsm8B
 	MOVQ $0x00000000, ret+48(FP)
@@ -5522,6 +5522,7 @@ match_nolit_end_encodeSnappyBlockAsm:
 	ADDL R9, CX
 	MOVL 16(SP), BP
 	ADDL $0x04, R9
+	MOVL CX, 12(SP)
 	CMPL BP, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeSnappyBlockAsm
 
@@ -5581,7 +5582,6 @@ match_nolit_emitcopy_end_encodeSnappyBlockAsm:
 	CMPL CX, 8(SP)
 	JGE  emit_remainder_encodeSnappyBlockAsm
 	MOVQ -2(DX)(CX*1), SI
-	MOVL CX, 12(SP)
 	CMPQ AX, (SP)
 	JL   match_nolit_dst_ok_encodeSnappyBlockAsm
 	MOVQ $0x00000000, ret+48(FP)
@@ -6412,6 +6412,7 @@ match_nolit_end_encodeSnappyBlockAsm12B:
 	ADDL R9, CX
 	MOVL 16(SP), BP
 	ADDL $0x04, R9
+	MOVL CX, 12(SP)
 	CMPL BP, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeSnappyBlockAsm12B
 
@@ -6471,7 +6472,6 @@ match_nolit_emitcopy_end_encodeSnappyBlockAsm12B:
 	CMPL CX, 8(SP)
 	JGE  emit_remainder_encodeSnappyBlockAsm12B
 	MOVQ -2(DX)(CX*1), SI
-	MOVL CX, 12(SP)
 	CMPQ AX, (SP)
 	JL   match_nolit_dst_ok_encodeSnappyBlockAsm12B
 	MOVQ $0x00000000, ret+48(FP)
@@ -7302,6 +7302,7 @@ match_nolit_end_encodeSnappyBlockAsm10B:
 	ADDL R9, CX
 	MOVL 16(SP), BP
 	ADDL $0x04, R9
+	MOVL CX, 12(SP)
 	CMPL BP, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeSnappyBlockAsm10B
 
@@ -7361,7 +7362,6 @@ match_nolit_emitcopy_end_encodeSnappyBlockAsm10B:
 	CMPL CX, 8(SP)
 	JGE  emit_remainder_encodeSnappyBlockAsm10B
 	MOVQ -2(DX)(CX*1), SI
-	MOVL CX, 12(SP)
 	CMPQ AX, (SP)
 	JL   match_nolit_dst_ok_encodeSnappyBlockAsm10B
 	MOVQ $0x00000000, ret+48(FP)
@@ -8192,6 +8192,7 @@ match_nolit_end_encodeSnappyBlockAsm8B:
 	ADDL R9, CX
 	MOVL 16(SP), BP
 	ADDL $0x04, R9
+	MOVL CX, 12(SP)
 	CMPL BP, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeSnappyBlockAsm8B
 
@@ -8251,7 +8252,6 @@ match_nolit_emitcopy_end_encodeSnappyBlockAsm8B:
 	CMPL CX, 8(SP)
 	JGE  emit_remainder_encodeSnappyBlockAsm8B
 	MOVQ -2(DX)(CX*1), SI
-	MOVL CX, 12(SP)
 	CMPQ AX, (SP)
 	JL   match_nolit_dst_ok_encodeSnappyBlockAsm8B
 	MOVQ $0x00000000, ret+48(FP)
