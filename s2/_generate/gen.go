@@ -214,13 +214,7 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes in
 			CMPQ(tmp, src)
 			JEQ(ok)
 		})
-		assert(func(ok LabelRef) {
-			// Check if s is valid
-			tmp := GP64()
-			MOVQ(lenSrcQ, tmp)
-			CMPQ(tmp, s.As64())
-			JG(ok)
-		})
+
 		cv := GP64()
 		MOVQ(Mem{Base: src, Index: s, Scale: 1}, cv)
 		nextS := GP32()
@@ -237,6 +231,13 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes in
 			CMPL(nextS.As32(), sLimitL)
 			JGE(LabelRef("emit_remainder_" + name))
 		}
+		assert(func(ok LabelRef) {
+			// Check if s is valid (we should have jumped above if not)
+			tmp := GP64()
+			MOVQ(lenSrcQ, tmp)
+			CMPQ(tmp, s.As64())
+			JG(ok)
+		})
 		// move nextS to stack.
 		MOVL(nextS.As32(), nextSTempL)
 
@@ -362,7 +363,7 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes in
 					backStart := GP64()
 					LEAQ(Mem{Base: src, Index: candidate, Scale: 1}, backStart)
 
-					length := o.matchLen("repeat_extend", forwardStart, backStart, srcLeft, LabelRef("repeat_extend_forward_end_"+name))
+					length := o.matchLen("repeat_extend_"+name, forwardStart, backStart, srcLeft, LabelRef("repeat_extend_forward_end_"+name))
 					forwardStart, backStart, srcLeft = nil, nil, nil
 					Label("repeat_extend_forward_end_" + name)
 					// s+= length
@@ -1677,11 +1678,56 @@ func (o options) genMatchLen() {
 // matchLen returns the number of matching bytes of a and b.
 // len is the maximum number of bytes to match.
 // Will jump to end when done and returns the length.
-// Uses 3 GP registers.
+// Uses 2 GP registers.
 func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) reg.GPVirtual {
 	if false {
 		return o.matchLenAlt(name, a, b, len, end)
 	}
+	tmp, matched := GP64(), GP32()
+	XORL(matched, matched)
+
+	CMPL(len.As32(), U8(8))
+	JL(LabelRef("matchlen_single_" + name))
+
+	Label("matchlen_loopback_" + name)
+	MOVQ(Mem{Base: a, Index: matched, Scale: 1}, tmp)
+	XORQ(Mem{Base: b, Index: matched, Scale: 1}, tmp)
+	TESTQ(tmp, tmp)
+	JZ(LabelRef("matchlen_loop_" + name))
+	// Not all match.
+	BSFQ(tmp, tmp)
+	SARQ(U8(3), tmp)
+	LEAL(Mem{Base: matched, Index: tmp, Scale: 1}, matched)
+	JMP(end)
+
+	// All 8 byte matched, update and loop.
+	Label("matchlen_loop_" + name)
+	LEAL(Mem{Base: len, Disp: -8}, len.As32())
+	LEAL(Mem{Base: matched, Disp: 8}, matched)
+	CMPL(len.As32(), U8(8))
+	JGE(LabelRef("matchlen_loopback_" + name))
+
+	// Less than 8 bytes left.
+	Label("matchlen_single_" + name)
+	TESTL(len.As32(), len.As32())
+	JZ(end)
+	Label("matchlen_single_loopback_" + name)
+	MOVB(Mem{Base: a, Index: matched, Scale: 1}, tmp.As8())
+	CMPB(Mem{Base: b, Index: matched, Scale: 1}, tmp.As8())
+	JNE(end)
+	LEAL(Mem{Base: matched, Disp: 1}, matched)
+	DECL(len.As32())
+	JNZ(LabelRef("matchlen_single_loopback_" + name))
+	JMP(end)
+	return matched
+}
+
+// matchLen returns the number of matching bytes of a and b.
+// len is the maximum number of bytes to match.
+// Will jump to end when done and returns the length.
+// Uses 3 GP registers.
+// It is better on longer matches.
+func (o options) matchLenAlt(name string, a, b, len reg.GPVirtual, end LabelRef) reg.GPVirtual {
 	tmp, tmp2, matched := GP64(), GP64(), GP32()
 	XORL(matched, matched)
 
@@ -1766,50 +1812,6 @@ func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) re
 		DECL(len.As32())
 		JNZ(LabelRef("matchlen_single_loopback_" + name))
 	}
-	JMP(end)
-	return matched
-}
-
-// matchLen returns the number of matching bytes of a and b.
-// len is the maximum number of bytes to match.
-// Will jump to end when done and returns the length.
-// Uses 2 GP registers.
-func (o options) matchLenAlt(name string, a, b, len reg.GPVirtual, end LabelRef) reg.GPVirtual {
-	tmp, matched := GP64(), GP32()
-	XORL(matched, matched)
-
-	CMPL(len.As32(), U8(8))
-	JL(LabelRef("matchlen_single_" + name))
-
-	Label("matchlen_loopback_" + name)
-	MOVQ(Mem{Base: a, Index: matched, Scale: 1}, tmp)
-	XORQ(Mem{Base: b, Index: matched, Scale: 1}, tmp)
-	TESTQ(tmp, tmp)
-	JZ(LabelRef("matchlen_loop_" + name))
-	// Not all match.
-	BSFQ(tmp, tmp)
-	SARQ(U8(3), tmp)
-	LEAL(Mem{Base: matched, Index: tmp, Scale: 1}, matched)
-	JMP(end)
-
-	// All 8 byte matched, update and loop.
-	Label("matchlen_loop_" + name)
-	LEAL(Mem{Base: len, Disp: -8}, len.As32())
-	LEAL(Mem{Base: matched, Disp: 8}, matched)
-	CMPL(len.As32(), U8(8))
-	JGE(LabelRef("matchlen_loopback_" + name))
-
-	// Less than 8 bytes left.
-	Label("matchlen_single_" + name)
-	TESTL(len.As32(), len.As32())
-	JZ(end)
-	Label("matchlen_single_loopback_" + name)
-	MOVB(Mem{Base: a, Index: matched, Scale: 1}, tmp.As8())
-	CMPB(Mem{Base: b, Index: matched, Scale: 1}, tmp.As8())
-	JNE(end)
-	LEAL(Mem{Base: matched, Disp: 1}, matched)
-	DECL(len.As32())
-	JNZ(LabelRef("matchlen_single_loopback_" + name))
 	JMP(end)
 	return matched
 }
