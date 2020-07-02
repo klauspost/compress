@@ -101,6 +101,7 @@ func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
 	llState, mlState, ofState := s.litLengths.state.state, s.matchLengths.state.state, s.offsets.state.state
 
 	for i := seqs - 1; i >= 0; i-- {
+		//gcassert:inline
 		if br.overread() {
 			printf("reading sequence %d, exceeded available data\n", seqs-i)
 			return io.ErrUnexpectedEOF
@@ -112,22 +113,33 @@ func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
 
 			// Final will not read from stream.
 			var llB, mlB, moB uint8
+			//gcassert:inline
 			ll, llB = llState.final()
+			//gcassert:inline
 			ml, mlB = mlState.final()
+			//gcassert:inline
 			mo, moB = ofState.final()
 
 			// extra bits are stored in reverse order.
+			//gcassert:inline
 			br.fillFast()
+			//gcassert:inline
 			mo += br.getBits(moB)
 			if s.maxBits > 32 {
+				//gcassert:inline
 				br.fillFast()
 			}
+			//gcassert:inline
 			ml += br.getBits(mlB)
+			//gcassert:inline
 			ll += br.getBits(llB)
 
 			if moB > 1 {
+				//gcassert:bce
 				s.prevOffset[2] = s.prevOffset[1]
+				//gcassert:bce
 				s.prevOffset[1] = s.prevOffset[0]
+				//gcassert:bce
 				s.prevOffset[0] = mo
 			} else {
 				// mo = s.adjustOffset(mo, ll, moB)
@@ -140,10 +152,12 @@ func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
 				}
 
 				if mo == 0 {
+					//gcassert:bce
 					mo = s.prevOffset[0]
 				} else {
 					var temp int
 					if mo == 3 {
+						//gcassert:bce
 						temp = s.prevOffset[0] - 1
 					} else {
 						temp = s.prevOffset[mo]
@@ -156,13 +170,17 @@ func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
 					}
 
 					if mo != 1 {
+						//gcassert:bce
 						s.prevOffset[2] = s.prevOffset[1]
 					}
+					//gcassert:bce
 					s.prevOffset[1] = s.prevOffset[0]
+					//gcassert:bce
 					s.prevOffset[0] = temp
 					mo = temp
 				}
 			}
+			//gcassert:inline
 			br.fillFast()
 		} else {
 			ll, mo, ml = s.next(br, llState, mlState, ofState)
@@ -265,21 +283,42 @@ func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
 
 		// Manually inlined, ~ 5-20% faster
 		// Update all 3 states at once. Approx 20% faster.
+		//gcassert:inline
 		nBits := llState.nbBits() + mlState.nbBits() + ofState.nbBits()
 		if nBits == 0 {
+			//gcassert:bce
+			//gcassert:inline
 			llState = llTable[llState.newState()&maxTableMask]
+			//gcassert:bce
+			//gcassert:inline
 			mlState = mlTable[mlState.newState()&maxTableMask]
+			//gcassert:bce
+			//gcassert:inline
 			ofState = ofTable[ofState.newState()&maxTableMask]
 		} else {
+			//gcassert:inline
 			bits := br.getBitsFast(nBits)
+			//gcassert:inline
 			lowBits := uint16(bits >> ((ofState.nbBits() + mlState.nbBits()) & 31))
+			//gcassert:bce
+			//gcassert:inline
 			llState = llTable[(llState.newState()+lowBits)&maxTableMask]
 
+			//gcassert:inline
 			lowBits = uint16(bits >> (ofState.nbBits() & 31))
+			//gcassert:bce
+			//gcassert:inline
 			lowBits &= bitMask[mlState.nbBits()&15]
+			//gcassert:bce
+			//gcassert:inline
 			mlState = mlTable[(mlState.newState()+lowBits)&maxTableMask]
 
+			//gcassert:bce
+			//gcassert:inline
 			lowBits = uint16(bits) & bitMask[ofState.nbBits()&15]
+
+			//gcassert:bce
+			//gcassert:inline
 			ofState = ofTable[(ofState.newState()+lowBits)&maxTableMask]
 		}
 	}

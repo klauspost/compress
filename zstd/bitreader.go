@@ -50,6 +50,7 @@ func (b *bitReader) getBits(n uint8) int {
 	if n == 0 /*|| b.bitsRead >= 64 */ {
 		return 0
 	}
+	//gcassert:inline
 	return b.getBitsFast(n)
 }
 
@@ -71,6 +72,7 @@ func (b *bitReader) fillFast() {
 	// 2 bounds checks.
 	v := b.in[b.off-4:]
 	v = v[:4]
+	//gcassert:bce
 	low := (uint32(v[0])) | (uint32(v[1]) << 8) | (uint32(v[2]) << 16) | (uint32(v[3]) << 24)
 	b.value = (b.value << 32) | uint64(low)
 	b.bitsRead -= 32
@@ -80,6 +82,7 @@ func (b *bitReader) fillFast() {
 // fillFastStart() assumes the bitreader is empty and there is at least 8 bytes to read.
 func (b *bitReader) fillFastStart() {
 	// Do single re-slice to avoid bounds checks.
+	//gcassert:inline
 	b.value = binary.LittleEndian.Uint64(b.in[b.off-8:])
 	b.bitsRead = 0
 	b.off -= 8
@@ -91,8 +94,10 @@ func (b *bitReader) fill() {
 		return
 	}
 	if b.off >= 4 {
+		//gcassert:bce
 		v := b.in[b.off-4:]
 		v = v[:4]
+		//gcassert:bce
 		low := (uint32(v[0])) | (uint32(v[1]) << 8) | (uint32(v[2]) << 16) | (uint32(v[3]) << 24)
 		b.value = (b.value << 32) | uint64(low)
 		b.bitsRead -= 32
