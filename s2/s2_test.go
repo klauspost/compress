@@ -1825,7 +1825,9 @@ func TestMatchLen(t *testing.T) {
 		return n
 	}
 
-	nums := []int{0, 1, 2, 7, 8, 9, 29, 30, 31, 32, 33, 34, 38, 39, 40}
+	// We allow slightly shorter matches at the end of slices
+	const maxBelow = 0
+	nums := []int{0, 1, 2, 7, 8, 9, 16, 20, 29, 30, 31, 32, 33, 34, 38, 39, 40}
 	for yIndex := 40; yIndex > 30; yIndex-- {
 		xxx := bytes.Repeat([]byte("x"), 40)
 		if yIndex < len(xxx) {
@@ -1838,7 +1840,11 @@ func TestMatchLen(t *testing.T) {
 				}
 				got := matchLen(xxx[j:], xxx[i:])
 				want := ref(xxx[j:], xxx[i:])
-				if got != want {
+				if got > want {
+					t.Errorf("yIndex=%d, i=%d, j=%d: got %d, want %d", yIndex, i, j, got, want)
+					continue
+				}
+				if got < want-maxBelow {
 					t.Errorf("yIndex=%d, i=%d, j=%d: got %d, want %d", yIndex, i, j, got, want)
 				}
 			}
