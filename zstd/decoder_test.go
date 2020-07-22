@@ -1324,6 +1324,7 @@ func testDecoderDecodeAllError(t *testing.T, fn string, dec *Decoder) {
 // We don't predefine them, since this also tests our transformations.
 // Reference from here: https://github.com/facebook/zstd/blob/ededcfca57366461021c922720878c81a5854a0a/lib/decompress/zstd_decompress_block.c#L234
 func TestPredefTables(t *testing.T) {
+	initPredefined()
 	x := func(nextState uint16, nbAddBits, nbBits uint8, baseVal uint32) decSymbol {
 		return newDecSymbol(nbBits, nbAddBits, nextState, baseVal)
 	}
