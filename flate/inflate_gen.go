@@ -63,7 +63,7 @@ readLiteral:
 						return
 					}
 					f.roffset++
-					b |= uint32(c) << (nb & 31)
+					b |= uint32(c) << (nb & regSizeMaskUint32)
 					nb += 8
 				}
 				chunk := f.hl.chunks[b&(huffmanNumChunks-1)]
@@ -82,7 +82,7 @@ readLiteral:
 						f.err = CorruptInputError(f.roffset)
 						return
 					}
-					f.b = b >> (n & 31)
+					f.b = b >> (n & regSizeMaskUint32)
 					f.nb = nb - n
 					v = int(chunk >> huffmanValueShift)
 					break
@@ -145,8 +145,8 @@ readLiteral:
 					return
 				}
 			}
-			length += int(f.b & uint32(1<<(n&31)-1))
-			f.b >>= n & 31
+			length += int(f.b & uint32(1<<(n&regSizeMaskUint32)-1))
+			f.b >>= n & regSizeMaskUint32
 			f.nb -= n
 		}
 
@@ -182,7 +182,7 @@ readLiteral:
 		case dist < maxNumDist:
 			nb := uint(dist-2) >> 1
 			// have 1 bit in bottom of dist, need nb more.
-			extra := (dist & 1) << (nb & 31)
+			extra := (dist & 1) << (nb & regSizeMaskUint32)
 			for f.nb < nb {
 				if err = f.moreBits(); err != nil {
 					if debugDecode {
@@ -192,10 +192,10 @@ readLiteral:
 					return
 				}
 			}
-			extra |= f.b & uint32(1<<(nb&31)-1)
-			f.b >>= nb & 31
+			extra |= f.b & uint32(1<<(nb&regSizeMaskUint32)-1)
+			f.b >>= nb & regSizeMaskUint32
 			f.nb -= nb
-			dist = 1<<((nb+1)&31) + 1 + extra
+			dist = 1<<((nb+1)&regSizeMaskUint32) + 1 + extra
 		default:
 			if debugDecode {
 				fmt.Println("dist too big:", dist, maxNumDist)
@@ -289,7 +289,7 @@ readLiteral:
 						return
 					}
 					f.roffset++
-					b |= uint32(c) << (nb & 31)
+					b |= uint32(c) << (nb & regSizeMaskUint32)
 					nb += 8
 				}
 				chunk := f.hl.chunks[b&(huffmanNumChunks-1)]
@@ -308,7 +308,7 @@ readLiteral:
 						f.err = CorruptInputError(f.roffset)
 						return
 					}
-					f.b = b >> (n & 31)
+					f.b = b >> (n & regSizeMaskUint32)
 					f.nb = nb - n
 					v = int(chunk >> huffmanValueShift)
 					break
@@ -371,8 +371,8 @@ readLiteral:
 					return
 				}
 			}
-			length += int(f.b & uint32(1<<(n&31)-1))
-			f.b >>= n & 31
+			length += int(f.b & uint32(1<<(n&regSizeMaskUint32)-1))
+			f.b >>= n & regSizeMaskUint32
 			f.nb -= n
 		}
 
@@ -408,7 +408,7 @@ readLiteral:
 		case dist < maxNumDist:
 			nb := uint(dist-2) >> 1
 			// have 1 bit in bottom of dist, need nb more.
-			extra := (dist & 1) << (nb & 31)
+			extra := (dist & 1) << (nb & regSizeMaskUint32)
 			for f.nb < nb {
 				if err = f.moreBits(); err != nil {
 					if debugDecode {
@@ -418,10 +418,10 @@ readLiteral:
 					return
 				}
 			}
-			extra |= f.b & uint32(1<<(nb&31)-1)
-			f.b >>= nb & 31
+			extra |= f.b & uint32(1<<(nb&regSizeMaskUint32)-1)
+			f.b >>= nb & regSizeMaskUint32
 			f.nb -= nb
-			dist = 1<<((nb+1)&31) + 1 + extra
+			dist = 1<<((nb+1)&regSizeMaskUint32) + 1 + extra
 		default:
 			if debugDecode {
 				fmt.Println("dist too big:", dist, maxNumDist)
@@ -515,7 +515,7 @@ readLiteral:
 						return
 					}
 					f.roffset++
-					b |= uint32(c) << (nb & 31)
+					b |= uint32(c) << (nb & regSizeMaskUint32)
 					nb += 8
 				}
 				chunk := f.hl.chunks[b&(huffmanNumChunks-1)]
@@ -534,7 +534,7 @@ readLiteral:
 						f.err = CorruptInputError(f.roffset)
 						return
 					}
-					f.b = b >> (n & 31)
+					f.b = b >> (n & regSizeMaskUint32)
 					f.nb = nb - n
 					v = int(chunk >> huffmanValueShift)
 					break
@@ -597,8 +597,8 @@ readLiteral:
 					return
 				}
 			}
-			length += int(f.b & uint32(1<<(n&31)-1))
-			f.b >>= n & 31
+			length += int(f.b & uint32(1<<(n&regSizeMaskUint32)-1))
+			f.b >>= n & regSizeMaskUint32
 			f.nb -= n
 		}
 
@@ -634,7 +634,7 @@ readLiteral:
 		case dist < maxNumDist:
 			nb := uint(dist-2) >> 1
 			// have 1 bit in bottom of dist, need nb more.
-			extra := (dist & 1) << (nb & 31)
+			extra := (dist & 1) << (nb & regSizeMaskUint32)
 			for f.nb < nb {
 				if err = f.moreBits(); err != nil {
 					if debugDecode {
@@ -644,10 +644,10 @@ readLiteral:
 					return
 				}
 			}
-			extra |= f.b & uint32(1<<(nb&31)-1)
-			f.b >>= nb & 31
+			extra |= f.b & uint32(1<<(nb&regSizeMaskUint32)-1)
+			f.b >>= nb & regSizeMaskUint32
 			f.nb -= nb
-			dist = 1<<((nb+1)&31) + 1 + extra
+			dist = 1<<((nb+1)&regSizeMaskUint32) + 1 + extra
 		default:
 			if debugDecode {
 				fmt.Println("dist too big:", dist, maxNumDist)
@@ -741,7 +741,7 @@ readLiteral:
 						return
 					}
 					f.roffset++
-					b |= uint32(c) << (nb & 31)
+					b |= uint32(c) << (nb & regSizeMaskUint32)
 					nb += 8
 				}
 				chunk := f.hl.chunks[b&(huffmanNumChunks-1)]
@@ -760,7 +760,7 @@ readLiteral:
 						f.err = CorruptInputError(f.roffset)
 						return
 					}
-					f.b = b >> (n & 31)
+					f.b = b >> (n & regSizeMaskUint32)
 					f.nb = nb - n
 					v = int(chunk >> huffmanValueShift)
 					break
@@ -823,8 +823,8 @@ readLiteral:
 					return
 				}
 			}
-			length += int(f.b & uint32(1<<(n&31)-1))
-			f.b >>= n & 31
+			length += int(f.b & uint32(1<<(n&regSizeMaskUint32)-1))
+			f.b >>= n & regSizeMaskUint32
 			f.nb -= n
 		}
 
@@ -860,7 +860,7 @@ readLiteral:
 		case dist < maxNumDist:
 			nb := uint(dist-2) >> 1
 			// have 1 bit in bottom of dist, need nb more.
-			extra := (dist & 1) << (nb & 31)
+			extra := (dist & 1) << (nb & regSizeMaskUint32)
 			for f.nb < nb {
 				if err = f.moreBits(); err != nil {
 					if debugDecode {
@@ -870,10 +870,10 @@ readLiteral:
 					return
 				}
 			}
-			extra |= f.b & uint32(1<<(nb&31)-1)
-			f.b >>= nb & 31
+			extra |= f.b & uint32(1<<(nb&regSizeMaskUint32)-1)
+			f.b >>= nb & regSizeMaskUint32
 			f.nb -= nb
-			dist = 1<<((nb+1)&31) + 1 + extra
+			dist = 1<<((nb+1)&regSizeMaskUint32) + 1 + extra
 		default:
 			if debugDecode {
 				fmt.Println("dist too big:", dist, maxNumDist)
