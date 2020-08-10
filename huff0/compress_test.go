@@ -265,6 +265,70 @@ func TestCompress1X(t *testing.T) {
 	}
 }
 
+func TestCompress1XMustReuse(t *testing.T) {
+	for _, test := range testfiles {
+		t.Run(test.name, func(t *testing.T) {
+			var s Scratch
+			buf0, err := test.fn()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(buf0) > BlockSizeMax {
+				buf0 = buf0[:BlockSizeMax]
+			}
+			b, re, err := Compress1X(buf0, &s)
+			if err != test.err1X {
+				t.Errorf("want error %v (%T), got %v (%T)", test.err1X, test.err1X, err, err)
+			}
+			if err != nil {
+				t.Log(test.name, err.Error())
+				return
+			}
+			if b == nil {
+				t.Error("got no output")
+				return
+			}
+
+			min := s.minSize(len(buf0))
+			if len(s.OutData) < min {
+				t.Errorf("output data length (%d) below shannon limit (%d)", len(s.OutData), min)
+			}
+			if len(s.OutTable) == 0 {
+				t.Error("got no table definition")
+			}
+			if re {
+				t.Error("claimed to have re-used.")
+			}
+			if len(s.OutData) == 0 {
+				t.Error("got no data output")
+			}
+			t.Logf("%s: %d -> %d bytes (%.2f:1) re:%t (table: %d bytes)", test.name, len(buf0), len(b), float64(len(buf0))/float64(len(b)), re, len(s.OutTable))
+			table := s.OutTable
+			b = s.OutData
+
+			s = Scratch{}
+			s2 := &s
+			s.Reuse = ReusePolicyMust
+			fmt.Println(len(table))
+			s2, _, err = ReadTable(table, s2)
+			if err != nil {
+				t.Error("Could not read table", err)
+				return
+			}
+			b2, reused, err := Compress1X(buf0, s2)
+			if err != nil {
+				t.Error("Could not re-compress with prev table", err)
+			}
+			if !reused {
+				t.Error("didn't reuse...")
+			}
+			if len(b2) != len(b) {
+				t.Errorf("recompressed to different size, want %d, got %d", len(b), len(b2))
+			}
+		})
+	}
+}
+
 func TestCompress4X(t *testing.T) {
 	for _, test := range testfiles {
 		t.Run(test.name, func(t *testing.T) {
