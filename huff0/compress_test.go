@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -304,16 +305,30 @@ func TestCompress1XMustReuse(t *testing.T) {
 			}
 			t.Logf("%s: %d -> %d bytes (%.2f:1) re:%t (table: %d bytes)", test.name, len(buf0), len(b), float64(len(buf0))/float64(len(b)), re, len(s.OutTable))
 			table := s.OutTable
+			prevTable := s.prevTable
+			for i, v := range prevTable {
+				// Clear unused sections for comparison
+				if v.nBits == 0 {
+					prevTable[i].val = 0
+				}
+			}
 			b = s.OutData
+			actl := s.actualTableLog
 
+			// Use only the table data to recompress.
 			s = Scratch{}
 			s2 := &s
 			s.Reuse = ReusePolicyMust
-			fmt.Println(len(table))
 			s2, _, err = ReadTable(table, s2)
 			if err != nil {
 				t.Error("Could not read table", err)
 				return
+			}
+			if !reflect.DeepEqual(prevTable, s2.prevTable) {
+				t.Errorf("prevtable mismatch.\ngot %v\nwant %v", s2.prevTable, prevTable)
+			}
+			if actl != s.actualTableLog {
+				t.Errorf("tablelog mismatch, want %d, got %d", actl, s.actualTableLog)
 			}
 			b2, reused, err := Compress1X(buf0, s2)
 			if err != nil {
@@ -321,9 +336,20 @@ func TestCompress1XMustReuse(t *testing.T) {
 			}
 			if !reused {
 				t.Error("didn't reuse...")
+				return
 			}
 			if len(b2) != len(b) {
 				t.Errorf("recompressed to different size, want %d, got %d", len(b), len(b2))
+				return
+			}
+
+			if !bytes.Equal(b, b2) {
+				for i := range b {
+					if b[i] != b2[i] {
+						t.Errorf("recompressed to different output. First mismatch at byte %d, (want %x != got %x)", i, b[i], b2[i])
+						return
+					}
+				}
 			}
 		})
 	}

@@ -144,6 +144,7 @@ func ReadTable(in []byte, s *Scratch) (s2 *Scratch, remain []byte, err error) {
 	}
 	cTable = cTable[:maxSymbolValue+1]
 	s.prevTable = cTable[:s.symbolLen]
+	s.prevTableLog = s.actualTableLog
 
 	for n, w := range s.huffWeight[:s.symbolLen] {
 		if w == 0 {
@@ -160,7 +161,7 @@ func ReadTable(in []byte, s *Scratch) (s2 *Scratch, remain []byte, err error) {
 
 		rank := &rankStats[w]
 		cTable[n] = cTableEntry{
-			val:   uint16(*rank),
+			val:   uint16(*rank >> (w - 1)),
 			nBits: uint8(d.entry),
 		}
 
