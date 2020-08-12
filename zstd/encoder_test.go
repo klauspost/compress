@@ -667,6 +667,34 @@ func TestEncoder_EncodeAllSilesia(t *testing.T) {
 	t.Log("Encoded content matched")
 }
 
+func TestEncoderReadFrom(t *testing.T) {
+	buffer := bytes.NewBuffer(nil)
+	encoder, err := NewWriter(buffer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := encoder.ReadFrom(strings.NewReader("0")); err != nil {
+		t.Fatal(err)
+	}
+	if err := encoder.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	dec, _ := NewReader(nil)
+	toDec := buffer.Bytes()
+	toDec = append(toDec, toDec...)
+	decoded, err := dec.DecodeAll(toDec, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal([]byte("00"), decoded) {
+		t.Logf("encoded: % x\n", buffer.Bytes())
+		t.Fatalf("output mismatch, got %s", string(decoded))
+	}
+	dec.Close()
+}
+
 func TestEncoder_EncodeAllEmpty(t *testing.T) {
 	if testing.Short() {
 		t.SkipNow()
