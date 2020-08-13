@@ -15,6 +15,8 @@ This package provides various compression algorithms.
 
 # changelog
 
+* July 8, 2020 (v1.10.11) zstd: Fix extra block when compressing with ReadFrom. [#278](https://github.com/klauspost/compress/pull/278)
+* July 6, 2020: huff0: Also populate compression table when reading decoding table. [#275](https://github.com/klauspost/compress/pull/275)
 * June 23, 2020 (v1.10.10) zstd: Skip entropy compression in fastest mode when no matches. [#270](https://github.com/klauspost/compress/pull/270)
 * June 16, 2020 (v1.10.9): zstd: API change for specifying dictionaries. See [#268](https://github.com/klauspost/compress/pull/268)
 * June 16, 2020: zip: update CreateHeaderRaw to handle zip64 fields. [#266](https://github.com/klauspost/compress/pull/266)
