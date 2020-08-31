@@ -35,7 +35,7 @@ type encoder interface {
 	AppendCRC([]byte) []byte
 	WindowSize(size int) int32
 	UseBlock(*blockEnc)
-	Reset(singleBlock bool)
+	Reset(d *dict, singleBlock bool)
 }
 
 type encoderState struct {
@@ -84,7 +84,7 @@ func (e *Encoder) initialize() {
 	for i := 0; i < e.o.concurrent; i++ {
 		enc := e.o.encoder()
 		// If not single block, history will be allocated on first use.
-		enc.Reset(true)
+		enc.Reset(e.o.dict, true)
 		e.encoders <- enc
 	}
 }
@@ -115,7 +115,7 @@ func (e *Encoder) Reset(w io.Writer) {
 	s.filling = s.filling[:0]
 	s.current = s.current[:0]
 	s.previous = s.previous[:0]
-	s.encoder.Reset(false)
+	s.encoder.Reset(e.o.dict, false)
 	s.headerWritten = false
 	s.eofWritten = false
 	s.fullFrameWritten = false
@@ -200,8 +200,9 @@ func (e *Encoder) nextBlock(final bool) error {
 			WindowSize:    uint32(s.encoder.WindowSize(0)),
 			SingleSegment: false,
 			Checksum:      e.o.crc,
-			DictID:        0,
+			DictID:        e.o.dict.ID(),
 		}
+
 		dst, err := fh.appendTo(tmp[:0])
 		if err != nil {
 			return err
@@ -450,7 +451,7 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 	defer func() {
 		// Release encoder reference to last block.
 		// If a non-single block is needed the encoder will reset again.
-		enc.Reset(true)
+		enc.Reset(e.o.dict, true)
 		e.encoders <- enc
 	}()
 	// Use single segments when above minimum window and below 1MB.
@@ -463,7 +464,7 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 		WindowSize:    uint32(enc.WindowSize(len(src))),
 		SingleSegment: single,
 		Checksum:      e.o.crc,
-		DictID:        0,
+		DictID:        e.o.dict.ID(),
 	}
 
 	// If less than 1MB, allocate a buffer up front.
@@ -483,7 +484,11 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 		}
 		blk := enc.Block()
 		blk.last = true
-		enc.EncodeNoHist(blk, src)
+		if e.o.dict == nil {
+			enc.EncodeNoHist(blk, src)
+		} else {
+			enc.Encode(blk, src)
+		}
 
 		// If we got the exact same number of literals as input,
 		// assume the literals cannot be compressed.
@@ -508,7 +513,7 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 		}
 		blk.output = oldout
 	} else {
-		enc.Reset(false)
+		enc.Reset(e.o.dict, false)
 		blk := enc.Block()
 		for len(src) > 0 {
 			todo := src

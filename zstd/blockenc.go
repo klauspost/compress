@@ -14,12 +14,13 @@ import (
 )
 
 type blockEnc struct {
-	size      int
-	literals  []byte
-	sequences []seq
-	coders    seqCoders
-	litEnc    *huff0.Scratch
-	wr        bitWriter
+	size       int
+	literals   []byte
+	sequences  []seq
+	coders     seqCoders
+	litEnc     *huff0.Scratch
+	dictLitEnc *huff0.Scratch
+	wr         bitWriter
 
 	extraLits int
 	last      bool
@@ -335,6 +336,11 @@ func (b *blockEnc) encodeLits(raw bool) error {
 		reUsed, single bool
 		err            error
 	)
+	if b.dictLitEnc != nil {
+		b.litEnc.TransferCTable(b.dictLitEnc)
+		b.litEnc.Reuse = huff0.ReusePolicyAllow
+		b.dictLitEnc = nil
+	}
 	if len(b.literals) >= 1024 {
 		// Use 4 Streams.
 		out, reUsed, err = huff0.Compress4X(b.literals, b.litEnc)
@@ -466,6 +472,11 @@ func (b *blockEnc) encode(raw, rawAllLits bool) error {
 		reUsed, single bool
 		err            error
 	)
+	if b.dictLitEnc != nil {
+		b.litEnc.TransferCTable(b.dictLitEnc)
+		b.litEnc.Reuse = huff0.ReusePolicyAllow
+		b.dictLitEnc = nil
+	}
 	if len(b.literals) >= 1024 && !raw {
 		// Use 4 Streams.
 		out, reUsed, err = huff0.Compress4X(b.literals, b.litEnc)
