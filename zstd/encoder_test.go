@@ -695,6 +695,48 @@ func TestEncoderReadFrom(t *testing.T) {
 	dec.Close()
 }
 
+func TestInterleavedWriteReadFrom(t *testing.T) {
+	var encoded bytes.Buffer
+
+	enc, err := NewWriter(&encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := enc.Write([]byte("write1")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := enc.Write([]byte("write2")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := enc.ReadFrom(strings.NewReader("readfrom1")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := enc.Write([]byte("write3")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := enc.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	dec, err := NewReader(&encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+
+	gotb, err := ioutil.ReadAll(dec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(gotb)
+
+	if want := "write1write2readfrom1write3"; got != want {
+		t.Errorf("got decoded %q, want %q", got, want)
+	}
+}
+
 func TestEncoder_EncodeAllEmpty(t *testing.T) {
 	if testing.Short() {
 		t.SkipNow()

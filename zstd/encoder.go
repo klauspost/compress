@@ -312,7 +312,13 @@ func (e *Encoder) ReadFrom(r io.Reader) (n int64, err error) {
 	if debug {
 		println("Using ReadFrom")
 	}
-	// Maybe handle stuff queued?
+
+	// Flush any current writes.
+	if len(e.state.filling) > 0 {
+		if err := e.nextBlock(false); err != nil {
+			return 0, err
+		}
+	}
 	e.state.filling = e.state.filling[:e.o.blockSize]
 	src := e.state.filling
 	for {
@@ -329,7 +335,7 @@ func (e *Encoder) ReadFrom(r io.Reader) (n int64, err error) {
 			if debug {
 				println("ReadFrom: got EOF final block:", len(e.state.filling))
 			}
-			return n, e.nextBlock(true)
+			return n, nil
 		default:
 			if debug {
 				println("ReadFrom: got error:", err)
