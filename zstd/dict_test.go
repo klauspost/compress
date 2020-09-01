@@ -107,7 +107,6 @@ func TestEncoder_SmallDict(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				defer enc.Close()
 				encs = append(encs, enc)
 				encNames = append(encNames, fmt.Sprint("level-", level.String(), "-dict-", len(dicts)))
 
@@ -116,7 +115,6 @@ func TestEncoder_SmallDict(t *testing.T) {
 					t.Fatal(err)
 				}
 				noDictEncs = append(noDictEncs, enc)
-				defer enc.Close()
 			}
 		}()
 	}
@@ -152,6 +150,7 @@ func TestEncoder_SmallDict(t *testing.T) {
 			var b []byte
 			var tmp []byte
 			for i := range encs {
+				i := i
 				t.Run(encNames[i], func(t *testing.T) {
 					b = encs[i].EncodeAll(decoded, b[:0])
 					tmp, err = dec.DecodeAll(in, tmp[:0])
@@ -164,10 +163,10 @@ func TestEncoder_SmallDict(t *testing.T) {
 
 					tmp = noDictEncs[i].EncodeAll(decoded, tmp[:0])
 
-					if strings.Contains(t.Name(), "dictplain") && strings.Contains(t.Name(), "dict-6") {
+					if strings.Contains(t.Name(), "dictplain") && strings.Contains(t.Name(), "dict-1") {
 						t.Log("reference:", len(in), "no dict:", len(tmp), "with dict:", len(b), "SAVED:", len(tmp)-len(b))
 						// Check that we reduced this significantly
-						if len(b) > 1000 {
+						if len(b) > 250 {
 							t.Error("output was bigger than expected")
 						}
 					}
@@ -178,6 +177,7 @@ func TestEncoder_SmallDict(t *testing.T) {
 			// Attempt to compress with all dicts
 			var tmp []byte
 			for i := range encs {
+				i := i
 				enc := encs[i]
 				t.Run(encNames[i], func(t *testing.T) {
 					var buf bytes.Buffer
@@ -197,13 +197,15 @@ func TestEncoder_SmallDict(t *testing.T) {
 					if !bytes.Equal(tmp, decoded) {
 						t.Fatal("output mismatch")
 					}
+					var buf2 bytes.Buffer
+					noDictEncs[i].Reset(&buf2)
+					noDictEncs[i].Write(decoded)
+					noDictEncs[i].Close()
 
-					tmp = noDictEncs[i].EncodeAll(decoded, tmp[:0])
-
-					if strings.Contains(t.Name(), "dictplain") && strings.Contains(t.Name(), "dict-6") {
-						t.Log("reference:", len(in), "no dict:", len(tmp), "with dict:", buf.Len(), "SAVED:", len(tmp)-buf.Len())
+					if strings.Contains(t.Name(), "dictplain") && strings.Contains(t.Name(), "dict-1") {
+						t.Log("reference:", len(in), "no dict:", buf2.Len(), "with dict:", buf.Len(), "SAVED:", buf2.Len()-buf.Len())
 						// Check that we reduced this significantly
-						if buf.Len() > 1000 {
+						if buf.Len() > 250 {
 							t.Error("output was bigger than expected")
 						}
 					}
