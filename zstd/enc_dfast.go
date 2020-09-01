@@ -694,11 +694,11 @@ func (e *doubleFastEncoder) Reset(d *dict, singleBlock bool) {
 			cv := load6432(d.content, 0)
 			e.dictLongTable[hash8(cv, dFastLongTableBits)] = tableEntry{
 				val:    uint32(cv),
-				offset: 0,
+				offset: e.maxMatchOff,
 			}
-
-			for i := int32(1); i < int32(len(d.content))-8; i++ {
-				cv = cv>>8 | (uint64(d.content[i+7]) << 56)
+			end := int32(len(d.content)) - 8 + e.maxMatchOff
+			for i := e.maxMatchOff + 1; i < end; i++ {
+				cv = cv>>8 | (uint64(d.content[i-e.maxMatchOff+7]) << 56)
 				e.dictLongTable[hash8(cv, dFastLongTableBits)] = tableEntry{
 					val:    uint32(cv),
 					offset: i,
@@ -708,5 +708,6 @@ func (e *doubleFastEncoder) Reset(d *dict, singleBlock bool) {
 		e.lastDictID = d.id
 	}
 	// Reset table to initial state
+	e.cur = e.maxMatchOff
 	copy(e.longTable[:], e.dictLongTable)
 }

@@ -530,10 +530,11 @@ func (e *betterFastEncoder) Reset(d *dict, singleBlock bool) {
 		if len(e.dictTable) != len(e.table) {
 			e.dictTable = make([]tableEntry, len(e.table))
 		}
-		for i := int32(0); i < int32(len(d.content))-8; i += 4 {
+		end := int32(len(d.content)) - 8 + e.maxMatchOff
+		for i := e.maxMatchOff; i < end; i += 4 {
 			const hashLog = betterShortTableBits
 
-			cv := load6432(d.content, int32(i))
+			cv := load6432(d.content, i-e.maxMatchOff)
 			nextHash := hash5(cv, hashLog)      // 0 -> 4
 			nextHash1 := hash5(cv>>8, hashLog)  // 1 -> 5
 			nextHash2 := hash5(cv>>16, hashLog) // 2 -> 6
@@ -567,17 +568,20 @@ func (e *betterFastEncoder) Reset(d *dict, singleBlock bool) {
 			cv := load6432(d.content, 0)
 			h := hash8(cv, betterLongTableBits)
 			e.dictLongTable[h] = prevEntry{
-				offset: 0,
+				offset: e.maxMatchOff,
 				prev:   e.dictLongTable[h].offset,
 			}
 
-			for i := int32(1); i < int32(len(d.content))-8; i++ {
-				cv = cv>>8 | (uint64(d.content[i+7]) << 56)
+			end := int32(len(d.content)) - 8 + e.maxMatchOff
+			off := 8 // First to read
+			for i := e.maxMatchOff + 1; i < end; i++ {
+				cv = cv>>8 | (uint64(d.content[off]) << 56)
 				h := hash8(cv, betterLongTableBits)
 				e.dictLongTable[h] = prevEntry{
 					offset: i,
 					prev:   e.dictLongTable[h].offset,
 				}
+				off++
 			}
 		}
 		e.lastDictID = d.id
@@ -585,7 +589,7 @@ func (e *betterFastEncoder) Reset(d *dict, singleBlock bool) {
 	// Reset table to initial state
 	copy(e.longTable[:], e.dictLongTable)
 
-	e.cur = 0
+	e.cur = e.maxMatchOff
 	// Reset table to initial state
 	copy(e.table[:], e.dictTable)
 }

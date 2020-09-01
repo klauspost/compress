@@ -630,10 +630,11 @@ func (e *fastEncoder) Reset(d *dict, singleBlock bool) {
 			e.dictTable = make([]tableEntry, len(e.table))
 		}
 		if true {
-			for i := int32(0); i < int32(len(d.content))-8; i += 3 {
+			end := e.maxMatchOff + int32(len(d.content)) - 8
+			for i := e.maxMatchOff; i < end; i += 3 {
 				const hashLog = tableBits
 
-				cv := load6432(d.content, int32(i))
+				cv := load6432(d.content, i-e.maxMatchOff)
 				nextHash := hash6(cv, hashLog)      // 0 -> 5
 				nextHash1 := hash6(cv>>8, hashLog)  // 1 -> 6
 				nextHash2 := hash6(cv>>16, hashLog) // 2 -> 7
@@ -654,7 +655,7 @@ func (e *fastEncoder) Reset(d *dict, singleBlock bool) {
 		e.lastDictID = d.id
 	}
 
-	e.cur = 0
+	e.cur = e.maxMatchOff
 	// Reset table to initial state
 	copy(e.table[:], e.dictTable)
 }
