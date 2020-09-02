@@ -262,8 +262,6 @@ func BenchmarkEncodeAllDict(b *testing.B) {
 				noDictEncs = append(noDictEncs, enc)
 			}
 		}()
-		// Only do dict 0
-		break
 	}
 	dec, err := NewReader(nil, WithDecoderConcurrency(1), WithDecoderDicts(dicts...))
 	if err != nil {
@@ -293,6 +291,10 @@ func BenchmarkEncodeAllDict(b *testing.B) {
 			t.Fatal(err)
 		}
 		for i := range encs {
+			// Only do 1 dict (3 encoders) for now.
+			if i == 3 {
+				break
+			}
 			// Attempt to compress with all dicts
 			var dst []byte
 			enc := encs[i]
