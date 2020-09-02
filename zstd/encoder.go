@@ -83,8 +83,6 @@ func (e *Encoder) initialize() {
 	e.encoders = make(chan encoder, e.o.concurrent)
 	for i := 0; i < e.o.concurrent; i++ {
 		enc := e.o.encoder()
-		// If not single block, history will be allocated on first use.
-		enc.Reset(e.o.dict, true)
 		e.encoders <- enc
 	}
 }
@@ -457,7 +455,6 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 	defer func() {
 		// Release encoder reference to last block.
 		// If a non-single block is needed the encoder will reset again.
-		enc.Reset(e.o.dict, true)
 		e.encoders <- enc
 	}()
 	// Use single segments when above minimum window and below 1MB.
@@ -484,6 +481,7 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 
 	// If we can do everything in one block, prefer that.
 	if len(src) <= maxCompressedBlockSize {
+		enc.Reset(e.o.dict, true)
 		// Slightly faster with no history and everything in one block.
 		if e.o.crc {
 			_, _ = enc.CRC().Write(src)
@@ -530,7 +528,6 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 			if e.o.crc {
 				_, _ = enc.CRC().Write(todo)
 			}
-			blk.reset(nil)
 			blk.pushOffsets()
 			enc.Encode(blk, todo)
 			if len(src) == 0 {
@@ -555,6 +552,7 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 			default:
 				panic(err)
 			}
+			blk.reset(nil)
 		}
 	}
 	if e.o.crc {

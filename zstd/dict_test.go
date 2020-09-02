@@ -215,6 +215,99 @@ func TestEncoder_SmallDict(t *testing.T) {
 	}
 }
 
+func BenchmarkEncodeAllDict(b *testing.B) {
+	fn := "testdata/dict-tests-small.zip"
+	data, err := ioutil.ReadFile(fn)
+	t := testing.TB(b)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dicts [][]byte
+	var encs []*Encoder
+	var noDictEncs []*Encoder
+	var encNames []string
+
+	for _, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, ".dict") {
+			continue
+		}
+		func() {
+			r, err := tt.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer r.Close()
+			in, err := ioutil.ReadAll(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			dicts = append(dicts, in)
+			for level := SpeedFastest; level < speedLast; level++ {
+				enc, err := NewWriter(nil, WithEncoderConcurrency(1), WithEncoderDict(in), WithEncoderLevel(level), WithWindowSize(1<<17))
+				if err != nil {
+					t.Fatal(err)
+				}
+				encs = append(encs, enc)
+				encNames = append(encNames, fmt.Sprint("level-", level.String(), "-dict-", len(dicts)))
+
+				enc, err = NewWriter(nil, WithEncoderConcurrency(1), WithEncoderLevel(level), WithWindowSize(1<<17))
+				if err != nil {
+					t.Fatal(err)
+				}
+				noDictEncs = append(noDictEncs, enc)
+			}
+		}()
+		// Only do dict 0
+		break
+	}
+	dec, err := NewReader(nil, WithDecoderConcurrency(1), WithDecoderDicts(dicts...))
+	if err != nil {
+		t.Fatal(err)
+		return
+	}
+	defer dec.Close()
+
+	for i, tt := range zr.File {
+		if i == 5 {
+			break
+		}
+		if !strings.HasSuffix(tt.Name, ".zst") {
+			continue
+		}
+		r, err := tt.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer r.Close()
+		in, err := ioutil.ReadAll(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded, err := dec.DecodeAll(in, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := range encs {
+			// Attempt to compress with all dicts
+			var dst []byte
+			enc := encs[i]
+			b.Run(fmt.Sprintf("length-%d-%s", len(decoded), encNames[i]), func(b *testing.B) {
+				b.SetBytes(int64(len(decoded)))
+				b.ResetTimer()
+				b.ReportAllocs()
+				for i := 0; i < b.N; i++ {
+					dst = enc.EncodeAll(decoded, dst[:0])
+				}
+			})
+		}
+	}
+}
+
 func TestDecoder_MoreDicts(t *testing.T) {
 	// All files have CRC
 	// https://files.klauspost.com/compress/zstd-dict-tests.zip

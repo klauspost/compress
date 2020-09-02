@@ -128,7 +128,7 @@ func (e *fastBase) resetBase(d *dict, singleBlock bool) {
 	} else {
 		e.crc.Reset()
 	}
-	if !singleBlock && cap(e.hist) < int(e.maxMatchOff*2)+d.DictContentSize() || d.DictContentSize() > 0 {
+	if (!singleBlock || d.DictContentSize() > 0) && cap(e.hist) < int(e.maxMatchOff*2)+d.DictContentSize() {
 		l := e.maxMatchOff*2 + int32(d.DictContentSize())
 		// Make it at least 1MB.
 		if l < 1<<20 {
