@@ -308,6 +308,14 @@ and it will likely be used even if it doesn't improve compression.
 
 The used dictionary must be used to decompress the content.
 
+For any real gains, the dictionary should be built with similar data. 
+If an unsuitable dictionary is used the output may be slightly larger than using no dictionary.
+Use the [zstd commandline tool](https://github.com/facebook/zstd/releases) to build a dictionary from sample data.
+For information see [zstd dictionary information](https://github.com/facebook/zstd#the-case-for-small-data-compression). 
+
+For now there is a fixed startup performance penalty for compressing content with dictionaries. 
+This will likely be improved over time. Just be aware to test performance when implementing.  
+
 ### Allocation-less operation
 
 The decoder has been designed to operate without allocations after a warmup. 
