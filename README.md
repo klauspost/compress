@@ -15,6 +15,11 @@ This package provides various compression algorithms.
 
 # changelog
 
+* v1.11.0 Sept 8, 2020:
+    * zstd: Add experimental compression dictionaries [#281](https://github.com/klauspost/compress/pull/281)
+    * zstd: Fix mixed Write and ReadFrom calls [#282](https://github.com/klauspost/compress/pull/282)
+    * inflate/gz: Limit variable shifts, ~5% faster decompression [#274](https://github.com/klauspost/compress/pull/274)
+    
 * July 8, 2020 (v1.10.11) zstd: Fix extra block when compressing with ReadFrom. [#278](https://github.com/klauspost/compress/pull/278)
 * July 6, 2020: huff0: Also populate compression table when reading decoding table. [#275](https://github.com/klauspost/compress/pull/275)
 * June 23, 2020 (v1.10.10) zstd: Skip entropy compression in fastest mode when no matches. [#270](https://github.com/klauspost/compress/pull/270)
