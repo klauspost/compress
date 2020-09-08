@@ -16,38 +16,60 @@ This package provides various compression algorithms.
 # changelog
 
 * v1.11.0 Sept 8, 2020:
-    * zstd: Add experimental compression [dictionaries](https://github.com/klauspost/compress/tree/master/zstd#dictionaries) [#281](https://github.com/klauspost/compress/pull/281)
-    * zstd: Fix mixed Write and ReadFrom calls [#282](https://github.com/klauspost/compress/pull/282)
-    * inflate/gz: Limit variable shifts, ~5% faster decompression [#274](https://github.com/klauspost/compress/pull/274)
+	* zstd: Add experimental compression [dictionaries](https://github.com/klauspost/compress/tree/master/zstd#dictionaries) [#281](https://github.com/klauspost/compress/pull/281)
+	* zstd: Fix mixed Write and ReadFrom calls [#282](https://github.com/klauspost/compress/pull/282)
+	* inflate/gz: Limit variable shifts, ~5% faster decompression [#274](https://github.com/klauspost/compress/pull/274)
     
-* July 8, 2020 (v1.10.11) zstd: Fix extra block when compressing with ReadFrom. [#278](https://github.com/klauspost/compress/pull/278)
-* July 6, 2020: huff0: Also populate compression table when reading decoding table. [#275](https://github.com/klauspost/compress/pull/275)
-* June 23, 2020 (v1.10.10) zstd: Skip entropy compression in fastest mode when no matches. [#270](https://github.com/klauspost/compress/pull/270)
-* June 16, 2020 (v1.10.9): zstd: API change for specifying dictionaries. See [#268](https://github.com/klauspost/compress/pull/268)
-* June 16, 2020: zip: update CreateHeaderRaw to handle zip64 fields. [#266](https://github.com/klauspost/compress/pull/266)
-* June 16, 2020: Fuzzit tests removed. The service has been purchased and is no longer available.
-* June 5, 2020 (v1.10.8): 1.15x faster zstd block decompression. [#265](https://github.com/klauspost/compress/pull/265)
-* June 1, 2020 (v1.10.7): Added zstd decompression [dictionary support](https://github.com/klauspost/compress/tree/master/zstd#dictionaries)
-* June 1, 2020: Increase zstd decompression speed up to 1.19x.  [#259](https://github.com/klauspost/compress/pull/259)
-* June 1, 2020: Remove internal reset call in zstd compression and reduce allocations. [#263](https://github.com/klauspost/compress/pull/263)
-* May 21, 2020: (v1.10.6) zstd: Reduce allocations while decoding. [#258](https://github.com/klauspost/compress/pull/258), [#252](https://github.com/klauspost/compress/pull/252)
-* May 21, 2020: zstd: Stricter decompression checks.
-* April 12, 2020: (v1.10.5) s2-commands: Flush output when receiving SIGINT. [#239](https://github.com/klauspost/compress/pull/239)
-* Apr 8, 2020: (v1.10.4) zstd: Minor/special case optimizations. [#251](https://github.com/klauspost/compress/pull/251),  [#250](https://github.com/klauspost/compress/pull/250),  [#249](https://github.com/klauspost/compress/pull/249),  [#247](https://github.com/klauspost/compress/pull/247)
-* Mar 11, 2020: (v1.10.3) s2: Use S2 encoder in pure Go mode for Snappy output as well. [#245](https://github.com/klauspost/compress/pull/245)
-* Mar 10, 2020: s2: Fix pure Go block encoder. [#244](https://github.com/klauspost/compress/pull/244)
-* Mar 9, 2020: zstd: Added "better compression" mode. [#240](https://github.com/klauspost/compress/pull/240)
-* Mar 9, 2020: zstd: Improve speed of fastest compression mode by 5-10% [#241](https://github.com/klauspost/compress/pull/241)
-* Feb 28, 2020: zstd: Skip creating encoders when not needed. [#238](https://github.com/klauspost/compress/pull/238)
-* Feb 27, 2020: (v1.10.2) Close to 50% speedup in inflate (gzip/zip decompression). [#236](https://github.com/klauspost/compress/pull/236) [#234](https://github.com/klauspost/compress/pull/234) [#232](https://github.com/klauspost/compress/pull/232)
-* Feb 23, 2020: Reduce deflate level 1-6 memory usage up to 59%. [#227](https://github.com/klauspost/compress/pull/227)
-* Feb 18, 2020: (v1.10.1) Fix zstd crash when resetting multiple times without sending data. [#226](https://github.com/klauspost/compress/pull/226)
-* Feb 16, 2020: deflate: Fix dictionary use on level 1-6. [#224](https://github.com/klauspost/compress/pull/224)
-* Feb 16, 2020: Remove deflate writer reference when closing. [#224](https://github.com/klauspost/compress/pull/224)
-* Feb 4, 2020: (v1.10.0) Add optional dictionary to [stateless deflate](https://pkg.go.dev/github.com/klauspost/compress/flate?tab=doc#StatelessDeflate). Breaking change, send `nil` for previous behaviour. [#216](https://github.com/klauspost/compress/pull/216)
-* Feb 3, 2020: Fix buffer overflow on repeated small block deflate.  [#218](https://github.com/klauspost/compress/pull/218)
-* Jan 31, 2020: Allow copying content from an existing ZIP file without decompressing+compressing. [#214](https://github.com/klauspost/compress/pull/214)
-* Jan 28, 2020: Added [S2](https://github.com/klauspost/compress/tree/master/s2#s2-compression) AMD64 assembler and various optimizations. Stream speed >10GB/s.  [#186](https://github.com/klauspost/compress/pull/186)
+* July 8, 2020 (v1.10.11) 
+	* zstd: Fix extra block when compressing with ReadFrom. [#278](https://github.com/klauspost/compress/pull/278)
+	* huff0: Also populate compression table when reading decoding table. [#275](https://github.com/klauspost/compress/pull/275)
+	
+* June 23, 2020 (v1.10.10) 
+	* zstd: Skip entropy compression in fastest mode when no matches. [#270](https://github.com/klauspost/compress/pull/270)
+	
+* June 16, 2020 (v1.10.9): 
+	* zstd: API change for specifying dictionaries. See [#268](https://github.com/klauspost/compress/pull/268)
+	* zip: update CreateHeaderRaw to handle zip64 fields. [#266](https://github.com/klauspost/compress/pull/266)
+	* Fuzzit tests removed. The service has been purchased and is no longer available.
+	
+* June 5, 2020 (v1.10.8): 
+	* 1.15x faster zstd block decompression. [#265](https://github.com/klauspost/compress/pull/265)
+	
+* June 1, 2020 (v1.10.7): 
+	* Added zstd decompression [dictionary support](https://github.com/klauspost/compress/tree/master/zstd#dictionaries)
+	* Increase zstd decompression speed up to 1.19x.  [#259](https://github.com/klauspost/compress/pull/259)
+	* Remove internal reset call in zstd compression and reduce allocations. [#263](https://github.com/klauspost/compress/pull/263)
+	
+* May 21, 2020: (v1.10.6) 
+	* zstd: Reduce allocations while decoding. [#258](https://github.com/klauspost/compress/pull/258), [#252](https://github.com/klauspost/compress/pull/252)
+	* zstd: Stricter decompression checks.
+	
+* April 12, 2020: (v1.10.5)
+	* s2-commands: Flush output when receiving SIGINT. [#239](https://github.com/klauspost/compress/pull/239)
+	
+* Apr 8, 2020: (v1.10.4) 
+	* zstd: Minor/special case optimizations. [#251](https://github.com/klauspost/compress/pull/251),  [#250](https://github.com/klauspost/compress/pull/250),  [#249](https://github.com/klauspost/compress/pull/249),  [#247](https://github.com/klauspost/compress/pull/247)
+* Mar 11, 2020: (v1.10.3) 
+	* s2: Use S2 encoder in pure Go mode for Snappy output as well. [#245](https://github.com/klauspost/compress/pull/245)
+	* s2: Fix pure Go block encoder. [#244](https://github.com/klauspost/compress/pull/244)
+	* zstd: Added "better compression" mode. [#240](https://github.com/klauspost/compress/pull/240)
+	* zstd: Improve speed of fastest compression mode by 5-10% [#241](https://github.com/klauspost/compress/pull/241)
+	* zstd: Skip creating encoders when not needed. [#238](https://github.com/klauspost/compress/pull/238)
+	
+* Feb 27, 2020: (v1.10.2) 
+	* Close to 50% speedup in inflate (gzip/zip decompression). [#236](https://github.com/klauspost/compress/pull/236) [#234](https://github.com/klauspost/compress/pull/234) [#232](https://github.com/klauspost/compress/pull/232)
+	* Reduce deflate level 1-6 memory usage up to 59%. [#227](https://github.com/klauspost/compress/pull/227)
+	
+* Feb 18, 2020: (v1.10.1)
+	* Fix zstd crash when resetting multiple times without sending data. [#226](https://github.com/klauspost/compress/pull/226)
+	* deflate: Fix dictionary use on level 1-6. [#224](https://github.com/klauspost/compress/pull/224)
+	* Remove deflate writer reference when closing. [#224](https://github.com/klauspost/compress/pull/224)
+	
+* Feb 4, 2020: (v1.10.0) 
+	* Add optional dictionary to [stateless deflate](https://pkg.go.dev/github.com/klauspost/compress/flate?tab=doc#StatelessDeflate). Breaking change, send `nil` for previous behaviour. [#216](https://github.com/klauspost/compress/pull/216)
+	* Fix buffer overflow on repeated small block deflate.  [#218](https://github.com/klauspost/compress/pull/218)
+	* Allow copying content from an existing ZIP file without decompressing+compressing. [#214](https://github.com/klauspost/compress/pull/214)
+	* Added [S2](https://github.com/klauspost/compress/tree/master/s2#s2-compression) AMD64 assembler and various optimizations. Stream speed >10GB/s.  [#186](https://github.com/klauspost/compress/pull/186)
 
 <details>
 	<summary>See changes prior to v1.10.0</summary>
