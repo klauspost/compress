@@ -15,7 +15,10 @@ This package provides various compression algorithms.
 
 # changelog
 
-* v1.11.0 Sept 8, 2020:
+* Oct 1, 2020 (v1.11.1)
+	* zstd: Set allLitEntropy true in default configuration [#286](https://github.com/klauspost/compress/pull/286)
+
+* Sept 8, 2020 (v1.11.0)
 	* zstd: Add experimental compression [dictionaries](https://github.com/klauspost/compress/tree/master/zstd#dictionaries) [#281](https://github.com/klauspost/compress/pull/281)
 	* zstd: Fix mixed Write and ReadFrom calls [#282](https://github.com/klauspost/compress/pull/282)
 	* inflate/gz: Limit variable shifts, ~5% faster decompression [#274](https://github.com/klauspost/compress/pull/274)
