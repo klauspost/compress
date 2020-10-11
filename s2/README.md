@@ -90,7 +90,7 @@ If you need to write several blocks, you should use the regular io.Writer interf
 ## Decompression
 
 ```Go
-func DecodeStream(src io.Reader, dst io.Writer) error        
+func DecodeStream(src io.Reader, dst io.Writer) error {
     dec := s2.NewReader(src)
     _, err := io.Copy(dst, dec)
     return err
