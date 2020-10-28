@@ -14,6 +14,8 @@ This package provides various compression algorithms.
 [![Sourcegraph Badge](https://sourcegraph.com/github.com/klauspost/compress/-/badge.svg)](https://sourcegraph.com/github.com/klauspost/compress?badge)
 
 # changelog
+* Oct 11, 2020 (v1.11.1)
+	s2: Fix out of bounds read in "better" block compression.
 
 * Oct 1, 2020 (v1.11.1)
 	* zstd: Set allLitEntropy true in default configuration [#286](https://github.com/klauspost/compress/pull/286)
