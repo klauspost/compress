@@ -183,6 +183,9 @@ func encodeBlockBetter(dst, src []byte) (d int) {
 		if offset > 65535 && s-base <= 5 {
 			// Bail if the match is equal or worse to the encoding.
 			s = base + 3
+			if s >= sLimit {
+				goto emitRemainder
+			}
 			cv = load64(src, s)
 			continue
 		}
