@@ -14,7 +14,7 @@ This package provides various compression algorithms.
 [![Sourcegraph Badge](https://sourcegraph.com/github.com/klauspost/compress/-/badge.svg)](https://sourcegraph.com/github.com/klauspost/compress?badge)
 
 # changelog
-* Oct 11, 2020 (v1.11.1)
+* Oct 11, 2020 (v1.11.2)
 	* s2: Fix out of bounds read in "better" block compression.
 
 * Oct 1, 2020 (v1.11.1)
