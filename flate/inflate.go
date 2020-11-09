@@ -29,7 +29,7 @@ const (
 	debugDecode = false
 )
 
-// Encoded value to length (9 bits) and extra bits (4 bits)
+// Value of length - 3 and extra bits.
 type lengthExtra struct {
 	length, extra uint8
 }
