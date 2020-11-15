@@ -14,8 +14,13 @@ This package provides various compression algorithms.
 [![Sourcegraph Badge](https://sourcegraph.com/github.com/klauspost/compress/-/badge.svg)](https://sourcegraph.com/github.com/klauspost/compress?badge)
 
 # changelog
+
+* Nov 15, 2020 (v1.11.3)
+	* inflate: 10-15% faster decompression  [#293](https://github.com/klauspost/compress/pull/293)
+	* zstd: Tweak DecodeAll default allocation [#295](https://github.com/klauspost/compress/pull/295)
+
 * Oct 11, 2020 (v1.11.2)
-	* s2: Fix out of bounds read in "better" block compression.
+	* s2: Fix out of bounds read in "better" block compression [#291](https://github.com/klauspost/compress/pull/291)
 
 * Oct 1, 2020 (v1.11.1)
 	* zstd: Set allLitEntropy true in default configuration [#286](https://github.com/klauspost/compress/pull/286)
