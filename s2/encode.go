@@ -278,6 +278,7 @@ type Writer struct {
 	wroteStreamHeader bool
 	paramsOK          bool
 	better            bool
+	uncompressed      bool
 }
 
 type result []byte
@@ -482,7 +483,7 @@ func (w *Writer) EncodeBuffer(buf []byte) (err error) {
 			var n2 int
 			if w.better {
 				n2 = encodeBlockBetter(obuf[obufHeaderLen+n:], uncompressed)
-			} else {
+			} else if !w.uncompressed {
 				n2 = encodeBlock(obuf[obufHeaderLen+n:], uncompressed)
 			}
 
@@ -559,7 +560,7 @@ func (w *Writer) write(p []byte) (nRet int, errRet error) {
 			var n2 int
 			if w.better {
 				n2 = encodeBlockBetter(obuf[obufHeaderLen+n:], uncompressed)
-			} else {
+			} else if !w.uncompressed {
 				n2 = encodeBlock(obuf[obufHeaderLen+n:], uncompressed)
 			}
 
@@ -635,7 +636,7 @@ func (w *Writer) writeFull(inbuf []byte) (errRet error) {
 		var n2 int
 		if w.better {
 			n2 = encodeBlockBetter(obuf[obufHeaderLen+n:], uncompressed)
-		} else {
+		} else if !w.uncompressed {
 			n2 = encodeBlock(obuf[obufHeaderLen+n:], uncompressed)
 		}
 
@@ -704,7 +705,7 @@ func (w *Writer) writeSync(p []byte) (nRet int, errRet error) {
 		var n2 int
 		if w.better {
 			n2 = encodeBlockBetter(obuf[obufHeaderLen+n:], uncompressed)
-		} else {
+		} else if !w.uncompressed {
 			n2 = encodeBlock(obuf[obufHeaderLen+n:], uncompressed)
 		}
 
@@ -877,7 +878,19 @@ func WriterConcurrency(n int) WriterOption {
 // 10-40% speed decrease on both compression and decompression.
 func WriterBetterCompression() WriterOption {
 	return func(w *Writer) error {
+		w.uncompressed = false
 		w.better = true
+		return nil
+	}
+}
+
+// WriterUncompressed will bypass compression.
+// The stream will be written as uncompressed blocks only.
+// If concurrency is > 1 CRC and output will still be done async.
+func WriterUncompressed() WriterOption {
+	return func(w *Writer) error {
+		w.better = false
+		w.uncompressed = true
 		return nil
 	}
 }

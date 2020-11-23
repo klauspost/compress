@@ -16,6 +16,44 @@ import (
 	"github.com/klauspost/compress/zip"
 )
 
+var testOptions = map[string][]WriterOption{
+	"default": {},
+	"better":  {WriterBetterCompression()},
+	"none":    {WriterUncompressed()},
+}
+
+func init() {
+	x := make(map[string][]WriterOption)
+	cloneAdd := func(org []WriterOption, add WriterOption) []WriterOption {
+		y := make([]WriterOption, len(org)+1)
+		copy(y, org)
+		y[len(org)] = add
+		return y
+	}
+	for name, opt := range testOptions {
+		x[name] = opt
+		x[name+"-c1"] = cloneAdd(opt, WriterConcurrency(1))
+		x[name+"-c4"] = cloneAdd(opt, WriterConcurrency(4))
+	}
+	testOptions = x
+	x = make(map[string][]WriterOption)
+	for name, opt := range testOptions {
+		x[name] = opt
+		x[name+"-1k-win"] = cloneAdd(opt, WriterBlockSize(1<<10))
+		x[name+"-4M-win"] = cloneAdd(opt, WriterBlockSize(4<<20))
+	}
+	testOptions = x
+	x = make(map[string][]WriterOption)
+	for name, opt := range testOptions {
+		x[name] = opt
+		x[name+"-pad-2"] = cloneAdd(opt, WriterPadding(2))
+		x[name+"-pad-8000"] = cloneAdd(opt, WriterPadding(8000))
+		x[name+"-pad-1m"] = cloneAdd(opt, WriterPadding(1e6))
+		x[name+"-pad-max"] = cloneAdd(opt, WriterPadding(4<<20))
+	}
+	testOptions = x
+}
+
 func TestEncoderRegression(t *testing.T) {
 	data, err := ioutil.ReadFile("testdata/enc_regressions.zip")
 	if err != nil {
@@ -27,107 +65,112 @@ func TestEncoderRegression(t *testing.T) {
 	}
 	// Same as fuzz test...
 	test := func(t *testing.T, data []byte) {
-		dec := NewReader(nil)
-		enc := NewWriter(nil, WriterConcurrency(2), WriterPadding(255), WriterBlockSize(128<<10))
-		encBetter := NewWriter(nil, WriterConcurrency(2), WriterPadding(255), WriterBetterCompression(), WriterBlockSize(512<<10))
+		for name, opts := range testOptions {
+			t.Run(name, func(t *testing.T) {
+				dec := NewReader(nil)
+				enc := NewWriter(nil, opts...)
 
-		comp := Encode(make([]byte, MaxEncodedLen(len(data))), data)
-		decoded, err := Decode(nil, comp)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		if !bytes.Equal(data, decoded) {
-			t.Error("block decoder mismatch")
-			return
-		}
-		if mel := MaxEncodedLen(len(data)); len(comp) > mel {
-			t.Error(fmt.Errorf("MaxEncodedLen Exceed: input: %d, mel: %d, got %d", len(data), mel, len(comp)))
-			return
-		}
-		comp = EncodeBetter(make([]byte, MaxEncodedLen(len(data))), data)
-		decoded, err = Decode(nil, comp)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		if !bytes.Equal(data, decoded) {
-			t.Error("block decoder mismatch")
-			return
-		}
-		if mel := MaxEncodedLen(len(data)); len(comp) > mel {
-			t.Error(fmt.Errorf("MaxEncodedLen Exceed: input: %d, mel: %d, got %d", len(data), mel, len(comp)))
-			return
-		}
-		// Test writer and use "better":
-		var buf bytes.Buffer
-		encBetter.Reset(&buf)
-		n, err := encBetter.Write(data)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		if n != len(data) {
-			t.Error(fmt.Errorf("Write: Short write, want %d, got %d", len(data), n))
-			return
-		}
-		err = encBetter.Close()
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		// Calling close twice should not affect anything.
-		err = encBetter.Close()
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		comp = buf.Bytes()
-		if len(comp)%255 != 0 {
-			t.Error(fmt.Errorf("wanted size to be mutiple of %d, got size %d with remainder %d", 255, len(comp), len(comp)%255))
-			return
-		}
-		dec.Reset(&buf)
-		got, err := ioutil.ReadAll(dec)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		if !bytes.Equal(data, got) {
-			t.Error("block (reset) decoder mismatch")
-			return
-		}
-		// Test Reset on both and use ReadFrom instead.
-		input := bytes.NewBuffer(data)
-		buf = bytes.Buffer{}
-		enc.Reset(&buf)
-		n2, err := enc.ReadFrom(input)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		if n2 != int64(len(data)) {
-			t.Error(fmt.Errorf("ReadFrom: Short read, want %d, got %d", len(data), n2))
-			return
-		}
-		err = enc.Close()
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		if buf.Len()%255 != 0 {
-			t.Error(fmt.Errorf("wanted size to be mutiple of %d, got size %d with remainder %d", 255, buf.Len(), buf.Len()%255))
-			return
-		}
-		dec.Reset(&buf)
-		got, err = ioutil.ReadAll(dec)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		if !bytes.Equal(data, got) {
-			t.Error("frame (reset) decoder mismatch")
-			return
+				comp := Encode(make([]byte, MaxEncodedLen(len(data))), data)
+				decoded, err := Decode(nil, comp)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				if !bytes.Equal(data, decoded) {
+					t.Error("block decoder mismatch")
+					return
+				}
+				if mel := MaxEncodedLen(len(data)); len(comp) > mel {
+					t.Error(fmt.Errorf("MaxEncodedLen Exceed: input: %d, mel: %d, got %d", len(data), mel, len(comp)))
+					return
+				}
+				comp = EncodeBetter(make([]byte, MaxEncodedLen(len(data))), data)
+				decoded, err = Decode(nil, comp)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				if !bytes.Equal(data, decoded) {
+					t.Error("block decoder mismatch")
+					return
+				}
+				if mel := MaxEncodedLen(len(data)); len(comp) > mel {
+					t.Error(fmt.Errorf("MaxEncodedLen Exceed: input: %d, mel: %d, got %d", len(data), mel, len(comp)))
+					return
+				}
+
+				// Test writer.
+				var buf bytes.Buffer
+				enc.Reset(&buf)
+				n, err := enc.Write(data)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				if n != len(data) {
+					t.Error(fmt.Errorf("Write: Short write, want %d, got %d", len(data), n))
+					return
+				}
+				err = enc.Close()
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				// Calling close twice should not affect anything.
+				err = enc.Close()
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				comp = buf.Bytes()
+				if enc.pad > 0 && len(comp)%enc.pad != 0 {
+					t.Error(fmt.Errorf("wanted size to be mutiple of %d, got size %d with remainder %d", enc.pad, len(comp), len(comp)%enc.pad))
+					return
+				}
+				dec.Reset(&buf)
+				got, err := ioutil.ReadAll(dec)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				if !bytes.Equal(data, got) {
+					t.Error("block (reset) decoder mismatch")
+					return
+				}
+
+				// Test Reset on both and use ReadFrom instead.
+				input := bytes.NewBuffer(data)
+				buf = bytes.Buffer{}
+				enc.Reset(&buf)
+				n2, err := enc.ReadFrom(input)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				if n2 != int64(len(data)) {
+					t.Error(fmt.Errorf("ReadFrom: Short read, want %d, got %d", len(data), n2))
+					return
+				}
+				err = enc.Close()
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				if enc.pad > 0 && buf.Len()%enc.pad != 0 {
+					t.Error(fmt.Errorf("wanted size to be mutiple of %d, got size %d with remainder %d", enc.pad, buf.Len(), buf.Len()%enc.pad))
+					return
+				}
+				dec.Reset(&buf)
+				got, err = ioutil.ReadAll(dec)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				if !bytes.Equal(data, got) {
+					t.Error("frame (reset) decoder mismatch")
+					return
+				}
+			})
 		}
 	}
 	for _, tt := range zr.File {
