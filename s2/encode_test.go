@@ -16,13 +16,13 @@ import (
 	"github.com/klauspost/compress/zip"
 )
 
-var testOptions = map[string][]WriterOption{
-	"default": {},
-	"better":  {WriterBetterCompression()},
-	"none":    {WriterUncompressed()},
-}
+func testOptions(t *testing.T) map[string][]WriterOption {
+	var testOptions = map[string][]WriterOption{
+		"default": {},
+		"better":  {WriterBetterCompression()},
+		"none":    {WriterUncompressed()},
+	}
 
-func init() {
 	x := make(map[string][]WriterOption)
 	cloneAdd := func(org []WriterOption, add WriterOption) []WriterOption {
 		y := make([]WriterOption, len(org)+1)
@@ -33,25 +33,32 @@ func init() {
 	for name, opt := range testOptions {
 		x[name] = opt
 		x[name+"-c1"] = cloneAdd(opt, WriterConcurrency(1))
-		x[name+"-c4"] = cloneAdd(opt, WriterConcurrency(4))
+		if !testing.Short() {
+			x[name+"-c4"] = cloneAdd(opt, WriterConcurrency(4))
+		}
 	}
 	testOptions = x
 	x = make(map[string][]WriterOption)
 	for name, opt := range testOptions {
 		x[name] = opt
-		x[name+"-1k-win"] = cloneAdd(opt, WriterBlockSize(1<<10))
-		x[name+"-4M-win"] = cloneAdd(opt, WriterBlockSize(4<<20))
+		if !testing.Short() {
+			x[name+"-1k-win"] = cloneAdd(opt, WriterBlockSize(1<<10))
+			x[name+"-4M-win"] = cloneAdd(opt, WriterBlockSize(4<<20))
+		}
 	}
 	testOptions = x
 	x = make(map[string][]WriterOption)
 	for name, opt := range testOptions {
 		x[name] = opt
 		x[name+"-pad-2"] = cloneAdd(opt, WriterPadding(2))
-		x[name+"-pad-8000"] = cloneAdd(opt, WriterPadding(8000))
-		x[name+"-pad-1m"] = cloneAdd(opt, WriterPadding(1e6))
-		x[name+"-pad-max"] = cloneAdd(opt, WriterPadding(4<<20))
+		if !testing.Short() {
+			x[name+"-pad-8000"] = cloneAdd(opt, WriterPadding(8000))
+			x[name+"-pad-1m"] = cloneAdd(opt, WriterPadding(1e6))
+			x[name+"-pad-max"] = cloneAdd(opt, WriterPadding(4<<20))
+		}
 	}
 	testOptions = x
+	return testOptions
 }
 
 func TestEncoderRegression(t *testing.T) {
@@ -65,7 +72,7 @@ func TestEncoderRegression(t *testing.T) {
 	}
 	// Same as fuzz test...
 	test := func(t *testing.T, data []byte) {
-		for name, opts := range testOptions {
+		for name, opts := range testOptions(t) {
 			t.Run(name, func(t *testing.T) {
 				dec := NewReader(nil)
 				enc := NewWriter(nil, opts...)
