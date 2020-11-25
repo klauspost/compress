@@ -33,9 +33,6 @@ func testOptions(t *testing.T) map[string][]WriterOption {
 	for name, opt := range testOptions {
 		x[name] = opt
 		x[name+"-c1"] = cloneAdd(opt, WriterConcurrency(1))
-		if !testing.Short() {
-			x[name+"-c4"] = cloneAdd(opt, WriterConcurrency(4))
-		}
 	}
 	testOptions = x
 	x = make(map[string][]WriterOption)
@@ -50,10 +47,9 @@ func testOptions(t *testing.T) map[string][]WriterOption {
 	x = make(map[string][]WriterOption)
 	for name, opt := range testOptions {
 		x[name] = opt
-		x[name+"-pad-2"] = cloneAdd(opt, WriterPadding(2))
+		x[name+"-pad-min"] = cloneAdd(opt, WriterPadding(2))
 		if !testing.Short() {
 			x[name+"-pad-8000"] = cloneAdd(opt, WriterPadding(8000))
-			x[name+"-pad-1m"] = cloneAdd(opt, WriterPadding(1e6))
 			x[name+"-pad-max"] = cloneAdd(opt, WriterPadding(4<<20))
 		}
 	}
