@@ -238,6 +238,7 @@ func NewWriter(w io.Writer, opts ...WriterOption) *Writer {
 	w2 := Writer{
 		blockSize:   defaultBlockSize,
 		concurrency: runtime.GOMAXPROCS(0),
+		randSrc:     rand.Reader,
 	}
 	for _, opt := range opts {
 		if err := opt(&w2); err != nil {
@@ -272,6 +273,7 @@ type Writer struct {
 	pad         int
 
 	writer   io.Writer
+	randSrc  io.Reader
 	writerWg sync.WaitGroup
 
 	// wroteStreamHeader is whether we have written the stream header.
@@ -932,6 +934,15 @@ func WriterPadding(n int) WriterOption {
 			return fmt.Errorf("s2: padding must less than 4MB")
 		}
 		w.pad = n
+		return nil
+	}
+}
+
+// WriterPaddingSrc will get random data for padding from the supplied source.
+// By default crypto/rand is used.
+func WriterPaddingSrc(reader io.Reader) WriterOption {
+	return func(w *Writer) error {
+		w.randSrc = reader
 		return nil
 	}
 }

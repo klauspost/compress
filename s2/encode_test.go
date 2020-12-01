@@ -24,10 +24,10 @@ func testOptions(t *testing.T) map[string][]WriterOption {
 	}
 
 	x := make(map[string][]WriterOption)
-	cloneAdd := func(org []WriterOption, add WriterOption) []WriterOption {
-		y := make([]WriterOption, len(org)+1)
+	cloneAdd := func(org []WriterOption, add ...WriterOption) []WriterOption {
+		y := make([]WriterOption, len(org)+len(add))
 		copy(y, org)
-		y[len(org)] = add
+		copy(y[len(org):], add)
 		return y
 	}
 	for name, opt := range testOptions {
@@ -47,10 +47,10 @@ func testOptions(t *testing.T) map[string][]WriterOption {
 	x = make(map[string][]WriterOption)
 	for name, opt := range testOptions {
 		x[name] = opt
-		x[name+"-pad-min"] = cloneAdd(opt, WriterPadding(2))
+		x[name+"-pad-min"] = cloneAdd(opt, WriterPadding(2), WriterPaddingSrc(rand.New(rand.NewSource(0))))
 		if !testing.Short() {
 			x[name+"-pad-8000"] = cloneAdd(opt, WriterPadding(8000))
-			x[name+"-pad-max"] = cloneAdd(opt, WriterPadding(4<<20))
+			x[name+"-pad-max"] = cloneAdd(opt, WriterPadding(4<<20), WriterPaddingSrc(rand.New(rand.NewSource(0))))
 		}
 	}
 	testOptions = x
