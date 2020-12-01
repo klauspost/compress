@@ -451,7 +451,8 @@ encodeLoop:
 			cv1 := cv0 >> 8
 			h0 := hash8(cv0, betterLongTableBits)
 			off := index0 + e.cur
-			e.longTable[h0] = prevEntry{offset: off, prev: e.longTable[h0].offset}
+			long := &e.longTable[h0]
+			*long = prevEntry{offset: off, prev: long.offset}
 			e.table[hash5(cv1, betterShortTableBits)] = tableEntry{offset: off + 1, val: uint32(cv1)}
 			index0 += 2
 		}
@@ -476,8 +477,8 @@ encodeLoop:
 			// We have at least 4 byte match.
 			// No need to check backwards. We come straight from a match
 			l := 4 + e.matchlen(s+4, o2+4, src)
-
-			e.longTable[nextHashL] = prevEntry{offset: s + e.cur, prev: e.longTable[nextHashL].offset}
+			long := &e.longTable[nextHashL]
+			*long = prevEntry{offset: s + e.cur, prev: long.offset}
 			e.table[nextHashS] = tableEntry{offset: s + e.cur, val: uint32(cv)}
 			seq.matchLen = uint32(l) - zstdMinMatch
 			seq.litLen = 0

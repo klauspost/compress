@@ -49,7 +49,7 @@ func testOptions(t *testing.T) map[string][]WriterOption {
 		x[name] = opt
 		x[name+"-pad-min"] = cloneAdd(opt, WriterPadding(2), WriterPaddingSrc(rand.New(rand.NewSource(0))))
 		if !testing.Short() {
-			x[name+"-pad-8000"] = cloneAdd(opt, WriterPadding(8000))
+			x[name+"-pad-8000"] = cloneAdd(opt, WriterPadding(8000), WriterPaddingSrc(rand.New(rand.NewSource(0))))
 			x[name+"-pad-max"] = cloneAdd(opt, WriterPadding(4<<20), WriterPaddingSrc(rand.New(rand.NewSource(0))))
 		}
 	}
