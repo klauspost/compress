@@ -796,7 +796,7 @@ func (w *Writer) Close() error {
 	}
 	if w.err(nil) == nil && w.writer != nil && w.pad > 0 {
 		add := calcSkippableFrame(w.written, int64(w.pad))
-		frame, err := skippableFrame(w.ibuf[:0], add, rand.Reader)
+		frame, err := skippableFrame(w.ibuf[:0], add, w.randSrc)
 		if err = w.err(err); err != nil {
 			return err
 		}
