@@ -238,6 +238,7 @@ func NewWriter(w io.Writer, opts ...WriterOption) *Writer {
 	w2 := Writer{
 		blockSize:   defaultBlockSize,
 		concurrency: runtime.GOMAXPROCS(0),
+		randSrc:     rand.Reader,
 	}
 	for _, opt := range opts {
 		if err := opt(&w2); err != nil {
@@ -272,12 +273,14 @@ type Writer struct {
 	pad         int
 
 	writer   io.Writer
+	randSrc  io.Reader
 	writerWg sync.WaitGroup
 
 	// wroteStreamHeader is whether we have written the stream header.
 	wroteStreamHeader bool
 	paramsOK          bool
 	better            bool
+	uncompressed      bool
 }
 
 type result []byte
@@ -482,7 +485,7 @@ func (w *Writer) EncodeBuffer(buf []byte) (err error) {
 			var n2 int
 			if w.better {
 				n2 = encodeBlockBetter(obuf[obufHeaderLen+n:], uncompressed)
-			} else {
+			} else if !w.uncompressed {
 				n2 = encodeBlock(obuf[obufHeaderLen+n:], uncompressed)
 			}
 
@@ -559,7 +562,7 @@ func (w *Writer) write(p []byte) (nRet int, errRet error) {
 			var n2 int
 			if w.better {
 				n2 = encodeBlockBetter(obuf[obufHeaderLen+n:], uncompressed)
-			} else {
+			} else if !w.uncompressed {
 				n2 = encodeBlock(obuf[obufHeaderLen+n:], uncompressed)
 			}
 
@@ -635,7 +638,7 @@ func (w *Writer) writeFull(inbuf []byte) (errRet error) {
 		var n2 int
 		if w.better {
 			n2 = encodeBlockBetter(obuf[obufHeaderLen+n:], uncompressed)
-		} else {
+		} else if !w.uncompressed {
 			n2 = encodeBlock(obuf[obufHeaderLen+n:], uncompressed)
 		}
 
@@ -704,7 +707,7 @@ func (w *Writer) writeSync(p []byte) (nRet int, errRet error) {
 		var n2 int
 		if w.better {
 			n2 = encodeBlockBetter(obuf[obufHeaderLen+n:], uncompressed)
-		} else {
+		} else if !w.uncompressed {
 			n2 = encodeBlock(obuf[obufHeaderLen+n:], uncompressed)
 		}
 
@@ -793,7 +796,7 @@ func (w *Writer) Close() error {
 	}
 	if w.err(nil) == nil && w.writer != nil && w.pad > 0 {
 		add := calcSkippableFrame(w.written, int64(w.pad))
-		frame, err := skippableFrame(w.ibuf[:0], add, rand.Reader)
+		frame, err := skippableFrame(w.ibuf[:0], add, w.randSrc)
 		if err = w.err(err); err != nil {
 			return err
 		}
@@ -877,7 +880,19 @@ func WriterConcurrency(n int) WriterOption {
 // 10-40% speed decrease on both compression and decompression.
 func WriterBetterCompression() WriterOption {
 	return func(w *Writer) error {
+		w.uncompressed = false
 		w.better = true
+		return nil
+	}
+}
+
+// WriterUncompressed will bypass compression.
+// The stream will be written as uncompressed blocks only.
+// If concurrency is > 1 CRC and output will still be done async.
+func WriterUncompressed() WriterOption {
+	return func(w *Writer) error {
+		w.better = false
+		w.uncompressed = true
 		return nil
 	}
 }
@@ -919,6 +934,15 @@ func WriterPadding(n int) WriterOption {
 			return fmt.Errorf("s2: padding must less than 4MB")
 		}
 		w.pad = n
+		return nil
+	}
+}
+
+// WriterPaddingSrc will get random data for padding from the supplied source.
+// By default crypto/rand is used.
+func WriterPaddingSrc(reader io.Reader) WriterOption {
+	return func(w *Writer) error {
+		w.randSrc = reader
 		return nil
 	}
 }
