@@ -13,6 +13,7 @@ import (
 // If less is sent to Header.Decode it *may* still contain enough information.
 const HeaderMaxSize = 14 + 3
 
+// Header contains information about the first frame and block within that.
 type Header struct {
 	// Window Size the window of data to keep while decoding.
 	// Will only be set if HasFCS is false.
@@ -62,6 +63,12 @@ type Header struct {
 	SingleSegment bool
 }
 
+// Decode the header from the beginning of the stream.
+// This will decode the frame header and the first block header if enough bytes are provided.
+// It is recommended to provide at least HeaderMaxSize bytes.
+// If the frame header cannot be read an error will be returned.
+// If there isn't enough input, io.ErrUnexpectedEOF is returned.
+// The FirstBlock.OK will indicate if enough information was available to decode the first block header.
 func (h *Header) Decode(in []byte) error {
 	if len(in) < 4 {
 		return io.ErrUnexpectedEOF
