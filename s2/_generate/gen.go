@@ -1047,7 +1047,8 @@ func (o options) emitRepeat(name string, length, offset, retval, dstBase reg.GPV
 		CMPL(length.As32(), U32((1<<16)+(1<<8)))
 		JLT(LabelRef("repeat_four_" + name)) // if length < (1 << 16) + (1 << 8)
 	} else {
-		JMP(LabelRef("repeat_four_" + name)) // if length < (1 << 16) + (1 << 8)
+		// Not needed, we should skip to it when generating.
+		// JMP(LabelRef("repeat_four_" + name)) // if length < (1 << 16) + (1 << 8)
 	}
 	if o.maxLen >= maxRepeat {
 		CMPL(length.As32(), U32(maxRepeat))
@@ -1070,19 +1071,20 @@ func (o options) emitRepeat(name string, length, offset, retval, dstBase reg.GPV
 	}
 
 	// Must be able to be within 5 bytes.
-	Label("repeat_five_" + name)
-	LEAL(Mem{Base: length, Disp: -65536}, length.As32()) // length -= 65536
-	MOVL(length.As32(), offset.As32())
-	MOVW(U16(7<<2|tagCopy1), Mem{Base: dstBase})     // dst[0] = 7<<2 | tagCopy1, dst[1] = 0
-	MOVW(length.As16(), Mem{Base: dstBase, Disp: 2}) // dst[2] = uint8(length), dst[3] = uint8(length >> 8)
-	SARL(U8(16), offset.As32())                      // offset = length >> 16
-	MOVB(offset.As8(), Mem{Base: dstBase, Disp: 4})  // dst[4] = length >> 16
-	if retval != nil {
-		ADDQ(U8(5), retval) // i += 5
+	if o.maxLen >= (1<<16)+(1<<8) {
+		Label("repeat_five_" + name)
+		LEAL(Mem{Base: length, Disp: -65536}, length.As32()) // length -= 65536
+		MOVL(length.As32(), offset.As32())
+		MOVW(U16(7<<2|tagCopy1), Mem{Base: dstBase})     // dst[0] = 7<<2 | tagCopy1, dst[1] = 0
+		MOVW(length.As16(), Mem{Base: dstBase, Disp: 2}) // dst[2] = uint8(length), dst[3] = uint8(length >> 8)
+		SARL(U8(16), offset.As32())                      // offset = length >> 16
+		MOVB(offset.As8(), Mem{Base: dstBase, Disp: 4})  // dst[4] = length >> 16
+		if retval != nil {
+			ADDQ(U8(5), retval) // i += 5
+		}
+		ADDQ(U8(5), dstBase) // dst += 5
+		JMP(end)
 	}
-	ADDQ(U8(5), dstBase) // dst += 5
-	JMP(end)
-
 	Label("repeat_four_" + name)
 	LEAL(Mem{Base: length, Disp: -256}, length.As32()) // length -= 256
 	MOVW(U16(6<<2|tagCopy1), Mem{Base: dstBase})       // dst[0] = 6<<2 | tagCopy1, dst[1] = 0
