@@ -667,10 +667,6 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes, m
 	// Bail if we exceed the maximum size.
 	// if d+len(src)-nextEmitL > dstLimitPtrQ {	return 0
 	{
-		// If we didn't output anything, we always have space to emit as is.
-		CMPL(nextEmitL, U8(0))
-		JEQ(LabelRef("emit_remainder_ok_" + name))
-
 		// remain = len(src) - nextEmit
 		remain := GP64()
 		MOVQ(lenSrcQ, remain)
@@ -682,10 +678,12 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes, m
 		LEAQ(Mem{Base: dst, Index: remain, Scale: 1, Disp: literalMaxOverhead}, dstExpect)
 		CMPQ(dstExpect, dstLimitPtrQ)
 		JL(LabelRef("emit_remainder_ok_" + name))
-		// Emit as single literal block, overwriting what we have.
-		MOVL(U32(0), nextEmitL)
-		Load(Param("dst").Base(), dst)
-		Load(Param("src").Base(), src)
+		ri, err := ReturnIndex(0).Resolve()
+		if err != nil {
+			panic(err)
+		}
+		MOVQ(U32(0), ri.Addr)
+		RET()
 		Label("emit_remainder_ok_" + name)
 	}
 	// emitLiteral(dst[d:], src[nextEmitL:])
@@ -787,8 +785,6 @@ type hashGen struct {
 	bytes     int
 	tablebits int
 	mulreg    reg.GPVirtual
-	vbmireg   reg.GPVirtual
-	vbmi      bool
 }
 
 // hashN uses multiply to get a 'output' hash on the hash of the lowest 'bytes' bytes in value.
