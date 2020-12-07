@@ -1047,13 +1047,16 @@ match_nolit_dst_ok_encodeBlockAsm:
 	JMP   search_loop_encodeBlockAsm
 
 emit_remainder_encodeBlockAsm:
+	CMPL 12(SP), $0x00
+	JEQ  emit_remainder_ok_encodeBlockAsm
 	MOVQ src_len+32(FP), CX
 	SUBL 12(SP), CX
 	LEAQ 4(AX)(CX*1), CX
 	CMPQ CX, (SP)
 	JL   emit_remainder_ok_encodeBlockAsm
-	MOVQ $0x00000000, ret+48(FP)
-	RET
+	MOVL $0x00000000, 12(SP)
+	MOVQ dst_base+0(FP), AX
+	MOVQ src_base+24(FP), DX
 
 emit_remainder_ok_encodeBlockAsm:
 	MOVQ src_len+32(FP), CX
@@ -1982,13 +1985,16 @@ match_nolit_dst_ok_encodeBlockAsm12B:
 	JMP   search_loop_encodeBlockAsm12B
 
 emit_remainder_encodeBlockAsm12B:
+	CMPL 12(SP), $0x00
+	JEQ  emit_remainder_ok_encodeBlockAsm12B
 	MOVQ src_len+32(FP), CX
 	SUBL 12(SP), CX
 	LEAQ 4(AX)(CX*1), CX
 	CMPQ CX, (SP)
 	JL   emit_remainder_ok_encodeBlockAsm12B
-	MOVQ $0x00000000, ret+48(FP)
-	RET
+	MOVL $0x00000000, 12(SP)
+	MOVQ dst_base+0(FP), AX
+	MOVQ src_base+24(FP), DX
 
 emit_remainder_ok_encodeBlockAsm12B:
 	MOVQ src_len+32(FP), CX
@@ -2898,13 +2904,16 @@ match_nolit_dst_ok_encodeBlockAsm10B:
 	JMP   search_loop_encodeBlockAsm10B
 
 emit_remainder_encodeBlockAsm10B:
+	CMPL 12(SP), $0x00
+	JEQ  emit_remainder_ok_encodeBlockAsm10B
 	MOVQ src_len+32(FP), CX
 	SUBL 12(SP), CX
 	LEAQ 4(AX)(CX*1), CX
 	CMPQ CX, (SP)
 	JL   emit_remainder_ok_encodeBlockAsm10B
-	MOVQ $0x00000000, ret+48(FP)
-	RET
+	MOVL $0x00000000, 12(SP)
+	MOVQ dst_base+0(FP), AX
+	MOVQ src_base+24(FP), DX
 
 emit_remainder_ok_encodeBlockAsm10B:
 	MOVQ src_len+32(FP), CX
@@ -3798,13 +3807,16 @@ match_nolit_dst_ok_encodeBlockAsm8B:
 	JMP   search_loop_encodeBlockAsm8B
 
 emit_remainder_encodeBlockAsm8B:
+	CMPL 12(SP), $0x00
+	JEQ  emit_remainder_ok_encodeBlockAsm8B
 	MOVQ src_len+32(FP), CX
 	SUBL 12(SP), CX
 	LEAQ 4(AX)(CX*1), CX
 	CMPQ CX, (SP)
 	JL   emit_remainder_ok_encodeBlockAsm8B
-	MOVQ $0x00000000, ret+48(FP)
-	RET
+	MOVL $0x00000000, 12(SP)
+	MOVQ dst_base+0(FP), AX
+	MOVQ src_base+24(FP), DX
 
 emit_remainder_ok_encodeBlockAsm8B:
 	MOVQ src_len+32(FP), CX
@@ -4669,13 +4681,16 @@ match_nolit_dst_ok_encodeSnappyBlockAsm:
 	JMP   search_loop_encodeSnappyBlockAsm
 
 emit_remainder_encodeSnappyBlockAsm:
+	CMPL 12(SP), $0x00
+	JEQ  emit_remainder_ok_encodeSnappyBlockAsm
 	MOVQ src_len+32(FP), CX
 	SUBL 12(SP), CX
 	LEAQ 4(AX)(CX*1), CX
 	CMPQ CX, (SP)
 	JL   emit_remainder_ok_encodeSnappyBlockAsm
-	MOVQ $0x00000000, ret+48(FP)
-	RET
+	MOVL $0x00000000, 12(SP)
+	MOVQ dst_base+0(FP), AX
+	MOVQ src_base+24(FP), DX
 
 emit_remainder_ok_encodeSnappyBlockAsm:
 	MOVQ src_len+32(FP), CX
@@ -5475,13 +5490,16 @@ match_nolit_dst_ok_encodeSnappyBlockAsm12B:
 	JMP   search_loop_encodeSnappyBlockAsm12B
 
 emit_remainder_encodeSnappyBlockAsm12B:
+	CMPL 12(SP), $0x00
+	JEQ  emit_remainder_ok_encodeSnappyBlockAsm12B
 	MOVQ src_len+32(FP), CX
 	SUBL 12(SP), CX
 	LEAQ 4(AX)(CX*1), CX
 	CMPQ CX, (SP)
 	JL   emit_remainder_ok_encodeSnappyBlockAsm12B
-	MOVQ $0x00000000, ret+48(FP)
-	RET
+	MOVL $0x00000000, 12(SP)
+	MOVQ dst_base+0(FP), AX
+	MOVQ src_base+24(FP), DX
 
 emit_remainder_ok_encodeSnappyBlockAsm12B:
 	MOVQ src_len+32(FP), CX
@@ -6262,13 +6280,16 @@ match_nolit_dst_ok_encodeSnappyBlockAsm10B:
 	JMP   search_loop_encodeSnappyBlockAsm10B
 
 emit_remainder_encodeSnappyBlockAsm10B:
+	CMPL 12(SP), $0x00
+	JEQ  emit_remainder_ok_encodeSnappyBlockAsm10B
 	MOVQ src_len+32(FP), CX
 	SUBL 12(SP), CX
 	LEAQ 4(AX)(CX*1), CX
 	CMPQ CX, (SP)
 	JL   emit_remainder_ok_encodeSnappyBlockAsm10B
-	MOVQ $0x00000000, ret+48(FP)
-	RET
+	MOVL $0x00000000, 12(SP)
+	MOVQ dst_base+0(FP), AX
+	MOVQ src_base+24(FP), DX
 
 emit_remainder_ok_encodeSnappyBlockAsm10B:
 	MOVQ src_len+32(FP), CX
@@ -7045,13 +7066,16 @@ match_nolit_dst_ok_encodeSnappyBlockAsm8B:
 	JMP   search_loop_encodeSnappyBlockAsm8B
 
 emit_remainder_encodeSnappyBlockAsm8B:
+	CMPL 12(SP), $0x00
+	JEQ  emit_remainder_ok_encodeSnappyBlockAsm8B
 	MOVQ src_len+32(FP), CX
 	SUBL 12(SP), CX
 	LEAQ 4(AX)(CX*1), CX
 	CMPQ CX, (SP)
 	JL   emit_remainder_ok_encodeSnappyBlockAsm8B
-	MOVQ $0x00000000, ret+48(FP)
-	RET
+	MOVL $0x00000000, 12(SP)
+	MOVQ dst_base+0(FP), AX
+	MOVQ src_base+24(FP), DX
 
 emit_remainder_ok_encodeSnappyBlockAsm8B:
 	MOVQ src_len+32(FP), CX
