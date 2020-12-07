@@ -38,7 +38,7 @@ type Header struct {
 		// Is the data compressed?
 		// If true CompressedSize will be populated.
 		// Unfortunately DecompressedSize cannot be determined
-		// without blocks.
+		// without decoding the blocks.
 		Compressed bool
 
 		// DecompressedSize is the expected decompressed size of the block.
@@ -47,6 +47,7 @@ type Header struct {
 
 		// CompressedSize of the data in the block.
 		// Does not include the block header.
+		// Will be equal to DecompressedSize if not Compressed.
 		CompressedSize int
 	}
 
