@@ -51,6 +51,7 @@ Directories can be wildcards as well. testdir/*/*.txt will match testdir/subdir/
 
 Options:`)
 		flag.PrintDefaults()
+		os.Exit(0)
 	}
 	if len(args) == 1 && args[0] == "-" {
 		r.Reset(os.Stdin)
