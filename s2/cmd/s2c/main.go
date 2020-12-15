@@ -71,6 +71,7 @@ Directories can be wildcards as well. testdir/*/*.txt will match testdir/subdir/
 
 Options:`)
 		flag.PrintDefaults()
+		os.Exit(0)
 	}
 	opts := []s2.WriterOption{s2.WriterBlockSize(int(sz)), s2.WriterConcurrency(*cpu), s2.WriterPadding(int(pad))}
 	if !*faster {
