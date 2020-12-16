@@ -1391,7 +1391,7 @@ func BenchmarkWordsEncode1e4(b *testing.B) { benchWords(b, 1e4, false) }
 func BenchmarkWordsEncode1e5(b *testing.B) { benchWords(b, 1e5, false) }
 func BenchmarkWordsEncode1e6(b *testing.B) { benchWords(b, 1e6, false) }
 
-func BenchmarkRandomEncode(b *testing.B) {
+func BenchmarkRandomEncodeBlock1MB(b *testing.B) {
 	rng := rand.New(rand.NewSource(1))
 	data := make([]byte, 1<<20)
 	for i := range data {
@@ -1400,7 +1400,7 @@ func BenchmarkRandomEncode(b *testing.B) {
 	benchEncode(b, data)
 }
 
-func BenchmarkRandomEncodeBetter(b *testing.B) {
+func BenchmarkRandomEncodeBetterBlock1MB(b *testing.B) {
 	rng := rand.New(rand.NewSource(1))
 	data := make([]byte, 1<<20)
 	for i := range data {

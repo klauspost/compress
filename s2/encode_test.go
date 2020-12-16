@@ -16,7 +16,7 @@ import (
 	"github.com/klauspost/compress/zip"
 )
 
-func testOptions(t *testing.T) map[string][]WriterOption {
+func testOptions(t testing.TB) map[string][]WriterOption {
 	var testOptions = map[string][]WriterOption{
 		"default": {},
 		"better":  {WriterBetterCompression()},
@@ -47,14 +47,23 @@ func testOptions(t *testing.T) map[string][]WriterOption {
 	x = make(map[string][]WriterOption)
 	for name, opt := range testOptions {
 		x[name] = opt
-		x[name+"-pad-min"] = cloneAdd(opt, WriterPadding(2), WriterPaddingSrc(rand.New(rand.NewSource(0))))
+		x[name+"-pad-min"] = cloneAdd(opt, WriterPadding(2), WriterPaddingSrc(zeroReader{}))
 		if !testing.Short() {
-			x[name+"-pad-8000"] = cloneAdd(opt, WriterPadding(8000), WriterPaddingSrc(rand.New(rand.NewSource(0))))
-			x[name+"-pad-max"] = cloneAdd(opt, WriterPadding(4<<20), WriterPaddingSrc(rand.New(rand.NewSource(0))))
+			x[name+"-pad-8000"] = cloneAdd(opt, WriterPadding(8000), WriterPaddingSrc(zeroReader{}))
+			x[name+"-pad-max"] = cloneAdd(opt, WriterPadding(4<<20), WriterPaddingSrc(zeroReader{}))
 		}
 	}
 	testOptions = x
 	return testOptions
+}
+
+type zeroReader struct{}
+
+func (zeroReader) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 0
+	}
+	return len(p), nil
 }
 
 func TestEncoderRegression(t *testing.T) {
@@ -263,5 +272,32 @@ func TestWriterPadding(t *testing.T) {
 		if !bytes.Equal(src, got.Bytes()) {
 			t.Fatal("output mismatch after reset")
 		}
+	}
+}
+
+func BenchmarkWriterRandom(b *testing.B) {
+	rng := rand.New(rand.NewSource(1))
+	// Make max window so we never get matches.
+	data := make([]byte, 4<<20)
+	for i := range data {
+		data[i] = uint8(rng.Intn(256))
+	}
+
+	for name, opts := range testOptions(b) {
+		w := NewWriter(ioutil.Discard, opts...)
+		b.Run(name, func(b *testing.B) {
+			b.ResetTimer()
+			b.ReportAllocs()
+			b.SetBytes(int64(len(data)))
+			for i := 0; i < b.N; i++ {
+				err := w.EncodeBuffer(data)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+			// Flush output
+			w.Flush()
+		})
+		w.Close()
 	}
 }
