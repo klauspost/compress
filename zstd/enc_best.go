@@ -155,7 +155,7 @@ encodeLoop:
 			if s-offset >= e.maxMatchOff || load3232(src, offset) != first {
 				return match{offset: offset, s: s}
 			}
-			return match{offset: offset, s: s, length: 4 + e.matchlen(s+4, offset+4, src)}
+			return match{offset: offset, s: s, length: 4 + e.matchlen(s+4, offset+4, src), rep: rep}
 		}
 
 		bestOf := func(a, b match) match {
@@ -268,8 +268,8 @@ encodeLoop:
 			off := index0 + e.cur
 			for index0 < s-1 {
 				cv0 := load6432(src, index0)
-				h0 := hash8(cv0, betterLongTableBits)
-				h1 := hash4x64(cv0, betterShortTableBits)
+				h0 := hash8(cv0, bestLongTableBits)
+				h1 := hash4x64(cv0, bestShortTableBits)
 				e.longTable[h0] = prevEntry{offset: off, prev: e.longTable[h0].offset}
 				e.table[h1] = prevEntry{offset: off, prev: e.table[h1].offset}
 				off++
