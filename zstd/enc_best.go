@@ -112,7 +112,7 @@ func (e *bestFastEncoder) Encode(blk *blockEnc, src []byte) {
 	// Override src
 	src = e.hist
 	sLimit := int32(len(src)) - inputMargin
-	const kSearchStrength = 15
+	const kSearchStrength = 12
 
 	// nextEmit is where in src the next emitLiteral should start from.
 	nextEmit := s
@@ -162,10 +162,10 @@ encodeLoop:
 			aScore := b.s - a.s + a.length
 			bScore := a.s - b.s + b.length
 			if a.rep < 0 {
-				aScore -= int32(bits.Len32(uint32(a.offset)))
+				aScore -= int32(bits.Len32(uint32(a.offset))) / 4
 			}
 			if b.rep < 0 {
-				bScore -= int32(bits.Len32(uint32(b.offset)))
+				bScore -= int32(bits.Len32(uint32(b.offset))) / 4
 			}
 			if aScore >= bScore {
 				return a
@@ -265,30 +265,15 @@ encodeLoop:
 				break encodeLoop
 			}
 			// Index skipped...
-			if true {
-				// every entry
-				off := index0 + e.cur
-				for index0 < s-1 {
-					cv0 := load6432(src, index0)
-					h0 := hash8(cv0, betterLongTableBits)
-					h1 := hash4x64(cv0, betterShortTableBits)
-					e.longTable[h0] = prevEntry{offset: off, prev: e.longTable[h0].offset}
-					e.table[h1] = prevEntry{offset: off, prev: e.table[h1].offset}
-					off++
-					index0++
-				}
-			} else {
-				// stagger indexing
-				for index0 < s-1 {
-					cv0 := load6432(src, index0)
-					cv1 := cv0 >> 8
-					h0 := hash8(cv0, betterLongTableBits)
-					h1 := hash4x64(cv1, betterShortTableBits)
-					off := index0 + e.cur
-					e.longTable[h0] = prevEntry{offset: off, prev: e.longTable[h0].offset}
-					e.table[h1] = prevEntry{offset: off + 1, prev: e.table[h1].offset}
-					index0 += 2
-				}
+			off := index0 + e.cur
+			for index0 < s-1 {
+				cv0 := load6432(src, index0)
+				h0 := hash8(cv0, betterLongTableBits)
+				h1 := hash4x64(cv0, betterShortTableBits)
+				e.longTable[h0] = prevEntry{offset: off, prev: e.longTable[h0].offset}
+				e.table[h1] = prevEntry{offset: off, prev: e.table[h1].offset}
+				off++
+				index0++
 			}
 			switch best.rep {
 			case 2:
@@ -348,29 +333,15 @@ encodeLoop:
 
 		// Index match start+1 (long) -> s - 1
 		index0 := s - l + 1
-		if true {
-			// every entry
-			for index0 < s-1 {
-				cv0 := load6432(src, index0)
-				h0 := hash8(cv0, bestLongTableBits)
-				h1 := hash4x64(cv0, bestShortTableBits)
-				off := index0 + e.cur
-				e.longTable[h0] = prevEntry{offset: off, prev: e.longTable[h0].offset}
-				e.table[h1] = prevEntry{offset: off, prev: e.table[h1].offset}
-				index0++
-			}
-		} else {
-			// every second in each
-			for index0 < s-1 {
-				cv0 := load6432(src, index0)
-				cv1 := cv0 >> 8
-				h0 := hash8(cv0, betterLongTableBits)
-				h1 := hash4x64(cv1, betterShortTableBits)
-				off := index0 + e.cur
-				e.longTable[h0] = prevEntry{offset: off, prev: e.longTable[h0].offset}
-				e.table[h1] = prevEntry{offset: off + 1, prev: e.table[h1].offset}
-				index0 += 2
-			}
+		// every entry
+		for index0 < s-1 {
+			cv0 := load6432(src, index0)
+			h0 := hash8(cv0, bestLongTableBits)
+			h1 := hash4x64(cv0, bestShortTableBits)
+			off := index0 + e.cur
+			e.longTable[h0] = prevEntry{offset: off, prev: e.longTable[h0].offset}
+			e.table[h1] = prevEntry{offset: off, prev: e.table[h1].offset}
+			index0++
 		}
 
 		cv = load6432(src, s)
