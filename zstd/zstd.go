@@ -14,7 +14,7 @@ import (
 const debug = false
 
 // Enable extra assertions.
-const debugAsserts = debug || false
+const debugAsserts = debug || true
 
 // print sequence details
 const debugSequences = false

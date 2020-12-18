@@ -19,6 +19,9 @@ const (
 	// This greatly depends on the type of input.
 	bestShortTableBits = 16                      // Bits used in the short match table
 	bestShortTableSize = 1 << bestShortTableBits // Size of the table
+
+	chainTableLen  = 4 << 20
+	chainTableMask = chainTableLen - 1
 )
 
 // bestFastEncoder uses 2 tables, one for short matches (5 bytes) and one for long matches.
@@ -29,10 +32,11 @@ const (
 // and that it is longer (lazy matching).
 type bestFastEncoder struct {
 	fastBase
-	table         [bestShortTableSize]prevEntry
-	longTable     [bestLongTableSize]prevEntry
-	dictTable     []prevEntry
-	dictLongTable []prevEntry
+	table         [bestShortTableSize]int32
+	longTable     [bestLongTableSize]int32
+	dictTable     []int32
+	dictLongTable []int32
+	chain         [chainTableLen]int32
 }
 
 // Encode improves compression...
@@ -48,10 +52,10 @@ func (e *bestFastEncoder) Encode(blk *blockEnc, src []byte) {
 	for e.cur >= bufferReset {
 		if len(e.hist) == 0 {
 			for i := range e.table[:] {
-				e.table[i] = prevEntry{}
+				e.table[i] = 0
 			}
 			for i := range e.longTable[:] {
-				e.longTable[i] = prevEntry{}
+				e.longTable[i] = 0
 			}
 			e.cur = e.maxMatchOff
 			break
@@ -59,42 +63,26 @@ func (e *bestFastEncoder) Encode(blk *blockEnc, src []byte) {
 		// Shift down everything in the table that isn't already too far away.
 		minOff := e.cur + int32(len(e.hist)) - e.maxMatchOff
 		for i := range e.table[:] {
-			v := e.table[i].offset
-			v2 := e.table[i].prev
+			v := e.table[i]
 			if v < minOff {
 				v = 0
-				v2 = 0
 			} else {
 				v = v - e.cur + e.maxMatchOff
-				if v2 < minOff {
-					v2 = 0
-				} else {
-					v2 = v2 - e.cur + e.maxMatchOff
-				}
 			}
-			e.table[i] = prevEntry{
-				offset: v,
-				prev:   v2,
-			}
+			e.table[i] = v
 		}
 		for i := range e.longTable[:] {
-			v := e.longTable[i].offset
-			v2 := e.longTable[i].prev
+			v := e.longTable[i]
 			if v < minOff {
 				v = 0
-				v2 = 0
 			} else {
 				v = v - e.cur + e.maxMatchOff
-				if v2 < minOff {
-					v2 = 0
-				} else {
-					v2 = v2 - e.cur + e.maxMatchOff
-				}
 			}
-			e.longTable[i] = prevEntry{
-				offset: v,
-				prev:   v2,
-			}
+			e.longTable[i] = v
+		}
+		for i := range e.chain[:] {
+			// FIXME:
+			e.chain[i] = 0
 		}
 		e.cur = e.maxMatchOff
 		break
@@ -152,10 +140,10 @@ encodeLoop:
 			rep    int32
 		}
 		matchAt := func(offset int32, s int32, first uint32, rep int32) match {
-			if s-offset >= e.maxMatchOff || load3232(src, offset) != first {
+			if s-offset >= e.maxMatchOff || offset >= s || load3232(src, offset) != first {
 				return match{offset: offset, s: s}
 			}
-			return match{offset: offset, s: s, length: 4 + e.matchlen(s+4, offset+4, src)}
+			return match{offset: offset, s: s, length: 4 + e.matchlen(s+4, offset+4, src), rep: rep}
 		}
 
 		bestOf := func(a, b match) match {
@@ -179,9 +167,12 @@ encodeLoop:
 		candidateL := e.longTable[nextHashL]
 		candidateS := e.table[nextHashS]
 
-		best := bestOf(matchAt(candidateL.offset-e.cur, s, uint32(cv), -1), matchAt(candidateL.prev-e.cur, s, uint32(cv), -1))
-		best = bestOf(best, matchAt(candidateS.offset-e.cur, s, uint32(cv), -1))
-		best = bestOf(best, matchAt(candidateS.prev-e.cur, s, uint32(cv), -1))
+		best := bestOf(matchAt(candidateL-e.cur, s, uint32(cv), -1), matchAt(candidateS-e.cur, s, uint32(cv), -1))
+		candidateLP := e.chain[candidateL&chainTableMask]
+		candidateSP := e.chain[candidateS&chainTableMask]
+		best = bestOf(best, matchAt(candidateLP-e.cur, s, uint32(cv), -1))
+		best = bestOf(best, matchAt(candidateSP-e.cur, s, uint32(cv), -1))
+
 		if canRepeat && best.length < goodEnough {
 			best = bestOf(best, matchAt(s-offset1+1, s+1, uint32(cv>>8), 1))
 			best = bestOf(best, matchAt(s-offset2+1, s+1, uint32(cv>>8), 2))
@@ -190,9 +181,12 @@ encodeLoop:
 			best = bestOf(best, matchAt(s-offset2+3, s+3, uint32(cv>>24), 2))
 			best = bestOf(best, matchAt(s-offset3+3, s+3, uint32(cv>>24), 3))
 		}
+
 		// Load next and check...
-		e.longTable[nextHashL] = prevEntry{offset: s + e.cur, prev: candidateL.offset}
-		e.table[nextHashS] = prevEntry{offset: s + e.cur, prev: candidateS.offset}
+		sCurr := s + e.cur
+		e.longTable[nextHashL] = sCurr
+		e.table[nextHashS] = sCurr
+		e.chain[sCurr&chainTableMask] = candidateS
 
 		// Look far ahead, unless we have a really long match already...
 		if best.length < goodEnough {
@@ -212,12 +206,26 @@ encodeLoop:
 			cv2 := load6432(src, s+1)
 			candidateL = e.longTable[hash8(cv, bestLongTableBits)]
 			candidateL2 := e.longTable[hash8(cv2, bestLongTableBits)]
+			candidateLP = e.chain[candidateL&chainTableMask]
+			candidateL2P := e.chain[candidateL2&chainTableMask]
 
-			best = bestOf(best, matchAt(candidateS.offset-e.cur, s, uint32(cv), -1))
-			best = bestOf(best, matchAt(candidateL.offset-e.cur, s, uint32(cv), -1))
-			best = bestOf(best, matchAt(candidateL.prev-e.cur, s, uint32(cv), -1))
-			best = bestOf(best, matchAt(candidateL2.offset-e.cur, s+1, uint32(cv2), -1))
-			best = bestOf(best, matchAt(candidateL2.prev-e.cur, s+1, uint32(cv2), -1))
+			best = bestOf(best, matchAt(candidateS-e.cur, s, uint32(cv), -1))
+			best = bestOf(best, matchAt(candidateL-e.cur, s, uint32(cv), -1))
+			best = bestOf(best, matchAt(candidateLP-e.cur, s, uint32(cv), -1))
+			best = bestOf(best, matchAt(candidateL2-e.cur, s+1, uint32(cv2), -1))
+			best = bestOf(best, matchAt(candidateL2P-e.cur, s+1, uint32(cv2), -1))
+
+			// Chain the best we have...
+			bPrev := e.chain[(best.offset+e.cur)&chainTableMask] - e.cur
+			cv32 := load3232(src, best.s)
+			s = best.s
+			for i := 0; i < 10; i++ {
+				if s-bPrev >= chainTableLen || best.length >= goodEnough {
+					break
+				}
+				best = bestOf(best, matchAt(bPrev, s, cv32, -1))
+				bPrev = e.chain[(bPrev+e.cur)&chainTableMask] - e.cur
+			}
 		}
 
 		// We have a match, we can store the forward value
@@ -225,13 +233,19 @@ encodeLoop:
 			s = best.s
 			var seq seq
 			seq.matchLen = uint32(best.length - zstdMinMatch)
-
+			if debugAsserts && seq.matchLen > maxMatchLen {
+				panic(fmt.Sprintf("seq.matchLen (%v) > maxMatchLen", seq.matchLen))
+			}
 			// We might be able to match backwards.
 			// Extend as long as we can.
 			start := best.s
 			// We end the search early, so we don't risk 0 literals
 			// and have to do special offset treatment.
 			startLimit := nextEmit + 1
+
+			if debugAsserts && start < startLimit {
+				panic(fmt.Sprintf("start (%v) < startLimit (%v)", start, startLimit))
+			}
 
 			tMin := s - e.maxMatchOff
 			if tMin < 0 {
@@ -250,6 +264,10 @@ encodeLoop:
 			if debugSequences {
 				println("repeat sequence", seq, "next s:", s)
 			}
+			if debugAsserts && seq.offset > 3 {
+				panic(fmt.Sprintf("seq.offset (%v) > 3", seq.offset))
+			}
+
 			blk.sequences = append(blk.sequences, seq)
 
 			// Index match start+1 (long) -> s - 1
@@ -268,10 +286,12 @@ encodeLoop:
 			off := index0 + e.cur
 			for index0 < s-1 {
 				cv0 := load6432(src, index0)
-				h0 := hash8(cv0, betterLongTableBits)
-				h1 := hash4x64(cv0, betterShortTableBits)
-				e.longTable[h0] = prevEntry{offset: off, prev: e.longTable[h0].offset}
-				e.table[h1] = prevEntry{offset: off, prev: e.table[h1].offset}
+				h0 := hash8(cv0, bestLongTableBits)
+				h1 := hash4x64(cv0, bestShortTableBits)
+				e.longTable[h0] = off
+				entry := &e.table[h1]
+				e.chain[off&chainTableMask] = *entry
+				*entry = off
 				off++
 				index0++
 			}
@@ -339,54 +359,16 @@ encodeLoop:
 			h0 := hash8(cv0, bestLongTableBits)
 			h1 := hash4x64(cv0, bestShortTableBits)
 			off := index0 + e.cur
-			e.longTable[h0] = prevEntry{offset: off, prev: e.longTable[h0].offset}
-			e.table[h1] = prevEntry{offset: off, prev: e.table[h1].offset}
+
+			e.longTable[h0] = off
+			entry := &e.table[h1]
+			e.chain[off&chainTableMask] = *entry
+			*entry = off
+
 			index0++
 		}
 
 		cv = load6432(src, s)
-		if !canRepeat {
-			continue
-		}
-
-		// Check offset 2
-		for {
-			o2 := s - offset2
-			if load3232(src, o2) != uint32(cv) {
-				// Do regular search
-				break
-			}
-
-			// Store this, since we have it.
-			nextHashS := hash4x64(cv, bestShortTableBits)
-			nextHashL := hash8(cv, bestLongTableBits)
-
-			// We have at least 4 byte match.
-			// No need to check backwards. We come straight from a match
-			l := 4 + e.matchlen(s+4, o2+4, src)
-
-			e.longTable[nextHashL] = prevEntry{offset: s + e.cur, prev: e.longTable[nextHashL].offset}
-			e.table[nextHashS] = prevEntry{offset: s + e.cur, prev: e.table[nextHashS].offset}
-			seq.matchLen = uint32(l) - zstdMinMatch
-			seq.litLen = 0
-
-			// Since litlen is always 0, this is offset 1.
-			seq.offset = 1
-			s += l
-			nextEmit = s
-			if debugSequences {
-				println("sequence", seq, "next s:", s)
-			}
-			blk.sequences = append(blk.sequences, seq)
-
-			// Swap offset 1 and 2.
-			offset1, offset2 = offset2, offset1
-			if s >= sLimit {
-				// Finished
-				break encodeLoop
-			}
-			cv = load6432(src, s)
-		}
 	}
 
 	if int(nextEmit) < len(src) {
@@ -417,7 +399,7 @@ func (e *bestFastEncoder) Reset(d *dict, singleBlock bool) {
 	// Init or copy dict table
 	if len(e.dictTable) != len(e.table) || d.id != e.lastDictID {
 		if len(e.dictTable) != len(e.table) {
-			e.dictTable = make([]prevEntry, len(e.table))
+			e.dictTable = make([]int32, len(e.table))
 		}
 		end := int32(len(d.content)) - 8 + e.maxMatchOff
 		for i := e.maxMatchOff; i < end; i += 4 {
@@ -428,22 +410,11 @@ func (e *bestFastEncoder) Reset(d *dict, singleBlock bool) {
 			nextHash1 := hash4x64(cv>>8, hashLog)  // 1 -> 5
 			nextHash2 := hash4x64(cv>>16, hashLog) // 2 -> 6
 			nextHash3 := hash4x64(cv>>24, hashLog) // 3 -> 7
-			e.dictTable[nextHash] = prevEntry{
-				prev:   e.dictTable[nextHash].offset,
-				offset: i,
-			}
-			e.dictTable[nextHash1] = prevEntry{
-				prev:   e.dictTable[nextHash1].offset,
-				offset: i + 1,
-			}
-			e.dictTable[nextHash2] = prevEntry{
-				prev:   e.dictTable[nextHash2].offset,
-				offset: i + 2,
-			}
-			e.dictTable[nextHash3] = prevEntry{
-				prev:   e.dictTable[nextHash3].offset,
-				offset: i + 3,
-			}
+			// FIXME: Chain
+			e.dictTable[nextHash] = i
+			e.dictTable[nextHash1] = i + 1
+			e.dictTable[nextHash2] = i + 2
+			e.dictTable[nextHash3] = i + 3
 		}
 		e.lastDictID = d.id
 	}
@@ -451,25 +422,20 @@ func (e *bestFastEncoder) Reset(d *dict, singleBlock bool) {
 	// Init or copy dict table
 	if len(e.dictLongTable) != len(e.longTable) || d.id != e.lastDictID {
 		if len(e.dictLongTable) != len(e.longTable) {
-			e.dictLongTable = make([]prevEntry, len(e.longTable))
+			e.dictLongTable = make([]int32, len(e.longTable))
 		}
 		if len(d.content) >= 8 {
 			cv := load6432(d.content, 0)
 			h := hash8(cv, bestLongTableBits)
-			e.dictLongTable[h] = prevEntry{
-				offset: e.maxMatchOff,
-				prev:   e.dictLongTable[h].offset,
-			}
+			e.dictLongTable[h] = e.maxMatchOff
 
 			end := int32(len(d.content)) - 8 + e.maxMatchOff
 			off := 8 // First to read
 			for i := e.maxMatchOff + 1; i < end; i++ {
 				cv = cv>>8 | (uint64(d.content[off]) << 56)
 				h := hash8(cv, bestLongTableBits)
-				e.dictLongTable[h] = prevEntry{
-					offset: i,
-					prev:   e.dictLongTable[h].offset,
-				}
+				e.dictLongTable[h] = i
+				// FIXME: Chain
 				off++
 			}
 		}
@@ -481,4 +447,9 @@ func (e *bestFastEncoder) Reset(d *dict, singleBlock bool) {
 	e.cur = e.maxMatchOff
 	// Reset table to initial state
 	copy(e.table[:], e.dictTable)
+
+	for i := range e.chain[:] {
+		// FIXME:
+		e.chain[i] = 0
+	}
 }

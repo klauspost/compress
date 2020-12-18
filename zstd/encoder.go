@@ -245,7 +245,11 @@ func (e *Encoder) nextBlock(final bool) error {
 		defer func() {
 			if r := recover(); r != nil {
 				s.err = fmt.Errorf("panic while encoding: %v", r)
-				rdebug.PrintStack()
+				if !debugAsserts {
+					rdebug.PrintStack()
+				} else {
+					panic(r)
+				}
 			}
 			s.wg.Done()
 		}()
