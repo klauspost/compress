@@ -458,8 +458,10 @@ func TestEncoder_EncoderEnwik9(t *testing.T) {
 
 // test roundtrip using io.ReaderFrom interface.
 func testEncoderRoundtrip(t *testing.T, file string, wantCRC []byte) {
-	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
+	for level := speedNotSet + 1; level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
+			level := level
+			t.Parallel()
 			f, err := os.Open(file)
 			if err != nil {
 				if os.IsNotExist(err) {
