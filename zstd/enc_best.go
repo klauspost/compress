@@ -162,10 +162,10 @@ encodeLoop:
 			aScore := b.s - a.s + a.length
 			bScore := a.s - b.s + b.length
 			if a.rep < 0 {
-				aScore -= int32(bits.Len32(uint32(a.offset))) / 4
+				aScore = aScore - int32(bits.Len32(uint32(a.offset)))/8
 			}
 			if b.rep < 0 {
-				bScore -= int32(bits.Len32(uint32(b.offset))) / 4
+				bScore = bScore - int32(bits.Len32(uint32(b.offset)))/8
 			}
 			if aScore >= bScore {
 				return a
