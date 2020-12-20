@@ -15,6 +15,13 @@ This package provides various compression algorithms.
 
 # changelog
 
+* Dev 20, 2020 (v1.11.4)
+	* zstd: Add Best compression mode [#304](https://github.com/klauspost/compress/pull/304)
+	* Add header decoder [#299](https://github.com/klauspost/compress/pull/299)
+	* s2: Add uncompressed stream option [#297](https://github.com/klauspost/compress/pull/297)
+	* Simplify/speed up small blocks with known max size. [#300](https://github.com/klauspost/compress/pull/300)
+	* zstd: Always reset literal dict encoder [#303](https://github.com/klauspost/compress/pull/303)
+
 * Nov 15, 2020 (v1.11.3)
 	* inflate: 10-15% faster decompression  [#293](https://github.com/klauspost/compress/pull/293)
 	* zstd: Tweak DecodeAll default allocation [#295](https://github.com/klauspost/compress/pull/295)
