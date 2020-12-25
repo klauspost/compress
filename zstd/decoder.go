@@ -156,8 +156,14 @@ func (d *Decoder) Reset(r io.Reader) error {
 	if d.current.err == ErrDecoderClosed {
 		return d.current.err
 	}
+
+	d.drainOutput()
+
 	if r == nil {
-		return errors.New("nil Reader sent as input")
+		d.current.b = []byte{}
+		d.current.err = io.EOF
+		d.current.flushed = true
+		return nil
 	}
 
 	if d.stream == nil {
@@ -165,8 +171,6 @@ func (d *Decoder) Reset(r io.Reader) error {
 		d.streamWg.Add(1)
 		go d.startStreamDecoder(d.stream)
 	}
-
-	d.drainOutput()
 
 	// If bytes buffer and < 1MB, do sync decoding anyway.
 	if bb, ok := r.(*bytes.Buffer); ok && bb.Len() < 1<<20 {
