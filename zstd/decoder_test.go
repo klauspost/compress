@@ -1434,6 +1434,48 @@ func TestPredefTables(t *testing.T) {
 	}
 }
 
+func TestResetNil(t *testing.T) {
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+
+	_, err = ioutil.ReadAll(dec)
+	if err != ErrDecoderNilInput {
+		t.Fatalf("Expected ErrDecoderNilInput when decoding from a nil reader, got %v", err)
+	}
+
+	emptyZstdBlob := []byte{40, 181, 47, 253, 32, 0, 1, 0, 0}
+
+	dec.Reset(bytes.NewBuffer(emptyZstdBlob))
+
+	result, err := ioutil.ReadAll(dec)
+	if err != nil && err != io.EOF {
+		t.Fatal(err)
+	}
+	if len(result) != 0 {
+		t.Fatalf("Expected to read 0 bytes, actually read %d", len(result))
+	}
+
+	dec.Reset(nil)
+
+	_, err = ioutil.ReadAll(dec)
+	if err != ErrDecoderNilInput {
+		t.Fatalf("Expected ErrDecoderNilInput when decoding from a nil reader, got %v", err)
+	}
+
+	dec.Reset(bytes.NewBuffer(emptyZstdBlob))
+
+	result, err = ioutil.ReadAll(dec)
+	if err != nil && err != io.EOF {
+		t.Fatal(err)
+	}
+	if len(result) != 0 {
+		t.Fatalf("Expected to read 0 bytes, actually read %d", len(result))
+	}
+}
+
 func timeout(after time.Duration) (cancel func()) {
 	c := time.After(after)
 	cc := make(chan struct{})
