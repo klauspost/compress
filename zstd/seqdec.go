@@ -185,7 +185,12 @@ func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
 			// but could be if destination slice is too small for sync operations.
 			// over-allocating here can create a large amount of GC pressure so we try to keep
 			// it as contained as possible
-			addBytes := 1024 + (size - len(s.out))
+			used := len(s.out) - startSize
+			addBytes := 256 + ll + ml + used>>2
+			// Clamp to max block size.
+			if used+addBytes > maxBlockSize {
+				addBytes = maxBlockSize - used
+			}
 			s.out = append(s.out, make([]byte, addBytes)...)
 			s.out = s.out[:len(s.out)-addBytes]
 		}
