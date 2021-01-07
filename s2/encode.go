@@ -399,6 +399,13 @@ func (w *Writer) ReadFrom(r io.Reader) (n int64, err error) {
 			return 0, err
 		}
 	}
+	if br, ok := r.(byter); ok {
+		buf := br.Bytes()
+		if err := w.EncodeBuffer(buf); err != nil {
+			return 0, err
+		}
+		return int64(len(buf)), w.Flush()
+	}
 	for {
 		inbuf := w.buffers.Get().([]byte)[:w.blockSize+obufHeaderLen]
 		n2, err := io.ReadFull(r, inbuf[obufHeaderLen:])
