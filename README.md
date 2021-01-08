@@ -15,7 +15,11 @@ This package provides various compression algorithms.
 
 # changelog
 
-* Dev 20, 2020 (v1.11.4)
+* Jan 7, 2021 (v1.11.6)
+	* zstd: Make decoder allocations smaller [#306](https://github.com/klauspost/compress/pull/306)
+	* zstd: Free Decoder resources when Reset is called with a nil io.Reader  [#305](https://github.com/klauspost/compress/pull/305)
+
+* Dec 20, 2020 (v1.11.4)
 	* zstd: Add Best compression mode [#304](https://github.com/klauspost/compress/pull/304)
 	* Add header decoder [#299](https://github.com/klauspost/compress/pull/299)
 	* s2: Add uncompressed stream option [#297](https://github.com/klauspost/compress/pull/297)
