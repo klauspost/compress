@@ -1,6 +1,6 @@
 // +build generate
 
-//go:generate go run $GOFILE && gofmt -w inflate_gen.go
+//go:generate go run $GOFILE && gofmt -w ../inflate_gen.go
 
 package main
 
@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	f, err := os.Create("inflate_gen.go")
+	f, err := os.Create("../inflate_gen.go")
 	if err != nil {
 		panic(err)
 	}
