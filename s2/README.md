@@ -442,11 +442,38 @@ The PDF sample shows a significant slowdown compared to Snappy, as this mode tri
 to compress the data. Very small blocks are also not favorable for better compression, so throughput is way down.
 
 This mode aims to provide better compression at the expense of performance and achieves that 
-without a huge performance pentalty, except on very small blocks. 
+without a huge performance penalty, except on very small blocks. 
 
 Decompression speed suffers a little compared to the regular S2 mode, 
 but still manages to be close to Snappy in spite of increased compression.  
  
+# Best compression mode
+
+S2 offers a "best" compression mode. 
+
+This will compress as much as possible with little regard to CPU usage.
+
+Mainly for offline compression, but where decompression speed should still
+be high and compatible with other S2 compressed data.
+
+Some examples compared to 'better' mode on 16 core CPU:
+
+```
+github-june-2days-2019.json; 6273951764 -> 950079555 [15.14%]; 3541.4MB/s
+github-june-2days-2019.json; 6273951764 -> 846260870 [13.49%]; 661.5MB/s
+
+nyc-taxi-data-10M.csv; 3325605752 -> 960330423 [28.88%]; 3249.5MB/s
+nyc-taxi-data-10M.csv; 3325605752 -> 794873295 [23.90%]; 437.5MB/s
+
+10gb.tar; 10065157632 -> 5650133605 [56.14%]; 3137.9MB/s
+10gb.tar; 10065157632 -> 5250102961 [52.16%]; 390.1MB/s
+
+consensus.db.10gb; 10737418240 -> 4542443833 [42.30%]; 3008.2MB/s
+consensus.db.10gb; 10737418240 -> 4272335541 [39.79%]; 248.8MB/s
+```
+
+Decompression speed should be around the same as using the 'better' compression mode. 
+
 # Concatenating blocks and streams.
 
 Concatenating streams will concatenate the output of both without recompressing them. 
