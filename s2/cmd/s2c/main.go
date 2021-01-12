@@ -26,6 +26,7 @@ import (
 
 var (
 	faster    = flag.Bool("faster", false, "Compress faster, but with a minor compression loss")
+	slower    = flag.Bool("slower", false, "Compress more, but a lot slower")
 	cpu       = flag.Int("cpu", runtime.GOMAXPROCS(0), "Compress using this amount of threads")
 	blockSize = flag.String("blocksize", "4M", "Max  block size. Examples: 64K, 256K, 1M, 4M. Must be power of two and <= 4MB")
 	safe      = flag.Bool("safe", false, "Do not overwrite output files")
@@ -55,7 +56,7 @@ func main() {
 	exitErr(err)
 
 	args := flag.Args()
-	if len(args) == 0 || *help {
+	if len(args) == 0 || *help || (*slower && *faster) {
 		_, _ = fmt.Fprintf(os.Stderr, "s2 compress v%v, built at %v.\n\n", version, date)
 		_, _ = fmt.Fprintf(os.Stderr, "Copyright (c) 2011 The Snappy-Go Authors. All rights reserved.\n"+
 			"Copyright (c) 2019 Klaus Post. All rights reserved.\n\n")
@@ -76,6 +77,9 @@ Options:`)
 	opts := []s2.WriterOption{s2.WriterBlockSize(int(sz)), s2.WriterConcurrency(*cpu), s2.WriterPadding(int(pad))}
 	if !*faster {
 		opts = append(opts, s2.WriterBetterCompression())
+	}
+	if *slower {
+		opts = append(opts, s2.WriterBestCompression())
 	}
 	wr := s2.NewWriter(nil, opts...)
 
