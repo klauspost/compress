@@ -83,6 +83,10 @@ func encodeBlockBest(dst, src []byte) (d int) {
 			candidateS := sTable[hashS]
 
 			matchAt := func(offset, s int, first uint32, rep bool) match {
+				if best.length != 0 && best.s-best.offset == s-offset {
+					// Don't retest if we have the same offset.
+					return match{offset: offset, s: s}
+				}
 				if load32(src, offset) != first {
 					return match{offset: offset, s: s}
 				}
