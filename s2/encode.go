@@ -983,7 +983,7 @@ func WriterUncompressed() WriterOption {
 // Default block size is 1MB.
 func WriterBlockSize(n int) WriterOption {
 	return func(w *Writer) error {
-		if w.blockSize > maxBlockSize || w.blockSize < minBlockSize {
+		if n > maxBlockSize || n < minBlockSize {
 			return errors.New("s2: block size too large. Must be <= 4MB and >=4KB")
 		}
 		w.blockSize = n

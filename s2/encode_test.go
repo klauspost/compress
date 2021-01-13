@@ -40,7 +40,7 @@ func testOptions(t testing.TB) map[string][]WriterOption {
 	for name, opt := range testOptions {
 		x[name] = opt
 		if !testing.Short() {
-			x[name+"-1k-win"] = cloneAdd(opt, WriterBlockSize(1<<10))
+			x[name+"-4k-win"] = cloneAdd(opt, WriterBlockSize(4<<10))
 			x[name+"-4M-win"] = cloneAdd(opt, WriterBlockSize(4<<20))
 		}
 	}
@@ -80,8 +80,9 @@ func TestEncoderRegression(t *testing.T) {
 	test := func(t *testing.T, data []byte) {
 		for name, opts := range testOptions(t) {
 			t.Run(name, func(t *testing.T) {
+				var buf bytes.Buffer
 				dec := NewReader(nil)
-				enc := NewWriter(nil, opts...)
+				enc := NewWriter(&buf, opts...)
 
 				comp := Encode(make([]byte, MaxEncodedLen(len(data))), data)
 				decoded, err := Decode(nil, comp)
@@ -113,8 +114,6 @@ func TestEncoderRegression(t *testing.T) {
 				}
 
 				// Test writer.
-				var buf bytes.Buffer
-				enc.Reset(&buf)
 				n, err := enc.Write(data)
 				if err != nil {
 					t.Error(err)
@@ -152,10 +151,9 @@ func TestEncoderRegression(t *testing.T) {
 				}
 
 				// Test Reset on both and use ReadFrom instead.
-				input := bytes.NewBuffer(data)
-				buf = bytes.Buffer{}
+				buf.Reset()
 				enc.Reset(&buf)
-				n2, err := enc.ReadFrom(input)
+				n2, err := enc.ReadFrom(bytes.NewBuffer(data))
 				if err != nil {
 					t.Error(err)
 					return
