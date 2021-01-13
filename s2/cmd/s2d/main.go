@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -76,9 +78,52 @@ Options:`)
 	}
 
 	*quiet = *quiet || *stdout
-	allFiles := files
-	for i := 0; i < *bench; i++ {
-		files = append(files, allFiles...)
+
+	if *bench > 0 {
+		debug.SetGCPercent(10)
+		for _, filename := range files {
+			switch {
+			case strings.HasSuffix(filename, ".s2"):
+			case strings.HasSuffix(filename, ".snappy"):
+			default:
+				fmt.Println("Skipping", filename)
+				continue
+			}
+
+			func() {
+				if !*quiet {
+					fmt.Print("Reading ", filename, "...")
+				}
+				// Input file.
+				file, err := os.Open(filename)
+				exitErr(err)
+				finfo, err := file.Stat()
+				exitErr(err)
+				b := make([]byte, finfo.Size())
+				_, err = io.ReadFull(file, b)
+				exitErr(err)
+				file.Close()
+
+				for i := 0; i < *bench; i++ {
+					if !*quiet {
+						fmt.Print("\nDecompressing...")
+					}
+					r.Reset(bytes.NewBuffer(b))
+					start := time.Now()
+					output, err := io.Copy(ioutil.Discard, r)
+					exitErr(err)
+					if !*quiet {
+						elapsed := time.Since(start)
+						ms := elapsed.Round(time.Millisecond)
+						mbPerSec := (float64(output) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
+						pct := float64(output) * 100 / float64(len(b))
+						fmt.Printf(" %d -> %d [%.02f%%]; %v, %.01fMB/s", len(b), output, pct, ms, mbPerSec)
+					}
+				}
+				fmt.Println("")
+			}()
+		}
+		os.Exit(0)
 	}
 
 	for _, filename := range files {
