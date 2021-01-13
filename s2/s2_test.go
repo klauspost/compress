@@ -1328,16 +1328,6 @@ func benchDecode(b *testing.B, src []byte) {
 	}
 }
 
-func benchDecodeBetter(b *testing.B, src []byte) {
-	encoded := EncodeBetter(nil, src)
-	// Bandwidth is in amount of uncompressed data.
-	b.SetBytes(int64(len(src)))
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		Decode(src, encoded)
-	}
-}
-
 func benchEncode(b *testing.B, src []byte) {
 	// Bandwidth is in amount of uncompressed data.
 	b.SetBytes(int64(len(src)))
@@ -1386,10 +1376,8 @@ func expand(src []byte, n int) []byte {
 	return dst
 }
 
-func benchWords(b *testing.B, n int, decode bool) {
-	// Note: the file is OS-language dependent so the resulting values are not
-	// directly comparable for non-US-English OS installations.
-	data := expand(readFile(b, "/usr/share/dict/words"), n)
+func benchTwain(b *testing.B, n int, decode bool) {
+	data := expand(readFile(b, "../testdata/Mark.Twain-Tom.Sawyer.txt"), n)
 	if decode {
 		benchDecode(b, data)
 	} else {
@@ -1397,18 +1385,18 @@ func benchWords(b *testing.B, n int, decode bool) {
 	}
 }
 
-func BenchmarkWordsDecode1e1(b *testing.B) { benchWords(b, 1e1, true) }
-func BenchmarkWordsDecode1e2(b *testing.B) { benchWords(b, 1e2, true) }
-func BenchmarkWordsDecode1e3(b *testing.B) { benchWords(b, 1e3, true) }
-func BenchmarkWordsDecode1e4(b *testing.B) { benchWords(b, 1e4, true) }
-func BenchmarkWordsDecode1e5(b *testing.B) { benchWords(b, 1e5, true) }
-func BenchmarkWordsDecode1e6(b *testing.B) { benchWords(b, 1e6, true) }
-func BenchmarkWordsEncode1e1(b *testing.B) { benchWords(b, 1e1, false) }
-func BenchmarkWordsEncode1e2(b *testing.B) { benchWords(b, 1e2, false) }
-func BenchmarkWordsEncode1e3(b *testing.B) { benchWords(b, 1e3, false) }
-func BenchmarkWordsEncode1e4(b *testing.B) { benchWords(b, 1e4, false) }
-func BenchmarkWordsEncode1e5(b *testing.B) { benchWords(b, 1e5, false) }
-func BenchmarkWordsEncode1e6(b *testing.B) { benchWords(b, 1e6, false) }
+func BenchmarkTwainDecode1e1(b *testing.B) { benchTwain(b, 1e1, true) }
+func BenchmarkTwainDecode1e2(b *testing.B) { benchTwain(b, 1e2, true) }
+func BenchmarkTwainDecode1e3(b *testing.B) { benchTwain(b, 1e3, true) }
+func BenchmarkTwainDecode1e4(b *testing.B) { benchTwain(b, 1e4, true) }
+func BenchmarkTwainDecode1e5(b *testing.B) { benchTwain(b, 1e5, true) }
+func BenchmarkTwainDecode1e6(b *testing.B) { benchTwain(b, 1e6, true) }
+func BenchmarkTwainEncode1e1(b *testing.B) { benchTwain(b, 1e1, false) }
+func BenchmarkTwainEncode1e2(b *testing.B) { benchTwain(b, 1e2, false) }
+func BenchmarkTwainEncode1e3(b *testing.B) { benchTwain(b, 1e3, false) }
+func BenchmarkTwainEncode1e4(b *testing.B) { benchTwain(b, 1e4, false) }
+func BenchmarkTwainEncode1e5(b *testing.B) { benchTwain(b, 1e5, false) }
+func BenchmarkTwainEncode1e6(b *testing.B) { benchTwain(b, 1e6, false) }
 
 func BenchmarkRandomEncodeBlock1MB(b *testing.B) {
 	rng := rand.New(rand.NewSource(1))

@@ -20,8 +20,6 @@ var (
 	ErrTooLarge = errors.New("s2: decoded block is too large")
 	// ErrUnsupported reports that the input isn't supported.
 	ErrUnsupported = errors.New("s2: unsupported input")
-
-	errUnsupportedLiteralLength = errors.New("s2: unsupported literal length")
 )
 
 // DecodedLen returns the length of the decoded block.
@@ -46,8 +44,7 @@ func decodedLen(src []byte) (blockLen, headerLen int, err error) {
 }
 
 const (
-	decodeErrCodeCorrupt                  = 1
-	decodeErrCodeUnsupportedLiteralLength = 2
+	decodeErrCodeCorrupt = 1
 )
 
 // Decode returns the decoded form of src. The returned slice may be a sub-
@@ -65,13 +62,10 @@ func Decode(dst, src []byte) ([]byte, error) {
 	} else {
 		dst = make([]byte, dLen)
 	}
-	switch s2Decode(dst, src[s:]) {
-	case 0:
-		return dst, nil
-	case decodeErrCodeUnsupportedLiteralLength:
-		return nil, errUnsupportedLiteralLength
+	if s2Decode(dst, src[s:]) != 0 {
+		return nil, ErrCorrupt
 	}
-	return nil, ErrCorrupt
+	return dst, nil
 }
 
 // NewReader returns a new Reader that decompresses from r, using the framing
