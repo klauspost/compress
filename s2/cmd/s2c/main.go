@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"runtime/pprof"
 	"runtime/trace"
 	"strconv"
@@ -26,6 +27,7 @@ import (
 
 var (
 	faster    = flag.Bool("faster", false, "Compress faster, but with a minor compression loss")
+	slower    = flag.Bool("slower", false, "Compress more, but a lot slower")
 	cpu       = flag.Int("cpu", runtime.GOMAXPROCS(0), "Compress using this amount of threads")
 	blockSize = flag.String("blocksize", "4M", "Max  block size. Examples: 64K, 256K, 1M, 4M. Must be power of two and <= 4MB")
 	safe      = flag.Bool("safe", false, "Do not overwrite output files")
@@ -55,7 +57,7 @@ func main() {
 	exitErr(err)
 
 	args := flag.Args()
-	if len(args) == 0 || *help {
+	if len(args) == 0 || *help || (*slower && *faster) {
 		_, _ = fmt.Fprintf(os.Stderr, "s2 compress v%v, built at %v.\n\n", version, date)
 		_, _ = fmt.Fprintf(os.Stderr, "Copyright (c) 2011 The Snappy-Go Authors. All rights reserved.\n"+
 			"Copyright (c) 2019 Klaus Post. All rights reserved.\n\n")
@@ -76,6 +78,9 @@ Options:`)
 	opts := []s2.WriterOption{s2.WriterBlockSize(int(sz)), s2.WriterConcurrency(*cpu), s2.WriterPadding(int(pad))}
 	if !*faster {
 		opts = append(opts, s2.WriterBetterCompression())
+	}
+	if *slower {
+		opts = append(opts, s2.WriterBestCompression())
 	}
 	wr := s2.NewWriter(nil, opts...)
 
@@ -130,10 +135,49 @@ Options:`)
 	}
 
 	*quiet = *quiet || *stdout
-	allFiles := files
-	for i := 0; i < *bench; i++ {
-		files = append(files, allFiles...)
+	if *bench > 0 {
+		debug.SetGCPercent(10)
+		for _, filename := range files {
+			func() {
+				if !*quiet {
+					fmt.Print("Reading ", filename, "...")
+				}
+				// Input file.
+				file, err := os.Open(filename)
+				exitErr(err)
+				finfo, err := file.Stat()
+				exitErr(err)
+				b := make([]byte, finfo.Size())
+				_, err = io.ReadFull(file, b)
+				exitErr(err)
+				file.Close()
+				for i := 0; i < *bench; i++ {
+					wc := wCounter{out: ioutil.Discard}
+					if !*quiet {
+						fmt.Print("\nCompressing...")
+					}
+					wr.Reset(&wc)
+					start := time.Now()
+					err := wr.EncodeBuffer(b)
+					exitErr(err)
+					err = wr.Close()
+					exitErr(err)
+					if !*quiet {
+						input := len(b)
+						elapsed := time.Since(start)
+						mbpersec := (float64(input) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
+						pct := float64(wc.n) * 100 / float64(input)
+						ms := elapsed.Round(time.Millisecond)
+						fmt.Printf(" %d -> %d [%.02f%%]; %v, %.01fMB/s", input, wc.n, pct, ms, mbpersec)
+					}
+				}
+				fmt.Println("")
+				wr.Close()
+			}()
+		}
+		os.Exit(0)
 	}
+
 	for _, filename := range files {
 		func() {
 			var closeOnce sync.Once

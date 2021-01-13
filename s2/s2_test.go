@@ -1270,6 +1270,25 @@ func testBetterBlockRoundtrip(t *testing.T, src []byte) {
 		t.Error(err)
 	}
 }
+
+func testBestBlockRoundtrip(t *testing.T, src []byte) {
+	dst := EncodeBest(nil, src)
+	t.Logf("encoded to %d -> %d bytes", len(src), len(dst))
+	decoded, err := Decode(nil, dst)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if len(decoded) != len(src) {
+		t.Error("decoded len:", len(decoded), "!=", len(src))
+		return
+	}
+	err = cmp(src, decoded)
+	if err != nil {
+		t.Error(err)
+	}
+}
+
 func testSnappyDecode(t *testing.T, src []byte) {
 	var buf bytes.Buffer
 	enc := snappy.NewBufferedWriter(&buf)
@@ -1586,6 +1605,55 @@ func benchFile(b *testing.B, i int, decode bool) {
 			})
 		}
 	})
+	once = sync.Once{}
+
+	b.Run("block-best", func(b *testing.B) {
+		if decode {
+			b.SetBytes(int64(len(data)))
+			b.ResetTimer()
+			b.RunParallel(func(pb *testing.PB) {
+				encoded := EncodeBest(nil, data)
+				tmp := make([]byte, len(data))
+				once.Do(func() {
+					if testing.Verbose() {
+						b.Log(len(encoded), " -> ", len(data))
+					}
+				})
+				for pb.Next() {
+					var err error
+					tmp, err = Decode(tmp, encoded)
+					if err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
+		} else {
+			b.SetBytes(int64(len(data)))
+			b.ResetTimer()
+
+			b.RunParallel(func(pb *testing.PB) {
+				once.Do(func() {
+					if testing.Verbose() {
+						b.Log(len(data), " -> ", len(EncodeBest(nil, data)))
+					}
+				})
+				dst := make([]byte, MaxEncodedLen(len(data)))
+				tmp := make([]byte, len(data))
+				for pb.Next() {
+					res := EncodeBest(dst, data)
+					if len(res) == 0 {
+						panic(0)
+					}
+					if false {
+						tmp, _ = Decode(tmp, res)
+						if !bytes.Equal(tmp, data) {
+							panic("wrong")
+						}
+					}
+				}
+			})
+		}
+	})
 }
 
 func benchFileSnappy(b *testing.B, i int, decode bool) {
@@ -1734,6 +1802,12 @@ func testFile(t *testing.T, i, repeat int) {
 		t.Run("s2-better", func(t *testing.T) {
 			testWriterRoundtrip(t, data, WriterBetterCompression())
 		})
+		t.Run("s2-best", func(t *testing.T) {
+			testWriterRoundtrip(t, data, WriterBestCompression())
+		})
+		t.Run("s2-uncompressed", func(t *testing.T) {
+			testWriterRoundtrip(t, data, WriterUncompressed())
+		})
 		t.Run("block", func(t *testing.T) {
 			d := data
 			testBlockRoundtrip(t, d)
@@ -1756,6 +1830,9 @@ func TestDataRoundtrips(t *testing.T) {
 		t.Run("s2-better", func(t *testing.T) {
 			testWriterRoundtrip(t, data, WriterBetterCompression())
 		})
+		t.Run("s2-best", func(t *testing.T) {
+			testWriterRoundtrip(t, data, WriterBestCompression())
+		})
 		t.Run("block", func(t *testing.T) {
 			d := data
 			testBlockRoundtrip(t, d)
@@ -1763,6 +1840,10 @@ func TestDataRoundtrips(t *testing.T) {
 		t.Run("block-better", func(t *testing.T) {
 			d := data
 			testBetterBlockRoundtrip(t, d)
+		})
+		t.Run("block-best", func(t *testing.T) {
+			d := data
+			testBestBlockRoundtrip(t, d)
 		})
 		t.Run("snappy", func(t *testing.T) {
 			testSnappyDecode(t, data)
