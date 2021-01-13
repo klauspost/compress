@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"runtime/pprof"
 	"runtime/trace"
 	"strconv"
@@ -134,10 +135,49 @@ Options:`)
 	}
 
 	*quiet = *quiet || *stdout
-	allFiles := files
-	for i := 0; i < *bench; i++ {
-		files = append(files, allFiles...)
+	if *bench > 0 {
+		debug.SetGCPercent(10)
+		for _, filename := range files {
+			func() {
+				if !*quiet {
+					fmt.Print("Reading ", filename, "...")
+				}
+				// Input file.
+				file, err := os.Open(filename)
+				exitErr(err)
+				finfo, err := file.Stat()
+				exitErr(err)
+				b := make([]byte, finfo.Size())
+				_, err = io.ReadFull(file, b)
+				exitErr(err)
+				file.Close()
+				for i := 0; i < *bench; i++ {
+					wc := wCounter{out: ioutil.Discard}
+					if !*quiet {
+						fmt.Print("\nCompressing...")
+					}
+					wr.Reset(&wc)
+					start := time.Now()
+					err := wr.EncodeBuffer(b)
+					exitErr(err)
+					err = wr.Close()
+					exitErr(err)
+					if !*quiet {
+						input := len(b)
+						elapsed := time.Since(start)
+						mbpersec := (float64(input) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
+						pct := float64(wc.n) * 100 / float64(input)
+						ms := elapsed.Round(time.Millisecond)
+						fmt.Printf(" %d -> %d [%.02f%%]; %v, %.01fMB/s", input, wc.n, pct, ms, mbpersec)
+					}
+				}
+				fmt.Println("")
+				wr.Close()
+			}()
+		}
+		os.Exit(0)
 	}
+
 	for _, filename := range files {
 		func() {
 			var closeOnce sync.Once
