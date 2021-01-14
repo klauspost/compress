@@ -15,6 +15,13 @@ This package provides various compression algorithms.
 
 # changelog
 
+* Jan 14, 2021 (v1.11.7)
+	* Use Bytes() interface to get bytes across packages. [#309](https://github.com/klauspost/compress/pull/309)
+	* s2: Add 'best' compression option.  [#310](https://github.com/klauspost/compress/pull/310)
+	* s2: Add ReaderMaxBlockSize, changes `s2.NewReader` signature to include varargs. [#311](https://github.com/klauspost/compress/pull/311)
+	* s2: Fix crash on small better buffers. [#308](https://github.com/klauspost/compress/pull/308)
+	* s2: Clean up decoder. [#312](https://github.com/klauspost/compress/pull/312)
+
 * Jan 7, 2021 (v1.11.6)
 	* zstd: Make decoder allocations smaller [#306](https://github.com/klauspost/compress/pull/306)
 	* zstd: Free Decoder resources when Reset is called with a nil io.Reader  [#305](https://github.com/klauspost/compress/pull/305)
