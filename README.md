@@ -49,7 +49,7 @@ This package provides various compression algorithms.
 	* inflate/gz: Limit variable shifts, ~5% faster decompression [#274](https://github.com/klauspost/compress/pull/274)
 
 <details>
-	<summary>See changes prior to v1.10.0</summary>
+	<summary>See changes prior to v1.11.0</summary>
  
 * July 8, 2020 (v1.10.11) 
 	* zstd: Fix extra block when compressing with ReadFrom. [#278](https://github.com/klauspost/compress/pull/278)
@@ -105,7 +105,7 @@ This package provides various compression algorithms.
 </details>
 
 <details>
-	<summary>See changes prior to v1.11.0</summary>
+	<summary>See changes prior to v1.10.0</summary>
 
 * Jan 20,2020 (v1.9.8) Optimize gzip/deflate with better size estimates and faster table generation. [#207](https://github.com/klauspost/compress/pull/207) by [luyu6056](https://github.com/luyu6056),  [#206](https://github.com/klauspost/compress/pull/206).
 * Jan 11, 2020: S2 Encode/Decode will use provided buffer if capacity is big enough. [#204](https://github.com/klauspost/compress/pull/204) 
