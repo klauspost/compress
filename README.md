@@ -47,7 +47,10 @@ This package provides various compression algorithms.
 	* zstd: Add experimental compression [dictionaries](https://github.com/klauspost/compress/tree/master/zstd#dictionaries) [#281](https://github.com/klauspost/compress/pull/281)
 	* zstd: Fix mixed Write and ReadFrom calls [#282](https://github.com/klauspost/compress/pull/282)
 	* inflate/gz: Limit variable shifts, ~5% faster decompression [#274](https://github.com/klauspost/compress/pull/274)
-    
+
+<details>
+	<summary>See changes prior to v1.10.0</summary>
+ 
 * July 8, 2020 (v1.10.11) 
 	* zstd: Fix extra block when compressing with ReadFrom. [#278](https://github.com/klauspost/compress/pull/278)
 	* huff0: Also populate compression table when reading decoding table. [#275](https://github.com/klauspost/compress/pull/275)
@@ -99,8 +102,10 @@ This package provides various compression algorithms.
 	* Allow copying content from an existing ZIP file without decompressing+compressing. [#214](https://github.com/klauspost/compress/pull/214)
 	* Added [S2](https://github.com/klauspost/compress/tree/master/s2#s2-compression) AMD64 assembler and various optimizations. Stream speed >10GB/s.  [#186](https://github.com/klauspost/compress/pull/186)
 
+</details>
+
 <details>
-	<summary>See changes prior to v1.10.0</summary>
+	<summary>See changes prior to v1.11.0</summary>
 
 * Jan 20,2020 (v1.9.8) Optimize gzip/deflate with better size estimates and faster table generation. [#207](https://github.com/klauspost/compress/pull/207) by [luyu6056](https://github.com/luyu6056),  [#206](https://github.com/klauspost/compress/pull/206).
 * Jan 11, 2020: S2 Encode/Decode will use provided buffer if capacity is big enough. [#204](https://github.com/klauspost/compress/pull/204) 
