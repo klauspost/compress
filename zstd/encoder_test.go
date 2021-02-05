@@ -1024,7 +1024,7 @@ func BenchmarkRandom10MBEncodeAllFastest(b *testing.B) {
 	rng := rand.New(rand.NewSource(1))
 	data := make([]byte, 10<<20)
 	rng.Read(data)
-	enc, _ := NewWriter(nil, WithEncoderLevel(SpeedFastest), WithEncoderConcurrency(1))
+	enc, _ := NewWriter(nil, WithEncoderLevel(SpeedFastest), WithEncoderConcurrency(2))
 	defer enc.Close()
 	dst := enc.EncodeAll(data, nil)
 	wantSize := len(dst)
