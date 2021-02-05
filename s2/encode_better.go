@@ -44,7 +44,7 @@ func hash8(u uint64, h uint8) uint32 {
 // It also assumes that:
 //	len(dst) >= MaxEncodedLen(len(src)) &&
 // 	minNonLiteralBlockSize <= len(src) && len(src) <= maxBlockSize
-func encodeBlockBetter(dst, src []byte) (d int) {
+func encodeBlockBetterGo(dst, src []byte) (d int) {
 	// Initialize the hash tables.
 	const (
 		// Long hash matches.

@@ -36,6 +36,38 @@ func encodeBlock(dst, src []byte) (d int) {
 	return encodeBlockAsm8B(dst, src)
 }
 
+// encodeBlockBetter encodes a non-empty src to a guaranteed-large-enough dst. It
+// assumes that the varint-encoded length of the decompressed bytes has already
+// been written.
+//
+// It also assumes that:
+//	len(dst) >= MaxEncodedLen(len(src)) &&
+// 	minNonLiteralBlockSize <= len(src) && len(src) <= maxBlockSize
+func encodeBlockBetter(dst, src []byte) (d int) {
+	const (
+		// Use 12 bit table when less than...
+		limit12B = 16 << 10
+		// Use 10 bit table when less than...
+		limit10B = 4 << 10
+		// Use 8 bit table when less than...
+		limit8B = 512
+	)
+
+	if len(src) >= limit12B {
+		return encodeBetterBlockAsm(dst, src)
+	}
+	if len(src) >= limit10B {
+		return encodeBetterBlockAsm12B(dst, src)
+	}
+	if len(src) >= limit8B {
+		return encodeBetterBlockAsm10B(dst, src)
+	}
+	if len(src) < minNonLiteralBlockSize {
+		return 0
+	}
+	return encodeBetterBlockAsm8B(dst, src)
+}
+
 // encodeBlockSnappy encodes a non-empty src to a guaranteed-large-enough dst. It
 // assumes that the varint-encoded length of the decompressed bytes has already
 // been written.

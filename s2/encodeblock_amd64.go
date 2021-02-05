@@ -62,6 +62,34 @@ func encodeSnappyBlockAsm10B(dst []byte, src []byte) int
 //go:noescape
 func encodeSnappyBlockAsm8B(dst []byte, src []byte) int
 
+// encodeBetterBlockAsm encodes a non-empty src to a guaranteed-large-enough dst.
+// Maximum input 4294967295 bytes.
+// It assumes that the varint-encoded length of the decompressed bytes has already been written.
+//
+//go:noescape
+func encodeBetterBlockAsm(dst []byte, src []byte) int
+
+// encodeBetterBlockAsm12B encodes a non-empty src to a guaranteed-large-enough dst.
+// Maximum input 16383 bytes.
+// It assumes that the varint-encoded length of the decompressed bytes has already been written.
+//
+//go:noescape
+func encodeBetterBlockAsm12B(dst []byte, src []byte) int
+
+// encodeBetterBlockAsm10B encodes a non-empty src to a guaranteed-large-enough dst.
+// Maximum input 4095 bytes.
+// It assumes that the varint-encoded length of the decompressed bytes has already been written.
+//
+//go:noescape
+func encodeBetterBlockAsm10B(dst []byte, src []byte) int
+
+// encodeBetterBlockAsm8B encodes a non-empty src to a guaranteed-large-enough dst.
+// Maximum input 511 bytes.
+// It assumes that the varint-encoded length of the decompressed bytes has already been written.
+//
+//go:noescape
+func encodeBetterBlockAsm8B(dst []byte, src []byte) int
+
 // emitLiteral writes a literal chunk and returns the number of bytes written.
 //
 // It assumes that:
