@@ -91,6 +91,9 @@ const (
 	defaultBlockSize = 1 << 20
 
 	obufHeaderLen = checksumSize + chunkHeaderSize
+
+	// minAutoConcurrency is the minimum concurrency for automatic compression.
+	minAutoConcurrency = 4
 )
 
 const (
