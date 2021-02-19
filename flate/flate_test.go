@@ -88,80 +88,85 @@ func TestRegressions(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for level := 0; level <= 9; level++ {
-			t.Run(fmt.Sprint(tt.Name+"-level", 1), func(t *testing.T) {
+		t.Run(tt.Name, func(t *testing.T) {
+			if testing.Short() && len(data1) > 10000 {
+				t.SkipNow()
+			}
+			for level := 0; level <= 9; level++ {
+				t.Run(fmt.Sprint(tt.Name+"-level", 1), func(t *testing.T) {
+					buf := new(bytes.Buffer)
+					fw, err := NewWriter(buf, level)
+					if err != nil {
+						t.Error(err)
+					}
+					n, err := fw.Write(data1)
+					if n != len(data1) {
+						t.Error("short write")
+					}
+					if err != nil {
+						t.Error(err)
+					}
+					err = fw.Close()
+					if err != nil {
+						t.Error(err)
+					}
+					fr1 := NewReader(buf)
+					data2, err := ioutil.ReadAll(fr1)
+					if err != nil {
+						t.Error(err)
+					}
+					if bytes.Compare(data1, data2) != 0 {
+						t.Error("not equal")
+					}
+					// Do it again...
+					buf.Reset()
+					fw.Reset(buf)
+					n, err = fw.Write(data1)
+					if n != len(data1) {
+						t.Error("short write")
+					}
+					if err != nil {
+						t.Error(err)
+					}
+					err = fw.Close()
+					if err != nil {
+						t.Error(err)
+					}
+					fr1 = flate.NewReader(buf)
+					data2, err = ioutil.ReadAll(fr1)
+					if err != nil {
+						t.Error(err)
+					}
+					if bytes.Compare(data1, data2) != 0 {
+						t.Error("not equal")
+					}
+				})
+			}
+			t.Run(tt.Name+"stateless", func(t *testing.T) {
+				// Split into two and use history...
 				buf := new(bytes.Buffer)
-				fw, err := NewWriter(buf, level)
+				err = StatelessDeflate(buf, data1[:len(data1)/2], false, nil)
 				if err != nil {
 					t.Error(err)
 				}
-				n, err := fw.Write(data1)
-				if n != len(data1) {
-					t.Error("short write")
-				}
+
+				// Use top half as dictionary...
+				dict := data1[:len(data1)/2]
+				err = StatelessDeflate(buf, data1[len(data1)/2:], true, dict)
 				if err != nil {
 					t.Error(err)
 				}
-				err = fw.Close()
-				if err != nil {
-					t.Error(err)
-				}
+				t.Log(buf.Len())
 				fr1 := NewReader(buf)
 				data2, err := ioutil.ReadAll(fr1)
 				if err != nil {
 					t.Error(err)
 				}
 				if bytes.Compare(data1, data2) != 0 {
-					t.Error("not equal")
-				}
-				// Do it again...
-				buf.Reset()
-				fw.Reset(buf)
-				n, err = fw.Write(data1)
-				if n != len(data1) {
-					t.Error("short write")
-				}
-				if err != nil {
-					t.Error(err)
-				}
-				err = fw.Close()
-				if err != nil {
-					t.Error(err)
-				}
-				fr1 = flate.NewReader(buf)
-				data2, err = ioutil.ReadAll(fr1)
-				if err != nil {
-					t.Error(err)
-				}
-				if bytes.Compare(data1, data2) != 0 {
+					fmt.Printf("want:%x\ngot: %x\n", data1, data2)
 					t.Error("not equal")
 				}
 			})
-		}
-		t.Run(tt.Name+"stateless", func(t *testing.T) {
-			// Split into two and use history...
-			buf := new(bytes.Buffer)
-			err = StatelessDeflate(buf, data1[:len(data1)/2], false, nil)
-			if err != nil {
-				t.Error(err)
-			}
-
-			// Use top half as dictionary...
-			dict := data1[:len(data1)/2]
-			err = StatelessDeflate(buf, data1[len(data1)/2:], true, dict)
-			if err != nil {
-				t.Error(err)
-			}
-			t.Log(buf.Len())
-			fr1 := NewReader(buf)
-			data2, err := ioutil.ReadAll(fr1)
-			if err != nil {
-				t.Error(err)
-			}
-			if bytes.Compare(data1, data2) != 0 {
-				fmt.Printf("want:%x\ngot: %x\n", data1, data2)
-				t.Error("not equal")
-			}
 		})
 	}
 }

@@ -1780,6 +1780,9 @@ func testFile(t *testing.T, i, repeat int) {
 	t.Run(fmt.Sprint(i, "-", testFiles[i].label), func(t *testing.T) {
 		bDir := filepath.FromSlash(*benchdataDir)
 		data := readFile(t, filepath.Join(bDir, testFiles[i].filename))
+		if testing.Short() && len(data) > 10000 {
+			t.SkipNow()
+		}
 		oSize := len(data)
 		for i := 0; i < repeat; i++ {
 			data = append(data, data[:oSize]...)
@@ -1839,6 +1842,9 @@ func TestDataRoundtrips(t *testing.T) {
 	}
 	t.Run("longblock", func(t *testing.T) {
 		data := make([]byte, 1<<25)
+		if testing.Short() {
+			data = data[:1<<20]
+		}
 		test(t, data)
 	})
 	t.Run("4f9e1a0", func(t *testing.T) {
