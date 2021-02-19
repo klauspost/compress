@@ -127,6 +127,9 @@ func TestEncoder_EncodeAllEncodeXML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if testing.Short() {
+		in = in[:10000]
+	}
 
 	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
@@ -336,7 +339,7 @@ func TestEncoder_EncodeAllPi(t *testing.T) {
 func TestWithEncoderPadding(t *testing.T) {
 	n := 100
 	if testing.Short() {
-		n = 5
+		n = 2
 	}
 	rng := rand.New(rand.NewSource(0x1337))
 	d, err := NewReader(nil)
@@ -471,6 +474,11 @@ func testEncoderRoundtrip(t *testing.T, file string, wantCRC []byte) {
 				t.Fatal(err)
 			}
 			defer f.Close()
+			if stat, err := f.Stat(); testing.Short() && err == nil {
+				if stat.Size() > 10000 {
+					t.SkipNow()
+				}
+			}
 			input := io.Reader(f)
 			if strings.HasSuffix(file, ".zst") {
 				dec, err := NewReader(f)
@@ -562,6 +570,11 @@ func testEncoderRoundtripWriter(t *testing.T, file string, wantCRC []byte) {
 		t.Fatal(err)
 	}
 	defer f.Close()
+	if stat, err := f.Stat(); testing.Short() && err == nil {
+		if stat.Size() > 10000 {
+			t.SkipNow()
+		}
+	}
 	input := io.Reader(f)
 	if strings.HasSuffix(file, ".zst") {
 		dec, err := NewReader(f)

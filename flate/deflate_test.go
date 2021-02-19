@@ -609,6 +609,9 @@ func TestBestSpeed(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
+		if testing.Short() && i > 5 {
+			t.Skip()
+		}
 		for _, firstN := range []int{1, 65534, 65535, 65536, 65537, 131072} {
 			tc[0] = firstN
 		outer:

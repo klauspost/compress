@@ -144,6 +144,9 @@ func TestEncoder_SmallDict(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if testing.Short() && len(decoded) > 1000 {
+			continue
+		}
 
 		t.Run("encodeall-"+tt.Name, func(t *testing.T) {
 			// Attempt to compress with all dicts
@@ -347,8 +350,11 @@ func TestDecoder_MoreDicts(t *testing.T) {
 		return
 	}
 	defer dec.Close()
-	for _, tt := range zr.File {
+	for i, tt := range zr.File {
 		if !strings.HasSuffix(tt.Name, ".zst") {
+			continue
+		}
+		if testing.Short() && i > 50 {
 			continue
 		}
 		t.Run("decodeall-"+tt.Name, func(t *testing.T) {

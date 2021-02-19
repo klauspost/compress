@@ -78,6 +78,9 @@ func TestEncoderRegression(t *testing.T) {
 	}
 	// Same as fuzz test...
 	test := func(t *testing.T, data []byte) {
+		if testing.Short() && len(data) > 10000 {
+			t.SkipNow()
+		}
 		for name, opts := range testOptions(t) {
 			t.Run(name, func(t *testing.T) {
 				var buf bytes.Buffer

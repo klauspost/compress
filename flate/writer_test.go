@@ -36,6 +36,9 @@ func TestWriterRegression(t *testing.T) {
 				}
 
 				t.Run(tt.Name, func(t *testing.T) {
+					if testing.Short() && tt.FileInfo().Size() > 10000 {
+						t.SkipNow()
+					}
 					r, err := tt.Open()
 					if err != nil {
 						t.Error(err)
