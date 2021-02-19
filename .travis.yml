@@ -13,6 +13,7 @@ go:
 
 env:
   - GO111MODULE=off
+  - CGO_ENABLED=0
 
 install:
  - go get ./...
