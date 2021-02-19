@@ -1191,7 +1191,7 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 			MOVL(s, repeatVal)
 			SUBL(candidate, repeatVal)
 			// Check if match is better..
-			if true {
+			if o.maxLen > 65535 {
 				CMPL(length.As32(), U8(1))
 				JG(LabelRef("match_length_ok_" + name))
 				CMPL(repeatVal, U32(65535))

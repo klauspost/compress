@@ -5816,15 +5816,6 @@ matchlen_single_loopback_match_nolit_encodeBetterBlockAsm12B:
 match_nolit_end_encodeBetterBlockAsm12B:
 	MOVL CX, DI
 	SUBL BP, DI
-	CMPL R11, $0x01
-	JG   match_length_ok_encodeBetterBlockAsm12B
-	CMPL DI, $0x0000ffff
-	JLE  match_length_ok_encodeBetterBlockAsm12B
-	MOVL 20(SP), CX
-	INCL CX
-	JMP  search_loop_encodeBetterBlockAsm12B
-
-match_length_ok_encodeBetterBlockAsm12B:
 	MOVL DI, 16(SP)
 	MOVL 12(SP), BP
 	CMPL BP, SI
@@ -6767,15 +6758,6 @@ matchlen_single_loopback_match_nolit_encodeBetterBlockAsm10B:
 match_nolit_end_encodeBetterBlockAsm10B:
 	MOVL CX, DI
 	SUBL BP, DI
-	CMPL R11, $0x01
-	JG   match_length_ok_encodeBetterBlockAsm10B
-	CMPL DI, $0x0000ffff
-	JLE  match_length_ok_encodeBetterBlockAsm10B
-	MOVL 20(SP), CX
-	INCL CX
-	JMP  search_loop_encodeBetterBlockAsm10B
-
-match_length_ok_encodeBetterBlockAsm10B:
 	MOVL DI, 16(SP)
 	MOVL 12(SP), BP
 	CMPL BP, SI
@@ -7708,15 +7690,6 @@ matchlen_single_loopback_match_nolit_encodeBetterBlockAsm8B:
 match_nolit_end_encodeBetterBlockAsm8B:
 	MOVL CX, DI
 	SUBL BP, DI
-	CMPL R11, $0x01
-	JG   match_length_ok_encodeBetterBlockAsm8B
-	CMPL DI, $0x0000ffff
-	JLE  match_length_ok_encodeBetterBlockAsm8B
-	MOVL 20(SP), CX
-	INCL CX
-	JMP  search_loop_encodeBetterBlockAsm8B
-
-match_length_ok_encodeBetterBlockAsm8B:
 	MOVL DI, 16(SP)
 	MOVL 12(SP), BP
 	CMPL BP, SI
