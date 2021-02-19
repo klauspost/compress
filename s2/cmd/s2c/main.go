@@ -36,6 +36,7 @@ var (
 	remove    = flag.Bool("rm", false, "Delete source file(s) after successful compression")
 	quiet     = flag.Bool("q", false, "Don't write any output to terminal, except errors")
 	bench     = flag.Int("bench", 0, "Run benchmark n times. No output will be written")
+	verify    = flag.Bool("verify", false, "Verify written files")
 	help      = flag.Bool("help", false, "Display help")
 
 	cpuprofile, memprofile, traceprofile string
@@ -152,7 +153,8 @@ Options:`)
 				exitErr(err)
 				file.Close()
 				for i := 0; i < *bench; i++ {
-					wc := wCounter{out: ioutil.Discard}
+					w, errFn := verifyTo(ioutil.Discard)
+					wc := wCounter{out: w}
 					if !*quiet {
 						fmt.Print("\nCompressing...")
 					}
@@ -170,6 +172,7 @@ Options:`)
 						ms := elapsed.Round(time.Millisecond)
 						fmt.Printf(" %d -> %d [%.02f%%]; %v, %.01fMB/s", input, wc.n, pct, ms, mbpersec)
 					}
+					exitErr(errFn())
 				}
 				fmt.Println("")
 				wr.Close()
@@ -218,6 +221,7 @@ Options:`)
 				defer bw.Flush()
 				out = bw
 			}
+			out, errFn := verifyTo(ioutil.Discard)
 			wc := wCounter{out: out}
 			wr.Reset(&wc)
 			defer wr.Close()
@@ -232,6 +236,7 @@ Options:`)
 				pct := float64(wc.n) * 100 / float64(input)
 				fmt.Printf(" %d -> %d [%.02f%%]; %.01fMB/s\n", input, wc.n, pct, mbpersec)
 			}
+			exitErr(errFn())
 			if *remove {
 				closeOnce.Do(func() {
 					file.Close()
@@ -243,6 +248,35 @@ Options:`)
 				})
 			}
 		}()
+	}
+}
+
+func verifyTo(w io.Writer) (io.Writer, func() error) {
+	if !*verify {
+		return w, func() error {
+			return nil
+		}
+	}
+	pr, pw := io.Pipe()
+	writer := io.MultiWriter(w, pw)
+	var wg sync.WaitGroup
+	var err error
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		r := s2.NewReader(pr)
+		_, err = io.Copy(ioutil.Discard, r)
+		pr.CloseWithError(fmt.Errorf("verify: %w", err))
+	}()
+	return writer, func() error {
+		pw.Close()
+		wg.Wait()
+		if err == nil {
+			if !*quiet {
+				fmt.Print("... Verified ok.")
+			}
+		}
+		return err
 	}
 }
 
