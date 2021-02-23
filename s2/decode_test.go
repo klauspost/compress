@@ -57,7 +57,7 @@ func TestDecoderMaxBlockSize(t *testing.T) {
 		for _, size := range sizes {
 			t.Run(fmt.Sprintf("%d", size), func(t *testing.T) {
 				var buf bytes.Buffer
-				dec := NewReader(nil, ReaderMaxBlockSize(size))
+				dec := NewReader(nil, ReaderMaxBlockSize(size), ReaderAllocBlock(size/2))
 				enc := NewWriter(&buf, WriterBlockSize(size), WriterPadding(16<<10), WriterPaddingSrc(zeroReader{}))
 
 				// Test writer.
