@@ -822,7 +822,7 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 		const inputMargin = 8
 		tmp, tmp2, tmp3 := GP64(), GP64(), GP64()
 		MOVQ(lenSrcQ, tmp)
-		LEAQ(Mem{Base: tmp, Disp: -5}, tmp2)
+		LEAQ(Mem{Base: tmp, Disp: -6}, tmp2)
 		// sLimitL := len(src) - inputMargin
 		LEAQ(Mem{Base: tmp, Disp: -inputMargin}, tmp3)
 
@@ -1225,7 +1225,7 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 			CMPL(s.As32(), sLimitL)
 			JGE(LabelRef("emit_remainder_" + name))
 		}
-		// Start load candidate+1 as early as possible...
+
 		// Bail if we exceed the maximum size.
 		{
 			CMPQ(dst, dstLimitPtrQ)

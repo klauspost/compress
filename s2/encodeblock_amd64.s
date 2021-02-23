@@ -4080,7 +4080,7 @@ zero_loop_encodeBetterBlockAsm:
 	JNZ   zero_loop_encodeBetterBlockAsm
 	MOVL  $0x00000000, 12(SP)
 	MOVQ  src_len+32(FP), CX
-	LEAQ  -5(CX), DX
+	LEAQ  -6(CX), DX
 	LEAQ  -8(CX), BP
 	MOVL  BP, 8(SP)
 	SHRQ  $0x05, CX
@@ -5339,7 +5339,7 @@ zero_loop_encodeBetterBlockAsm12B:
 	JNZ   zero_loop_encodeBetterBlockAsm12B
 	MOVL  $0x00000000, 12(SP)
 	MOVQ  src_len+32(FP), CX
-	LEAQ  -5(CX), DX
+	LEAQ  -6(CX), DX
 	LEAQ  -8(CX), BP
 	MOVL  BP, 8(SP)
 	SHRQ  $0x05, CX
@@ -6281,7 +6281,7 @@ zero_loop_encodeBetterBlockAsm10B:
 	JNZ   zero_loop_encodeBetterBlockAsm10B
 	MOVL  $0x00000000, 12(SP)
 	MOVQ  src_len+32(FP), CX
-	LEAQ  -5(CX), DX
+	LEAQ  -6(CX), DX
 	LEAQ  -8(CX), BP
 	MOVL  BP, 8(SP)
 	SHRQ  $0x05, CX
@@ -7223,7 +7223,7 @@ zero_loop_encodeBetterBlockAsm8B:
 	JNZ   zero_loop_encodeBetterBlockAsm8B
 	MOVL  $0x00000000, 12(SP)
 	MOVQ  src_len+32(FP), CX
-	LEAQ  -5(CX), DX
+	LEAQ  -6(CX), DX
 	LEAQ  -8(CX), BP
 	MOVL  BP, 8(SP)
 	SHRQ  $0x05, CX

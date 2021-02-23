@@ -68,7 +68,7 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 	}
 
 	// Bail if we can't compress to at least this.
-	dstLimit := len(src) - len(src)>>5 - 5
+	dstLimit := len(src) - len(src)>>5 - 6
 
 	// nextEmit is where in src the next emitLiteral should start from.
 	nextEmit := 0
