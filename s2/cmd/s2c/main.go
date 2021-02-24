@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -138,6 +139,7 @@ Options:`)
 	*quiet = *quiet || *stdout
 	if *bench > 0 {
 		debug.SetGCPercent(10)
+		dec := s2.NewReader(nil)
 		for _, filename := range files {
 			func() {
 				if !*quiet {
@@ -152,8 +154,17 @@ Options:`)
 				_, err = io.ReadFull(file, b)
 				exitErr(err)
 				file.Close()
+				var buf *bytes.Buffer
 				for i := 0; i < *bench; i++ {
-					w, errFn := verifyTo(ioutil.Discard)
+					w := ioutil.Discard
+					// Verify with this buffer...
+					if *verify {
+						if buf == nil {
+							buf = bytes.NewBuffer(make([]byte, 0, len(b)+(len(b)>>8)))
+						}
+						buf.Reset()
+						w = buf
+					}
 					wc := wCounter{out: w}
 					if !*quiet {
 						fmt.Print("\nCompressing...")
@@ -172,7 +183,27 @@ Options:`)
 						ms := elapsed.Round(time.Millisecond)
 						fmt.Printf(" %d -> %d [%.02f%%]; %v, %.01fMB/s", input, wc.n, pct, ms, mbpersec)
 					}
-					exitErr(errFn())
+					if *verify {
+						if !*quiet {
+							fmt.Print("\nDecompressing.")
+						}
+						start := time.Now()
+						dec.Reset(buf)
+						n, err := io.Copy(ioutil.Discard, dec)
+						exitErr(err)
+						if int(n) != len(b) {
+							exitErr(fmt.Errorf("unexpected size, want %d, got %d", len(b), n))
+						}
+						if !*quiet {
+							input := len(b)
+							elapsed := time.Since(start)
+							mbpersec := (float64(input) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
+							pct := float64(input) * 100 / float64(wc.n)
+							ms := elapsed.Round(time.Millisecond)
+							fmt.Printf(" %d -> %d [%.02f%%]; %v, %.01fMB/s", wc.n, n, pct, ms, mbpersec)
+						}
+						dec.Reset(nil)
+					}
 				}
 				fmt.Println("")
 				wr.Close()
