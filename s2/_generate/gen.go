@@ -108,8 +108,8 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes, m
 		"It assumes that the varint-encoded length of the decompressed bytes has already been written.", "")
 	Pragma("noescape")
 
-	const literalMaxOverhead = 4
 	o.maxLen = maxLen
+	var literalMaxOverhead = maxLitOverheadFor(maxLen)
 
 	var tableSize = 4 * (1 << tableBits)
 	// Memzero needs at least 128 bytes.
@@ -727,6 +727,22 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes, m
 	RET()
 }
 
+func maxLitOverheadFor(n int) int {
+	switch {
+	case n == 0:
+		return 0
+	case n < 60:
+		return 1
+	case n < 1<<8:
+		return 2
+	case n < 1<<16:
+		return 3
+	case n < 1<<24:
+		return 4
+	}
+	return 5
+}
+
 func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHashBytes, maxLen int) {
 	TEXT(name, 0, "func(dst, src []byte) int")
 	Doc(name+" encodes a non-empty src to a guaranteed-large-enough dst.",
@@ -737,7 +753,8 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 	if lHashBytes > 7 || lHashBytes <= 4 {
 		panic("lHashBytes must be <= 7 and >4")
 	}
-	const literalMaxOverhead = 4
+	var literalMaxOverhead = maxLitOverheadFor(maxLen)
+
 	var sTableBits = lTableBits - 2
 	const sHashBytes = 4
 	o.maxLen = maxLen
@@ -1597,7 +1614,7 @@ func (o options) emitLiteral(name string, litLen, retval, dstBase, litBase reg.G
 	}
 	JMP(end)
 
-	// > 32 bytes
+	// > 64 bytes
 	Label("memmove_long_" + name)
 
 	// copy(dst[i:], lit)
@@ -2259,8 +2276,9 @@ func (o options) genMemMoveLong(name string, dst, src, length reg.GPVirtual, end
 
 	// Store start and end for sse_tail
 	Label(name + "forward_sse")
-	X0, X1, X2, X3, X4, X5, X6, X7 := XMM(), XMM(), XMM(), XMM(), XMM(), XMM(), XMM(), XMM()
-	X8, X9, X10, X11 := XMM(), XMM(), XMM(), XMM()
+	X0, X1, X2, X3, X4, X5 := XMM(), XMM(), XMM(), XMM(), XMM(), XMM()
+	// X6, X7 :=  XMM(), XMM()
+	//X8, X9, X10, X11 := XMM(), XMM(), XMM(), XMM()
 
 	MOVOU(Mem{Base: src}, X0)
 	MOVOU(Mem{Base: src, Disp: 16}, X1)
@@ -2271,7 +2289,7 @@ func (o options) genMemMoveLong(name string, dst, src, length reg.GPVirtual, end
 	dstAlign := GP64()
 	bigLoops := GP64()
 	MOVQ(length, bigLoops)
-	SHRQ(U8(7), bigLoops) // bigLoops = length / 128
+	SHRQ(U8(5), bigLoops) // bigLoops = length / 32
 
 	MOVQ(dst, dstAlign)
 	ANDL(U32(31), dstAlign.As32())
@@ -2279,7 +2297,7 @@ func (o options) genMemMoveLong(name string, dst, src, length reg.GPVirtual, end
 	MOVQ(U32(64), srcOff)
 	SUBQ(dstAlign, srcOff)
 
-	// Move 128 bytes/loop
+	// Move 32 bytes/loop
 	DECQ(bigLoops)
 	JA(LabelRef(name + "forward_sse_loop_32"))
 
@@ -2293,24 +2311,12 @@ func (o options) genMemMoveLong(name string, dst, src, length reg.GPVirtual, end
 
 	MOVOU(Mem{Disp: 0, Base: srcPos}, X4)
 	MOVOU(Mem{Disp: 16, Base: srcPos}, X5)
-	MOVOU(Mem{Disp: 32, Base: srcPos}, X6)
-	MOVOU(Mem{Disp: 48, Base: srcPos}, X7)
-	MOVOU(Mem{Disp: 64, Base: srcPos}, X8)
-	MOVOU(Mem{Disp: 80, Base: srcPos}, X9)
-	MOVOU(Mem{Disp: 96, Base: srcPos}, X10)
-	MOVOU(Mem{Disp: 112, Base: srcPos}, X11)
 
 	MOVOA(X4, Mem{Disp: 0, Base: dstPos})
 	MOVOA(X5, Mem{Disp: 16, Base: dstPos})
-	MOVOA(X6, Mem{Disp: 32, Base: dstPos})
-	MOVOA(X7, Mem{Disp: 48, Base: dstPos})
-	MOVOA(X8, Mem{Disp: 64, Base: dstPos})
-	MOVOA(X9, Mem{Disp: 80, Base: dstPos})
-	MOVOA(X10, Mem{Disp: 96, Base: dstPos})
-	MOVOA(X11, Mem{Disp: 112, Base: dstPos})
-	ADDQ(U8(128), dstPos)
-	ADDQ(U8(128), srcPos)
-	ADDQ(U8(128), srcOff) // This could be outside the loop, but we lose a reg if we do.
+	ADDQ(U8(32), dstPos)
+	ADDQ(U8(32), srcPos)
+	ADDQ(U8(32), srcOff) // This could be outside the loop, but we lose a reg if we do.
 	DECQ(bigLoops)
 	JNA(LabelRef(name + "big_loop_back"))
 
