@@ -14,7 +14,13 @@ This package provides various compression algorithms.
 [![Sourcegraph Badge](https://sourcegraph.com/github.com/klauspost/compress/-/badge.svg)](https://sourcegraph.com/github.com/klauspost/compress?badge)
 
 # changelog
-
+* Feb 25, 2021 (v1.11.8)
+	* s2: Fixed occational out-of-bounds write on amd64. Upgrade recommended.
+	* s2: Add AMD64 assembly for better mode. 25-50% faster. [#315](https://github.com/klauspost/compress/pull/315)
+	* s2: Less upfront decoder allocation. [#322](https://github.com/klauspost/compress/pull/322)
+	* zstd: Faster "compression" of incompressible data. [#314](https://github.com/klauspost/compress/pull/314)
+	* zip: Fix zip64 headers. [#313](https://github.com/klauspost/compress/pull/313)
+  
 * Jan 14, 2021 (v1.11.7)
 	* Use Bytes() interface to get bytes across packages. [#309](https://github.com/klauspost/compress/pull/309)
 	* s2: Add 'best' compression option.  [#310](https://github.com/klauspost/compress/pull/310)
