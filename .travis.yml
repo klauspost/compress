@@ -39,8 +39,6 @@ jobs:
     - stage: arm64 tests
       arch: arm64
       go:
-        - 1.14.x
-        - 1.15.x
         - 1.16.x
       script:
         - go test -cpu=2 ./s2
