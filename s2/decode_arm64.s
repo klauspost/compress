@@ -50,7 +50,7 @@
 //
 // The d variable is implicitly R_DST - R_DBASE,  and len(dst)-d is R_DEND - R_DST.
 // The s variable is implicitly R_SRC - R_SBASE, and len(src)-s is R_SEND - R_SRC.
-TEXT ·s2Decode(SB), NOSPLIT, $56-56
+TEXT ·s2Decode(SB), NOSPLIT, $56-64
 	// Initialize R_SRC, R_DST and R_DBASE-R_SEND.
 	MOVD dst_base+0(FP), R_DBASE
 	MOVD dst_len+8(FP), R_DLEN
@@ -172,6 +172,7 @@ callMemmove:
 	MOVD R_DST, 32(RSP)
 	MOVD R_SRC, 40(RSP)
 	MOVD R_LEN, 48(RSP)
+	MOVD R_OFF, 56(RSP)
 	CALL runtime·memmove(SB)
 
 	// Restore local variables: unspill registers from the stack and
@@ -179,6 +180,7 @@ callMemmove:
 	MOVD 32(RSP), R_DST
 	MOVD 40(RSP), R_SRC
 	MOVD 48(RSP), R_LEN
+	MOVD 56(RSP), R_OFF
 	MOVD dst_base+0(FP), R_DBASE
 	MOVD dst_len+8(FP), R_DLEN
 	MOVD R_DBASE, R_DEND
@@ -316,11 +318,11 @@ tagCopy:
 	CMP $0, R_TMP0
 	BEQ repeatCode
 
-	// This is a regular copy, transfer our temporary value to R_OFF (length)
+	// This is a regular copy, transfer our temporary value to R_OFF (offset)
 	MOVD R_TMP0, R_OFF
-	JMP  doCopy
+	B    doCopy
 
-// This is a repeat code.
+	// This is a repeat code.
 repeatCode:
 	// If length < 9, reuse last offset, with the length already calculated.
 	CMP $9, R_LEN
@@ -393,9 +395,8 @@ doCopy:
 doCopyRepeat:
 
 	// if offset <= 0 { etc }
-	MOVD $0, R1
-	CMP  R1, R_OFF
-	BLE  errCorrupt
+	CMP $0, R_OFF
+	BLE errCorrupt
 
 	// if length > len(dst)-d { etc }
 	MOVD R_DEND, R_TMP1
