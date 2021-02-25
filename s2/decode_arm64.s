@@ -356,7 +356,7 @@ repeatLen2:
 	BGT  errCorrupt
 
 	MOVHU -2(R_SRC), R_LEN
-	ADD   $256, R_LEN, R_LEN
+	ADD   $260, R_LEN, R_LEN
 	B     doCopyRepeat
 
 repeatLen1:
