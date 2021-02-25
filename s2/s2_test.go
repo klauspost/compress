@@ -1330,12 +1330,26 @@ func benchDecode(b *testing.B, src []byte) {
 
 func benchEncode(b *testing.B, src []byte) {
 	// Bandwidth is in amount of uncompressed data.
-	b.SetBytes(int64(len(src)))
 	dst := make([]byte, MaxEncodedLen(len(src)))
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		Encode(dst, src)
-	}
+	b.Run("default", func(b *testing.B) {
+		b.SetBytes(int64(len(src)))
+		for i := 0; i < b.N; i++ {
+			Encode(dst, src)
+		}
+	})
+	b.Run("better", func(b *testing.B) {
+		b.SetBytes(int64(len(src)))
+		for i := 0; i < b.N; i++ {
+			EncodeBetter(dst, src)
+		}
+	})
+	b.Run("best", func(b *testing.B) {
+		b.SetBytes(int64(len(src)))
+		for i := 0; i < b.N; i++ {
+			EncodeBest(dst, src)
+		}
+	})
 }
 
 func benchEncodeBetter(b *testing.B, src []byte) {

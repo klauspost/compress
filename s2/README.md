@@ -8,7 +8,7 @@ Decoding is compatible with Snappy compressed content, but content compressed wi
 This means that S2 can seamlessly replace Snappy without converting compressed content.
 
 S2 is designed to have high throughput on content that cannot be compressed.
-This is important so you don't have to worry about spending CPU cycles on already compressed data. 
+This is important, so you don't have to worry about spending CPU cycles on already compressed data. 
 
 ## Benefits over Snappy
 
@@ -456,33 +456,33 @@ This will compress as much as possible with little regard to CPU usage.
 Mainly for offline compression, but where decompression speed should still
 be high and compatible with other S2 compressed data.
 
-Some examples compared on 16 core CPU:
+Some examples compared on 16 core CPU, amd64 assembly used:
 
 ```
 * enwik10
 Default... 10000000000 -> 4761467548 [47.61%]; 1.098s, 8685.6MB/s
-Better... 10000000000 -> 4225922984 [42.26%]; 2.817s, 3385.4MB/s
-Best... 10000000000 -> 3667646858 [36.68%]; 35.995s, 264.9MB/s
+Better...  10000000000 -> 4219438251 [42.19%]; 1.925s, 4954.2MB/s
+Best...    10000000000 -> 3667646858 [36.68%]; 35.995s, 264.9MB/s
 
 * github-june-2days-2019.json
 Default... 6273951764 -> 1043196283 [16.63%]; 431ms, 13882.3MB/s
-Better... 6273951764 -> 950079555 [15.14%]; 736ms, 8129.5MB/s
-Best... 6273951764 -> 846260870 [13.49%]; 8.125s, 736.4MB/s
+Better...  6273951764 -> 949146808 [15.13%]; 547ms, 10938.4MB/s
+Best...    6273951764 -> 846260870 [13.49%]; 8.125s, 736.4MB/s
 
 * nyc-taxi-data-10M.csv
 Default... 3325605752 -> 1095998837 [32.96%]; 324ms, 9788.7MB/s
-Better... 3325605752 -> 960330423 [28.88%]; 602ms, 5268.4MB/s
-Best... 3325605752 -> 794873295 [23.90%]; 6.619s, 479.1MB/s
+Better...  3325605752 -> 954776589 [28.71%]; 491ms, 6459.4MB/s
+Best...    3325605752 -> 794873295 [23.90%]; 6.619s, 479.1MB/s
 
 * 10gb.tar
 Default... 10065157632 -> 5916578242 [58.78%]; 1.028s, 9337.4MB/s
-Better... 10065157632 -> 5650133605 [56.14%]; 2.172s, 4419.4MB/s
-Best... 10065157632 -> 5246578570 [52.13%]; 25.696s, 373.6MB/s
+Better...  10065157632 -> 5649207485 [56.13%]; 1.597s, 6010.6MB/s
+Best...    10065157632 -> 5246578570 [52.13%]; 25.696s, 373.6MB/s
 
 * consensus.db.10gb
 Default... 10737418240 -> 4562648848 [42.49%]; 882ms, 11610.0MB/s
-Better... 10737418240 -> 4542443833 [42.30%]; 3.3s, 3103.5MB/s
-Best... 10737418240 -> 4272335558 [39.79%]; 38.955s, 262.9MB/s
+Better...  10737418240 -> 4542428129 [42.30%]; 1.533s, 6679.7MB/s
+Best...    10737418240 -> 4272335558 [39.79%]; 38.955s, 262.9MB/s
 ```
 
 Decompression speed should be around the same as using the 'better' compression mode. 
