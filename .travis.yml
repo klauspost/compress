@@ -6,7 +6,6 @@ os:
 
 arch:
   - amd64
-  - arm64
 
 go:
   - 1.14.x
@@ -24,25 +23,28 @@ install:
 script:
  - diff <(gofmt -d .) <(printf "")
  - go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d && s2c s2c && s2d s2c.s2 && rm s2c && rm s2d && rm s2c.s2
+ - go test -cpu=2 ./...
+ - go test -cpu=2 -tags=noasm ./...
+ - CGO_ENABLED=1 go test -cpu=1,4 -short -race ./...
 
 jobs:
   allow_failures:
     - go: 'master'
   fast_finish: true
   include:
-    - arch: amd64
-      script:
-        - go test -cpu=2 ./...
-        - go test -cpu=2 -tags=noasm ./...
-        - CGO_ENABLED=1 go test -cpu=1,4 -short -race ./...
-    - arch: arm64
-      script:
-        - go test -cpu=2 ./s2
-        - go test -cpu=2 -tags=noasm ./s2
     - stage: 386 linux test
       go: 1.16.x
       script:
         - GOOS=linux GOARCH=386 go test -short ./...
+    - stage: arm64 tests
+      arch: arm64
+      go:
+        - 1.14.x
+        - 1.15.x
+        - 1.16.x
+      script:
+        - go test -cpu=2 ./s2
+        - go test -cpu=2 -tags=noasm ./s2
 
 deploy:
 - provider: script

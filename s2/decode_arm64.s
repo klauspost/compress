@@ -23,6 +23,16 @@
 #define R_TMP2 R14
 #define R_TMP3 R15
 
+// TEST_SRC will check if R_SRC is <= SRC_END
+#define TEST_SRC \
+	CMP R_SEND, R_SRC \
+	BGT errCorrupt
+
+// MOVD R_SRC, R_TMP1
+// SUB  R_SBASE, R_TMP1, R_TMP1
+// CMP  R_SLEN, R_TMP1
+// BGT  errCorrupt
+
 // The asm code generally follows the pure Go code in decode_other.go, except
 // where marked with a "!!!".
 
@@ -202,12 +212,9 @@ tagLit60Plus:
 	// s += x - 58; if uint(s) > uint(len(src)) { etc }
 	//
 	// checks. In the asm version, we code it once instead of once per switch case.
-	ADD  R_LEN, R_SRC, R_SRC
-	SUB  $58, R_SRC, R_SRC
-	MOVD R_SRC, R_TMP1
-	SUB  R_SBASE, R_TMP1, R_TMP1
-	CMP  R_SLEN, R_TMP1
-	BGT  errCorrupt
+	ADD R_LEN, R_SRC, R_SRC
+	SUB $58, R_SRC, R_SRC
+	TEST_SRC()
 
 	// case x == 60:
 	MOVW $61, R1
@@ -271,10 +278,7 @@ tagCopy2:
 	ADD $3, R_SRC, R_SRC
 
 	// if uint(s) > uint(len(src)) { etc }
-	MOVD R_SRC, R_TMP1
-	SUB  R_SBASE, R_TMP1, R_TMP1
-	CMP  R_SLEN, R_TMP1
-	BGT  errCorrupt
+	TEST_SRC()
 
 	// length = 1 + int(src[s-3])>>2
 	MOVD $1, R1
@@ -297,10 +301,7 @@ tagCopy:
 	ADD $2, R_SRC, R_SRC
 
 	// if uint(s) > uint(len(src)) { etc }
-	MOVD R_SRC, R_TMP1
-	SUB  R_SBASE, R_TMP1, R_TMP1
-	CMP  R_SLEN, R_TMP1
-	BGT  errCorrupt
+	TEST_SRC()
 
 	// offset = int(uint32(src[s-2])&0xe0<<3 | uint32(src[s-1]))
 	// Calculate offset in R_TMP0 in case it is a repeat.
@@ -336,10 +337,7 @@ repeatLen3:
 	ADD $3, R_SRC, R_SRC
 
 	// if uint(s) > uint(len(src)) { etc }
-	MOVD R_SRC, R_TMP1
-	SUB  R_SBASE, R_TMP1, R_TMP1
-	CMP  R_SLEN, R_TMP1
-	BGT  errCorrupt
+	TEST_SRC()
 
 	// length = uint32(src[s-3]) | (uint32(src[s-2])<<8) | (uint32(src[s-1])<<16) + 65540
 	MOVBU -1(R_SRC), R_TMP0
@@ -353,10 +351,7 @@ repeatLen2:
 	ADD $2, R_SRC, R_SRC
 
 	// if uint(s) > uint(len(src)) { etc }
-	MOVD R_SRC, R_TMP1
-	SUB  R_SBASE, R_TMP1, R_TMP1
-	CMP  R_SLEN, R_TMP1
-	BGT  errCorrupt
+	TEST_SRC()
 
 	// length = uint32(src[s-2]) | (uint32(src[s-1])<<8) + 260
 	MOVHU -2(R_SRC), R_LEN
@@ -368,10 +363,7 @@ repeatLen1:
 	ADD $1, R_SRC, R_SRC
 
 	// if uint(s) > uint(len(src)) { etc }
-	MOVD R_SRC, R_TMP1
-	SUB  R_SBASE, R_TMP1, R_TMP1
-	CMP  R_SLEN, R_TMP1
-	BGT  errCorrupt
+	TEST_SRC()
 
 	// length = src[s-1] + 8
 	MOVBU -1(R_SRC), R_LEN
