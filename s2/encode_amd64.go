@@ -21,8 +21,11 @@ func encodeBlock(dst, src []byte) (d int) {
 		limit8B = 512
 	)
 
-	if len(src) >= limit12B {
+	if len(src) >= 4<<20 {
 		return encodeBlockAsm(dst, src)
+	}
+	if len(src) >= limit12B {
+		return encodeBlockAsm4MB(dst, src)
 	}
 	if len(src) >= limit10B {
 		return encodeBlockAsm12B(dst, src)
@@ -53,8 +56,11 @@ func encodeBlockBetter(dst, src []byte) (d int) {
 		limit8B = 512
 	)
 
-	if len(src) >= limit12B {
+	if len(src) > 4<<20 {
 		return encodeBetterBlockAsm(dst, src)
+	}
+	if len(src) >= limit12B {
+		return encodeBetterBlockAsm4MB(dst, src)
 	}
 	if len(src) >= limit10B {
 		return encodeBetterBlockAsm12B(dst, src)

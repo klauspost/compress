@@ -35,11 +35,13 @@ func main() {
 		snappy: false,
 	}
 	o.genEncodeBlockAsm("encodeBlockAsm", 14, 6, 6, limit14B)
+	o.genEncodeBlockAsm("encodeBlockAsm4MB", 14, 6, 6, 4<<20)
 	o.genEncodeBlockAsm("encodeBlockAsm12B", 12, 5, 5, limit12B)
 	o.genEncodeBlockAsm("encodeBlockAsm10B", 10, 5, 4, limit10B)
 	o.genEncodeBlockAsm("encodeBlockAsm8B", 8, 4, 4, limit8B)
 
 	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm", 16, 7, 7, limit14B)
+	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm4MB", 16, 7, 7, 4<<20)
 	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm12B", 14, 6, 6, limit12B)
 	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm10B", 12, 5, 6, limit10B)
 	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm8B", 10, 4, 6, limit8B)

@@ -13,6 +13,13 @@ package s2
 //go:noescape
 func encodeBlockAsm(dst []byte, src []byte) int
 
+// encodeBlockAsm4MB encodes a non-empty src to a guaranteed-large-enough dst.
+// Maximum input 4194304 bytes.
+// It assumes that the varint-encoded length of the decompressed bytes has already been written.
+//
+//go:noescape
+func encodeBlockAsm4MB(dst []byte, src []byte) int
+
 // encodeBlockAsm12B encodes a non-empty src to a guaranteed-large-enough dst.
 // Maximum input 16383 bytes.
 // It assumes that the varint-encoded length of the decompressed bytes has already been written.
@@ -40,6 +47,13 @@ func encodeBlockAsm8B(dst []byte, src []byte) int
 //
 //go:noescape
 func encodeBetterBlockAsm(dst []byte, src []byte) int
+
+// encodeBetterBlockAsm4MB encodes a non-empty src to a guaranteed-large-enough dst.
+// Maximum input 4194304 bytes.
+// It assumes that the varint-encoded length of the decompressed bytes has already been written.
+//
+//go:noescape
+func encodeBetterBlockAsm4MB(dst []byte, src []byte) int
 
 // encodeBetterBlockAsm12B encodes a non-empty src to a guaranteed-large-enough dst.
 // Maximum input 16383 bytes.
