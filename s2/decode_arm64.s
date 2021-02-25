@@ -24,7 +24,7 @@
 #define R_TMP3 R15
 
 // TEST_SRC will check if R_SRC is <= SRC_END
-#define TEST_SRC \
+#define TEST_SRC() \
 	CMP R_SEND, R_SRC \
 	BGT errCorrupt
 
