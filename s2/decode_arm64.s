@@ -493,7 +493,7 @@ slowForwardCopy:
 	BGT verySlowForwardCopy
 
 	// We want to keep the offset, so we use R_TMP2 from here.
-	MOVQ R_OFF, R_TMP2
+	MOVD R_OFF, R_TMP2
 
 makeOffsetAtLeast8:
 	// !!! As above, expand the pattern so that offset >= 8 and we can use
