@@ -339,6 +339,7 @@ repeatLen3:
 	CMP  R_SLEN, R_TMP1
 	BGT  errCorrupt
 
+	// length = uint32(src[s-3]) | (uint32(src[s-2])<<8) | (uint32(src[s-1])<<16) + 65540
 	MOVBU -1(R_SRC), R_TMP0
 	MOVHU -3(R_SRC), R_LEN
 	ORR   R_TMP0<<16, R_LEN, R_LEN
@@ -355,6 +356,7 @@ repeatLen2:
 	CMP  R_SLEN, R_TMP1
 	BGT  errCorrupt
 
+	// length = uint32(src[s-2]) | (uint32(src[s-1])<<8) + 260
 	MOVHU -2(R_SRC), R_LEN
 	ADD   $260, R_LEN, R_LEN
 	B     doCopyRepeat
@@ -369,6 +371,7 @@ repeatLen1:
 	CMP  R_SLEN, R_TMP1
 	BGT  errCorrupt
 
+	// length = src[s-1] + 8
 	MOVBU -1(R_SRC), R_LEN
 	ADD   $8, R_LEN, R_LEN
 	B     doCopyRepeat
@@ -489,6 +492,9 @@ slowForwardCopy:
 	CMP R_TMP2, R_LEN
 	BGT verySlowForwardCopy
 
+	// We want to keep the offset, so we use R_TMP2 from here.
+	MOVQ R_OFF, R_TMP2
+
 makeOffsetAtLeast8:
 	// !!! As above, expand the pattern so that offset >= 8 and we can use
 	// 8-byte load/stores.
@@ -501,13 +507,13 @@ makeOffsetAtLeast8:
 	//   // The two previous lines together means that d-offset, and therefore
 	//   // R_TMP3, is unchanged.
 	// }
-	CMP  $8, R_OFF
+	CMP  $8, R_TMP2
 	BGE  fixUpSlowForwardCopy
 	MOVD (R_TMP3), R_TMP1
 	MOVD R_TMP1, (R_DST)
-	SUB  R_OFF, R_LEN, R_LEN
-	ADD  R_OFF, R_DST, R_DST
-	ADD  R_OFF, R_OFF, R_OFF
+	SUB  R_TMP2, R_LEN, R_LEN
+	ADD  R_TMP2, R_DST, R_DST
+	ADD  R_TMP2, R_TMP2, R_TMP2
 	B    makeOffsetAtLeast8
 
 fixUpSlowForwardCopy:
