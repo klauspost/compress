@@ -62,7 +62,7 @@ TEXT ·s2Decode(SB), NOSPLIT, $56-56
 	MOVD R_SBASE, R_SRC
 	MOVD R_SBASE, R_SEND
 	ADD  R_SLEN, R_SEND, R_SEND
-	XORQ R_OFF, R_OFF
+	XOR  R_OFF, R_OFF
 
 loop:
 	// for s < len(src)
@@ -317,7 +317,7 @@ tagCopy:
 	BEQ repeatCode
 
 	// This is a regular copy, transfer our temporary value to R_OFF (length)
-	MOVQ R_TMP0, R_OFF
+	MOVD R_TMP0, R_OFF
 	JMP  doCopy
 
 // This is a repeat code.
@@ -343,7 +343,7 @@ repeatLen3:
 	MOVHU -3(R_SRC), R_LEN
 	ORR   R_TMP0<<16, R_LEN, R_LEN
 	ADD   $65540, R_LEN, R_LEN
-	J     doCopyRepeat
+	B     doCopyRepeat
 
 repeatLen2:
 	// s +=2
@@ -357,7 +357,7 @@ repeatLen2:
 
 	MOVHU -2(R_SRC), R_LEN
 	ADD   $256, R_LEN, R_LEN
-	J     doCopyRepeat
+	B     doCopyRepeat
 
 repeatLen1:
 	// s +=1
@@ -371,7 +371,7 @@ repeatLen1:
 
 	MOVBU -1(R_SRC), R_LEN
 	ADD   $8, R_LEN, R_LEN
-	J     doCopyRepeat
+	B     doCopyRepeat
 
 doCopy:
 	// This is the end of the outer "switch", when we have a copy tag.
