@@ -5,7 +5,7 @@ os:
   - osx
 
 arch:
-#  - amd64
+  - amd64
   - arm64
 
 go:
@@ -23,9 +23,6 @@ install:
 
 script:
  - diff <(gofmt -d .) <(printf "")
- - go test -v -cpu=2 ./s2
-# - go test -cpu=2 -tags=noasm ./...
-# - CGO_ENABLED=1 go test -cpu=1,4 -short -race ./...
  - go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d && s2c s2c && s2d s2c.s2 && rm s2c && rm s2d && rm s2c.s2
 
 jobs:
@@ -33,6 +30,15 @@ jobs:
     - go: 'master'
   fast_finish: true
   include:
+    - arch: amd64
+      script:
+        - go test -cpu=2 ./...
+        - go test -cpu=2 -tags=noasm ./...
+        - CGO_ENABLED=1 go test -cpu=1,4 -short -race ./...
+    - arch: arm64
+      script:
+        - go test -cpu=2 ./s2
+        - go test -cpu=2 -tags=noasm ./s2
     - stage: 386 linux test
       go: 1.16.x
       script:
