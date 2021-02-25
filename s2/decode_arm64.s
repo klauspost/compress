@@ -62,7 +62,7 @@ TEXT ·s2Decode(SB), NOSPLIT, $56-56
 	MOVD R_SBASE, R_SRC
 	MOVD R_SBASE, R_SEND
 	ADD  R_SLEN, R_SEND, R_SEND
-	XOR  R_OFF, R_OFF
+	MOVD $0, R_OFF
 
 loop:
 	// for s < len(src)
