@@ -252,7 +252,7 @@ Options:`)
 				defer bw.Flush()
 				out = bw
 			}
-			out, errFn := verifyTo(ioutil.Discard)
+			out, errFn := verifyTo(out)
 			wc := wCounter{out: out}
 			wr.Reset(&wc)
 			defer wr.Close()
