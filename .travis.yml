@@ -4,8 +4,10 @@ os:
   - linux
   - osx
 
+arch:
+  - amd64
+
 go:
-  - 1.13.x
   - 1.14.x
   - 1.15.x
   - 1.16.x
@@ -34,6 +36,14 @@ jobs:
       go: 1.16.x
       script:
         - GOOS=linux GOARCH=386 go test -short ./...
+    - stage: arm64 tests
+      arch: arm64
+      go:
+        - 1.16.x
+      script:
+        - go test -cpu=2 ./s2
+        - go test -cpu=2 -tags=noasm ./s2
+        - go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d && s2c s2c && s2d s2c.s2 && rm s2c && rm s2d && rm s2c.s2
 
 deploy:
 - provider: script
