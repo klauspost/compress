@@ -938,7 +938,7 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 		}
 
 		// En/disable repeat matching.
-		if true {
+		if false {
 			// Check repeat at offset checkRep
 			const checkRep = 1
 			{
@@ -1204,6 +1204,7 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 		a, b, srcLeft = nil, nil, nil
 
 		// Update repeat
+		// TODO: Check if match is actually a repeat before.
 		{
 			// repeat = base - candidate
 			repeatVal := GP64().As32()
