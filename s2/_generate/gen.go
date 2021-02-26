@@ -869,8 +869,8 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 	// s = 1
 	s := GP32()
 	MOVL(U32(1), s)
-	// repeatL = 1
-	MOVL(s, repeatL)
+	// repeatL = 0
+	MOVL(U32(0), repeatL)
 
 	src := GP64()
 	Load(Param("src").Base(), src)
@@ -938,7 +938,7 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 		}
 
 		// En/disable repeat matching.
-		if true {
+		if false {
 			// Check repeat at offset checkRep
 			const checkRep = 1
 			{
@@ -1203,40 +1203,57 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 		})
 		a, b, srcLeft = nil, nil, nil
 
-		// Update repeat
-		{
-			// repeat = base - candidate
-			repeatVal := GP64().As32()
-			MOVL(s, repeatVal)
-			SUBL(candidate, repeatVal)
-			// Check if match is better..
-			if o.maxLen > 65535 {
-				CMPL(length.As32(), U8(1))
-				JG(LabelRef("match_length_ok_" + name))
-				CMPL(repeatVal, U32(65535))
-				JLE(LabelRef("match_length_ok_" + name))
-				// Match is equal or worse to the encoding.
-				MOVL(nextSTempL, s)
-				INCL(s)
-				JMP(LabelRef("search_loop_" + name))
-				Label("match_length_ok_" + name)
-			}
-			// Store updated repeat
-			MOVL(repeatVal, repeatL)
-		}
-		// Emit....
-		o.emitLiteralsDstP(nextEmitL, base, src, dst, "match_emit_"+name)
-		// s += length (length is destroyed, use it now)
-		ADDL(length.As32(), s)
-
-		// Load offset from repeat value.
 		offset := GP64()
-		MOVL(repeatL, offset.As32())
+		offset32 := offset.As32()
+		{
+			// offset = base - candidate
+			MOVL(s, offset32)
+			SUBL(candidate, offset32)
+			Comment("Check if repeat")
+			CMPL(repeatL, offset32)
+			JEQ(LabelRef("match_is_repeat_" + name))
 
-		// length += 4
-		ADDL(U8(4), length.As32())
-		MOVL(s, nextEmitL) // nextEmit = s
-		o.emitCopy("match_nolit_"+name, length, offset, nil, dst, LabelRef("match_nolit_emitcopy_end_"+name))
+			// NOT REPEAT
+			{
+				// Check if match is better..
+				if o.maxLen > 65535 {
+					CMPL(length.As32(), U8(1))
+					JG(LabelRef("match_length_ok_" + name))
+					CMPL(offset32, U32(65535))
+					JLE(LabelRef("match_length_ok_" + name))
+					// Match is equal or worse to the encoding.
+					MOVL(nextSTempL, s)
+					INCL(s)
+					JMP(LabelRef("search_loop_" + name))
+					Label("match_length_ok_" + name)
+				}
+				// Store updated repeat
+				MOVL(offset32, repeatL)
+				// Emit....
+				o.emitLiteralsDstP(nextEmitL, base, src, dst, "match_emit_"+name)
+				// s += length (length is destroyed, use it now)
+				ADDL(length.As32(), s)
+
+				// length += 4
+				ADDL(U8(4), length.As32())
+				MOVL(s, nextEmitL) // nextEmit = s
+				o.emitCopy("match_nolit_"+name, length, offset, nil, dst, LabelRef("match_nolit_emitcopy_end_"+name))
+				// Jumps at end
+			}
+			// REPEAT
+			{
+				Label("match_is_repeat_" + name)
+				// Emit....
+				o.emitLiteralsDstP(nextEmitL, base, src, dst, "match_emit_repeat_"+name)
+				// s += length (length is destroyed, use it now)
+				ADDL(length.As32(), s)
+
+				// length += 4
+				ADDL(U8(4), length.As32())
+				MOVL(s, nextEmitL) // nextEmit = s
+				o.emitRepeat("match_nolit_repeat_"+name, length, offset, nil, dst, LabelRef("match_nolit_emitcopy_end_"+name))
+			}
+		}
 		Label("match_nolit_emitcopy_end_" + name)
 
 		// if s >= sLimit { end }

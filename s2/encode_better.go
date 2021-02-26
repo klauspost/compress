@@ -78,8 +78,8 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 	s := 1
 	cv := load64(src, s)
 
-	// We search for a repeat at -1, but don't output repeats when nextEmit == 0
-	repeat := 1
+	// We initialize repeat to 0, so we never match on first attempt
+	repeat := 0
 
 	for {
 		candidateL := 0
@@ -99,7 +99,7 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 
 			// Check repeat at offset checkRep.
 			const checkRep = 1
-			if uint32(cv>>(checkRep*8)) == load32(src, s-repeat+checkRep) {
+			if false && uint32(cv>>(checkRep*8)) == load32(src, s-repeat+checkRep) {
 				base := s + checkRep
 				// Extend back
 				for i := base - repeat; base > nextEmit && i > 0 && src[i-1] == src[base-1]; {
@@ -184,7 +184,7 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 			candidateL += 8
 		}
 
-		if offset > 65535 && s-base <= 5 {
+		if offset > 65535 && s-base <= 5 && repeat != offset {
 			// Bail if the match is equal or worse to the encoding.
 			s = nextS + 1
 			if s >= sLimit {
@@ -193,9 +193,13 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 			cv = load64(src, s)
 			continue
 		}
-		repeat = offset
 		d += emitLiteral(dst[d:], src[nextEmit:base])
-		d += emitCopy(dst[d:], offset, s-base)
+		if repeat == offset {
+			d += emitRepeat(dst[d:], offset, s-base)
+		} else {
+			d += emitCopy(dst[d:], offset, s-base)
+			repeat = offset
+		}
 
 		nextEmit = s
 		if s >= sLimit {
