@@ -22,10 +22,10 @@ install:
 
 script:
  - diff <(gofmt -d .) <(printf "")
- - go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d && s2c s2c && s2d s2c.s2 && rm s2c && rm s2d && rm s2c.s2
  - go test -cpu=2 ./...
  - go test -cpu=2 -tags=noasm ./...
  - CGO_ENABLED=1 go test -cpu=1,4 -short -race ./...
+ - go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d && s2c s2c && s2d s2c.s2 && rm s2c && rm s2d && rm s2c.s2
 
 jobs:
   allow_failures:
@@ -43,6 +43,7 @@ jobs:
       script:
         - go test -cpu=2 ./s2
         - go test -cpu=2 -tags=noasm ./s2
+        - go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d && s2c s2c && s2d s2c.s2 && rm s2c && rm s2d && rm s2c.s2
 
 deploy:
 - provider: script
