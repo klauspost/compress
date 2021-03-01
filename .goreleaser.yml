@@ -10,10 +10,12 @@ builds:
     env:
       - CGO_ENABLED=0
     goos:
+      - aix
       - linux
       - freebsd
       - netbsd
       - windows
+      - darwin
     goarch:
       - 386
       - amd64
@@ -32,10 +34,12 @@ builds:
     env:
       - CGO_ENABLED=0
     goos:
+      - aix
       - linux
       - freebsd
       - netbsd
       - windows
+      - darwin
     goarch:
       - 386
       - amd64
@@ -51,9 +55,10 @@ builds:
 archives:
   -
     id: s2-binaries
-    name_template: "s2-cmds_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "s2-{{ .Os }}_{{ .Arch }}_{{ .Version }}"
     replacements:
-      darwin: Darwin
+      aix: AIX
+      darwin: OSX
       linux: Linux
       windows: Windows
       386: i386
@@ -69,7 +74,7 @@ archives:
 checksum:
   name_template: 'checksums.txt'
 snapshot:
-  name_template: "s2-cmds_{{ .Tag }}-next"
+  name_template: "{{ .Tag }}-next"
 changelog:
   sort: asc
   filters:
@@ -82,7 +87,7 @@ changelog:
 
 nfpms:
   -
-    file_name_template: "s2-cmds_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    file_name_template: "s2-Install_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     vendor: Klaus Post
     homepage: https://github.com/klauspost/compress
     maintainer: Klaus Post <klauspost@gmail.com>

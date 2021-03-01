@@ -18,10 +18,8 @@ env:
 
 install:
  - go get ./...
- - go get github.com/klauspost/compress-fuzz
 
 script:
- - diff <(gofmt -d .) <(printf "")
  - go test -cpu=2 ./...
  - go test -cpu=2 -tags=noasm ./...
  - CGO_ENABLED=1 go test -cpu=1,4 -short -race ./...
@@ -32,10 +30,13 @@ jobs:
     - go: 'master'
   fast_finish: true
   include:
-    - stage: 386 linux test
+    - stage: misc one-off tests
       go: 1.16.x
       script:
-        - GOOS=linux GOARCH=386 go test -short ./...
+        - diff <(gofmt -d .) <(printf "")
+        - GOOS=linux GOARCH=386 go test -short ./... # test on 386/32 bits.
+        - curl -sfL https://git.io/goreleaser | VERSION=v0.157.0 sh -s -- check # check goreleaser config for deprecations
+        - curl -sL https://git.io/goreleaser | VERSION=v0.157.0 sh -s -- --snapshot --skip-publish --rm-dist
     - stage: arm64 tests
       arch: arm64
       go:
@@ -53,7 +54,6 @@ deploy:
     tags: true
     condition: $TRAVIS_OS_NAME = linux
     go: 1.16.x
-
 branches:
   only:
     - master
