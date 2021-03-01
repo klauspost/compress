@@ -14,6 +14,12 @@ This package provides various compression algorithms.
 [![Sourcegraph Badge](https://sourcegraph.com/github.com/klauspost/compress/-/badge.svg)](https://sourcegraph.com/github.com/klauspost/compress?badge)
 
 # changelog
+
+* Mar 1, 2021 (v1.11.9)
+	* s2: Add ARM64 decompression assembly. Around 2x output speed. [#324](https://github.com/klauspost/compress/pull/324)
+	* s2: Improve "better" speed and efficiency. [#325](https://github.com/klauspost/compress/pull/325)
+	* s2: Fix binaries.
+
 * Feb 25, 2021 (v1.11.8)
 	* s2: Fixed occational out-of-bounds write on amd64. Upgrade recommended.
 	* s2: Add AMD64 assembly for better mode. 25-50% faster. [#315](https://github.com/klauspost/compress/pull/315)
