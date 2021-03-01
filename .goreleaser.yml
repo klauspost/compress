@@ -82,7 +82,7 @@ changelog:
 
 nfpms:
   -
-    name_template: "s2-cmds_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    file_name_template: "s2-cmds_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     vendor: Klaus Post
     homepage: https://github.com/klauspost/compress
     maintainer: Klaus Post <klauspost@gmail.com>
