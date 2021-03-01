@@ -58,6 +58,7 @@ deploy:
   skip_cleanup: true
   script: curl -sL https://git.io/goreleaser | VERSION=v0.157.0 bash --snapshot --skip-publish --rm-dist
   on:
+    all_branches: true
     tags: false
     condition: $TRAVIS_OS_NAME = linux
     go: 1.16.x
