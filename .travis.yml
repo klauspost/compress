@@ -32,11 +32,12 @@ jobs:
     - go: 'master'
   fast_finish: true
   include:
-    - stage: 386 linux test
+    - stage: misc one-off tests
       go: 1.16.x
       script:
-        - GOOS=linux GOARCH=386 go test -short ./...
+        - GOOS=linux GOARCH=386 go test -short ./... # test on 386/32 bits.
         - curl -sfL https://git.io/goreleaser | sh -s -- check # check goreleaser config for deprecations
+        - curl -sL https://git.io/goreleaser | VERSION=v0.157.0 bash --snapshot --skip-publish --rm-dist
     - stage: arm64 tests
       arch: arm64
       go:
@@ -52,14 +53,6 @@ deploy:
   script: curl -sL https://git.io/goreleaser | VERSION=v0.157.0 bash || true
   on:
     tags: true
-    condition: $TRAVIS_OS_NAME = linux
-    go: 1.16.x
-- provider: script
-  skip_cleanup: true
-  script: curl -sL https://git.io/goreleaser | VERSION=v0.157.0 bash --snapshot --skip-publish --rm-dist
-  on:
-    all_branches: true
-    tags: false
     condition: $TRAVIS_OS_NAME = linux
     go: 1.16.x
 branches:
