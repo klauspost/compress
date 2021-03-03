@@ -41,22 +41,29 @@ func main() {
 	flag.Parse()
 	args := flag.Args()
 	if len(args) == 0 || *help {
-		_, _ = fmt.Fprintf(os.Stderr, "s2 selfextraction v%v, built at %v.\n\n", version, date)
+		_, _ = fmt.Fprintf(os.Stderr, "s2sx v%v, built at %v.\n\n", version, date)
 		_, _ = fmt.Fprintf(os.Stderr, "Copyright (c) 2011 The Snappy-Go Authors. All rights reserved.\n"+
 			"Copyright (c) 2021 Klaus Post. All rights reserved.\n\n")
-		_, _ = fmt.Fprintln(os.Stderr, `Usage: sfx [options] file1 file2
+		_, _ = fmt.Fprintln(os.Stderr, `Usage: s2sx [options] file1 file2
 
 Compresses all files supplied as input separately.
-Output files are written as 'filename.ext.s2'.
+If files have '.s2' extension they are assumed to be compressed already.
+Output files are written as 'filename.s2sfx' and with '.exe' for windows targets.
 By default output files will be overwritten.
-Use - as the only file name to read from stdin and write to stdout.
 
 Wildcards are accepted: testdir/*.txt will compress all files in testdir ending with .txt
 Directories can be wildcards as well. testdir/*/*.txt will match testdir/subdir/b.txt
 
 Options:`)
 		flag.PrintDefaults()
-		os.Exit(1)
+		dir, err := embeddedFiles.ReadDir("sfx-exe")
+		exitErr(err)
+		_, _ = fmt.Fprintf(os.Stderr, "\nAvailable platforms are:\n\n")
+		for _, d := range dir {
+			_, _ = fmt.Fprintf(os.Stderr, " * %s\n", d.Name())
+		}
+
+		os.Exit(0)
 	}
 
 	opts := []s2.WriterOption{s2.WriterBestCompression(), s2.WriterConcurrency(*cpu), s2.WriterBlockSize(4 << 20)}
@@ -110,21 +117,18 @@ Options:`)
 			src, err := readahead.NewReaderSize(file, *cpu+1, 1<<20)
 			exitErr(err)
 			defer src.Close()
-			finfo, err := file.Stat()
-			exitErr(err)
 			var out io.Writer
 			switch {
 			case *stdout:
 				out = os.Stdout
 			default:
-				mode := finfo.Mode() // use the same mode for the output file
 				if *safe {
 					_, err := os.Stat(dstFilename)
 					if !os.IsNotExist(err) {
 						exitErr(errors.New("destination file exists"))
 					}
 				}
-				dstFile, err := os.OpenFile(dstFilename, os.O_CREATE|os.O_WRONLY, mode)
+				dstFile, err := os.OpenFile(dstFilename, os.O_CREATE|os.O_WRONLY, 0777)
 				exitErr(err)
 				defer dstFile.Close()
 				bw := bufio.NewWriterSize(dstFile, 4<<20*2)

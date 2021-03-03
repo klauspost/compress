@@ -112,12 +112,20 @@ For big skips the decompressor is able to skip blocks without decompressing them
 ## Single Blocks
 
 Similar to Snappy S2 offers single block compression. 
-Blocks do not offer the same flexibility and safety as streams, but may be preferable for very small payloads, less than 100K.
+Blocks do not offer the same flexibility and safety as streams,
+but may be preferable for very small payloads, less than 100K.
 
-Using a simple `dst := s2.Encode(nil, src)` will compress `src` and return the compressed result. It is possible to provide a destination buffer. If the buffer has a capacity of `s2.MaxEncodedLen(len(src))` it will be used. If not a new will be allocated. Alternatively `EncodeBetter` can also be used for better, but slightly slower compression.
+Using a simple `dst := s2.Encode(nil, src)` will compress `src` and return the compressed result. 
+It is possible to provide a destination buffer. 
+If the buffer has a capacity of `s2.MaxEncodedLen(len(src))` it will be used. 
+If not a new will be allocated. 
 
-Similarly to decompress a block you can use `dst, err := s2.Decode(nil, src)`. Again an optional destination buffer can be supplied. 
-The `s2.DecodedLen(src)` can be used to get the minimum capacity needed. If that is not satisfied a new buffer will be allocated.
+Alternatively `EncodeBetter`/`EncodeBest` can also be used for better, but slightly slower compression.
+
+Similarly to decompress a block you can use `dst, err := s2.Decode(nil, src)`. 
+Again an optional destination buffer can be supplied. 
+The `s2.DecodedLen(src)` can be used to get the minimum capacity needed. 
+If that is not satisfied a new buffer will be allocated.
 
 Block function always operate on a single goroutine since it should only be used for small payloads.
 
@@ -151,23 +159,28 @@ Directories can be wildcards as well. testdir/*/*.txt will match testdir/subdir/
 
 Options:
   -bench int
-    	Run benchmark n times. No output will be written
+        Run benchmark n times. No output will be written
   -blocksize string
-    	Max  block size. Examples: 64K, 256K, 1M, 4M. Must be power of two and <= 4MB (default "4M")
-  -c	Write all output to stdout. Multiple input files will be concatenated
+        Max  block size. Examples: 64K, 256K, 1M, 4M. Must be power of two and <= 4MB (default "4M")
+  -c    Write all output to stdout. Multiple input files will be concatenated
   -cpu int
-    	Compress using this amount of threads (default CPU_THREADS])
+        Compress using this amount of threads (default 32)
   -faster
-    	Compress faster, but with a minor compression loss
+        Compress faster, but with a minor compression loss
   -help
-    	Display help
+        Display help
   -pad string
-    	Pad size to a multiple of this value, Examples: 500, 64K, 256K, 1M, 4M, etc (default "1")
-  -q	Don't write any output to terminal, except errors
+        Pad size to a multiple of this value, Examples: 500, 64K, 256K, 1M, 4M, etc (default "1")
+  -q    Don't write any output to terminal, except errors
   -rm
-    	Delete source file(s) after successful compression
+        Delete source file(s) after successful compression
   -safe
-    	Do not overwrite output files
+        Do not overwrite output files
+  -slower
+        Compress more, but a lot slower
+  -verify
+        Verify written files
+
 ```
 
 ## s2d
@@ -184,16 +197,61 @@ Directories can be wildcards as well. testdir/*/*.txt will match testdir/subdir/
 
 Options:
   -bench int
-    	Run benchmark n times. No output will be written
-  -c	Write all output to stdout. Multiple input files will be concatenated
+        Run benchmark n times. No output will be written
+  -c    Write all output to stdout. Multiple input files will be concatenated
   -help
-    	Display help
-  -q	Don't write any output to terminal, except errors
+        Display help
+  -q    Don't write any output to terminal, except errors
   -rm
-    	Delete source file(s) after successful decompression
+        Delete source file(s) after successful decompression
   -safe
-    	Do not overwrite output files
+        Do not overwrite output files
+  -verify
+        Verify files, but do not write output                                           
+```
 
+## s2sx: self-extracting archives
+
+s2sx allows creating self-extracting archives.
+
+By default, executables are created for the same platforms as the host os, 
+but this can be overridden with `-os` parameter.
+
+Extracted files have 0666 permissions, 
+and extracting multiple files from one executable is currently not supported.
+
+```
+Usage: s2sx [options] file1 file2
+
+Compresses all files supplied as input separately.
+If files have '.s2' extension they are assumed to be compressed already.
+Output files are written as 'filename.s2sfx' and with '.exe' for windows targets.
+By default output files will be overwritten.
+
+Wildcards are accepted: testdir/*.txt will compress all files in testdir ending with .txt
+Directories can be wildcards as well. testdir/*/*.txt will match testdir/subdir/b.txt
+
+Options:
+  -arch string
+        Destination architecture (default "amd64")
+  -c    Write all output to stdout. Multiple input files will be concatenated
+  -cpu int
+        Compress using this amount of threads (default 32)
+  -help
+        Display help
+  -os string
+        Destination operating system (default "windows")
+  -q    Don't write any output to terminal, except errors
+  -rm
+        Delete source file(s) after successful compression
+  -safe
+        Do not overwrite output files
+
+Available platforms are:
+
+ * darwin-amd64
+ * linux-amd64
+ * windows-amd64                                                                              
 ```
 
 # Performance
