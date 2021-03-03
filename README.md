@@ -30,6 +30,7 @@ This package provides various compression algorithms.
 * Jan 14, 2021 (v1.11.7)
 	* Use Bytes() interface to get bytes across packages. [#309](https://github.com/klauspost/compress/pull/309)
 	* s2: Add 'best' compression option.  [#310](https://github.com/klauspost/compress/pull/310)
+	* add emtoo
 	* s2: Add ReaderMaxBlockSize, changes `s2.NewReader` signature to include varargs. [#311](https://github.com/klauspost/compress/pull/311)
 	* s2: Fix crash on small better buffers. [#308](https://github.com/klauspost/compress/pull/308)
 	* s2: Clean up decoder. [#312](https://github.com/klauspost/compress/pull/312)
