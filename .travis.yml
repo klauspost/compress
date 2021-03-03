@@ -52,7 +52,7 @@ deploy:
   script: curl -sL https://git.io/goreleaser | VERSION=v0.157.0 bash || true
   on:
     tags: true
-    condition: $TRAVIS_OS_NAME = linux
+    condition: $TRAVIS_OS_NAME = linux AND $TRAVIS_CPU_ARCH = amd64
     go: 1.16.x
 branches:
   only:
