@@ -20,6 +20,11 @@ import (
 	"github.com/klauspost/compress/s2/cmd/internal/readahead"
 )
 
+const (
+	opUnpack = iota + 1
+	opUnTar
+)
+
 var (
 	goos   = flag.String("os", runtime.GOOS, "Destination operating system")
 	goarch = flag.String("arch", runtime.GOARCH, "Destination architecture")
@@ -28,6 +33,7 @@ var (
 	stdout = flag.Bool("c", false, "Write all output to stdout. Multiple input files will be concatenated")
 	remove = flag.Bool("rm", false, "Delete source file(s) after successful compression")
 	quiet  = flag.Bool("q", false, "Don't write any output to terminal, except errors")
+	untar  = flag.Bool("untar", false, "Untar on destination")
 	help   = flag.Bool("help", false, "Display help")
 
 	version = "(dev)"
@@ -89,10 +95,16 @@ Options:`)
 		_, _ = fmt.Fprintf(os.Stderr, "\nUse -os and -arch to specify the destination platform.")
 		os.Exit(1)
 	}
-	//
+	mode := byte(opUnpack)
+	if *untar {
+		mode = opUnTar
+	}
 	if *stdout {
 		// Write exec once to stdout
 		_, err = os.Stdout.Write(exec)
+		exitErr(err)
+		_, err = os.Stdout.Write([]byte{mode})
+		exitErr(err)
 	}
 	for _, filename := range files {
 		func() {
@@ -135,6 +147,8 @@ Options:`)
 				defer bw.Flush()
 				out = bw
 				_, err = out.Write(exec)
+				exitErr(err)
+				_, err = out.Write([]byte{mode})
 			}
 			exitErr(err)
 			wc := wCounter{out: out}

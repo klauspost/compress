@@ -212,13 +212,12 @@ Options:
 
 ## s2sx: self-extracting archives
 
-s2sx allows creating self-extracting archives.
+s2sx allows creating self-extracting archives with no dependencies.
 
 By default, executables are created for the same platforms as the host os, 
 but this can be overridden with `-os` parameter.
 
-Extracted files have 0666 permissions, 
-and extracting multiple files from one executable is currently not supported.
+Extracted files have 0666 permissions, except when untar option used.
 
 ```
 Usage: s2sx [options] file1 file2
@@ -246,6 +245,8 @@ Options:
         Delete source file(s) after successful compression
   -safe
         Do not overwrite output files
+  -untar
+        Untar on destination
 
 Available platforms are:
 
@@ -253,6 +254,16 @@ Available platforms are:
  * linux-amd64
  * windows-amd64                                                                              
 ```
+
+### Self-extracting TAR files
+
+If you wrap a TAR file you can specify `-untar` to make it untar on the destination host.
+
+Files are extracted to the current folder with the path specified in the tar file.
+
+Note that tar files are not validated before they are wrapped.
+
+For security reasons files that move below the root folder are not allowed.
 
 # Performance
 
