@@ -2,7 +2,7 @@
 # Make sure to check the documentation at http://goreleaser.com
 before:
   hooks:
-    - go generate s2/cmd/_s2sx
+    - gen.sh
 
 builds:
   -
