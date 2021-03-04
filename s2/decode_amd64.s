@@ -201,16 +201,15 @@ tagLit60Plus:
 	// s += x - 58; if uint(s) > uint(len(src)) { etc }
 	//
 	// checks. In the asm version, we code it once instead of once per switch case.
-	ADDQ R_LEN, R_SRC
-	SUBQ $58, R_SRC
+	LEAQ -58(R_SRC)(R_LEN*1), R_SRC
 	CMPQ R_SRC, R_SEND
 	JA   errCorrupt
 
-	// case x == 60:
 	CMPL R_LEN, $61
 	JEQ  tagLit61
 	JA   tagLit62Plus
 
+	// case x == 60:
 	// x = uint32(src[s-1])
 	MOVBLZX -1(R_SRC), R_LEN
 	JMP     doLit
