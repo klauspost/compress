@@ -22,4 +22,4 @@ _testmain.go
 *.exe
 *.test
 *.prof
-/s2/cmd/_sfx/sfx-exe
+/s2/cmd/s2sx/sfx-exe
