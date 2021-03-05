@@ -15,7 +15,7 @@ This package provides various compression algorithms.
 
 # changelog
 
-* Mar 5, 2021 (v1.11.10)
+* Mar 5, 2021 (v1.11.11)
 	* s2: Add `s2sx` binary that creates [self extracting archives](https://github.com/klauspost/compress/tree/master/s2#s2sx-self-extracting-archives).
 	* s2: Speed up decompression on non-assembly platforms [#328](https://github.com/klauspost/compress/pull/328)
 
