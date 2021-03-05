@@ -1,4 +1,4 @@
-module github.com/klauspost/compress/s2/cmd/_s2sx
+module github.com/klauspost/compress/s2/cmd/s2sx
 
 go 1.16
 

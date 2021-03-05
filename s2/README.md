@@ -247,13 +247,19 @@ Options:
         Do not overwrite output files
   -untar
         Untar on destination
+```
 
 Available platforms are:
 
  * darwin-amd64
+ * darwin-arm64
  * linux-amd64
- * windows-amd64                                                                              
-```
+ * linux-arm
+ * linux-arm64
+ * linux-mips64
+ * linux-ppc64le
+ * windows-386
+ * windows-amd64                                                                             
 
 ### Self-extracting TAR files
 

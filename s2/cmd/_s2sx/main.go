@@ -2,11 +2,13 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"embed"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -66,7 +68,7 @@ Options:`)
 		exitErr(err)
 		_, _ = fmt.Fprintf(os.Stderr, "\nAvailable platforms are:\n\n")
 		for _, d := range dir {
-			_, _ = fmt.Fprintf(os.Stderr, " * %s\n", d.Name())
+			_, _ = fmt.Fprintf(os.Stderr, " * %s\n", strings.TrimSuffix(d.Name(), ".s2"))
 		}
 
 		os.Exit(0)
@@ -84,17 +86,20 @@ Options:`)
 		files = append(files, found...)
 	}
 	wantPlat := *goos + "-" + *goarch
-	exec, err := embeddedFiles.ReadFile(path.Join("sfx-exe", wantPlat))
+	exec, err := embeddedFiles.ReadFile(path.Join("sfx-exe", wantPlat+".s2"))
 	if os.IsNotExist(err) {
 		dir, err := embeddedFiles.ReadDir("sfx-exe")
 		exitErr(err)
 		_, _ = fmt.Fprintf(os.Stderr, "os-arch %v not available. Available sfx platforms are:\n\n", wantPlat)
 		for _, d := range dir {
-			_, _ = fmt.Fprintf(os.Stderr, "* %s\n", d.Name())
+			_, _ = fmt.Fprintf(os.Stderr, "* %s\n", strings.TrimSuffix(d.Name(), ".s2"))
 		}
 		_, _ = fmt.Fprintf(os.Stderr, "\nUse -os and -arch to specify the destination platform.")
 		os.Exit(1)
 	}
+	exec, err = ioutil.ReadAll(s2.NewReader(bytes.NewBuffer(exec)))
+	exitErr(err)
+
 	mode := byte(opUnpack)
 	if *untar {
 		mode = opUnTar
