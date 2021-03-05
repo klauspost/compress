@@ -6,6 +6,7 @@ import (
 	"debug/macho"
 	"debug/pe"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -21,9 +22,33 @@ const (
 	opUnTar
 )
 
+var (
+	help       = flag.Bool("help", false, "Display help")
+	untarFlag  = flag.Bool("untar", true, "Untar tar files if specified at creation")
+	forceUntar = flag.Bool("force-untar", false, "Always untar file")
+	quiet      = flag.Bool("q", false, "Don't write any output to terminal, except errors")
+)
+
 func main() {
+	flag.Parse()
 	me, err := os.Executable()
 	exitErr(err)
+	args := flag.Args()
+	invalidArgs := len(args) > 1
+	if *help || invalidArgs {
+		_, _ = fmt.Fprintf(os.Stderr, "s2sx Self Extracting Archive\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: %s [options] [output-file/dir]\n\n", os.Args[0])
+		_, _ = fmt.Fprintf(os.Stderr, "Use - as file name to extract to stdout when not untarring.\n\n")
+		_, _ = fmt.Fprintln(os.Stderr, `Options:`)
+		flag.PrintDefaults()
+		if invalidArgs {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+	stdout := len(args) > 0 && args[0] == "-"
+	*quiet = *quiet || stdout
+
 	f, err := os.Open(me)
 	exitErr(err)
 	defer f.Close()
@@ -35,6 +60,12 @@ func main() {
 	_, err = io.ReadFull(rd, tmp[:])
 	exitErr(err)
 	dec := s2.NewReader(rd)
+	if !*untarFlag {
+		tmp[0] = opUnpack
+	}
+	if *forceUntar {
+		tmp[0] = opUnTar
+	}
 	switch tmp[0] {
 	case opUnpack:
 		outname := me + "-extracted"
@@ -42,9 +73,22 @@ func main() {
 			// Trim from '.s2sfx'
 			outname = me[:idx]
 		}
-		fmt.Printf("Extracting to %q...", outname)
-		out, err := os.Create(outname)
-		exitErr(err)
+		var out io.Writer
+		if stdout {
+			out = os.Stdout
+		} else {
+			if len(args) > 0 {
+				outname, err = filepath.Abs(args[0])
+				exitErr(err)
+			}
+			if !*quiet {
+				fmt.Printf("Extracting to \"%s\"...", outname)
+			}
+			f, err := os.Create(outname)
+			exitErr(err)
+			defer f.Close()
+			out = f
+		}
 		_, err = io.Copy(out, dec)
 		exitErr(err)
 
@@ -53,12 +97,26 @@ func main() {
 		if err != nil {
 			dir = filepath.Dir(me)
 		}
-		fmt.Printf("Extracting TAR file to %s...\n", dir)
+		if len(args) > 0 {
+			if args[0] == "-" {
+				exitErr(errors.New("cannot untar files to stdout. Use -untar=false to skip untar operation"))
+			}
+			if filepath.IsAbs(args[0]) {
+				dir = args[0]
+			} else {
+				dir = filepath.Join(dir, args[0])
+			}
+		}
+		if !*quiet {
+			fmt.Printf("Extracting TAR file to %s...\n", dir)
+		}
 		exitErr(untar(dir, dec))
 	default:
 		exitErr(fmt.Errorf("unknown operation: %d", tmp[0]))
 	}
-	fmt.Println("\nDone.")
+	if !*quiet {
+		fmt.Println("\nDone.")
+	}
 }
 
 func exitErr(err error) {
@@ -191,7 +249,9 @@ func untar(dst string, r io.Reader) error {
 
 		// if its a dir and it doesn't exist create it
 		case tar.TypeDir:
-			fmt.Println(target)
+			if !*quiet {
+				fmt.Println(target)
+			}
 			if _, err := os.Stat(target); err != nil {
 				if err := os.MkdirAll(target, 0755); err != nil {
 					return err
@@ -201,7 +261,9 @@ func untar(dst string, r io.Reader) error {
 		// if it's a file create it
 		case tar.TypeReg, tar.TypeChar, tar.TypeBlock, tar.TypeFifo, tar.TypeGNUSparse:
 			target = path.Clean(target)
-			fmt.Println(target)
+			if !*quiet {
+				fmt.Println(target)
+			}
 
 			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
 			if err != nil {
@@ -224,7 +286,9 @@ func untar(dst string, r io.Reader) error {
 			f.Close()
 		case tar.TypeSymlink:
 			target = path.Clean(target)
-			fmt.Println(target)
+			if !*quiet {
+				fmt.Println(target)
+			}
 
 			err := writeNewSymbolicLink(target, header.Linkname)
 			if err != nil {
@@ -232,7 +296,9 @@ func untar(dst string, r io.Reader) error {
 			}
 		case tar.TypeLink:
 			target = path.Clean(target)
-			fmt.Println(target)
+			if !*quiet {
+				fmt.Println(target)
+			}
 
 			err := writeNewHardLink(target, filepath.Join(dst, header.Linkname))
 			if err != nil {
