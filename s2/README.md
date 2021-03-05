@@ -215,7 +215,7 @@ Options:
 s2sx allows creating self-extracting archives with no dependencies.
 
 By default, executables are created for the same platforms as the host os, 
-but this can be overridden with `-os` parameter.
+but this can be overridden with `-os` and `-arch` parameters.
 
 Extracted files have 0666 permissions, except when untar option used.
 
