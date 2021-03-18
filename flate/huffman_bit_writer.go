@@ -396,7 +396,7 @@ func (w *huffmanBitWriter) fixedSize(extraBits int) int {
 // The function returns the size in bits and whether the block
 // fits inside a single block.
 func (w *huffmanBitWriter) storedSize(in []byte) (int, bool) {
-	if in == nil {
+	if len(in) == 0 {
 		return 0, false
 	}
 	if len(in) <= maxStoreBlockSize {
