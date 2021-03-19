@@ -135,7 +135,7 @@ func (e *fastBase) matchlen(s, t int32, src []byte) int32 {
 // Reset the encoding table.
 func (e *fastBase) resetBase(d *dict, singleBlock bool) {
 	if e.blk == nil {
-		e.blk = &blockEnc{}
+		e.blk = &blockEnc{lowMem: e.lowMem}
 		e.blk.init()
 	} else {
 		e.blk.reset(nil)

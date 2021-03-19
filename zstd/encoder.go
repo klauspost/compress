@@ -106,7 +106,7 @@ func (e *Encoder) Reset(w io.Writer) {
 		s.encoder = e.o.encoder()
 	}
 	if s.writing == nil {
-		s.writing = &blockEnc{}
+		s.writing = &blockEnc{lowMem: e.o.lowMem}
 		s.writing.init()
 	}
 	s.writing.initNewEncode()
