@@ -474,7 +474,7 @@ func TestCompress1XReuse(t *testing.T) {
 			if len(buf0) > BlockSizeMax {
 				buf0 = buf0[:BlockSizeMax]
 			}
-			b, re, err := Compress1X(buf0, &s)
+			b, _, err := Compress1X(buf0, &s)
 			if err != test.err1X {
 				t.Errorf("want error %v (%T), got %v (%T)", test.err1X, test.err1X, err, err)
 			}
@@ -488,7 +488,7 @@ func TestCompress1XReuse(t *testing.T) {
 			}
 			firstData := len(s.OutData)
 			s.Reuse = ReusePolicyAllow
-			b, re, err = Compress1X(buf0, &s)
+			b, re, err := Compress1X(buf0, &s)
 			if err != nil {
 				t.Errorf("got secondary error %v (%T)", err, err)
 				return
@@ -565,7 +565,7 @@ func BenchmarkCompress1XReuseNone(b *testing.B) {
 			if len(buf0) > BlockSizeMax {
 				buf0 = buf0[:BlockSizeMax]
 			}
-			_, re, err := Compress1X(buf0, &s)
+			_, _, err = Compress1X(buf0, &s)
 			if err != test.err1X {
 				b.Fatal("unexpected error:", err)
 			}
@@ -573,7 +573,7 @@ func BenchmarkCompress1XReuseNone(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(buf0)))
 			for i := 0; i < b.N; i++ {
-				_, re, _ = Compress1X(buf0, &s)
+				_, re, _ := Compress1X(buf0, &s)
 				if re {
 					b.Fatal("reused")
 				}
@@ -598,7 +598,7 @@ func BenchmarkCompress1XReuseAllow(b *testing.B) {
 			if len(buf0) > BlockSizeMax {
 				buf0 = buf0[:BlockSizeMax]
 			}
-			_, re, err := Compress1X(buf0, &s)
+			_, _, err = Compress1X(buf0, &s)
 			if err != test.err1X {
 				b.Fatal("unexpected error:", err)
 			}
@@ -606,7 +606,7 @@ func BenchmarkCompress1XReuseAllow(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(buf0)))
 			for i := 0; i < b.N; i++ {
-				_, re, _ = Compress1X(buf0, &s)
+				_, re, _ := Compress1X(buf0, &s)
 				if !re {
 					b.Fatal("not reused")
 				}
@@ -631,7 +631,7 @@ func BenchmarkCompress1XReusePrefer(b *testing.B) {
 			if len(buf0) > BlockSizeMax {
 				buf0 = buf0[:BlockSizeMax]
 			}
-			_, re, err := Compress1X(buf0, &s)
+			_, _, err = Compress1X(buf0, &s)
 			if err != test.err1X {
 				b.Fatal("unexpected error:", err)
 			}
@@ -639,7 +639,7 @@ func BenchmarkCompress1XReusePrefer(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(buf0)))
 			for i := 0; i < b.N; i++ {
-				_, re, _ = Compress1X(buf0, &s)
+				_, re, _ := Compress1X(buf0, &s)
 				if !re {
 					b.Fatal("not reused")
 				}
@@ -664,7 +664,7 @@ func BenchmarkCompress4XReuseNone(b *testing.B) {
 			if len(buf0) > BlockSizeMax {
 				buf0 = buf0[:BlockSizeMax]
 			}
-			_, re, err := Compress4X(buf0, &s)
+			_, _, err = Compress4X(buf0, &s)
 			if err != test.err1X {
 				b.Fatal("unexpected error:", err)
 			}
@@ -672,7 +672,7 @@ func BenchmarkCompress4XReuseNone(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(buf0)))
 			for i := 0; i < b.N; i++ {
-				_, re, _ = Compress4X(buf0, &s)
+				_, re, _ := Compress4X(buf0, &s)
 				if re {
 					b.Fatal("reused")
 				}
@@ -697,7 +697,7 @@ func BenchmarkCompress4XReuseAllow(b *testing.B) {
 			if len(buf0) > BlockSizeMax {
 				buf0 = buf0[:BlockSizeMax]
 			}
-			_, re, err := Compress4X(buf0, &s)
+			_, _, err = Compress4X(buf0, &s)
 			if err != test.err1X {
 				b.Fatal("unexpected error:", err)
 			}
@@ -705,7 +705,7 @@ func BenchmarkCompress4XReuseAllow(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(buf0)))
 			for i := 0; i < b.N; i++ {
-				_, re, _ = Compress4X(buf0, &s)
+				_, re, _ := Compress4X(buf0, &s)
 				if !re {
 					b.Fatal("not reused")
 				}
@@ -730,7 +730,7 @@ func BenchmarkCompress4XReusePrefer(b *testing.B) {
 			if len(buf0) > BlockSizeMax {
 				buf0 = buf0[:BlockSizeMax]
 			}
-			_, re, err := Compress4X(buf0, &s)
+			_, _, err = Compress4X(buf0, &s)
 			if err != test.err4X {
 				b.Fatal("unexpected error:", err)
 			}
@@ -738,7 +738,7 @@ func BenchmarkCompress4XReusePrefer(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(buf0)))
 			for i := 0; i < b.N; i++ {
-				_, re, _ = Compress4X(buf0, &s)
+				_, re, _ := Compress4X(buf0, &s)
 				if !re {
 					b.Fatal("not reused")
 				}
@@ -759,7 +759,7 @@ func BenchmarkCompress1XSizes(b *testing.B) {
 				b.Fatal(err)
 			}
 			buf0 = buf0[:size]
-			_, re, err := Compress1X(buf0, &s)
+			_, _, err = Compress1X(buf0, &s)
 			if err != test.err1X {
 				b.Fatal("unexpected error:", err)
 			}
@@ -768,7 +768,7 @@ func BenchmarkCompress1XSizes(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(buf0)))
 			for i := 0; i < b.N; i++ {
-				_, re, _ = Compress1X(buf0, &s)
+				_, re, _ := Compress1X(buf0, &s)
 				if re {
 					b.Fatal("reused")
 				}
@@ -789,7 +789,7 @@ func BenchmarkCompress4XSizes(b *testing.B) {
 				b.Fatal(err)
 			}
 			buf0 = buf0[:size]
-			_, re, err := Compress4X(buf0, &s)
+			_, _, err = Compress4X(buf0, &s)
 			if err != test.err1X {
 				b.Fatal("unexpected error:", err)
 			}
@@ -798,7 +798,7 @@ func BenchmarkCompress4XSizes(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(buf0)))
 			for i := 0; i < b.N; i++ {
-				_, re, _ = Compress4X(buf0, &s)
+				_, re, _ := Compress4X(buf0, &s)
 				if re {
 					b.Fatal("reused")
 				}

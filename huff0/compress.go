@@ -331,23 +331,6 @@ func (s *Scratch) canUseTable(c cTable) bool {
 	return true
 }
 
-func (s *Scratch) validateTable(c cTable) bool {
-	if len(c) < int(s.symbolLen) {
-		return false
-	}
-	for i, v := range s.count[:s.symbolLen] {
-		if v != 0 {
-			if c[i].nBits == 0 {
-				return false
-			}
-			if c[i].nBits > s.actualTableLog {
-				return false
-			}
-		}
-	}
-	return true
-}
-
 // minTableLog provides the minimum logSize to safely represent a distribution.
 func (s *Scratch) minTableLog() uint8 {
 	minBitsSrc := highBit32(uint32(s.br.remain())) + 1
@@ -536,7 +519,6 @@ func (s *Scratch) huffSort() {
 		}
 		nodes[pos&huffNodesMask] = nodeElt{count: c, symbol: byte(n)}
 	}
-	return
 }
 
 func (s *Scratch) setMaxHeight(lastNonNull int) uint8 {

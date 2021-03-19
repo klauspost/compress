@@ -10,19 +10,11 @@ import (
 
 type dTable struct {
 	single []dEntrySingle
-	double []dEntryDouble
 }
 
 // single-symbols decoding
 type dEntrySingle struct {
 	entry uint16
-}
-
-// double-symbols decoding
-type dEntryDouble struct {
-	seq   uint16
-	nBits uint8
-	len   uint8
 }
 
 // Uses special code for all tables that are < 8 bits.
@@ -709,7 +701,6 @@ func (d *Decoder) decompress4X8bit(dst, src []byte) ([]byte, error) {
 	shift := (8 - d.actualTableLog) & 7
 
 	const tlSize = 1 << 8
-	const tlMask = tlSize - 1
 	single := d.dt.single[:tlSize]
 
 	// Use temp table to avoid bound checks/append penalty.
@@ -916,7 +907,6 @@ func (d *Decoder) decompress4X8bitExactly(dst, src []byte) ([]byte, error) {
 
 	const shift = 0
 	const tlSize = 1 << 8
-	const tlMask = tlSize - 1
 	single := d.dt.single[:tlSize]
 
 	// Use temp table to avoid bound checks/append penalty.
