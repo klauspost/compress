@@ -237,7 +237,7 @@ func matchLen(a, b []byte) int {
 	b = b[:len(a)]
 	for i := range a {
 		if a[i] != b[i] {
-			return int(i) + checked
+			return i + checked
 		}
 	}
 	return len(a) + checked

@@ -35,7 +35,7 @@ func TestEncoder_EncodeAllSimple(t *testing.T) {
 	defer dec.Close()
 
 	in = append(in, in...)
-	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
+	for level := speedNotSet + 1; level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
 			e, err := NewWriter(nil, WithEncoderLevel(level), WithEncoderConcurrency(2), WithWindowSize(128<<10), WithZeroFrames(true))
 			if err != nil {
@@ -79,7 +79,7 @@ func TestEncoder_EncodeAllConcurrent(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer dec.Close()
-	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
+	for level := speedNotSet + 1; level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
 			rng := rand.New(rand.NewSource(0x1337))
 			e, err := NewWriter(nil, WithEncoderLevel(level), WithZeroFrames(true))
@@ -131,7 +131,7 @@ func TestEncoder_EncodeAllEncodeXML(t *testing.T) {
 		in = in[:10000]
 	}
 
-	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
+	for level := speedNotSet + 1; level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
 			e, err := NewWriter(nil, WithEncoderLevel(level))
 			if err != nil {
@@ -174,7 +174,7 @@ func TestEncoderRegression(t *testing.T) {
 	if testing.Short() {
 		testWindowSizes = []int{1 << 20}
 	}
-	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
+	for level := speedNotSet + 1; level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
 			for _, windowSize := range testWindowSizes {
 				t.Run(fmt.Sprintf("window:%d", windowSize), func(t *testing.T) {
@@ -260,7 +260,7 @@ func TestEncoder_EncodeAllTwain(t *testing.T) {
 	}
 	defer dec.Close()
 
-	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
+	for level := speedNotSet + 1; level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
 			for _, windowSize := range testWindowSizes {
 				t.Run(fmt.Sprintf("window:%d", windowSize), func(t *testing.T) {
@@ -306,7 +306,7 @@ func TestEncoder_EncodeAllPi(t *testing.T) {
 	}
 	defer dec.Close()
 
-	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
+	for level := speedNotSet + 1; level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
 			for _, windowSize := range testWindowSizes {
 				t.Run(fmt.Sprintf("window:%d", windowSize), func(t *testing.T) {
@@ -885,7 +885,7 @@ func BenchmarkEncoder_EncodeAllSimple(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
+	for level := speedNotSet + 1; level < speedLast; level++ {
 		b.Run(level.String(), func(b *testing.B) {
 			enc, err := NewWriter(nil, WithEncoderConcurrency(1), WithEncoderLevel(level))
 			if err != nil {
@@ -918,7 +918,7 @@ func BenchmarkEncoder_EncodeAllSimple4K(b *testing.B) {
 	}
 	in = in[:4096]
 
-	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
+	for level := speedNotSet + 1; level < speedLast; level++ {
 		b.Run(level.String(), func(b *testing.B) {
 			enc, err := NewWriter(nil, WithEncoderConcurrency(1), WithEncoderLevel(level))
 			if err != nil {
