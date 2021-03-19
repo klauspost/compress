@@ -122,16 +122,6 @@ func (h *huffmanEncoder) bitLength(freq []uint16) int {
 	return total
 }
 
-func (h *huffmanEncoder) bitLengthRaw(b []byte) int {
-	var total int
-	for _, f := range b {
-		if f != 0 {
-			total += int(h.codes[f].len)
-		}
-	}
-	return total
-}
-
 // Return the number of literals assigned to each bit size in the Huffman encoding
 //
 // This method is only called when list.length >= 3

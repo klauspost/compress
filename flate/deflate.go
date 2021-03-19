@@ -176,30 +176,6 @@ func (d *compressor) writeBlock(tok *tokens, index int, eof bool) error {
 	return nil
 }
 
-// writeBlockSkip writes the current block and uses the number of tokens
-// to determine if the block should be stored on no matches, or
-// only huffman encoded.
-func (d *compressor) writeBlockSkip(tok *tokens, index int, eof bool) error {
-	if index > 0 || eof {
-		if d.blockStart <= index {
-			window := d.window[d.blockStart:index]
-			// If we removed less than a 64th of all literals
-			// we huffman compress the block.
-			if int(tok.n) > len(window)-int(tok.n>>6) {
-				d.w.writeBlockHuff(eof, window, d.sync)
-			} else {
-				// Write a dynamic huffman block.
-				d.w.writeBlockDynamic(tok, eof, window, d.sync)
-			}
-		} else {
-			d.w.writeBlock(tok, eof, nil)
-		}
-		d.blockStart = index
-		return d.w.err
-	}
-	return nil
-}
-
 // fillWindow will fill the current window with the supplied
 // dictionary and calculate all hashes.
 // This is much faster than doing a full encode.
@@ -440,8 +416,7 @@ func (d *compressor) deflateLazy() {
 			// index and index-1 are already inserted. If there is not enough
 			// lookahead, the last two strings are not inserted into the hash
 			// table.
-			var newIndex int
-			newIndex = s.index + prevLength - 1
+			newIndex := s.index + prevLength - 1
 			// Calculate missing hashes
 			end := newIndex
 			if end > s.maxInsertIndex {

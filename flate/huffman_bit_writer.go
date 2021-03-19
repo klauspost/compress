@@ -28,11 +28,6 @@ const (
 	// Should preferably be a multiple of 6, since
 	// we accumulate 6 bytes between writes to the buffer.
 	bufferFlushSize = 240
-
-	// bufferSize is the actual output byte buffer size.
-	// It must have additional headroom for a flush
-	// which can contain up to 8 bytes.
-	bufferSize = bufferFlushSize + 8
 )
 
 // The number of extra bits needed by length code X - LENGTH_CODES_START.
@@ -138,39 +133,6 @@ func (w *huffmanBitWriter) reset(writer io.Writer) {
 	w.bits, w.nbits, w.nbytes, w.err = 0, 0, 0, nil
 	w.lastHeader = 0
 	w.lastHuffMan = false
-}
-
-func (w *huffmanBitWriter) canReuse(t *tokens) (offsets, lits bool) {
-	offsets, lits = true, true
-	a := t.offHist[:offsetCodeCount]
-	b := w.offsetFreq[:len(a)]
-	for i := range a {
-		if b[i] == 0 && a[i] != 0 {
-			offsets = false
-			break
-		}
-	}
-
-	a = t.extraHist[:literalCount-256]
-	b = w.literalFreq[256:literalCount]
-	b = b[:len(a)]
-	for i := range a {
-		if b[i] == 0 && a[i] != 0 {
-			lits = false
-			break
-		}
-	}
-	if lits {
-		a = t.litHist[:]
-		b = w.literalFreq[:len(a)]
-		for i := range a {
-			if b[i] == 0 && a[i] != 0 {
-				lits = false
-				break
-			}
-		}
-	}
-	return
 }
 
 func (w *huffmanBitWriter) flush() {

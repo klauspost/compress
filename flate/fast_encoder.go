@@ -58,17 +58,6 @@ const (
 	prime8bytes = 0xcf1bbcdcb7a56463
 )
 
-func load32(b []byte, i int) uint32 {
-	// Help the compiler eliminate bounds checks on the read so it can be done in a single read.
-	b = b[i:]
-	b = b[:4]
-	return uint32(b[0]) | uint32(b[1])<<8 | uint32(b[2])<<16 | uint32(b[3])<<24
-}
-
-func load64(b []byte, i int) uint64 {
-	return binary.LittleEndian.Uint64(b[i:])
-}
-
 func load3232(b []byte, i int32) uint32 {
 	return binary.LittleEndian.Uint32(b[i:])
 }
@@ -135,18 +124,6 @@ func hash4x64(u uint64, h uint8) uint32 {
 // Preferably h should be a constant and should always be <64.
 func hash7(u uint64, h uint8) uint32 {
 	return uint32(((u << (64 - 56)) * prime7bytes) >> ((64 - h) & reg8SizeMask64))
-}
-
-// hash8 returns the hash of u to fit in a hash table with h bits.
-// Preferably h should be a constant and should always be <64.
-func hash8(u uint64, h uint8) uint32 {
-	return uint32((u * prime8bytes) >> ((64 - h) & reg8SizeMask64))
-}
-
-// hash6 returns the hash of the lowest 6 bytes of u to fit in a hash table with h bits.
-// Preferably h should be a constant and should always be <64.
-func hash6(u uint64, h uint8) uint32 {
-	return uint32(((u << (64 - 48)) * prime6bytes) >> ((64 - h) & reg8SizeMask64))
 }
 
 // matchlen will return the match length between offsets and t in src.

@@ -212,6 +212,10 @@ func TestConcat(t *testing.T) {
 	w.Close()
 
 	r, err := NewReader(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	data, err := ioutil.ReadAll(r)
 	if string(data) != "hello world\n" || err != nil {
 		t.Fatalf("ReadAll = %q, %v, want %q, nil", data, err, "hello world")
@@ -440,7 +444,7 @@ func testDeterm(i int, t *testing.T) {
 	b1b := b1.Bytes()
 	b2b := b2.Bytes()
 
-	if bytes.Compare(b1b, b2b) != 0 {
+	if !bytes.Equal(b1b, b2b) {
 		t.Fatalf("Level %d did not produce deterministric result, len(a) = %d, len(b) = %d", i, len(b1b), len(b2b))
 	}
 }

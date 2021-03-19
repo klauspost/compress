@@ -115,7 +115,7 @@ func TestRegressions(t *testing.T) {
 					if err != nil {
 						t.Error(err)
 					}
-					if bytes.Compare(data1, data2) != 0 {
+					if !bytes.Equal(data1, data2) {
 						t.Error("not equal")
 					}
 					// Do it again...
@@ -137,7 +137,7 @@ func TestRegressions(t *testing.T) {
 					if err != nil {
 						t.Error(err)
 					}
-					if bytes.Compare(data1, data2) != 0 {
+					if !bytes.Equal(data1, data2) {
 						t.Error("not equal")
 					}
 				})
@@ -162,7 +162,7 @@ func TestRegressions(t *testing.T) {
 				if err != nil {
 					t.Error(err)
 				}
-				if bytes.Compare(data1, data2) != 0 {
+				if !bytes.Equal(data1, data2) {
 					fmt.Printf("want:%x\ngot: %x\n", data1, data2)
 					t.Error("not equal")
 				}
