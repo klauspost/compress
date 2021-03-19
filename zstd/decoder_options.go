@@ -43,7 +43,7 @@ func WithDecoderLowmem(b bool) DOption {
 func WithDecoderConcurrency(n int) DOption {
 	return func(o *decoderOptions) error {
 		if n <= 0 {
-			return fmt.Errorf("Concurrency must be at least 1")
+			return fmt.Errorf("concurrency must be at least 1")
 		}
 		o.concurrent = n
 		return nil
