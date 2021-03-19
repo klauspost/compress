@@ -30,7 +30,6 @@ type encoderOptions struct {
 
 func (o *encoderOptions) setDefault() {
 	*o = encoderOptions{
-		// use less ram: true for now, but may change.
 		concurrent:    runtime.GOMAXPROCS(0),
 		crc:           true,
 		single:        nil,
