@@ -24,12 +24,12 @@ type encoderOptions struct {
 	allLitEntropy   bool
 	customWindow    bool
 	customALEntropy bool
+	lowMem          bool
 	dict            *dict
 }
 
 func (o *encoderOptions) setDefault() {
 	*o = encoderOptions{
-		// use less ram: true for now, but may change.
 		concurrent:    runtime.GOMAXPROCS(0),
 		crc:           true,
 		single:        nil,
@@ -37,6 +37,7 @@ func (o *encoderOptions) setDefault() {
 		windowSize:    8 << 20,
 		level:         SpeedDefault,
 		allLitEntropy: true,
+		lowMem:        false,
 	}
 }
 
@@ -44,13 +45,13 @@ func (o *encoderOptions) setDefault() {
 func (o encoderOptions) encoder() encoder {
 	switch o.level {
 	case SpeedDefault:
-		return &doubleFastEncoder{fastEncoder: fastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize)}}}
+		return &doubleFastEncoder{fastEncoder: fastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize), lowMem: o.lowMem}}}
 	case SpeedBetterCompression:
-		return &betterFastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize)}}
+		return &betterFastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize), lowMem: o.lowMem}}
 	case SpeedBestCompression:
-		return &bestFastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize)}}
+		return &bestFastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize), lowMem: o.lowMem}}
 	case SpeedFastest:
-		return &fastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize)}}
+		return &fastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize), lowMem: o.lowMem}}
 	}
 	panic("unknown compression level")
 }
@@ -272,6 +273,17 @@ func WithNoEntropyCompression(b bool) EOption {
 func WithSingleSegment(b bool) EOption {
 	return func(o *encoderOptions) error {
 		o.single = &b
+		return nil
+	}
+}
+
+// WithLowerEncoderMem will trade in some memory cases trade less memory usage for
+// slower encoding speed.
+// This will not change the window size which is the primary function for reducing
+// memory usage. See WithWindowSize.
+func WithLowerEncoderMem(b bool) EOption {
+	return func(o *encoderOptions) error {
+		o.lowMem = b
 		return nil
 	}
 }
