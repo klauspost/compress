@@ -86,11 +86,6 @@ func (e *fastBase) UseBlock(enc *blockEnc) {
 	e.blk = enc
 }
 
-func (e *fastBase) matchlenNoHist(s, t int32, src []byte) int32 {
-	// Extend the match to be as long as possible.
-	return int32(matchLen(src[s:], src[t:]))
-}
-
 func (e *fastBase) matchlen(s, t int32, src []byte) int32 {
 	if debugAsserts {
 		if s < 0 {
