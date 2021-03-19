@@ -1047,7 +1047,7 @@ func TestIssue12449(t *testing.T) {
 		0x00, 0x50, 0x00, 0x00, 0x00, 0x00, 0x00,
 	}
 	// Read in the archive.
-	_, err := NewReader(bytes.NewReader([]byte(data)), int64(len(data)))
+	_, err := NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Errorf("Error reading the archive: %v", err)
 	}

@@ -30,7 +30,7 @@ type testEncOpt struct {
 
 func getEncOpts(cMax int) []testEncOpt {
 	var o []testEncOpt
-	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
+	for level := speedNotSet + 1; level < speedLast; level++ {
 		for conc := 1; conc <= 4; conc *= 2 {
 			for _, wind := range testWindowSizes {
 				addOpt := func(name string, options ...EOption) {
@@ -169,7 +169,7 @@ func TestEncoder_EncodeAllEncodeXML(t *testing.T) {
 		in = in[:10000]
 	}
 
-	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
+	for level := speedNotSet + 1; level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
 			e, err := NewWriter(nil, WithEncoderLevel(level))
 			if err != nil {
@@ -287,7 +287,7 @@ func TestEncoder_EncodeAllTwain(t *testing.T) {
 	}
 	defer dec.Close()
 
-	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
+	for level := speedNotSet + 1; level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
 			for _, windowSize := range testWindowSizes {
 				t.Run(fmt.Sprintf("window:%d", windowSize), func(t *testing.T) {
@@ -333,7 +333,7 @@ func TestEncoder_EncodeAllPi(t *testing.T) {
 	}
 	defer dec.Close()
 
-	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
+	for level := speedNotSet + 1; level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
 			for _, windowSize := range testWindowSizes {
 				t.Run(fmt.Sprintf("window:%d", windowSize), func(t *testing.T) {
@@ -910,7 +910,7 @@ func BenchmarkEncoder_EncodeAllSimple(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
+	for level := speedNotSet + 1; level < speedLast; level++ {
 		b.Run(level.String(), func(b *testing.B) {
 			enc, err := NewWriter(nil, WithEncoderConcurrency(1), WithEncoderLevel(level))
 			if err != nil {
@@ -943,7 +943,7 @@ func BenchmarkEncoder_EncodeAllSimple4K(b *testing.B) {
 	}
 	in = in[:4096]
 
-	for level := EncoderLevel(speedNotSet + 1); level < speedLast; level++ {
+	for level := speedNotSet + 1; level < speedLast; level++ {
 		b.Run(level.String(), func(b *testing.B) {
 			enc, err := NewWriter(nil, WithEncoderConcurrency(1), WithEncoderLevel(level))
 			if err != nil {
