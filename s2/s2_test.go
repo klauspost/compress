@@ -1093,8 +1093,7 @@ func TestReaderReset(t *testing.T) {
 func TestWriterReset(t *testing.T) {
 	gold := bytes.Repeat([]byte("Not all those who wander are lost;\n"), 10000)
 	const n = 20
-	var w *Writer
-	w = NewWriter(nil)
+	w := NewWriter(nil)
 	defer w.Close()
 
 	var gots, wants [][]byte
@@ -1870,7 +1869,7 @@ func TestDataRoundtrips(t *testing.T) {
 }
 
 func BenchmarkDecodeS2Block(b *testing.B) {
-	for i, _ := range testFiles {
+	for i := range testFiles {
 		b.Run(fmt.Sprint(i, "-", testFiles[i].label), func(b *testing.B) {
 			benchFile(b, i, true)
 		})
@@ -1878,7 +1877,7 @@ func BenchmarkDecodeS2Block(b *testing.B) {
 }
 
 func BenchmarkEncodeS2Block(b *testing.B) {
-	for i, _ := range testFiles {
+	for i := range testFiles {
 		b.Run(fmt.Sprint(i, "-", testFiles[i].label), func(b *testing.B) {
 			benchFile(b, i, false)
 		})
@@ -1886,7 +1885,7 @@ func BenchmarkEncodeS2Block(b *testing.B) {
 }
 
 func BenchmarkDecodeSnappyBlock(b *testing.B) {
-	for i, _ := range testFiles {
+	for i := range testFiles {
 		b.Run(fmt.Sprint(i, "-", testFiles[i].label), func(b *testing.B) {
 			benchFileSnappy(b, i, true)
 		})
@@ -1894,7 +1893,7 @@ func BenchmarkDecodeSnappyBlock(b *testing.B) {
 }
 
 func BenchmarkEncodeSnappyBlock(b *testing.B) {
-	for i, _ := range testFiles {
+	for i := range testFiles {
 		b.Run(fmt.Sprint(i, "-", testFiles[i].label), func(b *testing.B) {
 			benchFileSnappy(b, i, false)
 		})

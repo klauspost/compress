@@ -90,7 +90,7 @@ Options:`)
 	if len(args) == 1 && args[0] == "-" {
 		// Catch interrupt, so we don't exit at once.
 		// os.Stdin will return EOF, so we should be able to get everything.
-		signal.Notify(make(chan os.Signal), os.Interrupt)
+		signal.Notify(make(chan os.Signal, 1), os.Interrupt)
 		wr.Reset(os.Stdout)
 		_, err = wr.ReadFrom(os.Stdin)
 		printErr(err)
