@@ -1,3 +1,7 @@
+// +build appengine
+
+// This file contains the safe implementations of otherwise unsafe-using code.
+
 package xxhash
 
 // Sum64String computes the 64-bit xxHash digest of s.

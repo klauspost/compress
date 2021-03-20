@@ -1,7 +1,6 @@
 # xxhash
 
-VENDORED: Go to [github.com/cespare/xxhash](https://github.com/cespare/xxhash) for original package.
-
+**VENDORED:** Go to [github.com/cespare/xxhash](https://github.com/cespare/xxhash) for original package.
 
 [![GoDoc](https://godoc.org/github.com/cespare/xxhash?status.svg)](https://godoc.org/github.com/cespare/xxhash)
 [![Build Status](https://travis-ci.org/cespare/xxhash.svg?branch=master)](https://travis-ci.org/cespare/xxhash)
@@ -31,6 +30,18 @@ func (*Digest) Sum64() uint64
 This implementation provides a fast pure-Go implementation and an even faster
 assembly implementation for amd64.
 
+## Compatibility
+
+This package is in a module and the latest code is in version 2 of the module.
+You need a version of Go with at least "minimal module compatibility" to use
+github.com/cespare/xxhash/v2:
+
+* 1.9.7+ for Go 1.9
+* 1.10.3+ for Go 1.10
+* Go 1.11 or later
+
+I recommend using the latest release of Go.
+
 ## Benchmarks
 
 Here are some quick benchmarks comparing the pure-Go and assembly
@@ -56,3 +67,4 @@ $ go test -benchtime 10s -bench '/xxhash,direct,bytes'
 - [InfluxDB](https://github.com/influxdata/influxdb)
 - [Prometheus](https://github.com/prometheus/prometheus)
 - [FreeCache](https://github.com/coocood/freecache)
+- [FastCache](https://github.com/VictoriaMetrics/fastcache)
