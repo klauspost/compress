@@ -218,7 +218,7 @@ func TestEncoder_SmallDict(t *testing.T) {
 	}
 }
 
-func BenchmarkEncodeAllDict(b *testing.B) {
+func benchmarkEncodeAllLimitedBySize(b *testing.B, lowerLimit int, upperLimit int) {
 	fn := "testdata/dict-tests-small.zip"
 	data, err := ioutil.ReadFile(fn)
 	t := testing.TB(b)
@@ -232,7 +232,6 @@ func BenchmarkEncodeAllDict(b *testing.B) {
 	}
 	var dicts [][]byte
 	var encs []*Encoder
-	var noDictEncs []*Encoder
 	var encNames []string
 
 	for _, tt := range zr.File {
@@ -257,12 +256,6 @@ func BenchmarkEncodeAllDict(b *testing.B) {
 				}
 				encs = append(encs, enc)
 				encNames = append(encNames, fmt.Sprint("level-", level.String(), "-dict-", len(dicts)))
-
-				enc, err = NewWriter(nil, WithEncoderConcurrency(1), WithEncoderLevel(level), WithWindowSize(1<<17))
-				if err != nil {
-					t.Fatal(err)
-				}
-				noDictEncs = append(noDictEncs, enc)
 			}
 		}()
 	}
@@ -273,10 +266,7 @@ func BenchmarkEncodeAllDict(b *testing.B) {
 	}
 	defer dec.Close()
 
-	for i, tt := range zr.File {
-		if i == 5 {
-			break
-		}
+	for _, tt := range zr.File {
 		if !strings.HasSuffix(tt.Name, ".zst") {
 			continue
 		}
@@ -293,6 +283,15 @@ func BenchmarkEncodeAllDict(b *testing.B) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		if len(decoded) < lowerLimit {
+			continue
+		}
+
+		if upperLimit > 0 && len(decoded) > upperLimit {
+			continue
+		}
+
 		for i := range encs {
 			// Only do 1 dict (3 encoders) for now.
 			if i == 3 {
@@ -311,6 +310,26 @@ func BenchmarkEncodeAllDict(b *testing.B) {
 			})
 		}
 	}
+}
+
+func BenchmarkEncodeAllDict0_1024(b *testing.B) {
+	benchmarkEncodeAllLimitedBySize(b, 0, 1024)
+}
+
+func BenchmarkEncodeAllDict1024_8192(b *testing.B) {
+	benchmarkEncodeAllLimitedBySize(b, 1024, 8192)
+}
+
+func BenchmarkEncodeAllDict8192_16384(b *testing.B) {
+	benchmarkEncodeAllLimitedBySize(b, 8192, 16384)
+}
+
+func BenchmarkEncodeAllDict16384_65536(b *testing.B) {
+	benchmarkEncodeAllLimitedBySize(b, 16384, 65536)
+}
+
+func BenchmarkEncodeAllDict65536_0(b *testing.B) {
+	benchmarkEncodeAllLimitedBySize(b, 65536, 0)
 }
 
 func TestDecoder_MoreDicts(t *testing.T) {

@@ -11,9 +11,11 @@ import (
 )
 
 const (
-	tableBits      = 15             // Bits used in the table
-	tableSize      = 1 << tableBits // Size of the table
-	tableMask      = tableSize - 1  // Mask for table indices. Redundant, but can eliminate bounds checks.
+	tableBits      = 15                        // Bits used in the table
+	tableSize      = 1 << tableBits            // Size of the table
+	tableShardCnt  = 1 << 9                    // Number of shards in the table
+	tableShardSize = tableSize / tableShardCnt // Size of an individual shard
+	tableMask      = tableSize - 1             // Mask for table indices. Redundant, but can eliminate bounds checks.
 	maxMatchLength = 131074
 )
 
@@ -24,8 +26,9 @@ type tableEntry struct {
 
 type fastEncoder struct {
 	fastBase
-	table     [tableSize]tableEntry
-	dictTable []tableEntry
+	table           [tableSize]tableEntry
+	dictTable       []tableEntry
+	tableShardClean [tableShardCnt]bool
 }
 
 // Encode mimmics functionality in zstd_fast.c
@@ -41,6 +44,7 @@ func (e *fastEncoder) Encode(blk *blockEnc, src []byte) {
 			for i := range e.table[:] {
 				e.table[i] = tableEntry{}
 			}
+			e.markAllShardsDirty()
 			e.cur = e.maxMatchOff
 			break
 		}
@@ -55,6 +59,7 @@ func (e *fastEncoder) Encode(blk *blockEnc, src []byte) {
 			}
 			e.table[i].offset = v
 		}
+		e.markAllShardsDirty()
 		e.cur = e.maxMatchOff
 		break
 	}
@@ -121,7 +126,9 @@ encodeLoop:
 			repIndex := s - offset1 + 2
 
 			e.table[nextHash] = tableEntry{offset: s + e.cur, val: uint32(cv)}
+			e.markShardDirty(int(nextHash))
 			e.table[nextHash2] = tableEntry{offset: s + e.cur + 1, val: uint32(cv >> 8)}
+			e.markShardDirty(int(nextHash2))
 
 			if canRepeat && repIndex >= 0 && load3232(src, repIndex) == uint32(cv>>16) {
 				// Consider history as well.
@@ -295,6 +302,7 @@ encodeLoop:
 			// Store this, since we have it.
 			nextHash := hash6(cv, hashLog)
 			e.table[nextHash] = tableEntry{offset: s + e.cur, val: uint32(cv)}
+			e.markShardDirty(int(nextHash))
 			seq.matchLen = uint32(l) - zstdMinMatch
 			seq.litLen = 0
 			// Since litlen is always 0, this is offset 1.
@@ -346,6 +354,7 @@ func (e *fastEncoder) EncodeNoHist(blk *blockEnc, src []byte) {
 		for i := range e.table[:] {
 			e.table[i] = tableEntry{}
 		}
+		e.markAllShardsDirty()
 		e.cur = e.maxMatchOff
 	}
 
@@ -404,7 +413,9 @@ encodeLoop:
 			repIndex := s - offset1 + 2
 
 			e.table[nextHash] = tableEntry{offset: s + e.cur, val: uint32(cv)}
+			e.markShardDirty(int(nextHash))
 			e.table[nextHash2] = tableEntry{offset: s + e.cur + 1, val: uint32(cv >> 8)}
+			e.markShardDirty(int(nextHash2))
 
 			if len(blk.sequences) > 2 && load3232(src, repIndex) == uint32(cv>>16) {
 				// Consider history as well.
@@ -583,6 +594,7 @@ encodeLoop:
 			// Store this, since we have it.
 			nextHash := hash6(cv, hashLog)
 			e.table[nextHash] = tableEntry{offset: s + e.cur, val: uint32(cv)}
+			e.markShardDirty(int(nextHash))
 			seq.matchLen = uint32(l) - zstdMinMatch
 			seq.litLen = 0
 			// Since litlen is always 0, this is offset 1.
@@ -656,6 +668,38 @@ func (e *fastEncoder) Reset(d *dict, singleBlock bool) {
 	}
 
 	e.cur = e.maxMatchOff
-	// Reset table to initial state
-	copy(e.table[:], e.dictTable)
+
+	dirtyShardCnt := 0
+	for i := range e.tableShardClean {
+		if !e.tableShardClean[i] {
+			dirtyShardCnt++
+		}
+	}
+
+	minDirty := float64(tableShardCnt) * 4 / 5
+	if dirtyShardCnt > int(minDirty) {
+		copy(e.table[:], e.dictTable)
+		for i := range e.tableShardClean {
+			e.tableShardClean[i] = true
+		}
+	} else {
+		for i := range e.tableShardClean {
+			if e.tableShardClean[i] {
+				continue
+			}
+
+			copy(e.table[i*tableShardSize:(i+1)*tableShardSize], e.dictTable[i*tableShardSize:(i+1)*tableShardSize])
+			e.tableShardClean[i] = true
+		}
+	}
+}
+
+func (e *fastEncoder) markAllShardsDirty() {
+	for i := range e.tableShardClean {
+		e.tableShardClean[i] = false
+	}
+}
+
+func (e *fastEncoder) markShardDirty(entryNum int) {
+	e.tableShardClean[entryNum/tableShardSize] = false
 }
