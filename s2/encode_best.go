@@ -90,16 +90,17 @@ func encodeBlockBest(dst, src []byte) (d int) {
 				if load32(src, offset) != first {
 					return match{offset: offset, s: s}
 				}
-				m := match{offset: offset, s: s, length: 4, rep: rep}
+				m := match{offset: offset, s: s, length: 4 + offset, rep: rep}
 				s += 4
 				for s <= sLimit {
-					if diff := load64(src, s) ^ load64(src, offset+m.length); diff != 0 {
+					if diff := load64(src, s) ^ load64(src, m.length); diff != 0 {
 						m.length += bits.TrailingZeros64(diff) >> 3
 						break
 					}
 					s += 8
 					m.length += 8
 				}
+				m.length -= offset
 				return m
 			}
 
@@ -150,7 +151,7 @@ func encodeBlockBest(dst, src []byte) (d int) {
 					best = bestOf(best, matchAt(s-repeat+1, s+1, uint32(cv>>8), true))
 
 					// s+2
-					if true {
+					if best.length < 100 {
 						nextShort = sTable[hash4(cv>>8, sTableBits)]
 						s++
 						cv = load64(src, s)
