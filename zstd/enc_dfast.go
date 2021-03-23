@@ -1085,6 +1085,7 @@ func (e *doubleFastEncoderDict) Reset(d *dict, singleBlock bool) {
 			}
 		}
 		e.lastDictID = d.id
+		e.allDirty = true
 	}
 	// Reset table to initial state
 	e.cur = e.maxMatchOff

@@ -250,7 +250,7 @@ func benchmarkEncodeAllLimitedBySize(b *testing.B, lowerLimit int, upperLimit in
 			}
 			dicts = append(dicts, in)
 			for level := SpeedFastest; level < speedLast; level++ {
-				enc, err := NewWriter(nil, WithEncoderConcurrency(1), WithEncoderDict(in), WithEncoderLevel(level), WithWindowSize(1<<17))
+				enc, err := NewWriter(nil, WithEncoderDict(in), WithEncoderLevel(level))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -266,6 +266,7 @@ func benchmarkEncodeAllLimitedBySize(b *testing.B, lowerLimit int, upperLimit in
 	}
 	defer dec.Close()
 
+	tested := make(map[int]struct{})
 	for _, tt := range zr.File {
 		if !strings.HasSuffix(tt.Name, ".zst") {
 			continue
@@ -284,6 +285,12 @@ func benchmarkEncodeAllLimitedBySize(b *testing.B, lowerLimit int, upperLimit in
 			t.Fatal(err)
 		}
 
+		// Only test each size once
+		if _, ok := tested[len(decoded)]; ok {
+			continue
+		}
+		tested[len(decoded)] = struct{}{}
+
 		if len(decoded) < lowerLimit {
 			continue
 		}
@@ -293,20 +300,22 @@ func benchmarkEncodeAllLimitedBySize(b *testing.B, lowerLimit int, upperLimit in
 		}
 
 		for i := range encs {
-			// Only do 1 dict (3 encoders) for now.
-			if i == 3 {
+			// Only do 1 dict (4 encoders) for now.
+			if i == 4 {
 				break
 			}
 			// Attempt to compress with all dicts
-			var dst []byte
 			enc := encs[i]
 			b.Run(fmt.Sprintf("length-%d-%s", len(decoded), encNames[i]), func(b *testing.B) {
-				b.SetBytes(int64(len(decoded)))
-				b.ResetTimer()
-				b.ReportAllocs()
-				for i := 0; i < b.N; i++ {
-					dst = enc.EncodeAll(decoded, dst[:0])
-				}
+				b.RunParallel(func(pb *testing.PB) {
+					dst := make([]byte, 0, len(decoded)+10)
+					b.SetBytes(int64(len(decoded)))
+					b.ResetTimer()
+					b.ReportAllocs()
+					for pb.Next() {
+						dst = enc.EncodeAll(decoded, dst[:0])
+					}
+				})
 			})
 		}
 	}

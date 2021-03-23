@@ -1070,6 +1070,7 @@ func (e *betterFastEncoderDict) Reset(d *dict, singleBlock bool) {
 			}
 		}
 		e.lastDictID = d.id
+		e.allDirty = true
 	}
 
 	// Init or copy dict table
@@ -1098,6 +1099,7 @@ func (e *betterFastEncoderDict) Reset(d *dict, singleBlock bool) {
 			}
 		}
 		e.lastDictID = d.id
+		e.allDirty = true
 	}
 
 	// Reset table to initial state

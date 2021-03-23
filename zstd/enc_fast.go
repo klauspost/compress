@@ -975,6 +975,7 @@ func (e *fastEncoderDict) Reset(d *dict, singleBlock bool) {
 			}
 		}
 		e.lastDictID = d.id
+		e.allDirty = true
 	}
 
 	e.cur = e.maxMatchOff
