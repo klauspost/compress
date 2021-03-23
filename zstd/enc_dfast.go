@@ -11,7 +11,7 @@ const (
 	dFastLongTableSize = 1 << dFastLongTableBits // Size of the table
 	dFastLongTableMask = dFastLongTableSize - 1  // Mask for table indices. Redundant, but can eliminate bounds checks.
 
-	dLongTableShardCnt  = 1 << 9                             // Number of shards in the table
+	dLongTableShardCnt  = 1 << (dFastLongTableBits - 8)      // Number of shards in the table
 	dLongTableShardSize = dFastLongTableSize / tableShardCnt // Size of an individual shard
 
 	dFastShortTableBits = tableBits                // Bits used in the short match table
@@ -29,7 +29,6 @@ type doubleFastEncoderDict struct {
 	longTable           [dFastLongTableSize]tableEntry
 	dictLongTable       []tableEntry
 	longTableShardDirty [dLongTableShardCnt]bool
-	allLongDirty        bool
 }
 
 // Encode mimmics functionality in zstd_dfast.c
@@ -706,7 +705,7 @@ func (e *doubleFastEncoderDict) Encode(blk *blockEnc, src []byte) {
 			for i := range e.longTable[:] {
 				e.longTable[i] = tableEntry{}
 			}
-			e.markAllLongShardsDirty()
+			e.markAllShardsDirty()
 			e.cur = e.maxMatchOff
 			break
 		}
@@ -730,7 +729,7 @@ func (e *doubleFastEncoderDict) Encode(blk *blockEnc, src []byte) {
 			}
 			e.longTable[i].offset = v
 		}
-		e.markAllLongShardsDirty()
+		e.markAllShardsDirty()
 		e.cur = e.maxMatchOff
 		break
 	}
@@ -1045,7 +1044,7 @@ encodeLoop:
 	}
 	// If we encoded more than 64K mark all dirty.
 	if len(src) > 64<<10 {
-		e.markAllLongShardsDirty()
+		e.markAllShardsDirty()
 	}
 }
 
@@ -1059,6 +1058,7 @@ func (e *doubleFastEncoder) Reset(d *dict, singleBlock bool) {
 
 // ResetDict will reset and set a dictionary if not nil
 func (e *doubleFastEncoderDict) Reset(d *dict, singleBlock bool) {
+	allDirty := e.allDirty
 	e.fastEncoderDict.Reset(d, singleBlock)
 	if d == nil {
 		return
@@ -1090,7 +1090,7 @@ func (e *doubleFastEncoderDict) Reset(d *dict, singleBlock bool) {
 	e.cur = e.maxMatchOff
 
 	dirtyShardCnt := 0
-	if !e.allLongDirty {
+	if !allDirty {
 		for i := range e.longTableShardDirty {
 			if e.longTableShardDirty[i] {
 				dirtyShardCnt++
@@ -1098,12 +1098,11 @@ func (e *doubleFastEncoderDict) Reset(d *dict, singleBlock bool) {
 		}
 	}
 
-	if e.allLongDirty || dirtyShardCnt > dLongTableShardCnt/2 {
+	if allDirty || dirtyShardCnt > dLongTableShardCnt/2 {
 		copy(e.longTable[:], e.dictLongTable)
 		for i := range e.longTableShardDirty {
 			e.longTableShardDirty[i] = false
 		}
-		e.allLongDirty = false
 		return
 	}
 	for i := range e.longTableShardDirty {
@@ -1114,13 +1113,6 @@ func (e *doubleFastEncoderDict) Reset(d *dict, singleBlock bool) {
 		copy(e.longTable[i*dLongTableShardSize:(i+1)*dLongTableShardSize], e.dictLongTable[i*dLongTableShardSize:(i+1)*dLongTableShardSize])
 		e.longTableShardDirty[i] = false
 	}
-	e.allLongDirty = false
-
-}
-
-func (e *doubleFastEncoderDict) markAllLongShardsDirty() {
-	e.allLongDirty = true
-	e.markAllShardsDirty()
 }
 
 func (e *doubleFastEncoderDict) markLongShardDirty(entryNum uint32) {

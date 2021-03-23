@@ -13,7 +13,7 @@ import (
 const (
 	tableBits      = 15                        // Bits used in the table
 	tableSize      = 1 << tableBits            // Size of the table
-	tableShardCnt  = 1 << 9                    // Number of shards in the table
+	tableShardCnt  = 1 << (tableBits - 8)      // Number of shards in the table
 	tableShardSize = tableSize / tableShardCnt // Size of an individual shard
 	tableMask      = tableSize - 1             // Mask for table indices. Redundant, but can eliminate bounds checks.
 	maxMatchLength = 131074
@@ -631,7 +631,7 @@ func (e *fastEncoderDict) Encode(blk *blockEnc, src []byte) {
 		inputMargin            = 8
 		minNonLiteralBlockSize = 1 + 1 + inputMargin
 	)
-	if e.allDirty || len(src) > 64<<10 {
+	if e.allDirty || len(src) > 32<<10 {
 		e.fastEncoder.Encode(blk, src)
 		e.allDirty = true
 		return
@@ -987,7 +987,9 @@ func (e *fastEncoderDict) Reset(d *dict, singleBlock bool) {
 		}
 	}
 
-	if e.allDirty || dirtyShardCnt > tableShardCnt*4/6 {
+	const shardCnt = tableShardCnt
+	const shardSize = tableShardSize
+	if e.allDirty || dirtyShardCnt > shardCnt*4/6 {
 		copy(e.table[:], e.dictTable)
 		for i := range e.tableShardDirty {
 			e.tableShardDirty[i] = false
@@ -1000,7 +1002,7 @@ func (e *fastEncoderDict) Reset(d *dict, singleBlock bool) {
 			continue
 		}
 
-		copy(e.table[i*tableShardSize:(i+1)*tableShardSize], e.dictTable[i*tableShardSize:(i+1)*tableShardSize])
+		copy(e.table[i*shardSize:(i+1)*shardSize], e.dictTable[i*shardSize:(i+1)*shardSize])
 		e.tableShardDirty[i] = false
 	}
 	e.allDirty = false
