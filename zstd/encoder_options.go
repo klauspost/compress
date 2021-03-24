@@ -44,14 +44,24 @@ func (o *encoderOptions) setDefault() {
 // encoder returns an encoder with the selected options.
 func (o encoderOptions) encoder() encoder {
 	switch o.level {
+	case SpeedFastest:
+		if o.dict != nil {
+			return &fastEncoderDict{fastEncoder: fastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize), lowMem: o.lowMem}}}
+		}
+		return &fastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize), lowMem: o.lowMem}}
+
 	case SpeedDefault:
+		if o.dict != nil {
+			return &doubleFastEncoderDict{fastEncoderDict: fastEncoderDict{fastEncoder: fastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize), lowMem: o.lowMem}}}}
+		}
 		return &doubleFastEncoder{fastEncoder: fastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize), lowMem: o.lowMem}}}
 	case SpeedBetterCompression:
+		if o.dict != nil {
+			return &betterFastEncoderDict{betterFastEncoder: betterFastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize), lowMem: o.lowMem}}}
+		}
 		return &betterFastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize), lowMem: o.lowMem}}
 	case SpeedBestCompression:
 		return &bestFastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize), lowMem: o.lowMem}}
-	case SpeedFastest:
-		return &fastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize), lowMem: o.lowMem}}
 	}
 	panic("unknown compression level")
 }
