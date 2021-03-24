@@ -17,10 +17,10 @@ const (
 	betterShortTableBits = 13                        // Bits used in the short match table
 	betterShortTableSize = 1 << betterShortTableBits // Size of the table
 
-	betterLongTableShardCnt  = 1 << (betterLongTableBits - 8)                // Number of shards in the table
+	betterLongTableShardCnt  = 1 << (betterLongTableBits - dictShardBits)    // Number of shards in the table
 	betterLongTableShardSize = betterLongTableSize / betterLongTableShardCnt // Size of an individual shard
 
-	betterShortTableShardCnt  = 1 << (betterShortTableBits - 8)                 // Number of shards in the table
+	betterShortTableShardCnt  = 1 << (betterShortTableBits - dictShardBits)     // Number of shards in the table
 	betterShortTableShardSize = betterShortTableSize / betterShortTableShardCnt // Size of an individual shard
 )
 

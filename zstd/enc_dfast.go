@@ -11,8 +11,8 @@ const (
 	dFastLongTableSize = 1 << dFastLongTableBits // Size of the table
 	dFastLongTableMask = dFastLongTableSize - 1  // Mask for table indices. Redundant, but can eliminate bounds checks.
 
-	dLongTableShardCnt  = 1 << (dFastLongTableBits - 8)      // Number of shards in the table
-	dLongTableShardSize = dFastLongTableSize / tableShardCnt // Size of an individual shard
+	dLongTableShardCnt  = 1 << (dFastLongTableBits - dictShardBits) // Number of shards in the table
+	dLongTableShardSize = dFastLongTableSize / tableShardCnt        // Size of an individual shard
 
 	dFastShortTableBits = tableBits                // Bits used in the short match table
 	dFastShortTableSize = 1 << dFastShortTableBits // Size of the table
