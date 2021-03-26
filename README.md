@@ -15,6 +15,12 @@ This package provides various compression algorithms.
 
 # changelog
 
+* Mar 26, 2021 (v1.11.13)
+	* zstd: Big speedup on small dictionary encodes [#344](https://github.com/klauspost/compress/pull/344) [#345](https://github.com/klauspost/compress/pull/345)
+	* zstd: Add [WithLowerEncoderMem](https://pkg.go.dev/github.com/klauspost/compress/zstd#WithLowerEncoderMem) encoder option [#336](https://github.com/klauspost/compress/pull/336)
+	* deflate: Improve entropy compression [#338](https://github.com/klauspost/compress/pull/338)
+	* s2: Clean up and minor performance improvement in best [#341](https://github.com/klauspost/compress/pull/341)
+
 * Mar 5, 2021 (v1.11.12)
 	* s2: Add `s2sx` binary that creates [self extracting archives](https://github.com/klauspost/compress/tree/master/s2#s2sx-self-extracting-archives).
 	* s2: Speed up decompression on non-assembly platforms [#328](https://github.com/klauspost/compress/pull/328)
