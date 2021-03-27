@@ -100,9 +100,9 @@ func TestBulkHash4(t *testing.T) {
 						t.Errorf("Len:%d Index:%d, expected 0x%08x but not modified", len(y), i, expect)
 					} else if got != expect {
 						t.Errorf("Len:%d Index:%d, got 0x%08x expected:0x%08x", len(y), i, got, expect)
-					} /*else {
-						t.Logf("Len:%d Index:%d OK (0x%08x)", len(y), i, got)
-					} */
+					} else {
+						//t.Logf("Len:%d Index:%d OK (0x%08x)", len(y), i, got)
+					}
 				}
 			}
 		}
