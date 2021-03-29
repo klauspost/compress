@@ -276,7 +276,7 @@ func TestWriteTo(t *testing.T) {
 	if wtbuf.Len() != len(input) {
 		t.Error("Actual Length did not match, expected", len(input), "got", wtbuf.Len())
 	}
-	if bytes.Compare(wtbuf.Bytes(), input) != 0 {
+	if !bytes.Equal(wtbuf.Bytes(), input) {
 		t.Fatal("output did not match input")
 	}
 }

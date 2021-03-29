@@ -14,8 +14,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/klauspost/compress/flate"
 )
 
 type gunzipTest struct {
@@ -531,7 +529,7 @@ func TestWriteTo(t *testing.T) {
 	if len(readall) != len(input) {
 		t.Errorf("did not decompress everything, want %d, got %d", len(input), len(readall))
 	}
-	if bytes.Compare(readall, input) != 0 {
+	if !bytes.Equal(readall, input) {
 		t.Error("output did not match input")
 	}
 
@@ -550,7 +548,7 @@ func TestWriteTo(t *testing.T) {
 	if wtbuf.Len() != len(input) {
 		t.Error("Actual Length did not match, expected", len(input), "got", wtbuf.Len())
 	}
-	if bytes.Compare(wtbuf.Bytes(), input) != 0 {
+	if !bytes.Equal(wtbuf.Bytes(), input) {
 		t.Fatal("output did not match input")
 	}
 }
@@ -577,9 +575,6 @@ func TestTruncatedStreams(t *testing.T) {
 			continue
 		}
 		_, err = io.Copy(ioutil.Discard, r)
-		if ferr, ok := err.(*flate.ReadError); ok {
-			err = ferr.Err
-		}
 		if err != io.ErrUnexpectedEOF {
 			t.Errorf("io.Copy(%d) on truncated stream: got %v, want %v", i, err, io.ErrUnexpectedEOF)
 		}

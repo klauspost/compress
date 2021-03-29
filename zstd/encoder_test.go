@@ -141,7 +141,8 @@ func TestEncoder_EncodeAllConcurrent(t *testing.T) {
 					if !bytes.Equal(decoded, in) {
 						//ioutil.WriteFile("testdata/"+t.Name()+"-z000028.got", decoded, os.ModePerm)
 						//ioutil.WriteFile("testdata/"+t.Name()+"-z000028.want", in, os.ModePerm)
-						t.Fatal("Decoded does not match")
+						t.Error("Decoded does not match")
+						return
 					}
 				}()
 			}
@@ -188,7 +189,8 @@ func TestEncoder_EncodeAllEncodeXML(t *testing.T) {
 			}
 			if !bytes.Equal(decoded, in) {
 				ioutil.WriteFile("testdata/"+t.Name()+"-xml.got", decoded, os.ModePerm)
-				t.Fatal("Decoded does not match")
+				t.Error("Decoded does not match")
+				return
 			}
 			t.Log("Encoded content matched")
 		})
@@ -533,12 +535,14 @@ func testEncoderRoundtrip(t *testing.T, file string, wantCRC []byte) {
 			go func() {
 				n, err := enc.ReadFrom(input)
 				if err != nil {
-					t.Fatal(err)
+					t.Error(err)
+					return
 				}
 				wantSize = n
 				err = enc.Close()
 				if err != nil {
-					t.Fatal(err)
+					t.Error(err)
+					return
 				}
 				pw.Close()
 			}()
@@ -630,12 +634,14 @@ func testEncoderRoundtripWriter(t *testing.T, file string, wantCRC []byte) {
 	go func() {
 		n, err := io.CopyBuffer(encW, input, make([]byte, 1337))
 		if err != nil {
-			t.Fatal(err)
+			t.Error(err)
+			return
 		}
 		wantSize = n
 		err = enc.Close()
 		if err != nil {
-			t.Fatal(err)
+			t.Error(err)
+			return
 		}
 		pw.Close()
 	}()

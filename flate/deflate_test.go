@@ -561,7 +561,7 @@ func testResetOutput(t *testing.T, name string, newWriter func(w io.Writer) (*Wr
 		if len(out1) != len(out2) {
 			t.Errorf("got %d, expected %d bytes", len(out2), len(out1))
 		}
-		if bytes.Compare(out1, out2) != 0 {
+		if !bytes.Equal(out1, out2) {
 			mm := 0
 			for i, b := range out1[:len(out2)] {
 				if b != out2[i] {

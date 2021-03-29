@@ -118,6 +118,9 @@ func TestNewReaderMismatch(t *testing.T) {
 						start = 0
 					}
 					_, err = org.Seek(start, io.SeekStart)
+					if err != nil {
+						t.Fatal(err)
+					}
 					buf2 := make([]byte, sizeBack+1<<20)
 					n, _ := io.ReadFull(org, buf2)
 					if n > 0 {

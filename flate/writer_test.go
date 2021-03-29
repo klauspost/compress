@@ -70,7 +70,7 @@ func TestWriterRegression(t *testing.T) {
 					if err != nil {
 						t.Fatal(msg + err.Error())
 					}
-					if bytes.Compare(in, data2) != 0 {
+					if !bytes.Equal(in, data2) {
 						t.Fatal(msg + "not equal")
 					}
 					// Do it again...
@@ -93,7 +93,7 @@ func TestWriterRegression(t *testing.T) {
 					if err != nil {
 						t.Fatal(msg + err.Error())
 					}
-					if bytes.Compare(in, data2) != 0 {
+					if !bytes.Equal(in, data2) {
 						t.Fatal(msg + "not equal")
 					}
 				})
@@ -121,6 +121,9 @@ func benchmarkEncoder(b *testing.B, testfile, level, n int) {
 	buf0 = nil
 	runtime.GC()
 	w, err := NewWriter(ioutil.Discard, level)
+	if err != nil {
+		b.Fatal(err)
+	}
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
