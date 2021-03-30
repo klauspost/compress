@@ -157,29 +157,32 @@ Use - as the only file name to read from stdin and write to stdout.
 Wildcards are accepted: testdir/*.txt will compress all files in testdir ending with .txt
 Directories can be wildcards as well. testdir/*/*.txt will match testdir/subdir/b.txt
 
+File names beginning with 'http://' and 'https://' will be downloaded and compressed.
+Only http response code 200 is accepted.
+
 Options:
   -bench int
-        Run benchmark n times. No output will be written
+    	Run benchmark n times. No output will be written
   -blocksize string
-        Max  block size. Examples: 64K, 256K, 1M, 4M. Must be power of two and <= 4MB (default "4M")
-  -c    Write all output to stdout. Multiple input files will be concatenated
+    	Max  block size. Examples: 64K, 256K, 1M, 4M. Must be power of two and <= 4MB (default "4M")
+  -c	Write all output to stdout. Multiple input files will be concatenated
   -cpu int
-        Compress using this amount of threads (default 32)
+    	Compress using this amount of threads (default 32)
   -faster
-        Compress faster, but with a minor compression loss
+    	Compress faster, but with a minor compression loss
   -help
-        Display help
+    	Display help
   -pad string
-        Pad size to a multiple of this value, Examples: 500, 64K, 256K, 1M, 4M, etc (default "1")
-  -q    Don't write any output to terminal, except errors
+    	Pad size to a multiple of this value, Examples: 500, 64K, 256K, 1M, 4M, etc (default "1")
+  -q	Don't write any output to terminal, except errors
   -rm
-        Delete source file(s) after successful compression
+    	Delete source file(s) after successful compression
   -safe
-        Do not overwrite output files
+    	Do not overwrite output files
   -slower
-        Compress more, but a lot slower
+    	Compress more, but a lot slower
   -verify
-        Verify written files
+    	Verify written files  
 
 ```
 
@@ -195,19 +198,22 @@ Use - as the only file name to read from stdin and write to stdout.
 Wildcards are accepted: testdir/*.txt will compress all files in testdir ending with .txt
 Directories can be wildcards as well. testdir/*/*.txt will match testdir/subdir/b.txt
 
+File names beginning with 'http://' and 'https://' will be downloaded and decompressed.
+Extensions on downloaded files are ignored. Only http response code 200 is accepted.
+
 Options:
   -bench int
-        Run benchmark n times. No output will be written
-  -c    Write all output to stdout. Multiple input files will be concatenated
+    	Run benchmark n times. No output will be written
+  -c	Write all output to stdout. Multiple input files will be concatenated
   -help
-        Display help
-  -q    Don't write any output to terminal, except errors
+    	Display help
+  -q	Don't write any output to terminal, except errors
   -rm
-        Delete source file(s) after successful decompression
+    	Delete source file(s) after successful decompression
   -safe
-        Do not overwrite output files
+    	Do not overwrite output files
   -verify
-        Verify files, but do not write output                                           
+    	Verify files, but do not write output                                      
 ```
 
 ## s2sx: self-extracting archives
