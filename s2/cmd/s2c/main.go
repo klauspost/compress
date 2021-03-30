@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -73,6 +74,9 @@ Use - as the only file name to read from stdin and write to stdout.
 Wildcards are accepted: testdir/*.txt will compress all files in testdir ending with .txt
 Directories can be wildcards as well. testdir/*/*.txt will match testdir/subdir/b.txt
 
+File names beginning with 'http://' and 'https://' will be downloaded and compressed.
+Only http response code 200 is accepted.
+
 Options:`)
 		flag.PrintDefaults()
 		os.Exit(0)
@@ -100,6 +104,10 @@ Options:`)
 	var files []string
 
 	for _, pattern := range args {
+		if isHTTP(pattern) {
+			files = append(files, pattern)
+			continue
+		}
 		found, err := filepath.Glob(pattern)
 		exitErr(err)
 		if len(found) == 0 {
@@ -146,11 +154,8 @@ Options:`)
 					fmt.Print("Reading ", filename, "...")
 				}
 				// Input file.
-				file, err := os.Open(filename)
-				exitErr(err)
-				finfo, err := file.Stat()
-				exitErr(err)
-				b := make([]byte, finfo.Size())
+				file, size, _ := openFile(filename)
+				b := make([]byte, size)
 				_, err = io.ReadFull(file, b)
 				exitErr(err)
 				file.Close()
@@ -215,30 +220,22 @@ Options:`)
 	for _, filename := range files {
 		func() {
 			var closeOnce sync.Once
-			dstFilename := fmt.Sprintf("%s%s", filename, ".s2")
-			if *bench > 0 {
-				dstFilename = "(discarded)"
-			}
+			dstFilename := cleanFileName(fmt.Sprintf("%s%s", filename, ".s2"))
 			if !*quiet {
 				fmt.Print("Compressing ", filename, " -> ", dstFilename)
 			}
 			// Input file.
-			file, err := os.Open(filename)
+			file, _, mode := openFile(filename)
 			exitErr(err)
 			defer closeOnce.Do(func() { file.Close() })
 			src, err := readahead.NewReaderSize(file, *cpu+1, 1<<20)
 			exitErr(err)
 			defer src.Close()
-			finfo, err := file.Stat()
-			exitErr(err)
 			var out io.Writer
 			switch {
-			case *bench > 0:
-				out = ioutil.Discard
 			case *stdout:
 				out = os.Stdout
 			default:
-				mode := finfo.Mode() // use the same mode for the output file
 				if *safe {
 					_, err := os.Stat(dstFilename)
 					if !os.IsNotExist(err) {
@@ -280,6 +277,44 @@ Options:`)
 			}
 		}()
 	}
+}
+
+func isHTTP(name string) bool {
+	return strings.HasPrefix(name, "http://") || strings.HasPrefix(name, "https://")
+}
+
+func openFile(name string) (rc io.ReadCloser, size int64, mode os.FileMode) {
+	if isHTTP(name) {
+		resp, err := http.Get(name)
+		exitErr(err)
+		if resp.StatusCode != http.StatusOK {
+			exitErr(fmt.Errorf("unexpected response status code %v, want OK", resp.Status))
+		}
+		return resp.Body, resp.ContentLength, os.ModePerm
+	}
+	file, err := os.Open(name)
+	exitErr(err)
+	st, err := file.Stat()
+	exitErr(err)
+	return file, st.Size(), st.Mode()
+}
+
+func cleanFileName(s string) string {
+	if isHTTP(s) {
+		s = strings.TrimPrefix(s, "http://")
+		s = strings.TrimPrefix(s, "https://")
+		s = strings.Map(func(r rune) rune {
+			switch r {
+			case '\\', '/', '*', '?', ':', '|', '<', '>', '~':
+				return '_'
+			}
+			if r < 20 {
+				return '_'
+			}
+			return r
+		}, s)
+	}
+	return s
 }
 
 func verifyTo(w io.Writer) (io.Writer, func() error) {
