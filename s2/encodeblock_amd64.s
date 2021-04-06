@@ -12603,221 +12603,224 @@ gen_emit_repeat_end:
 	RET
 
 // func emitCopy(dst []byte, offset int, length int) int
+// Requires: SSE2
 TEXT ·emitCopy(SB), NOSPLIT, $0-48
-	XORQ BX, BX
-	MOVQ dst_base+0(FP), AX
-	MOVQ offset+24(FP), CX
-	MOVQ length+32(FP), DX
+	XORQ AX, AX
+	MOVQ BP, X0
+	MOVQ dst_base+0(FP), CX
+	MOVQ offset+24(FP), DX
+	MOVQ length+32(FP), BX
 
 	// emitCopy
-	CMPL CX, $0x00010000
+	CMPL DX, $0x00010000
 	JL   two_byte_offset_standalone
 
 four_bytes_loop_back_standalone:
-	CMPL DX, $0x40
+	CMPL BX, $0x40
 	JLE  four_bytes_remain_standalone
-	MOVB $0xff, (AX)
-	MOVL CX, 1(AX)
-	LEAL -64(DX), DX
-	ADDQ $0x05, BX
+	MOVB $0xff, (CX)
+	MOVL DX, 1(CX)
+	LEAL -64(BX), BX
 	ADDQ $0x05, AX
-	CMPL DX, $0x04
+	ADDQ $0x05, CX
+	CMPL BX, $0x04
 	JL   four_bytes_remain_standalone
 
 	// emitRepeat
 emit_repeat_again_standalone_emit_copy:
-	MOVL DX, BP
-	LEAL -4(DX), DX
+	MOVL BX, BP
+	LEAL -4(BX), BX
 	CMPL BP, $0x08
 	JLE  repeat_two_standalone_emit_copy
 	CMPL BP, $0x0c
 	JGE  cant_repeat_two_offset_standalone_emit_copy
-	CMPL CX, $0x00000800
+	CMPL DX, $0x00000800
 	JLT  repeat_two_offset_standalone_emit_copy
 
 cant_repeat_two_offset_standalone_emit_copy:
-	CMPL DX, $0x00000104
+	CMPL BX, $0x00000104
 	JLT  repeat_three_standalone_emit_copy
-	CMPL DX, $0x00010100
+	CMPL BX, $0x00010100
 	JLT  repeat_four_standalone_emit_copy
-	CMPL DX, $0x0100ffff
+	CMPL BX, $0x0100ffff
 	JLT  repeat_five_standalone_emit_copy
-	LEAL -16842747(DX), DX
-	MOVW $0x001d, (AX)
-	MOVW $0xfffb, 2(AX)
-	MOVB $0xff, 4(AX)
+	LEAL -16842747(BX), BX
+	MOVW $0x001d, (CX)
+	MOVW $0xfffb, 2(CX)
+	MOVB $0xff, 4(CX)
+	ADDQ $0x05, CX
 	ADDQ $0x05, AX
-	ADDQ $0x05, BX
 	JMP  emit_repeat_again_standalone_emit_copy
 
 repeat_five_standalone_emit_copy:
-	LEAL -65536(DX), DX
-	MOVL DX, CX
-	MOVW $0x001d, (AX)
-	MOVW DX, 2(AX)
-	SARL $0x10, CX
-	MOVB CL, 4(AX)
-	ADDQ $0x05, BX
+	LEAL -65536(BX), BX
+	MOVL BX, DX
+	MOVW $0x001d, (CX)
+	MOVW BX, 2(CX)
+	SARL $0x10, DX
+	MOVB DL, 4(CX)
 	ADDQ $0x05, AX
+	ADDQ $0x05, CX
 	JMP  gen_emit_copy_end
 
 repeat_four_standalone_emit_copy:
-	LEAL -256(DX), DX
-	MOVW $0x0019, (AX)
-	MOVW DX, 2(AX)
-	ADDQ $0x04, BX
+	LEAL -256(BX), BX
+	MOVW $0x0019, (CX)
+	MOVW BX, 2(CX)
 	ADDQ $0x04, AX
+	ADDQ $0x04, CX
 	JMP  gen_emit_copy_end
 
 repeat_three_standalone_emit_copy:
-	LEAL -4(DX), DX
-	MOVW $0x0015, (AX)
-	MOVB DL, 2(AX)
-	ADDQ $0x03, BX
+	LEAL -4(BX), BX
+	MOVW $0x0015, (CX)
+	MOVB BL, 2(CX)
 	ADDQ $0x03, AX
+	ADDQ $0x03, CX
 	JMP  gen_emit_copy_end
 
 repeat_two_standalone_emit_copy:
-	SHLL $0x02, DX
-	ORL  $0x01, DX
-	MOVW DX, (AX)
-	ADDQ $0x02, BX
+	SHLL $0x02, BX
+	ORL  $0x01, BX
+	MOVW BX, (CX)
 	ADDQ $0x02, AX
+	ADDQ $0x02, CX
 	JMP  gen_emit_copy_end
 
 repeat_two_offset_standalone_emit_copy:
 	XORQ BP, BP
-	LEAL 1(BP)(DX*4), DX
-	MOVB CL, 1(AX)
-	SARL $0x08, CX
-	SHLL $0x05, CX
-	ORL  CX, DX
-	MOVB DL, (AX)
-	ADDQ $0x02, BX
+	LEAL 1(BP)(BX*4), BX
+	MOVB DL, 1(CX)
+	SARL $0x08, DX
+	SHLL $0x05, DX
+	ORL  DX, BX
+	MOVB BL, (CX)
 	ADDQ $0x02, AX
+	ADDQ $0x02, CX
 	JMP  gen_emit_copy_end
 	JMP four_bytes_loop_back_standalone
 
 four_bytes_remain_standalone:
-	TESTL DX, DX
+	TESTL BX, BX
 	JZ    gen_emit_copy_end
 	MOVB  $0x03, BP
-	LEAL  -4(BP)(DX*4), DX
-	MOVB  DL, (AX)
-	MOVL  CX, 1(AX)
-	ADDQ  $0x05, BX
+	LEAL  -4(BP)(BX*4), BX
+	MOVB  BL, (CX)
+	MOVL  DX, 1(CX)
 	ADDQ  $0x05, AX
+	ADDQ  $0x05, CX
 	JMP   gen_emit_copy_end
 
 two_byte_offset_standalone:
-	CMPL DX, $0x40
+	CMPL BX, $0x40
 	JLE  two_byte_offset_short_standalone
-	MOVB $0xee, (AX)
-	MOVW CX, 1(AX)
-	LEAL -60(DX), DX
+	MOVB $0xee, (CX)
+	MOVW DX, 1(CX)
+	LEAL -60(BX), BX
+	ADDQ $0x03, CX
 	ADDQ $0x03, AX
-	ADDQ $0x03, BX
 
 	// emitRepeat
 emit_repeat_again_standalone_emit_copy_short:
-	MOVL DX, BP
-	LEAL -4(DX), DX
+	MOVL BX, BP
+	LEAL -4(BX), BX
 	CMPL BP, $0x08
 	JLE  repeat_two_standalone_emit_copy_short
 	CMPL BP, $0x0c
 	JGE  cant_repeat_two_offset_standalone_emit_copy_short
-	CMPL CX, $0x00000800
+	CMPL DX, $0x00000800
 	JLT  repeat_two_offset_standalone_emit_copy_short
 
 cant_repeat_two_offset_standalone_emit_copy_short:
-	CMPL DX, $0x00000104
+	CMPL BX, $0x00000104
 	JLT  repeat_three_standalone_emit_copy_short
-	CMPL DX, $0x00010100
+	CMPL BX, $0x00010100
 	JLT  repeat_four_standalone_emit_copy_short
-	CMPL DX, $0x0100ffff
+	CMPL BX, $0x0100ffff
 	JLT  repeat_five_standalone_emit_copy_short
-	LEAL -16842747(DX), DX
-	MOVW $0x001d, (AX)
-	MOVW $0xfffb, 2(AX)
-	MOVB $0xff, 4(AX)
+	LEAL -16842747(BX), BX
+	MOVW $0x001d, (CX)
+	MOVW $0xfffb, 2(CX)
+	MOVB $0xff, 4(CX)
+	ADDQ $0x05, CX
 	ADDQ $0x05, AX
-	ADDQ $0x05, BX
 	JMP  emit_repeat_again_standalone_emit_copy_short
 
 repeat_five_standalone_emit_copy_short:
-	LEAL -65536(DX), DX
-	MOVL DX, CX
-	MOVW $0x001d, (AX)
-	MOVW DX, 2(AX)
-	SARL $0x10, CX
-	MOVB CL, 4(AX)
-	ADDQ $0x05, BX
+	LEAL -65536(BX), BX
+	MOVL BX, DX
+	MOVW $0x001d, (CX)
+	MOVW BX, 2(CX)
+	SARL $0x10, DX
+	MOVB DL, 4(CX)
 	ADDQ $0x05, AX
+	ADDQ $0x05, CX
 	JMP  gen_emit_copy_end
 
 repeat_four_standalone_emit_copy_short:
-	LEAL -256(DX), DX
-	MOVW $0x0019, (AX)
-	MOVW DX, 2(AX)
-	ADDQ $0x04, BX
+	LEAL -256(BX), BX
+	MOVW $0x0019, (CX)
+	MOVW BX, 2(CX)
 	ADDQ $0x04, AX
+	ADDQ $0x04, CX
 	JMP  gen_emit_copy_end
 
 repeat_three_standalone_emit_copy_short:
-	LEAL -4(DX), DX
-	MOVW $0x0015, (AX)
-	MOVB DL, 2(AX)
-	ADDQ $0x03, BX
+	LEAL -4(BX), BX
+	MOVW $0x0015, (CX)
+	MOVB BL, 2(CX)
 	ADDQ $0x03, AX
+	ADDQ $0x03, CX
 	JMP  gen_emit_copy_end
 
 repeat_two_standalone_emit_copy_short:
-	SHLL $0x02, DX
-	ORL  $0x01, DX
-	MOVW DX, (AX)
-	ADDQ $0x02, BX
+	SHLL $0x02, BX
+	ORL  $0x01, BX
+	MOVW BX, (CX)
 	ADDQ $0x02, AX
+	ADDQ $0x02, CX
 	JMP  gen_emit_copy_end
 
 repeat_two_offset_standalone_emit_copy_short:
 	XORQ BP, BP
-	LEAL 1(BP)(DX*4), DX
-	MOVB CL, 1(AX)
-	SARL $0x08, CX
-	SHLL $0x05, CX
-	ORL  CX, DX
-	MOVB DL, (AX)
-	ADDQ $0x02, BX
+	LEAL 1(BP)(BX*4), BX
+	MOVB DL, 1(CX)
+	SARL $0x08, DX
+	SHLL $0x05, DX
+	ORL  DX, BX
+	MOVB BL, (CX)
 	ADDQ $0x02, AX
+	ADDQ $0x02, CX
 	JMP  gen_emit_copy_end
 	JMP two_byte_offset_standalone
 
 two_byte_offset_short_standalone:
-	CMPL DX, $0x0c
+	CMPL BX, $0x0c
 	JGE  emit_copy_three_standalone
-	CMPL CX, $0x00000800
+	CMPL DX, $0x00000800
 	JGE  emit_copy_three_standalone
 	MOVB $0x01, BP
-	LEAL -16(BP)(DX*4), DX
-	MOVB CL, 1(AX)
-	SHRL $0x08, CX
-	SHLL $0x05, CX
-	ORL  CX, DX
-	MOVB DL, (AX)
-	ADDQ $0x02, BX
+	LEAL -16(BP)(BX*4), BX
+	MOVB DL, 1(CX)
+	SHRL $0x08, DX
+	SHLL $0x05, DX
+	ORL  DX, BX
+	MOVB BL, (CX)
 	ADDQ $0x02, AX
+	ADDQ $0x02, CX
 	JMP  gen_emit_copy_end
 
 emit_copy_three_standalone:
 	MOVB $0x02, BP
-	LEAL -4(BP)(DX*4), DX
-	MOVB DL, (AX)
-	MOVW CX, 1(AX)
-	ADDQ $0x03, BX
+	LEAL -4(BP)(BX*4), BX
+	MOVB BL, (CX)
+	MOVW DX, 1(CX)
 	ADDQ $0x03, AX
+	ADDQ $0x03, CX
 
 gen_emit_copy_end:
-	MOVQ BX, ret+40(FP)
+	MOVQ AX, ret+40(FP)
+	MOVQ X0, BP
 	RET
 
 // func emitCopyNoRepeat(dst []byte, offset int, length int) int
