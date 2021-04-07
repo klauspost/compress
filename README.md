@@ -372,13 +372,6 @@ For more information see my blog post on [Fast Linear Time Compression](http://b
 This is implemented on Go 1.7 as "Huffman Only" mode, though not exposed for gzip.
 
 
-# snappy package
-
-The standard snappy package has now been improved. This repo contains a copy of the snappy repo.
-
-I would advise to use the standard package: https://github.com/golang/snappy
-
-
 # license
 
 This code is licensed under the same conditions as the original Go code. See LICENSE file.
