@@ -20,6 +20,7 @@ install:
  - go get ./...
 
 script:
+ - go vet ./...
  - go test -cpu=2 ./...
  - go test -cpu=2 -tags=noasm ./...
  - CGO_ENABLED=1 go test -cpu=1,4 -short -race ./...
@@ -30,14 +31,14 @@ jobs:
     - go: 'master'
   fast_finish: true
   include:
-    - stage: misc one-off tests
+    - stage: other
       go: 1.16.x
       script:
         - diff <(gofmt -d .) <(printf "")
         - GOOS=linux GOARCH=386 go test -short ./... # test on 386/32 bits.
         - curl -sfL https://git.io/goreleaser | VERSION=v0.157.0 sh -s -- check # check goreleaser config for deprecations
         - curl -sL https://git.io/goreleaser | VERSION=v0.157.0 sh -s -- --snapshot --skip-publish --rm-dist
-    - stage: arm64 tests
+    - stage: other
       arch: arm64
       go:
         - 1.16.x
