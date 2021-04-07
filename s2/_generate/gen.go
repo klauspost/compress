@@ -1501,6 +1501,7 @@ func (o options) genEmitLiteral() {
 	Pragma("noescape")
 
 	dstBase, litBase, litLen, retval := GP64(), GP64(), GP64(), GP64()
+	restore := saveBP()
 	Load(Param("lit").Len(), litLen)
 	Load(Param("dst").Base(), dstBase)
 	Load(Param("lit").Base(), litBase)
@@ -1513,6 +1514,7 @@ func (o options) genEmitLiteral() {
 
 	Label("emit_literal_end_standalone")
 	Store(retval, ReturnIndex(0))
+	restore()
 	RET()
 
 }
@@ -1669,6 +1671,7 @@ func (o options) genEmitRepeat() {
 	Pragma("noescape")
 
 	dstBase, offset, length, retval := GP64(), GP64(), GP64(), GP64()
+	restore := saveBP()
 
 	// retval = 0
 	XORQ(retval, retval)
@@ -1679,6 +1682,7 @@ func (o options) genEmitRepeat() {
 	o.emitRepeat("standalone", length, offset, retval, dstBase, LabelRef("gen_emit_repeat_end"))
 	Label("gen_emit_repeat_end")
 	Store(retval, ReturnIndex(0))
+	restore()
 	RET()
 }
 
@@ -1824,16 +1828,17 @@ func (o options) genEmitCopy() {
 	Pragma("noescape")
 
 	dstBase, offset, length, retval := GP64(), GP64(), GP64(), GP64()
+	restore := saveBP()
 
 	//	i := 0
 	XORQ(retval, retval)
-
 	Load(Param("dst").Base(), dstBase)
 	Load(Param("offset"), offset)
 	Load(Param("length"), length)
 	o.emitCopy("standalone", length, offset, retval, dstBase, LabelRef("gen_emit_copy_end"))
 	Label("gen_emit_copy_end")
 	Store(retval, ReturnIndex(0))
+	restore()
 	RET()
 }
 
@@ -1855,6 +1860,7 @@ func (o options) genEmitCopyNoRepeat() {
 	Pragma("noescape")
 
 	dstBase, offset, length, retval := GP64(), GP64(), GP64(), GP64()
+	restore := saveBP()
 
 	//	i := 0
 	XORQ(retval, retval)
@@ -1865,6 +1871,7 @@ func (o options) genEmitCopyNoRepeat() {
 	o.emitCopy("standalone_snappy", length, offset, retval, dstBase, "gen_emit_copy_end_snappy")
 	Label("gen_emit_copy_end_snappy")
 	Store(retval, ReturnIndex(0))
+	restore()
 	RET()
 }
 
@@ -2368,12 +2375,15 @@ func (o options) genMatchLen() {
 
 	aBase, bBase, length := GP64(), GP64(), GP64()
 
+	restore := saveBP()
+
 	Load(Param("a").Base(), aBase)
 	Load(Param("b").Base(), bBase)
 	Load(Param("a").Len(), length)
 	l := o.matchLen("standalone", aBase, bBase, length, LabelRef("gen_match_len_end"))
 	Label("gen_match_len_end")
 	Store(l.As64(), ReturnIndex(0))
+	restore()
 	RET()
 }
 
@@ -2518,4 +2528,13 @@ func (o options) matchLenAlt(name string, a, b, len reg.GPVirtual, end LabelRef)
 	}
 	JMP(end)
 	return matched
+}
+
+// saveBP will save RBP in an XMM register and restore it when returning.
+func saveBP() (restore func()) {
+	x := XMM()
+	MOVQ(reg.RBP, x)
+	return func() {
+		MOVQ(x, reg.RBP)
+	}
 }
