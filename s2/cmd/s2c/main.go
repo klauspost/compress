@@ -242,7 +242,7 @@ Options:`)
 						exitErr(errors.New("destination file exists"))
 					}
 				}
-				dstFile, err := os.OpenFile(dstFilename, os.O_CREATE|os.O_WRONLY, mode)
+				dstFile, err := os.OpenFile(dstFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 				exitErr(err)
 				defer dstFile.Close()
 				bw := bufio.NewWriterSize(dstFile, int(sz)*2)

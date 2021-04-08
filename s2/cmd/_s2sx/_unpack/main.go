@@ -265,13 +265,13 @@ func untar(dst string, r io.Reader) error {
 				fmt.Println(target)
 			}
 
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
 			if err != nil {
 				if os.IsNotExist(err) {
 					if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 						return err
 					}
-					f, err = os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
+					f, err = os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
 				}
 				if err != nil {
 					return err

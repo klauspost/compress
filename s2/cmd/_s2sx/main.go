@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"os/signal"
 	"path"
 	"path/filepath"
 	"runtime"
@@ -18,7 +19,6 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/s2"
-
 	"github.com/klauspost/compress/s2/cmd/internal/readahead"
 )
 
@@ -55,7 +55,9 @@ func main() {
 		_, _ = fmt.Fprintln(os.Stderr, `Usage: s2sx [options] file1 file2
 
 Compresses all files supplied as input separately.
-If files have '.s2' extension they are assumed to be compressed already.
+Use file name - to read from stdin and write to stdout.
+If input is already s2 compressed it will just have the executable wrapped.
+Use s2c commandline tool for advanced option, eg 'cat file.txt||s2c -|s2sx - >out.s2sx'
 Output files are written as 'filename.s2sfx' and with '.exe' for windows targets.
 By default output files will be overwritten.
 
@@ -76,15 +78,7 @@ Options:`)
 
 	opts := []s2.WriterOption{s2.WriterBestCompression(), s2.WriterConcurrency(*cpu), s2.WriterBlockSize(4 << 20)}
 	wr := s2.NewWriter(nil, opts...)
-	var files []string
-	for _, pattern := range args {
-		found, err := filepath.Glob(pattern)
-		exitErr(err)
-		if len(found) == 0 {
-			exitErr(fmt.Errorf("unable to find file %v", pattern))
-		}
-		files = append(files, found...)
-	}
+
 	wantPlat := *goos + "-" + *goarch
 	exec, err := embeddedFiles.ReadFile(path.Join("sfx-exe", wantPlat+".s2"))
 	if os.IsNotExist(err) {
@@ -104,22 +98,56 @@ Options:`)
 	if *untar {
 		mode = opUnTar
 	}
-	if *stdout {
+
+	// No args, use stdin/stdout
+	stdIn := len(args) == 1 && args[0] == "-"
+	if *stdout || stdIn {
 		// Write exec once to stdout
 		_, err = os.Stdout.Write(exec)
 		exitErr(err)
 		_, err = os.Stdout.Write([]byte{mode})
 		exitErr(err)
 	}
+
+	if stdIn {
+		// Catch interrupt, so we don't exit at once.
+		// os.Stdin will return EOF, so we should be able to get everything.
+		signal.Notify(make(chan os.Signal, 1), os.Interrupt)
+		isCompressed, rd := isS2Input(os.Stdin)
+		if isCompressed {
+			_, err := io.Copy(os.Stdout, rd)
+			exitErr(err)
+			return
+		}
+		wr.Reset(os.Stdout)
+		_, err = wr.ReadFrom(rd)
+		printErr(err)
+		printErr(wr.Close())
+		return
+	}
+
+	var files []string
+	for _, pattern := range args {
+		found, err := filepath.Glob(pattern)
+		exitErr(err)
+		if len(found) == 0 {
+			exitErr(fmt.Errorf("unable to find file %v", pattern))
+		}
+		files = append(files, found...)
+	}
+
 	for _, filename := range files {
 		func() {
 			var closeOnce sync.Once
-			isCompressed := strings.HasSuffix(filename, ".s2")
-			filename = strings.TrimPrefix(filename, ".s2")
-			dstFilename := fmt.Sprintf("%s%s", filename, ".s2sfx")
+			dstFilename := fmt.Sprintf("%s%s", strings.TrimPrefix(filename, ".s2"), ".s2sfx")
 			if *goos == "windows" {
 				dstFilename += ".exe"
 			}
+			// Input file.
+			file, err := os.Open(filename)
+			exitErr(err)
+			defer closeOnce.Do(func() { file.Close() })
+			isCompressed, rd := isS2Input(file)
 			if !*quiet {
 				if !isCompressed {
 					fmt.Print("Compressing ", filename, " -> ", dstFilename, " for ", wantPlat)
@@ -127,11 +155,7 @@ Options:`)
 					fmt.Print("Creating sfx archive ", filename, " -> ", dstFilename, " for ", wantPlat)
 				}
 			}
-			// Input file.
-			file, err := os.Open(filename)
-			exitErr(err)
-			defer closeOnce.Do(func() { file.Close() })
-			src, err := readahead.NewReaderSize(file, *cpu+1, 1<<20)
+			src, err := readahead.NewReaderSize(rd, *cpu+1, 1<<20)
 			exitErr(err)
 			defer src.Close()
 			var out io.Writer
@@ -145,7 +169,7 @@ Options:`)
 						exitErr(errors.New("destination file exists"))
 					}
 				}
-				dstFile, err := os.OpenFile(dstFilename, os.O_CREATE|os.O_WRONLY, 0777)
+				dstFile, err := os.OpenFile(dstFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0777)
 				exitErr(err)
 				defer dstFile.Close()
 				bw := bufio.NewWriterSize(dstFile, 4<<20*2)
@@ -191,6 +215,12 @@ Options:`)
 
 }
 
+func printErr(err error) {
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "\nERROR:", err.Error())
+	}
+}
+
 func exitErr(err error) {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "\nERROR:", err.Error())
@@ -208,4 +238,17 @@ func (w *wCounter) Write(p []byte) (n int, err error) {
 	w.n += n
 	return n, err
 
+}
+
+func isS2Input(rd io.Reader) (bool, io.Reader) {
+	var tmp [4]byte
+	n, err := io.ReadFull(rd, tmp[:])
+	switch err {
+	case nil:
+		return bytes.Equal(tmp[:], []byte{0xff, 0x06, 0x00, 0x00}), io.MultiReader(bytes.NewBuffer(tmp[:]), rd)
+	case io.ErrUnexpectedEOF, io.EOF:
+		return false, bytes.NewBuffer(tmp[:n])
+	}
+	exitErr(err)
+	return false, nil
 }
