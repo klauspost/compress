@@ -10,7 +10,7 @@ This package provides various compression algorithms.
 * [fuzz package](https://github.com/klauspost/compress-fuzz) for fuzz testing all compressors/decompressors here.
 
 [![Go Reference](https://pkg.go.dev/badge/klauspost/compress.svg)](https://pkg.go.dev/github.com/klauspost/compress?tab=subdirectories)
-[![Build Status](https://travis-ci.org/klauspost/compress.svg?branch=master)](https://travis-ci.org/klauspost/compress)
+[![Build Status](https://travis-ci.com/klauspost/compress.svg?branch=master)](https://travis-ci.com/klauspost/compress)
 [![Sourcegraph Badge](https://sourcegraph.com/github.com/klauspost/compress/-/badge.svg)](https://sourcegraph.com/github.com/klauspost/compress?badge)
 
 # changelog
