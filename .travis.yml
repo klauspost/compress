@@ -55,5 +55,7 @@ deploy:
     tags: true
     condition: ($TRAVIS_OS_NAME = linux) && ($TRAVIS_CPU_ARCH = amd64)
     go: 1.16.x
-    branch: master
-
+branches:
+  only:
+    - master
+    - /^v\d+\.\d+(\.\d+)?(-\S*)?$/
