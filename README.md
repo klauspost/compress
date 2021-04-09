@@ -15,6 +15,15 @@ This package provides various compression algorithms.
 
 # changelog
 
+* Apr 9, 2021 (v.1.12.1)
+	* snappy package removed. Upstream added as dependency.
+	* s2: Better compression in "best" mode [#353](https://github.com/klauspost/compress/pull/353)
+	* s2sx: Add stdin input and detect pre-compressed from signature [#352](https://github.com/klauspost/compress/pull/352)
+	* s2c/s2d: Add http as possible input [#348](https://github.com/klauspost/compress/pull/348)
+	* s2c/s2d/s2sx: Always truncate when writing files [#352](https://github.com/klauspost/compress/pull/352)
+	* zstd: Reduce memory usage further when using [WithLowerEncoderMem](https://pkg.go.dev/github.com/klauspost/compress/zstd#WithLowerEncoderMem) [#346](https://github.com/klauspost/compress/pull/346)
+	* s2: Fix potential problem with amd64 assembly and profilers [#349](https://github.com/klauspost/compress/pull/349)
+
 * Mar 26, 2021 (v1.11.13)
 	* zstd: Big speedup on small dictionary encodes [#344](https://github.com/klauspost/compress/pull/344) [#345](https://github.com/klauspost/compress/pull/345)
 	* zstd: Add [WithLowerEncoderMem](https://pkg.go.dev/github.com/klauspost/compress/zstd#WithLowerEncoderMem) encoder option [#336](https://github.com/klauspost/compress/pull/336)
