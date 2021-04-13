@@ -35,7 +35,9 @@ jobs:
       run: go test -tags=noasm ./...
 
     - name: Test Race
-      run: CGO_ENABLED=1 go test -cpu="1,4" -short -race ./...
+      env:
+        CGO_ENABLED: 1
+      run: go test -cpu="1,4" -short -race ./...
       
   build-special:
     env:
