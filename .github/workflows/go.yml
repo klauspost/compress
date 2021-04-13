@@ -35,11 +35,8 @@ jobs:
       run: go test -tags=noasm ./...
 
     - name: Test Race
-      run: CGO_ENABLED=1 go test -cpu=1,4 -short -race ./...
+      run: CGO_ENABLED=1 go test -cpu="1,4" -short -race ./...
       
-    - name: Build s2c
-      run: go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d&&./s2c -verify s2c &&./s2d s2c.s2&&rm ./s2c&&rm s2d&&rm s2c.s2
-
   build-special:
     env:
       CGO_ENABLED: 0
@@ -58,6 +55,9 @@ jobs:
 
     - name: Test 386
       run: GOOS=linux GOARCH=386 go test -short ./...
+
+    - name: Build s2c
+      run: go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d&&./s2c -verify s2c &&./s2d s2c.s2&&rm ./s2c&&rm s2d&&rm s2c.s2
 
     - name: goreleaser deprecation
       run: curl -sfL https://git.io/goreleaser | VERSION=v0.162.0 sh -s -- check
