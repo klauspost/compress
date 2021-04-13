@@ -8,7 +8,7 @@ on:
 
        
 jobs:
-  build-linux:
+  build:
     strategy:
       matrix:
         go-version: [1.14.x, 1.15.x, 1.16.x]
@@ -17,13 +17,14 @@ jobs:
       CGO_ENABLED: 0
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v2
-
     - name: Set up Go
       uses: actions/setup-go@v2      
       with:
         go-version: ${{ matrix.go-version }}
-        
+
+    - name: Checkout code
+      uses: actions/checkout@v2
+
     - name: Vet
       run: go vet ./...
 
@@ -40,28 +41,29 @@ jobs:
       run: go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d&&./s2c -verify s2c &&./s2d s2c.s2&&rm ./s2c&&rm s2d&&rm s2c.s2
 
     - name: Test 386
-      run: GOOS=linux GOARCH=386 go test -short ./...
-      
+      run: GOOS=linux GOARCH=386 go test -short ./...      
   build-special:
     env:
       CGO_ENABLED: 0
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-
     - name: Set up Go
       uses: actions/setup-go@v2      
       with:
         go-version: 1.16.x
-        
+
+    - name: Checkout code
+      uses: actions/checkout@v2
+
     - name: fmt
       run: diff <(gofmt -d .) <(printf "")
 
     - name: Test 386
-      run: GOOS=linux GOARCH=386 go test -short ./..
+      run: GOOS=linux GOARCH=386 go test -short ./...
 
     - name: goreleaser deprecation
       run: curl -sfL https://git.io/goreleaser | VERSION=v0.157.0 sh -s -- check 
       
     - name: goreleaser snapshot
       run: curl -sL https://git.io/goreleaser | VERSION=v0.157.0 sh -s -- --snapshot --skip-publish --rm-dis
+
