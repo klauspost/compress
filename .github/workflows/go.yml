@@ -21,6 +21,9 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v2      
 
+    - name: Build s2c
+      run: go install github.com/klauspost/compress/s2/cmd/s2c && go install github.com/klauspost/compress/s2/cmd/s2d && s2c -verify s2c && s2d s2c.s2 && rm s2c && rm s2d && rm s2c.s2
+      
     - name: Vet
       run: go vet ./...
 
@@ -33,7 +36,5 @@ jobs:
     - name: Test Race
       run: CGO_ENABLED=1 go test -cpu=1,4 -short -race ./...
       
-    - name: Build s2c
-      run: go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d && s2c s2c && s2d s2c.s2 && rm s2c && rm s2d && rm s2c.s2
-      
+
       
