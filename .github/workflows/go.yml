@@ -22,7 +22,7 @@ jobs:
       uses: actions/setup-go@v2      
 
     - name: Build s2c
-      run: go install github.com/klauspost/compress/s2/cmd/s2c && go install github.com/klauspost/compress/s2/cmd/s2d && s2c -verify s2c && s2d s2c.s2 && rm s2c && rm s2d && rm s2c.s2
+      run: go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d&&./s2c -verify s2c &&./s2d s2c.s2&&rm ./s2c&&rm s2d&&rm s2c.s2
       
     - name: Vet
       run: go vet ./...
