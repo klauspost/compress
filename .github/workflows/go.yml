@@ -1,0 +1,40 @@
+name: Go
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+       
+jobs:
+  build:
+    strategy:
+      matrix:
+        go-version: [1.14, 1.15, 1.16]
+    env:
+      CGO_ENABLED: 0
+      GO111MODULE: off
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up Go
+      uses: actions/setup-go@v2      
+
+    - name: Vet
+      run: go vet ./...
+
+    - name: Test
+      run: go test ./...
+
+    - name: Test Noasm
+      run: go test -tags=noasm ./...
+      
+    - name: Test Race
+      run: CGO_ENABLED=1 go test -cpu=1,4 -short -race ./...
+      
+    - name: Build s2c
+      run: go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d && s2c s2c && s2d s2c.s2 && rm s2c && rm s2d && rm s2c.s2
+      
+      
