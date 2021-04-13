@@ -28,12 +28,12 @@ jobs:
     - name: Vet
       run: go vet ./...
 
+    - name: Test Noasm
+      run: go test -tags=noasm ./...
+
     - name: Test
       run: go test ./...
 
-    - name: Test Noasm
-      run: go test -tags=noasm ./...
-      
     - name: Test Race
       run: CGO_ENABLED=1 go test -cpu=1,4 -short -race ./...
       
@@ -65,5 +65,5 @@ jobs:
       run: curl -sfL https://git.io/goreleaser | VERSION=v0.157.0 sh -s -- check 
       
     - name: goreleaser snapshot
-      run: curl -sL https://git.io/goreleaser | VERSION=v0.157.0 sh -s -- --snapshot --skip-publish --rm-dist
+      run: GO111MODULE=off curl -sL https://git.io/goreleaser | VERSION=v0.157.0 sh -s -- --snapshot --skip-publish --rm-dist
 
