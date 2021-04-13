@@ -59,6 +59,7 @@ builds:
     main: ./s2/cmd/_s2sx/main.go
     env:
       - CGO_ENABLED=0
+      - GO111MODULE=off
     goos:
       - aix
       - linux
