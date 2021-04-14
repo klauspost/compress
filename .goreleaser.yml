@@ -2,7 +2,7 @@
 # Make sure to check the documentation at http://goreleaser.com
 before:
   hooks:
-    #- ./gen.sh
+    - ./gen.sh
 
 builds:
   -
