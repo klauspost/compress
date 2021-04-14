@@ -57,6 +57,8 @@ builds:
     id: "s2sx"
     binary: s2sx
     main: ./s2/cmd/_s2sx/main.go
+    flags:
+      -modfile=s2sx.mod
     env:
       - CGO_ENABLED=0
     goos:
