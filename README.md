@@ -10,12 +10,12 @@ This package provides various compression algorithms.
 * [fuzz package](https://github.com/klauspost/compress-fuzz) for fuzz testing all compressors/decompressors here.
 
 [![Go Reference](https://pkg.go.dev/badge/klauspost/compress.svg)](https://pkg.go.dev/github.com/klauspost/compress?tab=subdirectories)
-[![Build Status](https://travis-ci.com/klauspost/compress.svg?branch=master)](https://travis-ci.com/klauspost/compress)
+[![Go](https://github.com/klauspost/compress/actions/workflows/go.yml/badge.svg)](https://github.com/klauspost/compress/actions/workflows/go.yml)
 [![Sourcegraph Badge](https://sourcegraph.com/github.com/klauspost/compress/-/badge.svg)](https://sourcegraph.com/github.com/klauspost/compress?badge)
 
 # changelog
 
-* Apr 9, 2021 (v.1.12.1)
+* Apr 14, 2021 (v1.12.1)
 	* snappy package removed. Upstream added as dependency.
 	* s2: Better compression in "best" mode [#353](https://github.com/klauspost/compress/pull/353)
 	* s2sx: Add stdin input and detect pre-compressed from signature [#352](https://github.com/klauspost/compress/pull/352)
