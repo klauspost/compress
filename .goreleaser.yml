@@ -2,13 +2,15 @@
 # Make sure to check the documentation at http://goreleaser.com
 before:
   hooks:
-    - ./gen.sh
+    #- ./gen.sh
 
 builds:
   -
     id: "s2c"
     binary: s2c
     main: ./s2/cmd/s2c/main.go
+    flags:
+      - -trimpath
     env:
       - CGO_ENABLED=0
     goos:
@@ -33,6 +35,8 @@ builds:
     id: "s2d"
     binary: s2d
     main: ./s2/cmd/s2d/main.go
+    flags:
+      - -trimpath
     env:
       - CGO_ENABLED=0
     goos:
@@ -58,7 +62,8 @@ builds:
     binary: s2sx
     main: ./s2/cmd/_s2sx/main.go
     flags:
-      -modfile=s2sx.mod
+      - -modfile=s2sx.mod
+      - -trimpath
     env:
       - CGO_ENABLED=0
     goos:
