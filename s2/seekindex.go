@@ -9,7 +9,7 @@ import (
 	"math"
 )
 
-const SeekIndexV1Header = "s2S33k01"
+const SeekIndexV1Header = "s33k01"
 
 type blockInfo struct {
 	offset int64 // Absolute offset
@@ -22,7 +22,9 @@ type seekIndex struct {
 }
 
 func (s seekIndex) encode() []byte {
-	res := append(make([]byte, 0, 2*len(SeekIndexV1Header)+len(s.blocks)*8), []byte(SeekIndexV1Header)...)
+	estSize := skippableFrameHeader + 4 + 2*len(SeekIndexV1Header) + len(s.blocks)*8
+	res := append(make([]byte, 0, estSize), chunkTypePadding, 0, 0, 0)
+	res = append(res, []byte(SeekIndexV1Header)...)
 	var tmp [binary.MaxVarintLen64]byte
 	n := binary.PutUvarint(tmp[:], uint64(len(s.blocks)))
 	res = append(res, tmp[:n]...)
@@ -45,6 +47,14 @@ func (s seekIndex) encode() []byte {
 	res = append(res, tmp[:4]...)
 	// End with "header" to confirm.
 	res = append(res, []byte(SeekIndexV1Header)...)
+	f := uint32(len(res) - skippableFrameHeader)
+	if f > maxSkippableChuckSize {
+		return nil
+	}
+	// Add chunk length.
+	res[1] = uint8(f)
+	res[2] = uint8(f >> 8)
+	res[3] = uint8(f >> 16)
 
 	return res
 }
@@ -79,9 +89,21 @@ func (s *seekIndex) addBlock(i blockInfo) {
 }
 
 func decodeSeekIndex(b []byte) (*seekIndex, error) {
-	if len(b) <= len(SeekIndexV1Header)*2+4 {
+	if len(b) <= len(SeekIndexV1Header)*2+4+skippableFrameHeader {
 		return nil, io.ErrUnexpectedEOF
 	}
+	if b[0] != chunkTypePadding {
+		return nil, errors.New("unknown chunk type")
+	}
+	chunkSize := int(b[1]) | int(b[2])<<8 | int(b[3])<<16
+	b = b[4:]
+	if len(b) < chunkSize {
+		return nil, io.ErrUnexpectedEOF
+	}
+	// Truncate any extra data given...
+	b = b[:chunkSize]
+
+	// Check front header
 	if !bytes.Equal(b[:len(SeekIndexV1Header)], []byte(SeekIndexV1Header)) {
 		return nil, errors.New("unknown header")
 	}

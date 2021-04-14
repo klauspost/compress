@@ -879,6 +879,7 @@ func (w *Writer) Close() error {
 }
 
 const skippableFrameHeader = 4
+const maxSkippableChuckSize = (1 << 24) - 1
 
 // calcSkippableFrame will return a total size to be added for written
 // to be divisible by multiple.
@@ -903,7 +904,7 @@ func calcSkippableFrame(written, wantMultiple int64) int {
 }
 
 // skippableFrame will add a skippable frame with a total size of bytes.
-// total should be >= skippableFrameHeader and < maxBlockSize + skippableFrameHeader
+// total should be >= skippableFrameHeader and < maxSkippableChuckSize
 func skippableFrame(dst []byte, total int, r io.Reader) ([]byte, error) {
 	if total == 0 {
 		return dst, nil
@@ -911,7 +912,7 @@ func skippableFrame(dst []byte, total int, r io.Reader) ([]byte, error) {
 	if total < skippableFrameHeader {
 		return dst, fmt.Errorf("s2: requested skippable frame (%d) < 4", total)
 	}
-	if int64(total) >= maxBlockSize+skippableFrameHeader {
+	if int64(total) > maxSkippableChuckSize {
 		return dst, fmt.Errorf("s2: requested skippable frame (%d) >= max 1<<24", total)
 	}
 	// Chunk type 0xfe "Section 4.4 Padding (chunk type 0xfe)"
