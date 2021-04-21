@@ -68,6 +68,7 @@ func encodeBlockBest(dst, src []byte) (d int) {
 			offset int
 			s      int
 			length int
+			score  int
 			rep    bool
 		}
 		var best match
@@ -81,6 +82,20 @@ func encodeBlockBest(dst, src []byte) (d int) {
 			hashS := hash4(cv, sTableBits)
 			candidateL := lTable[hashL]
 			candidateS := sTable[hashS]
+
+			score := func(m match) int {
+				// Matches that are longer forward are penalized since we must emit it as a literal.
+				score := m.length - m.s
+				if nextEmit == m.s {
+					// If we do not have to emit literals, we save 1 byte
+					score++
+				}
+				offset := m.s - m.offset
+				if m.rep {
+					return score - emitRepeatSize(offset, m.length)
+				}
+				return score - emitCopySize(offset, m.length)
+			}
 
 			matchAt := func(offset, s int, first uint32, rep bool) match {
 				if best.length != 0 && best.s-best.offset == s-offset {
@@ -101,21 +116,14 @@ func encodeBlockBest(dst, src []byte) (d int) {
 					m.length += 8
 				}
 				m.length -= offset
+				m.score = score(m)
+				if m.score <= -m.s {
+					// Eliminate if no savings, we might find a better one.
+					m.length = 0
+				}
 				return m
 			}
-			score := func(m match, otherS int) int {
-				// Matches that are longer forward are penalized since we must emit it as a literal.
-				score := m.length - (m.s - otherS)
-				if nextEmit == m.s {
-					// If we do not have to emit literals, we save 1 byte
-					score++
-				}
-				offset := m.s - m.offset
-				if m.rep {
-					return score - emitRepeatSize(offset, m.length)
-				}
-				return score - emitCopySize(offset, m.length)
-			}
+
 			bestOf := func(a, b match) match {
 				if b.length == 0 {
 					return a
@@ -123,18 +131,10 @@ func encodeBlockBest(dst, src []byte) (d int) {
 				if a.length == 0 {
 					return b
 				}
-				as := score(a, b.s)
-				bs := score(b, a.s)
+				as := a.score + b.s
+				bs := b.score + a.s
 				if as >= bs {
-					if as <= 0 {
-						// Eliminate if no savings, we might find a better one.
-						a.length = 0
-					}
 					return a
-				}
-				if bs <= 0 {
-					// Eliminate if no savings, we might find a better one.
-					b.length = 0
 				}
 				return b
 			}
@@ -159,7 +159,7 @@ func encodeBlockBest(dst, src []byte) (d int) {
 					best = bestOf(best, matchAt(s-repeat+1, s+1, uint32(cv>>8), true))
 
 					// s+2
-					if best.length < 100 {
+					if true {
 						nextShort = sTable[hash4(cv>>8, sTableBits)]
 						s++
 						cv = load64(src, s)
@@ -168,6 +168,23 @@ func encodeBlockBest(dst, src []byte) (d int) {
 						best = bestOf(best, matchAt(getPrev(nextShort), s, uint32(cv), false))
 						best = bestOf(best, matchAt(getCur(nextLong), s, uint32(cv), false))
 						best = bestOf(best, matchAt(getPrev(nextLong), s, uint32(cv), false))
+					}
+					// Search for a match at best match end, see if that is better.
+					if sAt := best.s + best.length; sAt < sLimit {
+						sBack := best.s
+						backL := best.length
+						// Load initial values
+						cv = load64(src, sBack)
+						// Search for mismatch
+						next := lTable[hash8(load64(src, sAt), lTableBits)]
+						//next := sTable[hash4(load64(src, sAt), sTableBits)]
+
+						if checkAt := getCur(next) - backL; checkAt > 0 {
+							best = bestOf(best, matchAt(checkAt, sBack, uint32(cv), false))
+						}
+						if checkAt := getPrev(next) - backL; checkAt > 0 {
+							best = bestOf(best, matchAt(checkAt, sBack, uint32(cv), false))
+						}
 					}
 				}
 			}
