@@ -1284,40 +1284,62 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 		cv := GP64()
 		INCL(base)
 		MOVQ(Mem{Base: src, Index: base, Scale: 1, Disp: 0}, cv)
-		hash0, hash1 := GP64(), GP64()
+		hash0, hash1, hash2, hash3 := GP64(), GP64(), GP64(), GP64()
 		MOVQ(cv, hash0) // src[base+1]
 		MOVQ(cv, hash1)
+		MOVQ(cv, hash2)
 		SHRQ(U8(8), hash1) // src[base+2]
-		bp1 := GP32()      // base+1
+		MOVQ(hash1, hash3)
+		SHRQ(U8(16), hash2)        // src[base+3]
+		bp1, bp2 := GP32(), GP32() // base+1
 		LEAL(Mem{Base: base, Disp: 1}, bp1)
+		LEAL(Mem{Base: base, Disp: 2}, bp2)
 
 		// Load s-2 early
 		MOVQ(Mem{Base: src, Index: s, Scale: 1, Disp: -2}, cv)
 
 		lHasher.hash(hash0)
+		lHasher.hash(hash3)
 		sHasher.hash(hash1)
+		sHasher.hash(hash2)
 		assert(func(ok LabelRef) {
 			CMPQ(hash0, U32(lTableSize))
+			JL(ok)
+		})
+		assert(func(ok LabelRef) {
+			CMPQ(hash3, U32(lTableSize))
 			JL(ok)
 		})
 		assert(func(ok LabelRef) {
 			CMPQ(hash1, U32(sTableSize))
 			JL(ok)
 		})
+		assert(func(ok LabelRef) {
+			CMPQ(hash2, U32(sTableSize))
+			JL(ok)
+		})
 		MOVL(base, lTab.Idx(hash0, 4))
+		MOVL(bp1, lTab.Idx(hash3, 4))
 		MOVL(bp1, sTab.Idx(hash1, 4))
+		MOVL(bp2, sTab.Idx(hash2, 4))
 
-		// Index s-2 long, s-1 short...
+		// Index s-2 long, s-1 long+short...
 		MOVQ(cv, hash0) // src[s-2]
 		MOVQ(cv, hash1) // src[s-1]
 		SHRQ(U8(8), hash1)
+		MOVQ(hash1, hash3)
 		sm1, sm2 := GP32(), GP32() // s -1, s - 2
 		LEAL(Mem{Base: s, Disp: -2}, sm2)
 		LEAL(Mem{Base: s, Disp: -1}, sm1)
 		lHasher.hash(hash0)
 		sHasher.hash(hash1)
+		lHasher.hash(hash3)
 		assert(func(ok LabelRef) {
 			CMPQ(hash0, U32(lTableSize))
+			JL(ok)
+		})
+		assert(func(ok LabelRef) {
+			CMPQ(hash3, U32(lTableSize))
 			JL(ok)
 		})
 		assert(func(ok LabelRef) {
@@ -1326,6 +1348,7 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 		})
 		MOVL(sm2, lTab.Idx(hash0, 4))
 		MOVL(sm1, sTab.Idx(hash1, 4))
+		MOVL(sm1, lTab.Idx(hash3, 4))
 	}
 	JMP(LabelRef("search_loop_" + name))
 

@@ -193,6 +193,7 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 			cv = load64(src, s)
 			continue
 		}
+
 		d += emitLiteral(dst[d:], src[nextEmit:base])
 		if repeat == offset {
 			d += emitRepeat(dst[d:], offset, s-base)
@@ -219,8 +220,11 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 		cv1 := load64(src, index1)
 		cv = load64(src, s)
 		lTable[hash7(cv0, lTableBits)] = uint32(index0)
+		lTable[hash7(cv0>>8, lTableBits)] = uint32(index0 + 1)
 		lTable[hash7(cv1, lTableBits)] = uint32(index1)
+		lTable[hash7(cv1>>8, lTableBits)] = uint32(index1 + 1)
 		sTable[hash4(cv0>>8, sTableBits)] = uint32(index0 + 1)
+		sTable[hash4(cv0>>16, sTableBits)] = uint32(index0 + 2)
 		sTable[hash4(cv1>>8, sTableBits)] = uint32(index1 + 1)
 	}
 
