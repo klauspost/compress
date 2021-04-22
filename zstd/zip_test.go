@@ -4,7 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"fmt"
-	"io"
+	"io/ioutil"
 
 	"github.com/klauspost/compress/zstd"
 )
@@ -55,7 +55,7 @@ func ExampleZipCompressor() {
 		if err != nil {
 			panic(err)
 		}
-		b, err := io.ReadAll(rc)
+		b, err := ioutil.ReadAll(rc)
 		rc.Close()
 		if bytes.Equal(b, tmp) {
 			fmt.Println(file.Name, "ok")
