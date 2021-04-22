@@ -237,7 +237,6 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes, m
 		})
 
 		cv := GP64()
-		MOVQ(Mem{Base: src, Index: s, Scale: 1}, cv)
 		nextS := GP32()
 		// nextS := s + (s-nextEmit)>>6 + 4
 		{
@@ -252,6 +251,7 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes, m
 			CMPL(nextS.As32(), sLimitL)
 			JGE(LabelRef("emit_remainder_" + name))
 		}
+		MOVQ(Mem{Base: src, Index: s, Scale: 1}, cv)
 		assert(func(ok LabelRef) {
 			// Check if s is valid (we should have jumped above if not)
 			tmp := GP64()
@@ -888,7 +888,6 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 		})
 
 		cv := GP64()
-		MOVQ(Mem{Base: src, Index: s, Scale: 1}, cv)
 		nextS := GP32()
 		// nextS := s + (s-nextEmit)>>skipLog + 1
 		{
@@ -903,6 +902,7 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 			CMPL(nextS.As32(), sLimitL)
 			JGE(LabelRef("emit_remainder_" + name))
 		}
+		MOVQ(Mem{Base: src, Index: s, Scale: 1}, cv)
 		assert(func(ok LabelRef) {
 			// Check if s is valid (we should have jumped above if not)
 			tmp := GP64()
