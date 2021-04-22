@@ -40,13 +40,13 @@ zero_loop_encodeBlockAsm:
 	MOVQ  src_base+24(FP), DX
 
 search_loop_encodeBlockAsm:
-	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
 	SHRL  $0x06, BP
 	LEAL  4(CX)(BP*1), BP
 	CMPL  BP, 8(SP)
 	JGE   emit_remainder_encodeBlockAsm
+	MOVQ  (DX)(CX*1), SI
 	MOVL  BP, 20(SP)
 	MOVQ  $0x0000cf1bbcdcbf9b, R8
 	MOVQ  SI, R9
@@ -1252,13 +1252,13 @@ zero_loop_encodeBlockAsm4MB:
 	MOVQ  src_base+24(FP), DX
 
 search_loop_encodeBlockAsm4MB:
-	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
 	SHRL  $0x06, BP
 	LEAL  4(CX)(BP*1), BP
 	CMPL  BP, 8(SP)
 	JGE   emit_remainder_encodeBlockAsm4MB
+	MOVQ  (DX)(CX*1), SI
 	MOVL  BP, 20(SP)
 	MOVQ  $0x0000cf1bbcdcbf9b, R8
 	MOVQ  SI, R9
@@ -2385,13 +2385,13 @@ zero_loop_encodeBlockAsm12B:
 	MOVQ  src_base+24(FP), DX
 
 search_loop_encodeBlockAsm12B:
-	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
 	SHRL  $0x05, BP
 	LEAL  4(CX)(BP*1), BP
 	CMPL  BP, 8(SP)
 	JGE   emit_remainder_encodeBlockAsm12B
+	MOVQ  (DX)(CX*1), SI
 	MOVL  BP, 20(SP)
 	MOVQ  $0x000000cf1bbcdcbb, R8
 	MOVQ  SI, R9
@@ -3289,13 +3289,13 @@ zero_loop_encodeBlockAsm10B:
 	MOVQ  src_base+24(FP), DX
 
 search_loop_encodeBlockAsm10B:
-	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
 	SHRL  $0x05, BP
 	LEAL  4(CX)(BP*1), BP
 	CMPL  BP, 8(SP)
 	JGE   emit_remainder_encodeBlockAsm10B
+	MOVQ  (DX)(CX*1), SI
 	MOVL  BP, 20(SP)
 	MOVQ  $0x9e3779b1, R8
 	MOVQ  SI, R9
@@ -4193,13 +4193,13 @@ zero_loop_encodeBlockAsm8B:
 	MOVQ  src_base+24(FP), DX
 
 search_loop_encodeBlockAsm8B:
-	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
 	SHRL  $0x04, BP
 	LEAL  4(CX)(BP*1), BP
 	CMPL  BP, 8(SP)
 	JGE   emit_remainder_encodeBlockAsm8B
+	MOVQ  (DX)(CX*1), SI
 	MOVL  BP, 20(SP)
 	MOVQ  $0x9e3779b1, R8
 	MOVQ  SI, R9
@@ -5081,13 +5081,13 @@ zero_loop_encodeBetterBlockAsm:
 	MOVQ  src_base+24(FP), DX
 
 search_loop_encodeBetterBlockAsm:
-	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
 	SHRL  $0x07, BP
 	LEAL  1(CX)(BP*1), BP
 	CMPL  BP, 8(SP)
 	JGE   emit_remainder_encodeBetterBlockAsm
+	MOVQ  (DX)(CX*1), SI
 	MOVL  BP, 20(SP)
 	MOVQ  $0x00cf1bbcdcbfa563, R8
 	MOVQ  $0x9e3779b1, BP
@@ -6059,13 +6059,13 @@ zero_loop_encodeBetterBlockAsm4MB:
 	MOVQ  src_base+24(FP), DX
 
 search_loop_encodeBetterBlockAsm4MB:
-	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
 	SHRL  $0x07, BP
 	LEAL  1(CX)(BP*1), BP
 	CMPL  BP, 8(SP)
 	JGE   emit_remainder_encodeBetterBlockAsm4MB
+	MOVQ  (DX)(CX*1), SI
 	MOVL  BP, 20(SP)
 	MOVQ  $0x00cf1bbcdcbfa563, R8
 	MOVQ  $0x9e3779b1, BP
@@ -6980,13 +6980,13 @@ zero_loop_encodeBetterBlockAsm12B:
 	MOVQ  src_base+24(FP), DX
 
 search_loop_encodeBetterBlockAsm12B:
-	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
 	SHRL  $0x06, BP
 	LEAL  1(CX)(BP*1), BP
 	CMPL  BP, 8(SP)
 	JGE   emit_remainder_encodeBetterBlockAsm12B
+	MOVQ  (DX)(CX*1), SI
 	MOVL  BP, 20(SP)
 	MOVQ  $0x0000cf1bbcdcbf9b, R8
 	MOVQ  $0x9e3779b1, BP
@@ -7755,13 +7755,13 @@ zero_loop_encodeBetterBlockAsm10B:
 	MOVQ  src_base+24(FP), DX
 
 search_loop_encodeBetterBlockAsm10B:
-	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
 	SHRL  $0x05, BP
 	LEAL  1(CX)(BP*1), BP
 	CMPL  BP, 8(SP)
 	JGE   emit_remainder_encodeBetterBlockAsm10B
+	MOVQ  (DX)(CX*1), SI
 	MOVL  BP, 20(SP)
 	MOVQ  $0x0000cf1bbcdcbf9b, R8
 	MOVQ  $0x9e3779b1, BP
@@ -8530,13 +8530,13 @@ zero_loop_encodeBetterBlockAsm8B:
 	MOVQ  src_base+24(FP), DX
 
 search_loop_encodeBetterBlockAsm8B:
-	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
 	SHRL  $0x04, BP
 	LEAL  1(CX)(BP*1), BP
 	CMPL  BP, 8(SP)
 	JGE   emit_remainder_encodeBetterBlockAsm8B
+	MOVQ  (DX)(CX*1), SI
 	MOVL  BP, 20(SP)
 	MOVQ  $0x0000cf1bbcdcbf9b, R8
 	MOVQ  $0x9e3779b1, BP
@@ -9295,13 +9295,13 @@ zero_loop_encodeSnappyBlockAsm:
 	MOVQ  src_base+24(FP), DX
 
 search_loop_encodeSnappyBlockAsm:
-	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
 	SHRL  $0x06, BP
 	LEAL  4(CX)(BP*1), BP
 	CMPL  BP, 8(SP)
 	JGE   emit_remainder_encodeSnappyBlockAsm
+	MOVQ  (DX)(CX*1), SI
 	MOVL  BP, 20(SP)
 	MOVQ  $0x0000cf1bbcdcbf9b, R8
 	MOVQ  SI, R9
@@ -10169,13 +10169,13 @@ zero_loop_encodeSnappyBlockAsm12B:
 	MOVQ  src_base+24(FP), DX
 
 search_loop_encodeSnappyBlockAsm12B:
-	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
 	SHRL  $0x05, BP
 	LEAL  4(CX)(BP*1), BP
 	CMPL  BP, 8(SP)
 	JGE   emit_remainder_encodeSnappyBlockAsm12B
+	MOVQ  (DX)(CX*1), SI
 	MOVL  BP, 20(SP)
 	MOVQ  $0x000000cf1bbcdcbb, R8
 	MOVQ  SI, R9
@@ -10938,13 +10938,13 @@ zero_loop_encodeSnappyBlockAsm10B:
 	MOVQ  src_base+24(FP), DX
 
 search_loop_encodeSnappyBlockAsm10B:
-	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
 	SHRL  $0x05, BP
 	LEAL  4(CX)(BP*1), BP
 	CMPL  BP, 8(SP)
 	JGE   emit_remainder_encodeSnappyBlockAsm10B
+	MOVQ  (DX)(CX*1), SI
 	MOVL  BP, 20(SP)
 	MOVQ  $0x9e3779b1, R8
 	MOVQ  SI, R9
@@ -11707,13 +11707,13 @@ zero_loop_encodeSnappyBlockAsm8B:
 	MOVQ  src_base+24(FP), DX
 
 search_loop_encodeSnappyBlockAsm8B:
-	MOVQ  (DX)(CX*1), SI
 	MOVL  CX, BP
 	SUBL  12(SP), BP
 	SHRL  $0x04, BP
 	LEAL  4(CX)(BP*1), BP
 	CMPL  BP, 8(SP)
 	JGE   emit_remainder_encodeSnappyBlockAsm8B
+	MOVQ  (DX)(CX*1), SI
 	MOVL  BP, 20(SP)
 	MOVQ  $0x9e3779b1, R8
 	MOVQ  SI, R9
