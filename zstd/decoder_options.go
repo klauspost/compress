@@ -15,6 +15,7 @@ type DOption func(*decoderOptions) error
 // options retains accumulated state of multiple options.
 type decoderOptions struct {
 	lowMem         bool
+	async          bool
 	concurrent     int
 	maxDecodedSize uint64
 	dicts          []dict
@@ -25,8 +26,16 @@ func (o *decoderOptions) setDefault() {
 		// use less ram: true for now, but may change.
 		lowMem:     true,
 		concurrent: runtime.GOMAXPROCS(0),
+		async:      true,
 	}
 	o.maxDecodedSize = 1 << 63
+}
+
+func (o *decoderOptions) finalize() error {
+	if o.lowMem && o.concurrent == 1 {
+		o.async = false
+	}
+	return nil
 }
 
 // WithDecoderLowmem will set whether to use a lower amount of memory,

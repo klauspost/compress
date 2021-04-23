@@ -97,10 +97,12 @@ func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
 
 	// Create decoders
 	d.decoders = make(chan *blockDec, d.o.concurrent)
-	for i := 0; i < d.o.concurrent; i++ {
-		dec := newBlockDec(d.o.lowMem)
-		dec.localFrame = newFrameDec(d.o)
-		d.decoders <- dec
+	if d.o.async {
+		for i := 0; i < d.o.concurrent; i++ {
+			dec := newBlockDec(d.o.lowMem)
+			dec.localFrame = newFrameDec(d.o)
+			d.decoders <- dec
+		}
 	}
 
 	if r == nil {
@@ -202,6 +204,14 @@ func (d *Decoder) Reset(r io.Reader) error {
 		return nil
 	}
 
+	if !d.o.async {
+		for i := 0; i < d.o.concurrent; i++ {
+			dec := newBlockDec(d.o.lowMem)
+			dec.localFrame = newFrameDec(d.o)
+			d.decoders <- dec
+		}
+	}
+
 	// Remove current block.
 	d.current.decodeOutput = decodeOutput{}
 	d.current.err = nil
@@ -247,6 +257,28 @@ func (d *Decoder) drainOutput() {
 			println("current flushed")
 			d.current.flushed = true
 			return
+		}
+	}
+
+	// Drain...
+	if !d.o.async {
+		if d.stream != nil {
+			close(d.stream)
+		}
+		for i := 0; i < d.o.concurrent; i++ {
+			select {
+			case dec := <-d.decoders:
+				dec.Close()
+			default:
+			}
+		}
+		if d.stream != nil {
+			d.streamWg.Wait()
+			d.stream = nil
+		}
+		if d.current.d != nil {
+			d.current.d.Close()
+			d.current.d = nil
 		}
 	}
 }
