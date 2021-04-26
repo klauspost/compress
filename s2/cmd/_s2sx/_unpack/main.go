@@ -56,6 +56,13 @@ func main() {
 	exitErr(err)
 	rd, err := newReader(f, stat.Size())
 	exitErr(err)
+	f2, err := os.Open(me + ".more")
+	if err == nil {
+		rd = io.MultiReader(rd, f2)
+	}
+	if !os.IsNotExist(err) {
+		exitErr(err)
+	}
 	var tmp [1]byte
 	_, err = io.ReadFull(rd, tmp[:])
 	exitErr(err)
@@ -69,8 +76,8 @@ func main() {
 	switch tmp[0] {
 	case opUnpack:
 		outname := me + "-extracted"
-		if idx := strings.Index(me, ".s2sfx"); idx > 0 {
-			// Trim from '.s2sfx'
+		if idx := strings.Index(me, ".s2sx"); idx > 0 {
+			// Trim from '.s2sx'
 			outname = me[:idx]
 		}
 		var out io.Writer

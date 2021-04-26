@@ -230,7 +230,8 @@ Usage: s2sx [options] file1 file2
 
 Compresses all files supplied as input separately.
 If files have '.s2' extension they are assumed to be compressed already.
-Output files are written as 'filename.s2sfx' and with '.exe' for windows targets.
+Output files are written as 'filename.s2sx' and with '.exe' for windows targets.
+If output is big, an additional file with ".more" is written. This must be included as well.
 By default output files will be overwritten.
 
 Wildcards are accepted: testdir/*.txt will compress all files in testdir ending with .txt
@@ -244,6 +245,8 @@ Options:
         Compress using this amount of threads (default 32)
   -help
         Display help
+  -max string
+        Maximum executable size. Rest will be written to another file. (default "1G")
   -os string
         Destination operating system (default "windows")
   -q    Don't write any output to terminal, except errors
@@ -266,6 +269,17 @@ Available platforms are:
  * linux-ppc64le
  * windows-386
  * windows-amd64                                                                             
+
+By default, there is a size limit of 1GB for the output executable.
+
+When this is exceeded the remaining file content is written to a file called
+output+`.more`. This file must be included for a successful extraction and 
+placed alongside the executable for a successful extraction.
+
+This file *must* have the same name as the executable, so if the executable is renamed, 
+so must the `.more` file. 
+
+This functionality is disabled with stdin/stdout. 
 
 ### Self-extracting TAR files
 
