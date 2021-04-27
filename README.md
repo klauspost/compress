@@ -19,7 +19,7 @@ This package provides various compression algorithms.
 	* zstd: Improve better/best compression [#360](https://github.com/klauspost/compress/pull/360) [#364](https://github.com/klauspost/compress/pull/364) [#365](https://github.com/klauspost/compress/pull/365)
 	* zstd: Add helpers to compress/decompress zstd inside zip files [#363](https://github.com/klauspost/compress/pull/363)
 	* deflate: Improve level 5+6 compression [#367](https://github.com/klauspost/compress/pull/367)
-	* s2: Improve better/best compression [#358](https://github.com/klauspost/compress/pull/358) [#359](https://github.com/klauspost/compress/pull/358)(#359)
+	* s2: Improve better/best compression [#358](https://github.com/klauspost/compress/pull/358) [#359](https://github.com/klauspost/compress/pull/358)
 	* s2: Load after checking src limit on amd64. [#362](https://github.com/klauspost/compress/pull/362)
 	* s2sx: Limit max executable size [#368](https://github.com/klauspost/compress/pull/368) 
 
