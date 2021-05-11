@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -140,6 +141,28 @@ func TestNewReaderMismatch(t *testing.T) {
 		}
 	}
 	t.Log("Output matched")
+}
+
+type errorReader struct {
+	err error
+}
+
+func (r *errorReader) Read(p []byte) (int, error) {
+	return 0, r.err
+}
+
+func TestErrorReader(t *testing.T) {
+	wantErr := fmt.Errorf("i'm a failure")
+	zr, err := NewReader(&errorReader{err: wantErr})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer zr.Close()
+
+	_, err = io.ReadAll(zr)
+	if !errors.Is(err, wantErr) {
+		t.Errorf("want error %v, got %v", wantErr, err)
+	}
 }
 
 func TestNewDecoder(t *testing.T) {
@@ -426,7 +449,7 @@ func TestDecoderRegression(t *testing.T) {
 	}
 	defer dec.Close()
 	for i, tt := range zr.File {
-		if !strings.HasSuffix(tt.Name, "") || (testing.Short() && i > 10) {
+		if !strings.HasSuffix(tt.Name, "artifact (5)") || (testing.Short() && i > 10) {
 			continue
 		}
 		t.Run("Reader-"+tt.Name, func(t *testing.T) {
