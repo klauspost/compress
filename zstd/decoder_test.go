@@ -159,7 +159,7 @@ func TestErrorReader(t *testing.T) {
 	}
 	defer zr.Close()
 
-	_, err = io.ReadAll(zr)
+	_, err = ioutil.ReadAll(zr)
 	if !errors.Is(err, wantErr) {
 		t.Errorf("want error %v, got %v", wantErr, err)
 	}
