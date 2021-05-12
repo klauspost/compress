@@ -349,20 +349,12 @@ func fillHist(b []uint16) {
 // histogramSize accumulates a histogram of b in h.
 // An estimated size in bits is returned.
 // len(h) must be >= 256, and h's elements must be all zeroes.
-func histogramSize(b []byte, h []uint16, fill bool) (bits int) {
+func histogramSize(b []byte, h []uint16) (bits int) {
 	h = h[:256]
 	for _, t := range b {
 		h[t]++
 	}
 	total := len(b)
-	if fill {
-		for _, v := range h {
-			if v == 0 {
-				total++
-			}
-		}
-	}
-
 	invTotal := 1.0 / float32(total)
 	shannon := float32(0.0)
 	for _, v := range h {

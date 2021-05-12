@@ -830,12 +830,8 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 	// Assume header is around 70 bytes:
 	// https://stackoverflow.com/a/25454430
 	const guessHeaderSizeBits = 70 * 8
-	estBits := histogramSize(input, w.literalFreq[:], !eof && !sync)
-	estBits += w.lastHeader + len(input)/32
-	if w.lastHeader == 0 {
-		estBits += guessHeaderSizeBits
-	}
-	estBits += estBits >> w.logNewTablePenalty
+	estBits := histogramSize(input, w.literalFreq[:])
+	estBits += estBits>>w.logNewTablePenalty + guessHeaderSizeBits
 
 	// Store bytes, if we don't get a reasonable improvement.
 	ssize, storable := w.storedSize(input)
@@ -845,38 +841,27 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 		return
 	}
 
-	reuseSize := 0
 	if w.lastHeader > 0 {
-		reuseSize = w.literalEncoding.bitLength(w.literalFreq[:256])
-
-		if estBits < reuseSize {
-			// We owe an EOB
-			w.writeCode(w.literalEncoding.codes[endBlockMarker])
-			w.lastHeader = 0
-		}
+		// We owe an EOB
+		w.writeCode(w.literalEncoding.codes[endBlockMarker])
+		w.lastHeader = 0
 	}
 
 	const numLiterals = endBlockMarker + 1
 	const numOffsets = 1
-	if w.lastHeader == 0 {
-		if !eof && !sync {
-			// Generate a slightly suboptimal tree that can be used for all.
-			fillHist(w.literalFreq[:numLiterals])
-		}
-		w.literalFreq[endBlockMarker] = 1
-		w.literalEncoding.generate(w.literalFreq[:numLiterals], 15)
+	w.literalFreq[endBlockMarker] = 1
+	w.literalEncoding.generate(w.literalFreq[:numLiterals], 15)
 
-		// Generate codegen and codegenFrequencies, which indicates how to encode
-		// the literalEncoding and the offsetEncoding.
-		w.generateCodegen(numLiterals, numOffsets, w.literalEncoding, huffOffset)
-		w.codegenEncoding.generate(w.codegenFreq[:], 7)
-		numCodegens := w.codegens()
+	// Generate codegen and codegenFrequencies, which indicates how to encode
+	// the literalEncoding and the offsetEncoding.
+	w.generateCodegen(numLiterals, numOffsets, w.literalEncoding, huffOffset)
+	w.codegenEncoding.generate(w.codegenFreq[:], 7)
+	numCodegens := w.codegens()
 
-		// Huffman.
-		w.writeDynamicHeader(numLiterals, numOffsets, numCodegens, eof)
-		w.lastHuffMan = true
-		w.lastHeader, _ = w.headerSize()
-	}
+	// Huffman.
+	w.writeDynamicHeader(numLiterals, numOffsets, numCodegens, eof)
+	w.lastHuffMan = true
+	w.lastHeader, _ = w.headerSize()
 
 	encoding := w.literalEncoding.codes[:257]
 	for _, t := range input {
