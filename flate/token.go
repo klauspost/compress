@@ -232,7 +232,7 @@ func (t *tokens) EstimatedBits() int {
 		for _, v := range t.litHist[:] {
 			if v > 0 {
 				n := float32(v)
-				shannon += -mFastLog2(n*invTotal) * n
+				shannon += atLeastOne(-mFastLog2(n*invTotal)) * n
 			}
 		}
 		// Just add 15 for EOB
@@ -240,7 +240,7 @@ func (t *tokens) EstimatedBits() int {
 		for i, v := range t.extraHist[1 : literalCount-256] {
 			if v > 0 {
 				n := float32(v)
-				shannon += -mFastLog2(n*invTotal) * n
+				shannon += atLeastOne(-mFastLog2(n*invTotal)) * n
 				bits += int(lengthExtraBits[i&31]) * int(v)
 				nMatches += int(v)
 			}
@@ -251,7 +251,7 @@ func (t *tokens) EstimatedBits() int {
 		for i, v := range t.offHist[:offsetCodeCount] {
 			if v > 0 {
 				n := float32(v)
-				shannon += -mFastLog2(n*invTotal) * n
+				shannon += atLeastOne(-mFastLog2(n*invTotal)) * n
 				bits += int(offsetExtraBits[i&31]) * int(v)
 			}
 		}
