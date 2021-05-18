@@ -60,19 +60,31 @@ var offsetExtraBits = [64]int8{
 	14, 14, 15, 15, 16, 16, 17, 17, 18, 18, 19, 19, 20, 20,
 }
 
-var offsetBase = [64]uint32{
-	/* normal deflate */
-	0x000000, 0x000001, 0x000002, 0x000003, 0x000004,
-	0x000006, 0x000008, 0x00000c, 0x000010, 0x000018,
-	0x000020, 0x000030, 0x000040, 0x000060, 0x000080,
-	0x0000c0, 0x000100, 0x000180, 0x000200, 0x000300,
-	0x000400, 0x000600, 0x000800, 0x000c00, 0x001000,
-	0x001800, 0x002000, 0x003000, 0x004000, 0x006000,
+var offsetCombined = [32]uint32{}
 
-	/* extended window */
-	0x008000, 0x00c000, 0x010000, 0x018000, 0x020000,
-	0x030000, 0x040000, 0x060000, 0x080000, 0x0c0000,
-	0x100000, 0x180000, 0x200000, 0x300000,
+func init() {
+	var offsetBase = [64]uint32{
+		/* normal deflate */
+		0x000000, 0x000001, 0x000002, 0x000003, 0x000004,
+		0x000006, 0x000008, 0x00000c, 0x000010, 0x000018,
+		0x000020, 0x000030, 0x000040, 0x000060, 0x000080,
+		0x0000c0, 0x000100, 0x000180, 0x000200, 0x000300,
+		0x000400, 0x000600, 0x000800, 0x000c00, 0x001000,
+		0x001800, 0x002000, 0x003000, 0x004000, 0x006000,
+
+		/* extended window */
+		0x008000, 0x00c000, 0x010000, 0x018000, 0x020000,
+		0x030000, 0x040000, 0x060000, 0x080000, 0x0c0000,
+		0x100000, 0x180000, 0x200000, 0x300000,
+	}
+
+	for i := range offsetCombined[:] {
+		// Don't use extended window values...
+		if offsetBase[i] > 0x006000 {
+			continue
+		}
+		offsetCombined[i] = uint32(offsetExtraBits[i])<<16 | (offsetBase[i])
+	}
 }
 
 // The odd order in which the codegen code sizes are written.
@@ -760,9 +772,9 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 			nbits += c.len
 			if nbits >= 48 {
 				binary.LittleEndian.PutUint64(w.bytes[nbytes:], bits)
+				//*(*uint64)(unsafe.Pointer(&w.bytes[nbytes])) = bits
 				bits >>= 48
 				nbits -= 48
-				//*(*uint64)(unsafe.Pointer(&w.bytes[nbytes])) = bits
 				nbytes += 6
 				if nbytes >= bufferFlushSize {
 					if w.err != nil {
@@ -788,9 +800,9 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 			nbits += c.len
 			if nbits >= 48 {
 				binary.LittleEndian.PutUint64(w.bytes[nbytes:], bits)
+				//*(*uint64)(unsafe.Pointer(&w.bytes[nbytes])) = bits
 				bits >>= 48
 				nbits -= 48
-				//*(*uint64)(unsafe.Pointer(&w.bytes[nbytes])) = bits
 				nbytes += 6
 				if nbytes >= bufferFlushSize {
 					if w.err != nil {
@@ -811,9 +823,9 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 			nbits += extraLengthBits
 			if nbits >= 48 {
 				binary.LittleEndian.PutUint64(w.bytes[nbytes:], bits)
+				//*(*uint64)(unsafe.Pointer(&w.bytes[nbytes])) = bits
 				bits >>= 48
 				nbits -= 48
-				//*(*uint64)(unsafe.Pointer(&w.bytes[nbytes])) = bits
 				nbytes += 6
 				if nbytes >= bufferFlushSize {
 					if w.err != nil {
@@ -837,9 +849,9 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 			nbits += c.len
 			if nbits >= 48 {
 				binary.LittleEndian.PutUint64(w.bytes[nbytes:], bits)
+				//*(*uint64)(unsafe.Pointer(&w.bytes[nbytes])) = bits
 				bits >>= 48
 				nbits -= 48
-				//*(*uint64)(unsafe.Pointer(&w.bytes[nbytes])) = bits
 				nbytes += 6
 				if nbytes >= bufferFlushSize {
 					if w.err != nil {
@@ -851,17 +863,16 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 				}
 			}
 		}
-		extraOffsetBits := uint16(offsetExtraBits[offsetCode&63])
-		if extraOffsetBits > 0 {
-			extraOffset := int32(offset - offsetBase[offsetCode&63])
+		offsetComb := offsetCombined[offsetCode&31]
+		if offsetComb > 1<<16 {
 			//w.writeBits(extraOffset, extraOffsetBits)
-			bits |= uint64(extraOffset) << nbits
-			nbits += extraOffsetBits
+			bits |= uint64(offset-(offsetComb&0xffff)) << nbits
+			nbits += uint16(offsetComb >> 16)
 			if nbits >= 48 {
 				binary.LittleEndian.PutUint64(w.bytes[nbytes:], bits)
+				//*(*uint64)(unsafe.Pointer(&w.bytes[nbytes])) = bits
 				bits >>= 48
 				nbits -= 48
-				//*(*uint64)(unsafe.Pointer(&w.bytes[nbytes])) = bits
 				nbytes += 6
 				if nbytes >= bufferFlushSize {
 					if w.err != nil {
@@ -994,9 +1005,9 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 		}
 		if nbits >= 48 {
 			binary.LittleEndian.PutUint64(w.bytes[nbytes:], bits)
+			//*(*uint64)(unsafe.Pointer(&w.bytes[nbytes])) = bits
 			bits >>= 48
 			nbits -= 48
-			//*(*uint64)(unsafe.Pointer(&w.bytes[nbytes])) = bits
 			nbytes += 6
 			if nbytes >= bufferFlushSize {
 				if w.err != nil {
