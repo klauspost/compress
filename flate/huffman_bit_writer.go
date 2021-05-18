@@ -839,12 +839,13 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 		}
 		// Write the offset
 		offset := t.offset()
-		offsetCode := offsetCode(offset)
+		offsetCode := offset >> 16
+		offset &= matchOffsetOnlyMask
 		if false {
 			w.writeCode(offs[offsetCode&31])
 		} else {
 			// inlined
-			c := offs[offsetCode&31]
+			c := offs[offsetCode]
 			bits |= uint64(c.code) << nbits
 			nbits += c.len
 			if nbits >= 48 {
@@ -863,10 +864,10 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 				}
 			}
 		}
-		offsetComb := offsetCombined[offsetCode&31]
+		offsetComb := offsetCombined[offsetCode]
 		if offsetComb > 1<<16 {
 			//w.writeBits(extraOffset, extraOffsetBits)
-			bits |= uint64(offset-(offsetComb&0xffff)) << nbits
+			bits |= uint64(offset&matchOffsetOnlyMask-(offsetComb&0xffff)) << nbits
 			nbits += uint16(offsetComb >> 16)
 			if nbits >= 48 {
 				binary.LittleEndian.PutUint64(w.bytes[nbytes:], bits)
