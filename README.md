@@ -272,6 +272,10 @@ The packages contains the same as the standard library, so you can use the godoc
 
 Currently there is only minor speedup on decompression (mostly CRC32 calculation).
 
+Memory usage is typically 1MB for a Writer. stdlib is in the same range. 
+If you expect to have a lot of concurrently allocated Writers consider using 
+the stateless compress described below.
+
 # Stateless compression
 
 This package offers stateless compression as a special option for gzip/deflate. 

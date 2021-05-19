@@ -21,9 +21,13 @@ type hcode struct {
 }
 
 type huffmanEncoder struct {
-	codes     []hcode
-	freqcache []literalNode
-	bitCount  [17]int32
+	codes    []hcode
+	bitCount [17]int32
+
+	// Allocate a reusable buffer with the longest possible frequency table.
+	// Possible lengths are codegenCodeCount, offsetCodeCount and literalCount.
+	// The largest of these is literalCount, so we allocate for that case.
+	freqcache [literalCount + 1]literalNode
 }
 
 type literalNode struct {
@@ -306,12 +310,6 @@ func (h *huffmanEncoder) assignEncodingAndSize(bitCount []int32, list []literalN
 // freq  An array of frequencies, in which frequency[i] gives the frequency of literal i.
 // maxBits  The maximum number of bits to use for any literal.
 func (h *huffmanEncoder) generate(freq []uint16, maxBits int32) {
-	if h.freqcache == nil {
-		// Allocate a reusable buffer with the longest possible frequency table.
-		// Possible lengths are codegenCodeCount, offsetCodeCount and literalCount.
-		// The largest of these is literalCount, so we allocate for that case.
-		h.freqcache = make([]literalNode, literalCount+1)
-	}
 	list := h.freqcache[:len(freq)+1]
 	// Number of non-zero literals
 	count := 0
