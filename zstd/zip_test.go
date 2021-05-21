@@ -10,19 +10,16 @@ import (
 )
 
 func ExampleZipCompressor() {
-	// Register zstandard compressors for zip.
+	// Get zstandard de/compressors for zip.
+	// These can be used by multiple readers and writers.
 	compr := zstd.ZipCompressor(zstd.WithWindowSize(1<<20), zstd.WithEncoderCRC(false))
-	zip.RegisterCompressor(zstd.ZipMethodWinZip, compr)
-	zip.RegisterCompressor(zstd.ZipMethodPKWare, compr)
-
-	// Register zstandard decompressors for zip.
 	decomp := zstd.ZipDecompressor()
-	zip.RegisterDecompressor(zstd.ZipMethodWinZip, decomp)
-	zip.RegisterDecompressor(zstd.ZipMethodPKWare, decomp)
 
 	// Try it out...
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
+	zw.RegisterCompressor(zstd.ZipMethodWinZip, compr)
+	zw.RegisterCompressor(zstd.ZipMethodPKWare, compr)
 
 	// Create 1MB data
 	tmp := make([]byte, 1<<20)
@@ -50,6 +47,8 @@ func ExampleZipCompressor() {
 	if err != nil {
 		panic(err)
 	}
+	zr.RegisterDecompressor(zstd.ZipMethodWinZip, decomp)
+	zr.RegisterDecompressor(zstd.ZipMethodPKWare, decomp)
 	for _, file := range zr.File {
 		rc, err := file.Open()
 		if err != nil {

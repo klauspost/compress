@@ -7,6 +7,7 @@ package flate
 import (
 	"archive/zip"
 	"bytes"
+	"compress/flate"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -17,6 +18,52 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestWriterMemUsage(t *testing.T) {
+	testMem := func(t *testing.T, fn func()) {
+		var before, after runtime.MemStats
+		runtime.GC()
+		runtime.ReadMemStats(&before)
+		fn()
+		runtime.GC()
+		runtime.ReadMemStats(&after)
+		t.Logf("%s: Memory Used: %dKB, %d allocs", t.Name(), (after.HeapInuse-before.HeapInuse)/1024, after.HeapObjects-before.HeapObjects)
+	}
+	data := make([]byte, 100000)
+	t.Run(fmt.Sprint("stateless"), func(t *testing.T) {
+		testMem(t, func() {
+			StatelessDeflate(ioutil.Discard, data, false, nil)
+		})
+	})
+	for level := HuffmanOnly; level <= BestCompression; level++ {
+		t.Run(fmt.Sprint("level-", level), func(t *testing.T) {
+			var zr *Writer
+			var err error
+			testMem(t, func() {
+				zr, err = NewWriter(ioutil.Discard, level)
+				if err != nil {
+					t.Fatal(err)
+				}
+				zr.Write(data)
+			})
+			zr.Close()
+		})
+	}
+	for level := HuffmanOnly; level <= BestCompression; level++ {
+		t.Run(fmt.Sprint("stdlib-", level), func(t *testing.T) {
+			var zr *flate.Writer
+			var err error
+			testMem(t, func() {
+				zr, err = flate.NewWriter(ioutil.Discard, level)
+				if err != nil {
+					t.Fatal(err)
+				}
+				zr.Write(data)
+			})
+			zr.Close()
+		})
+	}
+}
 
 func TestWriterRegression(t *testing.T) {
 	data, err := ioutil.ReadFile("testdata/regression.zip")
