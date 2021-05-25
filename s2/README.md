@@ -410,21 +410,24 @@ In rare, worst case scenario Snappy blocks could be significantly bigger than th
 ### Mixed content blocks
 
 The most reliable is a wide dataset. 
-For this we use `webdevdata.org-2015-01-07-subset`, 53927 files, total input size: 4,014,526,923 bytes. 
-Single goroutine used.
+For this we use [`webdevdata.org-2015-01-07-subset`](https://files.klauspost.com/compress/webdevdata.org-2015-01-07-4GB-subset.7z),
+53927 files, total input size: 4,014,735,833 bytes. Single goroutine used.
 
 | *                 | Input      | Output     | Reduction | MB/s   |
 |-------------------|------------|------------|-----------|--------|
-| S2                | 4014526923 | 1062282489 | 73.54%    | **861.44** |
-| S2 Better         | 4014526923 | 981221284  | **75.56%** | 399.54 |
-| Snappy            | 4014526923 | 1128667736 | 71.89%    | 741.29 |
-| S2, Snappy Output | 4014526923 | 1093784815 | 72.75%    | 843.66 |
+| S2                | 4014735833 | 1059723369 | 73.60%    | **934.34** |
+| S2 Better         | 4014735833 | 969670507  | 75.85%    | 532.70 |
+| S2 Best           | 4014735833 | 906625668  | **77.85%** | 46.84 |
+| Snappy            | 4014735833 | 1128706759 | 71.89%    | 762.59 |
+| S2, Snappy Output | 4014735833 | 1093821420 | 72.75%    | 908.60 |
+| LZ4               | 4014735833 | 1079259294 | 73.12%    | 526.94 |
 
-S2 delivers both the best single threaded throuhput with regular mode and the best compression rate with "better" mode. 
+S2 delivers both the best single threaded throughput with regular mode and the best compression rate with "best".
+"Better" mode provides the same compression speed as LZ4 with better compression ratio. 
 
-When outputting Snappy compatible output it still delivers better throughput (100MB/s more) and better compression.
+When outputting Snappy compatible output it still delivers better throughput (150MB/s more) and better compression.
 
-As can be seen from the other benchmarks decompression should also be easier on the S2 generated output.  
+As can be seen from the other benchmarks decompression should also be easier on the S2 generated output.
 
 ### Standard block compression
 
