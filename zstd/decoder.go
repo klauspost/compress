@@ -138,7 +138,7 @@ func (d *Decoder) Read(p []byte) (int, error) {
 		}
 	}
 	if len(d.current.b) > 0 {
-		if debug {
+		if debugDecoder {
 			println("returning", n, "still bytes left:", len(d.current.b))
 		}
 		// Only return error at end of block
@@ -147,7 +147,7 @@ func (d *Decoder) Read(p []byte) (int, error) {
 	if d.current.err != nil {
 		d.drainOutput()
 	}
-	if debug {
+	if debugDecoder {
 		println("returning", n, d.current.err, len(d.decoders))
 	}
 	return n, d.current.err
@@ -171,16 +171,10 @@ func (d *Decoder) Reset(r io.Reader) error {
 		return nil
 	}
 
-	if d.stream == nil {
-		d.stream = make(chan decodeStream, 1)
-		d.streamWg.Add(1)
-		go d.startStreamDecoder(d.stream)
-	}
-
 	// If bytes buffer and < 1MB, do sync decoding anyway.
 	if bb, ok := r.(byter); ok && bb.Len() < 1<<20 {
 		bb2 := bb
-		if debug {
+		if debugDecoder {
 			println("*bytes.Buffer detected, doing sync decode, len:", bb.Len())
 		}
 		b := bb2.Bytes()
@@ -196,10 +190,16 @@ func (d *Decoder) Reset(r io.Reader) error {
 		d.current.b = dst
 		d.current.err = err
 		d.current.flushed = true
-		if debug {
+		if debugDecoder {
 			println("sync decode to", len(dst), "bytes, err:", err)
 		}
 		return nil
+	}
+
+	if d.stream == nil {
+		d.stream = make(chan decodeStream, 1)
+		d.streamWg.Add(1)
+		go d.startStreamDecoder(d.stream)
 	}
 
 	// Remove current block.
@@ -225,7 +225,7 @@ func (d *Decoder) drainOutput() {
 		d.current.cancel = nil
 	}
 	if d.current.d != nil {
-		if debug {
+		if debugDecoder {
 			printf("re-adding current decoder %p, decoders: %d", d.current.d, len(d.decoders))
 		}
 		d.decoders <- d.current.d
@@ -238,7 +238,7 @@ func (d *Decoder) drainOutput() {
 	}
 	for v := range d.current.output {
 		if v.d != nil {
-			if debug {
+			if debugDecoder {
 				printf("re-adding decoder %p", v.d)
 			}
 			d.decoders <- v.d
@@ -297,7 +297,7 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 	block := <-d.decoders
 	frame := block.localFrame
 	defer func() {
-		if debug {
+		if debugDecoder {
 			printf("re-adding decoder: %p", block)
 		}
 		frame.rawInput = nil
@@ -310,7 +310,7 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 		frame.history.reset()
 		err := frame.reset(&frame.bBuf)
 		if err == io.EOF {
-			if debug {
+			if debugDecoder {
 				println("frame reset return EOF")
 			}
 			return dst, nil
@@ -355,7 +355,7 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 			return dst, err
 		}
 		if len(frame.bBuf) == 0 {
-			if debug {
+			if debugDecoder {
 				println("frame dbuf empty")
 			}
 			break
@@ -371,7 +371,7 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 // if no data was available without blocking.
 func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 	if d.current.d != nil {
-		if debug {
+		if debugDecoder {
 			printf("re-adding current decoder %p", d.current.d)
 		}
 		d.decoders <- d.current.d
@@ -391,7 +391,7 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 			return false
 		}
 	}
-	if debug {
+	if debugDecoder {
 		println("got", len(d.current.b), "bytes, error:", d.current.err)
 	}
 	return true
@@ -485,7 +485,7 @@ func (d *Decoder) startStreamDecoder(inStream chan decodeStream) {
 	defer d.streamWg.Done()
 	frame := newFrameDec(d.o)
 	for stream := range inStream {
-		if debug {
+		if debugDecoder {
 			println("got new stream")
 		}
 		br := readerWrapper{r: stream.r}
@@ -493,7 +493,7 @@ func (d *Decoder) startStreamDecoder(inStream chan decodeStream) {
 		for {
 			frame.history.reset()
 			err := frame.reset(&br)
-			if debug && err != nil {
+			if debugDecoder && err != nil {
 				println("Frame decoder returned", err)
 			}
 			if err == nil && frame.DictionaryID != nil {
@@ -510,7 +510,7 @@ func (d *Decoder) startStreamDecoder(inStream chan decodeStream) {
 				}
 				break
 			}
-			if debug {
+			if debugDecoder {
 				println("starting frame decoder")
 			}
 
