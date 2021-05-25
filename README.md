@@ -15,6 +15,11 @@ This package provides various compression algorithms.
 
 # changelog
 
+* May 25, 2021 (v1.12.3)
+	* deflate: Better/faster Huffman encoding [#374](https://github.com/klauspost/compress/pull/374)
+	* deflate: Allocate less for history. [#375](https://github.com/klauspost/compress/pull/375)
+	* zstd: Forward read errors [#373](https://github.com/klauspost/compress/pull/373) 
+
 * Apr 27, 2021 (v1.12.2)
 	* zstd: Improve better/best compression [#360](https://github.com/klauspost/compress/pull/360) [#364](https://github.com/klauspost/compress/pull/364) [#365](https://github.com/klauspost/compress/pull/365)
 	* zstd: Add helpers to compress/decompress zstd inside zip files [#363](https://github.com/klauspost/compress/pull/363)
