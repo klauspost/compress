@@ -429,6 +429,16 @@ When outputting Snappy compatible output it still delivers better throughput (15
 
 As can be seen from the other benchmarks decompression should also be easier on the S2 generated output.
 
+Though they cannot be compared due to different decompression speeds here are the speed/size comparisons for
+other Go compressors:
+
+| *                 | Input      | Output     | Reduction | MB/s   |
+|-------------------|------------|------------|-----------|--------|
+| Zstd Fastest (Go) | 4014735833 | 794608518  | 80.21%    | 236.04 |
+| Zstd Best (Go)    | 4014735833 | 704603356  | 82.45%    | 35.63  |
+| Deflate (Go) l1   | 4014735833 | 871294239  | 78.30%    | 214.04 |
+| Deflate (Go) l9   | 4014735833 | 730389060  | 81.81%    | 41.17  |
+
 ### Standard block compression
 
 Benchmarking single block performance is subject to a lot more variation since it only tests a limited number of file patterns.
