@@ -171,6 +171,12 @@ func (d *Decoder) Reset(r io.Reader) error {
 		return nil
 	}
 
+	if d.stream == nil {
+		d.stream = make(chan decodeStream, 1)
+		d.streamWg.Add(1)
+		go d.startStreamDecoder(d.stream)
+	}
+
 	// If bytes buffer and < 1MB, do sync decoding anyway.
 	if bb, ok := r.(byter); ok && bb.Len() < 1<<20 {
 		bb2 := bb
@@ -194,12 +200,6 @@ func (d *Decoder) Reset(r io.Reader) error {
 			println("sync decode to", len(dst), "bytes, err:", err)
 		}
 		return nil
-	}
-
-	if d.stream == nil {
-		d.stream = make(chan decodeStream, 1)
-		d.streamWg.Add(1)
-		go d.startStreamDecoder(d.stream)
 	}
 
 	// Remove current block.
