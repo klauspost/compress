@@ -575,6 +575,31 @@ func TestDecoderRegression(t *testing.T) {
 	}
 }
 
+func TestShort(t *testing.T) {
+	for _, in := range []string{"f", "fo", "foo"} {
+		inb := []byte(in)
+		dec, err := NewReader(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer dec.Close()
+
+		t.Run(fmt.Sprintf("DecodeAll-%d", len(in)), func(t *testing.T) {
+			_, err := dec.DecodeAll(inb, nil)
+			if err == nil {
+				t.Error("want error, got nil")
+			}
+		})
+		t.Run(fmt.Sprintf("Reader-%d", len(in)), func(t *testing.T) {
+			dec.Reset(bytes.NewReader(inb))
+			_, err := io.Copy(ioutil.Discard, dec)
+			if err == nil {
+				t.Error("want error, got nil")
+			}
+		})
+	}
+}
+
 func TestDecoder_Reset(t *testing.T) {
 	in, err := ioutil.ReadFile("testdata/z000028")
 	if err != nil {
