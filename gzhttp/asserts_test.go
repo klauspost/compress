@@ -15,7 +15,7 @@ func assertEqual(t testing.TB, want, got interface{}) {
 func assertNotEqual(t testing.TB, want, got interface{}) {
 	t.Helper()
 	if reflect.DeepEqual(want, got) {
-		t.Fatalf("want %#v, got %#v", want, got)
+		t.Fatalf("did not want %#v, got %#v", want, got)
 	}
 }
 

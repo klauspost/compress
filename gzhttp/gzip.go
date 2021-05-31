@@ -97,6 +97,12 @@ func (w *GzipResponseWriter) Write(b []byte) (int, error) {
 			// If a Content-Type wasn't specified, infer it from the current buffer.
 			if ct == "" {
 				ct = http.DetectContentType(w.buf)
+			}
+
+			// Handles the intended case of setting a nil Content-Type (as for http/server or http/fs)
+			// Set the header only if the key does not exist
+			_, haveType := w.Header()["Content-Type"]
+			if !haveType {
 				w.Header().Set(contentType, ct)
 			}
 			// If the Content-Type is acceptable to GZIP, initialize the GZIP writer.

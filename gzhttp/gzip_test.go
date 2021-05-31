@@ -649,3 +649,18 @@ func newTestHandler(body string) http.Handler {
 		}
 	}))
 }
+
+func TestGzipHandlerNilContentType(t *testing.T) {
+	// This just exists to provide something for GzipHandler to wrap.
+	handler := newTestHandler(testBody)
+
+	// content-type header not set when provided nil
+
+	req, _ := http.NewRequest("GET", "/whatever", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	res := httptest.NewRecorder()
+	res.Header()["Content-Type"] = nil
+	handler.ServeHTTP(res, req)
+
+	assertEqual(t, "", res.Header().Get("Content-Type"))
+}
