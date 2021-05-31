@@ -54,7 +54,7 @@ type GzipResponseWriter struct {
 	buf     []byte // Holds the first part of the write before reaching the minSize or the end of the write.
 	ignore  bool   // If true, then we immediately passthru writes to the underlying ResponseWriter.
 
-	contentTypes []parsedContentType // Only compress if the response is one of these content-types. All are accepted if empty.
+	contentTypeFilter func(ct string) bool // Only compress if the response is one of these content-types. All are accepted if empty.
 }
 
 type GzipResponseWriterWithCloseNotify struct {
@@ -87,7 +87,7 @@ func (w *GzipResponseWriter) Write(b []byte) (int, error) {
 		ce    = w.Header().Get(contentEncoding)
 	)
 	// Only continue if they didn't already choose an encoding or a known unhandled content length or type.
-	if ce == "" && (cl == 0 || cl >= w.minSize) && (ct == "" || handleContentType(w.contentTypes, ct)) {
+	if ce == "" && (cl == 0 || cl >= w.minSize) && (ct == "" || w.contentTypeFilter(ct)) {
 		// If the current buffer is less than minSize and a Content-Length isn't set, then wait until we have more data.
 		if len(w.buf) < w.minSize && cl == 0 {
 			return len(b), nil
@@ -106,7 +106,7 @@ func (w *GzipResponseWriter) Write(b []byte) (int, error) {
 				w.Header().Set(contentType, ct)
 			}
 			// If the Content-Type is acceptable to GZIP, initialize the GZIP writer.
-			if handleContentType(w.contentTypes, ct) {
+			if w.contentTypeFilter(ct) {
 				if err := w.startGzip(); err != nil {
 					return 0, err
 				}
@@ -273,6 +273,9 @@ func NewGzipHandler(opts ...option) (func(http.Handler) http.Handler, error) {
 			Levels: gzkp.Levels,
 			New:    gzkp.NewWriter,
 		},
+		contentTypes: func(ct string) bool {
+			return true
+		},
 	}
 
 	for _, o := range opts {
@@ -288,11 +291,11 @@ func NewGzipHandler(opts ...option) (func(http.Handler) http.Handler, error) {
 			w.Header().Add(vary, acceptEncoding)
 			if acceptsGzip(r) {
 				gw := &GzipResponseWriter{
-					ResponseWriter: w,
-					gwFactory:      c.writer,
-					level:          c.level,
-					minSize:        c.minSize,
-					contentTypes:   c.contentTypes,
+					ResponseWriter:    w,
+					gwFactory:         c.writer,
+					level:             c.level,
+					minSize:           c.minSize,
+					contentTypeFilter: c.contentTypes,
 				}
 				defer gw.Close()
 
@@ -344,7 +347,7 @@ type config struct {
 	minSize      int
 	level        int
 	writer       writer.GzipWriterFactory
-	contentTypes []parsedContentType
+	contentTypes func(ct string) bool
 }
 
 func (c *config) validate() error {
@@ -403,31 +406,72 @@ func Implementation(writer writer.GzipWriterFactory) option {
 //
 // By default, responses are gzipped regardless of
 // Content-Type.
+//
+// Setting this will override any previous Content Type settings.
 func ContentTypes(types []string) option {
 	return func(c *config) {
-		c.contentTypes = []parsedContentType{}
+		var contentTypes []parsedContentType
 		for _, v := range types {
 			mediaType, params, err := mime.ParseMediaType(v)
 			if err == nil {
-				c.contentTypes = append(c.contentTypes, parsedContentType{mediaType, params})
+				contentTypes = append(contentTypes, parsedContentType{mediaType, params})
 			}
+		}
+		c.contentTypes = func(ct string) bool {
+			return handleContentType(contentTypes, ct)
 		}
 	}
 }
 
-/*
-func ContentTypeFilter(func(contentType string) bool) {
+// ExceptContentTypes specifies a list of content types to compare
+// the Content-Type header to before compressing. If none
+// match, the response will be compressed.
+//
+// Content types are compared in a case-insensitive, whitespace-ignored
+// manner.
+//
+// A MIME type without any other directive will match a content type
+// that has the same MIME type, regardless of that content type's other
+// directives. I.e., "text/html" will match both "text/html" and
+// "text/html; charset=utf-8".
+//
+// A MIME type with any other directive will only match a content type
+// that has the same MIME type and other directives. I.e.,
+// "text/html; charset=utf-8" will only match "text/html; charset=utf-8".
+//
+// By default, responses are gzipped regardless of
+// Content-Type.
+//
+// Setting this will override any previous Content Type settings.
+func ExceptContentTypes(types []string) option {
 	return func(c *config) {
-		c.contentTypes = []parsedContentType{}
+		var contentTypes []parsedContentType
 		for _, v := range types {
 			mediaType, params, err := mime.ParseMediaType(v)
 			if err == nil {
-				c.contentTypes = append(c.contentTypes, parsedContentType{mediaType, params})
+				contentTypes = append(contentTypes, parsedContentType{mediaType, params})
 			}
+		}
+		c.contentTypes = func(ct string) bool {
+			return !handleContentType(contentTypes, ct)
 		}
 	}
 }
-*/
+
+// ContentTypeFilter allows adding a custom content type filter.
+//
+// The supplied function must return true/false to indicate if content
+// should be compressed.
+//
+// When called no parsing of the content type 'ct' has been done.
+// It may have been set or auto-detected.
+//
+// Setting this will override any previous Content Type settings.
+func ContentTypeFilter(compress func(ct string) bool) option {
+	return func(c *config) {
+		c.contentTypes = compress
+	}
+}
 
 // GzipHandler wraps an HTTP handler, to transparently gzip the response body if
 // the client supports it (via the Accept-Encoding header). This will compress at
