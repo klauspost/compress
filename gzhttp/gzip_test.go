@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -41,7 +42,7 @@ func TestParseEncodings(t *testing.T) {
 	}
 }
 
-func TestGzipHandler(t *testing.T) {
+func TestMustNewGzipHandler(t *testing.T) {
 	// This just exists to provide something for GzipHandler to wrap.
 	handler := newTestHandler(testBody)
 
@@ -117,7 +118,7 @@ func TestNewGzipLevelHandler(t *testing.T) {
 
 	for lvl := gzip.StatelessCompression; lvl <= gzip.BestCompression; lvl++ {
 		t.Run(fmt.Sprint(lvl), func(t *testing.T) {
-			wrapper, err := NewGzipHandler(CompressionLevel(lvl))
+			wrapper, err := NewWrapper(CompressionLevel(lvl))
 			assertNil(t, err)
 
 			req, _ := http.NewRequest("GET", "/whatever", nil)
@@ -138,21 +139,21 @@ func TestNewGzipLevelHandler(t *testing.T) {
 
 func TestNewGzipLevelHandlerReturnsErrorForInvalidLevels(t *testing.T) {
 	var err error
-	_, err = NewGzipHandler(CompressionLevel(-42))
+	_, err = NewWrapper(CompressionLevel(-42))
 	assertNotNil(t, err)
 
-	_, err = NewGzipHandler(CompressionLevel(42))
+	_, err = NewWrapper(CompressionLevel(42))
 	assertNotNil(t, err)
 }
 
 func TestMustNewGzipLevelHandlerWillPanic(t *testing.T) {
 	defer func() {
-		if r := recover(); r == nil {
-			t.Error("panic was not called")
+		if r := recover(); r != nil {
+			t.Error("panic was called with", r)
 		}
 	}()
 
-	_ = MustNewGzipLevelHandler(-42)
+	_ = MustGzipHandler(nil)
 }
 
 func TestGzipHandlerNoBody(t *testing.T) {
@@ -172,7 +173,7 @@ func TestGzipHandlerNoBody(t *testing.T) {
 
 	for num, test := range tests {
 		t.Run(fmt.Sprintf("test-%d", num), func(t *testing.T) {
-			handler := GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			handler := MustGzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(test.statusCode)
 				if test.body != nil {
 					w.Write(test.body)
@@ -234,7 +235,7 @@ func TestGzipHandlerContentLength(t *testing.T) {
 
 	for num, test := range tests {
 		t.Run(fmt.Sprintf("test-%d", num), func(t *testing.T) {
-			srv.Handler = GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			srv.Handler = MustGzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if test.bodyLen > 0 {
 					w.Header().Set("Content-Length", strconv.Itoa(test.bodyLen))
 				}
@@ -277,7 +278,7 @@ func TestGzipHandlerContentLength(t *testing.T) {
 }
 
 func TestGzipHandlerMinSizeMustBePositive(t *testing.T) {
-	_, err := NewGzipLevelAndMinSize(gzip.DefaultCompression, -1)
+	_, err := NewWrapper(MinSize(-1))
 	assertNotNil(t, err)
 }
 
@@ -285,7 +286,7 @@ func TestGzipHandlerMinSize(t *testing.T) {
 	responseLength := 0
 	b := []byte{'x'}
 
-	wrapper, _ := NewGzipLevelAndMinSize(gzip.DefaultCompression, 128)
+	wrapper, _ := NewWrapper(MinSize(128))
 	handler := wrapper(http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			// Write responses one byte at a time to ensure that the flush
@@ -332,7 +333,7 @@ func (w *panicOnSecondWriteHeaderWriter) WriteHeader(s int) {
 }
 
 func TestGzipHandlerDoubleWriteHeader(t *testing.T) {
-	handler := GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := MustGzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", "15000")
 		// Specifically write the header here
 		w.WriteHeader(304)
@@ -371,7 +372,7 @@ func TestGzipHandlerDoubleWriteHeader(t *testing.T) {
 }
 
 func TestStatusCodes(t *testing.T) {
-	handler := GzipHandler(http.NotFoundHandler())
+	handler := MustGzipHandler(http.NotFoundHandler())
 	r := httptest.NewRequest("GET", "/", nil)
 	r.Header.Set("Accept-Encoding", "gzip")
 	w := httptest.NewRecorder()
@@ -385,7 +386,7 @@ func TestStatusCodes(t *testing.T) {
 
 func TestFlushBeforeWrite(t *testing.T) {
 	b := []byte(testBody)
-	handler := GzipHandler(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+	handler := MustGzipHandler(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		rw.WriteHeader(http.StatusNotFound)
 		rw.(http.Flusher).Flush()
 		rw.Write(b)
@@ -404,7 +405,7 @@ func TestFlushBeforeWrite(t *testing.T) {
 func TestImplementCloseNotifier(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
 	request.Header.Set(acceptEncoding, "gzip")
-	GzipHandler(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+	MustGzipHandler(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		_, ok := rw.(http.CloseNotifier)
 		// response writer must implement http.CloseNotifier
 		assertEqual(t, true, ok)
@@ -414,7 +415,7 @@ func TestImplementCloseNotifier(t *testing.T) {
 func TestImplementFlusherAndCloseNotifier(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
 	request.Header.Set(acceptEncoding, "gzip")
-	GzipHandler(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+	MustGzipHandler(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		_, okCloseNotifier := rw.(http.CloseNotifier)
 		// response writer must implement http.CloseNotifier
 		assertEqual(t, true, okCloseNotifier)
@@ -427,7 +428,7 @@ func TestImplementFlusherAndCloseNotifier(t *testing.T) {
 func TestNotImplementCloseNotifier(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
 	request.Header.Set(acceptEncoding, "gzip")
-	GzipHandler(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+	MustGzipHandler(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		_, ok := rw.(http.CloseNotifier)
 		// response writer must not implement http.CloseNotifier
 		assertEqual(t, false, ok)
@@ -453,7 +454,7 @@ func (m *mockRWCloseNotify) WriteHeader(int) {
 }
 
 func TestIgnoreSubsequentWriteHeader(t *testing.T) {
-	handler := GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := MustGzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)
 		w.WriteHeader(404)
 	}))
@@ -473,7 +474,7 @@ func TestDontWriteWhenNotWrittenTo(t *testing.T) {
 	// ensure the gzip middleware doesn't touch the actual ResponseWriter
 	// either.
 
-	handler0 := GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler0 := MustGzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	}))
 
 	handler1 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -563,7 +564,7 @@ func TestContentTypes(t *testing.T) {
 				io.WriteString(w, testBody)
 			})
 
-			wrapper, err := NewGzipHandler(ContentTypes(tt.acceptedContentTypes))
+			wrapper, err := NewWrapper(ContentTypes(tt.acceptedContentTypes))
 			assertNil(t, err)
 
 			req, _ := http.NewRequest("GET", "/whatever", nil)
@@ -586,7 +587,7 @@ func TestContentTypes(t *testing.T) {
 				io.WriteString(w, testBody)
 			})
 
-			wrapper, err := NewGzipHandler(ExceptContentTypes(tt.acceptedContentTypes))
+			wrapper, err := NewWrapper(ExceptContentTypes(tt.acceptedContentTypes))
 			assertNil(t, err)
 
 			req, _ := http.NewRequest("GET", "/whatever", nil)
@@ -597,6 +598,92 @@ func TestContentTypes(t *testing.T) {
 
 			assertEqual(t, 200, res.StatusCode)
 			if !tt.expectedGzip {
+				assertEqual(t, "gzip", res.Header.Get("Content-Encoding"))
+			} else {
+				assertNotEqual(t, "gzip", res.Header.Get("Content-Encoding"))
+			}
+		})
+	}
+}
+
+var contentTypeTest2 = []struct {
+	name         string
+	contentType  string
+	expectedGzip bool
+}{
+	{
+		name:         "Always gzip when content types are empty",
+		contentType:  "",
+		expectedGzip: true,
+	},
+	{
+		name:         "MIME match",
+		contentType:  "application/json",
+		expectedGzip: true,
+	},
+	{
+		name:         "MIME no match",
+		contentType:  "text/xml",
+		expectedGzip: true,
+	},
+
+	{
+		name:         "MIME match case insensitive",
+		contentType:  "Video/Something",
+		expectedGzip: false,
+	},
+	{
+		name:         "MIME match case insensitive",
+		contentType:  "audio/Something",
+		expectedGzip: false,
+	},
+	{
+		name:         "MIME match ignore whitespace",
+		contentType:  " video/mp4",
+		expectedGzip: false,
+	},
+	{
+		name:         "without prefix..",
+		contentType:  "avideo/mp4",
+		expectedGzip: true,
+	},
+	{
+		name:         "application/zip",
+		contentType:  "application/zip;lalala",
+		expectedGzip: false,
+	},
+	{
+		name:         "x-zip-compressed",
+		contentType:  "application/x-zip-compressed",
+		expectedGzip: false,
+	},
+	{
+		name:         "application/x-gzip",
+		contentType:  "application/x-gzip",
+		expectedGzip: false,
+	},
+}
+
+func TestDefaultContentTypes(t *testing.T) {
+	for _, tt := range contentTypeTest2 {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				w.Header().Set("Content-Type", tt.contentType)
+				io.WriteString(w, testBody)
+			})
+
+			wrapper, err := NewWrapper()
+			assertNil(t, err)
+
+			req, _ := http.NewRequest("GET", "/whatever", nil)
+			req.Header.Set("Accept-Encoding", "gzip")
+			resp := httptest.NewRecorder()
+			wrapper(handler).ServeHTTP(resp, req)
+			res := resp.Result()
+
+			assertEqual(t, 200, res.StatusCode)
+			if tt.expectedGzip {
 				assertEqual(t, "gzip", res.Header.Get("Content-Encoding"))
 			} else {
 				assertNotEqual(t, "gzip", res.Header.Get("Content-Encoding"))
@@ -662,7 +749,7 @@ func runBenchmark(b *testing.B, req *http.Request, handler http.Handler) {
 }
 
 func newTestHandler(body string) http.Handler {
-	return GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return MustGzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/gzipped":
 			w.Header().Set("Content-Encoding", "gzip")
@@ -686,4 +773,43 @@ func TestGzipHandlerNilContentType(t *testing.T) {
 	handler.ServeHTTP(res, req)
 
 	assertEqual(t, "", res.Header().Get("Content-Type"))
+}
+
+func ExampleNewWrapper() {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		io.WriteString(w, "Hello, World, Welcome to the jungle...")
+	})
+	handler2 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, "Hello, Another World.................")
+	})
+
+	// Create a reusable wrapper with custom options.
+	wrapper, err := NewWrapper(MinSize(20), CompressionLevel(gzip.BestSpeed))
+	if err != nil {
+		log.Fatalln(err)
+	}
+	server := http.NewServeMux()
+	server.Handle("/a", wrapper(handler))
+	server.Handle("/b", wrapper(handler2))
+
+	test := httptest.NewServer(server)
+	defer test.Close()
+
+	resp, err := http.Get(test.URL + "/a")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	content, _ := ioutil.ReadAll(resp.Body)
+	fmt.Println(string(content))
+
+	resp, err = http.Get(test.URL + "/b")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	content, _ = ioutil.ReadAll(resp.Body)
+	fmt.Println(string(content))
+	// Output:
+	// Hello, World, Welcome to the jungle...
+	// Hello, Another World.................
 }

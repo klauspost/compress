@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/klauspost/compress/gzhttp/writer"
 	"github.com/klauspost/compress/gzhttp/writer/gzkp"
@@ -250,23 +251,24 @@ func (w *GzipResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 // verify Hijacker interface implementation
 var _ http.Hijacker = &GzipResponseWriter{}
 
-// MustNewGzipLevelHandler behaves just like NewGzipLevelHandler except that in
-// an error case it panics rather than returning an error.
-func MustNewGzipLevelHandler(level int) func(http.Handler) http.Handler {
-	wrap, err := NewGzipHandler(CompressionLevel(level))
-	if err != nil {
-		panic(err)
-	}
-	return wrap
+var onceDefault sync.Once
+var defaultWrapper func(http.Handler) http.Handler
+
+// MustGzipHandler allows to easily wrap an http handler with default settings.
+func MustGzipHandler(h http.Handler) http.Handler {
+	onceDefault.Do(func() {
+		var err error
+		defaultWrapper, err = NewWrapper()
+		if err != nil {
+			panic(err)
+		}
+	})
+
+	return defaultWrapper(h)
 }
 
-// NewGzipLevelAndMinSize behave as NewGzipLevelHandler except it let the caller
-// specify the minimum size before compression.
-func NewGzipLevelAndMinSize(level, minSize int) (func(http.Handler) http.Handler, error) {
-	return NewGzipHandler(CompressionLevel(level), MinSize(minSize))
-}
-
-func NewGzipHandler(opts ...option) (func(http.Handler) http.Handler, error) {
+// NewWrapper returns a reusable wrapper with the supplied options.
+func NewWrapper(opts ...option) (func(http.Handler) http.Handler, error) {
 	c := &config{
 		level:   gzip.DefaultCompression,
 		minSize: DefaultMinSize,
@@ -274,9 +276,7 @@ func NewGzipHandler(opts ...option) (func(http.Handler) http.Handler, error) {
 			Levels: gzkp.Levels,
 			New:    gzkp.NewWriter,
 		},
-		contentTypes: func(ct string) bool {
-			return true
-		},
+		contentTypes: DefaultContentTypeFilter,
 	}
 
 	for _, o := range opts {
@@ -405,10 +405,9 @@ func Implementation(writer writer.GzipWriterFactory) option {
 // that has the same MIME type and other directives. I.e.,
 // "text/html; charset=utf-8" will only match "text/html; charset=utf-8".
 //
-// By default, responses are gzipped regardless of
-// Content-Type.
+// By default common compressed audio, video and archive formats, see DefaultContentTypeFilter.
 //
-// Setting this will override any previous Content Type settings.
+// Setting this will override default and any previous Content Type settings.
 func ContentTypes(types []string) option {
 	return func(c *config) {
 		var contentTypes []parsedContentType
@@ -440,10 +439,9 @@ func ContentTypes(types []string) option {
 // that has the same MIME type and other directives. I.e.,
 // "text/html; charset=utf-8" will only match "text/html; charset=utf-8".
 //
-// By default, responses are gzipped regardless of
-// Content-Type.
+// By default common compressed audio, video and archive formats, see DefaultContentTypeFilter.
 //
-// Setting this will override any previous Content Type settings.
+// Setting this will override default and any previous Content Type settings.
 func ExceptContentTypes(types []string) option {
 	return func(c *config) {
 		var contentTypes []parsedContentType
@@ -467,19 +465,11 @@ func ExceptContentTypes(types []string) option {
 // When called no parsing of the content type 'ct' has been done.
 // It may have been set or auto-detected.
 //
-// Setting this will override any previous Content Type settings.
+// Setting this will override default and any previous Content Type settings.
 func ContentTypeFilter(compress func(ct string) bool) option {
 	return func(c *config) {
 		c.contentTypes = compress
 	}
-}
-
-// GzipHandler wraps an HTTP handler, to transparently gzip the response body if
-// the client supports it (via the Accept-Encoding header). This will compress at
-// the default compression level.
-func GzipHandler(h http.Handler, opts ...option) http.Handler {
-	wrapper, _ := NewGzipHandler(opts...)
-	return wrapper(h)
 }
 
 // acceptsGzip returns true if the given HTTP request indicates that it will
@@ -567,4 +557,30 @@ func parseCoding(s string) (coding string, qvalue float64, err error) {
 	}
 
 	return
+}
+
+// Don't compress any audio/video types.
+var excludePrefixDefault = []string{"video/", "audio/"}
+
+// Skip a bunch of compressed types that contains this string.
+var excludeContainsDefault = []string{"compress", "zip"}
+
+// DefaultContentTypeFilter excludes common compressed audio, video and archive formats.
+func DefaultContentTypeFilter(ct string) bool {
+	ct = strings.TrimSpace(strings.ToLower(ct))
+	if ct == "" {
+		return true
+	}
+	for _, s := range excludeContainsDefault {
+		if strings.Contains(ct, s) {
+			return false
+		}
+	}
+
+	for _, prefix := range excludePrefixDefault {
+		if strings.HasPrefix(ct, prefix) {
+			return false
+		}
+	}
+	return true
 }
