@@ -26,6 +26,7 @@ func TestParseEncodings(t *testing.T) {
 
 		// Examples from RFC 2616
 		"compress, gzip":                     {"compress": 1.0, "gzip": 1.0},
+		",,,,":                               {},
 		"":                                   {},
 		"*":                                  {"*": 1.0},
 		"compress;q=0.5, gzip;q=1.0":         {"compress": 0.5, "gzip": 1.0},
@@ -37,8 +38,12 @@ func TestParseEncodings(t *testing.T) {
 	}
 
 	for eg, exp := range examples {
-		act, _ := parseEncodings(eg)
-		assertEqual(t, exp, act)
+		t.Run(eg, func(t *testing.T) {
+			act, _ := parseEncodings(eg)
+			assertEqual(t, exp, act)
+			gz := parseEncodingGzip(eg)
+			assertEqual(t, exp["gzip"], gz)
+		})
 	}
 }
 

@@ -475,8 +475,7 @@ func ContentTypeFilter(compress func(ct string) bool) option {
 // acceptsGzip returns true if the given HTTP request indicates that it will
 // accept a gzipped response.
 func acceptsGzip(r *http.Request) bool {
-	acceptedEncodings, _ := parseEncodings(r.Header.Get(acceptEncoding))
-	return acceptedEncodings["gzip"] > 0.0
+	return parseEncodingGzip(r.Header.Get(acceptEncoding)) > 0
 }
 
 // returns true if we've been configured to compress the specific content type.
@@ -500,13 +499,28 @@ func handleContentType(contentTypes []parsedContentType, ct string) bool {
 	return false
 }
 
-// parseEncodings attempts to parse a list of codings, per RFC 2616, as might
-// appear in an Accept-Encoding header. It returns a map of content-codings to
-// quality values, and an error containing the errors encountered. It's probably
-// safe to ignore those, because silently ignoring errors is how the internet
-// works.
-//
-// See: http://tools.ietf.org/html/rfc2616#section-14.3.
+// parseEncodingGzip returns the qvalue of gzip compression.
+func parseEncodingGzip(s string) float64 {
+	s = strings.TrimSpace(s)
+
+	for len(s) > 0 {
+		stop := strings.IndexByte(s, ',')
+		if stop < 0 {
+			stop = len(s)
+		}
+		coding, qvalue, _ := parseCoding(s[:stop])
+
+		if coding == "gzip" {
+			return qvalue
+		}
+		if stop == len(s) {
+			break
+		}
+		s = s[stop+1:]
+	}
+	return 0
+}
+
 func parseEncodings(s string) (codings, error) {
 	split := strings.Split(s, ",")
 	c := make(codings, len(split))
@@ -531,7 +545,7 @@ func parseEncodings(s string) (codings, error) {
 	return c, nil
 }
 
-// parseCoding parses a single conding (content-coding with an optional qvalue),
+// parseCoding parses a single coding (content-coding with an optional qvalue),
 // as might appear in an Accept-Encoding header. It attempts to forgive minor
 // formatting errors.
 func parseCoding(s string) (coding string, qvalue float64, err error) {
