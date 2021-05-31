@@ -19,7 +19,7 @@ go get -u github.com/klauspost/compress
 
 ## Usage
 
-For the simplest usage call `MustGzipHandler` with any handler (an object which implements the
+For the simplest usage call `GzipHandler` with any handler (an object which implements the
 `http.Handler` interface), and it'll return a new handler which gzips the
 response. For example:
 
@@ -38,7 +38,7 @@ func main() {
 		io.WriteString(w, "Hello, World")
 	})
     
-	http.Handle("/", gzhttp.MustGzipHandler(handler))
+	http.Handle("/", gzhttp.GzipHandler(handler))
 	http.ListenAndServe("0.0.0.0:8000", nil)
 }
 ```
@@ -75,8 +75,59 @@ func main() {
 	http.Handle("/", wrapper(handler))
 	http.ListenAndServe("0.0.0.0:8000", nil)
 }
+
 ```
 
+## Stateless compression
+
+In cases where you expect to run many thousands of compressors concurrently, 
+but with very little activity you can use stateless compression. 
+This is not intended for regular web servers serving individual requests.
+
+Use `CompressionLevel(-3)` or `CompressionLevel(gzip.StatelessCompression)` to enable.
+
+See [more details on stateless compression](https://github.com/klauspost/compress#stateless-compression).
+
+## Migrating from gziphandler
+
+This package removes some of the extra constructors.
+When replacing, this can be used to find a replacement.
+
+* `GzipHandler(h)` -> `GzipHandler(h)` (keep as-is)
+* `GzipHandlerWithOpts(opts...)` -> `NewWrapper(opts...)`
+* `MustNewGzipLevelHandler(n)` -> `NewWrapper(CompressionLevel(n))`
+* `NewGzipLevelAndMinSize(n, s)` -> `NewWrapper(CompressionLevel(n), MinSize(s))` 
+
+# Performance
+
+Speed compared to  [nytimes/gziphandler](https://github.com/nytimes/gziphandler) with default settings:
+
+```
+λ benchcmp before.txt after.txt                                        
+benchmark                         old ns/op     new ns/op     delta    
+BenchmarkGzipHandler_S2k-32       51302         25554         -50.19%  
+BenchmarkGzipHandler_S20k-32      301426        174900        -41.98%  
+BenchmarkGzipHandler_S100k-32     1546203       912349        -40.99%  
+BenchmarkGzipHandler_P2k-32       3973          2116          -46.74%  
+BenchmarkGzipHandler_P20k-32      20319         12237         -39.78%  
+BenchmarkGzipHandler_P100k-32     96079         57348         -40.31%  
+                                                                       
+benchmark                         old MB/s     new MB/s     speedup    
+BenchmarkGzipHandler_S2k-32       39.92        80.14        2.01x      
+BenchmarkGzipHandler_S20k-32      67.94        117.10       1.72x      
+BenchmarkGzipHandler_S100k-32     66.23        112.24       1.69x      
+BenchmarkGzipHandler_P2k-32       515.44       967.76       1.88x      
+BenchmarkGzipHandler_P20k-32      1007.92      1673.55      1.66x      
+BenchmarkGzipHandler_P100k-32     1065.79      1785.58      1.68x      
+                                                                       
+benchmark                         old allocs     new allocs     delta  
+BenchmarkGzipHandler_S2k-32       22             19             -13.64%
+BenchmarkGzipHandler_S20k-32      25             22             -12.00%
+BenchmarkGzipHandler_S100k-32     28             25             -10.71%
+BenchmarkGzipHandler_P2k-32       22             19             -13.64%
+BenchmarkGzipHandler_P20k-32      25             22             -12.00%
+BenchmarkGzipHandler_P100k-32     27             24             -11.11%
+```
 ## License
 
 [Apache 2.0](LICENSE)

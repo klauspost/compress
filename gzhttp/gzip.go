@@ -254,8 +254,8 @@ var _ http.Hijacker = &GzipResponseWriter{}
 var onceDefault sync.Once
 var defaultWrapper func(http.Handler) http.Handler
 
-// MustGzipHandler allows to easily wrap an http handler with default settings.
-func MustGzipHandler(h http.Handler) http.Handler {
+// GzipHandler allows to easily wrap an http handler with default settings.
+func GzipHandler(h http.Handler) http.Handler {
 	onceDefault.Do(func() {
 		var err error
 		defaultWrapper, err = NewWrapper()
@@ -596,5 +596,10 @@ func DefaultContentTypeFilter(ct string) bool {
 			return false
 		}
 	}
+	return true
+}
+
+// CompressAllContentTypeFilter will compress all mime types.
+func CompressAllContentTypeFilter(ct string) bool {
 	return true
 }
