@@ -1,4 +1,4 @@
-package gzkp
+package gzstd
 
 import (
 	"bytes"
