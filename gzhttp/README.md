@@ -85,6 +85,7 @@ but with very little activity you can use stateless compression.
 This is not intended for regular web servers serving individual requests.
 
 Use `CompressionLevel(-3)` or `CompressionLevel(gzip.StatelessCompression)` to enable.
+Consider adding a [`bufio.Writer`](https://golang.org/pkg/bufio/#NewWriterSize) with a small buffer.
 
 See [more details on stateless compression](https://github.com/klauspost/compress#stateless-compression).
 
@@ -97,6 +98,9 @@ When replacing, this can be used to find a replacement.
 * `GzipHandlerWithOpts(opts...)` -> `NewWrapper(opts...)`
 * `MustNewGzipLevelHandler(n)` -> `NewWrapper(CompressionLevel(n))`
 * `NewGzipLevelAndMinSize(n, s)` -> `NewWrapper(CompressionLevel(n), MinSize(s))` 
+
+By default, some mime types will now be excluded.
+To re-enable compression of all types, use the `ContentTypeFilter(gzhttp.CompressAllContentTypeFilter)` option.
 
 # Performance
 
