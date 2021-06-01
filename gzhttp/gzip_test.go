@@ -1,11 +1,10 @@
-package gziphandler
+package gzhttp
 
 import (
 	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -778,43 +777,4 @@ func TestGzipHandlerNilContentType(t *testing.T) {
 	handler.ServeHTTP(res, req)
 
 	assertEqual(t, "", res.Header().Get("Content-Type"))
-}
-
-func ExampleNewWrapper() {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
-		io.WriteString(w, "Hello, World, Welcome to the jungle...")
-	})
-	handler2 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, "Hello, Another World.................")
-	})
-
-	// Create a reusable wrapper with custom options.
-	wrapper, err := NewWrapper(MinSize(20), CompressionLevel(gzip.BestSpeed))
-	if err != nil {
-		log.Fatalln(err)
-	}
-	server := http.NewServeMux()
-	server.Handle("/a", wrapper(handler))
-	server.Handle("/b", wrapper(handler2))
-
-	test := httptest.NewServer(server)
-	defer test.Close()
-
-	resp, err := http.Get(test.URL + "/a")
-	if err != nil {
-		log.Fatalln(err)
-	}
-	content, _ := ioutil.ReadAll(resp.Body)
-	fmt.Println(string(content))
-
-	resp, err = http.Get(test.URL + "/b")
-	if err != nil {
-		log.Fatalln(err)
-	}
-	content, _ = ioutil.ReadAll(resp.Body)
-	fmt.Println(string(content))
-	// Output:
-	// Hello, World, Welcome to the jungle...
-	// Hello, Another World.................
 }

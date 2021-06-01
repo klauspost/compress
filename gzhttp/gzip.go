@@ -1,4 +1,4 @@
-package gziphandler
+package gzhttp
 
 import (
 	"bufio"
