@@ -63,12 +63,11 @@ BenchmarkTransport/gzhttp-32         	    1995	    609791 ns/op	 214.14 MB/s	   
 BenchmarkTransport/stdlib-32         	    1567	    772161 ns/op	 169.11 MB/s	   53950 B/op	      99 allocs/op
 
 Multi Core:
-BenchmarkTransport/gzhttp-par-32     	    8428	    199682 ns/op	 653.95 MB/s	   42332 B/op	     120 allocs/op
-BenchmarkTransport/stdlib-par-32     	    3946	    311886 ns/op	 418.69 MB/s	   71972 B/op	     137 allocs/op
+BenchmarkTransport/gzhttp-par-32     	   29113	     36802 ns/op	3548.27 MB/s	   11061 B/op	      73 allocs/op
+BenchmarkTransport/stdlib-par-32     	   16114	     66442 ns/op	1965.38 MB/s	   54971 B/op	      99 allocs/op
 ```
 
 This includes both serving the http request, parsing requests and decompressing. 
-For this payload size decompression is actually only about 40% of CPU load on the multi-core benchmark.
 
 ### Server
 

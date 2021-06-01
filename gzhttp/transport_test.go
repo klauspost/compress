@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"testing"
 
 	"github.com/klauspost/compress/gzip"
@@ -92,7 +93,9 @@ func BenchmarkTransport(b *testing.B) {
 	zw.Close()
 	bin = buf.Bytes()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body.Close()
 		w.Header().Set("Content-Encoding", "gzip")
+		w.WriteHeader(http.StatusOK)
 		w.Write(bin)
 	}))
 	b.Run("gzhttp", func(b *testing.B) {
@@ -132,7 +135,10 @@ func BenchmarkTransport(b *testing.B) {
 	})
 	b.Run("gzhttp-par", func(b *testing.B) {
 		c := http.Client{
-			Transport: Transport(http.DefaultTransport),
+			Transport: Transport(&http.Transport{
+				MaxConnsPerHost:     runtime.GOMAXPROCS(0),
+				MaxIdleConnsPerHost: runtime.GOMAXPROCS(0),
+			}),
 		}
 
 		b.SetBytes(int64(sz))
@@ -153,7 +159,10 @@ func BenchmarkTransport(b *testing.B) {
 		})
 	})
 	b.Run("stdlib-par", func(b *testing.B) {
-		c := http.Client{Transport: http.DefaultTransport}
+		c := http.Client{Transport: &http.Transport{
+			MaxConnsPerHost:     runtime.GOMAXPROCS(0),
+			MaxIdleConnsPerHost: runtime.GOMAXPROCS(0),
+		}}
 		b.SetBytes(int64(sz))
 		b.ReportAllocs()
 		b.ResetTimer()
