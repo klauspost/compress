@@ -86,7 +86,7 @@ func (w *GzipResponseWriter) Write(b []byte) (int, error) {
 	w.buf = append(w.buf, b...)
 
 	var (
-		cl, _ = strconv.Atoi(w.Header().Get(contentLength))
+		cl, _ = atoi(w.Header().Get(contentLength))
 		ct    = w.Header().Get(contentType)
 		ce    = w.Header().Get(contentEncoding)
 		cr    = w.Header().Get(contentRange)
@@ -178,7 +178,7 @@ func (w *GzipResponseWriter) startPlain() error {
 	}
 	w.ignore = true
 	// If Write was never called then don't call Write on the underlying ResponseWriter.
-	if w.buf == nil {
+	if len(w.buf) == 0 {
 		return nil
 	}
 	n, err := w.ResponseWriter.Write(w.buf)
@@ -278,6 +278,8 @@ func GzipHandler(h http.Handler) http.Handler {
 	return defaultWrapper(h)
 }
 
+var grwPool = sync.Pool{New: func() interface{} { return &GzipResponseWriter{} }}
+
 // NewWrapper returns a reusable wrapper with the supplied options.
 func NewWrapper(opts ...option) (func(http.Handler) http.Handler, error) {
 	c := &config{
@@ -302,15 +304,24 @@ func NewWrapper(opts ...option) (func(http.Handler) http.Handler, error) {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add(vary, acceptEncoding)
 			if acceptsGzip(r) {
-				gw := &GzipResponseWriter{
+				gw := grwPool.Get().(*GzipResponseWriter)
+				*gw = GzipResponseWriter{
 					ResponseWriter:    w,
 					gwFactory:         c.writer,
 					level:             c.level,
 					minSize:           c.minSize,
 					contentTypeFilter: c.contentTypes,
 					keepAcceptRanges:  c.keepAcceptRanges,
+					buf:               gw.buf,
 				}
-				defer gw.Close()
+				if len(gw.buf) > 0 {
+					gw.buf = gw.buf[:0]
+				}
+				defer func() {
+					gw.Close()
+					gw.ResponseWriter = nil
+					grwPool.Put(gw)
+				}()
 
 				if _, ok := w.(http.CloseNotifier); ok {
 					gwcn := GzipResponseWriterWithCloseNotify{gw}
@@ -624,4 +635,39 @@ func DefaultContentTypeFilter(ct string) bool {
 // CompressAllContentTypeFilter will compress all mime types.
 func CompressAllContentTypeFilter(ct string) bool {
 	return true
+}
+
+const intSize = 32 << (^uint(0) >> 63)
+
+// atoi is equivalent to ParseInt(s, 10, 0), converted to type int.
+func atoi(s string) (int, bool) {
+	sLen := len(s)
+	if intSize == 32 && (0 < sLen && sLen < 10) ||
+		intSize == 64 && (0 < sLen && sLen < 19) {
+		// Fast path for small integers that fit int type.
+		s0 := s
+		if s[0] == '-' || s[0] == '+' {
+			s = s[1:]
+			if len(s) < 1 {
+				return 0, false
+			}
+		}
+
+		n := 0
+		for _, ch := range []byte(s) {
+			ch -= '0'
+			if ch > 9 {
+				return 0, false
+			}
+			n = n*10 + int(ch)
+		}
+		if s0[0] == '-' {
+			n = -n
+		}
+		return n, true
+	}
+
+	// Slow path for invalid, big, or underscored integers.
+	i64, err := strconv.ParseInt(s, 10, 0)
+	return int(i64), err == nil
 }

@@ -133,33 +133,41 @@ func main() {
 
 ### Performance
 
-Speed compared to  [nytimes/gziphandler](https://github.com/nytimes/gziphandler) with default settings:
+Speed compared to  [nytimes/gziphandler](https://github.com/nytimes/gziphandler) with default settings, 2KB, 20KB and 100KB:
 
 ```
-λ benchcmp before.txt after.txt                                        
-benchmark                         old ns/op     new ns/op     delta    
-BenchmarkGzipHandler_S2k-32       51302         25554         -50.19%  
-BenchmarkGzipHandler_S20k-32      301426        174900        -41.98%  
-BenchmarkGzipHandler_S100k-32     1546203       912349        -40.99%  
-BenchmarkGzipHandler_P2k-32       3973          2116          -46.74%  
-BenchmarkGzipHandler_P20k-32      20319         12237         -39.78%  
-BenchmarkGzipHandler_P100k-32     96079         57348         -40.31%  
-                                                                       
-benchmark                         old MB/s     new MB/s     speedup    
-BenchmarkGzipHandler_S2k-32       39.92        80.14        2.01x      
-BenchmarkGzipHandler_S20k-32      67.94        117.10       1.72x      
-BenchmarkGzipHandler_S100k-32     66.23        112.24       1.69x      
-BenchmarkGzipHandler_P2k-32       515.44       967.76       1.88x      
-BenchmarkGzipHandler_P20k-32      1007.92      1673.55      1.66x      
-BenchmarkGzipHandler_P100k-32     1065.79      1785.58      1.68x      
-                                                                       
-benchmark                         old allocs     new allocs     delta  
-BenchmarkGzipHandler_S2k-32       22             19             -13.64%
-BenchmarkGzipHandler_S20k-32      25             22             -12.00%
-BenchmarkGzipHandler_S100k-32     28             25             -10.71%
-BenchmarkGzipHandler_P2k-32       22             19             -13.64%
-BenchmarkGzipHandler_P20k-32      25             22             -12.00%
-BenchmarkGzipHandler_P100k-32     27             24             -11.11%
+λ benchcmp before.txt after.txt
+benchmark                         old ns/op     new ns/op     delta
+BenchmarkGzipHandler_S2k-32       51302         23679         -53.84%
+BenchmarkGzipHandler_S20k-32      301426        156331        -48.14%
+BenchmarkGzipHandler_S100k-32     1546203       818981        -47.03%
+BenchmarkGzipHandler_P2k-32       3973          1522          -61.69%
+BenchmarkGzipHandler_P20k-32      20319         9397          -53.75%
+BenchmarkGzipHandler_P100k-32     96079         46361         -51.75%
+
+benchmark                         old MB/s     new MB/s     speedup
+BenchmarkGzipHandler_S2k-32       39.92        86.49        2.17x
+BenchmarkGzipHandler_S20k-32      67.94        131.00       1.93x
+BenchmarkGzipHandler_S100k-32     66.23        125.03       1.89x
+BenchmarkGzipHandler_P2k-32       515.44       1345.31      2.61x
+BenchmarkGzipHandler_P20k-32      1007.92      2179.47      2.16x
+BenchmarkGzipHandler_P100k-32     1065.79      2208.75      2.07x
+
+benchmark                         old allocs     new allocs     delta
+BenchmarkGzipHandler_S2k-32       22             16             -27.27%
+BenchmarkGzipHandler_S20k-32      25             19             -24.00%
+BenchmarkGzipHandler_S100k-32     28             21             -25.00%
+BenchmarkGzipHandler_P2k-32       22             16             -27.27%
+BenchmarkGzipHandler_P20k-32      25             19             -24.00%
+BenchmarkGzipHandler_P100k-32     27             21             -22.22%
+
+benchmark                         old bytes     new bytes     delta
+BenchmarkGzipHandler_S2k-32       8836          2980          -66.27%
+BenchmarkGzipHandler_S20k-32      69034         20562         -70.21%
+BenchmarkGzipHandler_S100k-32     356582        86682         -75.69%
+BenchmarkGzipHandler_P2k-32       9062          2971          -67.21%
+BenchmarkGzipHandler_P20k-32      67799         20051         -70.43%
+BenchmarkGzipHandler_P100k-32     300972        83077         -72.40%
 ```
 
 ### Stateless compression
