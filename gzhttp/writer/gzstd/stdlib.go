@@ -1,3 +1,5 @@
+// package gzstd provides gzip compression through the standard library.
+
 package gzstd
 
 import (
