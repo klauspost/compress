@@ -277,6 +277,110 @@ func TestWriterPadding(t *testing.T) {
 	}
 }
 
+func TestBigRegularWrites(t *testing.T) {
+	var buf [maxBlockSize * 2]byte
+	dst := bytes.NewBuffer(nil)
+	enc := NewWriter(dst, WriterBestCompression())
+	max := uint8(10)
+	if testing.Short() {
+		max = 4
+	}
+	for n := uint8(0); n < max; n++ {
+		for i := range buf[:] {
+			buf[i] = n
+		}
+		// Writes may not keep a reference to the data beyond the Write call.
+		_, err := enc.Write(buf[:])
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	err := enc.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dec := NewReader(dst)
+	_, err = io.Copy(ioutil.Discard, dec)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestBigEncodeBuffer(t *testing.T) {
+	const blockSize = 1 << 20
+	var buf [blockSize * 2]byte
+	dst := bytes.NewBuffer(nil)
+	enc := NewWriter(dst, WriterBlockSize(blockSize), WriterBestCompression())
+	max := uint8(10)
+	if testing.Short() {
+		max = 4
+	}
+	for n := uint8(0); n < max; n++ {
+		// Change the buffer to a new value.
+		for i := range buf[:] {
+			buf[i] = n
+		}
+		err := enc.EncodeBuffer(buf[:])
+		if err != nil {
+			t.Fatal(err)
+		}
+		// We can write it again since we aren't changing it.
+		err = enc.EncodeBuffer(buf[:])
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = enc.Flush()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	err := enc.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dec := NewReader(dst)
+	n, err := io.Copy(ioutil.Discard, dec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(n)
+}
+
+func TestBigEncodeBufferSync(t *testing.T) {
+	const blockSize = 1 << 20
+	var buf [blockSize * 2]byte
+	dst := bytes.NewBuffer(nil)
+	enc := NewWriter(dst, WriterBlockSize(blockSize), WriterConcurrency(1), WriterBestCompression())
+	max := uint8(10)
+	if testing.Short() {
+		max = 2
+	}
+	for n := uint8(0); n < max; n++ {
+		// Change the buffer to a new value.
+		for i := range buf[:] {
+			buf[i] = n
+		}
+		// When WriterConcurrency == 1 we can encode and reuse the buffer.
+		err := enc.EncodeBuffer(buf[:])
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	err := enc.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dec := NewReader(dst)
+	n, err := io.Copy(ioutil.Discard, dec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(n)
+}
+
 func BenchmarkWriterRandom(b *testing.B) {
 	rng := rand.New(rand.NewSource(1))
 	// Make max window so we never get matches.
