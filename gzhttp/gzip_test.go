@@ -763,12 +763,19 @@ func TestDefaultContentTypes(t *testing.T) {
 
 // --------------------------------------------------------------------
 
-func BenchmarkGzipHandler_S2k(b *testing.B)   { benchmark(b, false, 2048) }
-func BenchmarkGzipHandler_S20k(b *testing.B)  { benchmark(b, false, 20480) }
-func BenchmarkGzipHandler_S100k(b *testing.B) { benchmark(b, false, 102400) }
-func BenchmarkGzipHandler_P2k(b *testing.B)   { benchmark(b, true, 2048) }
-func BenchmarkGzipHandler_P20k(b *testing.B)  { benchmark(b, true, 20480) }
-func BenchmarkGzipHandler_P100k(b *testing.B) { benchmark(b, true, 102400) }
+func BenchmarkGzipHandler_S2k(b *testing.B)   { benchmark(b, false, 2048, gzip.DefaultCompression) }
+func BenchmarkGzipHandler_S20k(b *testing.B)  { benchmark(b, false, 20480, gzip.DefaultCompression) }
+func BenchmarkGzipHandler_S100k(b *testing.B) { benchmark(b, false, 102400, gzip.DefaultCompression) }
+func BenchmarkGzipHandler_P2k(b *testing.B)   { benchmark(b, true, 2048, gzip.DefaultCompression) }
+func BenchmarkGzipHandler_P20k(b *testing.B)  { benchmark(b, true, 20480, gzip.DefaultCompression) }
+func BenchmarkGzipHandler_P100k(b *testing.B) { benchmark(b, true, 102400, gzip.DefaultCompression) }
+
+func BenchmarkGzipBestSpeedHandler_S2k(b *testing.B)   { benchmark(b, false, 2048, gzip.BestSpeed) }
+func BenchmarkGzipBestSpeedHandler_S20k(b *testing.B)  { benchmark(b, false, 20480, gzip.BestSpeed) }
+func BenchmarkGzipBestSpeedHandler_S100k(b *testing.B) { benchmark(b, false, 102400, gzip.BestSpeed) }
+func BenchmarkGzipBestSpeedHandler_P2k(b *testing.B)   { benchmark(b, true, 2048, gzip.BestSpeed) }
+func BenchmarkGzipBestSpeedHandler_P20k(b *testing.B)  { benchmark(b, true, 20480, gzip.BestSpeed) }
+func BenchmarkGzipBestSpeedHandler_P100k(b *testing.B) { benchmark(b, true, 102400, gzip.BestSpeed) }
 
 // --------------------------------------------------------------------
 
@@ -780,7 +787,7 @@ func gzipStrLevel(s []byte, lvl int) []byte {
 	return b.Bytes()
 }
 
-func benchmark(b *testing.B, parallel bool, size int) {
+func benchmark(b *testing.B, parallel bool, size, level int) {
 	bin, err := ioutil.ReadFile("testdata/benchmark.json")
 	if err != nil {
 		b.Fatal(err)
@@ -788,7 +795,7 @@ func benchmark(b *testing.B, parallel bool, size int) {
 
 	req, _ := http.NewRequest("GET", "/whatever", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
-	handler := newTestHandler(bin[:size])
+	handler := newTestHandlerLevel(bin[:size], level)
 
 	b.ReportAllocs()
 	b.SetBytes(int64(size))
@@ -819,6 +826,22 @@ func runBenchmark(b *testing.B, req *http.Request, handler http.Handler) {
 
 func newTestHandler(body []byte) http.Handler {
 	return GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/gzipped":
+			w.Header().Set("Content-Encoding", "gzip")
+			w.Write(body)
+		default:
+			w.Write(body)
+		}
+	}))
+}
+
+func newTestHandlerLevel(body []byte, level int) http.Handler {
+	wrapper, err := NewWrapper(CompressionLevel(level))
+	if err != nil {
+		panic(err)
+	}
+	return wrapper(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/gzipped":
 			w.Header().Set("Content-Encoding", "gzip")
