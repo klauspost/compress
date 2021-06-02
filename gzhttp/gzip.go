@@ -20,6 +20,8 @@ const (
 	vary            = "Vary"
 	acceptEncoding  = "Accept-Encoding"
 	contentEncoding = "Content-Encoding"
+	contentRange    = "Content-Range"
+	acceptRanges    = "Accept-Ranges"
 	contentType     = "Content-Type"
 	contentLength   = "Content-Length"
 )
@@ -51,9 +53,10 @@ type GzipResponseWriter struct {
 
 	code int // Saves the WriteHeader value.
 
-	minSize int    // Specifies the minimum response size to gzip. If the response length is bigger than this value, it is compressed.
-	buf     []byte // Holds the first part of the write before reaching the minSize or the end of the write.
-	ignore  bool   // If true, then we immediately passthru writes to the underlying ResponseWriter.
+	minSize          int    // Specifies the minimum response size to gzip. If the response length is bigger than this value, it is compressed.
+	buf              []byte // Holds the first part of the write before reaching the minSize or the end of the write.
+	ignore           bool   // If true, then we immediately passthru writes to the underlying ResponseWriter.
+	keepAcceptRanges bool   // Keep "Accept-Ranges" header.
 
 	contentTypeFilter func(ct string) bool // Only compress if the response is one of these content-types. All are accepted if empty.
 }
@@ -86,13 +89,16 @@ func (w *GzipResponseWriter) Write(b []byte) (int, error) {
 		cl, _ = strconv.Atoi(w.Header().Get(contentLength))
 		ct    = w.Header().Get(contentType)
 		ce    = w.Header().Get(contentEncoding)
+		cr    = w.Header().Get(contentRange)
 	)
+
 	// Only continue if they didn't already choose an encoding or a known unhandled content length or type.
-	if ce == "" && (cl == 0 || cl >= w.minSize) && (ct == "" || w.contentTypeFilter(ct)) {
+	if ce == "" && cr == "" && (cl == 0 || cl >= w.minSize) && (ct == "" || w.contentTypeFilter(ct)) {
 		// If the current buffer is less than minSize and a Content-Length isn't set, then wait until we have more data.
 		if len(w.buf) < w.minSize && cl == 0 {
 			return len(b), nil
 		}
+
 		// If the Content-Length is larger than minSize or the current buffer is larger than minSize, then continue.
 		if cl >= w.minSize || len(w.buf) >= w.minSize {
 			// If a Content-Type wasn't specified, infer it from the current buffer.
@@ -131,6 +137,11 @@ func (w *GzipResponseWriter) startGzip() error {
 	// will fail to set the Content-Length header since its already set
 	// See: https://github.com/golang/go/issues/14975.
 	w.Header().Del(contentLength)
+
+	// Delete Accept-Ranges.
+	if !w.keepAcceptRanges {
+		w.Header().Del(acceptRanges)
+	}
 
 	// Write the header to gzip response.
 	if w.code != 0 {
@@ -297,6 +308,7 @@ func NewWrapper(opts ...option) (func(http.Handler) http.Handler, error) {
 					level:             c.level,
 					minSize:           c.minSize,
 					contentTypeFilter: c.contentTypes,
+					keepAcceptRanges:  c.keepAcceptRanges,
 				}
 				defer gw.Close()
 
@@ -345,10 +357,11 @@ func (pct parsedContentType) equals(mediaType string, params map[string]string) 
 
 // Used for functional configuration.
 type config struct {
-	minSize      int
-	level        int
-	writer       writer.GzipWriterFactory
-	contentTypes func(ct string) bool
+	minSize          int
+	level            int
+	writer           writer.GzipWriterFactory
+	contentTypes     func(ct string) bool
+	keepAcceptRanges bool
 }
 
 func (c *config) validate() error {
@@ -454,6 +467,15 @@ func ExceptContentTypes(types []string) option {
 		c.contentTypes = func(ct string) bool {
 			return !handleContentType(contentTypes, ct)
 		}
+	}
+}
+
+// KeepAcceptRanges will keep Accept-Ranges header on gzipped responses.
+// This will likely break ranged requests since that cannot be transparently
+// handled by the filter.
+func KeepAcceptRanges() option {
+	return func(c *config) {
+		c.keepAcceptRanges = true
 	}
 }
 

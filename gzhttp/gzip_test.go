@@ -114,6 +114,72 @@ func TestGzipHandlerAlreadyCompressed(t *testing.T) {
 	assertEqual(t, testBody, res.Body.String())
 }
 
+func TestGzipHandlerRangeReply(t *testing.T) {
+	handler := GzipHandler(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Range", "bytes 0-300/804")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(testBody))
+		}))
+	req, _ := http.NewRequest("GET", "/gzipped", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+	res := resp.Result()
+	assertEqual(t, 200, res.StatusCode)
+	assertEqual(t, "", res.Header.Get("Content-Encoding"))
+	assertEqual(t, testBody, resp.Body.String())
+}
+
+func TestGzipHandlerAcceptRange(t *testing.T) {
+	handler := GzipHandler(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Accept-Ranges", "bytes")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(testBody))
+		}))
+	req, _ := http.NewRequest("GET", "/gzipped", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+	res := resp.Result()
+	assertEqual(t, 200, res.StatusCode)
+	assertEqual(t, "gzip", res.Header.Get("Content-Encoding"))
+	assertEqual(t, "", res.Header.Get("Accept-Ranges"))
+	zr, err := gzip.NewReader(resp.Body)
+	assertNil(t, err)
+	got, err := ioutil.ReadAll(zr)
+	assertNil(t, err)
+	assertEqual(t, testBody, string(got))
+}
+
+func TestGzipHandlerKeepAcceptRange(t *testing.T) {
+	wrapper, err := NewWrapper(KeepAcceptRanges())
+	assertNil(t, err)
+	handler := wrapper(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Accept-Ranges", "bytes")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(testBody))
+		}))
+	req, _ := http.NewRequest("GET", "/gzipped", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+	res := resp.Result()
+	assertEqual(t, 200, res.StatusCode)
+	assertEqual(t, "gzip", res.Header.Get("Content-Encoding"))
+	assertEqual(t, "bytes", res.Header.Get("Accept-Ranges"))
+	zr, err := gzip.NewReader(resp.Body)
+	assertNil(t, err)
+	got, err := ioutil.ReadAll(zr)
+	assertNil(t, err)
+	assertEqual(t, testBody, string(got))
+}
+
 func TestNewGzipLevelHandler(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
