@@ -3,7 +3,6 @@ package gzhttp
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -15,9 +14,9 @@ import (
 	"github.com/klauspost/compress/gzip"
 )
 
-const (
-	smallTestBody = "aaabbcaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbc"
-	testBody      = "aaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbccc aaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbccc aaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbccc aaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbccc aaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbccc aaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbccc aaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbccc"
+var (
+	smallTestBody = []byte("aaabbcaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbc")
+	testBody      = []byte("aaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbccc aaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbccc aaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbccc aaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbccc aaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbccc aaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbccc aaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbcccaaabbbccc")
 )
 
 func TestParseEncodings(t *testing.T) {
@@ -60,7 +59,7 @@ func TestMustNewGzipHandler(t *testing.T) {
 	assertEqual(t, 200, res1.StatusCode)
 	assertEqual(t, "", res1.Header.Get("Content-Encoding"))
 	assertEqual(t, "Accept-Encoding", res1.Header.Get("Vary"))
-	assertEqual(t, testBody, resp1.Body.String())
+	assertEqual(t, testBody, resp1.Body.Bytes())
 
 	// but requests with accept-encoding:gzip are compressed if possible
 
@@ -99,7 +98,7 @@ func TestGzipHandlerSmallBodyNoCompression(t *testing.T) {
 	assertEqual(t, 200, res.StatusCode)
 	assertEqual(t, "", res.Header.Get("Content-Encoding"))
 	assertEqual(t, "Accept-Encoding", res.Header.Get("Vary"))
-	assertEqual(t, smallTestBody, resp.Body.String())
+	assertEqual(t, smallTestBody, resp.Body.Bytes())
 
 }
 
@@ -111,7 +110,7 @@ func TestGzipHandlerAlreadyCompressed(t *testing.T) {
 	res := httptest.NewRecorder()
 	handler.ServeHTTP(res, req)
 
-	assertEqual(t, testBody, res.Body.String())
+	assertEqual(t, testBody, res.Body.Bytes())
 }
 
 func TestGzipHandlerRangeReply(t *testing.T) {
@@ -129,7 +128,7 @@ func TestGzipHandlerRangeReply(t *testing.T) {
 	res := resp.Result()
 	assertEqual(t, 200, res.StatusCode)
 	assertEqual(t, "", res.Header.Get("Content-Encoding"))
-	assertEqual(t, testBody, resp.Body.String())
+	assertEqual(t, testBody, resp.Body.Bytes())
 }
 
 func TestGzipHandlerAcceptRange(t *testing.T) {
@@ -152,7 +151,7 @@ func TestGzipHandlerAcceptRange(t *testing.T) {
 	assertNil(t, err)
 	got, err := ioutil.ReadAll(zr)
 	assertNil(t, err)
-	assertEqual(t, testBody, string(got))
+	assertEqual(t, testBody, got)
 }
 
 func TestGzipHandlerKeepAcceptRange(t *testing.T) {
@@ -177,13 +176,13 @@ func TestGzipHandlerKeepAcceptRange(t *testing.T) {
 	assertNil(t, err)
 	got, err := ioutil.ReadAll(zr)
 	assertNil(t, err)
-	assertEqual(t, testBody, string(got))
+	assertEqual(t, testBody, got)
 }
 
 func TestNewGzipLevelHandler(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		io.WriteString(w, testBody)
+		w.Write(testBody)
 	})
 
 	for lvl := gzip.StatelessCompression; lvl <= gzip.BestCompression; lvl++ {
@@ -631,7 +630,7 @@ func TestContentTypes(t *testing.T) {
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 				w.Header().Set("Content-Type", tt.contentType)
-				io.WriteString(w, testBody)
+				w.Write(testBody)
 			})
 
 			wrapper, err := NewWrapper(ContentTypes(tt.acceptedContentTypes))
@@ -654,7 +653,7 @@ func TestContentTypes(t *testing.T) {
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 				w.Header().Set("Content-Type", tt.contentType)
-				io.WriteString(w, testBody)
+				w.Write(testBody)
 			})
 
 			wrapper, err := NewWrapper(ExceptContentTypes(tt.acceptedContentTypes))
@@ -740,7 +739,7 @@ func TestDefaultContentTypes(t *testing.T) {
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 				w.Header().Set("Content-Type", tt.contentType)
-				io.WriteString(w, testBody)
+				w.Write(testBody)
 			})
 
 			wrapper, err := NewWrapper()
@@ -764,24 +763,31 @@ func TestDefaultContentTypes(t *testing.T) {
 
 // --------------------------------------------------------------------
 
-func BenchmarkGzipHandler_S2k(b *testing.B)   { benchmark(b, false, 2048) }
-func BenchmarkGzipHandler_S20k(b *testing.B)  { benchmark(b, false, 20480) }
-func BenchmarkGzipHandler_S100k(b *testing.B) { benchmark(b, false, 102400) }
-func BenchmarkGzipHandler_P2k(b *testing.B)   { benchmark(b, true, 2048) }
-func BenchmarkGzipHandler_P20k(b *testing.B)  { benchmark(b, true, 20480) }
-func BenchmarkGzipHandler_P100k(b *testing.B) { benchmark(b, true, 102400) }
+func BenchmarkGzipHandler_S2k(b *testing.B)   { benchmark(b, false, 2048, gzip.DefaultCompression) }
+func BenchmarkGzipHandler_S20k(b *testing.B)  { benchmark(b, false, 20480, gzip.DefaultCompression) }
+func BenchmarkGzipHandler_S100k(b *testing.B) { benchmark(b, false, 102400, gzip.DefaultCompression) }
+func BenchmarkGzipHandler_P2k(b *testing.B)   { benchmark(b, true, 2048, gzip.DefaultCompression) }
+func BenchmarkGzipHandler_P20k(b *testing.B)  { benchmark(b, true, 20480, gzip.DefaultCompression) }
+func BenchmarkGzipHandler_P100k(b *testing.B) { benchmark(b, true, 102400, gzip.DefaultCompression) }
+
+func BenchmarkGzipBestSpeedHandler_S2k(b *testing.B)   { benchmark(b, false, 2048, gzip.BestSpeed) }
+func BenchmarkGzipBestSpeedHandler_S20k(b *testing.B)  { benchmark(b, false, 20480, gzip.BestSpeed) }
+func BenchmarkGzipBestSpeedHandler_S100k(b *testing.B) { benchmark(b, false, 102400, gzip.BestSpeed) }
+func BenchmarkGzipBestSpeedHandler_P2k(b *testing.B)   { benchmark(b, true, 2048, gzip.BestSpeed) }
+func BenchmarkGzipBestSpeedHandler_P20k(b *testing.B)  { benchmark(b, true, 20480, gzip.BestSpeed) }
+func BenchmarkGzipBestSpeedHandler_P100k(b *testing.B) { benchmark(b, true, 102400, gzip.BestSpeed) }
 
 // --------------------------------------------------------------------
 
-func gzipStrLevel(s string, lvl int) []byte {
+func gzipStrLevel(s []byte, lvl int) []byte {
 	var b bytes.Buffer
 	w, _ := gzip.NewWriterLevel(&b, lvl)
-	io.WriteString(w, s)
+	w.Write(s)
 	w.Close()
 	return b.Bytes()
 }
 
-func benchmark(b *testing.B, parallel bool, size int) {
+func benchmark(b *testing.B, parallel bool, size, level int) {
 	bin, err := ioutil.ReadFile("testdata/benchmark.json")
 	if err != nil {
 		b.Fatal(err)
@@ -789,7 +795,7 @@ func benchmark(b *testing.B, parallel bool, size int) {
 
 	req, _ := http.NewRequest("GET", "/whatever", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
-	handler := newTestHandler(string(bin[:size]))
+	handler := newTestHandlerLevel(bin[:size], level)
 
 	b.ReportAllocs()
 	b.SetBytes(int64(size))
@@ -818,14 +824,30 @@ func runBenchmark(b *testing.B, req *http.Request, handler http.Handler) {
 	}
 }
 
-func newTestHandler(body string) http.Handler {
+func newTestHandler(body []byte) http.Handler {
 	return GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/gzipped":
 			w.Header().Set("Content-Encoding", "gzip")
-			io.WriteString(w, body)
+			w.Write(body)
 		default:
-			io.WriteString(w, body)
+			w.Write(body)
+		}
+	}))
+}
+
+func newTestHandlerLevel(body []byte, level int) http.Handler {
+	wrapper, err := NewWrapper(CompressionLevel(level))
+	if err != nil {
+		panic(err)
+	}
+	return wrapper(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/gzipped":
+			w.Header().Set("Content-Encoding", "gzip")
+			w.Write(body)
+		default:
+			w.Write(body)
 		}
 	}))
 }

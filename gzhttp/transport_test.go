@@ -22,7 +22,7 @@ func TestTransport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	server := httptest.NewServer(newTestHandler(string(bin)))
+	server := httptest.NewServer(newTestHandler(bin))
 
 	c := http.Client{Transport: Transport(http.DefaultTransport)}
 	resp, err := c.Get(server.URL)
@@ -44,7 +44,7 @@ func TestTransportInvalid(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	server := httptest.NewServer(newTestHandler(string(bin)))
+	server := httptest.NewServer(newTestHandler(bin))
 
 	c := http.Client{Transport: Transport(http.DefaultTransport)}
 	// Serves json as gzippped...
@@ -64,7 +64,7 @@ func TestDefaultTransport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	server := httptest.NewServer(newTestHandler(string(bin)))
+	server := httptest.NewServer(newTestHandler(bin))
 
 	// Not wrapped...
 	c := http.Client{Transport: http.DefaultTransport}
