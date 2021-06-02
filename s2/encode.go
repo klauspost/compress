@@ -487,7 +487,9 @@ func (w *Writer) ReadFrom(r io.Reader) (n int64, err error) {
 // EncodeBuffer will add a buffer to the stream.
 // This is the fastest way to encode a stream,
 // but the input buffer cannot be written to by the caller
-// until this function, Flush or Close has been called.
+// until Flush or Close has been called when concurrency != 1.
+//
+// If you cannot control that, use the regular Write function.
 //
 // Note that input is not buffered.
 // This means that each write will result in discrete blocks being created.
