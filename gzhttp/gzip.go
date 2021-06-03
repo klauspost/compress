@@ -558,7 +558,11 @@ func ContentTypeFilter(compress func(ct string) bool) option {
 // acceptsGzip returns true if the given HTTP request indicates that it will
 // accept a gzipped response.
 func acceptsGzip(r *http.Request) bool {
-	return parseEncodingGzip(r.Header.Get(acceptEncoding)) > 0
+	// Note that we don't request this for HEAD requests,
+	// due to a bug in nginx:
+	//   https://trac.nginx.org/nginx/ticket/358
+	//   https://golang.org/issue/5522
+	return r.Method != http.MethodHead && parseEncodingGzip(r.Header.Get(acceptEncoding)) > 0
 }
 
 // returns true if we've been configured to compress the specific content type.
