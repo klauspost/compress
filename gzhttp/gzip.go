@@ -37,8 +37,9 @@ const (
 	// DefaultMinSize is the default minimum size until we enable gzip compression.
 	// 1500 bytes is the MTU size for the internet since that is the largest size allowed at the network layer.
 	// If you take a file that is 1300 bytes and compress it to 800 bytes, it’s still transmitted in that same 1500 byte packet regardless, so you’ve gained nothing.
-	// That being the case, you should restrict the gzip compression to files with a size greater than a single packet, 1400 bytes (1.4KB) is a safe value.
-	DefaultMinSize = 1400
+	// That being the case, you should restrict the gzip compression to files with a size (plus header) greater than a single packet,
+	// 1024 bytes (1KB) is therefore default.
+	DefaultMinSize = 1024
 )
 
 // GzipResponseWriter provides an http.ResponseWriter interface, which gzips
@@ -81,9 +82,18 @@ func (w *GzipResponseWriter) Write(b []byte) (int, error) {
 		return w.ResponseWriter.Write(b)
 	}
 
-	// Save the write into a buffer for later use in GZIP responseWriter (if content is long enough) or at close with regular responseWriter.
-	// On the first write, w.buf changes from nil to a valid slice
-	w.buf = append(w.buf, b...)
+	// Save the write into a buffer for later use in GZIP responseWriter
+	// (if content is long enough) or at close with regular responseWriter.
+	wantBuf := 512
+	if w.minSize > wantBuf {
+		wantBuf = w.minSize
+	}
+	toAdd := len(b)
+	if len(w.buf)+toAdd > wantBuf {
+		toAdd = wantBuf - len(w.buf)
+	}
+	w.buf = append(w.buf, b[:toAdd]...)
+	remain := b[toAdd:]
 
 	var (
 		cl, _ = atoi(w.Header().Get(contentLength))
@@ -117,6 +127,11 @@ func (w *GzipResponseWriter) Write(b []byte) (int, error) {
 				if err := w.startGzip(); err != nil {
 					return 0, err
 				}
+				if len(remain) > 0 {
+					if _, err := w.gw.Write(remain); err != nil {
+						return 0, err
+					}
+				}
 				return len(b), nil
 			}
 		}
@@ -124,6 +139,11 @@ func (w *GzipResponseWriter) Write(b []byte) (int, error) {
 	// If we got here, we should not GZIP this response.
 	if err := w.startPlain(); err != nil {
 		return 0, err
+	}
+	if len(remain) > 0 {
+		if _, err := w.ResponseWriter.Write(remain); err != nil {
+			return 0, err
+		}
 	}
 	return len(b), nil
 }
@@ -164,6 +184,7 @@ func (w *GzipResponseWriter) startGzip() error {
 		if err == nil && n < len(w.buf) {
 			err = io.ErrShortWrite
 		}
+		w.buf = w.buf[:0]
 		return err
 	}
 	return nil
@@ -189,7 +210,7 @@ func (w *GzipResponseWriter) startPlain() error {
 		err = io.ErrShortWrite
 	}
 
-	w.buf = nil
+	w.buf = w.buf[:0]
 	return err
 }
 
