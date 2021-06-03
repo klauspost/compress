@@ -677,6 +677,59 @@ func TestContentTypes(t *testing.T) {
 	}
 }
 
+func TestFlush(t *testing.T) {
+	for _, tt := range contentTypeTests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				w.Header().Set("Content-Type", tt.contentType)
+				tb := testBody
+				for len(tb) > 0 {
+					// Write 100 bytes per run
+					// Detection should not be affected (we send 100 bytes)
+					toWrite := 100
+					if toWrite > len(tb) {
+						toWrite = len(tb)
+					}
+					_, err := w.Write(tb[:toWrite])
+					if err != nil {
+						t.Fatal(err)
+					}
+					// Flush between each write
+					w.(http.Flusher).Flush()
+					tb = tb[toWrite:]
+				}
+			})
+
+			wrapper, err := NewWrapper(ContentTypes(tt.acceptedContentTypes))
+			assertNil(t, err)
+
+			req, _ := http.NewRequest("GET", "/whatever", nil)
+			req.Header.Set("Accept-Encoding", "gzip")
+			// This doesn't allow checking flushes, but we validate if content is correct.
+			resp := httptest.NewRecorder()
+			wrapper(handler).ServeHTTP(resp, req)
+			res := resp.Result()
+
+			assertEqual(t, 200, res.StatusCode)
+			if tt.expectedGzip {
+				assertEqual(t, "gzip", res.Header.Get("Content-Encoding"))
+				zr, err := gzip.NewReader(resp.Body)
+				assertNil(t, err)
+				got, err := ioutil.ReadAll(zr)
+				assertNil(t, err)
+				assertEqual(t, testBody, got)
+
+			} else {
+				assertNotEqual(t, "gzip", res.Header.Get("Content-Encoding"))
+				got, err := ioutil.ReadAll(resp.Body)
+				assertNil(t, err)
+				assertEqual(t, testBody, got)
+			}
+		})
+	}
+}
+
 var contentTypeTest2 = []struct {
 	name         string
 	contentType  string
@@ -849,6 +902,67 @@ func TestContentTypeDetect(t *testing.T) {
 
 			assertEqual(t, 200, res.StatusCode)
 			assertEqual(t, tt.contentType, res.Header.Get("Content-Type"))
+			shouldGZ := DefaultContentTypeFilter(tt.contentType)
+			if shouldGZ {
+				assertEqual(t, "gzip", res.Header.Get("Content-Encoding"))
+			} else {
+				assertNotEqual(t, "gzip", res.Header.Get("Content-Encoding"))
+			}
+		})
+		t.Run(tt.desc+"empty", func(t *testing.T) {
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "")
+				w.WriteHeader(http.StatusOK)
+				for i := range tt.data {
+					// Do one byte writes...
+					w.Write([]byte{tt.data[i]})
+				}
+				w.Write(testBody)
+			})
+
+			wrapper, err := NewWrapper()
+			assertNil(t, err)
+
+			req, _ := http.NewRequest("GET", "/whatever", nil)
+			req.Header.Set("Accept-Encoding", "gzip")
+			resp := httptest.NewRecorder()
+			wrapper(handler).ServeHTTP(resp, req)
+			res := resp.Result()
+
+			assertEqual(t, 200, res.StatusCode)
+			// Is Content-Type still empty?
+			assertEqual(t, "", res.Header.Get("Content-Type"))
+			shouldGZ := DefaultContentTypeFilter(tt.contentType)
+			if shouldGZ {
+				assertEqual(t, "gzip", res.Header.Get("Content-Encoding"))
+			} else {
+				assertNotEqual(t, "gzip", res.Header.Get("Content-Encoding"))
+			}
+		})
+		t.Run(tt.desc+"flush", func(t *testing.T) {
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "")
+				w.WriteHeader(http.StatusOK)
+				for i := range tt.data {
+					// Do one byte writes...
+					w.Write([]byte{tt.data[i]})
+				}
+				w.(http.Flusher).Flush()
+				w.Write(testBody)
+			})
+
+			wrapper, err := NewWrapper()
+			assertNil(t, err)
+
+			req, _ := http.NewRequest("GET", "/whatever", nil)
+			req.Header.Set("Accept-Encoding", "gzip")
+			resp := httptest.NewRecorder()
+			wrapper(handler).ServeHTTP(resp, req)
+			res := resp.Result()
+
+			assertEqual(t, 200, res.StatusCode)
+			// Is Content-Type still empty?
+			assertEqual(t, "", res.Header.Get("Content-Type"))
 			shouldGZ := DefaultContentTypeFilter(tt.contentType)
 			if shouldGZ {
 				assertEqual(t, "gzip", res.Header.Get("Content-Encoding"))
