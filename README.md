@@ -15,6 +15,10 @@ This package provides various compression algorithms.
 [![Sourcegraph Badge](https://sourcegraph.com/github.com/klauspost/compress/-/badge.svg)](https://sourcegraph.com/github.com/klauspost/compress?badge)
 
 # changelog
+* Jun 3, 2021 (v1.13.0)
+	* Added [gzhttp](https://github.com/klauspost/compress/tree/master/gzhttp#gzip-handler) which allows wrapping HTTP servers and clients with GZIP compressors.
+	* zstd: Detect short invalid signatures [#382](https://github.com/klauspost/compress/pull/382)
+	* zstd: Spawn decoder goroutine only if needed. [#380](https://github.com/klauspost/compress/pull/380)
 
 * May 25, 2021 (v1.12.3)
 	* deflate: Better/faster Huffman encoding [#374](https://github.com/klauspost/compress/pull/374)
