@@ -53,7 +53,7 @@ func ExampleTransport() {
 }
 ```
 
-Speed compared to standard library for an approximate 127KB payload:
+Speed compared to standard library `DefaultTransport` for an approximate 127KB payload:
 
 ```
 BenchmarkTransport
