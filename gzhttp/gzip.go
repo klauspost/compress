@@ -118,10 +118,10 @@ func (w *GzipResponseWriter) Write(b []byte) (int, error) {
 
 			// Handles the intended case of setting a nil Content-Type (as for http/server or http/fs)
 			// Set the header only if the key does not exist
-			_, haveType := w.Header()["Content-Type"]
-			if !haveType {
+			if _, ok := w.Header()[contentType]; !ok {
 				w.Header().Set(contentType, ct)
 			}
+
 			// If the Content-Type is acceptable to GZIP, initialize the GZIP writer.
 			if w.contentTypeFilter(ct) {
 				if err := w.startGzip(); err != nil {
@@ -271,7 +271,12 @@ func (w *GzipResponseWriter) Flush() {
 
 		if ct == "" {
 			ct = http.DetectContentType(w.buf)
-			w.Header().Set(contentType, ct)
+
+			// Handles the intended case of setting a nil Content-Type (as for http/server or http/fs)
+			// Set the header only if the key does not exist
+			if _, ok := w.Header()[contentType]; !ok {
+				w.Header().Set(contentType, ct)
+			}
 		}
 		if cl == 0 {
 			// Assume minSize.

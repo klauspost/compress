@@ -909,6 +909,67 @@ func TestContentTypeDetect(t *testing.T) {
 				assertNotEqual(t, "gzip", res.Header.Get("Content-Encoding"))
 			}
 		})
+		t.Run(tt.desc+"empty", func(t *testing.T) {
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "")
+				w.WriteHeader(http.StatusOK)
+				for i := range tt.data {
+					// Do one byte writes...
+					w.Write([]byte{tt.data[i]})
+				}
+				w.Write(testBody)
+			})
+
+			wrapper, err := NewWrapper()
+			assertNil(t, err)
+
+			req, _ := http.NewRequest("GET", "/whatever", nil)
+			req.Header.Set("Accept-Encoding", "gzip")
+			resp := httptest.NewRecorder()
+			wrapper(handler).ServeHTTP(resp, req)
+			res := resp.Result()
+
+			assertEqual(t, 200, res.StatusCode)
+			// Is Content-Type still empty?
+			assertEqual(t, "", res.Header.Get("Content-Type"))
+			shouldGZ := DefaultContentTypeFilter(tt.contentType)
+			if shouldGZ {
+				assertEqual(t, "gzip", res.Header.Get("Content-Encoding"))
+			} else {
+				assertNotEqual(t, "gzip", res.Header.Get("Content-Encoding"))
+			}
+		})
+		t.Run(tt.desc+"flush", func(t *testing.T) {
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "")
+				w.WriteHeader(http.StatusOK)
+				for i := range tt.data {
+					// Do one byte writes...
+					w.Write([]byte{tt.data[i]})
+				}
+				w.(http.Flusher).Flush()
+				w.Write(testBody)
+			})
+
+			wrapper, err := NewWrapper()
+			assertNil(t, err)
+
+			req, _ := http.NewRequest("GET", "/whatever", nil)
+			req.Header.Set("Accept-Encoding", "gzip")
+			resp := httptest.NewRecorder()
+			wrapper(handler).ServeHTTP(resp, req)
+			res := resp.Result()
+
+			assertEqual(t, 200, res.StatusCode)
+			// Is Content-Type still empty?
+			assertEqual(t, "", res.Header.Get("Content-Type"))
+			shouldGZ := DefaultContentTypeFilter(tt.contentType)
+			if shouldGZ {
+				assertEqual(t, "gzip", res.Header.Get("Content-Encoding"))
+			} else {
+				assertNotEqual(t, "gzip", res.Header.Get("Content-Encoding"))
+			}
+		})
 	}
 }
 
