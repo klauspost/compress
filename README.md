@@ -382,7 +382,7 @@ The most notable thing is how quickly the standard library drops to very low com
 This is mainly a test of how good the algorithms are at detecting un-compressible input. The standard library only offers this feature with very conservative settings at level 1. Obviously there is no reason for the algorithms to try to compress input that cannot be compressed.  The only downside is that it might skip some compressible data on false detections.
 
 
-# linear time compression (huffman only)
+## Huffman only compression
 
 This compression library adds a special compression level, named `HuffmanOnly`, which allows near linear time compression. This is done by completely disabling matching of previous data, and only reduce the number of bits to represent each character. 
 
