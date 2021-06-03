@@ -1,11 +1,13 @@
 Gzip Handler
 ============
 
-This is a tiny Go package which wraps HTTP server handlers to transparently gzip the
+This Go package which wraps HTTP server handlers to transparently gzip the
 response body, for clients which support it. 
 
 For HTTP clients we provide a transport wrapper that will do gzip decompression 
-faster than what the standard library offers.   
+faster than what the standard library offers.
+
+Both the client and server wrappers are fully compatible with other servers and clients.
 
 This package is forked from the dead [nytimes/gziphandler](https://github.com/nytimes/gziphandler)
 and extends functionality for it.
