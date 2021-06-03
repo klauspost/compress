@@ -194,6 +194,15 @@ When replacing, this can be used to find a replacement.
 By default, some mime types will now be excluded.
 To re-enable compression of all types, use the `ContentTypeFilter(gzhttp.CompressAllContentTypeFilter)` option.
 
+### Flushing data
+
+The wrapper supports the [http.Flusher](https://golang.org/pkg/net/http/#Flusher) interface.
+
+The only caveat is that the writer may not yet have received enough bytes to determine if `MinSize`
+has been reached. In this case it will assume that the minimum size has been reached.
+
+If nothing has been written to the response writer, nothing will be flushed.
+
 ## License
 
 [Apache 2.0](LICENSE)
