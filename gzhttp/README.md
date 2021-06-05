@@ -120,8 +120,8 @@ func main() {
 		io.WriteString(w, "Hello, World")
 	})
 	
-   	// Create a reusable wrapper with custom options.
-    wrapper, err := gzhttp.NewWrapper(gzhttp.MinSize(2000), gzhttp.CompressionLevel(gzip.BestSpeed))
+	// Create a reusable wrapper with custom options.
+	wrapper, err := gzhttp.NewWrapper(gzhttp.MinSize(2000), gzhttp.CompressionLevel(gzip.BestSpeed))
 	if err != nil {
 		log.Fatalln(err)
 	}
