@@ -674,6 +674,26 @@ func TestContentTypes(t *testing.T) {
 				assertNotEqual(t, "gzip", res.Header.Get("Content-Encoding"))
 			}
 		})
+		t.Run("disable-"+tt.name, func(t *testing.T) {
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				w.Header().Set("Content-Type", tt.contentType)
+				w.Header().Set(HeaderNoCompression, "plz")
+				w.Write(testBody)
+			})
+
+			wrapper, err := NewWrapper(ContentTypes(tt.acceptedContentTypes))
+			assertNil(t, err)
+
+			req, _ := http.NewRequest("GET", "/whatever", nil)
+			req.Header.Set("Accept-Encoding", "gzip")
+			resp := httptest.NewRecorder()
+			wrapper(handler).ServeHTTP(resp, req)
+			res := resp.Result()
+
+			assertEqual(t, 200, res.StatusCode)
+			assertNotEqual(t, "gzip", res.Header.Get("Content-Encoding"))
+		})
 	}
 }
 

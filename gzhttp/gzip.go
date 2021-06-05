@@ -17,6 +17,11 @@ import (
 )
 
 const (
+	// HeaderNoCompression can be used to disable compression.
+	// Any header value will disable compression.
+	// The Header is always removed from output.
+	HeaderNoCompression = "No-Gzip-Compression"
+
 	vary            = "Vary"
 	acceptEncoding  = "Accept-Encoding"
 	contentEncoding = "Content-Encoding"
@@ -95,44 +100,42 @@ func (w *GzipResponseWriter) Write(b []byte) (int, error) {
 	w.buf = append(w.buf, b[:toAdd]...)
 	remain := b[toAdd:]
 
-	var (
-		cl, _ = atoi(w.Header().Get(contentLength))
-		ct    = w.Header().Get(contentType)
-		ce    = w.Header().Get(contentEncoding)
-		cr    = w.Header().Get(contentRange)
-	)
-
 	// Only continue if they didn't already choose an encoding or a known unhandled content length or type.
-	if ce == "" && cr == "" && (cl == 0 || cl >= w.minSize) && (ct == "" || w.contentTypeFilter(ct)) {
-		// If the current buffer is less than minSize and a Content-Length isn't set, then wait until we have more data.
-		if len(w.buf) < w.minSize && cl == 0 {
-			return len(b), nil
-		}
-
-		// If the Content-Length is larger than minSize or the current buffer is larger than minSize, then continue.
-		if cl >= w.minSize || len(w.buf) >= w.minSize {
-			// If a Content-Type wasn't specified, infer it from the current buffer.
-			if ct == "" {
-				ct = http.DetectContentType(w.buf)
+	if len(w.Header()[HeaderNoCompression]) == 0 && w.Header().Get(contentEncoding) == "" && w.Header().Get(contentRange) == "" {
+		// Check more expensive parts now.
+		cl, _ := atoi(w.Header().Get(contentLength))
+		ct := w.Header().Get(contentType)
+		if cl == 0 || cl >= w.minSize && (ct == "" || w.contentTypeFilter(ct)) {
+			// If the current buffer is less than minSize and a Content-Length isn't set, then wait until we have more data.
+			if len(w.buf) < w.minSize && cl == 0 {
+				return len(b), nil
 			}
 
-			// Handles the intended case of setting a nil Content-Type (as for http/server or http/fs)
-			// Set the header only if the key does not exist
-			if _, ok := w.Header()[contentType]; !ok {
-				w.Header().Set(contentType, ct)
-			}
-
-			// If the Content-Type is acceptable to GZIP, initialize the GZIP writer.
-			if w.contentTypeFilter(ct) {
-				if err := w.startGzip(); err != nil {
-					return 0, err
+			// If the Content-Length is larger than minSize or the current buffer is larger than minSize, then continue.
+			if cl >= w.minSize || len(w.buf) >= w.minSize {
+				// If a Content-Type wasn't specified, infer it from the current buffer.
+				if ct == "" {
+					ct = http.DetectContentType(w.buf)
 				}
-				if len(remain) > 0 {
-					if _, err := w.gw.Write(remain); err != nil {
+
+				// Handles the intended case of setting a nil Content-Type (as for http/server or http/fs)
+				// Set the header only if the key does not exist
+				if _, ok := w.Header()[contentType]; !ok {
+					w.Header().Set(contentType, ct)
+				}
+
+				// If the Content-Type is acceptable to GZIP, initialize the GZIP writer.
+				if w.contentTypeFilter(ct) {
+					if err := w.startGzip(); err != nil {
 						return 0, err
 					}
+					if len(remain) > 0 {
+						if _, err := w.gw.Write(remain); err != nil {
+							return 0, err
+						}
+					}
+					return len(b), nil
 				}
-				return len(b), nil
 			}
 		}
 	}
@@ -197,6 +200,7 @@ func (w *GzipResponseWriter) startPlain() error {
 		// Ensure that no other WriteHeader's happen
 		w.code = 0
 	}
+	delete(w.Header(), HeaderNoCompression)
 	w.ignore = true
 	// If Write was never called then don't call Write on the underlying ResponseWriter.
 	if len(w.buf) == 0 {
@@ -284,7 +288,7 @@ func (w *GzipResponseWriter) Flush() {
 		}
 
 		// See if we should compress...
-		if ce == "" && cr == "" && cl >= w.minSize && w.contentTypeFilter(ct) {
+		if len(w.Header()[HeaderNoCompression]) == 0 && ce == "" && cr == "" && cl >= w.minSize && w.contentTypeFilter(ct) {
 			w.startGzip()
 		} else {
 			w.startPlain()
