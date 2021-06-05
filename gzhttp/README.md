@@ -1,10 +1,10 @@
-Gzip Handler
-============
+Gzip Middleware
+===============
 
-This Go package which wraps HTTP server handlers to transparently gzip the
+This Go package which wraps HTTP *server* handlers to transparently gzip the
 response body, for clients which support it. 
 
-For HTTP clients we provide a transport wrapper that will do gzip decompression 
+For HTTP *clients* we provide a transport wrapper that will do gzip decompression 
 faster than what the standard library offers.
 
 Both the client and server wrappers are fully compatible with other servers and clients.
@@ -195,6 +195,14 @@ When replacing, this can be used to find a replacement.
 
 By default, some mime types will now be excluded.
 To re-enable compression of all types, use the `ContentTypeFilter(gzhttp.CompressAllContentTypeFilter)` option.
+
+### Range Requests
+
+Ranged requests are not well supported with compression.
+Therefore any request with a "Content-Range" header is not compressed.
+
+To signify that range requests are not supported any "Accept-Ranges" header set is removed when data is compressed.
+If you do not want this behavior use the `KeepAcceptRanges()` option.
 
 ### Flushing data
 
