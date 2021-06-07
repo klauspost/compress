@@ -48,7 +48,7 @@ func ExampleTransport() {
 	if err != nil {
 		return
 	}
-    defer resp.Body.Close()
+	defer resp.Body.Close()
 	
 	body, _ := ioutil.ReadAll(resp.Body)
 	fmt.Println("body:", string(body))
