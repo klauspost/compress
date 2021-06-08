@@ -11,12 +11,12 @@ import (
 
 func TestMain(m *testing.M) {
 	ec := m.Run()
-	if ec == 0 && runtime.NumGoroutine() > 1 {
+	if ec == 0 && runtime.NumGoroutine() > 2 {
 		n := 0
 		for n < 60 {
 			n++
 			time.Sleep(time.Second)
-			if runtime.NumGoroutine() == 1 {
+			if runtime.NumGoroutine() == 2 {
 				os.Exit(0)
 			}
 		}
