@@ -52,7 +52,7 @@ type frameDec struct {
 const (
 	// The minimum Window_Size is 1 KB.
 	MinWindowSize = 1 << 10
-	MaxWindowSize = 1 << 29
+	MaxWindowSize = 1 << 31
 )
 
 var (
@@ -170,7 +170,8 @@ func (d *frameDec) reset(br byteBuffer) error {
 	// https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#dictionary_id
 	d.DictionaryID = nil
 	if size := fhd & 3; size != 0 {
-		if size == 3 {
+		if size == 3 {	MaxWindowSize = 1 << 29
+
 			size = 4
 		}
 
