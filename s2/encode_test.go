@@ -21,6 +21,7 @@ func testOptions(t testing.TB) map[string][]WriterOption {
 		"default": {},
 		"better":  {WriterBetterCompression()},
 		"best":    {WriterBestCompression()},
+		"auto":    {WriterAutoCompression()},
 		"none":    {WriterUncompressed()},
 	}
 
