@@ -45,6 +45,14 @@ func hash8(u uint64, h uint8) uint32 {
 //	len(dst) >= MaxEncodedLen(len(src)) &&
 // 	minNonLiteralBlockSize <= len(src) && len(src) <= maxBlockSize
 func encodeBlockBetterGo(dst, src []byte) (d int) {
+	// sLimit is when to stop looking for offset/length copies. The inputMargin
+	// lets us use a fast path for emitLiteral in the main loop, while we are
+	// looking for copies.
+	sLimit := len(src) - inputMargin
+	if len(src) < minNonLiteralBlockSize {
+		return 0
+	}
+
 	// Initialize the hash tables.
 	const (
 		// Long hash matches.
@@ -58,14 +66,6 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 
 	var lTable [maxLTableSize]uint32
 	var sTable [maxSTableSize]uint32
-
-	// sLimit is when to stop looking for offset/length copies. The inputMargin
-	// lets us use a fast path for emitLiteral in the main loop, while we are
-	// looking for copies.
-	sLimit := len(src) - inputMargin
-	if len(src) < minNonLiteralBlockSize {
-		return 0
-	}
 
 	// Bail if we can't compress to at least this.
 	dstLimit := len(src) - len(src)>>5 - 6
@@ -247,6 +247,14 @@ emitRemainder:
 //	len(dst) >= MaxEncodedLen(len(src)) &&
 // 	minNonLiteralBlockSize <= len(src) && len(src) <= maxBlockSize
 func encodeBlockBetterSnappyGo(dst, src []byte) (d int) {
+	// sLimit is when to stop looking for offset/length copies. The inputMargin
+	// lets us use a fast path for emitLiteral in the main loop, while we are
+	// looking for copies.
+	sLimit := len(src) - inputMargin
+	if len(src) < minNonLiteralBlockSize {
+		return 0
+	}
+
 	// Initialize the hash tables.
 	const (
 		// Long hash matches.
@@ -260,14 +268,6 @@ func encodeBlockBetterSnappyGo(dst, src []byte) (d int) {
 
 	var lTable [maxLTableSize]uint32
 	var sTable [maxSTableSize]uint32
-
-	// sLimit is when to stop looking for offset/length copies. The inputMargin
-	// lets us use a fast path for emitLiteral in the main loop, while we are
-	// looking for copies.
-	sLimit := len(src) - inputMargin
-	if len(src) < minNonLiteralBlockSize {
-		return 0
-	}
 
 	// Bail if we can't compress to at least this.
 	dstLimit := len(src) - len(src)>>5 - 6

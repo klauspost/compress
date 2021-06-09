@@ -31,9 +31,6 @@ func encodeBlockBest(dst, src []byte) (d int) {
 		inputMargin = 8 + 2
 	)
 
-	var lTable [maxLTableSize]uint64
-	var sTable [maxSTableSize]uint64
-
 	// sLimit is when to stop looking for offset/length copies. The inputMargin
 	// lets us use a fast path for emitLiteral in the main loop, while we are
 	// looking for copies.
@@ -41,6 +38,9 @@ func encodeBlockBest(dst, src []byte) (d int) {
 	if len(src) < minNonLiteralBlockSize {
 		return 0
 	}
+
+	var lTable [maxLTableSize]uint64
+	var sTable [maxSTableSize]uint64
 
 	// Bail if we can't compress to at least this.
 	dstLimit := len(src) - 5
@@ -298,9 +298,6 @@ func encodeBlockBestSnappy(dst, src []byte) (d int) {
 		inputMargin = 8 + 2
 	)
 
-	var lTable [maxLTableSize]uint64
-	var sTable [maxSTableSize]uint64
-
 	// sLimit is when to stop looking for offset/length copies. The inputMargin
 	// lets us use a fast path for emitLiteral in the main loop, while we are
 	// looking for copies.
@@ -308,6 +305,9 @@ func encodeBlockBestSnappy(dst, src []byte) (d int) {
 	if len(src) < minNonLiteralBlockSize {
 		return 0
 	}
+
+	var lTable [maxLTableSize]uint64
+	var sTable [maxSTableSize]uint64
 
 	// Bail if we can't compress to at least this.
 	dstLimit := len(src) - 5
