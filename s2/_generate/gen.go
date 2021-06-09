@@ -49,9 +49,16 @@ func main() {
 	// Snappy compatible
 	o.snappy = true
 	o.genEncodeBlockAsm("encodeSnappyBlockAsm", 14, 6, 6, limit14B)
+	o.genEncodeBlockAsm("encodeSnappyBlockAsm64K", 14, 6, 6, 64<<10-1)
 	o.genEncodeBlockAsm("encodeSnappyBlockAsm12B", 12, 5, 5, limit12B)
 	o.genEncodeBlockAsm("encodeSnappyBlockAsm10B", 10, 5, 4, limit10B)
 	o.genEncodeBlockAsm("encodeSnappyBlockAsm8B", 8, 4, 4, limit8B)
+
+	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm", 16, 7, 7, limit14B)
+	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm64K", 16, 7, 7, 64<<10-1)
+	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm12B", 14, 6, 6, limit12B)
+	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm10B", 12, 5, 6, limit10B)
+	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm8B", 10, 4, 6, limit8B)
 
 	o.snappy = false
 	o.maxLen = math.MaxUint32
@@ -1210,8 +1217,10 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 			MOVL(s, offset32)
 			SUBL(candidate, offset32)
 			Comment("Check if repeat")
-			CMPL(repeatL, offset32)
-			JEQ(LabelRef("match_is_repeat_" + name))
+			if !o.snappy {
+				CMPL(repeatL, offset32)
+				JEQ(LabelRef("match_is_repeat_" + name))
+			}
 
 			// NOT REPEAT
 			{
@@ -1241,7 +1250,7 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 				// Jumps at end
 			}
 			// REPEAT
-			{
+			if !o.snappy {
 				Label("match_is_repeat_" + name)
 				// Emit....
 				o.emitLiteralsDstP(nextEmitL, base, src, dst, "match_emit_repeat_"+name)

@@ -1288,6 +1288,61 @@ func testBestBlockRoundtrip(t *testing.T, src []byte) {
 	}
 }
 
+func testSnappyBlockRoundtrip(t *testing.T, src []byte) {
+	// Write with s2, decode with snappy.
+	t.Run("regular", func(t *testing.T) {
+		dst := EncodeSnappy(nil, src)
+		t.Logf("encoded to %d -> %d bytes", len(src), len(dst))
+		decoded, err := snappy.Decode(nil, dst)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if len(decoded) != len(src) {
+			t.Error("decoded len:", len(decoded), "!=", len(src))
+			return
+		}
+		err = cmp(src, decoded)
+		if err != nil {
+			t.Error(err)
+		}
+	})
+	t.Run("better", func(t *testing.T) {
+		dst := EncodeSnappyBetter(nil, src)
+		t.Logf("encoded to %d -> %d bytes", len(src), len(dst))
+		decoded, err := snappy.Decode(nil, dst)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if len(decoded) != len(src) {
+			t.Error("decoded len:", len(decoded), "!=", len(src))
+			return
+		}
+		err = cmp(src, decoded)
+		if err != nil {
+			t.Error(err)
+		}
+	})
+	t.Run("best", func(t *testing.T) {
+		dst := EncodeSnappyBest(nil, src)
+		t.Logf("encoded to %d -> %d bytes", len(src), len(dst))
+		decoded, err := snappy.Decode(nil, dst)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if len(decoded) != len(src) {
+			t.Error("decoded len:", len(decoded), "!=", len(src))
+			return
+		}
+		err = cmp(src, decoded)
+		if err != nil {
+			t.Error(err)
+		}
+	})
+}
+
 func testSnappyDecode(t *testing.T, src []byte) {
 	var buf bytes.Buffer
 	enc := snappy.NewBufferedWriter(&buf)
@@ -1675,7 +1730,7 @@ func benchFileSnappy(b *testing.B, i int, decode bool) {
 				encoded := snappy.Encode(nil, data)
 				once.Do(func() {
 					if testing.Verbose() {
-						b.Log(len(encoded), " -> ", len(data))
+						b.Log(b.Name(), len(encoded), " -> ", len(data))
 					}
 				})
 				tmp := make([]byte, len(data))
@@ -1722,7 +1777,7 @@ func benchFileSnappy(b *testing.B, i int, decode bool) {
 				encoded := EncodeSnappy(nil, data)
 				once.Do(func() {
 					if testing.Verbose() {
-						b.Log(len(encoded), " -> ", len(data))
+						b.Log(b.Name(), len(encoded), " -> ", len(data))
 					}
 				})
 				tmp := make([]byte, len(data))
@@ -1747,6 +1802,100 @@ func benchFileSnappy(b *testing.B, i int, decode bool) {
 				tmp := make([]byte, len(data))
 				for pb.Next() {
 					res := EncodeSnappy(dst, data)
+					if len(res) == 0 {
+						panic(0)
+					}
+					if false {
+						tmp, _ = snappy.Decode(tmp, res)
+						if !bytes.Equal(tmp, data) {
+							panic("wrong")
+						}
+					}
+				}
+			})
+		}
+	})
+	once = sync.Once{}
+	b.Run("s2-snappy-better", func(b *testing.B) {
+		if decode {
+			b.SetBytes(int64(len(data)))
+			b.ResetTimer()
+			b.RunParallel(func(pb *testing.PB) {
+				encoded := EncodeSnappyBetter(nil, data)
+				once.Do(func() {
+					if testing.Verbose() {
+						b.Log(b.Name(), len(encoded), " -> ", len(data))
+					}
+				})
+				tmp := make([]byte, len(data))
+				for pb.Next() {
+					var err error
+					tmp, err = snappy.Decode(tmp, encoded)
+					if err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
+		} else {
+			b.SetBytes(int64(len(data)))
+			b.ResetTimer()
+			once.Do(func() {
+				if testing.Verbose() {
+					b.Log(len(data), " -> ", len(EncodeSnappyBetter(nil, data)))
+				}
+			})
+			b.RunParallel(func(pb *testing.PB) {
+				dst := make([]byte, MaxEncodedLen(len(data)))
+				tmp := make([]byte, len(data))
+				for pb.Next() {
+					res := EncodeSnappyBetter(dst, data)
+					if len(res) == 0 {
+						panic(0)
+					}
+					if false {
+						tmp, _ = snappy.Decode(tmp, res)
+						if !bytes.Equal(tmp, data) {
+							panic("wrong")
+						}
+					}
+				}
+			})
+		}
+	})
+	once = sync.Once{}
+	b.Run("s2-snappy-better", func(b *testing.B) {
+		if decode {
+			b.SetBytes(int64(len(data)))
+			b.ResetTimer()
+			b.RunParallel(func(pb *testing.PB) {
+				encoded := EncodeSnappyBest(nil, data)
+				once.Do(func() {
+					if testing.Verbose() {
+						b.Log(b.Name(), len(encoded), " -> ", len(data))
+					}
+				})
+				tmp := make([]byte, len(data))
+				for pb.Next() {
+					var err error
+					tmp, err = snappy.Decode(tmp, encoded)
+					if err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
+		} else {
+			b.SetBytes(int64(len(data)))
+			b.ResetTimer()
+			once.Do(func() {
+				if testing.Verbose() {
+					b.Log(len(data), " -> ", len(EncodeSnappyBest(nil, data)))
+				}
+			})
+			b.RunParallel(func(pb *testing.PB) {
+				dst := make([]byte, MaxEncodedLen(len(data)))
+				tmp := make([]byte, len(data))
+				for pb.Next() {
+					res := EncodeSnappyBest(dst, data)
 					if len(res) == 0 {
 						panic(0)
 					}
@@ -1820,6 +1969,14 @@ func testFile(t *testing.T, i, repeat int) {
 			d := data
 			testBetterBlockRoundtrip(t, d)
 		})
+		t.Run("block-best", func(t *testing.T) {
+			d := data
+			testBestBlockRoundtrip(t, d)
+		})
+		t.Run("s2-snappy", func(t *testing.T) {
+			d := data
+			testSnappyBlockRoundtrip(t, d)
+		})
 		t.Run("snappy", func(t *testing.T) {
 			testSnappyDecode(t, data)
 		})
@@ -1848,6 +2005,10 @@ func TestDataRoundtrips(t *testing.T) {
 		t.Run("block-best", func(t *testing.T) {
 			d := data
 			testBestBlockRoundtrip(t, d)
+		})
+		t.Run("s2-snappy", func(t *testing.T) {
+			d := data
+			testSnappyBlockRoundtrip(t, d)
 		})
 		t.Run("snappy", func(t *testing.T) {
 			testSnappyDecode(t, data)

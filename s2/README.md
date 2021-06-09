@@ -7,6 +7,9 @@ S2 is aimed for high throughput, which is why it features concurrent compression
 Decoding is compatible with Snappy compressed content, but content compressed with S2 cannot be decompressed by Snappy.
 This means that S2 can seamlessly replace Snappy without converting compressed content.
 
+S2 can produce Snappy compatible output, faster and better than Snappy.
+If you want full benefit of the changes you should use s2 without Snappy compatibility. 
+
 S2 is designed to have high throughput on content that cannot be compressed.
 This is important, so you don't have to worry about spending CPU cycles on already compressed data. 
 
@@ -150,7 +153,7 @@ To build binaries to the current folder use:
 Usage: s2c [options] file1 file2
 
 Compresses all files supplied as input separately.
-Output files are written as 'filename.ext.s2'.
+Output files are written as 'filename.ext.s2' or 'filename.ext.snappy'.
 By default output files will be overwritten.
 Use - as the only file name to read from stdin and write to stdout.
 
@@ -172,6 +175,8 @@ Options:
     	Compress faster, but with a minor compression loss
   -help
     	Display help
+  -o string
+        Write output to another file. Single input file only
   -pad string
     	Pad size to a multiple of this value, Examples: 500, 64K, 256K, 1M, 4M, etc (default "1")
   -q	Don't write any output to terminal, except errors
@@ -181,6 +186,8 @@ Options:
     	Do not overwrite output files
   -slower
     	Compress more, but a lot slower
+  -snappy
+        Generate Snappy compatible output stream
   -verify
     	Verify written files  
 
@@ -207,6 +214,8 @@ Options:
   -c	Write all output to stdout. Multiple input files will be concatenated
   -help
     	Display help
+  -o string
+        Write output to another file. Single input file only
   -q	Don't write any output to terminal, except errors
   -rm
     	Delete source file(s) after successful decompression
@@ -594,6 +603,47 @@ Best...    10737418240 -> 4244773384 [39.53%]; 42.96s, 238.4MB/s
 ```
 
 Decompression speed should be around the same as using the 'better' compression mode. 
+
+# Snappy Compatibility
+
+S2 now offers full compatibility with Snappy.
+
+This means that the efficient encoders of S2 can be used 
+
+## Blocks
+
+Snappy compatible blocks can be generated with the S2 encoder. 
+Compression and speed is typically a bit better `MaxEncodedLen` is also smaller for smaller memory usage. Replace 
+
+| Snappy                       | S2 replacement                |
+|------------------------------|-------------------------------|
+| `snappy.Encode(...)`         | `s2.EncodeSnappy(...)`   |
+| `snappy.MaxEncodedLen(...)`  | `s2.MaxEncodedLen(...)`      |
+
+`s2.EncodeSnappy` can be replaced with `s2.EncodeSnappyBetter` or `s2.EncodeSnappyBest` to get more efficiently compressed snappy compatible output. 
+
+`s2ConcatBlocks` is compatible with snappy blocks.
+
+## Streams
+
+For streams, replace `enc = snappy.NewWriter(w)` with `enc = s2.NewWriter(w, s2.WriterSnappyCompat())`.
+All other options are available, but note that block size limit is different for snappy.
+
+# Decompression
+
+All decompression functions map directly to equivalent s2 functions.
+
+| Snappy                   | S2 replacement       |
+|--------------------------|----------------------|
+| `snappy.Decode(...)`     | `s2.Decode(...)`     |
+| `snappy.DecodedLen(...)` | `s2.DecodedLen(...)` |
+| `snappy.NewReader(...)`  | `s2.NewReader(...)`  |
+
+Features like [quick forward skipping without decompression](https://pkg.go.dev/github.com/klauspost/compress/s2#Reader.Skip)
+are also available for Snappy streams.
+
+If you know you are only decompressing snappy streams, setting [`ReaderMaxBlockSize(64<<10)`](https://pkg.go.dev/github.com/klauspost/compress/s2#ReaderMaxBlockSize)
+on your Reader will reduce memory consumption.
 
 # Concatenating blocks and streams.
 

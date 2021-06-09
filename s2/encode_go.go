@@ -30,6 +30,16 @@ func encodeBlockBetter(dst, src []byte) (d int) {
 	return encodeBlockBetterGo(dst, src)
 }
 
+// encodeBlockBetter encodes a non-empty src to a guaranteed-large-enough dst. It
+// assumes that the varint-encoded length of the decompressed bytes has already
+// been written.
+//
+// It also assumes that:
+//	len(dst) >= MaxEncodedLen(len(src))
+func encodeBlockBetterSnappy(dst, src []byte) (d int) {
+	return encodeBlockBetterSnappyGo(dst, src)
+}
+
 // emitLiteral writes a literal chunk and returns the number of bytes written.
 //
 // It assumes that:

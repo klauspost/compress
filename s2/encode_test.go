@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/golang/snappy"
 	"github.com/klauspost/compress/zip"
 )
 
@@ -53,6 +54,10 @@ func testOptions(t testing.TB) map[string][]WriterOption {
 			x[name+"-pad-8000"] = cloneAdd(opt, WriterPadding(8000), WriterPaddingSrc(zeroReader{}))
 			x[name+"-pad-max"] = cloneAdd(opt, WriterPadding(4<<20), WriterPaddingSrc(zeroReader{}))
 		}
+	}
+	for name, opt := range testOptions {
+		x[name] = opt
+		x[name+"-snappy"] = cloneAdd(opt, WriterSnappyCompat())
 	}
 	testOptions = x
 	return testOptions
@@ -142,8 +147,14 @@ func TestEncoderRegression(t *testing.T) {
 					t.Error(fmt.Errorf("wanted size to be mutiple of %d, got size %d with remainder %d", enc.pad, len(comp), len(comp)%enc.pad))
 					return
 				}
-				dec.Reset(&buf)
-				got, err := ioutil.ReadAll(dec)
+				var got []byte
+				if !strings.Contains(name, "-snappy") {
+					dec.Reset(&buf)
+					got, err = ioutil.ReadAll(dec)
+				} else {
+					sdec := snappy.NewReader(&buf)
+					got, err = ioutil.ReadAll(sdec)
+				}
 				if err != nil {
 					t.Error(err)
 					return
@@ -174,8 +185,13 @@ func TestEncoderRegression(t *testing.T) {
 					t.Error(fmt.Errorf("wanted size to be mutiple of %d, got size %d with remainder %d", enc.pad, buf.Len(), buf.Len()%enc.pad))
 					return
 				}
-				dec.Reset(&buf)
-				got, err = ioutil.ReadAll(dec)
+				if !strings.Contains(name, "-snappy") {
+					dec.Reset(&buf)
+					got, err = ioutil.ReadAll(dec)
+				} else {
+					sdec := snappy.NewReader(&buf)
+					got, err = ioutil.ReadAll(sdec)
+				}
 				if err != nil {
 					t.Error(err)
 					return
