@@ -107,7 +107,7 @@ func encodeSnappyBlockAsm8B(dst []byte, src []byte) int
 // emitLiteral writes a literal chunk and returns the number of bytes written.
 //
 // It assumes that:
-//   dst is long enough to hold the encoded bytes
+//   dst is long enough to hold the encoded bytes with margin of 0 bytes
 //   0 <= len(lit) && len(lit) <= math.MaxUint32
 //
 //go:noescape
