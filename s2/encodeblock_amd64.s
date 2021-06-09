@@ -28,7 +28,7 @@ zero_loop_encodeBlockAsm:
 	JNZ   zero_loop_encodeBlockAsm
 	MOVL  $0x00000000, 12(SP)
 	MOVQ  src_len+32(FP), CX
-	LEAQ  -5(CX), DX
+	LEAQ  -9(CX), DX
 	LEAQ  -8(CX), SI
 	MOVL  SI, 8(SP)
 	SHRQ  $0x05, CX
@@ -146,36 +146,17 @@ memmove_repeat_emit_encodeBlockAsm:
 	LEAQ (AX)(R9*1), SI
 
 	// genMemMoveShort
-	CMPQ R9, $0x03
-	JB   emit_lit_memmove_repeat_emit_encodeBlockAsm_memmove_move_1or2
-	JE   emit_lit_memmove_repeat_emit_encodeBlockAsm_memmove_move_3
 	CMPQ R9, $0x08
-	JB   emit_lit_memmove_repeat_emit_encodeBlockAsm_memmove_move_4through7
+	JLE  emit_lit_memmove_repeat_emit_encodeBlockAsm_memmove_move_8
 	CMPQ R9, $0x10
 	JBE  emit_lit_memmove_repeat_emit_encodeBlockAsm_memmove_move_8through16
 	CMPQ R9, $0x20
 	JBE  emit_lit_memmove_repeat_emit_encodeBlockAsm_memmove_move_17through32
 	JMP  emit_lit_memmove_repeat_emit_encodeBlockAsm_memmove_move_33through64
 
-emit_lit_memmove_repeat_emit_encodeBlockAsm_memmove_move_1or2:
-	MOVB (R10), R11
-	MOVB -1(R10)(R9*1), R10
-	MOVB R11, (AX)
-	MOVB R10, -1(AX)(R9*1)
-	JMP  memmove_end_copy_repeat_emit_encodeBlockAsm
-
-emit_lit_memmove_repeat_emit_encodeBlockAsm_memmove_move_3:
-	MOVW (R10), R11
-	MOVB 2(R10), R10
-	MOVW R11, (AX)
-	MOVB R10, 2(AX)
-	JMP  memmove_end_copy_repeat_emit_encodeBlockAsm
-
-emit_lit_memmove_repeat_emit_encodeBlockAsm_memmove_move_4through7:
-	MOVL (R10), R11
-	MOVL -4(R10)(R9*1), R10
-	MOVL R11, (AX)
-	MOVL R10, -4(AX)(R9*1)
+emit_lit_memmove_repeat_emit_encodeBlockAsm_memmove_move_8:
+	MOVQ (R10), R11
+	MOVQ R11, (AX)
 	JMP  memmove_end_copy_repeat_emit_encodeBlockAsm
 
 emit_lit_memmove_repeat_emit_encodeBlockAsm_memmove_move_8through16:
@@ -667,36 +648,17 @@ memmove_match_emit_encodeBlockAsm:
 	LEAQ (AX)(R9*1), R8
 
 	// genMemMoveShort
-	CMPQ R9, $0x03
-	JB   emit_lit_memmove_match_emit_encodeBlockAsm_memmove_move_1or2
-	JE   emit_lit_memmove_match_emit_encodeBlockAsm_memmove_move_3
 	CMPQ R9, $0x08
-	JB   emit_lit_memmove_match_emit_encodeBlockAsm_memmove_move_4through7
+	JLE  emit_lit_memmove_match_emit_encodeBlockAsm_memmove_move_8
 	CMPQ R9, $0x10
 	JBE  emit_lit_memmove_match_emit_encodeBlockAsm_memmove_move_8through16
 	CMPQ R9, $0x20
 	JBE  emit_lit_memmove_match_emit_encodeBlockAsm_memmove_move_17through32
 	JMP  emit_lit_memmove_match_emit_encodeBlockAsm_memmove_move_33through64
 
-emit_lit_memmove_match_emit_encodeBlockAsm_memmove_move_1or2:
-	MOVB (DI), R10
-	MOVB -1(DI)(R9*1), DI
-	MOVB R10, (AX)
-	MOVB DI, -1(AX)(R9*1)
-	JMP  memmove_end_copy_match_emit_encodeBlockAsm
-
-emit_lit_memmove_match_emit_encodeBlockAsm_memmove_move_3:
-	MOVW (DI), R10
-	MOVB 2(DI), DI
-	MOVW R10, (AX)
-	MOVB DI, 2(AX)
-	JMP  memmove_end_copy_match_emit_encodeBlockAsm
-
-emit_lit_memmove_match_emit_encodeBlockAsm_memmove_move_4through7:
-	MOVL (DI), R10
-	MOVL -4(DI)(R9*1), DI
-	MOVL R10, (AX)
-	MOVL DI, -4(AX)(R9*1)
+emit_lit_memmove_match_emit_encodeBlockAsm_memmove_move_8:
+	MOVQ (DI), R10
+	MOVQ R10, (AX)
 	JMP  memmove_end_copy_match_emit_encodeBlockAsm
 
 emit_lit_memmove_match_emit_encodeBlockAsm_memmove_move_8through16:
@@ -1107,36 +1069,17 @@ memmove_emit_remainder_encodeBlockAsm:
 	MOVL SI, BX
 
 	// genMemMoveShort
-	CMPQ BX, $0x03
-	JB   emit_lit_memmove_emit_remainder_encodeBlockAsm_memmove_move_1or2
-	JE   emit_lit_memmove_emit_remainder_encodeBlockAsm_memmove_move_3
 	CMPQ BX, $0x08
-	JB   emit_lit_memmove_emit_remainder_encodeBlockAsm_memmove_move_4through7
+	JLE  emit_lit_memmove_emit_remainder_encodeBlockAsm_memmove_move_8
 	CMPQ BX, $0x10
 	JBE  emit_lit_memmove_emit_remainder_encodeBlockAsm_memmove_move_8through16
 	CMPQ BX, $0x20
 	JBE  emit_lit_memmove_emit_remainder_encodeBlockAsm_memmove_move_17through32
 	JMP  emit_lit_memmove_emit_remainder_encodeBlockAsm_memmove_move_33through64
 
-emit_lit_memmove_emit_remainder_encodeBlockAsm_memmove_move_1or2:
-	MOVB (CX), SI
-	MOVB -1(CX)(BX*1), CL
-	MOVB SI, (AX)
-	MOVB CL, -1(AX)(BX*1)
-	JMP  memmove_end_copy_emit_remainder_encodeBlockAsm
-
-emit_lit_memmove_emit_remainder_encodeBlockAsm_memmove_move_3:
-	MOVW (CX), SI
-	MOVB 2(CX), CL
-	MOVW SI, (AX)
-	MOVB CL, 2(AX)
-	JMP  memmove_end_copy_emit_remainder_encodeBlockAsm
-
-emit_lit_memmove_emit_remainder_encodeBlockAsm_memmove_move_4through7:
-	MOVL (CX), SI
-	MOVL -4(CX)(BX*1), CX
-	MOVL SI, (AX)
-	MOVL CX, -4(AX)(BX*1)
+emit_lit_memmove_emit_remainder_encodeBlockAsm_memmove_move_8:
+	MOVQ (CX), SI
+	MOVQ SI, (AX)
 	JMP  memmove_end_copy_emit_remainder_encodeBlockAsm
 
 emit_lit_memmove_emit_remainder_encodeBlockAsm_memmove_move_8through16:
@@ -1240,7 +1183,7 @@ zero_loop_encodeBlockAsm4MB:
 	JNZ   zero_loop_encodeBlockAsm4MB
 	MOVL  $0x00000000, 12(SP)
 	MOVQ  src_len+32(FP), CX
-	LEAQ  -5(CX), DX
+	LEAQ  -9(CX), DX
 	LEAQ  -8(CX), SI
 	MOVL  SI, 8(SP)
 	SHRQ  $0x05, CX
@@ -1350,36 +1293,17 @@ memmove_repeat_emit_encodeBlockAsm4MB:
 	LEAQ (AX)(R9*1), SI
 
 	// genMemMoveShort
-	CMPQ R9, $0x03
-	JB   emit_lit_memmove_repeat_emit_encodeBlockAsm4MB_memmove_move_1or2
-	JE   emit_lit_memmove_repeat_emit_encodeBlockAsm4MB_memmove_move_3
 	CMPQ R9, $0x08
-	JB   emit_lit_memmove_repeat_emit_encodeBlockAsm4MB_memmove_move_4through7
+	JLE  emit_lit_memmove_repeat_emit_encodeBlockAsm4MB_memmove_move_8
 	CMPQ R9, $0x10
 	JBE  emit_lit_memmove_repeat_emit_encodeBlockAsm4MB_memmove_move_8through16
 	CMPQ R9, $0x20
 	JBE  emit_lit_memmove_repeat_emit_encodeBlockAsm4MB_memmove_move_17through32
 	JMP  emit_lit_memmove_repeat_emit_encodeBlockAsm4MB_memmove_move_33through64
 
-emit_lit_memmove_repeat_emit_encodeBlockAsm4MB_memmove_move_1or2:
-	MOVB (R10), R11
-	MOVB -1(R10)(R9*1), R10
-	MOVB R11, (AX)
-	MOVB R10, -1(AX)(R9*1)
-	JMP  memmove_end_copy_repeat_emit_encodeBlockAsm4MB
-
-emit_lit_memmove_repeat_emit_encodeBlockAsm4MB_memmove_move_3:
-	MOVW (R10), R11
-	MOVB 2(R10), R10
-	MOVW R11, (AX)
-	MOVB R10, 2(AX)
-	JMP  memmove_end_copy_repeat_emit_encodeBlockAsm4MB
-
-emit_lit_memmove_repeat_emit_encodeBlockAsm4MB_memmove_move_4through7:
-	MOVL (R10), R11
-	MOVL -4(R10)(R9*1), R10
-	MOVL R11, (AX)
-	MOVL R10, -4(AX)(R9*1)
+emit_lit_memmove_repeat_emit_encodeBlockAsm4MB_memmove_move_8:
+	MOVQ (R10), R11
+	MOVQ R11, (AX)
 	JMP  memmove_end_copy_repeat_emit_encodeBlockAsm4MB
 
 emit_lit_memmove_repeat_emit_encodeBlockAsm4MB_memmove_move_8through16:
@@ -1830,36 +1754,17 @@ memmove_match_emit_encodeBlockAsm4MB:
 	LEAQ (AX)(R9*1), R8
 
 	// genMemMoveShort
-	CMPQ R9, $0x03
-	JB   emit_lit_memmove_match_emit_encodeBlockAsm4MB_memmove_move_1or2
-	JE   emit_lit_memmove_match_emit_encodeBlockAsm4MB_memmove_move_3
 	CMPQ R9, $0x08
-	JB   emit_lit_memmove_match_emit_encodeBlockAsm4MB_memmove_move_4through7
+	JLE  emit_lit_memmove_match_emit_encodeBlockAsm4MB_memmove_move_8
 	CMPQ R9, $0x10
 	JBE  emit_lit_memmove_match_emit_encodeBlockAsm4MB_memmove_move_8through16
 	CMPQ R9, $0x20
 	JBE  emit_lit_memmove_match_emit_encodeBlockAsm4MB_memmove_move_17through32
 	JMP  emit_lit_memmove_match_emit_encodeBlockAsm4MB_memmove_move_33through64
 
-emit_lit_memmove_match_emit_encodeBlockAsm4MB_memmove_move_1or2:
-	MOVB (DI), R10
-	MOVB -1(DI)(R9*1), DI
-	MOVB R10, (AX)
-	MOVB DI, -1(AX)(R9*1)
-	JMP  memmove_end_copy_match_emit_encodeBlockAsm4MB
-
-emit_lit_memmove_match_emit_encodeBlockAsm4MB_memmove_move_3:
-	MOVW (DI), R10
-	MOVB 2(DI), DI
-	MOVW R10, (AX)
-	MOVB DI, 2(AX)
-	JMP  memmove_end_copy_match_emit_encodeBlockAsm4MB
-
-emit_lit_memmove_match_emit_encodeBlockAsm4MB_memmove_move_4through7:
-	MOVL (DI), R10
-	MOVL -4(DI)(R9*1), DI
-	MOVL R10, (AX)
-	MOVL DI, -4(AX)(R9*1)
+emit_lit_memmove_match_emit_encodeBlockAsm4MB_memmove_move_8:
+	MOVQ (DI), R10
+	MOVQ R10, (AX)
 	JMP  memmove_end_copy_match_emit_encodeBlockAsm4MB
 
 emit_lit_memmove_match_emit_encodeBlockAsm4MB_memmove_move_8through16:
@@ -2240,36 +2145,17 @@ memmove_emit_remainder_encodeBlockAsm4MB:
 	MOVL SI, BX
 
 	// genMemMoveShort
-	CMPQ BX, $0x03
-	JB   emit_lit_memmove_emit_remainder_encodeBlockAsm4MB_memmove_move_1or2
-	JE   emit_lit_memmove_emit_remainder_encodeBlockAsm4MB_memmove_move_3
 	CMPQ BX, $0x08
-	JB   emit_lit_memmove_emit_remainder_encodeBlockAsm4MB_memmove_move_4through7
+	JLE  emit_lit_memmove_emit_remainder_encodeBlockAsm4MB_memmove_move_8
 	CMPQ BX, $0x10
 	JBE  emit_lit_memmove_emit_remainder_encodeBlockAsm4MB_memmove_move_8through16
 	CMPQ BX, $0x20
 	JBE  emit_lit_memmove_emit_remainder_encodeBlockAsm4MB_memmove_move_17through32
 	JMP  emit_lit_memmove_emit_remainder_encodeBlockAsm4MB_memmove_move_33through64
 
-emit_lit_memmove_emit_remainder_encodeBlockAsm4MB_memmove_move_1or2:
-	MOVB (CX), SI
-	MOVB -1(CX)(BX*1), CL
-	MOVB SI, (AX)
-	MOVB CL, -1(AX)(BX*1)
-	JMP  memmove_end_copy_emit_remainder_encodeBlockAsm4MB
-
-emit_lit_memmove_emit_remainder_encodeBlockAsm4MB_memmove_move_3:
-	MOVW (CX), SI
-	MOVB 2(CX), CL
-	MOVW SI, (AX)
-	MOVB CL, 2(AX)
-	JMP  memmove_end_copy_emit_remainder_encodeBlockAsm4MB
-
-emit_lit_memmove_emit_remainder_encodeBlockAsm4MB_memmove_move_4through7:
-	MOVL (CX), SI
-	MOVL -4(CX)(BX*1), CX
-	MOVL SI, (AX)
-	MOVL CX, -4(AX)(BX*1)
+emit_lit_memmove_emit_remainder_encodeBlockAsm4MB_memmove_move_8:
+	MOVQ (CX), SI
+	MOVQ SI, (AX)
 	JMP  memmove_end_copy_emit_remainder_encodeBlockAsm4MB
 
 emit_lit_memmove_emit_remainder_encodeBlockAsm4MB_memmove_move_8through16:
@@ -2373,7 +2259,7 @@ zero_loop_encodeBlockAsm12B:
 	JNZ   zero_loop_encodeBlockAsm12B
 	MOVL  $0x00000000, 12(SP)
 	MOVQ  src_len+32(FP), CX
-	LEAQ  -5(CX), DX
+	LEAQ  -9(CX), DX
 	LEAQ  -8(CX), SI
 	MOVL  SI, 8(SP)
 	SHRQ  $0x05, CX
@@ -2472,36 +2358,17 @@ memmove_repeat_emit_encodeBlockAsm12B:
 	LEAQ (AX)(R9*1), SI
 
 	// genMemMoveShort
-	CMPQ R9, $0x03
-	JB   emit_lit_memmove_repeat_emit_encodeBlockAsm12B_memmove_move_1or2
-	JE   emit_lit_memmove_repeat_emit_encodeBlockAsm12B_memmove_move_3
 	CMPQ R9, $0x08
-	JB   emit_lit_memmove_repeat_emit_encodeBlockAsm12B_memmove_move_4through7
+	JLE  emit_lit_memmove_repeat_emit_encodeBlockAsm12B_memmove_move_8
 	CMPQ R9, $0x10
 	JBE  emit_lit_memmove_repeat_emit_encodeBlockAsm12B_memmove_move_8through16
 	CMPQ R9, $0x20
 	JBE  emit_lit_memmove_repeat_emit_encodeBlockAsm12B_memmove_move_17through32
 	JMP  emit_lit_memmove_repeat_emit_encodeBlockAsm12B_memmove_move_33through64
 
-emit_lit_memmove_repeat_emit_encodeBlockAsm12B_memmove_move_1or2:
-	MOVB (R10), R11
-	MOVB -1(R10)(R9*1), R10
-	MOVB R11, (AX)
-	MOVB R10, -1(AX)(R9*1)
-	JMP  memmove_end_copy_repeat_emit_encodeBlockAsm12B
-
-emit_lit_memmove_repeat_emit_encodeBlockAsm12B_memmove_move_3:
-	MOVW (R10), R11
-	MOVB 2(R10), R10
-	MOVW R11, (AX)
-	MOVB R10, 2(AX)
-	JMP  memmove_end_copy_repeat_emit_encodeBlockAsm12B
-
-emit_lit_memmove_repeat_emit_encodeBlockAsm12B_memmove_move_4through7:
-	MOVL (R10), R11
-	MOVL -4(R10)(R9*1), R10
-	MOVL R11, (AX)
-	MOVL R10, -4(AX)(R9*1)
+emit_lit_memmove_repeat_emit_encodeBlockAsm12B_memmove_move_8:
+	MOVQ (R10), R11
+	MOVQ R11, (AX)
 	JMP  memmove_end_copy_repeat_emit_encodeBlockAsm12B
 
 emit_lit_memmove_repeat_emit_encodeBlockAsm12B_memmove_move_8through16:
@@ -2837,36 +2704,17 @@ memmove_match_emit_encodeBlockAsm12B:
 	LEAQ (AX)(R9*1), R8
 
 	// genMemMoveShort
-	CMPQ R9, $0x03
-	JB   emit_lit_memmove_match_emit_encodeBlockAsm12B_memmove_move_1or2
-	JE   emit_lit_memmove_match_emit_encodeBlockAsm12B_memmove_move_3
 	CMPQ R9, $0x08
-	JB   emit_lit_memmove_match_emit_encodeBlockAsm12B_memmove_move_4through7
+	JLE  emit_lit_memmove_match_emit_encodeBlockAsm12B_memmove_move_8
 	CMPQ R9, $0x10
 	JBE  emit_lit_memmove_match_emit_encodeBlockAsm12B_memmove_move_8through16
 	CMPQ R9, $0x20
 	JBE  emit_lit_memmove_match_emit_encodeBlockAsm12B_memmove_move_17through32
 	JMP  emit_lit_memmove_match_emit_encodeBlockAsm12B_memmove_move_33through64
 
-emit_lit_memmove_match_emit_encodeBlockAsm12B_memmove_move_1or2:
-	MOVB (DI), R10
-	MOVB -1(DI)(R9*1), DI
-	MOVB R10, (AX)
-	MOVB DI, -1(AX)(R9*1)
-	JMP  memmove_end_copy_match_emit_encodeBlockAsm12B
-
-emit_lit_memmove_match_emit_encodeBlockAsm12B_memmove_move_3:
-	MOVW (DI), R10
-	MOVB 2(DI), DI
-	MOVW R10, (AX)
-	MOVB DI, 2(AX)
-	JMP  memmove_end_copy_match_emit_encodeBlockAsm12B
-
-emit_lit_memmove_match_emit_encodeBlockAsm12B_memmove_move_4through7:
-	MOVL (DI), R10
-	MOVL -4(DI)(R9*1), DI
-	MOVL R10, (AX)
-	MOVL DI, -4(AX)(R9*1)
+emit_lit_memmove_match_emit_encodeBlockAsm12B_memmove_move_8:
+	MOVQ (DI), R10
+	MOVQ R10, (AX)
 	JMP  memmove_end_copy_match_emit_encodeBlockAsm12B
 
 emit_lit_memmove_match_emit_encodeBlockAsm12B_memmove_move_8through16:
@@ -3144,36 +2992,17 @@ memmove_emit_remainder_encodeBlockAsm12B:
 	MOVL SI, BX
 
 	// genMemMoveShort
-	CMPQ BX, $0x03
-	JB   emit_lit_memmove_emit_remainder_encodeBlockAsm12B_memmove_move_1or2
-	JE   emit_lit_memmove_emit_remainder_encodeBlockAsm12B_memmove_move_3
 	CMPQ BX, $0x08
-	JB   emit_lit_memmove_emit_remainder_encodeBlockAsm12B_memmove_move_4through7
+	JLE  emit_lit_memmove_emit_remainder_encodeBlockAsm12B_memmove_move_8
 	CMPQ BX, $0x10
 	JBE  emit_lit_memmove_emit_remainder_encodeBlockAsm12B_memmove_move_8through16
 	CMPQ BX, $0x20
 	JBE  emit_lit_memmove_emit_remainder_encodeBlockAsm12B_memmove_move_17through32
 	JMP  emit_lit_memmove_emit_remainder_encodeBlockAsm12B_memmove_move_33through64
 
-emit_lit_memmove_emit_remainder_encodeBlockAsm12B_memmove_move_1or2:
-	MOVB (CX), SI
-	MOVB -1(CX)(BX*1), CL
-	MOVB SI, (AX)
-	MOVB CL, -1(AX)(BX*1)
-	JMP  memmove_end_copy_emit_remainder_encodeBlockAsm12B
-
-emit_lit_memmove_emit_remainder_encodeBlockAsm12B_memmove_move_3:
-	MOVW (CX), SI
-	MOVB 2(CX), CL
-	MOVW SI, (AX)
-	MOVB CL, 2(AX)
-	JMP  memmove_end_copy_emit_remainder_encodeBlockAsm12B
-
-emit_lit_memmove_emit_remainder_encodeBlockAsm12B_memmove_move_4through7:
-	MOVL (CX), SI
-	MOVL -4(CX)(BX*1), CX
-	MOVL SI, (AX)
-	MOVL CX, -4(AX)(BX*1)
+emit_lit_memmove_emit_remainder_encodeBlockAsm12B_memmove_move_8:
+	MOVQ (CX), SI
+	MOVQ SI, (AX)
 	JMP  memmove_end_copy_emit_remainder_encodeBlockAsm12B
 
 emit_lit_memmove_emit_remainder_encodeBlockAsm12B_memmove_move_8through16:
@@ -3277,7 +3106,7 @@ zero_loop_encodeBlockAsm10B:
 	JNZ   zero_loop_encodeBlockAsm10B
 	MOVL  $0x00000000, 12(SP)
 	MOVQ  src_len+32(FP), CX
-	LEAQ  -5(CX), DX
+	LEAQ  -9(CX), DX
 	LEAQ  -8(CX), SI
 	MOVL  SI, 8(SP)
 	SHRQ  $0x05, CX
@@ -3376,36 +3205,17 @@ memmove_repeat_emit_encodeBlockAsm10B:
 	LEAQ (AX)(R9*1), SI
 
 	// genMemMoveShort
-	CMPQ R9, $0x03
-	JB   emit_lit_memmove_repeat_emit_encodeBlockAsm10B_memmove_move_1or2
-	JE   emit_lit_memmove_repeat_emit_encodeBlockAsm10B_memmove_move_3
 	CMPQ R9, $0x08
-	JB   emit_lit_memmove_repeat_emit_encodeBlockAsm10B_memmove_move_4through7
+	JLE  emit_lit_memmove_repeat_emit_encodeBlockAsm10B_memmove_move_8
 	CMPQ R9, $0x10
 	JBE  emit_lit_memmove_repeat_emit_encodeBlockAsm10B_memmove_move_8through16
 	CMPQ R9, $0x20
 	JBE  emit_lit_memmove_repeat_emit_encodeBlockAsm10B_memmove_move_17through32
 	JMP  emit_lit_memmove_repeat_emit_encodeBlockAsm10B_memmove_move_33through64
 
-emit_lit_memmove_repeat_emit_encodeBlockAsm10B_memmove_move_1or2:
-	MOVB (R10), R11
-	MOVB -1(R10)(R9*1), R10
-	MOVB R11, (AX)
-	MOVB R10, -1(AX)(R9*1)
-	JMP  memmove_end_copy_repeat_emit_encodeBlockAsm10B
-
-emit_lit_memmove_repeat_emit_encodeBlockAsm10B_memmove_move_3:
-	MOVW (R10), R11
-	MOVB 2(R10), R10
-	MOVW R11, (AX)
-	MOVB R10, 2(AX)
-	JMP  memmove_end_copy_repeat_emit_encodeBlockAsm10B
-
-emit_lit_memmove_repeat_emit_encodeBlockAsm10B_memmove_move_4through7:
-	MOVL (R10), R11
-	MOVL -4(R10)(R9*1), R10
-	MOVL R11, (AX)
-	MOVL R10, -4(AX)(R9*1)
+emit_lit_memmove_repeat_emit_encodeBlockAsm10B_memmove_move_8:
+	MOVQ (R10), R11
+	MOVQ R11, (AX)
 	JMP  memmove_end_copy_repeat_emit_encodeBlockAsm10B
 
 emit_lit_memmove_repeat_emit_encodeBlockAsm10B_memmove_move_8through16:
@@ -3741,36 +3551,17 @@ memmove_match_emit_encodeBlockAsm10B:
 	LEAQ (AX)(R9*1), R8
 
 	// genMemMoveShort
-	CMPQ R9, $0x03
-	JB   emit_lit_memmove_match_emit_encodeBlockAsm10B_memmove_move_1or2
-	JE   emit_lit_memmove_match_emit_encodeBlockAsm10B_memmove_move_3
 	CMPQ R9, $0x08
-	JB   emit_lit_memmove_match_emit_encodeBlockAsm10B_memmove_move_4through7
+	JLE  emit_lit_memmove_match_emit_encodeBlockAsm10B_memmove_move_8
 	CMPQ R9, $0x10
 	JBE  emit_lit_memmove_match_emit_encodeBlockAsm10B_memmove_move_8through16
 	CMPQ R9, $0x20
 	JBE  emit_lit_memmove_match_emit_encodeBlockAsm10B_memmove_move_17through32
 	JMP  emit_lit_memmove_match_emit_encodeBlockAsm10B_memmove_move_33through64
 
-emit_lit_memmove_match_emit_encodeBlockAsm10B_memmove_move_1or2:
-	MOVB (DI), R10
-	MOVB -1(DI)(R9*1), DI
-	MOVB R10, (AX)
-	MOVB DI, -1(AX)(R9*1)
-	JMP  memmove_end_copy_match_emit_encodeBlockAsm10B
-
-emit_lit_memmove_match_emit_encodeBlockAsm10B_memmove_move_3:
-	MOVW (DI), R10
-	MOVB 2(DI), DI
-	MOVW R10, (AX)
-	MOVB DI, 2(AX)
-	JMP  memmove_end_copy_match_emit_encodeBlockAsm10B
-
-emit_lit_memmove_match_emit_encodeBlockAsm10B_memmove_move_4through7:
-	MOVL (DI), R10
-	MOVL -4(DI)(R9*1), DI
-	MOVL R10, (AX)
-	MOVL DI, -4(AX)(R9*1)
+emit_lit_memmove_match_emit_encodeBlockAsm10B_memmove_move_8:
+	MOVQ (DI), R10
+	MOVQ R10, (AX)
 	JMP  memmove_end_copy_match_emit_encodeBlockAsm10B
 
 emit_lit_memmove_match_emit_encodeBlockAsm10B_memmove_move_8through16:
@@ -4048,36 +3839,17 @@ memmove_emit_remainder_encodeBlockAsm10B:
 	MOVL SI, BX
 
 	// genMemMoveShort
-	CMPQ BX, $0x03
-	JB   emit_lit_memmove_emit_remainder_encodeBlockAsm10B_memmove_move_1or2
-	JE   emit_lit_memmove_emit_remainder_encodeBlockAsm10B_memmove_move_3
 	CMPQ BX, $0x08
-	JB   emit_lit_memmove_emit_remainder_encodeBlockAsm10B_memmove_move_4through7
+	JLE  emit_lit_memmove_emit_remainder_encodeBlockAsm10B_memmove_move_8
 	CMPQ BX, $0x10
 	JBE  emit_lit_memmove_emit_remainder_encodeBlockAsm10B_memmove_move_8through16
 	CMPQ BX, $0x20
 	JBE  emit_lit_memmove_emit_remainder_encodeBlockAsm10B_memmove_move_17through32
 	JMP  emit_lit_memmove_emit_remainder_encodeBlockAsm10B_memmove_move_33through64
 
-emit_lit_memmove_emit_remainder_encodeBlockAsm10B_memmove_move_1or2:
-	MOVB (CX), SI
-	MOVB -1(CX)(BX*1), CL
-	MOVB SI, (AX)
-	MOVB CL, -1(AX)(BX*1)
-	JMP  memmove_end_copy_emit_remainder_encodeBlockAsm10B
-
-emit_lit_memmove_emit_remainder_encodeBlockAsm10B_memmove_move_3:
-	MOVW (CX), SI
-	MOVB 2(CX), CL
-	MOVW SI, (AX)
-	MOVB CL, 2(AX)
-	JMP  memmove_end_copy_emit_remainder_encodeBlockAsm10B
-
-emit_lit_memmove_emit_remainder_encodeBlockAsm10B_memmove_move_4through7:
-	MOVL (CX), SI
-	MOVL -4(CX)(BX*1), CX
-	MOVL SI, (AX)
-	MOVL CX, -4(AX)(BX*1)
+emit_lit_memmove_emit_remainder_encodeBlockAsm10B_memmove_move_8:
+	MOVQ (CX), SI
+	MOVQ SI, (AX)
 	JMP  memmove_end_copy_emit_remainder_encodeBlockAsm10B
 
 emit_lit_memmove_emit_remainder_encodeBlockAsm10B_memmove_move_8through16:
@@ -4181,7 +3953,7 @@ zero_loop_encodeBlockAsm8B:
 	JNZ   zero_loop_encodeBlockAsm8B
 	MOVL  $0x00000000, 12(SP)
 	MOVQ  src_len+32(FP), CX
-	LEAQ  -5(CX), DX
+	LEAQ  -9(CX), DX
 	LEAQ  -8(CX), SI
 	MOVL  SI, 8(SP)
 	SHRQ  $0x05, CX
@@ -4280,36 +4052,17 @@ memmove_repeat_emit_encodeBlockAsm8B:
 	LEAQ (AX)(R9*1), SI
 
 	// genMemMoveShort
-	CMPQ R9, $0x03
-	JB   emit_lit_memmove_repeat_emit_encodeBlockAsm8B_memmove_move_1or2
-	JE   emit_lit_memmove_repeat_emit_encodeBlockAsm8B_memmove_move_3
 	CMPQ R9, $0x08
-	JB   emit_lit_memmove_repeat_emit_encodeBlockAsm8B_memmove_move_4through7
+	JLE  emit_lit_memmove_repeat_emit_encodeBlockAsm8B_memmove_move_8
 	CMPQ R9, $0x10
 	JBE  emit_lit_memmove_repeat_emit_encodeBlockAsm8B_memmove_move_8through16
 	CMPQ R9, $0x20
 	JBE  emit_lit_memmove_repeat_emit_encodeBlockAsm8B_memmove_move_17through32
 	JMP  emit_lit_memmove_repeat_emit_encodeBlockAsm8B_memmove_move_33through64
 
-emit_lit_memmove_repeat_emit_encodeBlockAsm8B_memmove_move_1or2:
-	MOVB (R10), R11
-	MOVB -1(R10)(R9*1), R10
-	MOVB R11, (AX)
-	MOVB R10, -1(AX)(R9*1)
-	JMP  memmove_end_copy_repeat_emit_encodeBlockAsm8B
-
-emit_lit_memmove_repeat_emit_encodeBlockAsm8B_memmove_move_3:
-	MOVW (R10), R11
-	MOVB 2(R10), R10
-	MOVW R11, (AX)
-	MOVB R10, 2(AX)
-	JMP  memmove_end_copy_repeat_emit_encodeBlockAsm8B
-
-emit_lit_memmove_repeat_emit_encodeBlockAsm8B_memmove_move_4through7:
-	MOVL (R10), R11
-	MOVL -4(R10)(R9*1), R10
-	MOVL R11, (AX)
-	MOVL R10, -4(AX)(R9*1)
+emit_lit_memmove_repeat_emit_encodeBlockAsm8B_memmove_move_8:
+	MOVQ (R10), R11
+	MOVQ R11, (AX)
 	JMP  memmove_end_copy_repeat_emit_encodeBlockAsm8B
 
 emit_lit_memmove_repeat_emit_encodeBlockAsm8B_memmove_move_8through16:
@@ -4635,36 +4388,17 @@ memmove_match_emit_encodeBlockAsm8B:
 	LEAQ (AX)(R9*1), R8
 
 	// genMemMoveShort
-	CMPQ R9, $0x03
-	JB   emit_lit_memmove_match_emit_encodeBlockAsm8B_memmove_move_1or2
-	JE   emit_lit_memmove_match_emit_encodeBlockAsm8B_memmove_move_3
 	CMPQ R9, $0x08
-	JB   emit_lit_memmove_match_emit_encodeBlockAsm8B_memmove_move_4through7
+	JLE  emit_lit_memmove_match_emit_encodeBlockAsm8B_memmove_move_8
 	CMPQ R9, $0x10
 	JBE  emit_lit_memmove_match_emit_encodeBlockAsm8B_memmove_move_8through16
 	CMPQ R9, $0x20
 	JBE  emit_lit_memmove_match_emit_encodeBlockAsm8B_memmove_move_17through32
 	JMP  emit_lit_memmove_match_emit_encodeBlockAsm8B_memmove_move_33through64
 
-emit_lit_memmove_match_emit_encodeBlockAsm8B_memmove_move_1or2:
-	MOVB (DI), R10
-	MOVB -1(DI)(R9*1), DI
-	MOVB R10, (AX)
-	MOVB DI, -1(AX)(R9*1)
-	JMP  memmove_end_copy_match_emit_encodeBlockAsm8B
-
-emit_lit_memmove_match_emit_encodeBlockAsm8B_memmove_move_3:
-	MOVW (DI), R10
-	MOVB 2(DI), DI
-	MOVW R10, (AX)
-	MOVB DI, 2(AX)
-	JMP  memmove_end_copy_match_emit_encodeBlockAsm8B
-
-emit_lit_memmove_match_emit_encodeBlockAsm8B_memmove_move_4through7:
-	MOVL (DI), R10
-	MOVL -4(DI)(R9*1), DI
-	MOVL R10, (AX)
-	MOVL DI, -4(AX)(R9*1)
+emit_lit_memmove_match_emit_encodeBlockAsm8B_memmove_move_8:
+	MOVQ (DI), R10
+	MOVQ R10, (AX)
 	JMP  memmove_end_copy_match_emit_encodeBlockAsm8B
 
 emit_lit_memmove_match_emit_encodeBlockAsm8B_memmove_move_8through16:
@@ -4936,36 +4670,17 @@ memmove_emit_remainder_encodeBlockAsm8B:
 	MOVL SI, BX
 
 	// genMemMoveShort
-	CMPQ BX, $0x03
-	JB   emit_lit_memmove_emit_remainder_encodeBlockAsm8B_memmove_move_1or2
-	JE   emit_lit_memmove_emit_remainder_encodeBlockAsm8B_memmove_move_3
 	CMPQ BX, $0x08
-	JB   emit_lit_memmove_emit_remainder_encodeBlockAsm8B_memmove_move_4through7
+	JLE  emit_lit_memmove_emit_remainder_encodeBlockAsm8B_memmove_move_8
 	CMPQ BX, $0x10
 	JBE  emit_lit_memmove_emit_remainder_encodeBlockAsm8B_memmove_move_8through16
 	CMPQ BX, $0x20
 	JBE  emit_lit_memmove_emit_remainder_encodeBlockAsm8B_memmove_move_17through32
 	JMP  emit_lit_memmove_emit_remainder_encodeBlockAsm8B_memmove_move_33through64
 
-emit_lit_memmove_emit_remainder_encodeBlockAsm8B_memmove_move_1or2:
-	MOVB (CX), SI
-	MOVB -1(CX)(BX*1), CL
-	MOVB SI, (AX)
-	MOVB CL, -1(AX)(BX*1)
-	JMP  memmove_end_copy_emit_remainder_encodeBlockAsm8B
-
-emit_lit_memmove_emit_remainder_encodeBlockAsm8B_memmove_move_3:
-	MOVW (CX), SI
-	MOVB 2(CX), CL
-	MOVW SI, (AX)
-	MOVB CL, 2(AX)
-	JMP  memmove_end_copy_emit_remainder_encodeBlockAsm8B
-
-emit_lit_memmove_emit_remainder_encodeBlockAsm8B_memmove_move_4through7:
-	MOVL (CX), SI
-	MOVL -4(CX)(BX*1), CX
-	MOVL SI, (AX)
-	MOVL CX, -4(AX)(BX*1)
+emit_lit_memmove_emit_remainder_encodeBlockAsm8B_memmove_move_8:
+	MOVQ (CX), SI
+	MOVQ SI, (AX)
 	JMP  memmove_end_copy_emit_remainder_encodeBlockAsm8B
 
 emit_lit_memmove_emit_remainder_encodeBlockAsm8B_memmove_move_8through16:
@@ -5262,9 +4977,8 @@ memmove_match_emit_encodeBetterBlockAsm:
 	LEAQ (AX)(R9*1), SI
 
 	// genMemMoveShort
-	CMPQ R9, $0x03
-	JB   emit_lit_memmove_match_emit_encodeBetterBlockAsm_memmove_move_1or2
-	JE   emit_lit_memmove_match_emit_encodeBetterBlockAsm_memmove_move_3
+	CMPQ R9, $0x04
+	JLE  emit_lit_memmove_match_emit_encodeBetterBlockAsm_memmove_move_4
 	CMPQ R9, $0x08
 	JB   emit_lit_memmove_match_emit_encodeBetterBlockAsm_memmove_move_4through7
 	CMPQ R9, $0x10
@@ -5273,18 +4987,9 @@ memmove_match_emit_encodeBetterBlockAsm:
 	JBE  emit_lit_memmove_match_emit_encodeBetterBlockAsm_memmove_move_17through32
 	JMP  emit_lit_memmove_match_emit_encodeBetterBlockAsm_memmove_move_33through64
 
-emit_lit_memmove_match_emit_encodeBetterBlockAsm_memmove_move_1or2:
-	MOVB (R10), R11
-	MOVB -1(R10)(R9*1), R10
-	MOVB R11, (AX)
-	MOVB R10, -1(AX)(R9*1)
-	JMP  memmove_end_copy_match_emit_encodeBetterBlockAsm
-
-emit_lit_memmove_match_emit_encodeBetterBlockAsm_memmove_move_3:
-	MOVW (R10), R11
-	MOVB 2(R10), R10
-	MOVW R11, (AX)
-	MOVB R10, 2(AX)
+emit_lit_memmove_match_emit_encodeBetterBlockAsm_memmove_move_4:
+	MOVL (R10), R11
+	MOVL R11, (AX)
 	JMP  memmove_end_copy_match_emit_encodeBetterBlockAsm
 
 emit_lit_memmove_match_emit_encodeBetterBlockAsm_memmove_move_4through7:
@@ -5616,9 +5321,8 @@ memmove_match_emit_repeat_encodeBetterBlockAsm:
 	LEAQ (AX)(R9*1), SI
 
 	// genMemMoveShort
-	CMPQ R9, $0x03
-	JB   emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm_memmove_move_1or2
-	JE   emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm_memmove_move_3
+	CMPQ R9, $0x04
+	JLE  emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm_memmove_move_4
 	CMPQ R9, $0x08
 	JB   emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm_memmove_move_4through7
 	CMPQ R9, $0x10
@@ -5627,18 +5331,9 @@ memmove_match_emit_repeat_encodeBetterBlockAsm:
 	JBE  emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm_memmove_move_17through32
 	JMP  emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm_memmove_move_33through64
 
-emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm_memmove_move_1or2:
-	MOVB (R10), R11
-	MOVB -1(R10)(R9*1), R10
-	MOVB R11, (AX)
-	MOVB R10, -1(AX)(R9*1)
-	JMP  memmove_end_copy_match_emit_repeat_encodeBetterBlockAsm
-
-emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm_memmove_move_3:
-	MOVW (R10), R11
-	MOVB 2(R10), R10
-	MOVW R11, (AX)
-	MOVB R10, 2(AX)
+emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm_memmove_move_4:
+	MOVL (R10), R11
+	MOVL R11, (AX)
 	JMP  memmove_end_copy_match_emit_repeat_encodeBetterBlockAsm
 
 emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm_memmove_move_4through7:
@@ -5914,9 +5609,8 @@ memmove_emit_remainder_encodeBetterBlockAsm:
 	MOVL SI, BX
 
 	// genMemMoveShort
-	CMPQ BX, $0x03
-	JB   emit_lit_memmove_emit_remainder_encodeBetterBlockAsm_memmove_move_1or2
-	JE   emit_lit_memmove_emit_remainder_encodeBetterBlockAsm_memmove_move_3
+	CMPQ BX, $0x04
+	JLE  emit_lit_memmove_emit_remainder_encodeBetterBlockAsm_memmove_move_4
 	CMPQ BX, $0x08
 	JB   emit_lit_memmove_emit_remainder_encodeBetterBlockAsm_memmove_move_4through7
 	CMPQ BX, $0x10
@@ -5925,18 +5619,9 @@ memmove_emit_remainder_encodeBetterBlockAsm:
 	JBE  emit_lit_memmove_emit_remainder_encodeBetterBlockAsm_memmove_move_17through32
 	JMP  emit_lit_memmove_emit_remainder_encodeBetterBlockAsm_memmove_move_33through64
 
-emit_lit_memmove_emit_remainder_encodeBetterBlockAsm_memmove_move_1or2:
-	MOVB (CX), SI
-	MOVB -1(CX)(BX*1), CL
-	MOVB SI, (AX)
-	MOVB CL, -1(AX)(BX*1)
-	JMP  memmove_end_copy_emit_remainder_encodeBetterBlockAsm
-
-emit_lit_memmove_emit_remainder_encodeBetterBlockAsm_memmove_move_3:
-	MOVW (CX), SI
-	MOVB 2(CX), CL
-	MOVW SI, (AX)
-	MOVB CL, 2(AX)
+emit_lit_memmove_emit_remainder_encodeBetterBlockAsm_memmove_move_4:
+	MOVL (CX), SI
+	MOVL SI, (AX)
 	JMP  memmove_end_copy_emit_remainder_encodeBetterBlockAsm
 
 emit_lit_memmove_emit_remainder_encodeBetterBlockAsm_memmove_move_4through7:
@@ -6232,9 +5917,8 @@ memmove_match_emit_encodeBetterBlockAsm4MB:
 	LEAQ (AX)(R9*1), SI
 
 	// genMemMoveShort
-	CMPQ R9, $0x03
-	JB   emit_lit_memmove_match_emit_encodeBetterBlockAsm4MB_memmove_move_1or2
-	JE   emit_lit_memmove_match_emit_encodeBetterBlockAsm4MB_memmove_move_3
+	CMPQ R9, $0x04
+	JLE  emit_lit_memmove_match_emit_encodeBetterBlockAsm4MB_memmove_move_4
 	CMPQ R9, $0x08
 	JB   emit_lit_memmove_match_emit_encodeBetterBlockAsm4MB_memmove_move_4through7
 	CMPQ R9, $0x10
@@ -6243,18 +5927,9 @@ memmove_match_emit_encodeBetterBlockAsm4MB:
 	JBE  emit_lit_memmove_match_emit_encodeBetterBlockAsm4MB_memmove_move_17through32
 	JMP  emit_lit_memmove_match_emit_encodeBetterBlockAsm4MB_memmove_move_33through64
 
-emit_lit_memmove_match_emit_encodeBetterBlockAsm4MB_memmove_move_1or2:
-	MOVB (R10), R11
-	MOVB -1(R10)(R9*1), R10
-	MOVB R11, (AX)
-	MOVB R10, -1(AX)(R9*1)
-	JMP  memmove_end_copy_match_emit_encodeBetterBlockAsm4MB
-
-emit_lit_memmove_match_emit_encodeBetterBlockAsm4MB_memmove_move_3:
-	MOVW (R10), R11
-	MOVB 2(R10), R10
-	MOVW R11, (AX)
-	MOVB R10, 2(AX)
+emit_lit_memmove_match_emit_encodeBetterBlockAsm4MB_memmove_move_4:
+	MOVL (R10), R11
+	MOVL R11, (AX)
 	JMP  memmove_end_copy_match_emit_encodeBetterBlockAsm4MB
 
 emit_lit_memmove_match_emit_encodeBetterBlockAsm4MB_memmove_move_4through7:
@@ -6556,9 +6231,8 @@ memmove_match_emit_repeat_encodeBetterBlockAsm4MB:
 	LEAQ (AX)(R9*1), SI
 
 	// genMemMoveShort
-	CMPQ R9, $0x03
-	JB   emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm4MB_memmove_move_1or2
-	JE   emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm4MB_memmove_move_3
+	CMPQ R9, $0x04
+	JLE  emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm4MB_memmove_move_4
 	CMPQ R9, $0x08
 	JB   emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm4MB_memmove_move_4through7
 	CMPQ R9, $0x10
@@ -6567,18 +6241,9 @@ memmove_match_emit_repeat_encodeBetterBlockAsm4MB:
 	JBE  emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm4MB_memmove_move_17through32
 	JMP  emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm4MB_memmove_move_33through64
 
-emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm4MB_memmove_move_1or2:
-	MOVB (R10), R11
-	MOVB -1(R10)(R9*1), R10
-	MOVB R11, (AX)
-	MOVB R10, -1(AX)(R9*1)
-	JMP  memmove_end_copy_match_emit_repeat_encodeBetterBlockAsm4MB
-
-emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm4MB_memmove_move_3:
-	MOVW (R10), R11
-	MOVB 2(R10), R10
-	MOVW R11, (AX)
-	MOVB R10, 2(AX)
+emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm4MB_memmove_move_4:
+	MOVL (R10), R11
+	MOVL R11, (AX)
 	JMP  memmove_end_copy_match_emit_repeat_encodeBetterBlockAsm4MB
 
 emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm4MB_memmove_move_4through7:
@@ -6835,9 +6500,8 @@ memmove_emit_remainder_encodeBetterBlockAsm4MB:
 	MOVL SI, BX
 
 	// genMemMoveShort
-	CMPQ BX, $0x03
-	JB   emit_lit_memmove_emit_remainder_encodeBetterBlockAsm4MB_memmove_move_1or2
-	JE   emit_lit_memmove_emit_remainder_encodeBetterBlockAsm4MB_memmove_move_3
+	CMPQ BX, $0x04
+	JLE  emit_lit_memmove_emit_remainder_encodeBetterBlockAsm4MB_memmove_move_4
 	CMPQ BX, $0x08
 	JB   emit_lit_memmove_emit_remainder_encodeBetterBlockAsm4MB_memmove_move_4through7
 	CMPQ BX, $0x10
@@ -6846,18 +6510,9 @@ memmove_emit_remainder_encodeBetterBlockAsm4MB:
 	JBE  emit_lit_memmove_emit_remainder_encodeBetterBlockAsm4MB_memmove_move_17through32
 	JMP  emit_lit_memmove_emit_remainder_encodeBetterBlockAsm4MB_memmove_move_33through64
 
-emit_lit_memmove_emit_remainder_encodeBetterBlockAsm4MB_memmove_move_1or2:
-	MOVB (CX), SI
-	MOVB -1(CX)(BX*1), CL
-	MOVB SI, (AX)
-	MOVB CL, -1(AX)(BX*1)
-	JMP  memmove_end_copy_emit_remainder_encodeBetterBlockAsm4MB
-
-emit_lit_memmove_emit_remainder_encodeBetterBlockAsm4MB_memmove_move_3:
-	MOVW (CX), SI
-	MOVB 2(CX), CL
-	MOVW SI, (AX)
-	MOVB CL, 2(AX)
+emit_lit_memmove_emit_remainder_encodeBetterBlockAsm4MB_memmove_move_4:
+	MOVL (CX), SI
+	MOVL SI, (AX)
 	JMP  memmove_end_copy_emit_remainder_encodeBetterBlockAsm4MB
 
 emit_lit_memmove_emit_remainder_encodeBetterBlockAsm4MB_memmove_move_4through7:
@@ -7133,9 +6788,8 @@ memmove_match_emit_encodeBetterBlockAsm12B:
 	LEAQ (AX)(R9*1), SI
 
 	// genMemMoveShort
-	CMPQ R9, $0x03
-	JB   emit_lit_memmove_match_emit_encodeBetterBlockAsm12B_memmove_move_1or2
-	JE   emit_lit_memmove_match_emit_encodeBetterBlockAsm12B_memmove_move_3
+	CMPQ R9, $0x04
+	JLE  emit_lit_memmove_match_emit_encodeBetterBlockAsm12B_memmove_move_4
 	CMPQ R9, $0x08
 	JB   emit_lit_memmove_match_emit_encodeBetterBlockAsm12B_memmove_move_4through7
 	CMPQ R9, $0x10
@@ -7144,18 +6798,9 @@ memmove_match_emit_encodeBetterBlockAsm12B:
 	JBE  emit_lit_memmove_match_emit_encodeBetterBlockAsm12B_memmove_move_17through32
 	JMP  emit_lit_memmove_match_emit_encodeBetterBlockAsm12B_memmove_move_33through64
 
-emit_lit_memmove_match_emit_encodeBetterBlockAsm12B_memmove_move_1or2:
-	MOVB (R10), R11
-	MOVB -1(R10)(R9*1), R10
-	MOVB R11, (AX)
-	MOVB R10, -1(AX)(R9*1)
-	JMP  memmove_end_copy_match_emit_encodeBetterBlockAsm12B
-
-emit_lit_memmove_match_emit_encodeBetterBlockAsm12B_memmove_move_3:
-	MOVW (R10), R11
-	MOVB 2(R10), R10
-	MOVW R11, (AX)
-	MOVB R10, 2(AX)
+emit_lit_memmove_match_emit_encodeBetterBlockAsm12B_memmove_move_4:
+	MOVL (R10), R11
+	MOVL R11, (AX)
 	JMP  memmove_end_copy_match_emit_encodeBetterBlockAsm12B
 
 emit_lit_memmove_match_emit_encodeBetterBlockAsm12B_memmove_move_4through7:
@@ -7354,9 +6999,8 @@ memmove_match_emit_repeat_encodeBetterBlockAsm12B:
 	LEAQ (AX)(R9*1), SI
 
 	// genMemMoveShort
-	CMPQ R9, $0x03
-	JB   emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm12B_memmove_move_1or2
-	JE   emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm12B_memmove_move_3
+	CMPQ R9, $0x04
+	JLE  emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm12B_memmove_move_4
 	CMPQ R9, $0x08
 	JB   emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm12B_memmove_move_4through7
 	CMPQ R9, $0x10
@@ -7365,18 +7009,9 @@ memmove_match_emit_repeat_encodeBetterBlockAsm12B:
 	JBE  emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm12B_memmove_move_17through32
 	JMP  emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm12B_memmove_move_33through64
 
-emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm12B_memmove_move_1or2:
-	MOVB (R10), R11
-	MOVB -1(R10)(R9*1), R10
-	MOVB R11, (AX)
-	MOVB R10, -1(AX)(R9*1)
-	JMP  memmove_end_copy_match_emit_repeat_encodeBetterBlockAsm12B
-
-emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm12B_memmove_move_3:
-	MOVW (R10), R11
-	MOVB 2(R10), R10
-	MOVW R11, (AX)
-	MOVB R10, 2(AX)
+emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm12B_memmove_move_4:
+	MOVL (R10), R11
+	MOVL R11, (AX)
 	JMP  memmove_end_copy_match_emit_repeat_encodeBetterBlockAsm12B
 
 emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm12B_memmove_move_4through7:
@@ -7610,9 +7245,8 @@ memmove_emit_remainder_encodeBetterBlockAsm12B:
 	MOVL SI, BX
 
 	// genMemMoveShort
-	CMPQ BX, $0x03
-	JB   emit_lit_memmove_emit_remainder_encodeBetterBlockAsm12B_memmove_move_1or2
-	JE   emit_lit_memmove_emit_remainder_encodeBetterBlockAsm12B_memmove_move_3
+	CMPQ BX, $0x04
+	JLE  emit_lit_memmove_emit_remainder_encodeBetterBlockAsm12B_memmove_move_4
 	CMPQ BX, $0x08
 	JB   emit_lit_memmove_emit_remainder_encodeBetterBlockAsm12B_memmove_move_4through7
 	CMPQ BX, $0x10
@@ -7621,18 +7255,9 @@ memmove_emit_remainder_encodeBetterBlockAsm12B:
 	JBE  emit_lit_memmove_emit_remainder_encodeBetterBlockAsm12B_memmove_move_17through32
 	JMP  emit_lit_memmove_emit_remainder_encodeBetterBlockAsm12B_memmove_move_33through64
 
-emit_lit_memmove_emit_remainder_encodeBetterBlockAsm12B_memmove_move_1or2:
-	MOVB (CX), SI
-	MOVB -1(CX)(BX*1), CL
-	MOVB SI, (AX)
-	MOVB CL, -1(AX)(BX*1)
-	JMP  memmove_end_copy_emit_remainder_encodeBetterBlockAsm12B
-
-emit_lit_memmove_emit_remainder_encodeBetterBlockAsm12B_memmove_move_3:
-	MOVW (CX), SI
-	MOVB 2(CX), CL
-	MOVW SI, (AX)
-	MOVB CL, 2(AX)
+emit_lit_memmove_emit_remainder_encodeBetterBlockAsm12B_memmove_move_4:
+	MOVL (CX), SI
+	MOVL SI, (AX)
 	JMP  memmove_end_copy_emit_remainder_encodeBetterBlockAsm12B
 
 emit_lit_memmove_emit_remainder_encodeBetterBlockAsm12B_memmove_move_4through7:
@@ -7908,9 +7533,8 @@ memmove_match_emit_encodeBetterBlockAsm10B:
 	LEAQ (AX)(R9*1), SI
 
 	// genMemMoveShort
-	CMPQ R9, $0x03
-	JB   emit_lit_memmove_match_emit_encodeBetterBlockAsm10B_memmove_move_1or2
-	JE   emit_lit_memmove_match_emit_encodeBetterBlockAsm10B_memmove_move_3
+	CMPQ R9, $0x04
+	JLE  emit_lit_memmove_match_emit_encodeBetterBlockAsm10B_memmove_move_4
 	CMPQ R9, $0x08
 	JB   emit_lit_memmove_match_emit_encodeBetterBlockAsm10B_memmove_move_4through7
 	CMPQ R9, $0x10
@@ -7919,18 +7543,9 @@ memmove_match_emit_encodeBetterBlockAsm10B:
 	JBE  emit_lit_memmove_match_emit_encodeBetterBlockAsm10B_memmove_move_17through32
 	JMP  emit_lit_memmove_match_emit_encodeBetterBlockAsm10B_memmove_move_33through64
 
-emit_lit_memmove_match_emit_encodeBetterBlockAsm10B_memmove_move_1or2:
-	MOVB (R10), R11
-	MOVB -1(R10)(R9*1), R10
-	MOVB R11, (AX)
-	MOVB R10, -1(AX)(R9*1)
-	JMP  memmove_end_copy_match_emit_encodeBetterBlockAsm10B
-
-emit_lit_memmove_match_emit_encodeBetterBlockAsm10B_memmove_move_3:
-	MOVW (R10), R11
-	MOVB 2(R10), R10
-	MOVW R11, (AX)
-	MOVB R10, 2(AX)
+emit_lit_memmove_match_emit_encodeBetterBlockAsm10B_memmove_move_4:
+	MOVL (R10), R11
+	MOVL R11, (AX)
 	JMP  memmove_end_copy_match_emit_encodeBetterBlockAsm10B
 
 emit_lit_memmove_match_emit_encodeBetterBlockAsm10B_memmove_move_4through7:
@@ -8129,9 +7744,8 @@ memmove_match_emit_repeat_encodeBetterBlockAsm10B:
 	LEAQ (AX)(R9*1), SI
 
 	// genMemMoveShort
-	CMPQ R9, $0x03
-	JB   emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm10B_memmove_move_1or2
-	JE   emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm10B_memmove_move_3
+	CMPQ R9, $0x04
+	JLE  emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm10B_memmove_move_4
 	CMPQ R9, $0x08
 	JB   emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm10B_memmove_move_4through7
 	CMPQ R9, $0x10
@@ -8140,18 +7754,9 @@ memmove_match_emit_repeat_encodeBetterBlockAsm10B:
 	JBE  emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm10B_memmove_move_17through32
 	JMP  emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm10B_memmove_move_33through64
 
-emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm10B_memmove_move_1or2:
-	MOVB (R10), R11
-	MOVB -1(R10)(R9*1), R10
-	MOVB R11, (AX)
-	MOVB R10, -1(AX)(R9*1)
-	JMP  memmove_end_copy_match_emit_repeat_encodeBetterBlockAsm10B
-
-emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm10B_memmove_move_3:
-	MOVW (R10), R11
-	MOVB 2(R10), R10
-	MOVW R11, (AX)
-	MOVB R10, 2(AX)
+emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm10B_memmove_move_4:
+	MOVL (R10), R11
+	MOVL R11, (AX)
 	JMP  memmove_end_copy_match_emit_repeat_encodeBetterBlockAsm10B
 
 emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm10B_memmove_move_4through7:
@@ -8385,9 +7990,8 @@ memmove_emit_remainder_encodeBetterBlockAsm10B:
 	MOVL SI, BX
 
 	// genMemMoveShort
-	CMPQ BX, $0x03
-	JB   emit_lit_memmove_emit_remainder_encodeBetterBlockAsm10B_memmove_move_1or2
-	JE   emit_lit_memmove_emit_remainder_encodeBetterBlockAsm10B_memmove_move_3
+	CMPQ BX, $0x04
+	JLE  emit_lit_memmove_emit_remainder_encodeBetterBlockAsm10B_memmove_move_4
 	CMPQ BX, $0x08
 	JB   emit_lit_memmove_emit_remainder_encodeBetterBlockAsm10B_memmove_move_4through7
 	CMPQ BX, $0x10
@@ -8396,18 +8000,9 @@ memmove_emit_remainder_encodeBetterBlockAsm10B:
 	JBE  emit_lit_memmove_emit_remainder_encodeBetterBlockAsm10B_memmove_move_17through32
 	JMP  emit_lit_memmove_emit_remainder_encodeBetterBlockAsm10B_memmove_move_33through64
 
-emit_lit_memmove_emit_remainder_encodeBetterBlockAsm10B_memmove_move_1or2:
-	MOVB (CX), SI
-	MOVB -1(CX)(BX*1), CL
-	MOVB SI, (AX)
-	MOVB CL, -1(AX)(BX*1)
-	JMP  memmove_end_copy_emit_remainder_encodeBetterBlockAsm10B
-
-emit_lit_memmove_emit_remainder_encodeBetterBlockAsm10B_memmove_move_3:
-	MOVW (CX), SI
-	MOVB 2(CX), CL
-	MOVW SI, (AX)
-	MOVB CL, 2(AX)
+emit_lit_memmove_emit_remainder_encodeBetterBlockAsm10B_memmove_move_4:
+	MOVL (CX), SI
+	MOVL SI, (AX)
 	JMP  memmove_end_copy_emit_remainder_encodeBetterBlockAsm10B
 
 emit_lit_memmove_emit_remainder_encodeBetterBlockAsm10B_memmove_move_4through7:
@@ -8683,9 +8278,8 @@ memmove_match_emit_encodeBetterBlockAsm8B:
 	LEAQ (AX)(R9*1), SI
 
 	// genMemMoveShort
-	CMPQ R9, $0x03
-	JB   emit_lit_memmove_match_emit_encodeBetterBlockAsm8B_memmove_move_1or2
-	JE   emit_lit_memmove_match_emit_encodeBetterBlockAsm8B_memmove_move_3
+	CMPQ R9, $0x04
+	JLE  emit_lit_memmove_match_emit_encodeBetterBlockAsm8B_memmove_move_4
 	CMPQ R9, $0x08
 	JB   emit_lit_memmove_match_emit_encodeBetterBlockAsm8B_memmove_move_4through7
 	CMPQ R9, $0x10
@@ -8694,18 +8288,9 @@ memmove_match_emit_encodeBetterBlockAsm8B:
 	JBE  emit_lit_memmove_match_emit_encodeBetterBlockAsm8B_memmove_move_17through32
 	JMP  emit_lit_memmove_match_emit_encodeBetterBlockAsm8B_memmove_move_33through64
 
-emit_lit_memmove_match_emit_encodeBetterBlockAsm8B_memmove_move_1or2:
-	MOVB (R10), R11
-	MOVB -1(R10)(R9*1), R10
-	MOVB R11, (AX)
-	MOVB R10, -1(AX)(R9*1)
-	JMP  memmove_end_copy_match_emit_encodeBetterBlockAsm8B
-
-emit_lit_memmove_match_emit_encodeBetterBlockAsm8B_memmove_move_3:
-	MOVW (R10), R11
-	MOVB 2(R10), R10
-	MOVW R11, (AX)
-	MOVB R10, 2(AX)
+emit_lit_memmove_match_emit_encodeBetterBlockAsm8B_memmove_move_4:
+	MOVL (R10), R11
+	MOVL R11, (AX)
 	JMP  memmove_end_copy_match_emit_encodeBetterBlockAsm8B
 
 emit_lit_memmove_match_emit_encodeBetterBlockAsm8B_memmove_move_4through7:
@@ -8898,9 +8483,8 @@ memmove_match_emit_repeat_encodeBetterBlockAsm8B:
 	LEAQ (AX)(R8*1), SI
 
 	// genMemMoveShort
-	CMPQ R8, $0x03
-	JB   emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm8B_memmove_move_1or2
-	JE   emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm8B_memmove_move_3
+	CMPQ R8, $0x04
+	JLE  emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm8B_memmove_move_4
 	CMPQ R8, $0x08
 	JB   emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm8B_memmove_move_4through7
 	CMPQ R8, $0x10
@@ -8909,18 +8493,9 @@ memmove_match_emit_repeat_encodeBetterBlockAsm8B:
 	JBE  emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm8B_memmove_move_17through32
 	JMP  emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm8B_memmove_move_33through64
 
-emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm8B_memmove_move_1or2:
-	MOVB (R9), R10
-	MOVB -1(R9)(R8*1), R9
-	MOVB R10, (AX)
-	MOVB R9, -1(AX)(R8*1)
-	JMP  memmove_end_copy_match_emit_repeat_encodeBetterBlockAsm8B
-
-emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm8B_memmove_move_3:
-	MOVW (R9), R10
-	MOVB 2(R9), R9
-	MOVW R10, (AX)
-	MOVB R9, 2(AX)
+emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm8B_memmove_move_4:
+	MOVL (R9), R10
+	MOVL R10, (AX)
 	JMP  memmove_end_copy_match_emit_repeat_encodeBetterBlockAsm8B
 
 emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm8B_memmove_move_4through7:
@@ -9150,9 +8725,8 @@ memmove_emit_remainder_encodeBetterBlockAsm8B:
 	MOVL SI, BX
 
 	// genMemMoveShort
-	CMPQ BX, $0x03
-	JB   emit_lit_memmove_emit_remainder_encodeBetterBlockAsm8B_memmove_move_1or2
-	JE   emit_lit_memmove_emit_remainder_encodeBetterBlockAsm8B_memmove_move_3
+	CMPQ BX, $0x04
+	JLE  emit_lit_memmove_emit_remainder_encodeBetterBlockAsm8B_memmove_move_4
 	CMPQ BX, $0x08
 	JB   emit_lit_memmove_emit_remainder_encodeBetterBlockAsm8B_memmove_move_4through7
 	CMPQ BX, $0x10
@@ -9161,18 +8735,9 @@ memmove_emit_remainder_encodeBetterBlockAsm8B:
 	JBE  emit_lit_memmove_emit_remainder_encodeBetterBlockAsm8B_memmove_move_17through32
 	JMP  emit_lit_memmove_emit_remainder_encodeBetterBlockAsm8B_memmove_move_33through64
 
-emit_lit_memmove_emit_remainder_encodeBetterBlockAsm8B_memmove_move_1or2:
-	MOVB (CX), SI
-	MOVB -1(CX)(BX*1), CL
-	MOVB SI, (AX)
-	MOVB CL, -1(AX)(BX*1)
-	JMP  memmove_end_copy_emit_remainder_encodeBetterBlockAsm8B
-
-emit_lit_memmove_emit_remainder_encodeBetterBlockAsm8B_memmove_move_3:
-	MOVW (CX), SI
-	MOVB 2(CX), CL
-	MOVW SI, (AX)
-	MOVB CL, 2(AX)
+emit_lit_memmove_emit_remainder_encodeBetterBlockAsm8B_memmove_move_4:
+	MOVL (CX), SI
+	MOVL SI, (AX)
 	JMP  memmove_end_copy_emit_remainder_encodeBetterBlockAsm8B
 
 emit_lit_memmove_emit_remainder_encodeBetterBlockAsm8B_memmove_move_4through7:
@@ -9283,7 +8848,7 @@ zero_loop_encodeSnappyBlockAsm:
 	JNZ   zero_loop_encodeSnappyBlockAsm
 	MOVL  $0x00000000, 12(SP)
 	MOVQ  src_len+32(FP), CX
-	LEAQ  -5(CX), DX
+	LEAQ  -9(CX), DX
 	LEAQ  -8(CX), SI
 	MOVL  SI, 8(SP)
 	SHRQ  $0x05, CX
@@ -9401,36 +8966,17 @@ memmove_repeat_emit_encodeSnappyBlockAsm:
 	LEAQ (AX)(R8*1), SI
 
 	// genMemMoveShort
-	CMPQ R8, $0x03
-	JB   emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm_memmove_move_1or2
-	JE   emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm_memmove_move_3
 	CMPQ R8, $0x08
-	JB   emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm_memmove_move_4through7
+	JLE  emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm_memmove_move_8
 	CMPQ R8, $0x10
 	JBE  emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm_memmove_move_8through16
 	CMPQ R8, $0x20
 	JBE  emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm_memmove_move_17through32
 	JMP  emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm_memmove_move_33through64
 
-emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm_memmove_move_1or2:
-	MOVB (R9), R10
-	MOVB -1(R9)(R8*1), R9
-	MOVB R10, (AX)
-	MOVB R9, -1(AX)(R8*1)
-	JMP  memmove_end_copy_repeat_emit_encodeSnappyBlockAsm
-
-emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm_memmove_move_3:
-	MOVW (R9), R10
-	MOVB 2(R9), R9
-	MOVW R10, (AX)
-	MOVB R9, 2(AX)
-	JMP  memmove_end_copy_repeat_emit_encodeSnappyBlockAsm
-
-emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm_memmove_move_4through7:
-	MOVL (R9), R10
-	MOVL -4(R9)(R8*1), R9
-	MOVL R10, (AX)
-	MOVL R9, -4(AX)(R8*1)
+emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm_memmove_move_8:
+	MOVQ (R9), R10
+	MOVQ R10, (AX)
 	JMP  memmove_end_copy_repeat_emit_encodeSnappyBlockAsm
 
 emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm_memmove_move_8through16:
@@ -9718,36 +9264,17 @@ memmove_match_emit_encodeSnappyBlockAsm:
 	LEAQ (AX)(R9*1), R8
 
 	// genMemMoveShort
-	CMPQ R9, $0x03
-	JB   emit_lit_memmove_match_emit_encodeSnappyBlockAsm_memmove_move_1or2
-	JE   emit_lit_memmove_match_emit_encodeSnappyBlockAsm_memmove_move_3
 	CMPQ R9, $0x08
-	JB   emit_lit_memmove_match_emit_encodeSnappyBlockAsm_memmove_move_4through7
+	JLE  emit_lit_memmove_match_emit_encodeSnappyBlockAsm_memmove_move_8
 	CMPQ R9, $0x10
 	JBE  emit_lit_memmove_match_emit_encodeSnappyBlockAsm_memmove_move_8through16
 	CMPQ R9, $0x20
 	JBE  emit_lit_memmove_match_emit_encodeSnappyBlockAsm_memmove_move_17through32
 	JMP  emit_lit_memmove_match_emit_encodeSnappyBlockAsm_memmove_move_33through64
 
-emit_lit_memmove_match_emit_encodeSnappyBlockAsm_memmove_move_1or2:
-	MOVB (DI), R10
-	MOVB -1(DI)(R9*1), DI
-	MOVB R10, (AX)
-	MOVB DI, -1(AX)(R9*1)
-	JMP  memmove_end_copy_match_emit_encodeSnappyBlockAsm
-
-emit_lit_memmove_match_emit_encodeSnappyBlockAsm_memmove_move_3:
-	MOVW (DI), R10
-	MOVB 2(DI), DI
-	MOVW R10, (AX)
-	MOVB DI, 2(AX)
-	JMP  memmove_end_copy_match_emit_encodeSnappyBlockAsm
-
-emit_lit_memmove_match_emit_encodeSnappyBlockAsm_memmove_move_4through7:
-	MOVL (DI), R10
-	MOVL -4(DI)(R9*1), DI
-	MOVL R10, (AX)
-	MOVL DI, -4(AX)(R9*1)
+emit_lit_memmove_match_emit_encodeSnappyBlockAsm_memmove_move_8:
+	MOVQ (DI), R10
+	MOVQ R10, (AX)
 	JMP  memmove_end_copy_match_emit_encodeSnappyBlockAsm
 
 emit_lit_memmove_match_emit_encodeSnappyBlockAsm_memmove_move_8through16:
@@ -10024,36 +9551,17 @@ memmove_emit_remainder_encodeSnappyBlockAsm:
 	MOVL SI, BX
 
 	// genMemMoveShort
-	CMPQ BX, $0x03
-	JB   emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm_memmove_move_1or2
-	JE   emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm_memmove_move_3
 	CMPQ BX, $0x08
-	JB   emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm_memmove_move_4through7
+	JLE  emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm_memmove_move_8
 	CMPQ BX, $0x10
 	JBE  emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm_memmove_move_8through16
 	CMPQ BX, $0x20
 	JBE  emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm_memmove_move_17through32
 	JMP  emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm_memmove_move_33through64
 
-emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm_memmove_move_1or2:
-	MOVB (CX), SI
-	MOVB -1(CX)(BX*1), CL
-	MOVB SI, (AX)
-	MOVB CL, -1(AX)(BX*1)
-	JMP  memmove_end_copy_emit_remainder_encodeSnappyBlockAsm
-
-emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm_memmove_move_3:
-	MOVW (CX), SI
-	MOVB 2(CX), CL
-	MOVW SI, (AX)
-	MOVB CL, 2(AX)
-	JMP  memmove_end_copy_emit_remainder_encodeSnappyBlockAsm
-
-emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm_memmove_move_4through7:
-	MOVL (CX), SI
-	MOVL -4(CX)(BX*1), CX
-	MOVL SI, (AX)
-	MOVL CX, -4(AX)(BX*1)
+emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm_memmove_move_8:
+	MOVQ (CX), SI
+	MOVQ SI, (AX)
 	JMP  memmove_end_copy_emit_remainder_encodeSnappyBlockAsm
 
 emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm_memmove_move_8through16:
@@ -10157,7 +9665,7 @@ zero_loop_encodeSnappyBlockAsm12B:
 	JNZ   zero_loop_encodeSnappyBlockAsm12B
 	MOVL  $0x00000000, 12(SP)
 	MOVQ  src_len+32(FP), CX
-	LEAQ  -5(CX), DX
+	LEAQ  -9(CX), DX
 	LEAQ  -8(CX), SI
 	MOVL  SI, 8(SP)
 	SHRQ  $0x05, CX
@@ -10256,36 +9764,17 @@ memmove_repeat_emit_encodeSnappyBlockAsm12B:
 	LEAQ (AX)(R8*1), SI
 
 	// genMemMoveShort
-	CMPQ R8, $0x03
-	JB   emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm12B_memmove_move_1or2
-	JE   emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm12B_memmove_move_3
 	CMPQ R8, $0x08
-	JB   emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm12B_memmove_move_4through7
+	JLE  emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm12B_memmove_move_8
 	CMPQ R8, $0x10
 	JBE  emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm12B_memmove_move_8through16
 	CMPQ R8, $0x20
 	JBE  emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm12B_memmove_move_17through32
 	JMP  emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm12B_memmove_move_33through64
 
-emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm12B_memmove_move_1or2:
-	MOVB (R9), R10
-	MOVB -1(R9)(R8*1), R9
-	MOVB R10, (AX)
-	MOVB R9, -1(AX)(R8*1)
-	JMP  memmove_end_copy_repeat_emit_encodeSnappyBlockAsm12B
-
-emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm12B_memmove_move_3:
-	MOVW (R9), R10
-	MOVB 2(R9), R9
-	MOVW R10, (AX)
-	MOVB R9, 2(AX)
-	JMP  memmove_end_copy_repeat_emit_encodeSnappyBlockAsm12B
-
-emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm12B_memmove_move_4through7:
-	MOVL (R9), R10
-	MOVL -4(R9)(R8*1), R9
-	MOVL R10, (AX)
-	MOVL R9, -4(AX)(R8*1)
+emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm12B_memmove_move_8:
+	MOVQ (R9), R10
+	MOVQ R10, (AX)
 	JMP  memmove_end_copy_repeat_emit_encodeSnappyBlockAsm12B
 
 emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm12B_memmove_move_8through16:
@@ -10530,36 +10019,17 @@ memmove_match_emit_encodeSnappyBlockAsm12B:
 	LEAQ (AX)(R9*1), R8
 
 	// genMemMoveShort
-	CMPQ R9, $0x03
-	JB   emit_lit_memmove_match_emit_encodeSnappyBlockAsm12B_memmove_move_1or2
-	JE   emit_lit_memmove_match_emit_encodeSnappyBlockAsm12B_memmove_move_3
 	CMPQ R9, $0x08
-	JB   emit_lit_memmove_match_emit_encodeSnappyBlockAsm12B_memmove_move_4through7
+	JLE  emit_lit_memmove_match_emit_encodeSnappyBlockAsm12B_memmove_move_8
 	CMPQ R9, $0x10
 	JBE  emit_lit_memmove_match_emit_encodeSnappyBlockAsm12B_memmove_move_8through16
 	CMPQ R9, $0x20
 	JBE  emit_lit_memmove_match_emit_encodeSnappyBlockAsm12B_memmove_move_17through32
 	JMP  emit_lit_memmove_match_emit_encodeSnappyBlockAsm12B_memmove_move_33through64
 
-emit_lit_memmove_match_emit_encodeSnappyBlockAsm12B_memmove_move_1or2:
-	MOVB (DI), R10
-	MOVB -1(DI)(R9*1), DI
-	MOVB R10, (AX)
-	MOVB DI, -1(AX)(R9*1)
-	JMP  memmove_end_copy_match_emit_encodeSnappyBlockAsm12B
-
-emit_lit_memmove_match_emit_encodeSnappyBlockAsm12B_memmove_move_3:
-	MOVW (DI), R10
-	MOVB 2(DI), DI
-	MOVW R10, (AX)
-	MOVB DI, 2(AX)
-	JMP  memmove_end_copy_match_emit_encodeSnappyBlockAsm12B
-
-emit_lit_memmove_match_emit_encodeSnappyBlockAsm12B_memmove_move_4through7:
-	MOVL (DI), R10
-	MOVL -4(DI)(R9*1), DI
-	MOVL R10, (AX)
-	MOVL DI, -4(AX)(R9*1)
+emit_lit_memmove_match_emit_encodeSnappyBlockAsm12B_memmove_move_8:
+	MOVQ (DI), R10
+	MOVQ R10, (AX)
 	JMP  memmove_end_copy_match_emit_encodeSnappyBlockAsm12B
 
 emit_lit_memmove_match_emit_encodeSnappyBlockAsm12B_memmove_move_8through16:
@@ -10793,36 +10263,17 @@ memmove_emit_remainder_encodeSnappyBlockAsm12B:
 	MOVL SI, BX
 
 	// genMemMoveShort
-	CMPQ BX, $0x03
-	JB   emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm12B_memmove_move_1or2
-	JE   emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm12B_memmove_move_3
 	CMPQ BX, $0x08
-	JB   emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm12B_memmove_move_4through7
+	JLE  emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm12B_memmove_move_8
 	CMPQ BX, $0x10
 	JBE  emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm12B_memmove_move_8through16
 	CMPQ BX, $0x20
 	JBE  emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm12B_memmove_move_17through32
 	JMP  emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm12B_memmove_move_33through64
 
-emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm12B_memmove_move_1or2:
-	MOVB (CX), SI
-	MOVB -1(CX)(BX*1), CL
-	MOVB SI, (AX)
-	MOVB CL, -1(AX)(BX*1)
-	JMP  memmove_end_copy_emit_remainder_encodeSnappyBlockAsm12B
-
-emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm12B_memmove_move_3:
-	MOVW (CX), SI
-	MOVB 2(CX), CL
-	MOVW SI, (AX)
-	MOVB CL, 2(AX)
-	JMP  memmove_end_copy_emit_remainder_encodeSnappyBlockAsm12B
-
-emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm12B_memmove_move_4through7:
-	MOVL (CX), SI
-	MOVL -4(CX)(BX*1), CX
-	MOVL SI, (AX)
-	MOVL CX, -4(AX)(BX*1)
+emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm12B_memmove_move_8:
+	MOVQ (CX), SI
+	MOVQ SI, (AX)
 	JMP  memmove_end_copy_emit_remainder_encodeSnappyBlockAsm12B
 
 emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm12B_memmove_move_8through16:
@@ -10926,7 +10377,7 @@ zero_loop_encodeSnappyBlockAsm10B:
 	JNZ   zero_loop_encodeSnappyBlockAsm10B
 	MOVL  $0x00000000, 12(SP)
 	MOVQ  src_len+32(FP), CX
-	LEAQ  -5(CX), DX
+	LEAQ  -9(CX), DX
 	LEAQ  -8(CX), SI
 	MOVL  SI, 8(SP)
 	SHRQ  $0x05, CX
@@ -11025,36 +10476,17 @@ memmove_repeat_emit_encodeSnappyBlockAsm10B:
 	LEAQ (AX)(R8*1), SI
 
 	// genMemMoveShort
-	CMPQ R8, $0x03
-	JB   emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm10B_memmove_move_1or2
-	JE   emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm10B_memmove_move_3
 	CMPQ R8, $0x08
-	JB   emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm10B_memmove_move_4through7
+	JLE  emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm10B_memmove_move_8
 	CMPQ R8, $0x10
 	JBE  emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm10B_memmove_move_8through16
 	CMPQ R8, $0x20
 	JBE  emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm10B_memmove_move_17through32
 	JMP  emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm10B_memmove_move_33through64
 
-emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm10B_memmove_move_1or2:
-	MOVB (R9), R10
-	MOVB -1(R9)(R8*1), R9
-	MOVB R10, (AX)
-	MOVB R9, -1(AX)(R8*1)
-	JMP  memmove_end_copy_repeat_emit_encodeSnappyBlockAsm10B
-
-emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm10B_memmove_move_3:
-	MOVW (R9), R10
-	MOVB 2(R9), R9
-	MOVW R10, (AX)
-	MOVB R9, 2(AX)
-	JMP  memmove_end_copy_repeat_emit_encodeSnappyBlockAsm10B
-
-emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm10B_memmove_move_4through7:
-	MOVL (R9), R10
-	MOVL -4(R9)(R8*1), R9
-	MOVL R10, (AX)
-	MOVL R9, -4(AX)(R8*1)
+emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm10B_memmove_move_8:
+	MOVQ (R9), R10
+	MOVQ R10, (AX)
 	JMP  memmove_end_copy_repeat_emit_encodeSnappyBlockAsm10B
 
 emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm10B_memmove_move_8through16:
@@ -11299,36 +10731,17 @@ memmove_match_emit_encodeSnappyBlockAsm10B:
 	LEAQ (AX)(R9*1), R8
 
 	// genMemMoveShort
-	CMPQ R9, $0x03
-	JB   emit_lit_memmove_match_emit_encodeSnappyBlockAsm10B_memmove_move_1or2
-	JE   emit_lit_memmove_match_emit_encodeSnappyBlockAsm10B_memmove_move_3
 	CMPQ R9, $0x08
-	JB   emit_lit_memmove_match_emit_encodeSnappyBlockAsm10B_memmove_move_4through7
+	JLE  emit_lit_memmove_match_emit_encodeSnappyBlockAsm10B_memmove_move_8
 	CMPQ R9, $0x10
 	JBE  emit_lit_memmove_match_emit_encodeSnappyBlockAsm10B_memmove_move_8through16
 	CMPQ R9, $0x20
 	JBE  emit_lit_memmove_match_emit_encodeSnappyBlockAsm10B_memmove_move_17through32
 	JMP  emit_lit_memmove_match_emit_encodeSnappyBlockAsm10B_memmove_move_33through64
 
-emit_lit_memmove_match_emit_encodeSnappyBlockAsm10B_memmove_move_1or2:
-	MOVB (DI), R10
-	MOVB -1(DI)(R9*1), DI
-	MOVB R10, (AX)
-	MOVB DI, -1(AX)(R9*1)
-	JMP  memmove_end_copy_match_emit_encodeSnappyBlockAsm10B
-
-emit_lit_memmove_match_emit_encodeSnappyBlockAsm10B_memmove_move_3:
-	MOVW (DI), R10
-	MOVB 2(DI), DI
-	MOVW R10, (AX)
-	MOVB DI, 2(AX)
-	JMP  memmove_end_copy_match_emit_encodeSnappyBlockAsm10B
-
-emit_lit_memmove_match_emit_encodeSnappyBlockAsm10B_memmove_move_4through7:
-	MOVL (DI), R10
-	MOVL -4(DI)(R9*1), DI
-	MOVL R10, (AX)
-	MOVL DI, -4(AX)(R9*1)
+emit_lit_memmove_match_emit_encodeSnappyBlockAsm10B_memmove_move_8:
+	MOVQ (DI), R10
+	MOVQ R10, (AX)
 	JMP  memmove_end_copy_match_emit_encodeSnappyBlockAsm10B
 
 emit_lit_memmove_match_emit_encodeSnappyBlockAsm10B_memmove_move_8through16:
@@ -11562,36 +10975,17 @@ memmove_emit_remainder_encodeSnappyBlockAsm10B:
 	MOVL SI, BX
 
 	// genMemMoveShort
-	CMPQ BX, $0x03
-	JB   emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm10B_memmove_move_1or2
-	JE   emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm10B_memmove_move_3
 	CMPQ BX, $0x08
-	JB   emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm10B_memmove_move_4through7
+	JLE  emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm10B_memmove_move_8
 	CMPQ BX, $0x10
 	JBE  emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm10B_memmove_move_8through16
 	CMPQ BX, $0x20
 	JBE  emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm10B_memmove_move_17through32
 	JMP  emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm10B_memmove_move_33through64
 
-emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm10B_memmove_move_1or2:
-	MOVB (CX), SI
-	MOVB -1(CX)(BX*1), CL
-	MOVB SI, (AX)
-	MOVB CL, -1(AX)(BX*1)
-	JMP  memmove_end_copy_emit_remainder_encodeSnappyBlockAsm10B
-
-emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm10B_memmove_move_3:
-	MOVW (CX), SI
-	MOVB 2(CX), CL
-	MOVW SI, (AX)
-	MOVB CL, 2(AX)
-	JMP  memmove_end_copy_emit_remainder_encodeSnappyBlockAsm10B
-
-emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm10B_memmove_move_4through7:
-	MOVL (CX), SI
-	MOVL -4(CX)(BX*1), CX
-	MOVL SI, (AX)
-	MOVL CX, -4(AX)(BX*1)
+emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm10B_memmove_move_8:
+	MOVQ (CX), SI
+	MOVQ SI, (AX)
 	JMP  memmove_end_copy_emit_remainder_encodeSnappyBlockAsm10B
 
 emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm10B_memmove_move_8through16:
@@ -11695,7 +11089,7 @@ zero_loop_encodeSnappyBlockAsm8B:
 	JNZ   zero_loop_encodeSnappyBlockAsm8B
 	MOVL  $0x00000000, 12(SP)
 	MOVQ  src_len+32(FP), CX
-	LEAQ  -5(CX), DX
+	LEAQ  -9(CX), DX
 	LEAQ  -8(CX), SI
 	MOVL  SI, 8(SP)
 	SHRQ  $0x05, CX
@@ -11794,36 +11188,17 @@ memmove_repeat_emit_encodeSnappyBlockAsm8B:
 	LEAQ (AX)(R8*1), SI
 
 	// genMemMoveShort
-	CMPQ R8, $0x03
-	JB   emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm8B_memmove_move_1or2
-	JE   emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm8B_memmove_move_3
 	CMPQ R8, $0x08
-	JB   emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm8B_memmove_move_4through7
+	JLE  emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm8B_memmove_move_8
 	CMPQ R8, $0x10
 	JBE  emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm8B_memmove_move_8through16
 	CMPQ R8, $0x20
 	JBE  emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm8B_memmove_move_17through32
 	JMP  emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm8B_memmove_move_33through64
 
-emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm8B_memmove_move_1or2:
-	MOVB (R9), R10
-	MOVB -1(R9)(R8*1), R9
-	MOVB R10, (AX)
-	MOVB R9, -1(AX)(R8*1)
-	JMP  memmove_end_copy_repeat_emit_encodeSnappyBlockAsm8B
-
-emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm8B_memmove_move_3:
-	MOVW (R9), R10
-	MOVB 2(R9), R9
-	MOVW R10, (AX)
-	MOVB R9, 2(AX)
-	JMP  memmove_end_copy_repeat_emit_encodeSnappyBlockAsm8B
-
-emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm8B_memmove_move_4through7:
-	MOVL (R9), R10
-	MOVL -4(R9)(R8*1), R9
-	MOVL R10, (AX)
-	MOVL R9, -4(AX)(R8*1)
+emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm8B_memmove_move_8:
+	MOVQ (R9), R10
+	MOVQ R10, (AX)
 	JMP  memmove_end_copy_repeat_emit_encodeSnappyBlockAsm8B
 
 emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm8B_memmove_move_8through16:
@@ -12066,36 +11441,17 @@ memmove_match_emit_encodeSnappyBlockAsm8B:
 	LEAQ (AX)(R9*1), R8
 
 	// genMemMoveShort
-	CMPQ R9, $0x03
-	JB   emit_lit_memmove_match_emit_encodeSnappyBlockAsm8B_memmove_move_1or2
-	JE   emit_lit_memmove_match_emit_encodeSnappyBlockAsm8B_memmove_move_3
 	CMPQ R9, $0x08
-	JB   emit_lit_memmove_match_emit_encodeSnappyBlockAsm8B_memmove_move_4through7
+	JLE  emit_lit_memmove_match_emit_encodeSnappyBlockAsm8B_memmove_move_8
 	CMPQ R9, $0x10
 	JBE  emit_lit_memmove_match_emit_encodeSnappyBlockAsm8B_memmove_move_8through16
 	CMPQ R9, $0x20
 	JBE  emit_lit_memmove_match_emit_encodeSnappyBlockAsm8B_memmove_move_17through32
 	JMP  emit_lit_memmove_match_emit_encodeSnappyBlockAsm8B_memmove_move_33through64
 
-emit_lit_memmove_match_emit_encodeSnappyBlockAsm8B_memmove_move_1or2:
-	MOVB (DI), R10
-	MOVB -1(DI)(R9*1), DI
-	MOVB R10, (AX)
-	MOVB DI, -1(AX)(R9*1)
-	JMP  memmove_end_copy_match_emit_encodeSnappyBlockAsm8B
-
-emit_lit_memmove_match_emit_encodeSnappyBlockAsm8B_memmove_move_3:
-	MOVW (DI), R10
-	MOVB 2(DI), DI
-	MOVW R10, (AX)
-	MOVB DI, 2(AX)
-	JMP  memmove_end_copy_match_emit_encodeSnappyBlockAsm8B
-
-emit_lit_memmove_match_emit_encodeSnappyBlockAsm8B_memmove_move_4through7:
-	MOVL (DI), R10
-	MOVL -4(DI)(R9*1), DI
-	MOVL R10, (AX)
-	MOVL DI, -4(AX)(R9*1)
+emit_lit_memmove_match_emit_encodeSnappyBlockAsm8B_memmove_move_8:
+	MOVQ (DI), R10
+	MOVQ R10, (AX)
 	JMP  memmove_end_copy_match_emit_encodeSnappyBlockAsm8B
 
 emit_lit_memmove_match_emit_encodeSnappyBlockAsm8B_memmove_move_8through16:
@@ -12327,36 +11683,17 @@ memmove_emit_remainder_encodeSnappyBlockAsm8B:
 	MOVL SI, BX
 
 	// genMemMoveShort
-	CMPQ BX, $0x03
-	JB   emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm8B_memmove_move_1or2
-	JE   emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm8B_memmove_move_3
 	CMPQ BX, $0x08
-	JB   emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm8B_memmove_move_4through7
+	JLE  emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm8B_memmove_move_8
 	CMPQ BX, $0x10
 	JBE  emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm8B_memmove_move_8through16
 	CMPQ BX, $0x20
 	JBE  emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm8B_memmove_move_17through32
 	JMP  emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm8B_memmove_move_33through64
 
-emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm8B_memmove_move_1or2:
-	MOVB (CX), SI
-	MOVB -1(CX)(BX*1), CL
-	MOVB SI, (AX)
-	MOVB CL, -1(AX)(BX*1)
-	JMP  memmove_end_copy_emit_remainder_encodeSnappyBlockAsm8B
-
-emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm8B_memmove_move_3:
-	MOVW (CX), SI
-	MOVB 2(CX), CL
-	MOVW SI, (AX)
-	MOVB CL, 2(AX)
-	JMP  memmove_end_copy_emit_remainder_encodeSnappyBlockAsm8B
-
-emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm8B_memmove_move_4through7:
-	MOVL (CX), SI
-	MOVL -4(CX)(BX*1), CX
-	MOVL SI, (AX)
-	MOVL CX, -4(AX)(BX*1)
+emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm8B_memmove_move_8:
+	MOVQ (CX), SI
+	MOVQ SI, (AX)
 	JMP  memmove_end_copy_emit_remainder_encodeSnappyBlockAsm8B
 
 emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm8B_memmove_move_8through16:
