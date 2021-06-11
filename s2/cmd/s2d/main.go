@@ -28,6 +28,7 @@ var (
 	quiet  = flag.Bool("q", false, "Don't write any output to terminal, except errors")
 	bench  = flag.Int("bench", 0, "Run benchmark n times. No output will be written")
 	help   = flag.Bool("help", false, "Display help")
+	out    = flag.String("o", "", "Write output to another file. Single input file only")
 
 	version = "(dev)"
 	date    = "(unknown)"
@@ -42,7 +43,7 @@ func main() {
 	if len(args) == 0 || *help {
 		_, _ = fmt.Fprintf(os.Stderr, "s2 decompress v%v, built at %v.\n\n", version, date)
 		_, _ = fmt.Fprintf(os.Stderr, "Copyright (c) 2011 The Snappy-Go Authors. All rights reserved.\n"+
-			"Copyright (c) 2019 Klaus Post. All rights reserved.\n\n")
+			"Copyright (c) 2019+ Klaus Post. All rights reserved.\n\n")
 		_, _ = fmt.Fprintln(os.Stderr, `Usage: s2d [options] file1 file2
 
 Decompresses all files supplied as input. Input files must end with '.s2' or '.snappy'.
@@ -61,13 +62,30 @@ Options:`)
 	}
 	if len(args) == 1 && args[0] == "-" {
 		r.Reset(os.Stdin)
-		if !*verify {
-			_, err := io.Copy(os.Stdout, r)
-			exitErr(err)
-		} else {
+		if *verify {
 			_, err := io.Copy(ioutil.Discard, r)
 			exitErr(err)
+			return
 		}
+		if *out == "" {
+			_, err := io.Copy(os.Stdout, r)
+			exitErr(err)
+			return
+		}
+		dstFilename := *out
+		if *safe {
+			_, err := os.Stat(dstFilename)
+			if !os.IsNotExist(err) {
+				exitErr(errors.New("destination files exists"))
+			}
+		}
+		dstFile, err := os.OpenFile(dstFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.ModePerm)
+		exitErr(err)
+		defer dstFile.Close()
+		bw := bufio.NewWriterSize(dstFile, 4<<20)
+		defer bw.Flush()
+		_, err = io.Copy(bw, r)
+		exitErr(err)
 		return
 	}
 	var files []string
@@ -134,9 +152,15 @@ Options:`)
 		os.Exit(0)
 	}
 
+	if *out != "" && len(files) > 1 {
+		exitErr(errors.New("-out parameter can only be used with one input"))
+	}
+
 	for _, filename := range files {
 		dstFilename := cleanFileName(filename)
 		switch {
+		case *out != "":
+			dstFilename = *out
 		case strings.HasSuffix(filename, ".s2"):
 			dstFilename = strings.TrimSuffix(dstFilename, ".s2")
 		case strings.HasSuffix(filename, ".snappy"):
@@ -176,7 +200,7 @@ Options:`)
 			case *stdout:
 				out = os.Stdout
 			default:
-				dstFile, err := os.OpenFile(dstFilename, os.O_CREATE|os.O_WRONLY, mode)
+				dstFile, err := os.OpenFile(dstFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 				exitErr(err)
 				defer dstFile.Close()
 				bw := bufio.NewWriterSize(dstFile, 4<<20)

@@ -30,11 +30,13 @@ import (
 var (
 	faster    = flag.Bool("faster", false, "Compress faster, but with a minor compression loss")
 	slower    = flag.Bool("slower", false, "Compress more, but a lot slower")
+	snappy    = flag.Bool("snappy", false, "Generate Snappy compatible output stream")
 	cpu       = flag.Int("cpu", runtime.GOMAXPROCS(0), "Compress using this amount of threads")
 	blockSize = flag.String("blocksize", "4M", "Max  block size. Examples: 64K, 256K, 1M, 4M. Must be power of two and <= 4MB")
 	safe      = flag.Bool("safe", false, "Do not overwrite output files")
 	padding   = flag.String("pad", "1", "Pad size to a multiple of this value, Examples: 500, 64K, 256K, 1M, 4M, etc")
 	stdout    = flag.Bool("c", false, "Write all output to stdout. Multiple input files will be concatenated")
+	out       = flag.String("o", "", "Write output to another file. Single input file only")
 	remove    = flag.Bool("rm", false, "Delete source file(s) after successful compression")
 	quiet     = flag.Bool("q", false, "Don't write any output to terminal, except errors")
 	bench     = flag.Int("bench", 0, "Run benchmark n times. No output will be written")
@@ -63,11 +65,11 @@ func main() {
 	if len(args) == 0 || *help || (*slower && *faster) {
 		_, _ = fmt.Fprintf(os.Stderr, "s2 compress v%v, built at %v.\n\n", version, date)
 		_, _ = fmt.Fprintf(os.Stderr, "Copyright (c) 2011 The Snappy-Go Authors. All rights reserved.\n"+
-			"Copyright (c) 2019 Klaus Post. All rights reserved.\n\n")
+			"Copyright (c) 2019+ Klaus Post. All rights reserved.\n\n")
 		_, _ = fmt.Fprintln(os.Stderr, `Usage: s2c [options] file1 file2
 
 Compresses all files supplied as input separately.
-Output files are written as 'filename.ext.s2'.
+Output files are written as 'filename.ext.s2' or 'filename.ext.snappy'.
 By default output files will be overwritten.
 Use - as the only file name to read from stdin and write to stdout.
 
@@ -88,6 +90,9 @@ Options:`)
 	if *slower {
 		opts = append(opts, s2.WriterBestCompression())
 	}
+	if *snappy {
+		opts = append(opts, s2.WriterSnappyCompat())
+	}
 	wr := s2.NewWriter(nil, opts...)
 
 	// No args, use stdin/stdout
@@ -95,7 +100,22 @@ Options:`)
 		// Catch interrupt, so we don't exit at once.
 		// os.Stdin will return EOF, so we should be able to get everything.
 		signal.Notify(make(chan os.Signal, 1), os.Interrupt)
-		wr.Reset(os.Stdout)
+		if len(*out) == 0 {
+			wr.Reset(os.Stdout)
+		} else {
+			if *safe {
+				_, err := os.Stat(*out)
+				if !os.IsNotExist(err) {
+					exitErr(errors.New("destination file exists"))
+				}
+			}
+			dstFile, err := os.OpenFile(*out, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.ModePerm)
+			exitErr(err)
+			defer dstFile.Close()
+			bw := bufio.NewWriterSize(dstFile, int(sz)*2)
+			defer bw.Flush()
+			wr.Reset(bw)
+		}
 		_, err = wr.ReadFrom(os.Stdin)
 		printErr(err)
 		printErr(wr.Close())
@@ -216,11 +236,20 @@ Options:`)
 		}
 		os.Exit(0)
 	}
-
+	ext := ".s2"
+	if *snappy {
+		ext = ".snappy"
+	}
+	if *out != "" && len(files) > 1 {
+		exitErr(errors.New("-out parameter can only be used with one input"))
+	}
 	for _, filename := range files {
 		func() {
 			var closeOnce sync.Once
-			dstFilename := cleanFileName(fmt.Sprintf("%s%s", filename, ".s2"))
+			dstFilename := cleanFileName(fmt.Sprintf("%s%s", filename, ext))
+			if *out != "" {
+				dstFilename = *out
+			}
 			if !*quiet {
 				fmt.Print("Compressing ", filename, " -> ", dstFilename)
 			}
