@@ -226,12 +226,11 @@ tagLit62Plus:
 	JA   tagLit63
 
 	// case x == 62:
-	// x = uint32(src[s-3]) | uint32(src[s-2])<<8 | uint32(src[s-1])<<16
-	MOVWLZX -3(R_SRC), R_LEN
-	MOVBLZX -1(R_SRC), R_TMP1
-	SHLL    $16, R_TMP1
-	ORL     R_TMP1, R_LEN
-	JMP     doLit
+	// We read one byte, safe to read one back.
+	// x = binary.LittleEndian.Uint32(src[s-1:]) >> 8
+	MOVL -4(R_SRC), R_LEN
+	SHRL $8, R_LEN
+	JMP  doLit
 
 tagLit63:
 	// case x == 63:

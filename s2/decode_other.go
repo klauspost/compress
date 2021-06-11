@@ -7,7 +7,10 @@
 
 package s2
 
-import "fmt"
+import (
+	"encoding/binary"
+	"fmt"
+)
 
 // decode writes the decoding of src to dst. It assumes that the varint-encoded
 // length of the decompressed bytes has already been read, and that len(dst)
@@ -23,6 +26,7 @@ func s2Decode(dst, src []byte) int {
 	offset := 0
 
 	// As long as we can read at least 5 bytes...
+
 	for s < len(src)-5 {
 		switch src[s] & 0x03 {
 		case tagLiteral:
@@ -31,17 +35,18 @@ func s2Decode(dst, src []byte) int {
 			case x < 60:
 				s++
 			case x == 60:
+				x = uint32(src[s+1])
 				s += 2
-				x = uint32(src[s-1])
 			case x == 61:
+				x = uint32(binary.LittleEndian.Uint16(src[s:]))
 				s += 3
-				x = uint32(src[s-2]) | uint32(src[s-1])<<8
 			case x == 62:
+				// Read 32 bits one byte back...
+				x = binary.LittleEndian.Uint32(src[s:]) >> 8
 				s += 4
-				x = uint32(src[s-3]) | uint32(src[s-2])<<8 | uint32(src[s-1])<<16
 			case x == 63:
+				x = binary.LittleEndian.Uint32(src[s+1:])
 				s += 5
-				x = uint32(src[s-4]) | uint32(src[s-3])<<8 | uint32(src[s-2])<<16 | uint32(src[s-1])<<24
 			}
 			length = int(x) + 1
 			if length > len(dst)-d || length > len(src)-s {
@@ -67,14 +72,14 @@ func s2Decode(dst, src []byte) int {
 				// keep last offset
 				switch length {
 				case 5:
+					length = int(src[s]) + 4
 					s += 1
-					length = int(uint32(src[s-1])) + 4
 				case 6:
+					length = int(binary.LittleEndian.Uint16(src[s:])) + (1 << 8)
 					s += 2
-					length = int(uint32(src[s-2])|(uint32(src[s-1])<<8)) + (1 << 8)
 				case 7:
+					length = int(uint32(src[s])|(uint32(src[s+1])<<8)|(uint32(src[s+2])<<16)) + (1 << 16)
 					s += 3
-					length = int(uint32(src[s-3])|(uint32(src[s-2])<<8)|(uint32(src[s-1])<<16)) + (1 << 16)
 				default: // 0-> 4
 				}
 			} else {
@@ -82,14 +87,14 @@ func s2Decode(dst, src []byte) int {
 			}
 			length += 4
 		case tagCopy2:
+			length = 1 + int(src[s])>>2
+			offset = int(binary.LittleEndian.Uint16(src[s+1:]))
 			s += 3
-			length = 1 + int(src[s-3])>>2
-			offset = int(uint32(src[s-2]) | uint32(src[s-1])<<8)
 
 		case tagCopy4:
+			offset = int(binary.LittleEndian.Uint32(src[s+1:]))
+			length = 1 + int(src[s])>>2
 			s += 5
-			length = 1 + int(src[s-5])>>2
-			offset = int(uint32(src[s-4]) | uint32(src[s-3])<<8 | uint32(src[s-2])<<16 | uint32(src[s-1])<<24)
 		}
 
 		if offset <= 0 || d < offset || length > len(dst)-d {
