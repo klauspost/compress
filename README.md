@@ -15,6 +15,14 @@ This package provides various compression algorithms.
 [![Sourcegraph Badge](https://sourcegraph.com/github.com/klauspost/compress/-/badge.svg)](https://sourcegraph.com/github.com/klauspost/compress?badge)
 
 # changelog
+
+* Jun 14, 2021 (v1.13.1)
+
+	* s2: Add full Snappy output support  [#396](https://github.com/klauspost/compress/pull/396)
+	* zstd: Add configurable [Decoder window size](https://pkg.go.dev/github.com/klauspost/compress@v1.13.0/zstd#WithDecoderMaxWindow) [#394](https://github.com/klauspost/compress/pull/394)
+	* gzhttp: Add header to skip compression  [#389](https://github.com/klauspost/compress/pull/389)
+	* s2: Improve speed with bigger output margin  [#395](https://github.com/klauspost/compress/pull/395)
+
 * Jun 3, 2021 (v1.13.0)
 	* Added [gzhttp](https://github.com/klauspost/compress/tree/master/gzhttp#gzip-handler) which allows wrapping HTTP servers and clients with GZIP compressors.
 	* zstd: Detect short invalid signatures [#382](https://github.com/klauspost/compress/pull/382)
