@@ -618,22 +618,22 @@ Compression and speed is typically a bit better `MaxEncodedLen` is also smaller 
 
 | Snappy                     | S2 replacement          |
 |----------------------------|-------------------------|
-| snappy.Encode(...)         | s2.EncodeSnappy(...)`   |
+| snappy.Encode(...)         | s2.EncodeSnappy(...)   |
 | snappy.MaxEncodedLen(...)  | s2.MaxEncodedLen(...)   |
 
 `s2.EncodeSnappy` can be replaced with `s2.EncodeSnappyBetter` or `s2.EncodeSnappyBest` to get more efficiently compressed snappy compatible output. 
 
-`s2ConcatBlocks` is compatible with snappy blocks.
+`s2.ConcatBlocks` is compatible with snappy blocks.
 
 Comparison of [`webdevdata.org-2015-01-07-subset`](https://files.klauspost.com/compress/webdevdata.org-2015-01-07-4GB-subset.7z),
 53927 files, total input size: 4,014,735,833 bytes. amd64, single goroutine used:
 
-| Encoder               | Size       | MB/s   |
-|-----------------------|------------|--------|
-| snappy.Encode         | 1128706759 | 725.59 |
-| s2.EncodeSnappy       | 1093823291 | 899.16 |
-| s2.EncodeSnappyBetter | 1001158548 | 578.49 |
-| s2.EncodeSnappyBest   | 944507998  | 66.00  |
+| Encoder               | Size       | MB/s   | Reduction |
+|-----------------------|------------|--------|------------
+| snappy.Encode         | 1128706759 | 725.59 | 71.89%    |
+| s2.EncodeSnappy       | 1093823291 | 899.16 | 72.75%    |
+| s2.EncodeSnappyBetter | 1001158548 | 578.49 | 75.06%    |
+| s2.EncodeSnappyBest   | 944507998  | 66.00  | 76.47%    |
 
 ## Streams
 
