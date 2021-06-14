@@ -19,7 +19,7 @@ This package provides various compression algorithms.
 * Jun 14, 2021 (v1.13.1)
 
 	* s2: Add full Snappy output support  [#396](https://github.com/klauspost/compress/pull/396)
-	* zstd: Add configurable [Decoder window size](https://pkg.go.dev/github.com/klauspost/compress@v1.13.0/zstd#WithDecoderMaxWindow) [#394](https://github.com/klauspost/compress/pull/394)
+	* zstd: Add configurable [Decoder window](https://pkg.go.dev/github.com/klauspost/compress/zstd#WithDecoderMaxWindow) size [#394](https://github.com/klauspost/compress/pull/394)
 	* gzhttp: Add header to skip compression  [#389](https://github.com/klauspost/compress/pull/389)
 	* s2: Improve speed with bigger output margin  [#395](https://github.com/klauspost/compress/pull/395)
 
