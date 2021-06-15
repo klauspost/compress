@@ -69,26 +69,24 @@ func s2Decode(dst, src []byte) int {
 
 		case tagCopy1:
 			length = int(in[0]) >> 2 & 0x7
-			toffset := int(uint32(in[0])&0xe0<<3 | uint32(in[1]))
+			toffset := int(in[0])&0xe0<<3 | int(in[1])
 			if toffset == 0 {
 				if debug {
 					fmt.Print("(repeat) ")
 				}
 				// keep last offset
-				if length <= 4 {
+				switch length {
+				case 5:
+					length = int(in[2]) + 4
+					in = in[3:]
+				case 6:
+					length = int(binary.LittleEndian.Uint16(in[2:4])) + (1 << 8)
+					in = in[4:]
+				case 7:
+					length = int(uint32(in[2])|(uint32(in[3])<<8)|(uint32(in[4])<<16)) + (1 << 16)
+					in = in[5:]
+				default:
 					in = in[2:]
-				} else {
-					switch length {
-					case 5:
-						length = int(in[2]) + 4
-						in = in[3:]
-					case 6:
-						length = int(binary.LittleEndian.Uint16(in[2:4])) + (1 << 8)
-						in = in[4:]
-					case 7:
-						length = int(uint32(in[2])|(uint32(in[3])<<8)|(uint32(in[4])<<16)) + (1 << 16)
-						in = in[5:]
-					}
 				}
 			} else {
 				in = in[2:]
