@@ -296,7 +296,7 @@ func toSize(size string) (int64, error) {
 
 	switch multiple {
 	case "G", "GB", "GIB":
-		return bytes * 1 << 20, nil
+		return bytes * 1 << 30, nil
 	case "M", "MB", "MIB":
 		return bytes * 1 << 20, nil
 	case "K", "KB", "KIB":
