@@ -252,7 +252,7 @@ func TestEncoderRegression(t *testing.T) {
 
 					// Use the Writer
 					var dst bytes.Buffer
-					enc.Reset(&dst)
+					enc.ResetContentSize(&dst, int64(len(in)))
 					_, err = enc.Write(in)
 					if err != nil {
 						t.Error(err)
@@ -407,7 +407,7 @@ func TestWithEncoderPadding(t *testing.T) {
 
 		// Test using the writer.
 		var buf bytes.Buffer
-		e.Reset(&buf)
+		e.ResetContentSize(&buf, int64(len(src)))
 		_, err = io.Copy(e, bytes.NewBuffer(src))
 		if err != nil {
 			t.Fatal(err)
