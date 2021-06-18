@@ -184,7 +184,7 @@ func TestEncoder_SmallDict(t *testing.T) {
 				enc := encs[i]
 				t.Run(encNames[i], func(t *testing.T) {
 					var buf bytes.Buffer
-					enc.Reset(&buf)
+					enc.ResetContentSize(&buf, int64(len(decoded)))
 					_, err := enc.Write(decoded)
 					if err != nil {
 						t.Fatal(err)
