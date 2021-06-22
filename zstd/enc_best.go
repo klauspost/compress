@@ -12,6 +12,7 @@ import (
 const (
 	bestLongTableBits = 20                     // Bits used in the long match table
 	bestLongTableSize = 1 << bestLongTableBits // Size of the table
+	bestLongLen       = 8                      // Bytes used for table hash
 
 	// Note: Increasing the short table bits or making the hash shorter
 	// can actually lead to compression degradation since it will 'steal' more from the
@@ -19,6 +20,8 @@ const (
 	// This greatly depends on the type of input.
 	bestShortTableBits = 16                      // Bits used in the short match table
 	bestShortTableSize = 1 << bestShortTableBits // Size of the table
+	bestShortLen       = 4                       // Bytes used for table hash
+
 )
 
 // bestFastEncoder uses 2 tables, one for short matches (5 bytes) and one for long matches.
@@ -174,8 +177,8 @@ encodeLoop:
 		}
 		const goodEnough = 100
 
-		nextHashL := hash8(cv, bestLongTableBits)
-		nextHashS := hash4x64(cv, bestShortTableBits)
+		nextHashL := hashLen(cv, bestLongTableBits, bestLongLen)
+		nextHashS := hashLen(cv, bestShortTableBits, bestShortLen)
 		candidateL := e.longTable[nextHashL]
 		candidateS := e.table[nextHashS]
 
@@ -209,11 +212,11 @@ encodeLoop:
 			}
 
 			s++
-			candidateS = e.table[hash4x64(cv>>8, bestShortTableBits)]
+			candidateS = e.table[hashLen(cv>>8, bestShortTableBits, bestShortLen)]
 			cv = load6432(src, s)
 			cv2 := load6432(src, s+1)
-			candidateL = e.longTable[hash8(cv, bestLongTableBits)]
-			candidateL2 := e.longTable[hash8(cv2, bestLongTableBits)]
+			candidateL = e.longTable[hashLen(cv, bestLongTableBits, bestLongLen)]
+			candidateL2 := e.longTable[hashLen(cv2, bestLongTableBits, bestLongLen)]
 
 			best = bestOf(best, matchAt(candidateS.offset-e.cur, s, uint32(cv), -1))
 			best = bestOf(best, matchAt(candidateL.offset-e.cur, s, uint32(cv), -1))
@@ -224,7 +227,7 @@ encodeLoop:
 			// See if we can find a better match by checking where the current best ends.
 			// Use that offset to see if we can find a better full match.
 			if sAt := best.s + best.length; sAt < sLimit {
-				nextHashL := hash8(load6432(src, sAt), bestLongTableBits)
+				nextHashL := hashLen(load6432(src, sAt), bestLongTableBits, bestLongLen)
 				candidateEnd := e.longTable[nextHashL]
 				if pos := candidateEnd.offset - e.cur - best.length; pos >= 0 {
 					bestEnd := bestOf(best, matchAt(pos, best.s, load3232(src, best.s), -1))
@@ -284,8 +287,8 @@ encodeLoop:
 			off := index0 + e.cur
 			for index0 < s-1 {
 				cv0 := load6432(src, index0)
-				h0 := hash8(cv0, bestLongTableBits)
-				h1 := hash4x64(cv0, bestShortTableBits)
+				h0 := hashLen(cv0, bestLongTableBits, bestLongLen)
+				h1 := hashLen(cv0, bestShortTableBits, bestShortLen)
 				e.longTable[h0] = prevEntry{offset: off, prev: e.longTable[h0].offset}
 				e.table[h1] = prevEntry{offset: off, prev: e.table[h1].offset}
 				off++
@@ -352,8 +355,8 @@ encodeLoop:
 		// every entry
 		for index0 < s-1 {
 			cv0 := load6432(src, index0)
-			h0 := hash8(cv0, bestLongTableBits)
-			h1 := hash4x64(cv0, bestShortTableBits)
+			h0 := hashLen(cv0, bestLongTableBits, bestLongLen)
+			h1 := hashLen(cv0, bestShortTableBits, bestShortLen)
 			off := index0 + e.cur
 			e.longTable[h0] = prevEntry{offset: off, prev: e.longTable[h0].offset}
 			e.table[h1] = prevEntry{offset: off, prev: e.table[h1].offset}
@@ -374,8 +377,8 @@ encodeLoop:
 			}
 
 			// Store this, since we have it.
-			nextHashS := hash4x64(cv, bestShortTableBits)
-			nextHashL := hash8(cv, bestLongTableBits)
+			nextHashS := hashLen(cv, bestShortTableBits, bestShortLen)
+			nextHashL := hashLen(cv, bestLongTableBits, bestLongLen)
 
 			// We have at least 4 byte match.
 			// No need to check backwards. We come straight from a match
@@ -441,10 +444,10 @@ func (e *bestFastEncoder) Reset(d *dict, singleBlock bool) {
 			const hashLog = bestShortTableBits
 
 			cv := load6432(d.content, i-e.maxMatchOff)
-			nextHash := hash4x64(cv, hashLog)      // 0 -> 4
-			nextHash1 := hash4x64(cv>>8, hashLog)  // 1 -> 5
-			nextHash2 := hash4x64(cv>>16, hashLog) // 2 -> 6
-			nextHash3 := hash4x64(cv>>24, hashLog) // 3 -> 7
+			nextHash := hashLen(cv, hashLog, bestShortLen)      // 0 -> 4
+			nextHash1 := hashLen(cv>>8, hashLog, bestShortLen)  // 1 -> 5
+			nextHash2 := hashLen(cv>>16, hashLog, bestShortLen) // 2 -> 6
+			nextHash3 := hashLen(cv>>24, hashLog, bestShortLen) // 3 -> 7
 			e.dictTable[nextHash] = prevEntry{
 				prev:   e.dictTable[nextHash].offset,
 				offset: i,
@@ -472,7 +475,7 @@ func (e *bestFastEncoder) Reset(d *dict, singleBlock bool) {
 		}
 		if len(d.content) >= 8 {
 			cv := load6432(d.content, 0)
-			h := hash8(cv, bestLongTableBits)
+			h := hashLen(cv, bestLongTableBits, bestLongLen)
 			e.dictLongTable[h] = prevEntry{
 				offset: e.maxMatchOff,
 				prev:   e.dictLongTable[h].offset,
@@ -482,7 +485,7 @@ func (e *bestFastEncoder) Reset(d *dict, singleBlock bool) {
 			off := 8 // First to read
 			for i := e.maxMatchOff + 1; i < end; i++ {
 				cv = cv>>8 | (uint64(d.content[off]) << 56)
-				h := hash8(cv, bestLongTableBits)
+				h := hashLen(cv, bestLongTableBits, bestLongLen)
 				e.dictLongTable[h] = prevEntry{
 					offset: i,
 					prev:   e.dictLongTable[h].offset,
