@@ -396,9 +396,9 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 
 // Close will release all resources.
 // It is NOT possible to reuse the decoder after this.
-func (d *Decoder) Close() {
+func (d *Decoder) Close() error {
 	if d.current.err == ErrDecoderClosed {
-		return
+		return nil
 	}
 	d.drainOutput()
 	if d.stream != nil {
@@ -418,6 +418,7 @@ func (d *Decoder) Close() {
 		d.current.d = nil
 	}
 	d.current.err = ErrDecoderClosed
+	return nil
 }
 
 // IOReadCloser returns the decoder as an io.ReadCloser for convenience.
