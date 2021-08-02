@@ -19,7 +19,7 @@ const (
 	// can actually lead to compression degradation since it will 'steal' more from the
 	// long match table and match offsets are quite big.
 	// This greatly depends on the type of input.
-	bestShortTableBits = 16                      // Bits used in the short match table
+	bestShortTableBits = 18                      // Bits used in the short match table
 	bestShortTableSize = 1 << bestShortTableBits // Size of the table
 	bestShortLen       = 4                       // Bytes used for table hash
 
@@ -37,10 +37,6 @@ const highScore = 25000
 
 // estBits will estimate output bits from predefined tables.
 func (m *match) estBits(bitsPerByte int32) {
-	if false && m.length < zstdMinMatch {
-		m.est = highScore
-		return
-	}
 	mlc := mlCode(uint32(m.length - zstdMinMatch))
 	var ofc uint8
 	if m.rep < 0 {
@@ -159,7 +155,6 @@ func (e *bestFastEncoder) Encode(blk *blockEnc, src []byte) {
 		bitsPerByte = 1024
 	}
 
-	//fmt.Printf("bitsPerByte: %f\n", float64(bitsPerByte)/1024)
 	// Override src
 	src = e.hist
 	sLimit := int32(len(src)) - inputMargin
@@ -475,7 +470,7 @@ func (e *bestFastEncoder) EncodeNoHist(blk *blockEnc, src []byte) {
 	e.Encode(blk, src)
 }
 
-// ResetDict will reset and set a dictionary if not nil
+// Reset will reset and set a dictionary if not nil
 func (e *bestFastEncoder) Reset(d *dict, singleBlock bool) {
 	e.resetBase(d, singleBlock)
 	if d == nil {

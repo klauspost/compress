@@ -175,6 +175,9 @@ func TestEncoder_EncodeAllEncodeXML(t *testing.T) {
 
 	for level := speedNotSet + 1; level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
+			if isRaceTest && level >= SpeedBestCompression {
+				t.SkipNow()
+			}
 			e, err := NewWriter(nil, WithEncoderLevel(level))
 			if err != nil {
 				t.Fatal(err)
@@ -294,6 +297,9 @@ func TestEncoder_EncodeAllTwain(t *testing.T) {
 
 	for level := speedNotSet + 1; level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
+			if isRaceTest && level >= SpeedBestCompression {
+				t.SkipNow()
+			}
 			for _, windowSize := range testWindowSizes {
 				t.Run(fmt.Sprintf("window:%d", windowSize), func(t *testing.T) {
 					e, err := NewWriter(nil, WithEncoderLevel(level), WithWindowSize(windowSize))
@@ -340,6 +346,9 @@ func TestEncoder_EncodeAllPi(t *testing.T) {
 
 	for level := speedNotSet + 1; level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
+			if isRaceTest && level >= SpeedBestCompression {
+				t.SkipNow()
+			}
 			for _, windowSize := range testWindowSizes {
 				t.Run(fmt.Sprintf("window:%d", windowSize), func(t *testing.T) {
 					e, err := NewWriter(nil, WithEncoderLevel(level), WithWindowSize(windowSize))
