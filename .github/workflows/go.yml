@@ -37,7 +37,7 @@ jobs:
     - name: Test Race
       env:
         CGO_ENABLED: 1
-      run: go test -cpu="1,4" -short -race ./...
+      run: go test -cpu="1,4" -short -race -v ./...
       
   build-special:
     env:

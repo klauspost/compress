@@ -6,11 +6,12 @@ package zstd
 
 import (
 	"fmt"
-	"math/bits"
+
+	"github.com/klauspost/compress"
 )
 
 const (
-	bestLongTableBits = 20                     // Bits used in the long match table
+	bestLongTableBits = 22                     // Bits used in the long match table
 	bestLongTableSize = 1 << bestLongTableBits // Size of the table
 	bestLongLen       = 8                      // Bytes used for table hash
 
@@ -18,11 +19,45 @@ const (
 	// can actually lead to compression degradation since it will 'steal' more from the
 	// long match table and match offsets are quite big.
 	// This greatly depends on the type of input.
-	bestShortTableBits = 16                      // Bits used in the short match table
+	bestShortTableBits = 18                      // Bits used in the short match table
 	bestShortTableSize = 1 << bestShortTableBits // Size of the table
 	bestShortLen       = 4                       // Bytes used for table hash
 
 )
+
+type match struct {
+	offset int32
+	s      int32
+	length int32
+	rep    int32
+	est    int32
+}
+
+const highScore = 25000
+
+// estBits will estimate output bits from predefined tables.
+func (m *match) estBits(bitsPerByte int32) {
+	mlc := mlCode(uint32(m.length - zstdMinMatch))
+	var ofc uint8
+	if m.rep < 0 {
+		ofc = ofCode(uint32(m.s-m.offset) + 3)
+	} else {
+		ofc = ofCode(uint32(m.rep))
+	}
+	// Cost, excluding
+	ofTT, mlTT := fsePredefEnc[tableOffsets].ct.symbolTT[ofc], fsePredefEnc[tableMatchLengths].ct.symbolTT[mlc]
+
+	// Add cost of match encoding...
+	m.est = int32(ofTT.outBits + mlTT.outBits)
+	m.est += int32(ofTT.deltaNbBits>>16 + mlTT.deltaNbBits>>16)
+	// Subtract savings compared to literal encoding...
+	m.est -= (m.length * bitsPerByte) >> 10
+	if m.est > 0 {
+		// Unlikely gain..
+		m.length = 0
+		m.est = highScore
+	}
+}
 
 // bestFastEncoder uses 2 tables, one for short matches (5 bytes) and one for long matches.
 // The long match table contains the previous entry with the same hash,
@@ -112,6 +147,14 @@ func (e *bestFastEncoder) Encode(blk *blockEnc, src []byte) {
 		return
 	}
 
+	// Use this to estimate literal cost.
+	// Scaled by 10 bits.
+	bitsPerByte := int32((compress.ShannonEntropyBits(src) * 1024) / len(src))
+	// Huffman can never go < 1 bit/byte
+	if bitsPerByte < 1024 {
+		bitsPerByte = 1024
+	}
+
 	// Override src
 	src = e.hist
 	sLimit := int32(len(src)) - inputMargin
@@ -148,29 +191,8 @@ encodeLoop:
 			panic("offset0 was 0")
 		}
 
-		type match struct {
-			offset int32
-			s      int32
-			length int32
-			rep    int32
-		}
-		matchAt := func(offset int32, s int32, first uint32, rep int32) match {
-			if s-offset >= e.maxMatchOff || load3232(src, offset) != first {
-				return match{offset: offset, s: s}
-			}
-			return match{offset: offset, s: s, length: 4 + e.matchlen(s+4, offset+4, src), rep: rep}
-		}
-
 		bestOf := func(a, b match) match {
-			aScore := b.s - a.s + a.length
-			bScore := a.s - b.s + b.length
-			if a.rep < 0 {
-				aScore = aScore - int32(bits.Len32(uint32(a.offset)))/8
-			}
-			if b.rep < 0 {
-				bScore = bScore - int32(bits.Len32(uint32(b.offset)))/8
-			}
-			if aScore >= bScore {
+			if a.est+(a.s-b.s)*bitsPerByte>>10 < b.est+(b.s-a.s)*bitsPerByte>>10 {
 				return a
 			}
 			return b
@@ -182,17 +204,31 @@ encodeLoop:
 		candidateL := e.longTable[nextHashL]
 		candidateS := e.table[nextHashS]
 
+		matchAt := func(offset int32, s int32, first uint32, rep int32) match {
+			if s-offset >= e.maxMatchOff || load3232(src, offset) != first {
+				return match{s: s, est: highScore}
+			}
+			m := match{offset: offset, s: s, length: 4 + e.matchlen(s+4, offset+4, src), rep: rep}
+			m.estBits(bitsPerByte)
+			return m
+		}
+
 		best := bestOf(matchAt(candidateL.offset-e.cur, s, uint32(cv), -1), matchAt(candidateL.prev-e.cur, s, uint32(cv), -1))
 		best = bestOf(best, matchAt(candidateS.offset-e.cur, s, uint32(cv), -1))
 		best = bestOf(best, matchAt(candidateS.prev-e.cur, s, uint32(cv), -1))
+
 		if canRepeat && best.length < goodEnough {
-			best = bestOf(best, matchAt(s-offset1+1, s+1, uint32(cv>>8), 1))
-			best = bestOf(best, matchAt(s-offset2+1, s+1, uint32(cv>>8), 2))
-			best = bestOf(best, matchAt(s-offset3+1, s+1, uint32(cv>>8), 3))
+			cv := uint32(cv >> 8)
+			spp := s + 1
+			best = bestOf(best, matchAt(spp-offset1, spp, cv, 1))
+			best = bestOf(best, matchAt(spp-offset2, spp, cv, 2))
+			best = bestOf(best, matchAt(spp-offset3, spp, cv, 3))
 			if best.length > 0 {
-				best = bestOf(best, matchAt(s-offset1+3, s+3, uint32(cv>>24), 1))
-				best = bestOf(best, matchAt(s-offset2+3, s+3, uint32(cv>>24), 2))
-				best = bestOf(best, matchAt(s-offset3+3, s+3, uint32(cv>>24), 3))
+				cv >>= 16
+				spp += 2
+				best = bestOf(best, matchAt(spp-offset1, spp, cv, 1))
+				best = bestOf(best, matchAt(spp-offset2, spp, cv, 2))
+				best = bestOf(best, matchAt(spp-offset3, spp, cv, 3))
 			}
 		}
 		// Load next and check...
@@ -218,12 +254,18 @@ encodeLoop:
 			candidateL = e.longTable[hashLen(cv, bestLongTableBits, bestLongLen)]
 			candidateL2 := e.longTable[hashLen(cv2, bestLongTableBits, bestLongLen)]
 
+			// Short at s+1
 			best = bestOf(best, matchAt(candidateS.offset-e.cur, s, uint32(cv), -1))
+			// Long at s+1, s+2
 			best = bestOf(best, matchAt(candidateL.offset-e.cur, s, uint32(cv), -1))
 			best = bestOf(best, matchAt(candidateL.prev-e.cur, s, uint32(cv), -1))
 			best = bestOf(best, matchAt(candidateL2.offset-e.cur, s+1, uint32(cv2), -1))
 			best = bestOf(best, matchAt(candidateL2.prev-e.cur, s+1, uint32(cv2), -1))
-
+			if false {
+				// Short at s+3.
+				// Too often worse...
+				best = bestOf(best, matchAt(e.table[hashLen(cv2>>8, bestShortTableBits, bestShortLen)].offset-e.cur, s+2, uint32(cv2>>8), -1))
+			}
 			// See if we can find a better match by checking where the current best ends.
 			// Use that offset to see if we can find a better full match.
 			if sAt := best.s + best.length; sAt < sLimit {
@@ -428,7 +470,7 @@ func (e *bestFastEncoder) EncodeNoHist(blk *blockEnc, src []byte) {
 	e.Encode(blk, src)
 }
 
-// ResetDict will reset and set a dictionary if not nil
+// Reset will reset and set a dictionary if not nil
 func (e *bestFastEncoder) Reset(d *dict, singleBlock bool) {
 	e.resetBase(d, singleBlock)
 	if d == nil {
