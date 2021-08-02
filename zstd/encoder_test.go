@@ -78,6 +78,7 @@ func TestEncoder_EncodeAllSimple(t *testing.T) {
 	in = append(in, in...)
 	for _, opts := range getEncOpts(4) {
 		t.Run(opts.name, func(t *testing.T) {
+			runtime.GC()
 			e, err := NewWriter(nil, opts.o...)
 			if err != nil {
 				t.Fatal(err)
