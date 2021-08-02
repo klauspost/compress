@@ -50,8 +50,6 @@ func (m *match) estBits(bitsPerByte int32) {
 	}
 	// Cost, excluding
 	ofTT, mlTT := fsePredefEnc[tableOffsets].ct.symbolTT[ofc], fsePredefEnc[tableMatchLengths].ct.symbolTT[mlc]
-	//fmt.Println("ofc:", ofc, "of extra bits:", ofTT.outBits, "delta", ofTT.deltaNbBits>>16)
-	//fmt.Println("mlc:", mlc, "ml extra bits:", mlTT.outBits, "delta:", mlTT.deltaNbBits>>16)
 
 	// Add cost of match encoding...
 	m.est = int32(ofTT.outBits + mlTT.outBits)
@@ -63,7 +61,6 @@ func (m *match) estBits(bitsPerByte int32) {
 		m.length = 0
 		m.est = highScore
 	}
-	//fmt.Printf("%+v\n", *m)
 }
 
 // bestFastEncoder uses 2 tables, one for short matches (5 bytes) and one for long matches.
