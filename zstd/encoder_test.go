@@ -31,6 +31,9 @@ type testEncOpt struct {
 func getEncOpts(cMax int) []testEncOpt {
 	var o []testEncOpt
 	for level := speedNotSet + 1; level < speedLast; level++ {
+		if isRaceTest && level >= SpeedBestCompression {
+			break
+		}
 		for conc := 1; conc <= 4; conc *= 2 {
 			for _, wind := range testWindowSizes {
 				addOpt := func(name string, options ...EOption) {
