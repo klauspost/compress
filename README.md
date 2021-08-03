@@ -16,6 +16,15 @@ This package provides various compression algorithms.
 
 # changelog
 
+* Aug 3, 2021 (v1.13.3) 
+
+	* zstd: Improve Best compression [#404](https://github.com/klauspost/compress/pull/404)
+	* zstd: Fix WriteTo error forwarding [#411](https://github.com/klauspost/compress/pull/411)
+	* gzhttp: Return http.HandlerFunc instead of http.Handler. Unlikely breaking change. [#406](https://github.com/klauspost/compress/pull/406)
+	* s2sx: Fix max size error [#399](https://github.com/klauspost/compress/pull/399)
+	* zstd: Add optional stream content size on reset [#401](https://github.com/klauspost/compress/pull/401)
+	* zstd: use SpeedBestCompression for level >= 10 [#410](https://github.com/klauspost/compress/pull/410)
+
 * Jun 14, 2021 (v1.13.1)
 
 	* s2: Add full Snappy output support  [#396](https://github.com/klauspost/compress/pull/396)
