@@ -111,7 +111,15 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 				// Extend forward
 				candidate := s - repeat + 4 + checkRep
 				s += 4 + checkRep
-				for s <= sLimit {
+				for s < len(src) {
+					if len(src)-s < 8 {
+						if src[s] == src[candidate] {
+							s++
+							candidate++
+							continue
+						}
+						break
+					}
 					if diff := load64(src, s) ^ load64(src, candidate); diff != 0 {
 						s += bits.TrailingZeros64(diff) >> 3
 						break
@@ -175,7 +183,15 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 		// Extend the 4-byte match as long as possible.
 		s += 4
 		candidateL += 4
-		for s <= len(src)-8 {
+		for s < len(src) {
+			if len(src)-s < 8 {
+				if src[s] == src[candidateL] {
+					s++
+					candidateL++
+					continue
+				}
+				break
+			}
 			if diff := load64(src, s) ^ load64(src, candidateL); diff != 0 {
 				s += bits.TrailingZeros64(diff) >> 3
 				break
@@ -282,13 +298,20 @@ func encodeBlockBetterSnappyGo(dst, src []byte) (d int) {
 
 	// We initialize repeat to 0, so we never match on first attempt
 	repeat := 0
+	const maxSkip = 100
 
 	for {
 		candidateL := 0
 		nextS := 0
 		for {
 			// Next src position to check
-			nextS = s + (s-nextEmit)>>7 + 1
+			nextS = (s-nextEmit)>>7 + 1
+			if nextS > maxSkip {
+				nextS = s + maxSkip
+			} else {
+				nextS += s
+			}
+
 			if nextS > sLimit {
 				goto emitRemainder
 			}
@@ -339,7 +362,15 @@ func encodeBlockBetterSnappyGo(dst, src []byte) (d int) {
 		// Extend the 4-byte match as long as possible.
 		s += 4
 		candidateL += 4
-		for s <= len(src)-8 {
+		for s < len(src) {
+			if len(src)-s < 8 {
+				if src[s] == src[candidateL] {
+					s++
+					candidateL++
+					continue
+				}
+				break
+			}
 			if diff := load64(src, s) ^ load64(src, candidateL); diff != 0 {
 				s += bits.TrailingZeros64(diff) >> 3
 				break

@@ -657,7 +657,7 @@ func TestWriterGoldenOutput(t *testing.T) {
 		"\x00\x41",         // Compressed payload: tagLiteral, length=1,  "A".
 		"\xee\x01\x00",     // Compressed payload: tagCopy2,   length=60, offset=1.
 		"\xee\x01\x00",     // Compressed payload: tagCopy2,   length=60, offset=1.
-		"\x72\x01\x00",     // Compressed payload: tagCopy2,   length=21, offset=1.
+		"\x72\x01\x00",     // Compressed payload: tagCopy2,   length=29, offset=1.
 		"\x00\x18\x00\x00", // Compressed chunk, 24 bytes long (including 4 byte checksum).
 		"\x30\x85\x69\xeb", // Checksum.
 		"\x70",             // Compressed payload: Uncompressed length (varint encoded): 112.
@@ -670,6 +670,9 @@ func TestWriterGoldenOutput(t *testing.T) {
 		"\x00\x67",         // Compressed payload: tagLiteral, length=1,  "g".
 	}, "")
 	if got != want {
+		dec := NewReader(bytes.NewBuffer(buf.Bytes()))
+		var buf bytes.Buffer
+		io.Copy(&buf, dec)
 		t.Fatalf("\ngot:  % x\nwant: % x", got, want)
 	}
 }
