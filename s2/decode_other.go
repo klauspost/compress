@@ -44,7 +44,7 @@ func s2Decode(dst, src []byte) int {
 				x = uint32(src[s-4]) | uint32(src[s-3])<<8 | uint32(src[s-2])<<16 | uint32(src[s-1])<<24
 			}
 			length = int(x) + 1
-			if length > len(dst)-d || length > len(src)-s {
+			if length > len(dst)-d || length > len(src)-s || length <= 0 {
 				return decodeErrCodeCorrupt
 			}
 			if debug {
@@ -158,7 +158,7 @@ func s2Decode(dst, src []byte) int {
 				x = uint32(src[s-4]) | uint32(src[s-3])<<8 | uint32(src[s-2])<<16 | uint32(src[s-1])<<24
 			}
 			length = int(x) + 1
-			if length > len(dst)-d || length > len(src)-s {
+			if length > len(dst)-d || length > len(src)-s || length <= 0 {
 				return decodeErrCodeCorrupt
 			}
 			if debug {
