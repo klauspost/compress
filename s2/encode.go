@@ -411,6 +411,7 @@ type Writer struct {
 	wroteStreamHeader bool
 	paramsOK          bool
 	snappy            bool
+	flushOnWrite      bool
 	level             uint8
 }
 
@@ -499,6 +500,9 @@ func (w *Writer) Reset(writer io.Writer) {
 
 // Write satisfies the io.Writer interface.
 func (w *Writer) Write(p []byte) (nRet int, errRet error) {
+	if w.flushOnWrite {
+		return w.write(p)
+	}
 	// If we exceed the input buffer size, start writing
 	for len(p) > (cap(w.ibuf)-len(w.ibuf)) && w.err(nil) == nil {
 		var n int
@@ -588,6 +592,10 @@ func (w *Writer) EncodeBuffer(buf []byte) (err error) {
 		return err
 	}
 
+	if w.flushOnWrite {
+		_, err := w.write(buf)
+		return err
+	}
 	// Flush queued data first.
 	if len(w.ibuf) > 0 {
 		err := w.Flush()
@@ -932,11 +940,17 @@ func (w *Writer) Flush() error {
 
 	// Queue any data still in input buffer.
 	if len(w.ibuf) != 0 {
-		_, err := w.write(w.ibuf)
-		w.ibuf = w.ibuf[:0]
-		err = w.err(err)
-		if err != nil {
-			return err
+		if !w.wroteStreamHeader {
+			_, err := w.writeSync(w.ibuf)
+			w.ibuf = w.ibuf[:0]
+			return w.err(err)
+		} else {
+			_, err := w.write(w.ibuf)
+			w.ibuf = w.ibuf[:0]
+			err = w.err(err)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	if w.output == nil {
@@ -1140,6 +1154,19 @@ func WriterSnappyCompat() WriterOption {
 			// And allows us to skip some size checks.
 			w.blockSize = (64 << 10) - 8
 		}
+		return nil
+	}
+}
+
+// WriterFlushOnWrite will compress blocks on each call to the Write function.
+//
+// This is quite inefficient as blocks size will depend on the write size.
+//
+// Use WriterConcurrency(1) to also make sure that output is flushed.
+// When Write calls return, otherwise they will be written when compression is done.
+func WriterFlushOnWrite() WriterOption {
+	return func(w *Writer) error {
+		w.flushOnWrite = true
 		return nil
 	}
 }

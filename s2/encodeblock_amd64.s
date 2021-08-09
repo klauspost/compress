@@ -4796,10 +4796,18 @@ zero_loop_encodeBetterBlockAsm:
 	MOVQ  src_base+24(FP), DX
 
 search_loop_encodeBetterBlockAsm:
-	MOVL  CX, SI
-	SUBL  12(SP), SI
-	SHRL  $0x07, SI
-	LEAL  1(CX)(SI*1), SI
+	MOVL CX, SI
+	SUBL 12(SP), SI
+	SHRL $0x07, SI
+	CMPL SI, $0x63
+	JLE  check_maxskip_ok_encodeBetterBlockAsm
+	LEAL 100(CX), SI
+	JMP  check_maxskip_cont_encodeBetterBlockAsm
+
+check_maxskip_ok_encodeBetterBlockAsm:
+	LEAL 1(CX)(SI*1), SI
+
+check_maxskip_cont_encodeBetterBlockAsm:
 	CMPL  SI, 8(SP)
 	JGE   emit_remainder_encodeBetterBlockAsm
 	MOVQ  (DX)(CX*1), DI
@@ -5744,10 +5752,18 @@ zero_loop_encodeBetterBlockAsm4MB:
 	MOVQ  src_base+24(FP), DX
 
 search_loop_encodeBetterBlockAsm4MB:
-	MOVL  CX, SI
-	SUBL  12(SP), SI
-	SHRL  $0x07, SI
-	LEAL  1(CX)(SI*1), SI
+	MOVL CX, SI
+	SUBL 12(SP), SI
+	SHRL $0x07, SI
+	CMPL SI, $0x63
+	JLE  check_maxskip_ok_encodeBetterBlockAsm4MB
+	LEAL 100(CX), SI
+	JMP  check_maxskip_cont_encodeBetterBlockAsm4MB
+
+check_maxskip_ok_encodeBetterBlockAsm4MB:
+	LEAL 1(CX)(SI*1), SI
+
+check_maxskip_cont_encodeBetterBlockAsm4MB:
 	CMPL  SI, 8(SP)
 	JGE   emit_remainder_encodeBetterBlockAsm4MB
 	MOVQ  (DX)(CX*1), DI
@@ -12521,10 +12537,18 @@ zero_loop_encodeSnappyBetterBlockAsm:
 	MOVQ  src_base+24(FP), DX
 
 search_loop_encodeSnappyBetterBlockAsm:
-	MOVL  CX, SI
-	SUBL  12(SP), SI
-	SHRL  $0x07, SI
-	LEAL  1(CX)(SI*1), SI
+	MOVL CX, SI
+	SUBL 12(SP), SI
+	SHRL $0x07, SI
+	CMPL SI, $0x63
+	JLE  check_maxskip_ok_encodeSnappyBetterBlockAsm
+	LEAL 100(CX), SI
+	JMP  check_maxskip_cont_encodeSnappyBetterBlockAsm
+
+check_maxskip_ok_encodeSnappyBetterBlockAsm:
+	LEAL 1(CX)(SI*1), SI
+
+check_maxskip_cont_encodeSnappyBetterBlockAsm:
 	CMPL  SI, 8(SP)
 	JGE   emit_remainder_encodeSnappyBetterBlockAsm
 	MOVQ  (DX)(CX*1), DI

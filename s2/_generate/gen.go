@@ -42,8 +42,10 @@ func main() {
 	o.genEncodeBlockAsm("encodeBlockAsm8B", 8, 4, 4, limit8B)
 
 	o.outputMargin = 6
+	o.maxSkip = 100 // Blocks can be long, limit max skipping.
 	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm", 16, 7, 7, limit14B)
 	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm4MB", 16, 7, 7, 4<<20)
+	o.maxSkip = 0
 	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm12B", 14, 6, 6, limit12B)
 	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm10B", 12, 5, 6, limit10B)
 	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm8B", 10, 4, 6, limit8B)
@@ -57,7 +59,9 @@ func main() {
 	o.genEncodeBlockAsm("encodeSnappyBlockAsm10B", 10, 5, 4, limit10B)
 	o.genEncodeBlockAsm("encodeSnappyBlockAsm8B", 8, 4, 4, limit8B)
 
+	o.maxSkip = 100
 	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm", 16, 7, 7, limit14B)
+	o.maxSkip = 0
 	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm64K", 16, 7, 7, 64<<10-1)
 	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm12B", 14, 6, 6, limit12B)
 	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm10B", 12, 5, 6, limit10B)
@@ -113,6 +117,7 @@ type options struct {
 	vmbi2        bool
 	maxLen       int
 	outputMargin int // Should be at least 5.
+	maxSkip      int
 }
 
 func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes, maxLen int) {
@@ -251,7 +256,7 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes, m
 		cv := GP64()
 		nextS := GP32()
 		// nextS := s + (s-nextEmit)>>6 + 4
-		{
+		if o.maxSkip == 0 {
 			tmp := GP64()
 			MOVL(s, tmp.As32())           // tmp = s
 			SUBL(nextEmitL, tmp.As32())   // tmp = s - nextEmit
@@ -902,12 +907,33 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 		cv := GP64()
 		nextS := GP32()
 		// nextS := s + (s-nextEmit)>>skipLog + 1
-		{
+		if o.maxSkip == 0 {
 			tmp := GP64()
 			MOVL(s, tmp.As32())           // tmp = s
 			SUBL(nextEmitL, tmp.As32())   // tmp = s - nextEmit
 			SHRL(U8(skipLog), tmp.As32()) // tmp = (s - nextEmit) >> skipLog
 			LEAL(Mem{Base: s, Disp: 1, Index: tmp, Scale: 1}, nextS)
+		} else {
+			/*
+				nextS = (s-nextEmit)>>7 + 1
+				if nextS > maxSkip {
+					nextS = s + maxSkip
+				} else {
+					nextS += s
+				}
+			*/
+			tmp := GP64()
+			MOVL(s, tmp.As32())           // tmp = s
+			SUBL(nextEmitL, tmp.As32())   // tmp = s - nextEmit
+			SHRL(U8(skipLog), tmp.As32()) // tmp = (s - nextEmit) >> skipLog
+			CMPL(tmp.As32(), U8(o.maxSkip-1))
+			JLE(LabelRef("check_maxskip_ok_" + name))
+			LEAL(Mem{Base: s, Disp: o.maxSkip, Scale: 1}, nextS)
+			JMP(LabelRef("check_maxskip_cont_" + name))
+
+			Label("check_maxskip_ok_" + name)
+			LEAL(Mem{Base: s, Disp: 1, Index: tmp, Scale: 1}, nextS)
+			Label("check_maxskip_cont_" + name)
 		}
 		// if nextS > sLimit {goto emitRemainder}
 		{
