@@ -1217,6 +1217,18 @@ func testWriterRoundtrip(t *testing.T, src []byte, opts ...WriterOption) {
 		t.Error(err)
 		return
 	}
+	// Extra flush and close should be noops.
+	err = enc.Flush()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	err = enc.Close()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
 	t.Logf("encoded to %d -> %d bytes", len(src), buf.Len())
 	dec := NewReader(&buf)
 	decoded, err := ioutil.ReadAll(dec)
@@ -1475,13 +1487,13 @@ func BenchmarkRandomEncodeBlock1MB(b *testing.B) {
 	benchEncode(b, data)
 }
 
-func BenchmarkRandomEncodeBetterBlock1MB(b *testing.B) {
+func BenchmarkRandomEncodeBetterBlock16MB(b *testing.B) {
 	rng := rand.New(rand.NewSource(1))
-	data := make([]byte, 1<<20)
+	data := make([]byte, 16<<20)
 	for i := range data {
 		data[i] = uint8(rng.Intn(256))
 	}
-	benchEncodeBetter(b, data)
+	benchEncode(b, data)
 }
 
 // testFiles' values are copied directly from

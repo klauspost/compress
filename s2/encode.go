@@ -940,11 +940,17 @@ func (w *Writer) Flush() error {
 
 	// Queue any data still in input buffer.
 	if len(w.ibuf) != 0 {
-		_, err := w.write(w.ibuf)
-		w.ibuf = w.ibuf[:0]
-		err = w.err(err)
-		if err != nil {
-			return err
+		if !w.wroteStreamHeader {
+			_, err := w.writeSync(w.ibuf)
+			w.ibuf = w.ibuf[:0]
+			return w.err(err)
+		} else {
+			_, err := w.write(w.ibuf)
+			w.ibuf = w.ibuf[:0]
+			err = w.err(err)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	if w.output == nil {
