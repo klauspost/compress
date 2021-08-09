@@ -611,6 +611,11 @@ S2 now offers full compatibility with Snappy.
 
 This means that the efficient encoders of S2 can be used to generate fully Snappy compatible output.
 
+There is a [snappy](https://github.com/klauspost/compress/tree/master/snappy) package that can be used by
+simply changing imports from `github.com/golang/snappy` to `github.com/klauspost/compress/snappy`.
+This uses "better" mode for all operations.
+If you would like more control, you can use the s2 package as described below: 
+
 ## Blocks
 
 Snappy compatible blocks can be generated with the S2 encoder. 
@@ -637,7 +642,7 @@ Comparison of [`webdevdata.org-2015-01-07-subset`](https://files.klauspost.com/c
 
 ## Streams
 
-For streams, replace `enc = snappy.NewWriter(w)` with `enc = s2.NewWriter(w, s2.WriterSnappyCompat())`.
+For streams, replace `enc = snappy.NewBufferedWriter(w)` with `enc = s2.NewWriter(w, s2.WriterSnappyCompat())`.
 All other options are available, but note that block size limit is different for snappy.
 
 Comparison of different streams, AMD Ryzen 3950x, 16 cores. Size and throughput: 
