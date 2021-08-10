@@ -10,13 +10,13 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-	"path/filepath"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/klauspost/compress/s2"
+	"github.com/klauspost/compress/s2/cmd/internal/filepathx"
 	"github.com/klauspost/compress/s2/cmd/internal/readahead"
 )
 
@@ -96,7 +96,7 @@ Options:`)
 			continue
 		}
 
-		found, err := filepath.Glob(pattern)
+		found, err := filepathx.Glob(pattern)
 		exitErr(err)
 		if len(found) == 0 {
 			exitErr(fmt.Errorf("unable to find file %v", pattern))
@@ -146,7 +146,9 @@ Options:`)
 						fmt.Printf(" %d -> %d [%.02f%%]; %v, %.01fMB/s", len(b), output, pct, ms, mbPerSec)
 					}
 				}
-				fmt.Println("")
+				if !*quiet {
+					fmt.Println("")
+				}
 			}()
 		}
 		os.Exit(0)
