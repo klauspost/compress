@@ -294,7 +294,7 @@ func TestGzipHandlerContentLength(t *testing.T) {
 	// httptest.NewRecorder doesn't give you access to the Content-Length
 	// header so instead, we create a server on a random port and make
 	// a request to that instead
-	ln, err := net.Listen("tcp", "127.0.0.1:")
+	ln, err := net.Listen("tcp", "localhost:")
 	if err != nil {
 		t.Fatalf("failed creating listen socket: %v", err)
 	}
