@@ -51,7 +51,7 @@ func (b *blockEnc) init() {
 		if cap(b.literals) < maxCompressedBlockSize {
 			b.literals = make([]byte, 0, maxCompressedBlockSize)
 		}
-		const defSeqs = 200
+		const defSeqs = 2000
 		if cap(b.sequences) < defSeqs {
 			b.sequences = make([]seq, 0, defSeqs)
 		}
@@ -426,7 +426,7 @@ func fuzzFseEncoder(data []byte) int {
 		return 0
 	}
 	enc := fseEncoder{}
-	hist := enc.Histogram()[:256]
+	hist := enc.Histogram()
 	maxSym := uint8(0)
 	for i, v := range data {
 		v = v & 63
@@ -801,14 +801,13 @@ func (b *blockEnc) genCodes() {
 		// nothing to do
 		return
 	}
-
 	if len(b.sequences) > math.MaxUint16 {
 		panic("can only encode up to 64K sequences")
 	}
 	// No bounds checks after here:
-	llH := b.coders.llEnc.Histogram()[:256]
-	ofH := b.coders.ofEnc.Histogram()[:256]
-	mlH := b.coders.mlEnc.Histogram()[:256]
+	llH := b.coders.llEnc.Histogram()
+	ofH := b.coders.ofEnc.Histogram()
+	mlH := b.coders.mlEnc.Histogram()
 	for i := range llH {
 		llH[i] = 0
 	}
@@ -820,7 +819,8 @@ func (b *blockEnc) genCodes() {
 	}
 
 	var llMax, ofMax, mlMax uint8
-	for i, seq := range b.sequences {
+	seqs := b.sequences
+	for i, seq := range seqs {
 		v := llCode(seq.litLen)
 		seq.llCode = v
 		llH[v]++
@@ -844,7 +844,7 @@ func (b *blockEnc) genCodes() {
 				panic(fmt.Errorf("mlMax > maxMatchLengthSymbol (%d), matchlen: %d", mlMax, seq.matchLen))
 			}
 		}
-		b.sequences[i] = seq
+		seqs[i] = seq
 	}
 	maxCount := func(a []uint32) int {
 		var max uint32

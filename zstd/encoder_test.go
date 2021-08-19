@@ -51,7 +51,7 @@ func getEncOpts(cMax int) []testEncOpt {
 				addOpt("nolit", WithNoEntropyCompression(true))
 				addOpt("pad1k", WithEncoderPadding(1024))
 				addOpt("zerof", WithZeroFrames(true))
-				addOpt("singleseg", WithSingleSegment(true))
+				addOpt("1seg", WithSingleSegment(true))
 			}
 			if testing.Short() && conc == 2 {
 				break
@@ -904,10 +904,10 @@ func BenchmarkEncoder_EncodeAllXML(b *testing.B) {
 	}
 	dec.Close()
 
-	enc := Encoder{}
+	enc, _ := NewWriter(nil, WithEncoderConcurrency(1))
 	dst := enc.EncodeAll(in, nil)
 	wantSize := len(dst)
-	b.Log("Output size:", len(dst))
+	//b.Log("Output size:", len(dst))
 	b.ResetTimer()
 	b.ReportAllocs()
 	b.SetBytes(int64(len(in)))
@@ -994,7 +994,7 @@ func BenchmarkEncoder_EncodeAllHTML(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	enc := Encoder{}
+	enc, _ := NewWriter(nil, WithEncoderConcurrency(1))
 	dst := enc.EncodeAll(in, nil)
 	wantSize := len(dst)
 	b.ResetTimer()
@@ -1018,7 +1018,7 @@ func BenchmarkEncoder_EncodeAllTwain(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	enc := Encoder{}
+	enc, _ := NewWriter(nil, WithEncoderConcurrency(1))
 	dst := enc.EncodeAll(in, nil)
 	wantSize := len(dst)
 	b.ResetTimer()
@@ -1042,7 +1042,7 @@ func BenchmarkEncoder_EncodeAllPi(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	enc := Encoder{}
+	enc, _ := NewWriter(nil, WithEncoderConcurrency(1))
 	dst := enc.EncodeAll(in, nil)
 	wantSize := len(dst)
 	b.ResetTimer()
