@@ -22,7 +22,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/golang/snappy"
+	"github.com/klauspost/compress/internal/snapref"
+	"github.com/klauspost/compress/zip"
 	"github.com/klauspost/compress/zstd"
 )
 
@@ -131,7 +132,7 @@ func roundtrip(b, ebuf, dbuf []byte) error {
 	// Test concat with some existing data.
 	dst := []byte("existing")
 	// Add 3 different encodes and a 0 length block.
-	concat, err := ConcatBlocks(dst, Encode(nil, b), EncodeBetter(nil, b), []byte{0}, snappy.Encode(nil, b))
+	concat, err := ConcatBlocks(dst, Encode(nil, b), EncodeBetter(nil, b), []byte{0}, EncodeSnappy(nil, b))
 	if err != nil {
 		return fmt.Errorf("concat error: %v", err)
 	}
@@ -1301,11 +1302,11 @@ func testBestBlockRoundtrip(t *testing.T, src []byte) {
 }
 
 func testSnappyBlockRoundtrip(t *testing.T, src []byte) {
-	// Write with s2, decode with snappy.
+	// Write with s2, decode with snapref.
 	t.Run("regular", func(t *testing.T) {
 		dst := EncodeSnappy(nil, src)
 		t.Logf("encoded to %d -> %d bytes", len(src), len(dst))
-		decoded, err := snappy.Decode(nil, dst)
+		decoded, err := snapref.Decode(nil, dst)
 		if err != nil {
 			t.Error(err)
 			return
@@ -1322,7 +1323,7 @@ func testSnappyBlockRoundtrip(t *testing.T, src []byte) {
 	t.Run("better", func(t *testing.T) {
 		dst := EncodeSnappyBetter(nil, src)
 		t.Logf("encoded to %d -> %d bytes", len(src), len(dst))
-		decoded, err := snappy.Decode(nil, dst)
+		decoded, err := snapref.Decode(nil, dst)
 		if err != nil {
 			t.Error(err)
 			return
@@ -1339,7 +1340,7 @@ func testSnappyBlockRoundtrip(t *testing.T, src []byte) {
 	t.Run("best", func(t *testing.T) {
 		dst := EncodeSnappyBest(nil, src)
 		t.Logf("encoded to %d -> %d bytes", len(src), len(dst))
-		decoded, err := snappy.Decode(nil, dst)
+		decoded, err := snapref.Decode(nil, dst)
 		if err != nil {
 			t.Error(err)
 			return
@@ -1357,7 +1358,7 @@ func testSnappyBlockRoundtrip(t *testing.T, src []byte) {
 
 func testSnappyDecode(t *testing.T, src []byte) {
 	var buf bytes.Buffer
-	enc := snappy.NewBufferedWriter(&buf)
+	enc := snapref.NewBufferedWriter(&buf)
 	n, err := enc.Write(src)
 	if err != nil {
 		t.Error(err)
@@ -1367,6 +1368,7 @@ func testSnappyDecode(t *testing.T, src []byte) {
 		t.Error(io.ErrShortWrite)
 		return
 	}
+	enc.Close()
 	t.Logf("encoded to %d -> %d bytes", len(src), buf.Len())
 	dec := NewReader(&buf)
 	decoded, err := ioutil.ReadAll(dec)
@@ -1734,12 +1736,12 @@ func benchFileSnappy(b *testing.B, i int, decode bool) {
 	if n := testFiles[i].sizeLimit; 0 < n && n < len(data) {
 		data = data[:n]
 	}
-	b.Run("snappy", func(b *testing.B) {
+	b.Run("snappy-noasm", func(b *testing.B) {
 		if decode {
 			b.SetBytes(int64(len(data)))
 			b.ResetTimer()
 			b.RunParallel(func(pb *testing.PB) {
-				encoded := snappy.Encode(nil, data)
+				encoded := snapref.Encode(nil, data)
 				once.Do(func() {
 					if testing.Verbose() {
 						b.Log(b.Name(), len(encoded), " -> ", len(data))
@@ -1748,7 +1750,7 @@ func benchFileSnappy(b *testing.B, i int, decode bool) {
 				tmp := make([]byte, len(data))
 				for pb.Next() {
 					var err error
-					tmp, err = snappy.Decode(tmp, encoded)
+					tmp, err = snapref.Decode(tmp, encoded)
 					if err != nil {
 						b.Fatal(err)
 					}
@@ -1759,19 +1761,19 @@ func benchFileSnappy(b *testing.B, i int, decode bool) {
 			b.ResetTimer()
 			once.Do(func() {
 				if testing.Verbose() {
-					b.Log(len(data), " -> ", len(snappy.Encode(nil, data)))
+					b.Log(len(data), " -> ", len(snapref.Encode(nil, data)))
 				}
 			})
 			b.RunParallel(func(pb *testing.PB) {
-				dst := make([]byte, snappy.MaxEncodedLen(len(data)))
+				dst := make([]byte, snapref.MaxEncodedLen(len(data)))
 				tmp := make([]byte, len(data))
 				for pb.Next() {
-					res := snappy.Encode(dst, data)
+					res := snapref.Encode(dst, data)
 					if len(res) == 0 {
 						panic(0)
 					}
 					if false {
-						tmp, _ = snappy.Decode(tmp, res)
+						tmp, _ = snapref.Decode(tmp, res)
 						if !bytes.Equal(tmp, data) {
 							panic("wrong")
 						}
@@ -1795,7 +1797,7 @@ func benchFileSnappy(b *testing.B, i int, decode bool) {
 				tmp := make([]byte, len(data))
 				for pb.Next() {
 					var err error
-					tmp, err = snappy.Decode(tmp, encoded)
+					tmp, err = snapref.Decode(tmp, encoded)
 					if err != nil {
 						b.Fatal(err)
 					}
@@ -1810,7 +1812,7 @@ func benchFileSnappy(b *testing.B, i int, decode bool) {
 				}
 			})
 			b.RunParallel(func(pb *testing.PB) {
-				dst := make([]byte, snappy.MaxEncodedLen(len(data)))
+				dst := make([]byte, snapref.MaxEncodedLen(len(data)))
 				tmp := make([]byte, len(data))
 				for pb.Next() {
 					res := EncodeSnappy(dst, data)
@@ -1818,7 +1820,7 @@ func benchFileSnappy(b *testing.B, i int, decode bool) {
 						panic(0)
 					}
 					if false {
-						tmp, _ = snappy.Decode(tmp, res)
+						tmp, _ = snapref.Decode(tmp, res)
 						if !bytes.Equal(tmp, data) {
 							panic("wrong")
 						}
@@ -1842,7 +1844,7 @@ func benchFileSnappy(b *testing.B, i int, decode bool) {
 				tmp := make([]byte, len(data))
 				for pb.Next() {
 					var err error
-					tmp, err = snappy.Decode(tmp, encoded)
+					tmp, err = snapref.Decode(tmp, encoded)
 					if err != nil {
 						b.Fatal(err)
 					}
@@ -1865,7 +1867,7 @@ func benchFileSnappy(b *testing.B, i int, decode bool) {
 						panic(0)
 					}
 					if false {
-						tmp, _ = snappy.Decode(tmp, res)
+						tmp, _ = snapref.Decode(tmp, res)
 						if !bytes.Equal(tmp, data) {
 							panic("wrong")
 						}
@@ -1889,7 +1891,7 @@ func benchFileSnappy(b *testing.B, i int, decode bool) {
 				tmp := make([]byte, len(data))
 				for pb.Next() {
 					var err error
-					tmp, err = snappy.Decode(tmp, encoded)
+					tmp, err = snapref.Decode(tmp, encoded)
 					if err != nil {
 						b.Fatal(err)
 					}
@@ -1912,7 +1914,7 @@ func benchFileSnappy(b *testing.B, i int, decode bool) {
 						panic(0)
 					}
 					if false {
-						tmp, _ = snappy.Decode(tmp, res)
+						tmp, _ = snapref.Decode(tmp, res)
 						if !bytes.Equal(tmp, data) {
 							panic("wrong")
 						}
@@ -2039,6 +2041,33 @@ func TestDataRoundtrips(t *testing.T) {
 		data, _ := ioutil.ReadAll(dec)
 		test(t, data)
 	})
+	data, err := ioutil.ReadFile("testdata/enc_regressions.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range zr.File {
+		if !strings.HasSuffix(t.Name(), "") {
+			continue
+		}
+		t.Run(tt.Name, func(t *testing.T) {
+			r, err := tt.Open()
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			b, err := ioutil.ReadAll(r)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			test(t, b[:len(b):len(b)])
+		})
+	}
+
 }
 
 func BenchmarkDecodeS2Block(b *testing.B) {

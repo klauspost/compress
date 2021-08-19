@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/golang/snappy"
+	"github.com/klauspost/compress/internal/snapref"
 	"github.com/klauspost/compress/zip"
 )
 
@@ -152,7 +152,7 @@ func TestEncoderRegression(t *testing.T) {
 					dec.Reset(&buf)
 					got, err = ioutil.ReadAll(dec)
 				} else {
-					sdec := snappy.NewReader(&buf)
+					sdec := snapref.NewReader(&buf)
 					got, err = ioutil.ReadAll(sdec)
 				}
 				if err != nil {
@@ -189,7 +189,7 @@ func TestEncoderRegression(t *testing.T) {
 					dec.Reset(&buf)
 					got, err = ioutil.ReadAll(dec)
 				} else {
-					sdec := snappy.NewReader(&buf)
+					sdec := snapref.NewReader(&buf)
 					got, err = ioutil.ReadAll(sdec)
 				}
 				if err != nil {

@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/golang/snappy"
+	snappy "github.com/klauspost/compress/internal/snapref"
 )
 
 func TestSnappy_ConvertSimple(t *testing.T) {
