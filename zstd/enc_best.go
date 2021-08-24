@@ -550,9 +550,15 @@ func (e *bestFastEncoder) Reset(d *dict, singleBlock bool) {
 		e.lastDictID = d.id
 	}
 	// Reset table to initial state
-	copy(e.longTable[:], e.dictLongTable)
+	if len(e.dictLongTable) > 0 {
+		//copy(e.longTable[:], e.dictLongTable)
+		e.longTable = *(*[bestLongTableSize]prevEntry)(e.dictLongTable)
+	}
 
 	e.cur = e.maxMatchOff
 	// Reset table to initial state
-	copy(e.table[:], e.dictTable)
+	if len(e.dictTable) > 0 {
+		//copy(e.table[:], e.dictTable)
+		e.table = *(*[bestShortTableSize]prevEntry)(e.dictTable)
+	}
 }

@@ -598,10 +598,14 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 			if bufoff > dstEvery {
 				return nil, errors.New("corruption detected: stream overrun 1")
 			}
-			copy(out, buf[:bufoff])
-			copy(out[dstEvery:], buf[bufoff:bufoff*2])
-			copy(out[dstEvery*2:], buf[bufoff*2:bufoff*3])
-			copy(out[dstEvery*3:], buf[bufoff*3:bufoff*4])
+			//copy(out, buf[:bufoff])
+			//copy(out[dstEvery:], buf[bufoff:bufoff*2])
+			//copy(out[dstEvery*2:], buf[bufoff*2:bufoff*3])
+			//copy(out[dstEvery*3:], buf[bufoff*3:bufoff*4])
+			*(*[bufoff]byte)(out) = *(*[bufoff]byte)(buf[:])
+			*(*[bufoff]byte)(out[dstEvery:]) = *(*[bufoff]byte)(buf[bufoff:])
+			*(*[bufoff]byte)(out[dstEvery*2:]) = *(*[bufoff]byte)(buf[bufoff*2:])
+			*(*[bufoff]byte)(out[dstEvery*3:]) = *(*[bufoff]byte)(buf[bufoff*3:])
 			off = 0
 			out = out[bufoff:]
 			decoded += 256
@@ -809,10 +813,14 @@ func (d *Decoder) decompress4X8bit(dst, src []byte) ([]byte, error) {
 			if bufoff > dstEvery {
 				return nil, errors.New("corruption detected: stream overrun 1")
 			}
-			copy(out, buf[:bufoff])
-			copy(out[dstEvery:], buf[bufoff:bufoff*2])
-			copy(out[dstEvery*2:], buf[bufoff*2:bufoff*3])
-			copy(out[dstEvery*3:], buf[bufoff*3:bufoff*4])
+			//copy(out, buf[:bufoff])
+			//copy(out[dstEvery:], buf[bufoff:bufoff*2])
+			//copy(out[dstEvery*2:], buf[bufoff*2:bufoff*3])
+			//copy(out[dstEvery*3:], buf[bufoff*3:bufoff*4])
+			*(*[bufoff]byte)(out) = *(*[bufoff]byte)(buf[:])
+			*(*[bufoff]byte)(out[dstEvery:]) = *(*[bufoff]byte)(buf[bufoff:])
+			*(*[bufoff]byte)(out[dstEvery*2:]) = *(*[bufoff]byte)(buf[bufoff*2:])
+			*(*[bufoff]byte)(out[dstEvery*3:]) = *(*[bufoff]byte)(buf[bufoff*3:])
 			off = 0
 			out = out[bufoff:]
 			decoded += 256
@@ -1016,10 +1024,14 @@ func (d *Decoder) decompress4X8bitExactly(dst, src []byte) ([]byte, error) {
 			if bufoff > dstEvery {
 				return nil, errors.New("corruption detected: stream overrun 1")
 			}
-			copy(out, buf[:bufoff])
-			copy(out[dstEvery:], buf[bufoff:bufoff*2])
-			copy(out[dstEvery*2:], buf[bufoff*2:bufoff*3])
-			copy(out[dstEvery*3:], buf[bufoff*3:bufoff*4])
+			//copy(out, buf[:bufoff])
+			//copy(out[dstEvery:], buf[bufoff:bufoff*2])
+			//copy(out[dstEvery*2:], buf[bufoff*2:bufoff*3])
+			//copy(out[dstEvery*3:], buf[bufoff*3:bufoff*4])
+			*(*[bufoff]byte)(out) = *(*[bufoff]byte)(buf[:])
+			*(*[bufoff]byte)(out[dstEvery:]) = *(*[bufoff]byte)(buf[bufoff:])
+			*(*[bufoff]byte)(out[dstEvery*2:]) = *(*[bufoff]byte)(buf[bufoff*2:])
+			*(*[bufoff]byte)(out[dstEvery*3:]) = *(*[bufoff]byte)(buf[bufoff*3:])
 			off = 0
 			out = out[bufoff:]
 			decoded += 256
