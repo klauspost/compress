@@ -14,11 +14,12 @@ type DOption func(*decoderOptions) error
 
 // options retains accumulated state of multiple options.
 type decoderOptions struct {
-	lowMem         bool
 	concurrent     int
 	maxDecodedSize uint64
 	maxWindowSize  uint64
 	dicts          []dict
+	lowMem         bool
+	syncDec        bool
 }
 
 func (o *decoderOptions) setDefault() {

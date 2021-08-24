@@ -34,6 +34,9 @@ type Decoder struct {
 
 	// streamWg is the waitgroup for all streams
 	streamWg sync.WaitGroup
+	sync     struct {
+		dec *blockDec
+	}
 }
 
 // decoderState is used for maintaining state when the decoder
@@ -81,12 +84,7 @@ func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
 			return nil, err
 		}
 	}
-	d.current.output = make(chan decodeOutput, d.o.concurrent)
-	d.current.flushed = true
-
-	if r == nil {
-		d.current.err = ErrDecoderNilInput
-	}
+	d.o.syncDec = d.o.concurrent == 1
 
 	// Transfer option dicts.
 	d.dicts = make(map[uint32]dict, len(d.o.dicts))
@@ -95,12 +93,24 @@ func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
 	}
 	d.o.dicts = nil
 
-	// Create decoders
-	d.decoders = make(chan *blockDec, d.o.concurrent)
-	for i := 0; i < d.o.concurrent; i++ {
-		dec := newBlockDec(d.o.lowMem)
-		dec.localFrame = newFrameDec(d.o)
-		d.decoders <- dec
+	if r == nil {
+		d.current.err = ErrDecoderNilInput
+	}
+
+	d.current.output = make(chan decodeOutput, d.o.concurrent)
+	d.current.flushed = true
+
+	if d.o.syncDec {
+		d.sync.dec = newBlockDec(d.o.lowMem)
+		d.sync.dec.localFrame = newFrameDec(d.o)
+	} else {
+		// Create decoders
+		d.decoders = make(chan *blockDec, d.o.concurrent)
+		for i := 0; i < d.o.concurrent; i++ {
+			dec := newBlockDec(d.o.lowMem)
+			dec.localFrame = newFrameDec(d.o)
+			d.decoders <- dec
+		}
 	}
 
 	if r == nil {
@@ -194,6 +204,17 @@ func (d *Decoder) Reset(r io.Reader) error {
 			println("sync decode to", len(dst), "bytes, err:", err)
 		}
 		return nil
+	}
+	if d.o.syncDec {
+		if err := d.sync.dec.localFrame.reset(&readerWrapper{r: r}); err != nil {
+			d.current.err = err
+			return err
+		}
+		if len(d.current.b) > 0 {
+			d.current.b = d.current.b[:0]
+		}
+		d.current.b, d.current.err = d.sync.dec.localFrame.runDecoder(d.current.b, d.sync.dec)
+		return d.current.err
 	}
 
 	if d.stream == nil {
