@@ -29,6 +29,7 @@ var (
 	bench  = flag.Int("bench", 0, "Run benchmark n times. No output will be written")
 	help   = flag.Bool("help", false, "Display help")
 	out    = flag.String("o", "", "Write output to another file. Single input file only")
+	block  = flag.Bool("block", false, "Decompress as a single block. Will load content into memory.")
 
 	version = "(dev)"
 	date    = "(unknown)"
@@ -109,9 +110,15 @@ Options:`)
 	if *bench > 0 {
 		debug.SetGCPercent(10)
 		for _, filename := range files {
+			block := *block
+			dstFilename := cleanFileName(filename)
+			if strings.HasSuffix(filename, ".block") {
+				dstFilename = strings.TrimSuffix(dstFilename, ".block")
+				block = true
+			}
 			switch {
-			case strings.HasSuffix(filename, ".s2"):
-			case strings.HasSuffix(filename, ".snappy"):
+			case strings.HasSuffix(dstFilename, ".s2"):
+			case strings.HasSuffix(dstFilename, ".snappy"):
 			default:
 				if !isHTTP(filename) {
 					fmt.Println("Skipping", filename)
@@ -134,10 +141,17 @@ Options:`)
 					if !*quiet {
 						fmt.Print("\nDecompressing...")
 					}
-					r.Reset(bytes.NewBuffer(b))
 					start := time.Now()
-					output, err := io.Copy(ioutil.Discard, r)
-					exitErr(err)
+					var output int64
+					if block {
+						dec, err := s2.Decode(nil, b)
+						exitErr(err)
+						output = int64(len(dec))
+					} else {
+						r.Reset(bytes.NewBuffer(b))
+						output, err = io.Copy(ioutil.Discard, r)
+						exitErr(err)
+					}
 					if !*quiet {
 						elapsed := time.Since(start)
 						ms := elapsed.Round(time.Millisecond)
@@ -160,12 +174,17 @@ Options:`)
 
 	for _, filename := range files {
 		dstFilename := cleanFileName(filename)
+		block := *block
+		if strings.HasSuffix(dstFilename, ".block") {
+			dstFilename = strings.TrimSuffix(dstFilename, ".block")
+			block = true
+		}
 		switch {
 		case *out != "":
 			dstFilename = *out
-		case strings.HasSuffix(filename, ".s2"):
+		case strings.HasSuffix(dstFilename, ".s2"):
 			dstFilename = strings.TrimSuffix(dstFilename, ".s2")
-		case strings.HasSuffix(filename, ".snappy"):
+		case strings.HasSuffix(dstFilename, ".snappy"):
 			dstFilename = strings.TrimSuffix(dstFilename, ".snappy")
 		default:
 			if !isHTTP(filename) {
@@ -186,9 +205,15 @@ Options:`)
 			file, _, mode := openFile(filename)
 			defer closeOnce.Do(func() { file.Close() })
 			rc := rCounter{in: file}
-			src, err := readahead.NewReaderSize(&rc, 2, 4<<20)
-			exitErr(err)
-			defer src.Close()
+			var src io.Reader
+			if !block {
+				ra, err := readahead.NewReaderSize(&rc, 2, 4<<20)
+				exitErr(err)
+				defer ra.Close()
+				src = ra
+			} else {
+				src = &rc
+			}
 			if *safe {
 				_, err := os.Stat(dstFilename)
 				if !os.IsNotExist(err) {
@@ -205,13 +230,26 @@ Options:`)
 				dstFile, err := os.OpenFile(dstFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 				exitErr(err)
 				defer dstFile.Close()
-				bw := bufio.NewWriterSize(dstFile, 4<<20)
-				defer bw.Flush()
-				out = bw
+				out = dstFile
+				if !block {
+					bw := bufio.NewWriterSize(dstFile, 4<<20)
+					defer bw.Flush()
+					out = bw
+				}
 			}
-			r.Reset(src)
+			var decoded io.Reader
 			start := time.Now()
-			output, err := io.Copy(out, r)
+			if block {
+				all, err := ioutil.ReadAll(src)
+				exitErr(err)
+				b, err := s2.Decode(nil, all)
+				exitErr(err)
+				decoded = bytes.NewReader(b)
+			} else {
+				r.Reset(src)
+				decoded = r
+			}
+			output, err := io.Copy(out, decoded)
 			exitErr(err)
 			if !*quiet {
 				elapsed := time.Since(start)
