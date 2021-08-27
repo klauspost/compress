@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"runtime/pprof"
@@ -24,6 +23,7 @@ import (
 	"unicode"
 
 	"github.com/klauspost/compress/s2"
+	"github.com/klauspost/compress/s2/cmd/internal/filepathx"
 	"github.com/klauspost/compress/s2/cmd/internal/readahead"
 )
 
@@ -33,6 +33,7 @@ var (
 	snappy    = flag.Bool("snappy", false, "Generate Snappy compatible output stream")
 	cpu       = flag.Int("cpu", runtime.GOMAXPROCS(0), "Compress using this amount of threads")
 	blockSize = flag.String("blocksize", "4M", "Max  block size. Examples: 64K, 256K, 1M, 4M. Must be power of two and <= 4MB")
+	block     = flag.Bool("block", false, "Compress as a single block. Will load content into memory.")
 	safe      = flag.Bool("safe", false, "Do not overwrite output files")
 	padding   = flag.String("pad", "1", "Pad size to a multiple of this value, Examples: 500, 64K, 256K, 1M, 4M, etc")
 	stdout    = flag.Bool("c", false, "Write all output to stdout. Multiple input files will be concatenated")
@@ -128,7 +129,7 @@ Options:`)
 			files = append(files, pattern)
 			continue
 		}
-		found, err := filepath.Glob(pattern)
+		found, err := filepathx.Glob(pattern)
 		exitErr(err)
 		if len(found) == 0 {
 			exitErr(fmt.Errorf("unable to find file %v", pattern))
@@ -169,6 +170,88 @@ Options:`)
 		debug.SetGCPercent(10)
 		dec := s2.NewReader(nil)
 		for _, filename := range files {
+			if *block {
+				func() {
+					if !*quiet {
+						fmt.Print("Reading ", filename, "...")
+					}
+					// Input file.
+					file, size, _ := openFile(filename)
+					b := make([]byte, size)
+					_, err = io.ReadFull(file, b)
+					exitErr(err)
+					file.Close()
+					for i := 0; i < *bench; i++ {
+						if !*quiet {
+							fmt.Print("\nCompressing...")
+						}
+						start := time.Now()
+						var compressed []byte
+						switch {
+						case *faster:
+							if *snappy {
+								compressed = s2.EncodeSnappy(nil, b)
+								break
+							}
+							compressed = s2.Encode(nil, b)
+						case *slower:
+							if *snappy {
+								compressed = s2.EncodeSnappyBest(nil, b)
+								break
+							}
+							compressed = s2.EncodeBest(nil, b)
+						default:
+							if *snappy {
+								compressed = s2.EncodeSnappyBetter(nil, b)
+								break
+							}
+							compressed = s2.EncodeBetter(nil, b)
+						}
+						exitErr(err)
+						err = wr.Close()
+						exitErr(err)
+						if !*quiet {
+							input := len(b)
+							elapsed := time.Since(start)
+							mbpersec := (float64(input) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
+							pct := float64(len(compressed)) * 100 / float64(input)
+							ms := elapsed.Round(time.Millisecond)
+							fmt.Printf(" %d -> %d [%.02f%%]; %v, %.01fMB/s", input, len(compressed), pct, ms, mbpersec)
+						}
+						if *verify {
+							if !*quiet {
+								fmt.Print("\nDecompressing.")
+							}
+							decomp := make([]byte, 0, len(b))
+							start := time.Now()
+							decomp, err = s2.Decode(decomp, compressed)
+							exitErr(err)
+							if len(decomp) != len(b) {
+								exitErr(fmt.Errorf("unexpected size, want %d, got %d", len(b), len(decomp)))
+							}
+							if !*quiet {
+								input := len(b)
+								elapsed := time.Since(start)
+								mbpersec := (float64(input) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
+								pct := float64(input) * 100 / float64(len(compressed))
+								ms := elapsed.Round(time.Millisecond)
+								fmt.Printf(" %d -> %d [%.02f%%]; %v, %.01fMB/s", len(compressed), len(decomp), pct, ms, mbpersec)
+							}
+							if !bytes.Equal(decomp, b) {
+								exitErr(fmt.Errorf("decompresed data mismatch"))
+							}
+							if !*quiet {
+								fmt.Print("... Verified ok.")
+							}
+						}
+					}
+					if !*quiet {
+						fmt.Println("")
+					}
+					wr.Close()
+				}()
+				continue
+			}
 			func() {
 				if !*quiet {
 					fmt.Print("Reading ", filename, "...")
@@ -230,7 +313,9 @@ Options:`)
 						dec.Reset(nil)
 					}
 				}
-				fmt.Println("")
+				if !*quiet {
+					fmt.Println("")
+				}
 				wr.Close()
 			}()
 		}
@@ -240,10 +325,99 @@ Options:`)
 	if *snappy {
 		ext = ".snappy"
 	}
+	if *block {
+		ext += ".block"
+	}
 	if *out != "" && len(files) > 1 {
 		exitErr(errors.New("-out parameter can only be used with one input"))
 	}
 	for _, filename := range files {
+		if *block {
+			func() {
+				var closeOnce sync.Once
+				dstFilename := cleanFileName(fmt.Sprintf("%s%s", filename, ext))
+				if *out != "" {
+					dstFilename = *out
+				}
+				if !*quiet {
+					fmt.Print("Compressing ", filename, " -> ", dstFilename)
+				}
+				// Input file.
+				file, _, mode := openFile(filename)
+				exitErr(err)
+				defer closeOnce.Do(func() { file.Close() })
+				inBytes, err := ioutil.ReadAll(file)
+				exitErr(err)
+
+				var out io.Writer
+				switch {
+				case *stdout:
+					out = os.Stdout
+				default:
+					if *safe {
+						_, err := os.Stat(dstFilename)
+						if !os.IsNotExist(err) {
+							exitErr(errors.New("destination file exists"))
+						}
+					}
+					dstFile, err := os.OpenFile(dstFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+					exitErr(err)
+					defer dstFile.Close()
+					out = dstFile
+				}
+				start := time.Now()
+				var compressed []byte
+				switch {
+				case *faster:
+					if *snappy {
+						compressed = s2.EncodeSnappy(nil, inBytes)
+						break
+					}
+					compressed = s2.Encode(nil, inBytes)
+				case *slower:
+					if *snappy {
+						compressed = s2.EncodeSnappyBest(nil, inBytes)
+						break
+					}
+					compressed = s2.EncodeBest(nil, inBytes)
+				default:
+					if *snappy {
+						compressed = s2.EncodeSnappyBetter(nil, inBytes)
+						break
+					}
+					compressed = s2.EncodeBetter(nil, inBytes)
+				}
+				_, err = out.Write(compressed)
+				exitErr(err)
+				if !*quiet {
+					elapsed := time.Since(start)
+					mbpersec := (float64(len(inBytes)) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
+					pct := float64(len(compressed)) * 100 / float64(len(inBytes))
+					fmt.Printf(" %d -> %d [%.02f%%]; %.01fMB/s\n", len(inBytes), len(compressed), pct, mbpersec)
+				}
+				if *verify {
+					got, err := s2.Decode(make([]byte, 0, len(inBytes)), compressed)
+					exitErr(err)
+					if !bytes.Equal(got, inBytes) {
+						exitErr(fmt.Errorf("decoded content mismatch"))
+					}
+					if !*quiet {
+						fmt.Print("... Verified ok.")
+					}
+				}
+				if *remove {
+					closeOnce.Do(func() {
+						file.Close()
+						if !*quiet {
+							fmt.Println("Removing", filename)
+						}
+						err := os.Remove(filename)
+						exitErr(err)
+					})
+				}
+			}()
+			continue
+		}
 		func() {
 			var closeOnce sync.Once
 			dstFilename := cleanFileName(fmt.Sprintf("%s%s", filename, ext))
