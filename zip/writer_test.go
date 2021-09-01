@@ -14,6 +14,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -542,7 +543,7 @@ func TestWriterCreateRaw(t *testing.T) {
 		if got.Method != want.method {
 			t.Errorf("%s: got Method %#x; want %#x", want.name, got.Method, want.method)
 		}
-		if got.Flags != want.flags {
+		if got.Flags != want.flags && runtime.Version() >= "go1.16" {
 			t.Errorf("%s: got Flags %#x; want %#x", want.name, got.Flags, want.flags)
 		}
 		if got.CRC32 != want.crc32 {
