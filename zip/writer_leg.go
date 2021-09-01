@@ -395,24 +395,24 @@ func (w *Writer) CreateHeader(fh *FileHeader) (io.Writer, error) {
 	return ow, nil
 }
 
-// Deprecated: CreateRawHeader is replaced by CreateRaw (stdlib name).
-func (w *Writer) CreateRawHeader(fh *FileHeader) (io.Writer, error) {
-	return w.CreateHeader(fh)
+// Deprecated: CreateHeaderRaw is replaced by CreateRaw (stdlib name).
+func (w *Writer) CreateHeaderRaw(fh *FileHeader) (io.Writer, error) {
+	return w.CreateRaw(fh)
 }
 
-// CreateHeader adds a file to the zip archive using the provided FileHeader
+// CreateRaw adds a file to the zip archive using the provided FileHeader
 // for the file metadata. Writer takes ownership of fh and may mutate
 // its fields. The caller must not modify fh after calling CreateHeaderRaw.
 //
 // This returns a Writer to which the compressed file contents should be written.
 // The file's contents must be written to the io.Writer before the next
-// call to Create, Copy, CreateHeader, CreateHeaderRaw or Close.
+// call to Create, Copy, CreateHeader, CreateRaw or Close.
 //
 // Using this requires knowledge of populating the FileHeader correctly (the
 // UncompressedSize64 and CRC32 fields should be set and valid for the contents
 // written). For copying from an existing zip file, the Copy() function is
 // recommended.
-func (w *Writer) CreateHeader(fh *FileHeader) (io.Writer, error) {
+func (w *Writer) CreateRaw(fh *FileHeader) (io.Writer, error) {
 	if w.last != nil && !w.last.Closed() {
 		if err := w.last.Close(); err != nil {
 			return nil, err
