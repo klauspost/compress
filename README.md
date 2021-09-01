@@ -28,7 +28,6 @@ This package provides various compression algorithms.
 	* zstd: Fix incorrect encoding in "best" mode [#415](https://github.com/klauspost/compress/pull/415)
 
 * Aug 3, 2021 (v1.13.3) 
-
 	* zstd: Improve Best compression [#404](https://github.com/klauspost/compress/pull/404)
 	* zstd: Fix WriteTo error forwarding [#411](https://github.com/klauspost/compress/pull/411)
 	* gzhttp: Return http.HandlerFunc instead of http.Handler. Unlikely breaking change. [#406](https://github.com/klauspost/compress/pull/406)
@@ -37,7 +36,6 @@ This package provides various compression algorithms.
 	* zstd: use SpeedBestCompression for level >= 10 [#410](https://github.com/klauspost/compress/pull/410)
 
 * Jun 14, 2021 (v1.13.1)
-
 	* s2: Add full Snappy output support  [#396](https://github.com/klauspost/compress/pull/396)
 	* zstd: Add configurable [Decoder window](https://pkg.go.dev/github.com/klauspost/compress/zstd#WithDecoderMaxWindow) size [#394](https://github.com/klauspost/compress/pull/394)
 	* gzhttp: Add header to skip compression  [#389](https://github.com/klauspost/compress/pull/389)
