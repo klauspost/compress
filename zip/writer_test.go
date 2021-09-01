@@ -561,7 +561,7 @@ func TestWriterCreateRaw(t *testing.T) {
 			continue
 		}
 
-		buf, err := io.ReadAll(r)
+		buf, err := ioutil.ReadAll(r)
 		if err != nil {
 			t.Errorf("%s: ReadAll err = %v", got.Name, err)
 			continue
