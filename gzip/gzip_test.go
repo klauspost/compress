@@ -7,7 +7,6 @@ package gzip
 import (
 	"bufio"
 	"bytes"
-	oldgz "compress/gzip"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -486,6 +485,7 @@ func benchmarkGzipN(b *testing.B, level int) {
 	}
 }
 
+/*
 func BenchmarkOldGzipL1(b *testing.B) { benchmarkOldGzipN(b, 1) }
 func BenchmarkOldGzipL2(b *testing.B) { benchmarkOldGzipN(b, 2) }
 func BenchmarkOldGzipL3(b *testing.B) { benchmarkOldGzipN(b, 3) }
@@ -522,3 +522,5 @@ func benchmarkOldGzipN(b *testing.B, level int) {
 		}
 	}
 }
+
+*/
