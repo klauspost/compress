@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.16
-// +build go1.16
+//go:build !go1.16
+// +build !go1.16
 
 /*
 Package zip provides support for reading and writing ZIP archives.
@@ -23,7 +23,7 @@ fields must be used instead.
 package zip
 
 import (
-	"io/fs"
+	"os"
 	"path"
 	"time"
 )
@@ -45,7 +45,7 @@ const (
 	directoryHeaderLen       = 46         // + filename + extra + comment
 	directoryEndLen          = 22         // + comment
 	dataDescriptorLen        = 16         // four uint32: descriptor signature, crc32, compressed size, size
-	dataDescriptor64Len      = 24         // two uint32: signature, crc32 | two uint64: compressed size, size
+	dataDescriptor64Len      = 24         // descriptor with 8 byte sizes
 	directory64LocLen        = 20         //
 	directory64EndLen        = 56         // + extra
 
@@ -140,12 +140,12 @@ type FileHeader struct {
 	ExternalAttrs      uint32 // Meaning depends on CreatorVersion
 }
 
-// FileInfo returns an fs.FileInfo for the FileHeader.
-func (h *FileHeader) FileInfo() fs.FileInfo {
+// FileInfo returns an os.FileInfo for the FileHeader.
+func (h *FileHeader) FileInfo() os.FileInfo {
 	return headerFileInfo{h}
 }
 
-// headerFileInfo implements fs.FileInfo.
+// headerFileInfo implements os.FileInfo.
 type headerFileInfo struct {
 	fh *FileHeader
 }
@@ -164,20 +164,17 @@ func (fi headerFileInfo) ModTime() time.Time {
 	}
 	return fi.fh.Modified.UTC()
 }
-func (fi headerFileInfo) Mode() fs.FileMode { return fi.fh.Mode() }
-func (fi headerFileInfo) Type() fs.FileMode { return fi.fh.Mode().Type() }
+func (fi headerFileInfo) Mode() os.FileMode { return fi.fh.Mode() }
 func (fi headerFileInfo) Sys() interface{}  { return fi.fh }
 
-func (fi headerFileInfo) Info() (fs.FileInfo, error) { return fi, nil }
-
 // FileInfoHeader creates a partially-populated FileHeader from an
-// fs.FileInfo.
-// Because fs.FileInfo's Name method returns only the base name of
+// os.FileInfo.
+// Because os.FileInfo's Name method returns only the base name of
 // the file it describes, it may be necessary to modify the Name field
 // of the returned header to provide the full path name of the file.
 // If compression is desired, callers should set the FileHeader.Method
 // field; it is unset by default.
-func FileInfoHeader(fi fs.FileInfo) (*FileHeader, error) {
+func FileInfoHeader(fi os.FileInfo) (*FileHeader, error) {
 	size := fi.Size()
 	fh := &FileHeader{
 		Name:               fi.Name(),
@@ -286,7 +283,7 @@ const (
 )
 
 // Mode returns the permission and mode bits for the FileHeader.
-func (h *FileHeader) Mode() (mode fs.FileMode) {
+func (h *FileHeader) Mode() (mode os.FileMode) {
 	switch h.CreatorVersion >> 8 {
 	case creatorUnix, creatorMacOSX:
 		mode = unixModeToFileMode(h.ExternalAttrs >> 16)
@@ -294,18 +291,18 @@ func (h *FileHeader) Mode() (mode fs.FileMode) {
 		mode = msdosModeToFileMode(h.ExternalAttrs)
 	}
 	if len(h.Name) > 0 && h.Name[len(h.Name)-1] == '/' {
-		mode |= fs.ModeDir
+		mode |= os.ModeDir
 	}
 	return mode
 }
 
 // SetMode changes the permission and mode bits for the FileHeader.
-func (h *FileHeader) SetMode(mode fs.FileMode) {
+func (h *FileHeader) SetMode(mode os.FileMode) {
 	h.CreatorVersion = h.CreatorVersion&0xff | creatorUnix<<8
 	h.ExternalAttrs = fileModeToUnixMode(mode) << 16
 
 	// set MSDOS attributes too, as the original zip does.
-	if mode&fs.ModeDir != 0 {
+	if mode&os.ModeDir != 0 {
 		h.ExternalAttrs |= msdosDir
 	}
 	if mode&0200 == 0 {
@@ -318,13 +315,9 @@ func (h *FileHeader) isZip64() bool {
 	return h.CompressedSize64 >= uint32max || h.UncompressedSize64 >= uint32max
 }
 
-func (f *FileHeader) hasDataDescriptor() bool {
-	return f.Flags&0x8 != 0
-}
-
-func msdosModeToFileMode(m uint32) (mode fs.FileMode) {
+func msdosModeToFileMode(m uint32) (mode os.FileMode) {
 	if m&msdosDir != 0 {
-		mode = fs.ModeDir | 0777
+		mode = os.ModeDir | 0777
 	} else {
 		mode = 0666
 	}
@@ -334,70 +327,64 @@ func msdosModeToFileMode(m uint32) (mode fs.FileMode) {
 	return mode
 }
 
-func fileModeToUnixMode(mode fs.FileMode) uint32 {
+func fileModeToUnixMode(mode os.FileMode) uint32 {
 	var m uint32
-	switch mode & fs.ModeType {
+	switch mode & os.ModeType {
 	default:
 		m = s_IFREG
-	case fs.ModeDir:
+	case os.ModeDir:
 		m = s_IFDIR
-	case fs.ModeSymlink:
+	case os.ModeSymlink:
 		m = s_IFLNK
-	case fs.ModeNamedPipe:
+	case os.ModeNamedPipe:
 		m = s_IFIFO
-	case fs.ModeSocket:
+	case os.ModeSocket:
 		m = s_IFSOCK
-	case fs.ModeDevice:
-		m = s_IFBLK
-	case fs.ModeDevice | fs.ModeCharDevice:
-		m = s_IFCHR
+	case os.ModeDevice:
+		if mode&os.ModeCharDevice != 0 {
+			m = s_IFCHR
+		} else {
+			m = s_IFBLK
+		}
 	}
-	if mode&fs.ModeSetuid != 0 {
+	if mode&os.ModeSetuid != 0 {
 		m |= s_ISUID
 	}
-	if mode&fs.ModeSetgid != 0 {
+	if mode&os.ModeSetgid != 0 {
 		m |= s_ISGID
 	}
-	if mode&fs.ModeSticky != 0 {
+	if mode&os.ModeSticky != 0 {
 		m |= s_ISVTX
 	}
 	return m | uint32(mode&0777)
 }
 
-func unixModeToFileMode(m uint32) fs.FileMode {
-	mode := fs.FileMode(m & 0777)
+func unixModeToFileMode(m uint32) os.FileMode {
+	mode := os.FileMode(m & 0777)
 	switch m & s_IFMT {
 	case s_IFBLK:
-		mode |= fs.ModeDevice
+		mode |= os.ModeDevice
 	case s_IFCHR:
-		mode |= fs.ModeDevice | fs.ModeCharDevice
+		mode |= os.ModeDevice | os.ModeCharDevice
 	case s_IFDIR:
-		mode |= fs.ModeDir
+		mode |= os.ModeDir
 	case s_IFIFO:
-		mode |= fs.ModeNamedPipe
+		mode |= os.ModeNamedPipe
 	case s_IFLNK:
-		mode |= fs.ModeSymlink
+		mode |= os.ModeSymlink
 	case s_IFREG:
 		// nothing to do
 	case s_IFSOCK:
-		mode |= fs.ModeSocket
+		mode |= os.ModeSocket
 	}
 	if m&s_ISGID != 0 {
-		mode |= fs.ModeSetgid
+		mode |= os.ModeSetgid
 	}
 	if m&s_ISUID != 0 {
-		mode |= fs.ModeSetuid
+		mode |= os.ModeSetuid
 	}
 	if m&s_ISVTX != 0 {
-		mode |= fs.ModeSticky
+		mode |= os.ModeSticky
 	}
 	return mode
-}
-
-// dataDescriptor holds the data descriptor that optionally follows the file
-// contents in the zip file.
-type dataDescriptor struct {
-	crc32            uint32
-	compressedSize   uint64
-	uncompressedSize uint64
 }
