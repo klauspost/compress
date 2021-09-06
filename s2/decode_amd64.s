@@ -227,11 +227,11 @@ tagLit62Plus:
 
 	// case x == 62:
 	// x = uint32(src[s-3]) | uint32(src[s-2])<<8 | uint32(src[s-1])<<16
-	MOVWLZX -3(R_SRC), R_LEN
-	MOVBLZX -1(R_SRC), R_TMP1
-	SHLL    $16, R_TMP1
-	ORL     R_TMP1, R_LEN
-	JMP     doLit
+	// We read one byte, safe to read one back, since we are just reading tag.
+	// x = binary.LittleEndian.Uint32(src[s-1:]) >> 8
+	MOVL -4(R_SRC), R_LEN
+	SHRL $8, R_LEN
+	JMP  doLit
 
 tagLit63:
 	// case x == 63:
@@ -294,20 +294,18 @@ tagCopy:
 	JA   errCorrupt
 
 	// offset = int(uint32(src[s-2])&0xe0<<3 | uint32(src[s-1]))
-	MOVQ    R_LEN, R_TMP0
-	ANDQ    $0xe0, R_TMP0
-	SHLQ    $3, R_TMP0
+	// length = 4 + int(src[s-2])>>2&0x7
 	MOVBQZX -1(R_SRC), R_TMP1
+	MOVQ    R_LEN, R_TMP0
+	SHRQ    $2, R_LEN
+	ANDQ    $0xe0, R_TMP0
+	ANDQ    $7, R_LEN
+	SHLQ    $3, R_TMP0
+	ADDQ    $4, R_LEN
 	ORQ     R_TMP1, R_TMP0
 
-	// length = 4 + int(src[s-2])>>2&0x7
-	SHRQ $2, R_LEN
-	ANDQ $7, R_LEN
-	ADDQ $4, R_LEN
-
-	// check if repeat code
-	CMPQ R_TMP0, $0
-	JE   repeatCode
+	// check if repeat code, ZF set by ORQ.
+	JZ repeatCode
 
 	// This is a regular copy, transfer our temporary value to R_OFF (length)
 	MOVQ R_TMP0, R_OFF
@@ -363,12 +361,11 @@ repeatLen3:
 	JA   errCorrupt
 
 	// length = uint32(src[s-3]) | (uint32(src[s-2])<<8) | (uint32(src[s-1])<<16) + (1 << 16)
-	MOVBLZX -1(R_SRC), R_TMP0
-	MOVWLZX -3(R_SRC), R_LEN
-	SHLL    $16, R_TMP0
-	ORL     R_TMP0, R_LEN
-	ADDL    $65540, R_LEN
-	JMP     doCopyRepeat
+	// Read one byte further back (just part of the tag, shifted out)
+	MOVL -4(R_SRC), R_LEN
+	SHRL $8, R_LEN
+	ADDL $65540, R_LEN
+	JMP  doCopyRepeat
 
 doCopy:
 	// This is the end of the outer "switch", when we have a copy tag.
