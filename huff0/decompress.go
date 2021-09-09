@@ -20,8 +20,9 @@ type dEntrySingle struct {
 
 // double-symbols decoding
 type dEntryDouble struct {
-	seq   [2]byte
+	seq   [4]byte
 	nBits uint8
+	len   uint8
 }
 
 // Uses special code for all tables that are < 8 bits.
