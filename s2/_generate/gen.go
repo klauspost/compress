@@ -200,24 +200,38 @@ Fast:
 r64 are similar on both platforms.
 */
 
+type As32er interface {
+	As32() reg.Register
+}
+
+type As64er interface {
+	As64() reg.Register
+}
+
 // LEAL_ selects the best LEA instruction to use.
 // Note that flags *may* get clobbered.
 func LEAL_(m Mem, r reg.Register) {
+	if m.Base.Size() != 4 {
+		if as32, ok := m.Base.(As32er); ok {
+			m.Base = as32.As32()
+		}
+	}
+	//Comment(fmt.Sprintf("LEAL_: m: %#v, r:%#v, m.Base == r:%v, Index nil: %v", m, r, reg.Equal(m.Base, r), m.Index == reg.Register(nil)))
 	switch {
 	case m.Disp == 0:
 		// All disp == 0 are fast.
 		LEAL(m, r)
 		return
-	case m.Index == nil:
+	case m.Index == reg.Register(nil):
 		// All without index are fast.
-		if m.Base == r {
+		if reg.Equal(m.Base, r) {
 			// No index and no register shift, use add
 			ADDL_(m.Disp, r)
 			return
 		}
 		LEAL(m, r)
 		return
-	case m.Base == r && m.Scale <= 1:
+	case reg.Equal(m.Base, r) && m.Scale <= 1:
 		// If no scale.
 		ADDL(U32(m.Disp), r)
 		ADDL(m.Index, r)
@@ -234,21 +248,26 @@ func LEAL_(m Mem, r reg.Register) {
 // LEAQ_ selects the best LEA instruction to use.
 // Note that flags *may* get clobbered.
 func LEAQ_(m Mem, r reg.Register) {
+	if m.Base.Size() != 8 {
+		if as64, ok := m.Base.(As64er); ok {
+			m.Base = as64.As64()
+		}
+	}
 	switch {
 	case m.Disp == 0:
 		// All disp == 0 are fast.
 		LEAQ(m, r)
 		return
-	case m.Index == nil:
+	case m.Index == reg.Register(nil):
 		// All without index are fast.
-		if m.Base == r {
+		if reg.Equal(m.Base, r) {
 			// No index and no register shift, use add
 			ADDQ_(m.Disp, r)
 			return
 		}
 		LEAQ(m, r)
 		return
-	case m.Base == r && m.Scale <= 1:
+	case reg.Equal(m.Base, r) && m.Scale <= 1:
 		// If input == output and no scale.
 		ADDQ(m.Index, m.Base)
 		ADDQ(U32(m.Disp), m.Base)
