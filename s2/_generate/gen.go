@@ -200,6 +200,8 @@ Fast:
 r64 are similar on both platforms.
 */
 
+// LEAL_ selects the best LEA instruction to use.
+// Note that flags *may* get clobbered.
 func LEAL_(m Mem, r reg.Register) {
 	switch {
 	case m.Disp == 0:
@@ -229,6 +231,8 @@ func LEAL_(m Mem, r reg.Register) {
 	ADDL_(disp, r)
 }
 
+// LEAQ_ selects the best LEA instruction to use.
+// Note that flags *may* get clobbered.
 func LEAQ_(m Mem, r reg.Register) {
 	switch {
 	case m.Disp == 0:
