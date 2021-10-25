@@ -1,6 +1,7 @@
 package main
 
 //go:generate go run gen.go -out ../encodeblock_amd64.s -stubs ../encodeblock_amd64.go -pkg=s2
+//go:generate go fmt ../encodeblock_amd64.go
 
 import (
 	"fmt"
