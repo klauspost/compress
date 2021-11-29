@@ -72,7 +72,7 @@ var levels = []compressionLevel{
 	// and increasingly stringent conditions for "good enough".
 	{8, 8, 24, 16, skipNever, 7},
 	{10, 16, 24, 64, skipNever, 8},
-	{32, 258, 258, 4096, skipNever, 9},
+	{32, 258, 258, 1024, skipNever, 9},
 }
 
 // advancedState contains state for the advanced levels, with bigger hash tables, etc.
@@ -292,7 +292,7 @@ func (d *compressor) findMatch(pos int, prevHead int, prevLength int, lookahead 
 		if wEnd == win[i+length] {
 			n := matchLen(win[i:i+minMatchLook], wPos)
 
-			if n > length && (n > minMatchLength || pos-i <= 4096) {
+			if n > length && n >= minMatchLength {
 				length = n
 				offset = pos - i
 				ok = true
@@ -377,7 +377,7 @@ func (d *compressor) deflateLazy() {
 
 	s.maxInsertIndex = d.windowEnd - (minMatchLength - 1)
 	if s.index < s.maxInsertIndex {
-		s.hash = hash4(d.window[s.index : s.index+minMatchLength])
+		s.hash = hash4(d.window[s.index:])
 	}
 
 	for {
@@ -410,7 +410,7 @@ func (d *compressor) deflateLazy() {
 		}
 		if s.index < s.maxInsertIndex {
 			// Update the hash
-			s.hash = hash4(d.window[s.index : s.index+minMatchLength])
+			s.hash = hash4(d.window[s.index:])
 			ch := s.hashHead[s.hash&hashMask]
 			s.chainHead = int(ch)
 			s.hashPrev[s.index&windowMask] = ch
@@ -432,6 +432,25 @@ func (d *compressor) deflateLazy() {
 			}
 		}
 		if prevLength >= minMatchLength && s.length <= prevLength {
+			// Check for better match at end...
+			prevIndex := s.index - 1
+			if prevLength < d.nice && prevIndex+prevLength+4 < s.maxInsertIndex {
+				end := lookahead
+				if lookahead > maxMatchLength {
+					end = maxMatchLength
+				}
+				end += prevIndex
+				idx := prevIndex + prevLength
+				h := hash4(d.window[idx:])
+				ch2 := int(s.hashHead[h&hashMask]) - s.hashOffset - prevLength
+				if ch2 > minIndex {
+					length := matchLen(d.window[prevIndex:end], d.window[ch2:])
+					if length > prevLength {
+						prevLength = length
+						prevOffset = prevIndex - ch2
+					}
+				}
+			}
 			// There was a match at the previous step, and the current match is
 			// not better. Output the previous match.
 			d.tokens.AddMatch(uint32(prevLength-3), uint32(prevOffset-minOffsetSize))
