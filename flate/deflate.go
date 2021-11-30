@@ -6,6 +6,7 @@
 package flate
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
@@ -70,8 +71,8 @@ var levels = []compressionLevel{
 	{0, 0, 0, 0, 0, 6},
 	// Levels 7-9 use increasingly more lazy matching
 	// and increasingly stringent conditions for "good enough".
-	{8, 8, 24, 16, skipNever, 7},
-	{10, 16, 24, 64, skipNever, 8},
+	{8, 12, 24, 24, skipNever, 7},
+	{10, 24, 32, 64, skipNever, 8},
 	{32, 258, 258, 1024, skipNever, 9},
 }
 
@@ -327,8 +328,7 @@ func (d *compressor) writeStoredBlock(buf []byte) error {
 // of the supplied slice.
 // The caller must ensure that len(b) >= 4.
 func hash4(b []byte) uint32 {
-	b = b[:4]
-	return hash4u(uint32(b[3])|uint32(b[2])<<8|uint32(b[1])<<16|uint32(b[0])<<24, hashBits)
+	return hash4u(binary.LittleEndian.Uint32(b), hashBits)
 }
 
 // bulkHash4 will compute hashes using the same
@@ -337,11 +337,12 @@ func bulkHash4(b []byte, dst []uint32) {
 	if len(b) < 4 {
 		return
 	}
-	hb := uint32(b[3]) | uint32(b[2])<<8 | uint32(b[1])<<16 | uint32(b[0])<<24
+	hb := binary.LittleEndian.Uint32(b)
+
 	dst[0] = hash4u(hb, hashBits)
 	end := len(b) - 4 + 1
 	for i := 1; i < end; i++ {
-		hb = (hb << 8) | uint32(b[i+3])
+		hb = (hb >> 8) | uint32(b[i+3])<<24
 		dst[i] = hash4u(hb, hashBits)
 	}
 }
@@ -433,16 +434,20 @@ func (d *compressor) deflateLazy() {
 		}
 		if prevLength >= minMatchLength && s.length <= prevLength {
 			// Check for better match at end...
+			//
+			// checkOff must be >=2 since we otherwise risk checking s.index
+			// Offset of 2 seems to yield best results.
+			const checkOff = 2
 			prevIndex := s.index - 1
-			if prevLength < d.nice && prevIndex+prevLength+4 < s.maxInsertIndex {
+			if prevLength < d.nice && prevIndex+prevLength+checkOff < s.maxInsertIndex {
 				end := lookahead
 				if lookahead > maxMatchLength {
 					end = maxMatchLength
 				}
 				end += prevIndex
-				idx := prevIndex + prevLength
+				idx := prevIndex + prevLength - (4 - checkOff)
 				h := hash4(d.window[idx:])
-				ch2 := int(s.hashHead[h&hashMask]) - s.hashOffset - prevLength
+				ch2 := int(s.hashHead[h&hashMask]) - s.hashOffset - prevLength + (4 - checkOff)
 				if ch2 > minIndex {
 					length := matchLen(d.window[prevIndex:end], d.window[ch2:])
 					if length > prevLength {
