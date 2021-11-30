@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/bits"
 )
 
 const (
@@ -46,7 +47,7 @@ const (
 	hashSize            = 1 << hashBits
 	hashMask            = (1 << hashBits) - 1
 	hashShift           = (hashBits + minMatchLength - 1) / minMatchLength
-	maxHashOffset       = 1 << 24
+	maxHashOffset       = 1 << 28
 
 	skipNever = math.MaxInt32
 
@@ -264,7 +265,7 @@ func (d *compressor) fillWindow(b []byte) {
 // Try to find a match starting at index whose length is greater than prevSize.
 // We only look at chainCount possibilities before giving up.
 // pos = s.index, prevHead = s.chainHead-s.hashOffset, prevLength=minMatchLength-1, lookahead
-func (d *compressor) findMatch(pos int, prevHead int, prevLength int, lookahead int) (length, offset int, ok bool) {
+func (d *compressor) findMatch(pos int, prevHead int, lookahead int) (length, offset int, ok bool) {
 	minMatchLook := maxMatchLength
 	if lookahead < minMatchLook {
 		minMatchLook = lookahead
@@ -280,22 +281,25 @@ func (d *compressor) findMatch(pos int, prevHead int, prevLength int, lookahead 
 
 	// If we've got a match that's good enough, only look in 1/4 the chain.
 	tries := d.chain
-	length = prevLength
-	if length >= d.good {
-		tries >>= 2
-	}
+	length = minMatchLength - 1
 
 	wEnd := win[pos+length]
 	wPos := win[pos:]
 	minIndex := pos - windowSize
-
+	if minIndex < 0 {
+		minIndex = 0
+	}
+	offset = 0
+	const assumeBits = 8
+	cGain := 0
 	for i := prevHead; tries > 0; tries-- {
 		if wEnd == win[i+length] {
 			n := matchLen(win[i:i+minMatchLook], wPos)
-
-			if n > length && n >= minMatchLength {
+			newGain := n*assumeBits - bits.Len32(uint32(pos-i))
+			if n >= minMatchLength && newGain > cGain {
 				length = n
 				offset = pos - i
+				cGain = newGain
 				ok = true
 				if n >= nice {
 					// The match is good enough that we don't try to find a better one.
@@ -304,12 +308,12 @@ func (d *compressor) findMatch(pos int, prevHead int, prevLength int, lookahead 
 				wEnd = win[pos+n]
 			}
 		}
-		if i == minIndex {
+		if i <= minIndex {
 			// hashPrev[i & windowMask] has already been overwritten, so stop now.
 			break
 		}
 		i = int(d.state.hashPrev[i&windowMask]) - d.state.hashOffset
-		if i < minIndex || i < 0 {
+		if i < minIndex {
 			break
 		}
 	}
@@ -427,11 +431,12 @@ func (d *compressor) deflateLazy() {
 		}
 
 		if s.chainHead-s.hashOffset >= minIndex && lookahead > prevLength && prevLength < d.lazy {
-			if newLength, newOffset, ok := d.findMatch(s.index, s.chainHead-s.hashOffset, minMatchLength-1, lookahead); ok {
+			if newLength, newOffset, ok := d.findMatch(s.index, s.chainHead-s.hashOffset, lookahead); ok {
 				s.length = newLength
 				s.offset = newOffset
 			}
 		}
+
 		if prevLength >= minMatchLength && s.length <= prevLength {
 			// Check for better match at end...
 			//
@@ -450,6 +455,7 @@ func (d *compressor) deflateLazy() {
 				ch2 := int(s.hashHead[h&hashMask]) - s.hashOffset - prevLength + (4 - checkOff)
 				if ch2 > minIndex {
 					length := matchLen(d.window[prevIndex:end], d.window[ch2:])
+					// It seems like a pure length metric is best.
 					if length > prevLength {
 						prevLength = length
 						prevOffset = prevIndex - ch2
@@ -503,6 +509,7 @@ func (d *compressor) deflateLazy() {
 				}
 				d.tokens.Reset()
 			}
+			s.ii = 0
 		} else {
 			// Reset, if we got a match this run.
 			if s.length >= minMatchLength {
@@ -522,7 +529,7 @@ func (d *compressor) deflateLazy() {
 
 				// If we have a long run of no matches, skip additional bytes
 				// Resets when s.ii overflows after 64KB.
-				if s.ii > 31 {
+				if s.ii > uint16(d.nice) {
 					n := int(s.ii >> 5)
 					for j := 0; j < n; j++ {
 						if s.index >= d.windowEnd-1 {
