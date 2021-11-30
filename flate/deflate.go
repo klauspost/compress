@@ -6,9 +6,11 @@
 package flate
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
+	"math/bits"
 )
 
 const (
@@ -72,7 +74,7 @@ var levels = []compressionLevel{
 	// and increasingly stringent conditions for "good enough".
 	{8, 8, 24, 16, skipNever, 7},
 	{10, 16, 24, 64, skipNever, 8},
-	{32, 258, 258, 4096, skipNever, 9},
+	{32, 258, 258, 1024, skipNever, 9},
 }
 
 // advancedState contains state for the advanced levels, with bigger hash tables, etc.
@@ -242,7 +244,7 @@ func (d *compressor) fillWindow(b []byte) {
 		}
 
 		dst := s.hashMatch[:dstSize]
-		bulkHash4(tocheck, dst)
+		bulkHash3(tocheck, dst)
 		var newH uint32
 		for i, val := range dst {
 			di := i + startindex
@@ -264,6 +266,7 @@ func (d *compressor) fillWindow(b []byte) {
 // We only look at chainCount possibilities before giving up.
 // pos = s.index, prevHead = s.chainHead-s.hashOffset, prevLength=minMatchLength-1, lookahead
 func (d *compressor) findMatch(pos int, prevHead int, prevLength int, lookahead int) (length, offset int, ok bool) {
+	const minMatchLength = 3
 	minMatchLook := maxMatchLength
 	if lookahead < minMatchLook {
 		minMatchLook = lookahead
@@ -283,7 +286,11 @@ func (d *compressor) findMatch(pos int, prevHead int, prevLength int, lookahead 
 	if length >= d.good {
 		tries >>= 2
 	}
-
+	baseBits := 0
+	if length >= minMatchLength {
+		baseBits = bits.Len32(uint32(pos - prevHead))
+	}
+	_ = baseBits
 	wEnd := win[pos+length]
 	wPos := win[pos:]
 	minIndex := pos - windowSize
@@ -292,15 +299,17 @@ func (d *compressor) findMatch(pos int, prevHead int, prevLength int, lookahead 
 		if wEnd == win[i+length] {
 			n := matchLen(win[i:i+minMatchLook], wPos)
 
-			if n > length && (n > minMatchLength || pos-i <= 4096) {
-				length = n
-				offset = pos - i
-				ok = true
-				if n >= nice {
-					// The match is good enough that we don't try to find a better one.
-					break
+			if n > length && n >= minMatchLength {
+				if baseBits+(n-length)*8 > bits.Len32(uint32(pos-i)) {
+					length = n
+					offset = pos - i
+					ok = true
+					if n >= nice {
+						// The match is good enough that we don't try to find a better one.
+						break
+					}
+					wEnd = win[pos+n]
 				}
-				wEnd = win[pos+n]
 			}
 		}
 		if i == minIndex {
@@ -323,26 +332,42 @@ func (d *compressor) writeStoredBlock(buf []byte) error {
 	return d.w.err
 }
 
-// hash4 returns a hash representation of the first 4 bytes
+// hash3 returns a hash representation of the first 4 bytes
 // of the supplied slice.
 // The caller must ensure that len(b) >= 4.
-func hash4(b []byte) uint32 {
-	b = b[:4]
-	return hash4u(uint32(b[3])|uint32(b[2])<<8|uint32(b[1])<<16|uint32(b[0])<<24, hashBits)
+func hash3(b []byte) uint32 {
+	if len(b) >= 4 {
+		const prime3bytes = 506832829
+		u := binary.LittleEndian.Uint32(b)
+		return ((u << (32 - 24)) * prime3bytes) >> ((32 - hashBits) & 31)
+	}
+	u := uint32(b[0])<<8 | uint32(b[1])<<16 | uint32(b[2])<<24
+	const prime3bytes = 506832829
+	return (u * prime3bytes) >> ((32 - hashBits) & 31)
+
 }
 
-// bulkHash4 will compute hashes using the same
-// algorithm as hash4
-func bulkHash4(b []byte, dst []uint32) {
+// hash3u returns a hash representation of the first 4 bytes
+// of the supplied slice.
+// The caller must ensure that len(b) >= 4.
+func hash3u(u uint32) uint32 {
+	const prime3bytes = 506832829
+	return ((u << (32 - 24)) * prime3bytes) >> ((32 - hashBits) & 31)
+}
+
+// bulkHash3 will compute hashes using the same
+// algorithm as hash3
+func bulkHash3(b []byte, dst []uint32) {
 	if len(b) < 4 {
 		return
 	}
-	hb := uint32(b[3]) | uint32(b[2])<<8 | uint32(b[1])<<16 | uint32(b[0])<<24
-	dst[0] = hash4u(hb, hashBits)
-	end := len(b) - 4 + 1
+	hb := binary.LittleEndian.Uint32(b)
+
+	dst[0] = hash3u(hb)
+	end := len(b) - 3 + 1
 	for i := 1; i < end; i++ {
-		hb = (hb << 8) | uint32(b[i+3])
-		dst[i] = hash4u(hb, hashBits)
+		hb = (hb >> 8) | uint32(b[i+2])<<16
+		dst[i] = hash3u(hb)
 	}
 }
 
@@ -356,7 +381,7 @@ func (d *compressor) initDeflate() {
 	s := d.state
 	s.index = 0
 	s.hashOffset = 1
-	s.length = minMatchLength - 1
+	s.length = 2
 	s.offset = 0
 	s.hash = 0
 	s.chainHead = -1
@@ -370,6 +395,7 @@ func (d *compressor) deflateLazy() {
 	// It's intended to be used during development
 	// to supplement the currently ad-hoc unit tests.
 	const sanity = debugDeflate
+	const minMatchLength = 3 // The smallest match that the compressor looks for
 
 	if d.windowEnd-s.index < minMatchLength+maxMatchLength && !d.sync {
 		return
@@ -377,7 +403,7 @@ func (d *compressor) deflateLazy() {
 
 	s.maxInsertIndex = d.windowEnd - (minMatchLength - 1)
 	if s.index < s.maxInsertIndex {
-		s.hash = hash4(d.window[s.index : s.index+minMatchLength])
+		s.hash = hash3(d.window[s.index:])
 	}
 
 	for {
@@ -410,7 +436,7 @@ func (d *compressor) deflateLazy() {
 		}
 		if s.index < s.maxInsertIndex {
 			// Update the hash
-			s.hash = hash4(d.window[s.index : s.index+minMatchLength])
+			s.hash = hash3(d.window[s.index:])
 			ch := s.hashHead[s.hash&hashMask]
 			s.chainHead = int(ch)
 			s.hashPrev[s.index&windowMask] = ch
@@ -455,7 +481,7 @@ func (d *compressor) deflateLazy() {
 			dstSize := len(tocheck) - minMatchLength + 1
 			if dstSize > 0 {
 				dst := s.hashMatch[:dstSize]
-				bulkHash4(tocheck, dst)
+				bulkHash3(tocheck, dst)
 				var newH uint32
 				for i, val := range dst {
 					di := i + startindex
@@ -700,7 +726,7 @@ func (d *compressor) reset(w io.Writer) {
 		s.index, d.windowEnd = 0, 0
 		d.blockStart, d.byteAvailable = 0, false
 		d.tokens.Reset()
-		s.length = minMatchLength - 1
+		s.length = 2
 		s.offset = 0
 		s.hash = 0
 		s.ii = 0

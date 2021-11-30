@@ -92,10 +92,10 @@ func TestBulkHash4(t *testing.T) {
 				for i := range dst {
 					dst[i] = uint32(i + 100)
 				}
-				bulkHash4(y, dst)
+				bulkHash3(y, dst)
 				for i, val := range dst {
 					got := val
-					expect := hash4(y[i:])
+					expect := hash3(y[i:])
 					if got != expect && got == uint32(i)+100 {
 						t.Errorf("Len:%d Index:%d, expected 0x%08x but not modified", len(y), i, expect)
 					} else if got != expect {

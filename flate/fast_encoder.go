@@ -114,7 +114,7 @@ func (e *fastGen) addBlock(src []byte) int32 {
 	return s
 }
 
-// hash4 returns the hash of u to fit in a hash table with h bits.
+// hash4u returns the hash of u to fit in a hash table with h bits.
 // Preferably h should be a constant and should always be <32.
 func hash4u(u uint32, h uint8) uint32 {
 	return (u * prime4bytes) >> ((32 - h) & reg8SizeMask32)
