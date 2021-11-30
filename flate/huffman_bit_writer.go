@@ -996,6 +996,37 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 	encoding := w.literalEncoding.codes[:256]
 	// Go 1.16 LOVES having these on stack. At least 1.5x the speed.
 	bits, nbits, nbytes := w.bits, w.nbits, w.nbytes
+
+	// Unroll, write 3 codes/loop.
+	// Fastest number of unrolls.
+	for len(input) > 3 {
+		// We must have at least 48 bits free.
+		if nbits >= 8 {
+			n := nbits >> 3
+			binary.LittleEndian.PutUint64(w.bytes[nbytes:], bits)
+			bits >>= (n * 8) & 63
+			nbits -= n * 8
+			nbytes += uint8(n)
+		}
+		if nbytes >= bufferFlushSize {
+			if w.err != nil {
+				nbytes = 0
+				return
+			}
+			_, w.err = w.writer.Write(w.bytes[:nbytes])
+			nbytes = 0
+		}
+		a, b := encoding[input[0]], encoding[input[1]]
+		bits |= uint64(a.code) << nbits
+		bits |= uint64(b.code) << (nbits + a.len)
+		c := encoding[input[2]]
+		nbits += b.len + a.len
+		bits |= uint64(c.code) << nbits
+		nbits += c.len
+		input = input[3:]
+	}
+
+	// Remaining...
 	for _, t := range input {
 		// Bitwriting inlined, ~30% speedup
 		c := encoding[t]
