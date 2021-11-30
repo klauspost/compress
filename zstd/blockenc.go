@@ -727,17 +727,46 @@ func (b *blockEnc) encode(org []byte, raw, rawAllLits bool) error {
 		for seq >= 0 {
 			s = b.sequences[seq]
 			wr.flush32()
-			llB, ofB, mlB := llTT[s.llCode], ofTT[s.ofCode], mlTT[s.mlCode]
 			// tabelog max is 8 for all.
-			of.encode(ofB)
-			ml.encode(mlB)
-			ll.encode(llB)
+
+			//of.encode(ofB)
+			ofB := ofTT[s.ofCode]
+			nbBitsOut := (uint32(of.state) + ofB.deltaNbBits) >> 16
+			dstState := int32(of.state>>(nbBitsOut&15)) + int32(ofB.deltaFindState)
+			of.bw.addBits16NC(of.state, uint8(nbBitsOut))
+			of.state = of.stateTable[dstState]
+
+			// Collect extra bits:
+			// We checked that all can stay within 32 bits
+			outBits := ofB.outBits & 31
+			extraBits := s.offset & bitMask32[outBits]
+			extraBitsN := ofB.outBits
+
+			//ml.encode(mlB)
+			mlB := mlTT[s.mlCode]
+			nbBitsOut = (uint32(ml.state) + mlB.deltaNbBits) >> 16
+			dstState = int32(ml.state>>(nbBitsOut&15)) + int32(mlB.deltaFindState)
+			ml.bw.addBits16NC(ml.state, uint8(nbBitsOut))
+			ml.state = ml.stateTable[dstState]
+
+			outBits = mlB.outBits & 31
+			extraBits = extraBits<<outBits | s.matchLen&bitMask32[outBits&31]
+			extraBitsN += outBits
+
+			//ll.encode(llB)
+			llB := llTT[s.llCode]
+			nbBitsOut = (uint32(ll.state) + llB.deltaNbBits) >> 16
+			dstState = int32(ll.state>>(nbBitsOut&15)) + int32(llB.deltaFindState)
+			ll.bw.addBits16NC(ll.state, uint8(nbBitsOut))
+			ll.state = ll.stateTable[dstState]
+
+			outBits = llB.outBits & 31
+			extraBits = extraBits<<outBits | s.litLen&bitMask32[outBits]
+			extraBitsN += outBits
+
 			wr.flush32()
 
-			// We checked that all can stay within 32 bits
-			wr.addBits32NC(s.litLen, llB.outBits)
-			wr.addBits32NC(s.matchLen, mlB.outBits)
-			wr.addBits32NC(s.offset, ofB.outBits)
+			wr.addBits32NC(extraBits, extraBitsN)
 
 			if debugSequences {
 				println("Encoded seq", seq, s)
@@ -820,7 +849,8 @@ func (b *blockEnc) genCodes() {
 	}
 
 	var llMax, ofMax, mlMax uint8
-	for i, seq := range b.sequences {
+	for i := range b.sequences {
+		seq := &b.sequences[i]
 		v := llCode(seq.litLen)
 		seq.llCode = v
 		llH[v]++
@@ -844,7 +874,6 @@ func (b *blockEnc) genCodes() {
 				panic(fmt.Errorf("mlMax > maxMatchLengthSymbol (%d), matchlen: %d", mlMax, seq.matchLen))
 			}
 		}
-		b.sequences[i] = seq
 	}
 	maxCount := func(a []uint32) int {
 		var max uint32
