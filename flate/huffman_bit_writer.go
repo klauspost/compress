@@ -1017,11 +1017,11 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 			nbytes = 0
 		}
 		a, b := encoding[input[0]], encoding[input[1]]
-		bits |= uint64(a.code) << nbits
-		bits |= uint64(b.code) << (nbits + a.len)
+		bits |= uint64(a.code) << (nbits & 63)
+		bits |= uint64(b.code) << ((nbits + a.len) & 63)
 		c := encoding[input[2]]
 		nbits += b.len + a.len
-		bits |= uint64(c.code) << nbits
+		bits |= uint64(c.code) << (nbits & 63)
 		nbits += c.len
 		input = input[3:]
 	}
@@ -1030,7 +1030,7 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 	for _, t := range input {
 		// Bitwriting inlined, ~30% speedup
 		c := encoding[t]
-		bits |= uint64(c.code) << nbits
+		bits |= uint64(c.code) << (nbits & 63)
 		nbits += c.len
 		if debugDeflate {
 			count += int(c.len)
