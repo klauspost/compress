@@ -53,9 +53,9 @@ func (b *bitWriter) addBits64NC(value uint64, bits uint8) {
 		b.addBits32Clean(uint32(value), bits)
 		return
 	}
-	b.addBits32Clean(uint32(value), 31)
+	b.addBits32Clean(uint32(value), 32)
 	b.flush32()
-	b.addBits32Clean(uint32(value>>31), bits-31)
+	b.addBits32Clean(uint32(value>>32), bits-32)
 }
 
 // addBits32Clean will add up to 32 bits.
