@@ -387,11 +387,9 @@ func (d *compressor) deflateLazy() {
 		return
 	}
 	s.estBitsPerByte = 8
-	if d.windowEnd-s.index > 100 {
+	if !d.sync {
 		s.estBitsPerByte = comp.ShannonEntropyBits(d.window[s.index:d.windowEnd])
-		s.estBitsPerByte *= 1024
-		s.estBitsPerByte /= d.windowEnd - s.index
-		s.estBitsPerByte = int(1 + float64(s.estBitsPerByte)/1024)
+		s.estBitsPerByte = int(1 + float64(s.estBitsPerByte)/float64(d.windowEnd-s.index))
 	}
 
 	s.maxInsertIndex = d.windowEnd - (minMatchLength - 1)
@@ -656,7 +654,9 @@ func (d *compressor) write(b []byte) (n int, err error) {
 	}
 	n = len(b)
 	for len(b) > 0 {
-		d.step(d)
+		if d.windowEnd == len(d.window) || d.sync {
+			d.step(d)
+		}
 		b = b[d.fill(d, b):]
 		if d.err != nil {
 			return 0, d.err
