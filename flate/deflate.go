@@ -6,9 +6,11 @@
 package flate
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
+	"math/bits"
 )
 
 const (
@@ -45,7 +47,7 @@ const (
 	hashSize            = 1 << hashBits
 	hashMask            = (1 << hashBits) - 1
 	hashShift           = (hashBits + minMatchLength - 1) / minMatchLength
-	maxHashOffset       = 1 << 24
+	maxHashOffset       = 1 << 28
 
 	skipNever = math.MaxInt32
 
@@ -70,9 +72,9 @@ var levels = []compressionLevel{
 	{0, 0, 0, 0, 0, 6},
 	// Levels 7-9 use increasingly more lazy matching
 	// and increasingly stringent conditions for "good enough".
-	{8, 8, 24, 16, skipNever, 7},
-	{10, 16, 24, 64, skipNever, 8},
-	{32, 258, 258, 4096, skipNever, 9},
+	{8, 12, 24, 24, skipNever, 7},
+	{10, 24, 32, 64, skipNever, 8},
+	{32, 258, 258, 1024, skipNever, 9},
 }
 
 // advancedState contains state for the advanced levels, with bigger hash tables, etc.
@@ -263,7 +265,7 @@ func (d *compressor) fillWindow(b []byte) {
 // Try to find a match starting at index whose length is greater than prevSize.
 // We only look at chainCount possibilities before giving up.
 // pos = s.index, prevHead = s.chainHead-s.hashOffset, prevLength=minMatchLength-1, lookahead
-func (d *compressor) findMatch(pos int, prevHead int, prevLength int, lookahead int) (length, offset int, ok bool) {
+func (d *compressor) findMatch(pos int, prevHead int, lookahead int) (length, offset int, ok bool) {
 	minMatchLook := maxMatchLength
 	if lookahead < minMatchLook {
 		minMatchLook = lookahead
@@ -279,22 +281,25 @@ func (d *compressor) findMatch(pos int, prevHead int, prevLength int, lookahead 
 
 	// If we've got a match that's good enough, only look in 1/4 the chain.
 	tries := d.chain
-	length = prevLength
-	if length >= d.good {
-		tries >>= 2
-	}
+	length = minMatchLength - 1
 
 	wEnd := win[pos+length]
 	wPos := win[pos:]
 	minIndex := pos - windowSize
-
+	if minIndex < 0 {
+		minIndex = 0
+	}
+	offset = 0
+	const assumeBits = 8
+	cGain := 0
 	for i := prevHead; tries > 0; tries-- {
 		if wEnd == win[i+length] {
 			n := matchLen(win[i:i+minMatchLook], wPos)
-
-			if n > length && (n > minMatchLength || pos-i <= 4096) {
+			newGain := n*assumeBits - bits.Len32(uint32(pos-i))
+			if n >= minMatchLength && newGain > cGain {
 				length = n
 				offset = pos - i
+				cGain = newGain
 				ok = true
 				if n >= nice {
 					// The match is good enough that we don't try to find a better one.
@@ -303,12 +308,12 @@ func (d *compressor) findMatch(pos int, prevHead int, prevLength int, lookahead 
 				wEnd = win[pos+n]
 			}
 		}
-		if i == minIndex {
+		if i <= minIndex {
 			// hashPrev[i & windowMask] has already been overwritten, so stop now.
 			break
 		}
 		i = int(d.state.hashPrev[i&windowMask]) - d.state.hashOffset
-		if i < minIndex || i < 0 {
+		if i < minIndex {
 			break
 		}
 	}
@@ -327,8 +332,7 @@ func (d *compressor) writeStoredBlock(buf []byte) error {
 // of the supplied slice.
 // The caller must ensure that len(b) >= 4.
 func hash4(b []byte) uint32 {
-	b = b[:4]
-	return hash4u(uint32(b[3])|uint32(b[2])<<8|uint32(b[1])<<16|uint32(b[0])<<24, hashBits)
+	return hash4u(binary.LittleEndian.Uint32(b), hashBits)
 }
 
 // bulkHash4 will compute hashes using the same
@@ -337,11 +341,12 @@ func bulkHash4(b []byte, dst []uint32) {
 	if len(b) < 4 {
 		return
 	}
-	hb := uint32(b[3]) | uint32(b[2])<<8 | uint32(b[1])<<16 | uint32(b[0])<<24
+	hb := binary.LittleEndian.Uint32(b)
+
 	dst[0] = hash4u(hb, hashBits)
 	end := len(b) - 4 + 1
 	for i := 1; i < end; i++ {
-		hb = (hb << 8) | uint32(b[i+3])
+		hb = (hb >> 8) | uint32(b[i+3])<<24
 		dst[i] = hash4u(hb, hashBits)
 	}
 }
@@ -377,7 +382,7 @@ func (d *compressor) deflateLazy() {
 
 	s.maxInsertIndex = d.windowEnd - (minMatchLength - 1)
 	if s.index < s.maxInsertIndex {
-		s.hash = hash4(d.window[s.index : s.index+minMatchLength])
+		s.hash = hash4(d.window[s.index:])
 	}
 
 	for {
@@ -410,7 +415,7 @@ func (d *compressor) deflateLazy() {
 		}
 		if s.index < s.maxInsertIndex {
 			// Update the hash
-			s.hash = hash4(d.window[s.index : s.index+minMatchLength])
+			s.hash = hash4(d.window[s.index:])
 			ch := s.hashHead[s.hash&hashMask]
 			s.chainHead = int(ch)
 			s.hashPrev[s.index&windowMask] = ch
@@ -426,12 +431,37 @@ func (d *compressor) deflateLazy() {
 		}
 
 		if s.chainHead-s.hashOffset >= minIndex && lookahead > prevLength && prevLength < d.lazy {
-			if newLength, newOffset, ok := d.findMatch(s.index, s.chainHead-s.hashOffset, minMatchLength-1, lookahead); ok {
+			if newLength, newOffset, ok := d.findMatch(s.index, s.chainHead-s.hashOffset, lookahead); ok {
 				s.length = newLength
 				s.offset = newOffset
 			}
 		}
+
 		if prevLength >= minMatchLength && s.length <= prevLength {
+			// Check for better match at end...
+			//
+			// checkOff must be >=2 since we otherwise risk checking s.index
+			// Offset of 2 seems to yield best results.
+			const checkOff = 2
+			prevIndex := s.index - 1
+			if prevLength < d.nice && prevIndex+prevLength+checkOff < s.maxInsertIndex {
+				end := lookahead
+				if lookahead > maxMatchLength {
+					end = maxMatchLength
+				}
+				end += prevIndex
+				idx := prevIndex + prevLength - (4 - checkOff)
+				h := hash4(d.window[idx:])
+				ch2 := int(s.hashHead[h&hashMask]) - s.hashOffset - prevLength + (4 - checkOff)
+				if ch2 > minIndex {
+					length := matchLen(d.window[prevIndex:end], d.window[ch2:])
+					// It seems like a pure length metric is best.
+					if length > prevLength {
+						prevLength = length
+						prevOffset = prevIndex - ch2
+					}
+				}
+			}
 			// There was a match at the previous step, and the current match is
 			// not better. Output the previous match.
 			d.tokens.AddMatch(uint32(prevLength-3), uint32(prevOffset-minOffsetSize))
@@ -479,6 +509,7 @@ func (d *compressor) deflateLazy() {
 				}
 				d.tokens.Reset()
 			}
+			s.ii = 0
 		} else {
 			// Reset, if we got a match this run.
 			if s.length >= minMatchLength {
@@ -498,7 +529,7 @@ func (d *compressor) deflateLazy() {
 
 				// If we have a long run of no matches, skip additional bytes
 				// Resets when s.ii overflows after 64KB.
-				if s.ii > 31 {
+				if s.ii > uint16(d.nice) {
 					n := int(s.ii >> 5)
 					for j := 0; j < n; j++ {
 						if s.index >= d.windowEnd-1 {
