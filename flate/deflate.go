@@ -11,6 +11,8 @@ import (
 	"io"
 	"math"
 	"math/bits"
+
+	comp "github.com/klauspost/compress"
 )
 
 const (
@@ -95,8 +97,9 @@ type advancedState struct {
 	hashOffset int
 
 	// input window: unprocessed data is window[index:windowEnd]
-	index     int
-	hashMatch [maxMatchLength + minMatchLength]uint32
+	index          int
+	estBitsPerByte int
+	hashMatch      [maxMatchLength + minMatchLength]uint32
 
 	hash uint32
 	ii   uint16 // position of last match, intended to overflow to reset.
@@ -265,7 +268,7 @@ func (d *compressor) fillWindow(b []byte) {
 // Try to find a match starting at index whose length is greater than prevSize.
 // We only look at chainCount possibilities before giving up.
 // pos = s.index, prevHead = s.chainHead-s.hashOffset, prevLength=minMatchLength-1, lookahead
-func (d *compressor) findMatch(pos int, prevHead int, lookahead int) (length, offset int, ok bool) {
+func (d *compressor) findMatch(pos int, prevHead int, lookahead, bpb int) (length, offset int, ok bool) {
 	minMatchLook := maxMatchLength
 	if lookahead < minMatchLook {
 		minMatchLook = lookahead
@@ -290,22 +293,26 @@ func (d *compressor) findMatch(pos int, prevHead int, lookahead int) (length, of
 		minIndex = 0
 	}
 	offset = 0
-	const assumeBits = 8
-	cGain := 0
+
+	// Base is 4 bytes at with an additional cost.
+	// Matches must be better than this.
+	cGain := minMatchLength*bpb - 12
 	for i := prevHead; tries > 0; tries-- {
 		if wEnd == win[i+length] {
 			n := matchLen(win[i:i+minMatchLook], wPos)
-			newGain := n*assumeBits - bits.Len32(uint32(pos-i))
-			if n >= minMatchLength && newGain > cGain {
-				length = n
-				offset = pos - i
-				cGain = newGain
-				ok = true
-				if n >= nice {
-					// The match is good enough that we don't try to find a better one.
-					break
+			if n > length {
+				newGain := n*bpb - bits.Len32(uint32(pos-i)) - 1
+				if newGain > cGain {
+					length = n
+					offset = pos - i
+					cGain = newGain
+					ok = true
+					if n >= nice {
+						// The match is good enough that we don't try to find a better one.
+						break
+					}
+					wEnd = win[pos+n]
 				}
-				wEnd = win[pos+n]
 			}
 		}
 		if i <= minIndex {
@@ -379,6 +386,11 @@ func (d *compressor) deflateLazy() {
 	if d.windowEnd-s.index < minMatchLength+maxMatchLength && !d.sync {
 		return
 	}
+	s.estBitsPerByte = 8
+	if !d.sync {
+		s.estBitsPerByte = comp.ShannonEntropyBits(d.window[s.index:d.windowEnd])
+		s.estBitsPerByte = int(1 + float64(s.estBitsPerByte)/float64(d.windowEnd-s.index))
+	}
 
 	s.maxInsertIndex = d.windowEnd - (minMatchLength - 1)
 	if s.index < s.maxInsertIndex {
@@ -431,7 +443,7 @@ func (d *compressor) deflateLazy() {
 		}
 
 		if s.chainHead-s.hashOffset >= minIndex && lookahead > prevLength && prevLength < d.lazy {
-			if newLength, newOffset, ok := d.findMatch(s.index, s.chainHead-s.hashOffset, lookahead); ok {
+			if newLength, newOffset, ok := d.findMatch(s.index, s.chainHead-s.hashOffset, lookahead, s.estBitsPerByte); ok {
 				s.length = newLength
 				s.offset = newOffset
 			}
@@ -444,7 +456,7 @@ func (d *compressor) deflateLazy() {
 			// Offset of 2 seems to yield best results.
 			const checkOff = 2
 			prevIndex := s.index - 1
-			if prevLength < d.nice && prevIndex+prevLength+checkOff < s.maxInsertIndex {
+			if prevIndex+prevLength+checkOff < s.maxInsertIndex {
 				end := lookahead
 				if lookahead > maxMatchLength {
 					end = maxMatchLength
@@ -642,7 +654,9 @@ func (d *compressor) write(b []byte) (n int, err error) {
 	}
 	n = len(b)
 	for len(b) > 0 {
-		d.step(d)
+		if d.windowEnd == len(d.window) || d.sync {
+			d.step(d)
+		}
 		b = b[d.fill(d, b):]
 		if d.err != nil {
 			return 0, d.err
