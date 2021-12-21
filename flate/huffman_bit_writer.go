@@ -566,7 +566,7 @@ func (w *huffmanBitWriter) writeBlock(tokens *tokens, eof bool, input []byte) {
 		w.lastHeader = 0
 	}
 	numLiterals, numOffsets := w.indexTokens(tokens, false)
-	w.generate(tokens)
+	w.generate()
 	var extraBits int
 	storedSize, storable := w.storedSize(input)
 	if storable {
@@ -595,7 +595,7 @@ func (w *huffmanBitWriter) writeBlock(tokens *tokens, eof bool, input []byte) {
 	}
 
 	// Stored bytes?
-	if storable && storedSize < size {
+	if storable && storedSize <= size {
 		w.writeStoredHeader(len(input), eof)
 		w.writeBytes(input)
 		return
@@ -634,10 +634,14 @@ func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []b
 		w.lastHeader = 0
 		w.lastHuffMan = false
 	}
-	if !sync {
-		tokens.Fill()
-	}
+
 	numLiterals, numOffsets := w.indexTokens(tokens, !sync)
+	extraBits := 0
+	ssize, storable := w.storedSize(input)
+	const usePrefs = true
+	if storable || w.lastHeader > 0 {
+		extraBits = w.extraBitSize()
+	}
 
 	var size int
 	// Check if we should reuse.
@@ -645,11 +649,11 @@ func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []b
 		// Estimate size for using a new table.
 		// Use the previous header size as the best estimate.
 		newSize := w.lastHeader + tokens.EstimatedBits()
-		newSize += newSize >> w.logNewTablePenalty
+		newSize += int(w.literalEncoding.codes[endBlockMarker].len) + newSize>>w.logNewTablePenalty
 
 		// The estimated size is calculated as an optimal table.
 		// We add a penalty to make it more realistic and re-use a bit more.
-		reuseSize := w.dynamicReuseSize(w.literalEncoding, w.offsetEncoding) + w.extraBitSize()
+		reuseSize := w.dynamicReuseSize(w.literalEncoding, w.offsetEncoding) + extraBits
 
 		// Check if a new table is better.
 		if newSize < reuseSize {
@@ -660,35 +664,76 @@ func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []b
 		} else {
 			size = reuseSize
 		}
+
+		if preSize := w.fixedSize(extraBits) + 7; usePrefs && preSize < size {
+			// Check if we get a reasonable size decrease.
+			if storable && ssize <= size {
+				w.writeStoredHeader(len(input), eof)
+				w.writeBytes(input)
+				return
+			}
+			w.writeFixedHeader(eof)
+			if !sync {
+				tokens.AddEOB()
+			}
+			w.writeTokens(tokens.Slice(), fixedLiteralEncoding.codes, fixedOffsetEncoding.codes)
+			return
+		}
 		// Check if we get a reasonable size decrease.
-		if ssize, storable := w.storedSize(input); storable && ssize < (size+size>>4) {
+		if storable && ssize <= size {
 			w.writeStoredHeader(len(input), eof)
 			w.writeBytes(input)
-			w.lastHeader = 0
 			return
 		}
 	}
 
 	// We want a new block/table
 	if w.lastHeader == 0 {
-		w.generate(tokens)
+		if !sync {
+			w.fillTokens()
+			numLiterals, numOffsets = maxNumLit, maxNumDist
+		}
+		w.generate()
 		// Generate codegen and codegenFrequencies, which indicates how to encode
 		// the literalEncoding and the offsetEncoding.
 		w.generateCodegen(numLiterals, numOffsets, w.literalEncoding, w.offsetEncoding)
 		w.codegenEncoding.generate(w.codegenFreq[:], 7)
+
 		var numCodegens int
-		size, numCodegens = w.dynamicSize(w.literalEncoding, w.offsetEncoding, w.extraBitSize())
-		// Store bytes, if we don't get a reasonable improvement.
-		if ssize, storable := w.storedSize(input); storable && ssize < (size+size>>4) {
+		if !sync {
+			// Reindex for accurate size...
+			w.indexTokens(tokens, true)
+		}
+		size, numCodegens = w.dynamicSize(w.literalEncoding, w.offsetEncoding, extraBits)
+
+		// Store predefined, if we don't get a reasonable improvement.
+		if preSize := w.fixedSize(extraBits); usePrefs && preSize <= size {
+			// Store bytes, if we don't get an improvement.
+			if storable && ssize <= preSize {
+				w.writeStoredHeader(len(input), eof)
+				w.writeBytes(input)
+				return
+			}
+			w.writeFixedHeader(eof)
+			if !sync {
+				tokens.AddEOB()
+			}
+			w.writeTokens(tokens.Slice(), fixedLiteralEncoding.codes, fixedOffsetEncoding.codes)
+			return
+		}
+
+		if storable && ssize <= size {
+			// Store bytes, if we don't get an improvement.
 			w.writeStoredHeader(len(input), eof)
 			w.writeBytes(input)
-			w.lastHeader = 0
 			return
 		}
 
 		// Write Huffman table.
 		w.writeDynamicHeader(numLiterals, numOffsets, numCodegens, eof)
-		w.lastHeader, _ = w.headerSize()
+		if !sync {
+			w.lastHeader, _ = w.headerSize()
+		}
 		w.lastHuffMan = false
 	}
 
@@ -697,6 +742,19 @@ func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []b
 	}
 	// Write the tokens.
 	w.writeTokens(tokens.Slice(), w.literalEncoding.codes, w.offsetEncoding.codes)
+}
+
+func (w *huffmanBitWriter) fillTokens() {
+	for i, v := range w.literalFreq[:literalCount] {
+		if v == 0 {
+			w.literalFreq[i] = 1
+		}
+	}
+	for i, v := range w.offsetFreq[:offsetCodeCount] {
+		if v == 0 {
+			w.offsetFreq[i] = 1
+		}
+	}
 }
 
 // indexTokens indexes a slice of tokens, and updates
@@ -733,7 +791,7 @@ func (w *huffmanBitWriter) indexTokens(t *tokens, filled bool) (numLiterals, num
 	return
 }
 
-func (w *huffmanBitWriter) generate(t *tokens) {
+func (w *huffmanBitWriter) generate() {
 	w.literalEncoding.generate(w.literalFreq[:literalCount], 15)
 	w.offsetEncoding.generate(w.offsetFreq[:offsetCodeCount], 15)
 }
@@ -867,7 +925,7 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 		offsetComb := offsetCombined[offsetCode]
 		if offsetComb > 1<<16 {
 			//w.writeBits(extraOffset, extraOffsetBits)
-			bits |= uint64(offset&matchOffsetOnlyMask-(offsetComb&0xffff)) << (nbits & 63)
+			bits |= uint64(offset-(offsetComb&0xffff)) << (nbits & 63)
 			nbits += uint16(offsetComb >> 16)
 			if nbits >= 48 {
 				binary.LittleEndian.PutUint64(w.bytes[nbytes:], bits)

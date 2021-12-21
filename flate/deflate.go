@@ -41,9 +41,10 @@ const (
 	maxMatchLength   = 258 // The longest match for the compressor
 	minOffsetSize    = 1   // The shortest offset that makes any sense
 
-	// The maximum number of tokens we put into a single flat block, just too
-	// stop things from getting too large.
-	maxFlateBlockTokens = 1 << 14
+	// The maximum number of tokens we will encode at the time.
+	// Smaller sizes usually creates more less optimal blocks.
+	// Bigger can make context switching slow.
+	maxFlateBlockTokens = 1 << 15
 	maxStoreBlockSize   = 65535
 	hashBits            = 17 // After 17 performance degrades
 	hashSize            = 1 << hashBits
@@ -175,7 +176,8 @@ func (d *compressor) writeBlock(tok *tokens, index int, eof bool) error {
 			window = d.window[d.blockStart:index]
 		}
 		d.blockStart = index
-		d.w.writeBlock(tok, eof, window)
+		//d.w.writeBlock(tok, eof, window)
+		d.w.writeBlockDynamic(tok, eof, window, d.sync)
 		return d.w.err
 	}
 	return nil
@@ -301,7 +303,7 @@ func (d *compressor) findMatch(pos int, prevHead int, lookahead, bpb int) (lengt
 		if wEnd == win[i+length] {
 			n := matchLen(win[i:i+minMatchLook], wPos)
 			if n > length {
-				newGain := n*bpb - bits.Len32(uint32(pos-i)) - 1
+				newGain := n*bpb - bits.Len32(uint32(pos-i))
 				if newGain > cGain {
 					length = n
 					offset = pos - i
@@ -703,7 +705,7 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 		d.fill = (*compressor).fillBlock
 		d.step = (*compressor).storeFast
 	case 7 <= level && level <= 9:
-		d.w.logNewTablePenalty = 10
+		d.w.logNewTablePenalty = 8
 		d.state = &advancedState{}
 		d.compressionLevel = levels[level]
 		d.initDeflate()
