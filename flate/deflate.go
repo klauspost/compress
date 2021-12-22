@@ -44,8 +44,8 @@ const (
 	// The maximum number of tokens we will encode at the time.
 	// Smaller sizes usually creates less optimal blocks.
 	// Bigger can make context switching slow.
-	// We use this for levels 7-9, so we make it as big as we can.
-	maxFlateBlockTokens = maxStoreBlockSize
+	// We use this for levels 7-9, so we make it big.
+	maxFlateBlockTokens = 1 << 15
 	maxStoreBlockSize   = 65535
 	hashBits            = 17 // After 17 performance degrades
 	hashSize            = 1 << hashBits
