@@ -155,37 +155,33 @@ func (w *huffmanBitWriter) reset(writer io.Writer) {
 	w.lastHuffMan = false
 }
 
-func (w *huffmanBitWriter) canReuse(t *tokens) (offsets, lits bool) {
-	offsets, lits = true, true
+func (w *huffmanBitWriter) canReuse(t *tokens) (ok bool) {
 	a := t.offHist[:offsetCodeCount]
-	b := w.offsetFreq[:len(a)]
-	for i := range a {
-		if b[i] == 0 && a[i] != 0 {
-			offsets = false
-			break
+	b := w.offsetEncoding.codes
+	b = b[:len(a)]
+	for i, v := range a {
+		if v != 0 && b[i].len == 0 {
+			return false
 		}
 	}
 
 	a = t.extraHist[:literalCount-256]
-	b = w.literalFreq[256:literalCount]
+	b = w.literalEncoding.codes[256:literalCount]
 	b = b[:len(a)]
-	for i := range a {
-		if b[i] == 0 && a[i] != 0 {
-			lits = false
-			break
+	for i, v := range a {
+		if v != 0 && b[i].len == 0 {
+			return false
 		}
 	}
-	if lits {
-		a = t.litHist[:]
-		b = w.literalFreq[:len(a)]
-		for i := range a {
-			if b[i] == 0 && a[i] != 0 {
-				lits = false
-				break
-			}
+
+	a = t.litHist[:256]
+	b = w.literalEncoding.codes[:len(a)]
+	for i, v := range a {
+		if v != 0 && b[i].len == 0 {
+			return false
 		}
 	}
-	return
+	return true
 }
 
 func (w *huffmanBitWriter) flush() {
@@ -635,15 +631,28 @@ func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []b
 		w.lastHuffMan = false
 	}
 
+	// fillReuse enables filling of empty values.
+	// This will make encodings always reusable without testing.
+	// However, this does not appear to benefit on most cases.
+	const fillReuse = false
+
+	// Check if we can reuse...
+	if !fillReuse && w.lastHeader > 0 && !w.canReuse(tokens) {
+		w.writeCode(w.literalEncoding.codes[endBlockMarker])
+		w.lastHeader = 0
+	}
+
 	numLiterals, numOffsets := w.indexTokens(tokens, !sync)
 	extraBits := 0
 	ssize, storable := w.storedSize(input)
+
 	const usePrefs = true
 	if storable || w.lastHeader > 0 {
 		extraBits = w.extraBitSize()
 	}
 
 	var size int
+
 	// Check if we should reuse.
 	if w.lastHeader > 0 {
 		// Estimate size for using a new table.
@@ -689,10 +698,13 @@ func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []b
 
 	// We want a new block/table
 	if w.lastHeader == 0 {
-		if !sync {
+		if fillReuse && !sync {
 			w.fillTokens()
 			numLiterals, numOffsets = maxNumLit, maxNumDist
+		} else {
+			w.literalFreq[endBlockMarker] = 1
 		}
+
 		w.generate()
 		// Generate codegen and codegenFrequencies, which indicates how to encode
 		// the literalEncoding and the offsetEncoding.
@@ -700,7 +712,7 @@ func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []b
 		w.codegenEncoding.generate(w.codegenFreq[:], 7)
 
 		var numCodegens int
-		if !sync {
+		if fillReuse && !sync {
 			// Reindex for accurate size...
 			w.indexTokens(tokens, true)
 		}

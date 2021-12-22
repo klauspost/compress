@@ -42,9 +42,10 @@ const (
 	minOffsetSize    = 1   // The shortest offset that makes any sense
 
 	// The maximum number of tokens we will encode at the time.
-	// Smaller sizes usually creates more less optimal blocks.
+	// Smaller sizes usually creates less optimal blocks.
 	// Bigger can make context switching slow.
-	maxFlateBlockTokens = 1 << 15
+	// We use this for levels 7-9, so we make it as big as we can.
+	maxFlateBlockTokens = maxStoreBlockSize
 	maxStoreBlockSize   = 65535
 	hashBits            = 17 // After 17 performance degrades
 	hashSize            = 1 << hashBits
@@ -699,7 +700,7 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 		level = 5
 		fallthrough
 	case level >= 1 && level <= 6:
-		d.w.logNewTablePenalty = 8
+		d.w.logNewTablePenalty = 7
 		d.fast = newFastEnc(level)
 		d.window = make([]byte, maxStoreBlockSize)
 		d.fill = (*compressor).fillBlock
