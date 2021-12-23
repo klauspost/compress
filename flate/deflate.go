@@ -544,19 +544,26 @@ func (d *compressor) deflateLazy() {
 
 				// If we have a long run of no matches, skip additional bytes
 				// Resets when s.ii overflows after 64KB.
-				if s.ii > uint16(d.nice) {
-					n := int(s.ii >> 5)
+				if n := int(s.ii) - d.chain; n > 0 {
+					n = 1 + int(n>>6)
 					for j := 0; j < n; j++ {
 						if s.index >= d.windowEnd-1 {
 							break
 						}
-
 						d.tokens.AddLiteral(d.window[s.index-1])
 						if d.tokens.n == maxFlateBlockTokens {
 							if d.err = d.writeBlock(&d.tokens, s.index, false); d.err != nil {
 								return
 							}
 							d.tokens.Reset()
+						}
+						// Index...
+						if s.index < s.maxInsertIndex {
+							h := hash4(d.window[s.index:])
+							ch := s.hashHead[h]
+							s.chainHead = int(ch)
+							s.hashPrev[s.index&windowMask] = ch
+							s.hashHead[h] = uint32(s.index + s.hashOffset)
 						}
 						s.index++
 					}
