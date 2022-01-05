@@ -594,15 +594,17 @@ func (r *Reader) Skip(n int64) error {
 	return nil
 }
 
-type readSeeker struct {
+// ReadSeeker provides random or forward seeking in compressed content.
+// See Reader.ReadSeeker
+type ReadSeeker struct {
 	*Reader
 }
 
-// ReadSeeker will return an io.ReadSeeker
-// If 'random' is specified the returned io.ReadSeeker can be used for
+// ReadSeeker will return an io.ReadSeeker compatible version of the reader.
+// If 'random' is specified the returned io.Seeker can be used for
 // random seeking, otherwise only forward seeking is supported.
 // A custom index can be specified which will be used if supplied
-func (r *Reader) ReadSeeker(random bool, withIndex []byte) (io.ReadSeeker, error) {
+func (r *Reader) ReadSeeker(random bool, withIndex []byte) (*ReadSeeker, error) {
 	// Read index if provided.
 	if len(withIndex) != 0 {
 		if r.index == nil {
@@ -613,7 +615,7 @@ func (r *Reader) ReadSeeker(random bool, withIndex []byte) (io.ReadSeeker, error
 		}
 	}
 	if !random {
-		return &readSeeker{Reader: r}, nil
+		return &ReadSeeker{Reader: r}, nil
 	}
 
 	// Check if input is seekable
@@ -624,7 +626,7 @@ func (r *Reader) ReadSeeker(random bool, withIndex []byte) (io.ReadSeeker, error
 
 	if r.index != nil {
 		// Seekable and index, ok...
-		return &readSeeker{Reader: r}, nil
+		return &ReadSeeker{Reader: r}, nil
 	}
 
 	if !r.loadIndex {
@@ -652,11 +654,11 @@ func (r *Reader) ReadSeeker(random bool, withIndex []byte) (io.ReadSeeker, error
 	if err != nil {
 		return nil, ErrCantSeek{reason: "seeking input returned: " + err.Error()}
 	}
-	return &readSeeker{Reader: r}, nil
+	return &ReadSeeker{Reader: r}, nil
 }
 
 // Seek allows seeking in compressed data.
-func (r *readSeeker) Seek(offset int64, whence int) (int64, error) {
+func (r *ReadSeeker) Seek(offset int64, whence int) (int64, error) {
 	if r.err != nil {
 		return 0, r.err
 	}
