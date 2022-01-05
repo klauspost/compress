@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 )
 
 var (
@@ -22,6 +23,16 @@ var (
 	// ErrUnsupported reports that the input isn't supported.
 	ErrUnsupported = errors.New("s2: unsupported input")
 )
+
+// ErrCantSeek is returned if the stream cannot be seeked.
+type ErrCantSeek struct {
+	reason string
+}
+
+// Error returns the error as string.
+func (e ErrCantSeek) Error() string {
+	return fmt.Sprintf("s2: Can't seek because %s", e.reason)
+}
 
 // DecodedLen returns the length of the decoded block.
 func DecodedLen(src []byte) (int, error) {
@@ -154,6 +165,7 @@ type Reader struct {
 	decoded     []byte
 	buf         []byte
 	skippableCB [0x80]func(r io.Reader) error
+	blockStart  int64 // Uncompressed offset at start of current.
 
 	// decoded[i:j] contains decoded bytes that have not yet been passed on.
 	i, j int
@@ -166,6 +178,8 @@ type Reader struct {
 	readHeader  bool
 	paramsOK    bool
 	snappyFrame bool
+	loadIndex   bool
+	index       *index
 }
 
 // ensureBufferSize will ensure that the buffer can take at least n bytes.
@@ -190,6 +204,7 @@ func (r *Reader) Reset(reader io.Reader) {
 	if !r.paramsOK {
 		return
 	}
+	r.index = nil
 	r.r = reader
 	r.err = nil
 	r.i = 0
@@ -222,7 +237,7 @@ func (r *Reader) skippable(tmp []byte, n int, allowEOF bool, id uint8) (ok bool)
 		if r.err != nil {
 			return false
 		}
-		_, r.err = io.CopyBuffer(io.Discard, rd, tmp)
+		_, r.err = io.CopyBuffer(ioutil.Discard, rd, tmp)
 		return r.err == nil
 	}
 	if rs, ok := r.r.(io.ReadSeeker); ok {
@@ -278,6 +293,7 @@ func (r *Reader) Read(p []byte) (int, error) {
 		// https://github.com/google/snappy/blob/master/framing_format.txt
 		switch chunkType {
 		case chunkTypeCompressedData:
+			r.blockStart += int64(r.j)
 			// Section 4.2. Compressed data (chunk type 0x00).
 			if chunkLen < checksumSize {
 				r.err = ErrCorrupt
@@ -325,6 +341,7 @@ func (r *Reader) Read(p []byte) (int, error) {
 			continue
 
 		case chunkTypeUncompressedData:
+			r.blockStart += int64(r.j)
 			// Section 4.3. Uncompressed data (chunk type 0x01).
 			if chunkLen < checksumSize {
 				r.err = ErrCorrupt
@@ -430,7 +447,7 @@ func (r *Reader) Skip(n int64) error {
 				return nil
 			}
 			n -= int64(r.j - r.i)
-			r.i, r.j = 0, 0
+			r.i = r.j
 		}
 
 		// Buffer empty; read blocks until we have content.
@@ -454,6 +471,7 @@ func (r *Reader) Skip(n int64) error {
 		// https://github.com/google/snappy/blob/master/framing_format.txt
 		switch chunkType {
 		case chunkTypeCompressedData:
+			r.blockStart += int64(r.j)
 			// Section 4.2. Compressed data (chunk type 0x00).
 			if chunkLen < checksumSize {
 				r.err = ErrCorrupt
@@ -502,6 +520,7 @@ func (r *Reader) Skip(n int64) error {
 			r.i, r.j = 0, dLen
 			continue
 		case chunkTypeUncompressedData:
+			r.blockStart += int64(r.j)
 			// Section 4.3. Uncompressed data (chunk type 0x01).
 			if chunkLen < checksumSize {
 				r.err = ErrCorrupt
@@ -573,6 +592,93 @@ func (r *Reader) Skip(n int64) error {
 		}
 	}
 	return nil
+}
+
+type readSeeker struct {
+	*Reader
+}
+
+// ReadSeeker will return an io.ReadSeeker
+// If 'random' is specified the returned io.ReadSeeker can be used for
+// random seeking, otherwise only forward seeking is supported.
+// A custom index can be specified which will be used if supplied
+func (r *Reader) ReadSeeker(random bool, withIndex []byte) (io.ReadSeeker, error) {
+	// Read index if provided.
+	if len(withIndex) != 0 {
+		if r.index == nil {
+			r.index = &index{}
+		}
+		if _, err := r.index.Load(withIndex); err != nil {
+			return nil, ErrCantSeek{reason: "loading index returned: " + err.Error()}
+		}
+	}
+	if !random {
+		return &readSeeker{Reader: r}, nil
+	}
+
+	// Check if input is seekable
+	rs, ok := r.r.(io.ReadSeeker)
+	if !ok {
+		return nil, ErrCantSeek{reason: "input stream isn't seekable"}
+	}
+
+	if r.index != nil {
+		// Seekable and index, ok...
+		return &readSeeker{Reader: r}, nil
+	}
+
+	if !r.loadIndex {
+		return nil, ErrCantSeek{reason: "not allowed to read index and none provided"}
+	}
+
+	// Load from stream.
+	r.index = &index{}
+
+	// Read current position.
+	pos, err := rs.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return nil, ErrCantSeek{reason: "seeking input returned: " + err.Error()}
+	}
+	err = r.index.LoadStream(rs)
+	if err != nil {
+		if err == ErrUnsupported {
+			return nil, ErrCantSeek{reason: "input stream does not contain an index"}
+		}
+		return nil, ErrCantSeek{reason: "reading index returned: " + err.Error()}
+	}
+
+	// Reset position.
+	_, err = rs.Seek(pos, io.SeekStart)
+	if err != nil {
+		return nil, ErrCantSeek{reason: "seeking input returned: " + err.Error()}
+	}
+	return &readSeeker{Reader: r}, nil
+}
+
+// Seek allows seeking in compressed data.
+func (r *readSeeker) Seek(offset int64, whence int) (int64, error) {
+	if r.err != nil {
+		return 0, r.err
+	}
+	if !r.readHeader {
+		// Make sure we read the header.
+		_, r.err = r.Read([]byte{})
+	}
+	_, ok := r.r.(io.ReadSeeker)
+	if r.index == nil || !ok {
+		if whence == io.SeekCurrent && offset >= 0 {
+			err := r.Skip(offset)
+			return r.blockStart + int64(r.i), err
+		}
+		if whence == io.SeekStart && offset >= r.blockStart+int64(r.i) {
+			err := r.Skip(offset - r.blockStart - int64(r.i))
+			return r.blockStart + int64(r.i), err
+		}
+		return 0, ErrUnsupported
+
+	}
+	// FIXME: Use index to seek.
+	return 0, ErrUnsupported
 }
 
 // ReadByte satisfies the io.ByteReader interface.

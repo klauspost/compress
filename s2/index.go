@@ -76,21 +76,21 @@ func (i *index) Add(compressedOffset, uncompressedOffset int64) error {
 }
 
 func (i *index) Reduce() {
-	fmt.Println("entries:", len(i.info))
 	if len(i.info) < maxIndexEntries {
 		return
 	}
 	// Algorithm, keep 1, remove removeN entries...
-	removeN := (len(i.info) + maxIndexEntries - 1) / maxIndexEntries
+	removeN := (len(i.info) + 1) / maxIndexEntries
 	src := i.info
-	i.AllocInfos(len(i.info) / removeN)
+	j := 0
 	for idx := 0; idx < len(src); idx++ {
-		i.info = append(i.info, src[idx])
+		i.info[j] = src[idx]
+		j++
 		idx += removeN
 	}
+	i.info = i.info[:j]
 	// Update maxblock estimate.
 	i.estBlockUncomp += i.estBlockUncomp * int64(removeN)
-	fmt.Println("entries after:", len(i.info))
 }
 
 func (i *index) AppendTo(b []byte, uncompTotal, compTotal int64) []byte {
@@ -126,7 +126,7 @@ func (i *index) AppendTo(b []byte, uncompTotal, compTotal int64) []byte {
 			// Update compressed size prediction, with half the error.
 			cPredict += cOff / 2
 		}
-		fmt.Println(info.uncompressedOffset, "->", info.compressedOffset, "encoded:", uOff, cOff)
+		//fmt.Println(info.uncompressedOffset, "->", info.compressedOffset, "encoded:", uOff, cOff)
 		n = binary.PutVarint(tmp[:], uOff)
 		b = append(b, tmp[:n]...)
 		n = binary.PutVarint(tmp[:], cOff)
@@ -144,7 +144,7 @@ func (i *index) AppendTo(b []byte, uncompTotal, compTotal int64) []byte {
 	b[initSize+1] = uint8(chunkLen >> 0)
 	b[initSize+2] = uint8(chunkLen >> 8)
 	b[initSize+3] = uint8(chunkLen >> 16)
-	fmt.Printf("chunklen: 0x%x Uncomp:%d, Comp:%d\n", chunkLen, uncompTotal, compTotal)
+	//fmt.Printf("chunklen: 0x%x Uncomp:%d, Comp:%d\n", chunkLen, uncompTotal, compTotal)
 	return b
 }
 
@@ -242,7 +242,7 @@ func (i *index) Load(b []byte) ([]byte, error) {
 			cOff += prev.compressedOffset + cPredict
 			cPredict = cPredictNew
 		}
-		fmt.Println(uOff, "->", cOff)
+		//fmt.Println(uOff, "->", cOff)
 		i.info[idx] = struct {
 			compressedOffset   int64
 			uncompressedOffset int64

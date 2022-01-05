@@ -685,6 +685,13 @@ Snappy blocks/streams can safely be concatenated with S2 blocks and streams.
 
 ## Index Format:
 
+Each block is structured as a snappy skippable block, with the chunk ID 0x88.
+
+The block can be read from the front, but contains information so it can be read from the back as well.
+
+Numbers are stored as fixed size little endian values or [zigzag encoded](https://developers.google.com/protocol-buffers/docs/encoding#signed_integers) [base 128 varints](https://developers.google.com/protocol-buffers/docs/encoding), 
+with un-encoded value length of 64 bits, unless other limits are specified. 
+
 | Content                                                                   | Format                                                                                                                      |
 |---------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|
 | ID, `[1]byte`                                                           | Always 0x88.                                                                                                                  |
@@ -706,9 +713,9 @@ Snappy blocks/streams can safely be concatenated with S2 blocks and streams.
 // EstBlockSize is read previously.
 // Integer truncating division must be used.
 
-CompressPredict := EstBlockSize / 2
+CompressGuess := EstBlockSize / 2
 
-for each entry
+for each entry {
     uOff = ReadVarInt // Read value from stream
     cOff = ReadVarInt // Read value from stream
     
@@ -723,11 +730,11 @@ for each entry
     entry[entryNum].UncompressedOffset = entry[entryNum-1].UncompressedOffset + EstBlockSize
 
     // Compressed uses previous and our estimate.
-    entry[entryNum].CompressedOffset = entry[entryNum-1].CompressedOffset + CompressPredict
+    entry[entryNum].CompressedOffset = entry[entryNum-1].CompressedOffset + CompressGuess
         
      // Adjust compressed offset for next loop, integer truncating division must be used. 
-     CompressPredict += cOff/2               
-end for each
+     CompressGuess += cOff/2               
+}
 ```
 
 # Format Extensions
