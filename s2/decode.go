@@ -8,6 +8,7 @@ package s2
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 )
 
@@ -131,12 +132,29 @@ func ReaderAllocBlock(blockSize int) ReaderOption {
 	}
 }
 
+// ReaderSkippableCB will register a callback for chuncks with the specified ID.
+// ID must be a Reserved skippable chunks ID, 0x80-0xfd (inclusive).
+// For each chunk with the ID, the callback is called with the content.
+// Any returned non-nil error will abort decompression.
+// Only one callback per ID is supported, latest sent will be used.
+func ReaderSkippableCB(id uint8, fn func(r io.Reader) error) ReaderOption {
+	return func(r *Reader) error {
+		if id < 0x80 || id > 0xfd {
+			return fmt.Errorf("ReaderSkippableCB: Invalid id provided, must be 0x80-0xfd (inclusive)")
+		}
+		r.skippableCB[id] = fn
+		return nil
+	}
+}
+
 // Reader is an io.Reader that can read Snappy-compressed bytes.
 type Reader struct {
-	r       io.Reader
-	err     error
-	decoded []byte
-	buf     []byte
+	r           io.Reader
+	err         error
+	decoded     []byte
+	buf         []byte
+	skippableCB [0x80]func(r io.Reader) error
+
 	// decoded[i:j] contains decoded bytes that have not yet been passed on.
 	i, j int
 	// maximum block size allowed.
@@ -189,11 +207,24 @@ func (r *Reader) readFull(p []byte, allowEOF bool) (ok bool) {
 	return true
 }
 
-// skipN will skip n bytes.
+// skippable will skip n bytes.
 // If the supplied reader supports seeking that is used.
 // tmp is used as a temporary buffer for reading.
 // The supplied slice does not need to be the size of the read.
-func (r *Reader) skipN(tmp []byte, n int, allowEOF bool) (ok bool) {
+func (r *Reader) skippable(tmp []byte, n int, allowEOF bool, id uint8) (ok bool) {
+	if id < 0x80 {
+		r.err = fmt.Errorf("interbal error: skippable id < 0x80")
+		return false
+	}
+	if fn := r.skippableCB[id-0x80]; fn != nil {
+		rd := io.LimitReader(r.r, int64(n))
+		r.err = fn(rd)
+		if r.err != nil {
+			return false
+		}
+		_, r.err = io.CopyBuffer(io.Discard, rd, tmp)
+		return r.err == nil
+	}
 	if rs, ok := r.r.(io.ReadSeeker); ok {
 		_, err := rs.Seek(int64(n), io.SeekCurrent)
 		if err == nil {
@@ -357,17 +388,20 @@ func (r *Reader) Read(p []byte) (int, error) {
 
 		if chunkType <= 0x7f {
 			// Section 4.5. Reserved unskippable chunks (chunk types 0x02-0x7f).
+			// fmt.Printf("ERR chunktype: 0x%x\n", chunkType)
 			r.err = ErrUnsupported
 			return 0, r.err
 		}
 		// Section 4.4 Padding (chunk type 0xfe).
 		// Section 4.6. Reserved skippable chunks (chunk types 0x80-0xfd).
-		if chunkLen > maxBlockSize {
+		if chunkLen > maxChunkSize {
+			// fmt.Printf("ERR chunkLen: 0x%x\n", chunkLen)
 			r.err = ErrUnsupported
 			return 0, r.err
 		}
 
-		if !r.skipN(r.buf, chunkLen, false) {
+		// fmt.Printf("skippable: ID: 0x%x, len: 0x%x\n", chunkType, chunkLen)
+		if !r.skippable(r.buf, chunkLen, false, chunkType) {
 			return 0, r.err
 		}
 	}
@@ -528,13 +562,13 @@ func (r *Reader) Skip(n int64) error {
 			r.err = ErrUnsupported
 			return r.err
 		}
-		if chunkLen > maxBlockSize {
+		if chunkLen > maxChunkSize {
 			r.err = ErrUnsupported
 			return r.err
 		}
 		// Section 4.4 Padding (chunk type 0xfe).
 		// Section 4.6. Reserved skippable chunks (chunk types 0x80-0xfd).
-		if !r.skipN(r.buf, chunkLen, false) {
+		if !r.skippable(r.buf, chunkLen, false, chunkType) {
 			return r.err
 		}
 	}
@@ -562,4 +596,18 @@ func (r *Reader) ReadByte() (byte, error) {
 		}
 	}
 	return 0, io.ErrNoProgress
+}
+
+// SkippableCB will register a callback for chunks with the specified ID.
+// ID must be a Reserved skippable chunks ID, 0x80-0xfe (inclusive).
+// For each chunk with the ID, the callback is called with the content.
+// Any returned non-nil error will abort decompression.
+// Only one callback per ID is supported, latest sent will be used.
+// Sending a nil function will disable previous callbacks.
+func (r *Reader) SkippableCB(id uint8, fn func(r io.Reader) error) error {
+	if id < 0x80 || id > chunkTypePadding {
+		return fmt.Errorf("ReaderSkippableCB: Invalid id provided, must be 0x80-0xfe (inclusive)")
+	}
+	r.skippableCB[id] = fn
+	return nil
 }

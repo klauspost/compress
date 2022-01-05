@@ -681,6 +681,55 @@ Blocks can be concatenated using the `ConcatBlocks` function.
 
 Snappy blocks/streams can safely be concatenated with S2 blocks and streams. 
 
+# Stream Seek Index
+
+## Index Format:
+
+| Content                                                                   | Format                                                                                                                      |
+|---------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|
+| ID, `[1]byte`                                                           | Always 0x88.                                                                                                                  |
+| Data Length, `[3]byte`                                                  | 3 byte little-endian length of the chunk in bytes, following this.                                                            |
+| Header `[6]byte`                                                        | Header, must be `[115, 50, 105, 100, 120, 0]` or in text: "s2idx\x00".                                                        |
+| UncompressedSize, Varint                                                | Total Uncompressed size if known. Should be -1 if unknown.                                                                    |
+| CompressedSize, Varint                                                  | Total Compressed size if known. Should be -1 if unknown.                                                                      |
+| EstBlockSize, Varint                                                    | Block Size, used for guessing uncompressed offsets. Must be >= 0                                                              |
+| Entries, Varint                                                         | Number of Entries in index, must be < 65536 and >=0                                                                           |
+| For Each Entry:  (uncompressedOffset, VarInt; compressedOffset, VarInt) | Pairs of uncompressed and compressed offsets. See below how to decode.                                                        |
+| Block Size, `[4]byte`                                                   | Little Endian total encoded size (including header and trailer). Can be used for searching backwards to start of block.       |
+| Trailer `[6]byte`                                                       | Trailer, must be `[0, 120, 100, 105, 50, 115]` or in text: "\x00xdi2s". Can be used for identifying block from end of stream. |
+
+### Decoding entries:
+
+```
+
+// Guess that the first block will be 50% of uncompressed size.
+// EstBlockSize is read previously.
+// Integer truncating division must be used.
+
+CompressPredict := EstBlockSize / 2
+
+for each entry
+    uOff = ReadVarInt // Read value from stream
+    cOff = ReadVarInt // Read value from stream
+    
+    // Except for the first entry, use previous values.
+    if entryNum == 0 {
+        entry[entryNum].UncompressedOffset = uOff
+        entry[entryNum].CompressedOffset = cOff
+        continue
+    }
+    
+    // Uncompressed uses previous offset and adds EstBlockSize
+    entry[entryNum].UncompressedOffset = entry[entryNum-1].UncompressedOffset + EstBlockSize
+
+    // Compressed uses previous and our estimate.
+    entry[entryNum].CompressedOffset = entry[entryNum-1].CompressedOffset + CompressPredict
+        
+     // Adjust compressed offset for next loop, integer truncating division must be used. 
+     CompressPredict += cOff/2               
+end for each
+```
+
 # Format Extensions
 
 * Frame [Stream identifier](https://github.com/google/snappy/blob/master/framing_format.txt#L68) changed from `sNaPpY` to `S2sTwO`.
