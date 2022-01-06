@@ -35,7 +35,7 @@ var (
 	blockSize = flag.String("blocksize", "4M", "Max  block size. Examples: 64K, 256K, 1M, 4M. Must be power of two and <= 4MB")
 	block     = flag.Bool("block", false, "Compress as a single block. Will load content into memory.")
 	safe      = flag.Bool("safe", false, "Do not overwrite output files")
-	index     = flag.Bool("index", false, "Add seek index")
+	index     = flag.Bool("index", true, "Add seek index")
 	padding   = flag.String("pad", "1", "Pad size to a multiple of this value, Examples: 500, 64K, 256K, 1M, 4M, etc")
 	stdout    = flag.Bool("c", false, "Write all output to stdout. Multiple input files will be concatenated")
 	out       = flag.String("o", "", "Write output to another file. Single input file only")
