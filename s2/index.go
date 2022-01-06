@@ -209,7 +209,7 @@ func (i *index) Load(b []byte) ([]byte, error) {
 		b = b[n:]
 	}
 
-	// Total Uncompressed
+	// Total Compressed
 	if v, n := binary.Varint(b); n <= 0 {
 		return b, ErrCorrupt
 	} else {
@@ -222,7 +222,7 @@ func (i *index) Load(b []byte) ([]byte, error) {
 		return b, ErrCorrupt
 	} else {
 		if v < 0 {
-			return b, ErrUnsupported
+			return b, ErrCorrupt
 		}
 		i.estBlockUncomp = v
 		b = b[n:]
@@ -251,18 +251,12 @@ func (i *index) Load(b []byte) ([]byte, error) {
 		if v, n := binary.Varint(b); n <= 0 {
 			return b, ErrCorrupt
 		} else {
-			if v > maxIndexEntries {
-				return b, ErrUnsupported
-			}
 			uOff = v
 			b = b[n:]
 		}
 		if v, n := binary.Varint(b); n <= 0 {
 			return b, ErrCorrupt
 		} else {
-			if v > maxIndexEntries {
-				return b, ErrUnsupported
-			}
 			cOff = v
 			b = b[n:]
 		}
@@ -312,7 +306,7 @@ func (i *index) LoadStream(rs io.ReadSeeker) error {
 	}
 	sz := binary.LittleEndian.Uint32(tmp[:4])
 	if sz > maxChunkSize+skippableFrameHeader {
-
+		return ErrCorrupt
 	}
 	_, err = rs.Seek(-int64(sz), io.SeekEnd)
 	if err != nil {
