@@ -101,6 +101,7 @@ func NewReader(r io.Reader, opts ...ReaderOption) *Reader {
 		nr.buf = make([]byte, MaxEncodedLen(defaultBlockSize)+checksumSize)
 	}
 	nr.paramsOK = true
+	nr.loadIndex = true
 	return &nr
 }
 
@@ -614,13 +615,13 @@ func (r *Reader) ReadSeeker(random bool, withIndex []byte) (*ReadSeeker, error) 
 			return nil, ErrCantSeek{reason: "loading index returned: " + err.Error()}
 		}
 	}
-	if !random {
-		return &ReadSeeker{Reader: r}, nil
-	}
 
 	// Check if input is seekable
 	rs, ok := r.r.(io.ReadSeeker)
 	if !ok {
+		if !random {
+			return &ReadSeeker{Reader: r}, nil
+		}
 		return nil, ErrCantSeek{reason: "input stream isn't seekable"}
 	}
 
@@ -630,6 +631,9 @@ func (r *Reader) ReadSeeker(random bool, withIndex []byte) (*ReadSeeker, error) 
 	}
 
 	if !r.loadIndex {
+		if !random {
+			return &ReadSeeker{Reader: r}, nil
+		}
 		return nil, ErrCantSeek{reason: "not allowed to read index and none provided"}
 	}
 
@@ -662,11 +666,14 @@ func (r *ReadSeeker) Seek(offset int64, whence int) (int64, error) {
 	if r.err != nil {
 		return 0, r.err
 	}
+	if offset == 0 {
+		return r.blockStart + int64(r.i), nil
+	}
 	if !r.readHeader {
 		// Make sure we read the header.
 		_, r.err = r.Read([]byte{})
 	}
-	_, ok := r.r.(io.ReadSeeker)
+	rs, ok := r.r.(io.ReadSeeker)
 	if r.index == nil || !ok {
 		if whence == io.SeekCurrent && offset >= 0 {
 			err := r.Skip(offset)
@@ -679,8 +686,34 @@ func (r *ReadSeeker) Seek(offset int64, whence int) (int64, error) {
 		return 0, ErrUnsupported
 
 	}
-	// FIXME: Use index to seek.
-	return 0, ErrUnsupported
+
+	switch whence {
+	case io.SeekCurrent:
+		offset += r.blockStart + int64(r.i)
+	case io.SeekEnd:
+		offset = -offset
+	}
+	c, u, err := r.index.Find(offset)
+	if err != nil {
+		return r.blockStart + int64(r.i), err
+	}
+
+	// Seek to next block
+	_, err = rs.Seek(c, io.SeekStart)
+	if err != nil {
+		return 0, err
+	}
+
+	if offset < 0 {
+		offset = r.index.totalUncompressed + offset
+	}
+
+	r.i = r.j // Remove rest of current block.
+	if u < offset {
+		// Forward inside block
+		return offset, r.Skip(offset - u)
+	}
+	return offset, nil
 }
 
 // ReadByte satisfies the io.ByteReader interface.

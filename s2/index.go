@@ -50,6 +50,8 @@ func (i *index) AllocInfos(n int) {
 	}, 0, n)
 }
 
+// Add an uncompressed and compressed pair.
+// Entries should be sent in order.
 func (i *index) Add(compressedOffset, uncompressedOffset int64) error {
 	if i == nil {
 		return nil
@@ -75,6 +77,38 @@ func (i *index) Add(compressedOffset, uncompressedOffset int64) error {
 	return nil
 }
 
+// Find the offset at or before the wanted (uncompressed) offset.
+// If offset is 0 or positive it is the offset from the beginning of the file.
+// If the uncompressed size is known, the offset must be within the file.
+// If an offset outside the file is requested io.ErrUnexpectedEOF is returned.
+// If the offset is negative, it is interpreted as the distance from the end of the file,
+// where -1 represents the last byte.
+// If offset from the end of the file is requested, but size is unknown,
+// ErrUnsupported will be returned.
+func (i *index) Find(offset int64) (compressedOff, uncompressedOff int64, err error) {
+	if offset < 0 {
+		if i.totalUncompressed < 0 {
+			return 0, 0, ErrUnsupported
+		}
+		offset = i.totalUncompressed + offset
+		if offset < 0 {
+			return 0, 0, io.ErrUnexpectedEOF
+		}
+	}
+	if i.totalUncompressed >= 0 && offset > i.totalUncompressed {
+		return 0, 0, io.ErrUnexpectedEOF
+	}
+	for _, info := range i.info {
+		if info.uncompressedOffset > offset {
+			break
+		}
+		compressedOff = info.compressedOffset
+		uncompressedOff = info.uncompressedOffset
+	}
+	return compressedOff, uncompressedOff, nil
+}
+
+// Reduce to stay below maxIndexEntries
 func (i *index) Reduce() {
 	if len(i.info) < maxIndexEntries {
 		return
@@ -179,7 +213,7 @@ func (i *index) Load(b []byte) ([]byte, error) {
 	if v, n := binary.Varint(b); n <= 0 {
 		return b, ErrCorrupt
 	} else {
-		i.totalUncompressed = v
+		i.totalCompressed = v
 		b = b[n:]
 	}
 
