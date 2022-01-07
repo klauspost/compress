@@ -19,7 +19,7 @@ import (
 
 func testOptions(t testing.TB) map[string][]WriterOption {
 	var testOptions = map[string][]WriterOption{
-		"default": {},
+		"default": {WriterAddIndex()},
 		"better":  {WriterBetterCompression()},
 		"best":    {WriterBestCompression()},
 		"none":    {WriterUncompressed()},

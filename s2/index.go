@@ -17,7 +17,7 @@ const (
 	maxIndexEntries = 1 << 16
 )
 
-// Index represents
+// Index represents an S2/Snappy index.
 type Index struct {
 	TotalUncompressed int64 // Total Uncompressed size if known. Will be -1 if unknown.
 	TotalCompressed   int64 // Total Compressed size if known. Will be -1 if unknown.
@@ -49,7 +49,7 @@ func (i *Index) allocInfos(n int) {
 }
 
 // add an uncompressed and compressed pair.
-// Entries should be sent in order.
+// Entries must be sent in order.
 func (i *Index) add(compressedOffset, uncompressedOffset int64) error {
 	if i == nil {
 		return nil
@@ -87,16 +87,16 @@ func (i *Index) add(compressedOffset, uncompressedOffset int64) error {
 // If offset from the end of the file is requested, but size is unknown,
 // ErrUnsupported will be returned.
 func (i *Index) Find(offset int64) (compressedOff, uncompressedOff int64, err error) {
+	if i.TotalUncompressed < 0 {
+		return 0, 0, ErrCorrupt
+	}
 	if offset < 0 {
-		if i.TotalUncompressed < 0 {
-			return 0, 0, ErrUnsupported
-		}
 		offset = i.TotalUncompressed + offset
 		if offset < 0 {
 			return 0, 0, io.ErrUnexpectedEOF
 		}
 	}
-	if i.TotalUncompressed >= 0 && offset > i.TotalUncompressed {
+	if offset > i.TotalUncompressed {
 		return 0, 0, io.ErrUnexpectedEOF
 	}
 	for _, info := range i.info {
@@ -232,7 +232,7 @@ func (i *Index) Load(b []byte) ([]byte, error) {
 	b = b[len(S2IndexHeader):]
 
 	// Total Uncompressed
-	if v, n := binary.Varint(b); n <= 0 {
+	if v, n := binary.Varint(b); n <= 0 || v < 0 {
 		return b, ErrCorrupt
 	} else {
 		i.TotalUncompressed = v

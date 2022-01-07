@@ -141,7 +141,7 @@ Binaries can be downloaded on the [Releases Page](https://github.com/klauspost/c
 
 Installing then requires Go to be installed. To install them, use:
 
-`go install github.com/klauspost/compress/s2/cmd/s2c && go install github.com/klauspost/compress/s2/cmd/s2d`
+`go install github.com/klauspost/compress/s2/cmd/s2c@latest && go install github.com/klauspost/compress/s2/cmd/s2d@latest`
 
 To build binaries to the current folder use:
 
@@ -176,6 +176,8 @@ Options:
     	Compress faster, but with a minor compression loss
   -help
     	Display help
+  -index
+        Add seek index (default true)    	
   -o string
         Write output to another file. Single input file only
   -pad string
@@ -217,11 +219,15 @@ Options:
     	Display help
   -o string
         Write output to another file. Single input file only
-  -q	Don't write any output to terminal, except errors
+  -offset string
+        Start at offset. Examples: 92, 64K, 256K, 1M, 4M. Requires Index
+  -q    Don't write any output to terminal, except errors
   -rm
-    	Delete source file(s) after successful decompression
+        Delete source file(s) after successful decompression
   -safe
-    	Do not overwrite output files
+        Do not overwrite output files
+  -tail string
+        Return last of compressed file. Examples: 92, 64K, 256K, 1M, 4M. Requires Index
   -verify
     	Verify files, but do not write output                                      
 ```
@@ -730,7 +736,7 @@ with un-encoded value length of 64 bits, unless other limits are specified.
 | ID, `[1]byte`                                                           | Always 0x99.                                                                                                                  |
 | Data Length, `[3]byte`                                                  | 3 byte little-endian length of the chunk in bytes, following this.                                                            |
 | Header `[6]byte`                                                        | Header, must be `[115, 50, 105, 100, 120, 0]` or in text: "s2idx\x00".                                                        |
-| UncompressedSize, Varint                                                | Total Uncompressed size if known. Should be -1 if unknown.                                                                    |
+| UncompressedSize, Varint                                                | Total Uncompressed size.                                                                                                      |
 | CompressedSize, Varint                                                  | Total Compressed size if known. Should be -1 if unknown.                                                                      |
 | EstBlockSize, Varint                                                    | Block Size, used for guessing uncompressed offsets. Must be >= 0.                                                             |
 | Entries, Varint                                                         | Number of Entries in index, must be < 65536 and >=0.                                                                          |
@@ -755,9 +761,6 @@ In fact there is a maximum of 65536 block entries in an index.
 
 The writer can use any method to reduce the number of entries.
 An implicit block start at 0,0 can be assumed.
-
-It is strongly recommended adding `UncompressedSize`, 
-otherwise seeking from end-of-file (tailing for example) will not be possible. 
 
 ### Decoding entries:
 
