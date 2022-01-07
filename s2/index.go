@@ -17,30 +17,28 @@ const (
 	maxIndexEntries = 1 << 16
 )
 
-type index struct {
-	info []struct {
+// Index represents
+type Index struct {
+	TotalUncompressed int64 // Total Uncompressed size if known. Will be -1 if unknown.
+	TotalCompressed   int64 // Total Compressed size if known. Will be -1 if unknown.
+	info              []struct {
 		compressedOffset   int64
 		uncompressedOffset int64
 	}
-	estBlockUncomp    int64
-	totalUncompressed int64
-	totalCompressed   int64
+	estBlockUncomp int64
 }
 
-func (i *index) Reset(maxBlock int) {
+func (i *Index) reset(maxBlock int) {
 	i.estBlockUncomp = int64(maxBlock)
-	// We do not write the first.
+	i.TotalCompressed = -1
+	i.TotalUncompressed = -1
 	if len(i.info) > 0 {
 		i.info = i.info[:0]
 	}
 }
 
-func (i *index) Close() {
-	i.Reset(0)
-}
-
-// AllocInfos will allocate an empty slice of infos.
-func (i *index) AllocInfos(n int) {
+// allocInfos will allocate an empty slice of infos.
+func (i *Index) allocInfos(n int) {
 	if n > maxIndexEntries {
 		panic("n > maxIndexEntries")
 	}
@@ -50,9 +48,9 @@ func (i *index) AllocInfos(n int) {
 	}, 0, n)
 }
 
-// Add an uncompressed and compressed pair.
+// add an uncompressed and compressed pair.
 // Entries should be sent in order.
-func (i *index) Add(compressedOffset, uncompressedOffset int64) error {
+func (i *Index) add(compressedOffset, uncompressedOffset int64) error {
 	if i == nil {
 		return nil
 	}
@@ -68,6 +66,9 @@ func (i *index) Add(compressedOffset, uncompressedOffset int64) error {
 		}
 		if latest.uncompressedOffset > uncompressedOffset {
 			return fmt.Errorf("internal error: Earlier uncompressed received (%d > %d)", latest.uncompressedOffset, uncompressedOffset)
+		}
+		if latest.compressedOffset > compressedOffset {
+			return fmt.Errorf("internal error: Earlier compressed received (%d > %d)", latest.uncompressedOffset, uncompressedOffset)
 		}
 	}
 	i.info = append(i.info, struct {
@@ -85,17 +86,17 @@ func (i *index) Add(compressedOffset, uncompressedOffset int64) error {
 // where -1 represents the last byte.
 // If offset from the end of the file is requested, but size is unknown,
 // ErrUnsupported will be returned.
-func (i *index) Find(offset int64) (compressedOff, uncompressedOff int64, err error) {
+func (i *Index) Find(offset int64) (compressedOff, uncompressedOff int64, err error) {
 	if offset < 0 {
-		if i.totalUncompressed < 0 {
+		if i.TotalUncompressed < 0 {
 			return 0, 0, ErrUnsupported
 		}
-		offset = i.totalUncompressed + offset
+		offset = i.TotalUncompressed + offset
 		if offset < 0 {
 			return 0, 0, io.ErrUnexpectedEOF
 		}
 	}
-	if i.totalUncompressed >= 0 && offset > i.totalUncompressed {
+	if i.TotalUncompressed >= 0 && offset > i.TotalUncompressed {
 		return 0, 0, io.ErrUnexpectedEOF
 	}
 	for _, info := range i.info {
@@ -108,8 +109,8 @@ func (i *index) Find(offset int64) (compressedOff, uncompressedOff int64, err er
 	return compressedOff, uncompressedOff, nil
 }
 
-// Reduce to stay below maxIndexEntries
-func (i *index) Reduce() {
+// reduce to stay below maxIndexEntries
+func (i *Index) reduce() {
 	if len(i.info) < maxIndexEntries {
 		return
 	}
@@ -127,8 +128,8 @@ func (i *index) Reduce() {
 	i.estBlockUncomp += i.estBlockUncomp * int64(removeN)
 }
 
-func (i *index) AppendTo(b []byte, uncompTotal, compTotal int64) []byte {
-	i.Reduce()
+func (i *Index) appendTo(b []byte, uncompTotal, compTotal int64) []byte {
+	i.reduce()
 	var tmp [binary.MaxVarintLen64]byte
 
 	initSize := len(b)
@@ -147,25 +148,52 @@ func (i *index) AppendTo(b []byte, uncompTotal, compTotal int64) []byte {
 	// Put length
 	n = binary.PutVarint(tmp[:], int64(len(i.info)))
 	b = append(b, tmp[:n]...)
+
+	// Check if we should add uncompressed offsets
+	var hasUncompressed byte
+	for idx, info := range i.info {
+		if idx == 0 {
+			if info.uncompressedOffset != 0 {
+				hasUncompressed = 1
+				break
+			}
+			continue
+		}
+		if info.uncompressedOffset != i.info[idx-1].uncompressedOffset+i.estBlockUncomp {
+			hasUncompressed = 1
+			break
+		}
+	}
+	b = append(b, hasUncompressed)
+
+	// Add each entry
+	if hasUncompressed == 1 {
+		for idx, info := range i.info {
+			uOff := info.uncompressedOffset
+			if idx > 0 {
+				prev := i.info[idx-1]
+				uOff -= prev.uncompressedOffset + (i.estBlockUncomp)
+			}
+			n = binary.PutVarint(tmp[:], uOff)
+			b = append(b, tmp[:n]...)
+		}
+	}
+
 	// Initial compressed size estimate.
 	cPredict := i.estBlockUncomp / 2
-	// Add each entry
+
 	for idx, info := range i.info {
-		uOff := info.uncompressedOffset
 		cOff := info.compressedOffset
 		if idx > 0 {
 			prev := i.info[idx-1]
-			uOff -= prev.uncompressedOffset + (i.estBlockUncomp)
 			cOff -= prev.compressedOffset + cPredict
 			// Update compressed size prediction, with half the error.
 			cPredict += cOff / 2
 		}
-		//fmt.Println(info.uncompressedOffset, "->", info.compressedOffset, "encoded:", uOff, cOff)
-		n = binary.PutVarint(tmp[:], uOff)
-		b = append(b, tmp[:n]...)
 		n = binary.PutVarint(tmp[:], cOff)
 		b = append(b, tmp[:n]...)
 	}
+
 	// Add Total Size.
 	// Stored as fixed size for easier reading.
 	binary.LittleEndian.PutUint32(tmp[:], uint32(len(b)-initSize+4+len(S2IndexTrailer)))
@@ -182,7 +210,9 @@ func (i *index) AppendTo(b []byte, uncompTotal, compTotal int64) []byte {
 	return b
 }
 
-func (i *index) Load(b []byte) ([]byte, error) {
+// Load a binary index.
+// A zero value Index can be used or a previous one can be reused.
+func (i *Index) Load(b []byte) ([]byte, error) {
 	if len(b) <= 4+len(S2IndexHeader)+len(S2IndexTrailer) {
 		return b, io.ErrUnexpectedEOF
 	}
@@ -205,7 +235,7 @@ func (i *index) Load(b []byte) ([]byte, error) {
 	if v, n := binary.Varint(b); n <= 0 {
 		return b, ErrCorrupt
 	} else {
-		i.totalUncompressed = v
+		i.TotalUncompressed = v
 		b = b[n:]
 	}
 
@@ -213,7 +243,7 @@ func (i *index) Load(b []byte) ([]byte, error) {
 	if v, n := binary.Varint(b); n <= 0 {
 		return b, ErrCorrupt
 	} else {
-		i.totalCompressed = v
+		i.TotalCompressed = v
 		b = b[n:]
 	}
 
@@ -233,27 +263,57 @@ func (i *index) Load(b []byte) ([]byte, error) {
 		return b, ErrCorrupt
 	} else {
 		if v < 0 || v > maxIndexEntries {
-			return b, ErrUnsupported
+			return b, ErrCorrupt
 		}
 		entries = int(v)
 		b = b[n:]
 	}
 	if cap(i.info) < entries {
-		i.AllocInfos(entries)
+		i.allocInfos(entries)
 	}
 	i.info = i.info[:entries]
 
+	if len(b) < 1 {
+		return b, io.ErrUnexpectedEOF
+	}
+	hasUncompressed := b[0]
+	b = b[1:]
+	if hasUncompressed&1 != hasUncompressed {
+		return b, ErrCorrupt
+	}
+
+	// Add each uncompressed entry
+	for idx := range i.info {
+		var uOff int64
+		if hasUncompressed != 0 {
+			// Load delta
+			if v, n := binary.Varint(b); n <= 0 {
+				return b, ErrCorrupt
+			} else {
+				uOff = v
+				b = b[n:]
+			}
+		}
+
+		if idx > 0 {
+			prev := i.info[idx-1].uncompressedOffset
+			uOff += prev + (i.estBlockUncomp)
+			if uOff <= prev {
+				return b, ErrCorrupt
+			}
+		}
+		if uOff < 0 {
+			return b, ErrCorrupt
+		}
+		i.info[idx].uncompressedOffset = uOff
+	}
+
 	// Initial compressed size estimate.
 	cPredict := i.estBlockUncomp / 2
-	// Add each entry
+
+	// Add each compressed entry
 	for idx := range i.info {
-		var uOff, cOff int64
-		if v, n := binary.Varint(b); n <= 0 {
-			return b, ErrCorrupt
-		} else {
-			uOff = v
-			b = b[n:]
-		}
+		var cOff int64
 		if v, n := binary.Varint(b); n <= 0 {
 			return b, ErrCorrupt
 		} else {
@@ -265,16 +325,17 @@ func (i *index) Load(b []byte) ([]byte, error) {
 			// Update compressed size prediction, with half the error.
 			cPredictNew := cPredict + cOff/2
 
-			prev := i.info[idx-1]
-			uOff += prev.uncompressedOffset + (i.estBlockUncomp)
-			cOff += prev.compressedOffset + cPredict
+			prev := i.info[idx-1].compressedOffset
+			cOff += prev + cPredict
+			if cOff <= prev {
+				return b, ErrCorrupt
+			}
 			cPredict = cPredictNew
 		}
-		//fmt.Println(uOff, "->", cOff)
-		i.info[idx] = struct {
-			compressedOffset   int64
-			uncompressedOffset int64
-		}{compressedOffset: cOff, uncompressedOffset: uOff}
+		if cOff < 0 {
+			return b, ErrCorrupt
+		}
+		i.info[idx].compressedOffset = cOff
 	}
 	if len(b) < 4+len(S2IndexTrailer) {
 		return b, io.ErrUnexpectedEOF
@@ -289,7 +350,12 @@ func (i *index) Load(b []byte) ([]byte, error) {
 	return b[len(S2IndexTrailer):], nil
 }
 
-func (i *index) LoadStream(rs io.ReadSeeker) error {
+// LoadStream will load an index from the end of the supplied stream.
+// ErrUnsupported will be returned if the signature cannot be found.
+// ErrCorrupt will be returned if unexpected values are found.
+// io.ErrUnexpectedEOF is returned if there are too few bytes.
+// IO errors are returned as-is.
+func (i *Index) LoadStream(rs io.ReadSeeker) error {
 	// Go to end.
 	_, err := rs.Seek(-10, io.SeekEnd)
 	if err != nil {

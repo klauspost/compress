@@ -102,7 +102,7 @@ const (
 const (
 	chunkTypeCompressedData   = 0x00
 	chunkTypeUncompressedData = 0x01
-	ChunkTypeIndex            = 0x88
+	ChunkTypeIndex            = 0x99
 	chunkTypePadding          = 0xfe
 	chunkTypeStreamIdentifier = 0xff
 )

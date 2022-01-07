@@ -26,12 +26,12 @@ var (
 
 // ErrCantSeek is returned if the stream cannot be seeked.
 type ErrCantSeek struct {
-	reason string
+	Reason string
 }
 
 // Error returns the error as string.
 func (e ErrCantSeek) Error() string {
-	return fmt.Sprintf("s2: Can't seek because %s", e.reason)
+	return fmt.Sprintf("s2: Can't seek because %s", e.Reason)
 }
 
 // DecodedLen returns the length of the decoded block.
@@ -101,7 +101,6 @@ func NewReader(r io.Reader, opts ...ReaderOption) *Reader {
 		nr.buf = make([]byte, MaxEncodedLen(defaultBlockSize)+checksumSize)
 	}
 	nr.paramsOK = true
-	nr.loadIndex = true
 	return &nr
 }
 
@@ -179,8 +178,7 @@ type Reader struct {
 	readHeader  bool
 	paramsOK    bool
 	snappyFrame bool
-	loadIndex   bool
-	index       *index
+	index       *Index
 }
 
 // ensureBufferSize will ensure that the buffer can take at least n bytes.
@@ -604,15 +602,20 @@ type ReadSeeker struct {
 // ReadSeeker will return an io.ReadSeeker compatible version of the reader.
 // If 'random' is specified the returned io.Seeker can be used for
 // random seeking, otherwise only forward seeking is supported.
-// A custom index can be specified which will be used if supplied
-func (r *Reader) ReadSeeker(random bool, withIndex []byte) (*ReadSeeker, error) {
+// Enabling random seeking requires the original input to support
+// the io.Seeker interface.
+// A custom index can be specified which will be used if supplied.
+// When using a custom index, it will not be read from the input stream.
+// The returned ReadSeeker contains a shallow reference to the existing Reader,
+// meaning changes performed to one is reflected in the other.
+func (r *Reader) ReadSeeker(random bool, index []byte) (*ReadSeeker, error) {
 	// Read index if provided.
-	if len(withIndex) != 0 {
+	if len(index) != 0 {
 		if r.index == nil {
-			r.index = &index{}
+			r.index = &Index{}
 		}
-		if _, err := r.index.Load(withIndex); err != nil {
-			return nil, ErrCantSeek{reason: "loading index returned: " + err.Error()}
+		if _, err := r.index.Load(index); err != nil {
+			return nil, ErrCantSeek{Reason: "loading index returned: " + err.Error()}
 		}
 	}
 
@@ -622,7 +625,7 @@ func (r *Reader) ReadSeeker(random bool, withIndex []byte) (*ReadSeeker, error) 
 		if !random {
 			return &ReadSeeker{Reader: r}, nil
 		}
-		return nil, ErrCantSeek{reason: "input stream isn't seekable"}
+		return nil, ErrCantSeek{Reason: "input stream isn't seekable"}
 	}
 
 	if r.index != nil {
@@ -630,33 +633,26 @@ func (r *Reader) ReadSeeker(random bool, withIndex []byte) (*ReadSeeker, error) 
 		return &ReadSeeker{Reader: r}, nil
 	}
 
-	if !r.loadIndex {
-		if !random {
-			return &ReadSeeker{Reader: r}, nil
-		}
-		return nil, ErrCantSeek{reason: "not allowed to read index and none provided"}
-	}
-
 	// Load from stream.
-	r.index = &index{}
+	r.index = &Index{}
 
 	// Read current position.
 	pos, err := rs.Seek(0, io.SeekCurrent)
 	if err != nil {
-		return nil, ErrCantSeek{reason: "seeking input returned: " + err.Error()}
+		return nil, ErrCantSeek{Reason: "seeking input returned: " + err.Error()}
 	}
 	err = r.index.LoadStream(rs)
 	if err != nil {
 		if err == ErrUnsupported {
-			return nil, ErrCantSeek{reason: "input stream does not contain an index"}
+			return nil, ErrCantSeek{Reason: "input stream does not contain an index"}
 		}
-		return nil, ErrCantSeek{reason: "reading index returned: " + err.Error()}
+		return nil, ErrCantSeek{Reason: "reading index returned: " + err.Error()}
 	}
 
-	// Reset position.
+	// reset position.
 	_, err = rs.Seek(pos, io.SeekStart)
 	if err != nil {
-		return nil, ErrCantSeek{reason: "seeking input returned: " + err.Error()}
+		return nil, ErrCantSeek{Reason: "seeking input returned: " + err.Error()}
 	}
 	return &ReadSeeker{Reader: r}, nil
 }
@@ -705,7 +701,7 @@ func (r *ReadSeeker) Seek(offset int64, whence int) (int64, error) {
 	}
 
 	if offset < 0 {
-		offset = r.index.totalUncompressed + offset
+		offset = r.index.TotalUncompressed + offset
 	}
 
 	r.i = r.j // Remove rest of current block.

@@ -407,8 +407,7 @@ type Writer struct {
 	writer   io.Writer
 	randSrc  io.Reader
 	writerWg sync.WaitGroup
-	index    *index
-	indexOut func(b []byte)
+	index    Index
 
 	// wroteStreamHeader is whether we have written the stream header.
 	wroteStreamHeader bool
@@ -463,12 +462,7 @@ func (w *Writer) Reset(writer io.Writer) {
 	w.written = 0
 	w.writer = writer
 	w.uncompWritten = 0
-	if w.indexOut != nil || w.appendIndex {
-		if w.index == nil {
-			w.index = &index{}
-		}
-		w.index.Reset(w.blockSize)
-	}
+	w.index.reset(w.blockSize)
 
 	// If we didn't get a writer, stop here.
 	if writer == nil {
@@ -502,7 +496,7 @@ func (w *Writer) Reset(writer io.Writer) {
 						err = io.ErrShortBuffer
 					}
 					_ = w.err(err)
-					w.err(w.index.Add(w.written, input.startOffset))
+					w.err(w.index.add(w.written, input.startOffset))
 					w.written += int64(n)
 				}
 			}
@@ -1032,7 +1026,7 @@ func (w *Writer) writeSync(p []byte) (nRet int, errRet error) {
 		if n != len(obuf) {
 			return 0, w.err(io.ErrShortWrite)
 		}
-		w.err(w.index.Add(w.written, w.uncompWritten))
+		w.err(w.index.add(w.written, w.uncompWritten))
 		w.written += int64(n)
 		w.uncompWritten += int64(len(uncompressed))
 
@@ -1091,8 +1085,20 @@ func (w *Writer) Flush() error {
 }
 
 // Close calls Flush and then closes the Writer.
-// Calling Close multiple times is ok.
+// Calling Close multiple times is ok,
+// but calling CloseIndex after this will make it not return the index.
 func (w *Writer) Close() error {
+	_, err := w.closeIndex(w.appendIndex)
+	return err
+}
+
+// CloseIndex calls Close and returns an index on first call.
+// This is not required if you are only adding index to a stream.
+func (w *Writer) CloseIndex() ([]byte, error) {
+	return w.closeIndex(false)
+}
+
+func (w *Writer) closeIndex(idx bool) ([]byte, error) {
 	err := w.Flush()
 	if w.output != nil {
 		close(w.output)
@@ -1100,25 +1106,24 @@ func (w *Writer) Close() error {
 		w.output = nil
 	}
 
+	var index []byte
 	if w.err(nil) == nil && w.writer != nil {
-		var index []byte
 		// Create index.
-		if w.index != nil {
+		if idx {
 			compSize := int64(-1)
 			if w.pad <= 1 {
 				compSize = w.written
 			}
-			index = w.index.AppendTo(w.ibuf[:0], w.uncompWritten, compSize)
-			if w.indexOut != nil {
-				w.indexOut(index)
-			}
+			index = w.index.appendTo(w.ibuf[:0], w.uncompWritten, compSize)
 			// Count as written for padding.
 			if w.appendIndex {
 				w.written += int64(len(index))
 			}
-			_, err := w.index.Load(index)
-			if err != nil {
-				panic(err)
+			if true {
+				_, err := w.index.Load(index)
+				if err != nil {
+					panic(err)
+				}
 			}
 		}
 
@@ -1132,7 +1137,7 @@ func (w *Writer) Close() error {
 			add := calcSkippableFrame(w.written, int64(w.pad))
 			frame, err := skippableFrame(tmp, add, w.randSrc)
 			if err = w.err(err); err != nil {
-				return err
+				return nil, err
 			}
 			n, err2 := w.writer.Write(frame)
 			if err2 == nil && n != len(frame) {
@@ -1150,9 +1155,9 @@ func (w *Writer) Close() error {
 	}
 	err = w.err(errClosed)
 	if err == errClosed {
-		return nil
+		return index, nil
 	}
-	return err
+	return nil, err
 }
 
 // calcSkippableFrame will return a total size to be added for written
@@ -1214,17 +1219,6 @@ func WriterConcurrency(n int) WriterOption {
 			return errors.New("concurrency must be at least 1")
 		}
 		w.concurrency = n
-		return nil
-	}
-}
-
-// WriterIndexCB will build indexes and call back the function with the index when Close() is called.
-func WriterIndexCB(fn func(b []byte)) WriterOption {
-	return func(w *Writer) error {
-		if w.indexOut != nil {
-			return errors.New("only one index callback can be added")
-		}
-		w.indexOut = fn
 		return nil
 	}
 }

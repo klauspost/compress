@@ -683,9 +683,42 @@ Snappy blocks/streams can safely be concatenated with S2 blocks and streams.
 
 # Stream Seek Index
 
+S2 and Snappy streams can have indexes. These indexes will allow random seeking within the compressed data.
+
+The index can either be appended to the stream as a skippable block or returned for separate storage.
+
+When the index is appended to a stream it will be skipped by regular decoders, 
+so the output remains compatible with other decoders. 
+
+## Creating an Index
+
+To automatically add an index to a stream, add `WriterAddIndex()` option to your writer.
+Then the index will be added to the stream when `Close()` is called.
+
+If you want to store the index separately, you can use `CloseIndex()` instead of the regular `Close()`.
+This will return the index. Note that `CloseIndex()` should only be called once, and you shouldn't call `Close()`.
+
+## Using Indexes
+
+To use indexes there is a `ReadSeeker(random bool, index []byte) (*ReadSeeker, error)` function available.
+
+Calling ReadSeeker will return an [io.ReadSeeker](https://pkg.go.dev/io#ReadSeeker) compatible version of the reader.
+
+If 'random' is specified the returned io.Seeker can be used for random seeking, otherwise only forward seeking is supported.
+Enabling random seeking requires the original input to support the [io.Seeker](https://pkg.go.dev/io#Seeker) interface.
+
+A custom index can be specified which will be used if supplied.
+When using a custom index, it will not be read from the input stream.
+
+The returned [ReadSeeker](https://pkg.go.dev/github.com/klauspost/compress/s2#ReadSeeker) contains a shallow reference to the existing Reader,
+meaning changes performed to one is reflected in the other.
+
+Indexes can also be read outside the decoder using the [Index](https://pkg.go.dev/github.com/klauspost/compress/s2#Index) type.
+This can be used for parsing indexes, either separate or in streams.
+
 ## Index Format:
 
-Each block is structured as a snappy skippable block, with the chunk ID 0x88.
+Each block is structured as a snappy skippable block, with the chunk ID 0x99.
 
 The block can be read from the front, but contains information so it can be read from the back as well.
 
@@ -694,41 +727,76 @@ with un-encoded value length of 64 bits, unless other limits are specified.
 
 | Content                                                                   | Format                                                                                                                      |
 |---------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|
-| ID, `[1]byte`                                                           | Always 0x88.                                                                                                                  |
+| ID, `[1]byte`                                                           | Always 0x99.                                                                                                                  |
 | Data Length, `[3]byte`                                                  | 3 byte little-endian length of the chunk in bytes, following this.                                                            |
 | Header `[6]byte`                                                        | Header, must be `[115, 50, 105, 100, 120, 0]` or in text: "s2idx\x00".                                                        |
 | UncompressedSize, Varint                                                | Total Uncompressed size if known. Should be -1 if unknown.                                                                    |
 | CompressedSize, Varint                                                  | Total Compressed size if known. Should be -1 if unknown.                                                                      |
-| EstBlockSize, Varint                                                    | Block Size, used for guessing uncompressed offsets. Must be >= 0                                                              |
-| Entries, Varint                                                         | Number of Entries in index, must be < 65536 and >=0                                                                           |
-| For Each Entry:  (uncompressedOffset, VarInt; compressedOffset, VarInt) | Pairs of uncompressed and compressed offsets. See below how to decode.                                                        |
+| EstBlockSize, Varint                                                    | Block Size, used for guessing uncompressed offsets. Must be >= 0.                                                             |
+| Entries, Varint                                                         | Number of Entries in index, must be < 65536 and >=0.                                                                          |
+| HasUncompressedOffsets `byte`                                           | 0 if no uncompressed offsets are present, 1 if present.                                                                       |
+| UncompressedOffsets, [Entries]VarInt                                    | Uncompressed offsets. See below how to decode.                                                                                |
+| CompressedOffsets, [Entries]VarInt                                      | Compressed offsets. See below how to decode.                                                                                  |
 | Block Size, `[4]byte`                                                   | Little Endian total encoded size (including header and trailer). Can be used for searching backwards to start of block.       |
 | Trailer `[6]byte`                                                       | Trailer, must be `[0, 120, 100, 105, 50, 115]` or in text: "\x00xdi2s". Can be used for identifying block from end of stream. |
+
+For regular streams the uncompressed offsets are fully predictable,
+so `HasUncompressedOffsets` allows to specify that compressed blocks all have 
+exactly `EstBlockSize` bytes of uncompressed content.
+
+Entries *must* be in order, starting with the lowest offset, 
+and there *must* be no uncompressed offset duplicates.  
+Entries *may* point to the start of a skippable block, 
+but it is then not allowed to also have an entry for the next block since 
+that would give an uncompressed offset duplicate.
+
+There is no requirement for all blocks to be represented in the index. 
+In fact there is a maximum of 65536 block entries in an index.
+
+The writer can use any method to reduce the number of entries.
+An implicit block start at 0,0 can be assumed.
+
+It is strongly recommended adding `UncompressedSize`, 
+otherwise seeking from end-of-file (tailing for example) will not be possible. 
 
 ### Decoding entries:
 
 ```
-
-// Guess that the first block will be 50% of uncompressed size.
-// EstBlockSize is read previously.
-// Integer truncating division must be used.
-
-CompressGuess := EstBlockSize / 2
-
+// Read Uncompressed entries.
+// Each assumes EstBlockSize delta from previous.
 for each entry {
-    uOff = ReadVarInt // Read value from stream
-    cOff = ReadVarInt // Read value from stream
-    
+    uOff = 0
+    if HasUncompressedOffsets == 1 {
+        uOff = ReadVarInt // Read value from stream
+    }
+   
     // Except for the first entry, use previous values.
     if entryNum == 0 {
         entry[entryNum].UncompressedOffset = uOff
-        entry[entryNum].CompressedOffset = cOff
         continue
     }
     
     // Uncompressed uses previous offset and adds EstBlockSize
     entry[entryNum].UncompressedOffset = entry[entryNum-1].UncompressedOffset + EstBlockSize
+}
 
+
+// Guess that the first block will be 50% of uncompressed size.
+// Integer truncating division must be used.
+CompressGuess := EstBlockSize / 2
+
+// Read Compressed entries.
+// Each assumes CompressGuess delta from previous.
+// CompressGuess is adjusted for each value.
+for each entry {
+    cOff = ReadVarInt // Read value from stream
+    
+    // Except for the first entry, use previous values.
+    if entryNum == 0 {
+        entry[entryNum].CompressedOffset = cOff
+        continue
+    }
+    
     // Compressed uses previous and our estimate.
     entry[entryNum].CompressedOffset = entry[entryNum-1].CompressedOffset + CompressGuess
         
