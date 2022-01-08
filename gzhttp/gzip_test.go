@@ -473,6 +473,77 @@ func TestFlushBeforeWrite(t *testing.T) {
 	assertNotEqual(t, b, w.Body.Bytes())
 }
 
+func TestFlushAfterWrite(t *testing.T) {
+	b := testBody[:1000]
+	handler := GzipHandler(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		rw.WriteHeader(http.StatusOK)
+		rw.Write(b[0:1])
+		rw.(http.Flusher).Flush()
+		for i := range b[1:] {
+			rw.Write(b[i+1 : i+2])
+		}
+	}))
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Header.Set("Accept-Encoding", "gzip")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+
+	res := w.Result()
+	assertEqual(t, http.StatusOK, res.StatusCode)
+	assertEqual(t, "gzip", res.Header.Get("Content-Encoding"))
+	gr, err := gzip.NewReader(w.Body)
+	assertNil(t, err)
+	got, err := ioutil.ReadAll(gr)
+	assertNil(t, err)
+	assertEqual(t, b, got)
+}
+
+func TestFlushAfterWrite2(t *testing.T) {
+	b := testBody[:1050]
+	handler := GzipHandler(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		for i := range b {
+			rw.Write(b[i : i+1])
+		}
+		rw.(http.Flusher).Flush()
+	}))
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Header.Set("Accept-Encoding", "gzip")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+
+	res := w.Result()
+	assertEqual(t, http.StatusOK, res.StatusCode)
+	assertEqual(t, "gzip", res.Header.Get("Content-Encoding"))
+	gr, err := gzip.NewReader(w.Body)
+	assertNil(t, err)
+	got, err := ioutil.ReadAll(gr)
+	assertNil(t, err)
+	assertEqual(t, b, got)
+}
+
+func TestFlushAfterWrite3(t *testing.T) {
+	b := []byte(nil)
+	gz, err := NewWrapper(MinSize(1000), CompressionLevel(gzip.BestSpeed))
+	if err != nil {
+		// Static params, so this is very unlikely.
+		t.Fatal(err, "Unable to initialize server")
+	}
+	handler := gz(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		rw.WriteHeader(http.StatusOK)
+		//rw.Write(nil)
+		rw.(http.Flusher).Flush()
+	}))
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Header.Set("Accept-Encoding", "gzip")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+
+	res := w.Result()
+	assertEqual(t, http.StatusOK, res.StatusCode)
+	assertEqual(t, "", res.Header.Get("Content-Encoding"))
+	assertEqual(t, b, w.Body.Bytes())
+}
+
 func TestImplementCloseNotifier(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
 	request.Header.Set(acceptEncoding, "gzip")
