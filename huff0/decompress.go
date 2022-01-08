@@ -935,87 +935,91 @@ func (d *Decoder) decompress4X8bit(dst, src []byte) ([]byte, error) {
 			// Interleave 2 decodes.
 			const stream = 0
 			const stream2 = 1
-			br[stream].fillFast()
-			br[stream2].fillFast()
+			br1 := &br[stream]
+			br2 := &br[stream2]
+			br1.fillFast()
+			br2.fillFast()
 
-			v := single[uint8(br[stream].value>>shift)].entry
-			v2 := single[uint8(br[stream2].value>>shift)].entry
+			v := single[uint8(br1.value>>shift)].entry
+			v2 := single[uint8(br2.value>>shift)].entry
+			br1.bitsRead += uint8(v)
+			br1.value <<= v & 63
+			br2.bitsRead += uint8(v2)
+			br2.value <<= v2 & 63
 			buf[off+bufoff*stream] = uint8(v >> 8)
 			buf[off+bufoff*stream2] = uint8(v2 >> 8)
-			br[stream].bitsRead += uint8(v)
-			br[stream].value <<= v & 63
-			br[stream2].bitsRead += uint8(v2)
-			br[stream2].value <<= v2 & 63
 
-			v = single[uint8(br[stream].value>>shift)].entry
-			v2 = single[uint8(br[stream2].value>>shift)].entry
+			v = single[uint8(br1.value>>shift)].entry
+			v2 = single[uint8(br2.value>>shift)].entry
+			br1.bitsRead += uint8(v)
+			br1.value <<= v & 63
+			br2.bitsRead += uint8(v2)
+			br2.value <<= v2 & 63
 			buf[off+bufoff*stream+1] = uint8(v >> 8)
 			buf[off+bufoff*stream2+1] = uint8(v2 >> 8)
-			br[stream].bitsRead += uint8(v)
-			br[stream].value <<= v & 63
-			br[stream2].bitsRead += uint8(v2)
-			br[stream2].value <<= v2 & 63
 
-			v = single[uint8(br[stream].value>>shift)].entry
-			v2 = single[uint8(br[stream2].value>>shift)].entry
+			v = single[uint8(br1.value>>shift)].entry
+			v2 = single[uint8(br2.value>>shift)].entry
+			br1.bitsRead += uint8(v)
+			br1.value <<= v & 63
+			br2.bitsRead += uint8(v2)
+			br2.value <<= v2 & 63
 			buf[off+bufoff*stream+2] = uint8(v >> 8)
 			buf[off+bufoff*stream2+2] = uint8(v2 >> 8)
-			br[stream].bitsRead += uint8(v)
-			br[stream].value <<= v & 63
-			br[stream2].bitsRead += uint8(v2)
-			br[stream2].value <<= v2 & 63
 
-			v = single[uint8(br[stream].value>>shift)].entry
-			v2 = single[uint8(br[stream2].value>>shift)].entry
-			buf[off+bufoff*stream+3] = uint8(v >> 8)
+			v = single[uint8(br1.value>>shift)].entry
+			v2 = single[uint8(br2.value>>shift)].entry
+			br1.bitsRead += uint8(v)
+			br1.value <<= v & 63
+			br2.bitsRead += uint8(v2)
+			br2.value <<= v2 & 63
 			buf[off+bufoff*stream2+3] = uint8(v2 >> 8)
-			br[stream].bitsRead += uint8(v)
-			br[stream].value <<= v & 63
-			br[stream2].bitsRead += uint8(v2)
-			br[stream2].value <<= v2 & 63
+			buf[off+bufoff*stream+3] = uint8(v >> 8)
 		}
 
 		{
 			const stream = 2
 			const stream2 = 3
-			br[stream].fillFast()
-			br[stream2].fillFast()
+			br1 := &br[stream]
+			br2 := &br[stream2]
+			br1.fillFast()
+			br2.fillFast()
 
-			v := single[uint8(br[stream].value>>shift)].entry
-			v2 := single[uint8(br[stream2].value>>shift)].entry
+			v := single[uint8(br1.value>>shift)].entry
+			v2 := single[uint8(br2.value>>shift)].entry
+			br1.bitsRead += uint8(v)
+			br1.value <<= v & 63
+			br2.bitsRead += uint8(v2)
+			br2.value <<= v2 & 63
 			buf[off+bufoff*stream] = uint8(v >> 8)
 			buf[off+bufoff*stream2] = uint8(v2 >> 8)
-			br[stream].bitsRead += uint8(v)
-			br[stream].value <<= v & 63
-			br[stream2].bitsRead += uint8(v2)
-			br[stream2].value <<= v2 & 63
 
-			v = single[uint8(br[stream].value>>shift)].entry
-			v2 = single[uint8(br[stream2].value>>shift)].entry
+			v = single[uint8(br1.value>>shift)].entry
+			v2 = single[uint8(br2.value>>shift)].entry
+			br1.bitsRead += uint8(v)
+			br1.value <<= v & 63
+			br2.bitsRead += uint8(v2)
+			br2.value <<= v2 & 63
 			buf[off+bufoff*stream+1] = uint8(v >> 8)
 			buf[off+bufoff*stream2+1] = uint8(v2 >> 8)
-			br[stream].bitsRead += uint8(v)
-			br[stream].value <<= v & 63
-			br[stream2].bitsRead += uint8(v2)
-			br[stream2].value <<= v2 & 63
 
-			v = single[uint8(br[stream].value>>shift)].entry
-			v2 = single[uint8(br[stream2].value>>shift)].entry
+			v = single[uint8(br1.value>>shift)].entry
+			v2 = single[uint8(br2.value>>shift)].entry
+			br1.bitsRead += uint8(v)
+			br1.value <<= v & 63
+			br2.bitsRead += uint8(v2)
+			br2.value <<= v2 & 63
 			buf[off+bufoff*stream+2] = uint8(v >> 8)
 			buf[off+bufoff*stream2+2] = uint8(v2 >> 8)
-			br[stream].bitsRead += uint8(v)
-			br[stream].value <<= v & 63
-			br[stream2].bitsRead += uint8(v2)
-			br[stream2].value <<= v2 & 63
 
-			v = single[uint8(br[stream].value>>shift)].entry
-			v2 = single[uint8(br[stream2].value>>shift)].entry
-			buf[off+bufoff*stream+3] = uint8(v >> 8)
+			v = single[uint8(br1.value>>shift)].entry
+			v2 = single[uint8(br2.value>>shift)].entry
+			br1.bitsRead += uint8(v)
+			br1.value <<= v & 63
+			br2.bitsRead += uint8(v2)
+			br2.value <<= v2 & 63
 			buf[off+bufoff*stream2+3] = uint8(v2 >> 8)
-			br[stream].bitsRead += uint8(v)
-			br[stream].value <<= v & 63
-			br[stream2].bitsRead += uint8(v2)
-			br[stream2].value <<= v2 & 63
+			buf[off+bufoff*stream+3] = uint8(v >> 8)
 		}
 
 		off += 4
@@ -1154,44 +1158,40 @@ func (d *Decoder) decompress4X8bitExactly(dst, src []byte) ([]byte, error) {
 			br[stream2].fillFast()
 
 			v := single[uint8(br[stream].value>>shift)].entry
-			buf[off+bufoff*stream] = uint8(v >> 8)
-			br[stream].bitsRead += uint8(v)
-			br[stream].value <<= v & 63
-
 			v2 := single[uint8(br[stream2].value>>shift)].entry
+			br[stream].bitsRead += uint8(v)
+			br[stream].value <<= v & 63
+			br[stream2].bitsRead += uint8(v2)
+			br[stream2].value <<= v2 & 63
+			buf[off+bufoff*stream] = uint8(v >> 8)
 			buf[off+bufoff*stream2] = uint8(v2 >> 8)
-			br[stream2].bitsRead += uint8(v2)
-			br[stream2].value <<= v2 & 63
 
 			v = single[uint8(br[stream].value>>shift)].entry
+			v2 = single[uint8(br[stream2].value>>shift)].entry
+			br[stream].bitsRead += uint8(v)
+			br[stream].value <<= v & 63
+			br[stream2].bitsRead += uint8(v2)
+			br[stream2].value <<= v2 & 63
 			buf[off+bufoff*stream+1] = uint8(v >> 8)
-			br[stream].bitsRead += uint8(v)
-			br[stream].value <<= v & 63
-
-			v2 = single[uint8(br[stream2].value>>shift)].entry
 			buf[off+bufoff*stream2+1] = uint8(v2 >> 8)
-			br[stream2].bitsRead += uint8(v2)
-			br[stream2].value <<= v2 & 63
 
 			v = single[uint8(br[stream].value>>shift)].entry
+			v2 = single[uint8(br[stream2].value>>shift)].entry
+			br[stream].bitsRead += uint8(v)
+			br[stream].value <<= v & 63
+			br[stream2].bitsRead += uint8(v2)
+			br[stream2].value <<= v2 & 63
 			buf[off+bufoff*stream+2] = uint8(v >> 8)
-			br[stream].bitsRead += uint8(v)
-			br[stream].value <<= v & 63
-
-			v2 = single[uint8(br[stream2].value>>shift)].entry
 			buf[off+bufoff*stream2+2] = uint8(v2 >> 8)
-			br[stream2].bitsRead += uint8(v2)
-			br[stream2].value <<= v2 & 63
 
 			v = single[uint8(br[stream].value>>shift)].entry
-			buf[off+bufoff*stream+3] = uint8(v >> 8)
+			v2 = single[uint8(br[stream2].value>>shift)].entry
 			br[stream].bitsRead += uint8(v)
 			br[stream].value <<= v & 63
-
-			v2 = single[uint8(br[stream2].value>>shift)].entry
-			buf[off+bufoff*stream2+3] = uint8(v2 >> 8)
 			br[stream2].bitsRead += uint8(v2)
 			br[stream2].value <<= v2 & 63
+			buf[off+bufoff*stream+3] = uint8(v >> 8)
+			buf[off+bufoff*stream2+3] = uint8(v2 >> 8)
 		}
 
 		{
@@ -1201,44 +1201,40 @@ func (d *Decoder) decompress4X8bitExactly(dst, src []byte) ([]byte, error) {
 			br[stream2].fillFast()
 
 			v := single[uint8(br[stream].value>>shift)].entry
-			buf[off+bufoff*stream] = uint8(v >> 8)
-			br[stream].bitsRead += uint8(v)
-			br[stream].value <<= v & 63
-
 			v2 := single[uint8(br[stream2].value>>shift)].entry
+			br[stream].bitsRead += uint8(v)
+			br[stream].value <<= v & 63
+			br[stream2].bitsRead += uint8(v2)
+			br[stream2].value <<= v2 & 63
+			buf[off+bufoff*stream] = uint8(v >> 8)
 			buf[off+bufoff*stream2] = uint8(v2 >> 8)
-			br[stream2].bitsRead += uint8(v2)
-			br[stream2].value <<= v2 & 63
 
 			v = single[uint8(br[stream].value>>shift)].entry
+			v2 = single[uint8(br[stream2].value>>shift)].entry
+			br[stream].bitsRead += uint8(v)
+			br[stream].value <<= v & 63
+			br[stream2].bitsRead += uint8(v2)
+			br[stream2].value <<= v2 & 63
 			buf[off+bufoff*stream+1] = uint8(v >> 8)
-			br[stream].bitsRead += uint8(v)
-			br[stream].value <<= v & 63
-
-			v2 = single[uint8(br[stream2].value>>shift)].entry
 			buf[off+bufoff*stream2+1] = uint8(v2 >> 8)
-			br[stream2].bitsRead += uint8(v2)
-			br[stream2].value <<= v2 & 63
 
 			v = single[uint8(br[stream].value>>shift)].entry
+			v2 = single[uint8(br[stream2].value>>shift)].entry
+			br[stream].bitsRead += uint8(v)
+			br[stream].value <<= v & 63
+			br[stream2].bitsRead += uint8(v2)
+			br[stream2].value <<= v2 & 63
 			buf[off+bufoff*stream+2] = uint8(v >> 8)
-			br[stream].bitsRead += uint8(v)
-			br[stream].value <<= v & 63
-
-			v2 = single[uint8(br[stream2].value>>shift)].entry
 			buf[off+bufoff*stream2+2] = uint8(v2 >> 8)
-			br[stream2].bitsRead += uint8(v2)
-			br[stream2].value <<= v2 & 63
 
 			v = single[uint8(br[stream].value>>shift)].entry
-			buf[off+bufoff*stream+3] = uint8(v >> 8)
+			v2 = single[uint8(br[stream2].value>>shift)].entry
 			br[stream].bitsRead += uint8(v)
 			br[stream].value <<= v & 63
-
-			v2 = single[uint8(br[stream2].value>>shift)].entry
-			buf[off+bufoff*stream2+3] = uint8(v2 >> 8)
 			br[stream2].bitsRead += uint8(v2)
 			br[stream2].value <<= v2 & 63
+			buf[off+bufoff*stream+3] = uint8(v >> 8)
+			buf[off+bufoff*stream2+3] = uint8(v2 >> 8)
 		}
 
 		off += 4
