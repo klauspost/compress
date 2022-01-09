@@ -96,8 +96,8 @@ func (s *sequenceDecs) initialize(br *bitReader, hist *history, literals, out []
 // decode sequences from the stream with the provided history.
 func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
 	startSize := len(s.out)
-	// Grab full sizes tables, to avoid bounds checks.
-	llTable, mlTable, ofTable := s.litLengths.fse.dt[:maxTablesize], s.matchLengths.fse.dt[:maxTablesize], s.offsets.fse.dt[:maxTablesize]
+	// Go 1.17+ no longer bounds checks access to array; avoid slice indirection overhead.
+	llTable, mlTable, ofTable := s.litLengths.fse.dt, s.matchLengths.fse.dt, s.offsets.fse.dt
 	llState, mlState, ofState := s.litLengths.state.state, s.matchLengths.state.state, s.offsets.state.state
 
 	for i := seqs - 1; i >= 0; i-- {
