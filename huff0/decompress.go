@@ -753,23 +753,21 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 			br[stream2].fillFast()
 
 			val := br[stream].peekBitsFast(d.actualTableLog)
-			v := single[val&tlMask]
-			br[stream].advance(uint8(v.entry))
-			buf[off+bufoff*stream] = uint8(v.entry >> 8)
-
 			val2 := br[stream2].peekBitsFast(d.actualTableLog)
+			v := single[val&tlMask]
 			v2 := single[val2&tlMask]
+			br[stream].advance(uint8(v.entry))
 			br[stream2].advance(uint8(v2.entry))
+			buf[off+bufoff*stream] = uint8(v.entry >> 8)
 			buf[off+bufoff*stream2] = uint8(v2.entry >> 8)
 
 			val = br[stream].peekBitsFast(d.actualTableLog)
-			v = single[val&tlMask]
-			br[stream].advance(uint8(v.entry))
-			buf[off+bufoff*stream+1] = uint8(v.entry >> 8)
-
 			val2 = br[stream2].peekBitsFast(d.actualTableLog)
+			v = single[val&tlMask]
 			v2 = single[val2&tlMask]
+			br[stream].advance(uint8(v.entry))
 			br[stream2].advance(uint8(v2.entry))
+			buf[off+bufoff*stream+1] = uint8(v.entry >> 8)
 			buf[off+bufoff*stream2+1] = uint8(v2.entry >> 8)
 		}
 
@@ -780,23 +778,21 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 			br[stream2].fillFast()
 
 			val := br[stream].peekBitsFast(d.actualTableLog)
-			v := single[val&tlMask]
-			br[stream].advance(uint8(v.entry))
-			buf[off+bufoff*stream] = uint8(v.entry >> 8)
-
 			val2 := br[stream2].peekBitsFast(d.actualTableLog)
+			v := single[val&tlMask]
 			v2 := single[val2&tlMask]
+			br[stream].advance(uint8(v.entry))
 			br[stream2].advance(uint8(v2.entry))
+			buf[off+bufoff*stream] = uint8(v.entry >> 8)
 			buf[off+bufoff*stream2] = uint8(v2.entry >> 8)
 
 			val = br[stream].peekBitsFast(d.actualTableLog)
-			v = single[val&tlMask]
-			br[stream].advance(uint8(v.entry))
-			buf[off+bufoff*stream+1] = uint8(v.entry >> 8)
-
 			val2 = br[stream2].peekBitsFast(d.actualTableLog)
+			v = single[val&tlMask]
 			v2 = single[val2&tlMask]
+			br[stream].advance(uint8(v.entry))
 			br[stream2].advance(uint8(v2.entry))
+			buf[off+bufoff*stream+1] = uint8(v.entry >> 8)
 			buf[off+bufoff*stream2+1] = uint8(v2.entry >> 8)
 		}
 
