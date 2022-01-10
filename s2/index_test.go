@@ -68,11 +68,9 @@ func ExampleIndex_Load() {
 		}
 
 		// When creating the decoder we must specify that it should not
-		// expect a frame header at the beginning og the frame.
-		dec := s2.NewReader(input, s2.ReaderIgnoreFrameHeader())
+		// expect a stream identifier at the beginning og the frame.
+		dec := s2.NewReader(input, s2.ReaderIgnoreStreamIdentifier())
 
-		rs, err := dec.ReadSeeker(true, nil)
-		rs.Seek(wantOffset, io.SeekStart)
 		// We now have a reader, but it will start outputting at uncompressedOffset,
 		// and not the actual offset we want, so skip forward to that.
 		toSkip := wantOffset - uncompressedOffset

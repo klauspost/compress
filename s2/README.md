@@ -723,6 +723,8 @@ The `index` can then be used needing to read from the stream.
 This means the index can be used without needing to seek to the end of the stream 
 or for manually forwarding streams. See below.
 
+Finally, an existing S2/Snappy stream can be indexed using the `s2.IndexStream(r io.Reader)` function.
+
 ## Using Indexes
 
 To use indexes there is a `ReadSeeker(random bool, index []byte) (*ReadSeeker, error)` function available.
@@ -763,6 +765,8 @@ Finally, since we specify that we want to do random seeking `r` must be an io.Se
 The returned [ReadSeeker](https://pkg.go.dev/github.com/klauspost/compress/s2#ReadSeeker) contains a shallow reference to the existing Reader,
 meaning changes performed to one is reflected in the other.
 
+To check if a stream contains an index at the end, the `(*Index).LoadStream(rs io.ReadSeeker) error` can be used.
+
 ## Manually Forwarding Streams
 
 Indexes can also be read outside the decoder using the [Index](https://pkg.go.dev/github.com/klauspost/compress/s2#Index) type.
@@ -792,12 +796,12 @@ from the beginning of the compressed file.
 The `uncompressedOffset` will then be offset of the uncompressed bytes returned
 when decoding from that position. This will always be <= wantOffset.
 
-When creating a decoder it must be specified that it should *not* expect a frame header
+When creating a decoder it must be specified that it should *not* expect a stream identifier
 at the beginning of the stream. Assuming the io.Reader `r` has been forwarded to `compressedOffset`
 we create the decoder like this:
 
 ```
-	dec := s2.NewReader(r, s2.ReaderIgnoreFrameHeader())
+	dec := s2.NewReader(r, s2.ReaderIgnoreStreamIdentifier())
 ```
 
 We are not completely done. We still need to forward the stream the uncompressed bytes we didn't want.

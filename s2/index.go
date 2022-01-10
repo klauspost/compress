@@ -7,6 +7,7 @@ package s2
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io"
 )
@@ -387,4 +388,132 @@ func (i *Index) LoadStream(rs io.ReadSeeker) error {
 	}
 	_, err = i.Load(buf)
 	return err
+}
+
+// IndexStream will return an index for a stream.
+// The stream structure will be checked, but
+// data within blocks is not verified.
+// The returned index can either be appended to the end of the stream
+// or stored separately.
+func IndexStream(r io.Reader) ([]byte, error) {
+	var i Index
+	var buf [maxChunkSize]byte
+	var readHeader bool
+	for {
+		_, err := io.ReadFull(r, buf[:4])
+		if err != nil {
+			if err == io.EOF {
+				return i.appendTo(nil, i.TotalUncompressed, i.TotalCompressed), nil
+			}
+			return nil, err
+		}
+		// Start of this chunk.
+		startChunk := i.TotalCompressed
+		i.TotalCompressed += 4
+
+		chunkType := buf[0]
+		if !readHeader {
+			if chunkType != chunkTypeStreamIdentifier {
+				return nil, ErrCorrupt
+			}
+			readHeader = true
+		}
+		chunkLen := int(buf[1]) | int(buf[2])<<8 | int(buf[3])<<16
+		if chunkLen < checksumSize {
+			return nil, ErrCorrupt
+		}
+
+		i.TotalCompressed += int64(chunkLen)
+		_, err = io.ReadFull(r, buf[:chunkLen])
+		if err != nil {
+			return nil, io.ErrUnexpectedEOF
+		}
+		// The chunk types are specified at
+		// https://github.com/google/snappy/blob/master/framing_format.txt
+		switch chunkType {
+		case chunkTypeCompressedData:
+			// Section 4.2. Compressed data (chunk type 0x00).
+			// Skip checksum.
+			dLen, err := DecodedLen(buf[checksumSize:])
+			if err != nil {
+				return nil, err
+			}
+			if dLen > maxBlockSize {
+				return nil, ErrCorrupt
+			}
+			if i.estBlockUncomp == 0 {
+				// Use first block for estimate...
+				i.estBlockUncomp = int64(dLen)
+			}
+			err = i.add(startChunk, i.TotalUncompressed)
+			if err != nil {
+				return nil, err
+			}
+			i.TotalUncompressed += int64(dLen)
+			continue
+		case chunkTypeUncompressedData:
+			n2 := chunkLen - checksumSize
+			if n2 > maxBlockSize {
+				return nil, ErrCorrupt
+			}
+			if i.estBlockUncomp == 0 {
+				// Use first block for estimate...
+				i.estBlockUncomp = int64(n2)
+			}
+			err = i.add(startChunk, i.TotalUncompressed)
+			if err != nil {
+				return nil, err
+			}
+			i.TotalUncompressed += int64(n2)
+			continue
+		case chunkTypeStreamIdentifier:
+			// Section 4.1. Stream identifier (chunk type 0xff).
+			if chunkLen != len(magicBody) {
+				return nil, ErrCorrupt
+			}
+
+			if string(buf[:len(magicBody)]) != magicBody {
+				if string(buf[:len(magicBody)]) != magicBodySnappy {
+					return nil, ErrCorrupt
+				}
+			}
+
+			continue
+		}
+
+		if chunkType <= 0x7f {
+			// Section 4.5. Reserved unskippable chunks (chunk types 0x02-0x7f).
+			return nil, ErrUnsupported
+		}
+		if chunkLen > maxChunkSize {
+			return nil, ErrUnsupported
+		}
+		// Section 4.4 Padding (chunk type 0xfe).
+		// Section 4.6. Reserved skippable chunks (chunk types 0x80-0xfd).
+	}
+}
+
+// JSON returns the index as JSON text.
+func (i *Index) JSON() []byte {
+	x := struct {
+		TotalUncompressed int64 `json:"total_uncompressed"` // Total Uncompressed size if known. Will be -1 if unknown.
+		TotalCompressed   int64 `json:"total_compressed"`   // Total Compressed size if known. Will be -1 if unknown.
+		Offsets           []struct {
+			CompressedOffset   int64 `json:"compressed"`
+			UncompressedOffset int64 `json:"uncompressed"`
+		} `json:"offsets"`
+		EstBlockUncomp int64 `json:"est_block_uncompressed"`
+	}{
+		TotalUncompressed: i.TotalUncompressed,
+		TotalCompressed:   i.TotalCompressed,
+		EstBlockUncomp:    i.estBlockUncomp,
+	}
+	for _, v := range i.info {
+		x.Offsets = append(x.Offsets, struct {
+			CompressedOffset   int64 `json:"compressed"`
+			UncompressedOffset int64 `json:"uncompressed"`
+		}{CompressedOffset: v.compressedOffset, UncompressedOffset: v.uncompressedOffset})
+	}
+	b, _ := json.MarshalIndent(x, "", "  ")
+	return b
 }

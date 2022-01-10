@@ -100,7 +100,7 @@ func NewReader(r io.Reader, opts ...ReaderOption) *Reader {
 	} else {
 		nr.buf = make([]byte, MaxEncodedLen(defaultBlockSize)+checksumSize)
 	}
-	nr.readHeader = nr.ignoreFrameHeader
+	nr.readHeader = nr.ignoreStreamID
 	nr.paramsOK = true
 	return &nr
 }
@@ -144,12 +144,12 @@ func ReaderAllocBlock(blockSize int) ReaderOption {
 	}
 }
 
-// ReaderIgnoreFrameHeader will make the reader skip the expected
-// frame header at the beginning of the stream.
+// ReaderIgnoreStreamIdentifier will make the reader skip the expected
+// stream identifier at the beginning of the stream.
 // This can be used when serving a stream that has been forwarded to a specific point.
-func ReaderIgnoreFrameHeader() ReaderOption {
+func ReaderIgnoreStreamIdentifier() ReaderOption {
 	return func(r *Reader) error {
-		r.ignoreFrameHeader = true
+		r.ignoreStreamID = true
 		return nil
 	}
 }
@@ -186,11 +186,11 @@ type Reader struct {
 	// maximum expected buffer size.
 	maxBufSize int
 	// alloc a buffer this size if > 0.
-	lazyBuf           int
-	readHeader        bool
-	paramsOK          bool
-	snappyFrame       bool
-	ignoreFrameHeader bool
+	lazyBuf        int
+	readHeader     bool
+	paramsOK       bool
+	snappyFrame    bool
+	ignoreStreamID bool
 }
 
 // ensureBufferSize will ensure that the buffer can take at least n bytes.
@@ -220,7 +220,7 @@ func (r *Reader) Reset(reader io.Reader) {
 	r.err = nil
 	r.i = 0
 	r.j = 0
-	r.readHeader = r.ignoreFrameHeader
+	r.readHeader = r.ignoreStreamID
 }
 
 func (r *Reader) readFull(p []byte, allowEOF bool) (ok bool) {
