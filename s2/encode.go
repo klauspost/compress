@@ -1095,7 +1095,7 @@ func (w *Writer) Close() error {
 // CloseIndex calls Close and returns an index on first call.
 // This is not required if you are only adding index to a stream.
 func (w *Writer) CloseIndex() ([]byte, error) {
-	return w.closeIndex(false)
+	return w.closeIndex(true)
 }
 
 func (w *Writer) closeIndex(idx bool) ([]byte, error) {

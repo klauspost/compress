@@ -685,7 +685,8 @@ The 10 byte 'stream identifier' of the second stream can optionally be stripped,
 
 Blocks can be concatenated using the `ConcatBlocks` function.
 
-Snappy blocks/streams can safely be concatenated with S2 blocks and streams. 
+Snappy blocks/streams can safely be concatenated with S2 blocks and streams.
+Streams with indexes (see below) will currently not work on concatenated streams.
 
 # Stream Seek Index
 
@@ -701,8 +702,26 @@ so the output remains compatible with other decoders.
 To automatically add an index to a stream, add `WriterAddIndex()` option to your writer.
 Then the index will be added to the stream when `Close()` is called.
 
+```
+    // Add Index to stream...
+	enc := s2.NewWriter(w, s2.WriterAddIndex())
+	io.Copy(enc, r)
+	enc.Close()
+```
+
 If you want to store the index separately, you can use `CloseIndex()` instead of the regular `Close()`.
 This will return the index. Note that `CloseIndex()` should only be called once, and you shouldn't call `Close()`.
+
+```
+    // Get index for separate storage... 
+	enc := s2.NewWriter(w)
+	io.Copy(enc, r)
+	index, err := enc.CloseIndex()
+```
+
+The `index` can then be used needing to read from the stream. 
+This means the index can be used without needing to seek to the end of the stream 
+or for manually forwarding streams. See below.
 
 ## Using Indexes
 
@@ -713,14 +732,82 @@ Calling ReadSeeker will return an [io.ReadSeeker](https://pkg.go.dev/io#ReadSeek
 If 'random' is specified the returned io.Seeker can be used for random seeking, otherwise only forward seeking is supported.
 Enabling random seeking requires the original input to support the [io.Seeker](https://pkg.go.dev/io#Seeker) interface.
 
+```
+	dec := s2.NewReader(r)
+	rs, err := dec.ReadSeeker(false, nil)
+	rs.Seek(wantOffset, io.SeekStart)	
+```
+
+Get a seeker to seek forward. Since no index is provided, the index is read from the stream.
+This requires that an index was added and that `r` supports the [io.Seeker](https://pkg.go.dev/io#Seeker) interface.
+
 A custom index can be specified which will be used if supplied.
 When using a custom index, it will not be read from the input stream.
+
+```
+	dec := s2.NewReader(r)
+	rs, err := dec.ReadSeeker(false, index)
+	rs.Seek(wantOffset, io.SeekStart)	
+```
+
+This will read the index from `index`. Since we specify non-random (forward only) seeking `r` does not have to be an io.Seeker
+
+```
+	dec := s2.NewReader(r)
+	rs, err := dec.ReadSeeker(true, index)
+	rs.Seek(wantOffset, io.SeekStart)	
+```
+
+Finally, since we specify that we want to do random seeking `r` must be an io.Seeker. 
 
 The returned [ReadSeeker](https://pkg.go.dev/github.com/klauspost/compress/s2#ReadSeeker) contains a shallow reference to the existing Reader,
 meaning changes performed to one is reflected in the other.
 
+## Manually Forwarding Streams
+
 Indexes can also be read outside the decoder using the [Index](https://pkg.go.dev/github.com/klauspost/compress/s2#Index) type.
 This can be used for parsing indexes, either separate or in streams.
+
+In some cases it may not be possible to serve a seekable stream.
+This can for instance be an HTTP stream, where the Range request 
+is sent at the start of the stream. 
+
+With a little bit of extra code it is still possible to forward 
+
+It is possible to load the index manually like this: 
+```
+	var index s2.Index
+	_, err = index.Load(idxBytes)
+```
+
+This can be used to figure out how much to offset the compressed stream:
+
+```
+	compressedOffset, uncompressedOffset, err := index.Find(wantOffset)
+```
+
+The `compressedOffset` is the number of bytes that should be skipped 
+from the beginning of the compressed file.
+
+The `uncompressedOffset` will then be offset of the uncompressed bytes returned
+when decoding from that position. This will always be <= wantOffset.
+
+When creating a decoder it must be specified that it should *not* expect a frame header
+at the beginning of the stream. Assuming the io.Reader `r` has been forwarded to `compressedOffset`
+we create the decoder like this:
+
+```
+	dec := s2.NewReader(r, s2.ReaderIgnoreFrameHeader())
+```
+
+We are not completely done. We still need to forward the stream the uncompressed bytes we didn't want.
+This is done using the regular "Skip" function:
+
+```
+	err = dec.Skip(wantOffset - uncompressedOffset)
+```
+
+This will ensure that we are at exactly the offset we want, and reading from `dec` will start at the requested offset.
 
 ## Index Format:
 

@@ -100,6 +100,7 @@ func NewReader(r io.Reader, opts ...ReaderOption) *Reader {
 	} else {
 		nr.buf = make([]byte, MaxEncodedLen(defaultBlockSize)+checksumSize)
 	}
+	nr.readHeader = nr.ignoreFrameHeader
 	nr.paramsOK = true
 	return &nr
 }
@@ -143,6 +144,16 @@ func ReaderAllocBlock(blockSize int) ReaderOption {
 	}
 }
 
+// ReaderIgnoreFrameHeader will make the reader skip the expected
+// frame header at the beginning of the stream.
+// This can be used when serving a stream that has been forwarded to a specific point.
+func ReaderIgnoreFrameHeader() ReaderOption {
+	return func(r *Reader) error {
+		r.ignoreFrameHeader = true
+		return nil
+	}
+}
+
 // ReaderSkippableCB will register a callback for chuncks with the specified ID.
 // ID must be a Reserved skippable chunks ID, 0x80-0xfd (inclusive).
 // For each chunk with the ID, the callback is called with the content.
@@ -166,6 +177,7 @@ type Reader struct {
 	buf         []byte
 	skippableCB [0x80]func(r io.Reader) error
 	blockStart  int64 // Uncompressed offset at start of current.
+	index       *Index
 
 	// decoded[i:j] contains decoded bytes that have not yet been passed on.
 	i, j int
@@ -174,11 +186,11 @@ type Reader struct {
 	// maximum expected buffer size.
 	maxBufSize int
 	// alloc a buffer this size if > 0.
-	lazyBuf     int
-	readHeader  bool
-	paramsOK    bool
-	snappyFrame bool
-	index       *Index
+	lazyBuf           int
+	readHeader        bool
+	paramsOK          bool
+	snappyFrame       bool
+	ignoreFrameHeader bool
 }
 
 // ensureBufferSize will ensure that the buffer can take at least n bytes.
@@ -208,7 +220,7 @@ func (r *Reader) Reset(reader io.Reader) {
 	r.err = nil
 	r.i = 0
 	r.j = 0
-	r.readHeader = false
+	r.readHeader = r.ignoreFrameHeader
 }
 
 func (r *Reader) readFull(p []byte, allowEOF bool) (ok bool) {
