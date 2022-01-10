@@ -112,13 +112,19 @@ func (i *Index) Find(offset int64) (compressedOff, uncompressedOff int64, err er
 
 // reduce to stay below maxIndexEntries
 func (i *Index) reduce() {
-	if len(i.info) < maxIndexEntries {
+	if len(i.info) < maxIndexEntries && i.estBlockUncomp >= 1<<20 {
 		return
 	}
+
 	// Algorithm, keep 1, remove removeN entries...
 	removeN := (len(i.info) + 1) / maxIndexEntries
 	src := i.info
 	j := 0
+
+	// Each block should be at least 1MB, but don't reduce below 1000 entries.
+	for i.estBlockUncomp*(int64(removeN)+1) < 1<<20 && len(i.info)/(removeN+1) > 1000 {
+		removeN++
+	}
 	for idx := 0; idx < len(src); idx++ {
 		i.info[j] = src[idx]
 		j++
