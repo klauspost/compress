@@ -29,7 +29,7 @@ func ExampleIndex_Load() {
 	// Compress it...
 	var buf bytes.Buffer
 	// We use smaller blocks just for the example...
-	enc := s2.NewWriter(&buf, s2.WriterBlockSize(100<<10), s2.WriterAddIndex())
+	enc := s2.NewWriter(&buf, s2.WriterBlockSize(100<<10))
 	err := enc.EncodeBuffer(tmp)
 	fatalErr(err)
 

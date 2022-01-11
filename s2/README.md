@@ -20,6 +20,7 @@ This is important, so you don't have to worry about spending CPU cycles on alrea
 * Concurrent stream compression
 * Faster decompression, even for Snappy compatible content
 * Ability to quickly skip forward in compressed stream
+* Random seeking with indexes
 * Compatible with reading Snappy compressed content
 * Smaller block size overhead on incompressible blocks
 * Block concatenation
@@ -29,8 +30,8 @@ This is important, so you don't have to worry about spending CPU cycles on alrea
 
 ## Drawbacks over Snappy
 
-* Not optimized for 32 bit systems.
-* Streams use slightly more memory due to larger blocks and concurrency (configurable).
+* Not optimized for 32 bit systems
+* Streams use slightly more memory due to larger blocks and concurrency (configurable)
 
 # Usage
 
@@ -655,11 +656,11 @@ Comparison of different streams, AMD Ryzen 3950x, 16 cores. Size and throughput:
 
 | File                        | snappy.NewWriter         | S2 Snappy                 | S2 Snappy, Better        | S2 Snappy, Best         |
 |-----------------------------|--------------------------|---------------------------|--------------------------|-------------------------|
-| nyc-taxi-data-10M.csv       | 1316042016 - 517.54MB/s  | 1307003093 - 8406.29MB/s  | 1174534014 - 4984.35MB/s | 1115904679 - 177.81MB/s |
-| enwik10                     | 5088294643 - 433.45MB/s  | 5175840939 - 8454.52MB/s  | 4560784526 - 4403.10MB/s | 4340299103 - 159.71MB/s |
-| 10gb.tar                    | 6056946612 - 703.25MB/s  | 6208571995 - 9035.75MB/s  | 5741646126 - 2402.08MB/s | 5548973895 - 171.17MB/s |
-| github-june-2days-2019.json | 1525176492 - 908.11MB/s  | 1476519054 - 12625.93MB/s | 1400547532 - 6163.61MB/s | 1321887137 - 200.71MB/s |
-| consensus.db.10gb           | 5412897703 - 1054.38MB/s | 5354073487 - 12634.82MB/s | 5335069899 - 2472.23MB/s | 5201000954 - 166.32MB/s |
+| nyc-taxi-data-10M.csv       | 1316042016 - 539.47MB/s  | 1307003093 - 10132.73MB/s | 1174534014 - 5002.44MB/s | 1115904679 - 177.97MB/s |
+| enwik10 (xml)               | 5088294643 - 433.45MB/s  | 5175840939 -  8454.52MB/s | 4560784526 - 4403.10MB/s | 4340299103 - 159.71MB/s |
+| 10gb.tar (mixed)            | 6056946612 - 729.73MB/s  | 6208571995 -  9978.05MB/s | 5741646126 - 4919.98MB/s | 5548973895 - 180.44MB/s |
+| github-june-2days-2019.json | 1525176492 - 933.00MB/s  | 1476519054 - 13150.12MB/s | 1400547532 - 5803.40MB/s | 1321887137 - 204.29MB/s |
+| consensus.db.10gb (db)      | 5412897703 - 1102.14MB/s | 5354073487 - 13562.91MB/s | 5335069899 - 5294.73MB/s | 5201000954 - 175.72MB/s |
 
 # Decompression
 
@@ -776,7 +777,8 @@ In some cases it may not be possible to serve a seekable stream.
 This can for instance be an HTTP stream, where the Range request 
 is sent at the start of the stream. 
 
-With a little bit of extra code it is still possible to forward 
+With a little bit of extra code it is still possible to use indexes
+to forward to specific offset with a single forward skip. 
 
 It is possible to load the index manually like this: 
 ```
@@ -831,7 +833,7 @@ with un-encoded value length of 64 bits, unless other limits are specified.
 | CompressedSize, Varint                                                  | Total Compressed size if known. Should be -1 if unknown.                                                                      |
 | EstBlockSize, Varint                                                    | Block Size, used for guessing uncompressed offsets. Must be >= 0.                                                             |
 | Entries, Varint                                                         | Number of Entries in index, must be < 65536 and >=0.                                                                          |
-| HasUncompressedOffsets `byte`                                           | 0 if no uncompressed offsets are present, 1 if present.                                                                       |
+| HasUncompressedOffsets `byte`                                           | 0 if no uncompressed offsets are present, 1 if present. Other values are invalid.                                             |
 | UncompressedOffsets, [Entries]VarInt                                    | Uncompressed offsets. See below how to decode.                                                                                |
 | CompressedOffsets, [Entries]VarInt                                      | Compressed offsets. See below how to decode.                                                                                  |
 | Block Size, `[4]byte`                                                   | Little Endian total encoded size (including header and trailer). Can be used for searching backwards to start of block.       |

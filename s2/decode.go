@@ -674,7 +674,7 @@ func (r *ReadSeeker) Seek(offset int64, whence int) (int64, error) {
 	if r.err != nil {
 		return 0, r.err
 	}
-	if offset == 0 {
+	if offset == 0 && whence == io.SeekCurrent {
 		return r.blockStart + int64(r.i), nil
 	}
 	if !r.readHeader {
