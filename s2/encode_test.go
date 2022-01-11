@@ -248,13 +248,30 @@ func TestIndex(t *testing.T) {
 	var buf bytes.Buffer
 	// We use smaller blocks just for the example...
 	enc := NewWriter(&buf, WriterBlockSize(100<<10), WriterAddIndex(), WriterBetterCompression(), WriterConcurrency(runtime.GOMAXPROCS(0)))
-	_, err := enc.Write(input)
-	fatalErr(t, err)
+	todo := input
+	for len(todo) > 0 {
+		// Write random sized inputs..
+		x := todo[:rng.Intn((len(todo)&65535)+2)]
+		_, err := enc.Write(x)
+		fatalErr(t, err)
+		// Flush once in a while
+		if rng.Intn(8) == 0 {
+			err = enc.Flush()
+			fatalErr(t, err)
+		}
+		todo = todo[len(x):]
+	}
 
 	// Close and also get index...
 	idxBytes, err := enc.CloseIndex()
 	fatalErr(t, err)
-
+	if false {
+		// Load the index.
+		var index Index
+		_, err = index.Load(idxBytes)
+		fatalErr(t, err)
+		t.Log(string(index.JSON()))
+	}
 	// This is our compressed stream...
 	compressed := buf.Bytes()
 	for wantOffset := int64(0); wantOffset < int64(len(input)); wantOffset += 65531 {
