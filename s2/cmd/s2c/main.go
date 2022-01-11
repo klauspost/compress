@@ -35,6 +35,7 @@ var (
 	blockSize = flag.String("blocksize", "4M", "Max  block size. Examples: 64K, 256K, 1M, 4M. Must be power of two and <= 4MB")
 	block     = flag.Bool("block", false, "Compress as a single block. Will load content into memory.")
 	safe      = flag.Bool("safe", false, "Do not overwrite output files")
+	index     = flag.Bool("index", true, "Add seek index")
 	padding   = flag.String("pad", "1", "Pad size to a multiple of this value, Examples: 500, 64K, 256K, 1M, 4M, etc")
 	stdout    = flag.Bool("c", false, "Write all output to stdout. Multiple input files will be concatenated")
 	out       = flag.String("o", "", "Write output to another file. Single input file only")
@@ -85,6 +86,9 @@ Options:`)
 		os.Exit(0)
 	}
 	opts := []s2.WriterOption{s2.WriterBlockSize(int(sz)), s2.WriterConcurrency(*cpu), s2.WriterPadding(int(pad))}
+	if *index {
+		opts = append(opts, s2.WriterAddIndex())
+	}
 	if !*faster {
 		opts = append(opts, s2.WriterBetterCompression())
 	}

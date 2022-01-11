@@ -11,9 +11,11 @@ import (
 	"net/http"
 	"os"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/klauspost/compress/s2"
 	"github.com/klauspost/compress/s2/cmd/internal/filepathx"
@@ -27,6 +29,8 @@ var (
 	remove = flag.Bool("rm", false, "Delete source file(s) after successful decompression")
 	quiet  = flag.Bool("q", false, "Don't write any output to terminal, except errors")
 	bench  = flag.Int("bench", 0, "Run benchmark n times. No output will be written")
+	tail   = flag.String("tail", "", "Return last of compressed file. Examples: 92, 64K, 256K, 1M, 4M. Requires Index")
+	offset = flag.String("offset", "", "Start at offset. Examples: 92, 64K, 256K, 1M, 4M. Requires Index")
 	help   = flag.Bool("help", false, "Display help")
 	out    = flag.String("o", "", "Write output to another file. Single input file only")
 	block  = flag.Bool("block", false, "Decompress as a single block. Will load content into memory.")
@@ -60,6 +64,13 @@ Extensions on downloaded files are ignored. Only http response code 200 is accep
 Options:`)
 		flag.PrintDefaults()
 		os.Exit(0)
+	}
+	tailBytes, err := toSize(*tail)
+	exitErr(err)
+	offset, err := toSize(*offset)
+	exitErr(err)
+	if tailBytes > 0 && offset > 0 {
+		exitErr(errors.New("--offset and --tail cannot be used together"))
 	}
 	if len(args) == 1 && args[0] == "-" {
 		r.Reset(os.Stdin)
@@ -204,15 +215,31 @@ Options:`)
 			// Input file.
 			file, _, mode := openFile(filename)
 			defer closeOnce.Do(func() { file.Close() })
-			rc := rCounter{in: file}
+			var rc interface {
+				io.Reader
+				BytesRead() int64
+			}
+			if tailBytes > 0 || offset > 0 {
+				rs, ok := file.(io.ReadSeeker)
+				if !ok && tailBytes > 0 {
+					exitErr(errors.New("cannot tail with non-seekable input"))
+				}
+				if ok {
+					rc = &rCountSeeker{in: rs}
+				} else {
+					rc = &rCounter{in: file}
+				}
+			} else {
+				rc = &rCounter{in: file}
+			}
 			var src io.Reader
-			if !block {
-				ra, err := readahead.NewReaderSize(&rc, 2, 4<<20)
+			if !block && tailBytes == 0 && offset == 0 {
+				ra, err := readahead.NewReaderSize(rc, 2, 4<<20)
 				exitErr(err)
 				defer ra.Close()
 				src = ra
 			} else {
-				src = &rc
+				src = rc
 			}
 			if *safe {
 				_, err := os.Stat(dstFilename)
@@ -247,6 +274,16 @@ Options:`)
 				decoded = bytes.NewReader(b)
 			} else {
 				r.Reset(src)
+				if tailBytes > 0 || offset > 0 {
+					rs, err := r.ReadSeeker(tailBytes > 0, nil)
+					exitErr(err)
+					if tailBytes > 0 {
+						_, err = rs.Seek(int64(tailBytes), io.SeekEnd)
+					} else {
+						_, err = rs.Seek(int64(offset), io.SeekStart)
+					}
+					exitErr(err)
+				}
 				decoded = r
 			}
 			output, err := io.Copy(out, decoded)
@@ -254,8 +291,8 @@ Options:`)
 			if !*quiet {
 				elapsed := time.Since(start)
 				mbPerSec := (float64(output) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
-				pct := float64(output) * 100 / float64(rc.n)
-				fmt.Printf(" %d -> %d [%.02f%%]; %.01fMB/s\n", rc.n, output, pct, mbPerSec)
+				pct := float64(output) * 100 / float64(rc.BytesRead())
+				fmt.Printf(" %d -> %d [%.02f%%]; %.01fMB/s\n", rc.BytesRead(), output, pct, mbPerSec)
 			}
 			if *remove && !*verify {
 				closeOnce.Do(func() {
@@ -317,13 +354,68 @@ func exitErr(err error) {
 }
 
 type rCounter struct {
-	n  int
+	n  int64
 	in io.Reader
 }
 
 func (w *rCounter) Read(p []byte) (n int, err error) {
 	n, err = w.in.Read(p)
-	w.n += n
+	w.n += int64(n)
 	return n, err
+}
 
+func (w *rCounter) BytesRead() int64 {
+	return w.n
+}
+
+type rCountSeeker struct {
+	n  int64
+	in io.ReadSeeker
+}
+
+func (w *rCountSeeker) Read(p []byte) (n int, err error) {
+	n, err = w.in.Read(p)
+	w.n += int64(n)
+	return n, err
+}
+
+func (w *rCountSeeker) Seek(offset int64, whence int) (int64, error) {
+	return w.in.Seek(offset, whence)
+}
+
+func (w *rCountSeeker) BytesRead() int64 {
+	return w.n
+}
+
+// toSize converts a size indication to bytes.
+func toSize(size string) (uint64, error) {
+	if len(size) == 0 {
+		return 0, nil
+	}
+	size = strings.ToUpper(strings.TrimSpace(size))
+	firstLetter := strings.IndexFunc(size, unicode.IsLetter)
+	if firstLetter == -1 {
+		firstLetter = len(size)
+	}
+
+	bytesString, multiple := size[:firstLetter], size[firstLetter:]
+	bytes, err := strconv.ParseUint(bytesString, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("unable to parse size: %v", err)
+	}
+
+	switch multiple {
+	case "T", "TB", "TIB":
+		return bytes * 1 << 40, nil
+	case "G", "GB", "GIB":
+		return bytes * 1 << 30, nil
+	case "M", "MB", "MIB":
+		return bytes * 1 << 20, nil
+	case "K", "KB", "KIB":
+		return bytes * 1 << 10, nil
+	case "B", "":
+		return bytes, nil
+	default:
+		return 0, fmt.Errorf("unknown size suffix: %v", multiple)
+	}
 }

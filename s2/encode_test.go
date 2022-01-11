@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/ioutil"
 	"math/rand"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -19,7 +20,7 @@ import (
 
 func testOptions(t testing.TB) map[string][]WriterOption {
 	var testOptions = map[string][]WriterOption{
-		"default": {},
+		"default": {WriterAddIndex()},
 		"better":  {WriterBetterCompression()},
 		"best":    {WriterBestCompression()},
 		"none":    {WriterUncompressed()},
@@ -219,6 +220,133 @@ func TestEncoderRegression(t *testing.T) {
 				return
 			}
 			test(t, b[:len(b):len(b)])
+		})
+	}
+}
+
+func TestIndex(t *testing.T) {
+	fatalErr := func(t testing.TB, err error) {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Create a test corpus
+	var input []byte
+	if !testing.Short() {
+		input = make([]byte, 10<<20)
+	} else {
+		input = make([]byte, 500<<10)
+	}
+	rng := rand.New(rand.NewSource(0xabeefcafe))
+	rng.Read(input)
+	// Make it compressible...
+	for i, v := range input {
+		input[i] = '0' + v&3
+	}
+	// Compress it...
+	var buf bytes.Buffer
+	// We use smaller blocks just for the example...
+	enc := NewWriter(&buf, WriterBlockSize(100<<10), WriterAddIndex(), WriterBetterCompression(), WriterConcurrency(runtime.GOMAXPROCS(0)))
+	todo := input
+	for len(todo) > 0 {
+		// Write random sized inputs..
+		x := todo[:rng.Intn(1+len(todo)&65535)]
+		if len(x) == 0 {
+			x = todo[:1]
+		}
+		_, err := enc.Write(x)
+		fatalErr(t, err)
+		// Flush once in a while
+		if rng.Intn(8) == 0 {
+			err = enc.Flush()
+			fatalErr(t, err)
+		}
+		todo = todo[len(x):]
+	}
+
+	// Close and also get index...
+	idxBytes, err := enc.CloseIndex()
+	fatalErr(t, err)
+	if false {
+		// Load the index.
+		var index Index
+		_, err = index.Load(idxBytes)
+		fatalErr(t, err)
+		t.Log(string(index.JSON()))
+	}
+	// This is our compressed stream...
+	compressed := buf.Bytes()
+	for wantOffset := int64(0); wantOffset < int64(len(input)); wantOffset += 65531 {
+		t.Run(fmt.Sprintf("offset-%d", wantOffset), func(t *testing.T) {
+			// Let's assume we want to read from uncompressed offset 'i'
+			// and we cannot seek in input, but we have the index.
+			want := input[wantOffset:]
+
+			// Load the index.
+			var index Index
+			_, err = index.Load(idxBytes)
+			fatalErr(t, err)
+
+			// Find offset in file:
+			compressedOffset, uncompressedOffset, err := index.Find(wantOffset)
+			fatalErr(t, err)
+
+			// Offset the input to the compressed offset.
+			// Notice how we do not provide any bytes before the offset.
+			in := io.Reader(bytes.NewBuffer(compressed[compressedOffset:]))
+
+			// When creating the decoder we must specify that it should not
+			// expect a stream identifier at the beginning og the frame.
+			dec := NewReader(in, ReaderIgnoreStreamIdentifier())
+
+			// We now have a reader, but it will start outputting at uncompressedOffset,
+			// and not the actual offset we want, so skip forward to that.
+			toSkip := wantOffset - uncompressedOffset
+			err = dec.Skip(toSkip)
+			fatalErr(t, err)
+
+			// Read the rest of the stream...
+			got, err := ioutil.ReadAll(dec)
+			fatalErr(t, err)
+			if !bytes.Equal(got, want) {
+				t.Error("Result mismatch", wantOffset)
+			}
+
+			// Test with stream index...
+			for i := io.SeekStart; i <= io.SeekEnd; i++ {
+				t.Run(fmt.Sprintf("seek-%d", i), func(t *testing.T) {
+					// Read it from a seekable stream
+					dec = NewReader(bytes.NewReader(compressed))
+
+					rs, err := dec.ReadSeeker(true, nil)
+					fatalErr(t, err)
+
+					// Read a little...
+					var tmp = make([]byte, len(input)/2)
+					_, err = io.ReadFull(rs, tmp[:])
+					fatalErr(t, err)
+
+					toSkip := wantOffset
+					switch i {
+					case io.SeekStart:
+					case io.SeekCurrent:
+						toSkip = wantOffset - int64(len(input)/2)
+					case io.SeekEnd:
+						toSkip = int64(len(input)) - wantOffset
+					}
+					gotOffset, err := rs.Seek(toSkip, i)
+					if gotOffset != wantOffset {
+						t.Errorf("got offset %d, want %d", gotOffset, wantOffset)
+					}
+					// Read the rest of the stream...
+					got, err := ioutil.ReadAll(dec)
+					fatalErr(t, err)
+					if !bytes.Equal(got, want) {
+						t.Error("Result mismatch", wantOffset)
+					}
+				})
+			}
 		})
 	}
 }

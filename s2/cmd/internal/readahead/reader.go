@@ -1,6 +1,6 @@
 // Copyright (c) 2015 Klaus Post, released under MIT License. See LICENSE file.
 
-// The readahead package will do asynchronous read-ahead from an input io.Reader
+// Package readahead will do asynchronous read-ahead from an input io.Reader
 // and make the data available as an io.Reader.
 //
 // This should be fully transparent, except that once an error
@@ -17,6 +17,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+)
+
+const (
+	// DefaultBuffers is the default number of buffers used.
+	DefaultBuffers = 4
+
+	// DefaultBufferSize is the default buffer size, 1 MB.
+	DefaultBufferSize = 1 << 20
 )
 
 type seekable struct {
@@ -39,6 +47,85 @@ type reader struct {
 	err     error         // If an error has occurred it is here
 	cur     *buffer       // Current buffer being served
 	exited  chan struct{} // Channel is closed been the async reader shuts down
+	bufs    [][]byte
+}
+
+// NewReader returns a reader that will asynchronously read from
+// the supplied reader into 4 buffers of 1MB each.
+//
+// It will start reading from the input at once, maybe even before this
+// function has returned.
+//
+// The input can be read from the returned reader.
+// When done use Close() to release the buffers.
+// If a reader supporting the io.Seeker is given,
+// the returned reader will also support it.
+func NewReader(rd io.Reader) io.ReadCloser {
+	if rd == nil {
+		return nil
+	}
+
+	ret, err := NewReaderSize(rd, DefaultBuffers, DefaultBufferSize)
+
+	// Should not be possible to trigger from other packages.
+	if err != nil {
+		panic("unexpected error:" + err.Error())
+	}
+	return ret
+}
+
+// NewReadCloser returns a reader that will asynchronously read from
+// the supplied reader into 4 buffers of 1MB each.
+//
+// It will start reading from the input at once, maybe even before this
+// function has returned.
+//
+// The input can be read from the returned reader.
+// When done use Close() to release the buffers,
+// which will also close the supplied closer.
+// If a reader supporting the io.Seeker is given,
+// the returned reader will also support it.
+func NewReadCloser(rd io.ReadCloser) io.ReadCloser {
+	if rd == nil {
+		return nil
+	}
+
+	ret, err := NewReadCloserSize(rd, DefaultBuffers, DefaultBufferSize)
+
+	// Should not be possible to trigger from other packages.
+	if err != nil {
+		panic("unexpected error:" + err.Error())
+	}
+	return ret
+}
+
+// NewReadSeeker returns a reader that will asynchronously read from
+// the supplied reader into 4 buffers of 1MB each.
+//
+// It will start reading from the input at once, maybe even before this
+// function has returned.
+//
+// The input can be read and seeked from the returned reader.
+// When done use Close() to release the buffers.
+func NewReadSeeker(rd io.ReadSeeker) ReadSeekCloser {
+	//Not checking for result as the input interface guarantees it's seekable
+	res, _ := NewReader(rd).(ReadSeekCloser)
+	return res
+}
+
+// NewReadSeekCloser returns a reader that will asynchronously read from
+// the supplied reader into 4 buffers of 1MB each.
+//
+// It will start reading from the input at once, maybe even before this
+// function has returned.
+//
+// The input can be read and seeked from the returned reader.
+// When done use Close() to release the buffers,
+// which will also close the supplied closer.
+func NewReadSeekCloser(rd ReadSeekCloser) ReadSeekCloser {
+	// Not checking for result as the input interface guarantees it's seekable
+	res, _ := NewReadCloser(rd).(ReadSeekCloser)
+	return res
 }
 
 // NewReaderSize returns a reader with a custom number of buffers and size.
@@ -64,21 +151,160 @@ func NewReaderSize(rd io.Reader, buffers, size int) (res io.ReadCloser, err erro
 	return
 }
 
+// NewReaderBuffer returns a reader with a custom number of buffers and size.
+// All buffers must be the same size.
+// Buffers can be reused after Close has been called.
+func NewReaderBuffer(rd io.Reader, buffers [][]byte) (res io.ReadCloser, err error) {
+	if len(buffers) == 0 {
+		return nil, fmt.Errorf("number of buffers too small")
+	}
+	sz := 0
+	for _, buf := range buffers {
+		if len(buf) == 0 {
+			return nil, fmt.Errorf("zero size buffer sent")
+		}
+		if sz == 0 {
+			sz = len(buf)
+		}
+		if sz != len(buf) {
+			return nil, fmt.Errorf("buffers should have similar size")
+		}
+	}
+	if rd == nil {
+		return nil, fmt.Errorf("nil input reader supplied")
+	}
+	a := &reader{}
+	if _, ok := rd.(io.Seeker); ok {
+		res = &seekable{a}
+	} else {
+		res = a
+	}
+	a.initBuffers(rd, buffers, sz)
+
+	return
+}
+
+// NewReadCloserSize returns a reader with a custom number of buffers and size.
+// buffers is the number of queued buffers and size is the size of each
+// buffer in bytes.
+func NewReadCloserSize(rc io.ReadCloser, buffers, size int) (res io.ReadCloser, err error) {
+	if size <= 0 {
+		return nil, fmt.Errorf("buffer size too small")
+	}
+	if buffers <= 0 {
+		return nil, fmt.Errorf("number of buffers too small")
+	}
+	if rc == nil {
+		return nil, fmt.Errorf("nil input reader supplied")
+	}
+	a := &reader{closer: rc}
+	if _, ok := rc.(io.Seeker); ok {
+		res = &seekable{a}
+	} else {
+		res = a
+	}
+	a.init(rc, buffers, size)
+	return
+}
+
+// NewReadCloserBuffer returns a reader with a custom number of buffers and size.
+// All buffers must be the same size.
+// Buffers can be reused after Close has been called.
+func NewReadCloserBuffer(rc io.ReadCloser, buffers [][]byte) (res io.ReadCloser, err error) {
+	if len(buffers) == 0 {
+		return nil, fmt.Errorf("number of buffers too small")
+	}
+	sz := 0
+	for _, buf := range buffers {
+		if len(buf) == 0 {
+			return nil, fmt.Errorf("zero size buffer sent")
+		}
+		if sz == 0 {
+			sz = len(buf)
+		}
+		if sz != len(buf) {
+			return nil, fmt.Errorf("buffers should have similar size")
+		}
+	}
+
+	if rc == nil {
+		return nil, fmt.Errorf("nil input reader supplied")
+	}
+	a := &reader{closer: rc}
+	if _, ok := rc.(io.Seeker); ok {
+		res = &seekable{a}
+	} else {
+		res = a
+	}
+	a.initBuffers(rc, buffers, sz)
+	return
+}
+
+// NewReadSeekerSize returns a reader with a custom number of buffers and size.
+// buffers is the number of queued buffers and size is the size of each
+// buffer in bytes.
+func NewReadSeekerSize(rd io.ReadSeeker, buffers, size int) (res ReadSeekCloser, err error) {
+	reader, err := NewReaderSize(rd, buffers, size)
+	if err != nil {
+		return nil, err
+	}
+	//Not checking for result as the input interface guarantees it's seekable
+	res, _ = reader.(ReadSeekCloser)
+	return
+}
+
+// NewReadSeekCloserSize returns a reader with a custom number of buffers and size.
+// buffers is the number of queued buffers and size is the size of each
+// buffer in bytes.
+func NewReadSeekCloserSize(rd ReadSeekCloser, buffers, size int) (res ReadSeekCloser, err error) {
+	reader, err := NewReadCloserSize(rd, buffers, size)
+	if err != nil {
+		return nil, err
+	}
+	//Not checking for result as the input interface guarantees it's seekable
+	res, _ = reader.(ReadSeekCloser)
+	return
+}
+
+// NewReadSeekCloserBuffer returns a reader with a custom number of buffers and size.
+// All buffers must be the same size.
+// Buffers can be reused after Close has been called.
+func NewReadSeekCloserBuffer(rd ReadSeekCloser, buffers [][]byte) (res ReadSeekCloser, err error) {
+	reader, err := NewReadCloserBuffer(rd, buffers)
+	if err != nil {
+		return nil, err
+	}
+	//Not checking for result as the input interface guarantees it's seekable
+	res, _ = reader.(ReadSeekCloser)
+	return
+}
+
 // initialize the reader
 func (a *reader) init(rd io.Reader, buffers, size int) {
+	x := make([]byte, buffers*size)
+	bufs := make([][]byte, buffers)
+	for i := range bufs {
+		bufs[i] = x[i*size : (i+1)*size : (i+1)*size]
+	}
+	a.initBuffers(rd, bufs, size)
+}
+
+// initialize the reader
+func (a *reader) initBuffers(rd io.Reader, buffers [][]byte, size int) {
 	a.in = rd
-	a.ready = make(chan *buffer, buffers)
-	a.reuse = make(chan *buffer, buffers)
-	a.exit = make(chan struct{})
-	a.exited = make(chan struct{})
-	a.buffers = buffers
+	a.ready = make(chan *buffer, len(buffers))
+	a.reuse = make(chan *buffer, len(buffers))
+	a.exit = make(chan struct{}, 0)
+	a.exited = make(chan struct{}, 0)
+	a.buffers = len(buffers)
 	a.size = size
 	a.cur = nil
 	a.err = nil
+	a.bufs = buffers
 
 	// Create buffers
-	for i := 0; i < buffers; i++ {
-		a.reuse <- newBuffer(size)
+	for _, buf := range buffers {
+		a.reuse <- newBuffer(buf)
 	}
 
 	// Start async reader
@@ -86,10 +312,25 @@ func (a *reader) init(rd io.Reader, buffers, size int) {
 		// Ensure that when we exit this is signalled.
 		defer close(a.exited)
 		defer close(a.ready)
+		var atEOF bool
 		for {
 			select {
 			case b := <-a.reuse:
+				if atEOF {
+					// Return delay
+					b.err = io.EOF
+					b.buf = b.buf[:0]
+					b.offset = 0
+					a.ready <- b
+					return
+				}
 				err := b.read(a.in)
+				// Delay EOF if we have content.
+				if err == io.EOF && len(b.buf) > 0 {
+					atEOF = true
+					err = nil
+					b.err = nil
+				}
 				a.ready <- b
 				if err != nil {
 					return
@@ -136,9 +377,14 @@ func (a *reader) Read(p []byte) (n int, err error) {
 	n = copy(p, a.cur.buffer())
 	a.cur.inc(n)
 
-	// If at end of buffer, return any error, if present
 	if a.cur.isEmpty() {
-		a.err = a.cur.err
+		// Return current, so a fetch can start.
+		if a.cur != nil {
+			// If at end of buffer, return any error, if present
+			a.err = a.cur.err
+			a.reuse <- a.cur
+			a.cur = nil
+		}
 		return n, a.err
 	}
 	return n, nil
@@ -166,8 +412,8 @@ func (a *seekable) Seek(offset int64, whence int) (res int64, err error) {
 	}
 	//Seek the actual Seeker
 	if res, err = seeker.Seek(offset, whence); err == nil {
-		//If the seek was successful, reinitialize ourselves (with the new position).
-		a.init(a.in, a.buffers, a.size)
+		//If the seek was successful, reinitalize ourselves (with the new position).
+		a.initBuffers(a.in, a.bufs, a.size)
 	}
 	return
 }
@@ -231,8 +477,8 @@ type buffer struct {
 	size   int
 }
 
-func newBuffer(size int) *buffer {
-	return &buffer{buf: make([]byte, size), err: nil, size: size}
+func newBuffer(buf []byte) *buffer {
+	return &buffer{buf: buf, err: nil, size: len(buf)}
 }
 
 // isEmpty returns true is offset is at end of
@@ -257,8 +503,18 @@ func (b *buffer) read(rd io.Reader) (err error) {
 			b.err = err
 		}
 	}()
+
 	var n int
-	n, b.err = rd.Read(b.buf[0:b.size])
+	buf := b.buf[0:b.size]
+	for n < b.size {
+		n2, err := rd.Read(buf)
+		n += n2
+		if err != nil {
+			b.err = err
+			break
+		}
+		buf = buf[n2:]
+	}
 	b.buf = b.buf[0:n]
 	b.offset = 0
 	return b.err
