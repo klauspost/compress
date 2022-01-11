@@ -432,6 +432,13 @@ For more information see my blog post on [Fast Linear Time Compression](http://b
 
 This is implemented on Go 1.7 as "Huffman Only" mode, though not exposed for gzip.
 
+# Other packages
+
+Here are other packages of good quality and pure Go (no cgo wrappers or autoconverted code):
+
+* [github.com/pierrec/lz4](https://github.com/pierrec/lz4) - strong multithreaded LZ4 compression.
+* [github.com/cosnicolaou/pbzip2](https://github.com/cosnicolaou/pbzip2) - multithreaded bzip2 decompression.
+* [github.com/dsnet/compress](https://github.com/dsnet/compress) - brotli decompression, bzip2 writer.
 
 # license
 
