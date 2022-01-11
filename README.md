@@ -17,7 +17,7 @@ This package provides various compression algorithms.
 
 # changelog
 
-* Jan 11, 2022 (v1.14.0)
+* Jan 11, 2022 (v1.14.1)
 	* s2: Add stream index in [#462](https://github.com/klauspost/compress/pull/462)
 	* flate: Speed and efficiency improvements in [#439](https://github.com/klauspost/compress/pull/439) [#461](https://github.com/klauspost/compress/pull/461) [#455](https://github.com/klauspost/compress/pull/455) [#452](https://github.com/klauspost/compress/pull/452) [#458](https://github.com/klauspost/compress/pull/458)
 	* zstd: Performance improvement in [#420]( https://github.com/klauspost/compress/pull/420) [#456](https://github.com/klauspost/compress/pull/456) [#437](https://github.com/klauspost/compress/pull/437) [#467](https://github.com/klauspost/compress/pull/467) [#468](https://github.com/klauspost/compress/pull/468)
