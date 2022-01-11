@@ -640,12 +640,12 @@ Compression and speed is typically a bit better `MaxEncodedLen` is also smaller 
 Comparison of [`webdevdata.org-2015-01-07-subset`](https://files.klauspost.com/compress/webdevdata.org-2015-01-07-4GB-subset.7z),
 53927 files, total input size: 4,014,735,833 bytes. amd64, single goroutine used:
 
-| Encoder               | Size       | MB/s   | Reduction |
-|-----------------------|------------|--------|------------
-| snappy.Encode         | 1128706759 | 725.59 | 71.89%    |
-| s2.EncodeSnappy       | 1093823291 | 899.16 | 72.75%    |
-| s2.EncodeSnappyBetter | 1001158548 | 578.49 | 75.06%    |
-| s2.EncodeSnappyBest   | 944507998  | 66.00  | 76.47%    |
+| Encoder               | Size       | MB/s       | Reduction |
+|-----------------------|------------|------------|------------
+| snappy.Encode         | 1128706759 | 725.59     | 71.89%    |
+| s2.EncodeSnappy       | 1093823291 | **899.16** | 72.75%    |
+| s2.EncodeSnappyBetter | 1001158548 | 578.49     | 75.06%    |
+| s2.EncodeSnappyBest   | 944507998  | 66.00      | **76.47%**|
 
 ## Streams
 
@@ -657,7 +657,7 @@ Comparison of different streams, AMD Ryzen 3950x, 16 cores. Size and throughput:
 | File                        | snappy.NewWriter         | S2 Snappy                 | S2 Snappy, Better        | S2 Snappy, Best         |
 |-----------------------------|--------------------------|---------------------------|--------------------------|-------------------------|
 | nyc-taxi-data-10M.csv       | 1316042016 - 539.47MB/s  | 1307003093 - 10132.73MB/s | 1174534014 - 5002.44MB/s | 1115904679 - 177.97MB/s |
-| enwik10 (xml)               | 5088294643 - 433.45MB/s  | 5175840939 -  8454.52MB/s | 4560784526 - 4403.10MB/s | 4340299103 - 159.71MB/s |
+| enwik10 (xml)               | 5088294643 - 451.13MB/s  | 5175840939 -  9440.69MB/s | 4560784526 - 4487.21MB/s | 4340299103 - 158.92MB/s |
 | 10gb.tar (mixed)            | 6056946612 - 729.73MB/s  | 6208571995 -  9978.05MB/s | 5741646126 - 4919.98MB/s | 5548973895 - 180.44MB/s |
 | github-june-2days-2019.json | 1525176492 - 933.00MB/s  | 1476519054 - 13150.12MB/s | 1400547532 - 5803.40MB/s | 1321887137 - 204.29MB/s |
 | consensus.db.10gb (db)      | 5412897703 - 1102.14MB/s | 5354073487 - 13562.91MB/s | 5335069899 - 5294.73MB/s | 5201000954 - 175.72MB/s |

@@ -251,7 +251,10 @@ func TestIndex(t *testing.T) {
 	todo := input
 	for len(todo) > 0 {
 		// Write random sized inputs..
-		x := todo[:rng.Intn((len(todo)&65535)+2)]
+		x := todo[:rng.Intn(1+len(todo)&65535)]
+		if len(x) == 0 {
+			x = todo[:1]
+		}
 		_, err := enc.Write(x)
 		fatalErr(t, err)
 		// Flush once in a while
