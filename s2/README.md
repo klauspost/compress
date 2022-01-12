@@ -894,7 +894,7 @@ for each entry {
     }
     
     // Compressed uses previous and our estimate.
-    entry[entryNum].CompressedOffset = entry[entryNum-1].CompressedOffset + CompressGuess
+    entry[entryNum].CompressedOffset = entry[entryNum-1].CompressedOffset + CompressGuess + cOff
         
      // Adjust compressed offset for next loop, integer truncating division must be used. 
      CompressGuess += cOff/2               
