@@ -10,9 +10,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"math/bits"
-
-	comp "github.com/klauspost/compress"
 )
 
 const (
@@ -110,6 +107,7 @@ type advancedState struct {
 type compressor struct {
 	compressionLevel
 
+	h *huffmanEncoder
 	w *huffmanBitWriter
 
 	// compression algorithm
@@ -271,7 +269,7 @@ func (d *compressor) fillWindow(b []byte) {
 // Try to find a match starting at index whose length is greater than prevSize.
 // We only look at chainCount possibilities before giving up.
 // pos = s.index, prevHead = s.chainHead-s.hashOffset, prevLength=minMatchLength-1, lookahead
-func (d *compressor) findMatch(pos int, prevHead int, lookahead, bpb int) (length, offset int, ok bool) {
+func (d *compressor) findMatch(pos int, prevHead int, lookahead int) (length, offset int, ok bool) {
 	minMatchLook := maxMatchLength
 	if lookahead < minMatchLook {
 		minMatchLook = lookahead
@@ -297,14 +295,19 @@ func (d *compressor) findMatch(pos int, prevHead int, lookahead, bpb int) (lengt
 	}
 	offset = 0
 
+	// Some like it higher (CSV), some like it lower (JSON)
+	const baseCost = 6
 	// Base is 4 bytes at with an additional cost.
 	// Matches must be better than this.
-	cGain := minMatchLength*bpb - 12
+	cGain := 0
 	for i := prevHead; tries > 0; tries-- {
 		if wEnd == win[i+length] {
 			n := matchLen(win[i:i+minMatchLook], wPos)
 			if n > length {
-				newGain := n*bpb - bits.Len32(uint32(pos-i))
+				// Calculate gain. Estimate
+				newGain := d.h.bitLengthRaw(wPos[:n]) - int(offsetExtraBits[offsetCode(uint32(pos-i))]) - baseCost - int(lengthExtraBits[lengthCodes[(n-3)&255]])
+
+				//fmt.Println(n, "gain:", newGain, "prev:", cGain, "raw:", d.h.bitLengthRaw(wPos[:n]))
 				if newGain > cGain {
 					length = n
 					offset = pos - i
@@ -389,10 +392,17 @@ func (d *compressor) deflateLazy() {
 	if d.windowEnd-s.index < minMatchLength+maxMatchLength && !d.sync {
 		return
 	}
-	s.estBitsPerByte = 8
-	if !d.sync {
-		s.estBitsPerByte = comp.ShannonEntropyBits(d.window[s.index:d.windowEnd])
-		s.estBitsPerByte = int(1 + float64(s.estBitsPerByte)/float64(d.windowEnd-s.index))
+	if d.windowEnd != s.index {
+		// Get literal huffman coder.
+		if d.h == nil {
+			d.h = newHuffmanEncoder(maxFlateBlockTokens)
+		}
+		var tmp [256]uint16
+		for _, v := range d.window[s.index:d.windowEnd] {
+			tmp[v]++
+		}
+		d.h.generate(tmp[:], 15)
+		//s.estBitsPerByte = d.h.bitLength(tmp[:])/(d.windowEnd-s.index) + 1
 	}
 
 	s.maxInsertIndex = d.windowEnd - (minMatchLength - 1)
@@ -446,7 +456,7 @@ func (d *compressor) deflateLazy() {
 		}
 
 		if s.chainHead-s.hashOffset >= minIndex && lookahead > prevLength && prevLength < d.lazy {
-			if newLength, newOffset, ok := d.findMatch(s.index, s.chainHead-s.hashOffset, lookahead, s.estBitsPerByte); ok {
+			if newLength, newOffset, ok := d.findMatch(s.index, s.chainHead-s.hashOffset, lookahead); ok {
 				s.length = newLength
 				s.offset = newOffset
 			}
