@@ -10,7 +10,6 @@ import (
 	"errors"
 	"hash"
 	"io"
-	"sync"
 
 	"github.com/klauspost/compress/zstd/internal/xxhash"
 )
@@ -22,9 +21,6 @@ type frameDec struct {
 
 	WindowSize uint64
 
-	// In order queue of blocks being decoded.
-	decoding chan *blockDec
-
 	// Frame history passed between blocks
 	history history
 
@@ -34,15 +30,10 @@ type frameDec struct {
 	bBuf byteBuf
 
 	FrameContentSize uint64
-	frameDone        sync.WaitGroup
 
 	DictionaryID  *uint32
 	HasCheckSum   bool
 	SingleSegment bool
-
-	// asyncRunning indicates whether the async routine processes input on 'decoding'.
-	asyncRunningMu sync.Mutex
-	asyncRunning   bool
 }
 
 const (
@@ -282,41 +273,10 @@ func (d *frameDec) next(block *blockDec) error {
 	if err != nil {
 		println("block error:", err)
 		// Signal the frame decoder we have a problem.
-		d.sendErr(block, err)
+		block.sendErr(err)
 		return err
 	}
-	block.input <- struct{}{}
-	if debugDecoder {
-		println("next block:", block)
-	}
-	d.asyncRunningMu.Lock()
-	defer d.asyncRunningMu.Unlock()
-	if !d.asyncRunning {
-		return nil
-	}
-	if block.Last {
-		// We indicate the frame is done by sending io.EOF
-		d.decoding <- block
-		return io.EOF
-	}
-	d.decoding <- block
 	return nil
-}
-
-// sendEOF will queue an error block on the frame.
-// This will cause the frame decoder to return when it encounters the block.
-// Returns true if the decoder was added.
-func (d *frameDec) sendErr(block *blockDec, err error) bool {
-	d.asyncRunningMu.Lock()
-	defer d.asyncRunningMu.Unlock()
-	if !d.asyncRunning {
-		return false
-	}
-
-	println("sending error", err.Error())
-	block.sendErr(err)
-	d.decoding <- block
-	return true
 }
 
 // checkCRC will check the checksum if the frame has one.
@@ -364,18 +324,13 @@ func (d *frameDec) initAsync() {
 	if cap(d.history.b) < d.history.maxSize {
 		d.history.b = make([]byte, 0, d.history.maxSize)
 	}
-	if cap(d.decoding) < d.o.concurrent {
-		d.decoding = make(chan *blockDec, d.o.concurrent)
-	}
 	if debugDecoder {
 		h := d.history
 		printf("history init. len: %d, cap: %d", len(h.b), cap(h.b))
 	}
-	d.asyncRunningMu.Lock()
-	d.asyncRunning = true
-	d.asyncRunningMu.Unlock()
 }
 
+/*
 // startDecoder will start decoding blocks and write them to the writer.
 // The decoder will stop as soon as an error occurs or at end of frame.
 // When the frame has finished decoding the *bufio.Reader
@@ -470,6 +425,7 @@ func (d *frameDec) startDecoder(output chan decodeOutput) {
 		block = next
 	}
 }
+*/
 
 // runDecoder will create a sync decoder that will decode a block of data.
 func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {

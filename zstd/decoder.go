@@ -5,6 +5,7 @@
 package zstd
 
 import (
+	"context"
 	"errors"
 	"io"
 	"sync"
@@ -21,9 +22,6 @@ type Decoder struct {
 
 	// Unreferenced decoders, ready for use.
 	decoders chan *blockDec
-
-	// Streams ready to be decoded.
-	stream chan decodeStream
 
 	// Current read position used for Reader functionality.
 	current decoderState
@@ -46,7 +44,7 @@ type decoderState struct {
 	output chan decodeOutput
 
 	// cancel remaining output.
-	cancel chan struct{}
+	cancel context.CancelFunc
 
 	flushed bool
 }
@@ -196,24 +194,17 @@ func (d *Decoder) Reset(r io.Reader) error {
 		return nil
 	}
 
-	if d.stream == nil {
-		d.stream = make(chan decodeStream, 1)
-		d.streamWg.Add(1)
-		go d.startStreamDecoder(d.stream)
-	}
+	ctx, cancel := context.WithCancel(context.Background())
+	d.streamWg.Add(1)
+	go d.startStreamDecoder(ctx, r, d.current.output)
 
 	// Remove current block.
 	d.current.decodeOutput = decodeOutput{}
 	d.current.err = nil
-	d.current.cancel = make(chan struct{})
+	d.current.cancel = cancel
 	d.current.flushed = false
 	d.current.d = nil
 
-	d.stream <- decodeStream{
-		r:      r,
-		output: d.current.output,
-		cancel: d.current.cancel,
-	}
 	return nil
 }
 
@@ -221,7 +212,7 @@ func (d *Decoder) Reset(r io.Reader) error {
 func (d *Decoder) drainOutput() {
 	if d.current.cancel != nil {
 		println("cancelling current")
-		close(d.current.cancel)
+		d.current.cancel()
 		d.current.cancel = nil
 	}
 	if d.current.d != nil {
@@ -327,7 +318,7 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 			return dst, ErrDecoderSizeExceeded
 		}
 		if frame.FrameContentSize > 0 && frame.FrameContentSize < 1<<30 {
-			// Never preallocate moe than 1 GB up front.
+			// Never preallocate more than 1 GB up front.
 			if cap(dst)-len(dst) < int(frame.FrameContentSize) {
 				dst2 := make([]byte, len(dst), len(dst)+int(frame.FrameContentSize))
 				copy(dst2, dst)
@@ -402,10 +393,10 @@ func (d *Decoder) Close() {
 		return
 	}
 	d.drainOutput()
-	if d.stream != nil {
-		close(d.stream)
+	if d.current.cancel != nil {
+		d.current.cancel()
 		d.streamWg.Wait()
-		d.stream = nil
+		d.current.cancel = nil
 	}
 	if d.decoders != nil {
 		close(d.decoders)
@@ -470,86 +461,144 @@ type decodeStream struct {
 var errEndOfStream = errors.New("end-of-stream")
 
 // Create Decoder:
-// Spawn n block decoders. These accept tasks to decode a block.
-// Create goroutine that handles stream processing, this will send history to decoders as they are available.
-// Decoders update the history as they decode.
-// When a block is returned:
-// 		a) history is sent to the next decoder,
-// 		b) content written to CRC.
-// 		c) return data to WRITER.
-// 		d) wait for next block to return data.
-// Once WRITTEN, the decoders reused by the writer frame decoder for re-use.
-func (d *Decoder) startStreamDecoder(inStream chan decodeStream) {
+// ASYNC:
+// Spawn 3 go routines.
+// 1: Decode block and literals. Receives hufftree and seqdecs, returns seqdecs and huff tree.
+// 2: Wait for recentOffsets if needed. Decode sequences, send recentOffsets.
+// 3: Wait for stream history, execute sequences, send stream history.
+func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output chan decodeOutput) {
 	defer d.streamWg.Done()
 	frame := newFrameDec(d.o)
-	for stream := range inStream {
-		if debugDecoder {
-			println("got new stream")
+
+	br := readerWrapper{r: r}
+
+	// TODO: Needed?
+	frame.initAsync()
+
+	var seqPrepare = make(chan *blockDec, d.o.concurrent)
+	var seqDecode = make(chan *blockDec, d.o.concurrent)
+	var seqExecute = make(chan *blockDec, d.o.concurrent)
+	// Async 1: Prepare blocks...
+	go func() {
+		var hist history
+		for block := range seqPrepare {
+			if block.err != nil {
+				seqDecode <- block
+				continue
+			}
+			if block.async.newHist != nil {
+				hist.huffTree = block.async.newHist.huffTree
+			}
+			literals, remain, err := block.decodeLiterals(block.data, &hist)
+			block.err = err
+			if err == nil {
+				block.async.literals = literals
+				block.async.seqData = remain
+			}
+			seqDecode <- block
 		}
-		br := readerWrapper{r: stream.r}
-	decodeStream:
+		close(seqDecode)
+	}()
+	// Async 2: Decode sequences...
+	go func() {
+		var hist history
+
+		for block := range seqDecode {
+			if block.err != nil {
+				seqExecute <- block
+				continue
+			}
+			if block.async.newHist != nil {
+				hist.decoders = block.async.newHist.decoders
+				hist.recentOffsets = block.async.newHist.recentOffsets
+			}
+			hist.decoders.literals = block.async.literals
+			block.err = block.decodeSequences(block.async.seqData, block.async.literals, &hist)
+			seqExecute <- block
+		}
+		close(seqExecute)
+	}()
+	// Async 3: Execute sequences...
+	go func() {
+		var hist history
+
+		for block := range seqExecute {
+			out := decodeOutput{err: block.err, d: block}
+			if block.err != nil {
+				output <- out
+				continue
+			}
+			if block.async.newHist != nil {
+				hist.dict = block.async.newHist.dict
+				hist.b = append(hist.b[:0], block.async.newHist.b...)
+			}
+
+		}
+		close(output)
+	}()
+
+decodeStream:
+	for {
+		var historySent bool
+		frame.history.reset()
+		err := frame.reset(&br)
+		switch err {
+		case io.EOF:
+			break decodeStream
+		default:
+			dec := <-d.decoders
+			dec.sendErr(err)
+			seqPrepare <- dec
+			break decodeStream
+		case nil:
+		}
+		if debugDecoder && err != nil {
+			println("Frame decoder returned", err)
+		}
+		if frame.DictionaryID != nil {
+			dict, ok := d.dicts[*frame.DictionaryID]
+			if !ok {
+				err = ErrUnknownDictionary
+			} else {
+				frame.history.setDict(&dict)
+			}
+		}
+		if err != nil {
+			output <- decodeOutput{
+				err: err,
+			}
+			return
+		}
+	decodeFrame:
+		// Go through all blocks of the frame.
 		for {
-			frame.history.reset()
-			err := frame.reset(&br)
-			if debugDecoder && err != nil {
-				println("Frame decoder returned", err)
+			dec := <-d.decoders
+			select {
+			case <-ctx.Done():
+				dec.sendErr(ctx.Err())
+				seqPrepare <- dec
+				break decodeFrame
+			default:
 			}
-			if err == nil && frame.DictionaryID != nil {
-				dict, ok := d.dicts[*frame.DictionaryID]
-				if !ok {
-					err = ErrUnknownDictionary
-				} else {
-					frame.history.setDict(&dict)
-				}
+			err := frame.next(dec)
+			if !historySent {
+				h := frame.history
+				dec.async.newHist = &h
+				historySent = true
 			}
-			if err != nil {
-				stream.output <- decodeOutput{
-					err: err,
-				}
-				break
+			seqPrepare <- dec
+			switch err {
+			case io.EOF:
+				// End of current frame, no error
+				println("EOF on next block")
+				break decodeFrame
+			case nil:
+				continue
+			default:
+				println("block decoder returned", err)
+				break decodeStream
 			}
-			if debugDecoder {
-				println("starting frame decoder")
-			}
-
-			// This goroutine will forward history between frames.
-			frame.frameDone.Add(1)
-			frame.initAsync()
-
-			go frame.startDecoder(stream.output)
-		decodeFrame:
-			// Go through all blocks of the frame.
-			for {
-				dec := <-d.decoders
-				select {
-				case <-stream.cancel:
-					if !frame.sendErr(dec, io.EOF) {
-						// To not let the decoder dangle, send it back.
-						stream.output <- decodeOutput{d: dec}
-					}
-					break decodeStream
-				default:
-				}
-				err := frame.next(dec)
-				switch err {
-				case io.EOF:
-					// End of current frame, no error
-					println("EOF on next block")
-					break decodeFrame
-				case nil:
-					continue
-				default:
-					println("block decoder returned", err)
-					break decodeStream
-				}
-			}
-			// All blocks have started decoding, check if there are more frames.
-			println("waiting for done")
-			frame.frameDone.Wait()
-			println("done waiting...")
 		}
-		frame.frameDone.Wait()
-		println("Sending EOS")
-		stream.output <- decodeOutput{err: errEndOfStream}
 	}
+	close(seqPrepare)
 }

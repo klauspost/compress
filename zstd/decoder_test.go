@@ -1362,7 +1362,7 @@ func BenchmarkDecoderSilesia(b *testing.B) {
 }
 
 func BenchmarkDecoderEnwik9(b *testing.B) {
-	fn := "testdata/enwik9-1.zst"
+	fn := "testdata/enwik8.zst"
 	data, err := ioutil.ReadFile(fn)
 	if err != nil {
 		if os.IsNotExist(err) {

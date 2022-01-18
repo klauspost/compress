@@ -20,6 +20,10 @@ type seq struct {
 	llCode, mlCode, ofCode uint8
 }
 
+type seqVals struct {
+	ll, ml, mo int
+}
+
 func (s seq) String() string {
 	if s.offset <= 3 {
 		if s.offset == 0 {
@@ -61,10 +65,11 @@ type sequenceDecs struct {
 	offsets      sequenceDec
 	matchLengths sequenceDec
 	prevOffset   [3]int
-	hist         []byte
 	dict         []byte
 	literals     []byte
 	out          []byte
+	seq          []seqVals
+	seqSize      int
 	windowSize   int
 	maxBits      uint8
 }
@@ -81,7 +86,6 @@ func (s *sequenceDecs) initialize(br *bitReader, hist *history, literals, out []
 		return errors.New("matchLengths:" + err.Error())
 	}
 	s.literals = literals
-	s.hist = hist.b
 	s.prevOffset = hist.recentOffsets
 	s.maxBits = s.litLengths.fse.maxBits + s.offsets.fse.maxBits + s.matchLengths.fse.maxBits
 	s.windowSize = hist.windowSize
@@ -94,7 +98,225 @@ func (s *sequenceDecs) initialize(br *bitReader, hist *history, literals, out []
 }
 
 // decode sequences from the stream with the provided history.
-func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
+func (s *sequenceDecs) decode(seqs int, br *bitReader) error {
+	// Grab full sizes tables, to avoid bounds checks.
+	llTable, mlTable, ofTable := s.litLengths.fse.dt[:maxTablesize], s.matchLengths.fse.dt[:maxTablesize], s.offsets.fse.dt[:maxTablesize]
+	llState, mlState, ofState := s.litLengths.state.state, s.matchLengths.state.state, s.offsets.state.state
+	if cap(s.seq) < seqs {
+		s.seq = make([]seqVals, 0, seqs)
+	}
+	s.seq = s.seq[:seqs]
+	s.seqSize = 0
+	litRemain := len(s.literals)
+
+	for i := range s.seq {
+		var ll, mo, ml int
+		if br.off > 4+((maxOffsetBits+16+16)>>3) {
+			// inlined function:
+			// ll, mo, ml = s.nextFast(br, llState, mlState, ofState)
+
+			// Final will not read from stream.
+			var llB, mlB, moB uint8
+			ll, llB = llState.final()
+			ml, mlB = mlState.final()
+			mo, moB = ofState.final()
+
+			// extra bits are stored in reverse order.
+			br.fillFast()
+			mo += br.getBits(moB)
+			if s.maxBits > 32 {
+				br.fillFast()
+			}
+			ml += br.getBits(mlB)
+			ll += br.getBits(llB)
+
+			if moB > 1 {
+				s.prevOffset[2] = s.prevOffset[1]
+				s.prevOffset[1] = s.prevOffset[0]
+				s.prevOffset[0] = mo
+			} else {
+				// mo = s.adjustOffset(mo, ll, moB)
+				// Inlined for rather big speedup
+				if ll == 0 {
+					// There is an exception though, when current sequence's literals_length = 0.
+					// In this case, repeated offsets are shifted by one, so an offset_value of 1 means Repeated_Offset2,
+					// an offset_value of 2 means Repeated_Offset3, and an offset_value of 3 means Repeated_Offset1 - 1_byte.
+					mo++
+				}
+
+				if mo == 0 {
+					mo = s.prevOffset[0]
+				} else {
+					var temp int
+					if mo == 3 {
+						temp = s.prevOffset[0] - 1
+					} else {
+						temp = s.prevOffset[mo]
+					}
+
+					if temp == 0 {
+						// 0 is not valid; input is corrupted; force offset to 1
+						println("temp was 0")
+						temp = 1
+					}
+
+					if mo != 1 {
+						s.prevOffset[2] = s.prevOffset[1]
+					}
+					s.prevOffset[1] = s.prevOffset[0]
+					s.prevOffset[0] = temp
+					mo = temp
+				}
+			}
+			br.fillFast()
+		} else {
+			if br.overread() {
+				printf("reading sequence %d, exceeded available data\n", i)
+				return io.ErrUnexpectedEOF
+			}
+			ll, mo, ml = s.next(br, llState, mlState, ofState)
+			br.fill()
+		}
+
+		if debugSequences {
+			println("Seq", i, "Litlen:", ll, "mo:", mo, "(abs) ml:", ml)
+		}
+		// Evaluate.
+		// We might be doing this async, so do it early.
+		if mo == 0 && ml > 0 {
+			return fmt.Errorf("zero matchoff and matchlen (%d) > 0", ml)
+		}
+		if ml > maxMatchLen {
+			return fmt.Errorf("match len (%d) bigger than max allowed length", ml)
+		}
+		s.seqSize += ll + ml
+		if s.seqSize > maxBlockSize {
+			return fmt.Errorf("output (%d) bigger than max block size", s.seqSize)
+		}
+		litRemain -= ll
+		if litRemain < 0 {
+			return fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available", ll, litRemain)
+		}
+		s.seq[i] = seqVals{
+			ll: ll,
+			ml: ml,
+			mo: mo,
+		}
+		if i == len(s.seq)-1 {
+			// This is the last sequence, so we shouldn't update state.
+			break
+		}
+
+		// Manually inlined, ~ 5-20% faster
+		// Update all 3 states at once. Approx 20% faster.
+		nBits := llState.nbBits() + mlState.nbBits() + ofState.nbBits()
+		if nBits == 0 {
+			llState = llTable[llState.newState()&maxTableMask]
+			mlState = mlTable[mlState.newState()&maxTableMask]
+			ofState = ofTable[ofState.newState()&maxTableMask]
+		} else {
+			bits := br.get32BitsFast(nBits)
+			lowBits := uint16(bits >> ((ofState.nbBits() + mlState.nbBits()) & 31))
+			llState = llTable[(llState.newState()+lowBits)&maxTableMask]
+
+			lowBits = uint16(bits >> (ofState.nbBits() & 31))
+			lowBits &= bitMask[mlState.nbBits()&15]
+			mlState = mlTable[(mlState.newState()+lowBits)&maxTableMask]
+
+			lowBits = uint16(bits) & bitMask[ofState.nbBits()&15]
+			ofState = ofTable[(ofState.newState()+lowBits)&maxTableMask]
+		}
+	}
+	s.seqSize += litRemain
+	if s.seqSize > maxBlockSize {
+		return fmt.Errorf("output (%d) bigger than max block size", s.seqSize)
+	}
+	return nil
+}
+
+// execute will execute the decoded sequence with the provided history.
+func (s *sequenceDecs) execute(hist []byte) error {
+	if len(s.out)+s.seqSize > cap(s.out) {
+		addBytes := s.seqSize + len(s.out)
+		s.out = append(s.out, make([]byte, addBytes)...)
+		s.out = s.out[:len(s.out)-addBytes]
+	}
+
+	for _, seq := range s.seq {
+		ll, ml, mo := seq.ll, seq.ml, seq.mo
+
+		// Add literals
+		s.out = append(s.out, s.literals[:ll]...)
+		s.literals = s.literals[ll:]
+		out := s.out
+
+		if mo > len(s.out)+len(hist) || mo > s.windowSize {
+			if len(s.dict) == 0 {
+				return fmt.Errorf("match offset (%d) bigger than current history (%d)", mo, len(s.out)+len(hist))
+			}
+
+			// we may be in dictionary.
+			dictO := len(s.dict) - (mo - (len(s.out) + len(hist)))
+			if dictO < 0 || dictO >= len(s.dict) {
+				return fmt.Errorf("match offset (%d) bigger than current history (%d)", mo, len(s.out)+len(hist))
+			}
+			end := dictO + ml
+			if end > len(s.dict) {
+				out = append(out, s.dict[dictO:]...)
+				mo -= len(s.dict) - dictO
+				ml -= len(s.dict) - dictO
+			} else {
+				out = append(out, s.dict[dictO:end]...)
+				mo = 0
+				ml = 0
+			}
+		}
+
+		// Copy from history.
+		// TODO: Blocks without history could be made to ignore this completely.
+		if v := mo - len(s.out); v > 0 {
+			// v is the start position in history from end.
+			start := len(hist) - v
+			if ml > v {
+				// Some goes into current block.
+				// Copy remainder of history
+				out = append(out, hist[start:]...)
+				mo -= v
+				ml -= v
+			} else {
+				out = append(out, hist[start:start+ml]...)
+				ml = 0
+			}
+		}
+		// We must be in current buffer now
+		if ml > 0 {
+			start := len(s.out) - mo
+			if ml <= len(s.out)-start {
+				// No overlap
+				out = append(out, s.out[start:start+ml]...)
+			} else {
+				// Overlapping copy
+				// Extend destination slice and copy one byte at the time.
+				out = out[:len(out)+ml]
+				src := out[start : start+ml]
+				// Destination is the space we just added.
+				dst := out[len(out)-ml:]
+				dst = dst[:len(src)]
+				for i := range src {
+					dst[i] = src[i]
+				}
+			}
+		}
+		s.out = out
+	}
+	// Add final literals
+	s.out = append(s.out, s.literals...)
+
+	return nil
+}
+
+// decode sequences from the stream with the provided history.
+func (s *sequenceDecs) decodeSync(seqs int, br *bitReader, hist []byte) error {
 	startSize := len(s.out)
 	// Grab full sizes tables, to avoid bounds checks.
 	llTable, mlTable, ofTable := s.litLengths.fse.dt[:maxTablesize], s.matchLengths.fse.dt[:maxTablesize], s.offsets.fse.dt[:maxTablesize]
@@ -233,15 +455,15 @@ func (s *sequenceDecs) decode(seqs int, br *bitReader, hist []byte) error {
 		// TODO: Blocks without history could be made to ignore this completely.
 		if v := mo - len(s.out); v > 0 {
 			// v is the start position in history from end.
-			start := len(s.hist) - v
+			start := len(hist) - v
 			if ml > v {
 				// Some goes into current block.
 				// Copy remainder of history
-				out = append(out, s.hist[start:]...)
+				out = append(out, hist[start:]...)
 				mo -= v
 				ml -= v
 			} else {
-				out = append(out, s.hist[start:start+ml]...)
+				out = append(out, hist[start:start+ml]...)
 				ml = 0
 			}
 		}
