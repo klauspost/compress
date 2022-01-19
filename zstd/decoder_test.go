@@ -165,6 +165,40 @@ func TestErrorReader(t *testing.T) {
 	}
 }
 
+type failingWriter struct {
+	err error
+}
+
+func (f failingWriter) Write(_ []byte) (n int, err error) {
+	return 0, f.err
+}
+
+func TestErrorWriter(t *testing.T) {
+	input := make([]byte, 100)
+	cmp := bytes.Buffer{}
+	w, err := NewWriter(&cmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = rand.Read(input)
+	_, err = w.Write(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = w.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantErr := fmt.Errorf("i'm a failure")
+	zr, err := NewReader(&cmp)
+	defer zr.Close()
+	out := failingWriter{err: wantErr}
+	_, err = zr.WriteTo(out)
+	if !errors.Is(err, wantErr) {
+		t.Errorf("error: wanted: %v, got: %v", wantErr, err)
+	}
+}
+
 func TestNewDecoder(t *testing.T) {
 	defer timeout(60 * time.Second)()
 	testDecoderFile(t, "testdata/decoder.zip")

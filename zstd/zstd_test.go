@@ -1,3 +1,6 @@
+// Copyright 2019+ Klaus Post. All rights reserved.
+// License information can be found in the LICENSE file.
+
 package zstd
 
 import (
@@ -8,6 +11,8 @@ import (
 	"testing"
 	"time"
 )
+
+var isRaceTest bool
 
 func TestMain(m *testing.M) {
 	ec := m.Run()

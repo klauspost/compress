@@ -231,6 +231,7 @@ func TestCompress1X(t *testing.T) {
 			if len(buf0) > BlockSizeMax {
 				buf0 = buf0[:BlockSizeMax]
 			}
+			tbSz, dSz, reSz, _ := EstimateSizes(buf0, &s)
 			b, re, err := Compress1X(buf0, &s)
 			if err != test.err1X {
 				t.Errorf("want error %v (%T), got %v (%T)", test.err1X, test.err1X, err, err)
@@ -256,6 +257,7 @@ func TestCompress1X(t *testing.T) {
 			if len(s.OutData) == 0 {
 				t.Error("got no data output")
 			}
+			t.Logf("Estimate: table %d, got %d, data %d, got %d, reuse: %d", tbSz, len(s.OutTable), dSz, len(s.OutData), reSz)
 			t.Logf("%s: %d -> %d bytes (%.2f:1) re:%t (table: %d bytes)", test.name, len(buf0), len(b), float64(len(buf0))/float64(len(b)), re, len(s.OutTable))
 			s.Out = nil
 			bRe, _, err := Compress1X(b, &s)
@@ -406,7 +408,7 @@ func TestCompress4XReuse(t *testing.T) {
 			for j := range buf0 {
 				buf0[j] = byte(int64(i) + (rng.Int63() & 3))
 			}
-
+			tbSz, dSz, reSz, _ := EstimateSizes(buf0, &s)
 			b, re, err := Compress4X(buf0, &s)
 			if err != nil {
 				t.Fatal(err)
@@ -421,7 +423,7 @@ func TestCompress4XReuse(t *testing.T) {
 			if re {
 				t.Error("claimed to have re-used. Unlikely.")
 			}
-
+			t.Logf("Estimate: table %d, got %d, data %d, got %d, reuse: %d", tbSz, len(s.OutTable), dSz, len(s.OutData), reSz)
 			t.Logf("%s: %d -> %d bytes (%.2f:1) %t (table: %d bytes)", t.Name(), len(buf0), len(b), float64(len(buf0))/float64(len(b)), re, len(s.OutTable))
 		})
 	}
@@ -441,6 +443,7 @@ func TestCompress4XReuseActually(t *testing.T) {
 				buf0[j] = byte(rng.Int63() & 7)
 			}
 
+			tbSz, dSz, reSz, _ := EstimateSizes(buf0, &s)
 			b, re, err := Compress4X(buf0, &s)
 			if err != nil {
 				t.Fatal(err)
@@ -458,7 +461,7 @@ func TestCompress4XReuseActually(t *testing.T) {
 			if !re && i > 0 {
 				t.Error("Expected table to be reused")
 			}
-
+			t.Logf("Estimate: table %d, got %d, data %d, got %d, reuse: %d", tbSz, len(s.OutTable), dSz, len(s.OutData), reSz)
 			t.Logf("%s: %d -> %d bytes (%.2f:1) %t (table: %d bytes)", t.Name(), len(buf0), len(b), float64(len(buf0))/float64(len(b)), re, len(s.OutTable))
 		})
 	}
@@ -488,6 +491,7 @@ func TestCompress1XReuse(t *testing.T) {
 			}
 			firstData := len(s.OutData)
 			s.Reuse = ReusePolicyAllow
+			tbSz, dSz, reSz, _ := EstimateSizes(buf0, &s)
 			b, re, err := Compress1X(buf0, &s)
 			if err != nil {
 				t.Errorf("got secondary error %v (%T)", err, err)
@@ -505,6 +509,7 @@ func TestCompress1XReuse(t *testing.T) {
 			if len(b) != firstData {
 				t.Errorf("data length did not match first: %d, second:%d", firstData, len(b))
 			}
+			t.Logf("Estimate: table %d, got %d, data %d, got %d, reuse: %d", tbSz, len(s.OutTable), dSz, len(s.OutData), reSz)
 			t.Logf("%s: %d -> %d bytes (%.2f:1) %t", test.name, len(buf0), len(b), float64(len(buf0))/float64(len(b)), re)
 		})
 	}

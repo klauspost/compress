@@ -3,6 +3,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+//go:build (!amd64 && !arm64) || appengine || !gc || noasm
 // +build !amd64,!arm64 appengine !gc noasm
 
 package s2
@@ -10,6 +11,7 @@ package s2
 import (
 	"encoding/binary"
 	"fmt"
+	"strconv"
 )
 
 // decode writes the decoding of src to dst. It assumes that the varint-encoded
@@ -52,7 +54,7 @@ func s2Decode(dst, src []byte) int {
 				in = in[5:]
 			}
 			length = int(x) + 1
-			if length > len(dst)-d || length > len(in) {
+			if length > len(dst)-d || length > len(in) || (strconv.IntSize == 32 && length <= 0) {
 				if debug {
 					fmt.Println("CORRUPT: literals, avail:", len(in), "length:", length, "d-after:", d+length)
 				}
@@ -175,7 +177,7 @@ func s2Decode(dst, src []byte) int {
 				x = uint32(src[s-4]) | uint32(src[s-3])<<8 | uint32(src[s-2])<<16 | uint32(src[s-1])<<24
 			}
 			length = int(x) + 1
-			if length > len(dst)-d || length > len(src)-s {
+			if length > len(dst)-d || length > len(src)-s || (strconv.IntSize == 32 && length <= 0) {
 				return decodeErrCodeCorrupt
 			}
 			if debug {

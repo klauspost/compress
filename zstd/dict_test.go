@@ -103,6 +103,9 @@ func TestEncoder_SmallDict(t *testing.T) {
 			}
 			dicts = append(dicts, in)
 			for level := SpeedFastest; level < speedLast; level++ {
+				if isRaceTest && level >= SpeedBestCompression {
+					break
+				}
 				enc, err := NewWriter(nil, WithEncoderConcurrency(1), WithEncoderDict(in), WithEncoderLevel(level), WithWindowSize(1<<17))
 				if err != nil {
 					t.Fatal(err)
@@ -184,7 +187,7 @@ func TestEncoder_SmallDict(t *testing.T) {
 				enc := encs[i]
 				t.Run(encNames[i], func(t *testing.T) {
 					var buf bytes.Buffer
-					enc.Reset(&buf)
+					enc.ResetContentSize(&buf, int64(len(decoded)))
 					_, err := enc.Write(decoded)
 					if err != nil {
 						t.Fatal(err)

@@ -31,6 +31,9 @@ type testEncOpt struct {
 func getEncOpts(cMax int) []testEncOpt {
 	var o []testEncOpt
 	for level := speedNotSet + 1; level < speedLast; level++ {
+		if isRaceTest && level >= SpeedBestCompression {
+			break
+		}
 		for conc := 1; conc <= 4; conc *= 2 {
 			for _, wind := range testWindowSizes {
 				addOpt := func(name string, options ...EOption) {
@@ -48,7 +51,7 @@ func getEncOpts(cMax int) []testEncOpt {
 				addOpt("nolit", WithNoEntropyCompression(true))
 				addOpt("pad1k", WithEncoderPadding(1024))
 				addOpt("zerof", WithZeroFrames(true))
-				addOpt("singleseg", WithSingleSegment(true))
+				addOpt("1seg", WithSingleSegment(true))
 			}
 			if testing.Short() && conc == 2 {
 				break
@@ -75,6 +78,7 @@ func TestEncoder_EncodeAllSimple(t *testing.T) {
 	in = append(in, in...)
 	for _, opts := range getEncOpts(4) {
 		t.Run(opts.name, func(t *testing.T) {
+			runtime.GC()
 			e, err := NewWriter(nil, opts.o...)
 			if err != nil {
 				t.Fatal(err)
@@ -172,6 +176,9 @@ func TestEncoder_EncodeAllEncodeXML(t *testing.T) {
 
 	for level := speedNotSet + 1; level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
+			if isRaceTest && level >= SpeedBestCompression {
+				t.SkipNow()
+			}
 			e, err := NewWriter(nil, WithEncoderLevel(level))
 			if err != nil {
 				t.Fatal(err)
@@ -252,7 +259,7 @@ func TestEncoderRegression(t *testing.T) {
 
 					// Use the Writer
 					var dst bytes.Buffer
-					enc.Reset(&dst)
+					enc.ResetContentSize(&dst, int64(len(in)))
 					_, err = enc.Write(in)
 					if err != nil {
 						t.Error(err)
@@ -291,6 +298,9 @@ func TestEncoder_EncodeAllTwain(t *testing.T) {
 
 	for level := speedNotSet + 1; level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
+			if isRaceTest && level >= SpeedBestCompression {
+				t.SkipNow()
+			}
 			for _, windowSize := range testWindowSizes {
 				t.Run(fmt.Sprintf("window:%d", windowSize), func(t *testing.T) {
 					e, err := NewWriter(nil, WithEncoderLevel(level), WithWindowSize(windowSize))
@@ -337,6 +347,9 @@ func TestEncoder_EncodeAllPi(t *testing.T) {
 
 	for level := speedNotSet + 1; level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
+			if isRaceTest && level >= SpeedBestCompression {
+				t.SkipNow()
+			}
 			for _, windowSize := range testWindowSizes {
 				t.Run(fmt.Sprintf("window:%d", windowSize), func(t *testing.T) {
 					e, err := NewWriter(nil, WithEncoderLevel(level), WithWindowSize(windowSize))
@@ -407,7 +420,7 @@ func TestWithEncoderPadding(t *testing.T) {
 
 		// Test using the writer.
 		var buf bytes.Buffer
-		e.Reset(&buf)
+		e.ResetContentSize(&buf, int64(len(src)))
 		_, err = io.Copy(e, bytes.NewBuffer(src))
 		if err != nil {
 			t.Fatal(err)
@@ -891,10 +904,10 @@ func BenchmarkEncoder_EncodeAllXML(b *testing.B) {
 	}
 	dec.Close()
 
-	enc := Encoder{}
+	enc, _ := NewWriter(nil, WithEncoderConcurrency(1))
 	dst := enc.EncodeAll(in, nil)
 	wantSize := len(dst)
-	b.Log("Output size:", len(dst))
+	//b.Log("Output size:", len(dst))
 	b.ResetTimer()
 	b.ReportAllocs()
 	b.SetBytes(int64(len(in)))
@@ -981,7 +994,7 @@ func BenchmarkEncoder_EncodeAllHTML(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	enc := Encoder{}
+	enc, _ := NewWriter(nil, WithEncoderConcurrency(1))
 	dst := enc.EncodeAll(in, nil)
 	wantSize := len(dst)
 	b.ResetTimer()
@@ -1005,7 +1018,7 @@ func BenchmarkEncoder_EncodeAllTwain(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	enc := Encoder{}
+	enc, _ := NewWriter(nil, WithEncoderConcurrency(1))
 	dst := enc.EncodeAll(in, nil)
 	wantSize := len(dst)
 	b.ResetTimer()
@@ -1029,7 +1042,7 @@ func BenchmarkEncoder_EncodeAllPi(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	enc := Encoder{}
+	enc, _ := NewWriter(nil, WithEncoderConcurrency(1))
 	dst := enc.EncodeAll(in, nil)
 	wantSize := len(dst)
 	b.ResetTimer()
