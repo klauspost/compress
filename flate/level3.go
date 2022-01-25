@@ -203,15 +203,15 @@ func (e *fastEncL3) Encode(dst *tokens, src []byte) {
 			candidate = candidates.Cur
 			minOffset := e.cur + s - (maxMatchOffset - 4)
 
-			if candidate.offset > minOffset && cv != load3232(src, candidate.offset-e.cur) {
-				// We only check if value mismatches.
-				// Offset will always be invalid in other cases.
+			if candidate.offset > minOffset {
+				if cv == load3232(src, candidate.offset-e.cur) {
+					// Found a match...
+					continue
+				}
 				candidate = candidates.Prev
 				if candidate.offset > minOffset && cv == load3232(src, candidate.offset-e.cur) {
-					offset := s - (candidate.offset - e.cur)
-					if offset <= maxMatchOffset {
-						continue
-					}
+					// Match at prev...
+					continue
 				}
 			}
 			cv = uint32(x >> 8)
