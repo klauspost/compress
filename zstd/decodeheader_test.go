@@ -82,7 +82,7 @@ func TestHeader_Decode(t *testing.T) {
 				t.Errorf("want error, got result: %v", got)
 			}
 			if want != got {
-				t.Errorf("want %#v, got %#v", want, got)
+				t.Errorf("header mismatch:\nwant %#v\ngot  %#v", want, got)
 			}
 		})
 	}
