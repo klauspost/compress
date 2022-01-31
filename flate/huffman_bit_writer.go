@@ -833,9 +833,9 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 	bits, nbits, nbytes := w.bits, w.nbits, w.nbytes
 
 	for _, t := range tokens {
-		if t < matchType {
+		if t < 256 {
 			//w.writeCode(lits[t.literal()])
-			c := lits[t.literal()]
+			c := lits[t]
 			bits |= uint64(c.code) << (nbits & 63)
 			nbits += c.len
 			if nbits >= 48 {

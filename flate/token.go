@@ -276,7 +276,7 @@ func (t *tokens) AddMatch(xlength uint32, xoffset uint32) {
 	xoffset |= oCode << 16
 
 	t.extraHist[lengthCodes1[uint8(xlength)]]++
-	t.offHist[oCode]++
+	t.offHist[oCode&31]++
 	t.tokens[t.n] = token(matchType | xlength<<lengthShift | xoffset)
 	t.n++
 }
@@ -300,7 +300,7 @@ func (t *tokens) AddMatchLong(xlength int32, xoffset uint32) {
 		xlength -= xl
 		xl -= baseMatchLength
 		t.extraHist[lengthCodes1[uint8(xl)]]++
-		t.offHist[oc]++
+		t.offHist[oc&31]++
 		t.tokens[t.n] = token(matchType | uint32(xl)<<lengthShift | xoffset)
 		t.n++
 	}
