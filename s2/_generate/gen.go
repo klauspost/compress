@@ -39,9 +39,9 @@ func main() {
 	Constraint(buildtags.Not("noasm").ToConstraint())
 	Constraint(buildtags.Term("gc").ToConstraint())
 	if *x64v3 {
-		Constraint(buildtags.Term("GOAMD64_v3").ToConstraint())
+		Constraint(buildtags.Term("goamd64_v3").ToConstraint())
 	} else {
-		Constraint(buildtags.Not("GOAMD64_v3").ToConstraint())
+		Constraint(buildtags.Not("goamd64_v3").ToConstraint())
 	}
 	Constraint(buildtags.Not("noasm").ToConstraint())
 

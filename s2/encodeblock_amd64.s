@@ -3,7 +3,7 @@
 // +build !appengine
 // +build !noasm
 // +build gc
-// +build !GOAMD64_v3
+// +build !goamd64_v3
 // +build !noasm
 
 #include "textflag.h"
