@@ -356,8 +356,8 @@ func (t token) offset() uint32 { return uint32(t) & offsetMask }
 
 func (t token) length() uint8 { return uint8(t >> lengthShift) }
 
-// The code is never more than 8 bits, but is returned as uint32 for convenience.
-func lengthCode(len uint8) uint32 { return uint32(lengthCodes[len]) }
+// Convert length to code.
+func lengthCode(len uint8) uint8 { return lengthCodes[len] }
 
 // Returns the offset code corresponding to a specific offset
 func offsetCode(off uint32) uint32 {
