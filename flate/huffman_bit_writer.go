@@ -58,7 +58,7 @@ var lengthBase = [32]uint8{
 const offsetExtraBitsMinCode = 4
 
 // offset code word extra bits.
-var offsetExtraBits = [32]int8{
+var offsetExtraBits = [32]uint8{
 	0, 0, 0, 0, 1, 1, 2, 2, 3, 3,
 	4, 4, 5, 5, 6, 6, 7, 7, 8, 8,
 	9, 9, 10, 10, 11, 11, 12, 12, 13, 13,
@@ -66,29 +66,17 @@ var offsetExtraBits = [32]int8{
 	14, 14,
 }
 
-var offsetCombined = [32]uint32{}
+var offsetBase = [32]uint32{
+	/* normal deflate */
+	0x000000, 0x000001, 0x000002, 0x000003, 0x000004,
+	0x000006, 0x000008, 0x00000c, 0x000010, 0x000018,
+	0x000020, 0x000030, 0x000040, 0x000060, 0x000080,
+	0x0000c0, 0x000100, 0x000180, 0x000200, 0x000300,
+	0x000400, 0x000600, 0x000800, 0x000c00, 0x001000,
+	0x001800, 0x002000, 0x003000, 0x004000, 0x006000,
 
-func init() {
-	var offsetBase = [32]uint32{
-		/* normal deflate */
-		0x000000, 0x000001, 0x000002, 0x000003, 0x000004,
-		0x000006, 0x000008, 0x00000c, 0x000010, 0x000018,
-		0x000020, 0x000030, 0x000040, 0x000060, 0x000080,
-		0x0000c0, 0x000100, 0x000180, 0x000200, 0x000300,
-		0x000400, 0x000600, 0x000800, 0x000c00, 0x001000,
-		0x001800, 0x002000, 0x003000, 0x004000, 0x006000,
-
-		/* extended window */
-		0x008000, 0x00c000,
-	}
-
-	for i := range offsetCombined[:] {
-		// Don't use extended window values...
-		if offsetExtraBits[i] == 0 || offsetBase[i] > 0x006000 {
-			continue
-		}
-		offsetCombined[i] = uint32(offsetExtraBits[i]) | (offsetBase[i] << 8)
-	}
+	/* extended window */
+	0x008000, 0x00c000,
 }
 
 // The odd order in which the codegen code sizes are written.
@@ -939,10 +927,9 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 		}
 
 		if offsetCode >= offsetExtraBitsMinCode {
-			offsetComb := offsetCombined[offsetCode]
 			//w.writeBits(extraOffset, extraOffsetBits)
-			bits |= uint64((offset&matchOffsetOnlyMask)-(offsetComb>>8)) << (nbits & 63)
-			nbits += uint8(offsetComb)
+			bits |= uint64((offset&matchOffsetOnlyMask)-(offsetBase[offsetCode])) << (nbits & 63)
+			nbits += offsetExtraBits[offsetCode]
 			if nbits >= 48 {
 				binary.LittleEndian.PutUint64(w.bytes[nbytes:], bits)
 				//*(*uint64)(unsafe.Pointer(&w.bytes[nbytes])) = bits
