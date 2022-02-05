@@ -17,7 +17,8 @@ const (
 
 // hcode is a huffman code with a bit code and bit length.
 type hcode struct {
-	code, len uint16
+	code uint16
+	len  uint8
 }
 
 type huffmanEncoder struct {
@@ -56,7 +57,7 @@ type levelInfo struct {
 }
 
 // set sets the code and length of an hcode.
-func (h *hcode) set(code uint16, length uint16) {
+func (h *hcode) set(code uint16, length uint8) {
 	h.len = length
 	h.code = code
 }
@@ -80,7 +81,7 @@ func generateFixedLiteralEncoding() *huffmanEncoder {
 	var ch uint16
 	for ch = 0; ch < literalCount; ch++ {
 		var bits uint16
-		var size uint16
+		var size uint8
 		switch {
 		case ch < 144:
 			// size 8, 000110000  .. 10111111
@@ -99,7 +100,7 @@ func generateFixedLiteralEncoding() *huffmanEncoder {
 			bits = ch + 192 - 280
 			size = 8
 		}
-		codes[ch] = hcode{code: reverseBits(bits, byte(size)), len: size}
+		codes[ch] = hcode{code: reverseBits(bits, size), len: size}
 	}
 	return h
 }
@@ -296,7 +297,7 @@ func (h *huffmanEncoder) assignEncodingAndSize(bitCount []int32, list []literalN
 
 		sortByLiteral(chunk)
 		for _, node := range chunk {
-			h.codes[node.literal] = hcode{code: reverseBits(code, uint8(n)), len: uint16(n)}
+			h.codes[node.literal] = hcode{code: reverseBits(code, uint8(n)), len: uint8(n)}
 			code++
 		}
 		list = list[0 : len(list)-int(bits)]

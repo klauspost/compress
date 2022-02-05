@@ -13,11 +13,10 @@ import (
 )
 
 const (
-	// From top
-	// 2 bits:   type   0 = literal  1=EOF  2=Match   3=Unused
-	// 8 bits:   xlength = length - MIN_MATCH_LENGTH
-	// 5 bits    offsetcode
-	// 16 bits   xoffset = offset - MIN_OFFSET_SIZE, or literal
+	// bits 0-16  	xoffset = offset - MIN_OFFSET_SIZE, or literal - 16 bits
+	// bits 16-22	offsetcode - 5 bits
+	// bits 22-30   xlength = length - MIN_MATCH_LENGTH - 8 bits
+	// bits 30-32   type   0 = literal  1=EOF  2=Match   3=Unused - 2 bits
 	lengthShift         = 22
 	offsetMask          = 1<<lengthShift - 1
 	typeMask            = 3 << 30
@@ -356,8 +355,8 @@ func (t token) offset() uint32 { return uint32(t) & offsetMask }
 
 func (t token) length() uint8 { return uint8(t >> lengthShift) }
 
-// The code is never more than 8 bits, but is returned as uint32 for convenience.
-func lengthCode(len uint8) uint32 { return uint32(lengthCodes[len]) }
+// Convert length to code.
+func lengthCode(len uint8) uint8 { return lengthCodes[len] }
 
 // Returns the offset code corresponding to a specific offset
 func offsetCode(off uint32) uint32 {
