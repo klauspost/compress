@@ -1008,6 +1008,26 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 	// https://stackoverflow.com/a/25454430
 	const guessHeaderSizeBits = 70 * 8
 	histogram(input, w.literalFreq[:numLiterals], fill)
+	ssize, storable := w.storedSize(input)
+	if storable && len(input) > 1024 {
+		// Quick check for incompressible content.
+		abs := float64(0)
+		avg := float64(len(input)) / 256
+		max := float64(len(input) * 2)
+		for _, v := range w.literalFreq[:256] {
+			diff := float64(v) - avg
+			abs += diff * diff
+			if abs > max {
+				break
+			}
+		}
+		if abs < max {
+			// No chance we can compress this...
+			w.writeStoredHeader(len(input), eof)
+			w.writeBytes(input)
+			return
+		}
+	}
 	w.literalFreq[endBlockMarker] = 1
 	w.tmpLitEncoding.generate(w.literalFreq[:numLiterals], 15)
 	if fill {
@@ -1025,7 +1045,6 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 	estBits += estBits >> w.logNewTablePenalty
 
 	// Store bytes, if we don't get a reasonable improvement.
-	ssize, storable := w.storedSize(input)
 	if storable && ssize <= estBits {
 		w.writeStoredHeader(len(input), eof)
 		w.writeBytes(input)
