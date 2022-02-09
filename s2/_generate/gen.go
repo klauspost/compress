@@ -1,8 +1,13 @@
 package main
 
 //go:generate go run gen.go -out ../encodeblock_amd64.s -stubs ../encodeblock_amd64.go -pkg=s2
+//go:generate gofmt -w ../encodeblock_amd64.go
+
+//go:generate go run gen.go -x64v3 -out ../encodeblock_v3_amd64.s -stubs ../encodeblock_v3_amd64.go -pkg=s2
+//go:generate gofmt -w ../encodeblock_v3_amd64.go
 
 import (
+	"flag"
 	"fmt"
 	"math"
 	"runtime"
@@ -26,12 +31,23 @@ const (
 	limit8B = 512 - 1
 )
 
+var x64v3 = flag.Bool("x64v3", false, "Generate for amd64-v3")
+
 func main() {
+	flag.Parse()
 	Constraint(buildtags.Not("appengine").ToConstraint())
 	Constraint(buildtags.Not("noasm").ToConstraint())
 	Constraint(buildtags.Term("gc").ToConstraint())
+	if *x64v3 {
+		Constraint(buildtags.Term("goamd64_v3").ToConstraint())
+	} else {
+		Constraint(buildtags.Not("goamd64_v3").ToConstraint())
+	}
+	Constraint(buildtags.Not("noasm").ToConstraint())
 
 	o := options{
+		bmi1:         *x64v3,
+		bmi2:         *x64v3, // Currently unused....
 		snappy:       false,
 		outputMargin: 9,
 	}
@@ -114,7 +130,8 @@ func assert(fn func(ok LabelRef)) {
 
 type options struct {
 	snappy       bool
-	vmbi2        bool
+	bmi1         bool
+	bmi2         bool
 	maxLen       int
 	outputMargin int // Should be at least 5.
 	maxSkip      int
@@ -1550,8 +1567,12 @@ func (h hashGen) hash(val reg.GPVirtual) {
 	if h.bytes < 8 {
 		SHLQ(U8(64-8*h.bytes), val)
 	}
+	//  329 AMD64               :IMUL r64, r64                         L:   0.86ns=  3.0c  T:   0.29ns=  1.00c
+	// 2020 BMI2                :MULX r64, r64, r64                    L:   1.14ns=  4.0c  T:   0.29ns=  1.00c
 	IMULQ(h.mulreg, val)
 	// Move value to bottom
+	// 2032 BMI2                :SHRX r64, r64, r64                    L:   0.29ns=  1.0c  T:   0.12ns=  0.42c
+	//  236 AMD64               :SHR r64, imm8                         L:   0.29ns=  1.0c  T:   0.13ns=  0.46c
 	SHRQ(U8(64-h.tablebits), val)
 }
 
@@ -2482,7 +2503,7 @@ func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) re
 	XORL(matched, matched)
 
 	CMPL(len.As32(), U8(8))
-	JL(LabelRef("matchlen_single_" + name))
+	JL(LabelRef("matchlen_match4_" + name))
 
 	Label("matchlen_loopback_" + name)
 	MOVQ(Mem{Base: a, Index: matched, Scale: 1}, tmp)
@@ -2490,7 +2511,13 @@ func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) re
 	TESTQ(tmp, tmp)
 	JZ(LabelRef("matchlen_loop_" + name))
 	// Not all match.
-	BSFQ(tmp, tmp)
+	if o.bmi1 {
+		// 2016 BMI                 :TZCNT r64, r64                        L:   0.57ns=  2.0c  T:   0.29ns=  1.00c
+		//  315 AMD64               :BSF r64, r64                          L:   0.88ns=  3.1c  T:   0.86ns=  3.00c
+		TZCNTQ(tmp, tmp)
+	} else {
+		BSFQ(tmp, tmp)
+	}
 	SARQ(U8(3), tmp)
 	LEAL(Mem{Base: matched, Index: tmp, Scale: 1}, matched)
 	JMP(end)
@@ -2501,18 +2528,37 @@ func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) re
 	LEAL(Mem{Base: matched, Disp: 8}, matched)
 	CMPL(len.As32(), U8(8))
 	JGE(LabelRef("matchlen_loopback_" + name))
+	JZ(end)
 
 	// Less than 8 bytes left.
-	Label("matchlen_single_" + name)
-	TESTL(len.As32(), len.As32())
-	JZ(end)
-	Label("matchlen_single_loopback_" + name)
+	// Test 4 bytes...
+	Label("matchlen_match4_" + name)
+	CMPL(len.As32(), U8(4))
+	JL(LabelRef("matchlen_match2_" + name))
+	MOVL(Mem{Base: a, Index: matched, Scale: 1}, tmp.As32())
+	CMPL(Mem{Base: b, Index: matched, Scale: 1}, tmp.As32())
+	JNE(LabelRef("matchlen_match2_" + name))
+	SUBL(U8(4), len.As32())
+	LEAL(Mem{Base: matched, Disp: 4}, matched)
+
+	// Test 2 bytes...
+	Label("matchlen_match2_" + name)
+	CMPL(len.As32(), U8(2))
+	JL(LabelRef("matchlen_match1_" + name))
+	MOVW(Mem{Base: a, Index: matched, Scale: 1}, tmp.As16())
+	CMPW(Mem{Base: b, Index: matched, Scale: 1}, tmp.As16())
+	JNE(LabelRef("matchlen_match1_" + name))
+	SUBL(U8(2), len.As32())
+	LEAL(Mem{Base: matched, Disp: 2}, matched)
+
+	// Test 1 byte...
+	Label("matchlen_match1_" + name)
+	CMPL(len.As32(), U8(1))
+	JL(end)
 	MOVB(Mem{Base: a, Index: matched, Scale: 1}, tmp.As8())
 	CMPB(Mem{Base: b, Index: matched, Scale: 1}, tmp.As8())
 	JNE(end)
 	LEAL(Mem{Base: matched, Disp: 1}, matched)
-	DECL(len.As32())
-	JNZ(LabelRef("matchlen_single_loopback_" + name))
 	JMP(end)
 	return matched
 }
