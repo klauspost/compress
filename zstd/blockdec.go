@@ -444,11 +444,17 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 	if err != nil {
 		return err
 	}
+	if hist.decoders.nSeqs == 0 {
+		b.dst = append(b.dst, hist.decoders.literals...)
+		return nil
+	}
 	err = hist.decoders.decodeSync(hist.b)
 	if err != nil {
 		return err
 	}
-	return b.updateHistory(hist)
+	b.dst = hist.decoders.out
+	hist.recentOffsets = hist.decoders.prevOffset
+	return nil
 }
 
 func (b *blockDec) prepareSequences(in []byte, hist *history) (err error) {
