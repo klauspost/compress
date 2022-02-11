@@ -253,9 +253,17 @@ matchlen_loopback_repeat_extend_encodeBlockAsm:
 #ifdef GOAMD64_v3
 	TZCNTQ R11, R11
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R11, R11
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R11, R11
 
@@ -783,9 +791,17 @@ matchlen_loopback_match_nolit_encodeBlockAsm:
 #ifdef GOAMD64_v3
 	TZCNTQ R9, R9
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R9, R9
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R9, R9
 
@@ -1450,9 +1466,17 @@ matchlen_loopback_repeat_extend_encodeBlockAsm4MB:
 #ifdef GOAMD64_v3
 	TZCNTQ R11, R11
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R11, R11
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R11, R11
 
@@ -1939,9 +1963,17 @@ matchlen_loopback_match_nolit_encodeBlockAsm4MB:
 #ifdef GOAMD64_v3
 	TZCNTQ R9, R9
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R9, R9
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R9, R9
 
@@ -2565,9 +2597,17 @@ matchlen_loopback_repeat_extend_encodeBlockAsm12B:
 #ifdef GOAMD64_v3
 	TZCNTQ R11, R11
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R11, R11
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R11, R11
 
@@ -2939,9 +2979,17 @@ matchlen_loopback_match_nolit_encodeBlockAsm12B:
 #ifdef GOAMD64_v3
 	TZCNTQ R9, R9
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R9, R9
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R9, R9
 
@@ -3462,9 +3510,17 @@ matchlen_loopback_repeat_extend_encodeBlockAsm10B:
 #ifdef GOAMD64_v3
 	TZCNTQ R11, R11
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R11, R11
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R11, R11
 
@@ -3836,9 +3892,17 @@ matchlen_loopback_match_nolit_encodeBlockAsm10B:
 #ifdef GOAMD64_v3
 	TZCNTQ R9, R9
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R9, R9
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R9, R9
 
@@ -4359,9 +4423,17 @@ matchlen_loopback_repeat_extend_encodeBlockAsm8B:
 #ifdef GOAMD64_v3
 	TZCNTQ R11, R11
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R11, R11
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R11, R11
 
@@ -4723,9 +4795,17 @@ matchlen_loopback_match_nolit_encodeBlockAsm8B:
 #ifdef GOAMD64_v3
 	TZCNTQ R9, R9
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R9, R9
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R9, R9
 
@@ -5145,9 +5225,17 @@ matchlen_loopback_match_nolit_encodeBetterBlockAsm:
 #ifdef GOAMD64_v3
 	TZCNTQ R11, R11
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R11, R11
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R11, R11
 
@@ -6126,9 +6214,17 @@ matchlen_loopback_match_nolit_encodeBetterBlockAsm4MB:
 #ifdef GOAMD64_v3
 	TZCNTQ R11, R11
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R11, R11
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R11, R11
 
@@ -7042,9 +7138,17 @@ matchlen_loopback_match_nolit_encodeBetterBlockAsm12B:
 #ifdef GOAMD64_v3
 	TZCNTQ R11, R11
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R11, R11
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R11, R11
 
@@ -7812,9 +7916,17 @@ matchlen_loopback_match_nolit_encodeBetterBlockAsm10B:
 #ifdef GOAMD64_v3
 	TZCNTQ R11, R11
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R11, R11
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R11, R11
 
@@ -8582,9 +8694,17 @@ matchlen_loopback_match_nolit_encodeBetterBlockAsm8B:
 #ifdef GOAMD64_v3
 	TZCNTQ R11, R11
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R11, R11
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R11, R11
 
@@ -9464,9 +9584,17 @@ matchlen_loopback_repeat_extend_encodeSnappyBlockAsm:
 #ifdef GOAMD64_v3
 	TZCNTQ R10, R10
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R10, R10
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R10, R10
 
@@ -9790,9 +9918,17 @@ matchlen_loopback_match_nolit_encodeSnappyBlockAsm:
 #ifdef GOAMD64_v3
 	TZCNTQ R9, R9
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R9, R9
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R9, R9
 
@@ -10312,9 +10448,17 @@ matchlen_loopback_repeat_extend_encodeSnappyBlockAsm64K:
 #ifdef GOAMD64_v3
 	TZCNTQ R10, R10
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R10, R10
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R10, R10
 
@@ -10595,9 +10739,17 @@ matchlen_loopback_match_nolit_encodeSnappyBlockAsm64K:
 #ifdef GOAMD64_v3
 	TZCNTQ R9, R9
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R9, R9
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R9, R9
 
@@ -11074,9 +11226,17 @@ matchlen_loopback_repeat_extend_encodeSnappyBlockAsm12B:
 #ifdef GOAMD64_v3
 	TZCNTQ R10, R10
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R10, R10
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R10, R10
 
@@ -11357,9 +11517,17 @@ matchlen_loopback_match_nolit_encodeSnappyBlockAsm12B:
 #ifdef GOAMD64_v3
 	TZCNTQ R9, R9
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R9, R9
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R9, R9
 
@@ -11836,9 +12004,17 @@ matchlen_loopback_repeat_extend_encodeSnappyBlockAsm10B:
 #ifdef GOAMD64_v3
 	TZCNTQ R10, R10
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R10, R10
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R10, R10
 
@@ -12119,9 +12295,17 @@ matchlen_loopback_match_nolit_encodeSnappyBlockAsm10B:
 #ifdef GOAMD64_v3
 	TZCNTQ R9, R9
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R9, R9
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R9, R9
 
@@ -12598,9 +12782,17 @@ matchlen_loopback_repeat_extend_encodeSnappyBlockAsm8B:
 #ifdef GOAMD64_v3
 	TZCNTQ R10, R10
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R10, R10
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R10, R10
 
@@ -12879,9 +13071,17 @@ matchlen_loopback_match_nolit_encodeSnappyBlockAsm8B:
 #ifdef GOAMD64_v3
 	TZCNTQ R9, R9
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R9, R9
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R9, R9
 
@@ -13261,9 +13461,17 @@ matchlen_loopback_match_nolit_encodeSnappyBetterBlockAsm:
 #ifdef GOAMD64_v3
 	TZCNTQ R11, R11
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R11, R11
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R11, R11
 
@@ -13860,9 +14068,17 @@ matchlen_loopback_match_nolit_encodeSnappyBetterBlockAsm64K:
 #ifdef GOAMD64_v3
 	TZCNTQ R11, R11
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R11, R11
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R11, R11
 
@@ -14388,9 +14604,17 @@ matchlen_loopback_match_nolit_encodeSnappyBetterBlockAsm12B:
 #ifdef GOAMD64_v3
 	TZCNTQ R11, R11
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R11, R11
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R11, R11
 
@@ -14916,9 +15140,17 @@ matchlen_loopback_match_nolit_encodeSnappyBetterBlockAsm10B:
 #ifdef GOAMD64_v3
 	TZCNTQ R11, R11
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R11, R11
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R11, R11
 
@@ -15444,9 +15676,17 @@ matchlen_loopback_match_nolit_encodeSnappyBetterBlockAsm8B:
 #ifdef GOAMD64_v3
 	TZCNTQ R11, R11
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ R11, R11
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ R11, R11
 
@@ -16404,9 +16644,17 @@ matchlen_loopback_standalone:
 #ifdef GOAMD64_v3
 	TZCNTQ BX, BX
 
-#elifdef GOAMD64_v4
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef GOAMD64_v4
 	TZCNTQ BX, BX
 
+#define TZCNTQ_EMITTED 1
+#endif
+
+#ifdef TZCNTQ_EMITTED
+#undef TZCNTQ_EMITTED
 #else
 	BSFQ BX, BX
 

@@ -2507,8 +2507,14 @@ func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) re
 	// 2016 BMI                 :TZCNT r64, r64                        L:   0.57ns=  2.0c  T:   0.29ns=  1.00c
 	//  315 AMD64               :BSF r64, r64                          L:   0.88ns=  3.1c  T:   0.86ns=  3.00c
 	TZCNTQ(tmp, tmp)
-	Comment("#elifdef GOAMD64_v4")
+	Comment("#define TZCNTQ_EMITTED 1")
+	Comment("#endif\n")
+	Comment("#ifdef GOAMD64_v4")
 	TZCNTQ(tmp, tmp)
+	Comment("#define TZCNTQ_EMITTED 1")
+	Comment("#endif\n")
+	Comment("#ifdef TZCNTQ_EMITTED")
+	Comment("#undef TZCNTQ_EMITTED")
 	Comment("#else")
 	BSFQ(tmp, tmp)
 	Comment("#endif")
