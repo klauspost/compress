@@ -69,13 +69,15 @@ type sequenceDecs struct {
 	literals     []byte
 	out          []byte
 	seq          []seqVals
+	nSeqs        int
+	br           *bitReader
 	seqSize      int
 	windowSize   int
 	maxBits      uint8
 }
 
 // initialize all 3 decoders from the stream input.
-func (s *sequenceDecs) initialize(br *bitReader, hist *history, literals, out []byte) error {
+func (s *sequenceDecs) initialize(br *bitReader, hist *history, out []byte) error {
 	if err := s.litLengths.init(br); err != nil {
 		return errors.New("litLengths:" + err.Error())
 	}
@@ -85,7 +87,7 @@ func (s *sequenceDecs) initialize(br *bitReader, hist *history, literals, out []
 	if err := s.matchLengths.init(br); err != nil {
 		return errors.New("matchLengths:" + err.Error())
 	}
-	s.literals = literals
+	s.br = br
 	s.prevOffset = hist.recentOffsets
 	s.maxBits = s.litLengths.fse.maxBits + s.offsets.fse.maxBits + s.matchLengths.fse.maxBits
 	s.windowSize = hist.windowSize
@@ -98,7 +100,10 @@ func (s *sequenceDecs) initialize(br *bitReader, hist *history, literals, out []
 }
 
 // decode sequences from the stream with the provided history.
-func (s *sequenceDecs) decode(seqs int, br *bitReader) error {
+func (s *sequenceDecs) decode() error {
+	seqs := s.nSeqs
+	br := s.br
+
 	// Grab full sizes tables, to avoid bounds checks.
 	llTable, mlTable, ofTable := s.litLengths.fse.dt[:maxTablesize], s.matchLengths.fse.dt[:maxTablesize], s.offsets.fse.dt[:maxTablesize]
 	llState, mlState, ofState := s.litLengths.state.state, s.matchLengths.state.state, s.offsets.state.state
@@ -231,10 +236,18 @@ func (s *sequenceDecs) decode(seqs int, br *bitReader) error {
 	if s.seqSize > maxBlockSize {
 		return fmt.Errorf("output (%d) bigger than max block size", s.seqSize)
 	}
+	if !br.finished() {
+		return fmt.Errorf("%d extra bits on block, should be 0", br.remain())
+	}
+	err := br.close()
+	if err != nil {
+		printf("Closing sequences: %v, %+v\n", err, *br)
+	}
 	return nil
 }
 
 // execute will execute the decoded sequence with the provided history.
+// The sequence must be evaluated before being sent.
 func (s *sequenceDecs) execute(hist []byte) error {
 	if len(s.out)+s.seqSize > cap(s.out) {
 		addBytes := s.seqSize + len(s.out)
@@ -316,7 +329,9 @@ func (s *sequenceDecs) execute(hist []byte) error {
 }
 
 // decode sequences from the stream with the provided history.
-func (s *sequenceDecs) decodeSync(seqs int, br *bitReader, hist []byte) error {
+func (s *sequenceDecs) decodeSync(hist []byte) error {
+	br := s.br
+	seqs := s.nSeqs
 	startSize := len(s.out)
 	// Grab full sizes tables, to avoid bounds checks.
 	llTable, mlTable, ofTable := s.litLengths.fse.dt[:maxTablesize], s.matchLengths.fse.dt[:maxTablesize], s.offsets.fse.dt[:maxTablesize]

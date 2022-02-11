@@ -489,10 +489,10 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 			if block.async.newHist != nil {
 				hist.huffTree = block.async.newHist.huffTree
 			}
-			literals, remain, err := block.decodeLiterals(block.data, &hist)
+			remain, err := block.decodeLiterals(block.data, &hist)
 			block.err = err
 			if err == nil {
-				block.async.literals = literals
+				block.async.literals = hist.decoders.literals
 				block.async.seqData = remain
 			}
 			seqDecode <- block
@@ -513,7 +513,7 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 				hist.recentOffsets = block.async.newHist.recentOffsets
 			}
 			hist.decoders.literals = block.async.literals
-			block.err = block.decodeSequences(block.async.seqData, block.async.literals, &hist)
+			block.err = block.decodeSequences(&hist)
 			seqExecute <- block
 		}
 		close(seqExecute)

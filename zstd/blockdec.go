@@ -237,10 +237,10 @@ func (b *blockDec) decodeBuf(hist *history) error {
 	}
 }
 
-func (b *blockDec) decodeLiterals(in []byte, hist *history) (literals, remain []byte, err error) {
+func (b *blockDec) decodeLiterals(in []byte, hist *history) (remain []byte, err error) {
 	// There must be at least one byte for Literals_Block_Type and one for Sequences_Section_Header
 	if len(in) < 2 {
-		return nil, in, ErrBlockTooSmall
+		return in, ErrBlockTooSmall
 	}
 
 	litType := literalsBlockType(in[0] & 3)
@@ -248,6 +248,7 @@ func (b *blockDec) decodeLiterals(in []byte, hist *history) (literals, remain []
 	var litCompSize int
 	sizeFormat := (in[0] >> 2) & 3
 	var fourStreams bool
+	var literals []byte
 	switch litType {
 	case literalsBlockRaw, literalsBlockRLE:
 		switch sizeFormat {
@@ -263,7 +264,7 @@ func (b *blockDec) decodeLiterals(in []byte, hist *history) (literals, remain []
 			//  Regenerated_Size uses 20 bits (0-1048575). Literals_Section_Header uses 3 bytes.
 			if len(in) < 3 {
 				println("too small: litType:", litType, " sizeFormat", sizeFormat, len(in))
-				return nil, in, ErrBlockTooSmall
+				return in, ErrBlockTooSmall
 			}
 			litRegenSize = int(in[0]>>4) + (int(in[1]) << 4) + (int(in[2]) << 12)
 			in = in[3:]
@@ -274,7 +275,7 @@ func (b *blockDec) decodeLiterals(in []byte, hist *history) (literals, remain []
 			// Both Regenerated_Size and Compressed_Size use 10 bits (0-1023).
 			if len(in) < 3 {
 				println("too small: litType:", litType, " sizeFormat", sizeFormat, len(in))
-				return nil, in, ErrBlockTooSmall
+				return in, ErrBlockTooSmall
 			}
 			n := uint64(in[0]>>4) + (uint64(in[1]) << 4) + (uint64(in[2]) << 12)
 			litRegenSize = int(n & 1023)
@@ -285,7 +286,7 @@ func (b *blockDec) decodeLiterals(in []byte, hist *history) (literals, remain []
 			fourStreams = true
 			if len(in) < 4 {
 				println("too small: litType:", litType, " sizeFormat", sizeFormat, len(in))
-				return nil, in, ErrBlockTooSmall
+				return in, ErrBlockTooSmall
 			}
 			n := uint64(in[0]>>4) + (uint64(in[1]) << 4) + (uint64(in[2]) << 12) + (uint64(in[3]) << 20)
 			litRegenSize = int(n & 16383)
@@ -295,7 +296,7 @@ func (b *blockDec) decodeLiterals(in []byte, hist *history) (literals, remain []
 			fourStreams = true
 			if len(in) < 5 {
 				println("too small: litType:", litType, " sizeFormat", sizeFormat, len(in))
-				return nil, in, ErrBlockTooSmall
+				return in, ErrBlockTooSmall
 			}
 			n := uint64(in[0]>>4) + (uint64(in[1]) << 4) + (uint64(in[2]) << 12) + (uint64(in[3]) << 20) + (uint64(in[4]) << 28)
 			litRegenSize = int(n & 262143)
@@ -311,7 +312,7 @@ func (b *blockDec) decodeLiterals(in []byte, hist *history) (literals, remain []
 	case literalsBlockRaw:
 		if len(in) < litRegenSize {
 			println("too small: litType:", litType, " sizeFormat", sizeFormat, "remain:", len(in), "want:", litRegenSize)
-			return nil, in, ErrBlockTooSmall
+			return in, ErrBlockTooSmall
 		}
 		literals = in[:litRegenSize]
 		in = in[litRegenSize:]
@@ -319,7 +320,7 @@ func (b *blockDec) decodeLiterals(in []byte, hist *history) (literals, remain []
 	case literalsBlockRLE:
 		if len(in) < 1 {
 			println("too small: litType:", litType, " sizeFormat", sizeFormat, "remain:", len(in), "want:", 1)
-			return nil, in, ErrBlockTooSmall
+			return in, ErrBlockTooSmall
 		}
 		if cap(b.literalBuf) < litRegenSize {
 			if b.lowMem {
@@ -345,7 +346,7 @@ func (b *blockDec) decodeLiterals(in []byte, hist *history) (literals, remain []
 	case literalsBlockTreeless:
 		if len(in) < litCompSize {
 			println("too small: litType:", litType, " sizeFormat", sizeFormat, "remain:", len(in), "want:", litCompSize)
-			return nil, in, ErrBlockTooSmall
+			return in, ErrBlockTooSmall
 		}
 		// Store compressed literals, so we defer decoding until we get history.
 		literals = in[:litCompSize]
@@ -355,7 +356,7 @@ func (b *blockDec) decodeLiterals(in []byte, hist *history) (literals, remain []
 		}
 		huff := hist.huffTree
 		if huff == nil {
-			return nil, in, errors.New("literal block was treeless, but no history was defined")
+			return in, errors.New("literal block was treeless, but no history was defined")
 		}
 		// Ensure we have space to store it.
 		if cap(b.literalBuf) < litRegenSize {
@@ -375,16 +376,16 @@ func (b *blockDec) decodeLiterals(in []byte, hist *history) (literals, remain []
 		// Make sure we don't leak our literals buffer
 		if err != nil {
 			println("decompressing literals:", err)
-			return nil, in, err
+			return in, err
 		}
 		if len(literals) != litRegenSize {
-			return nil, in, fmt.Errorf("literal output size mismatch want %d, got %d", litRegenSize, len(literals))
+			return in, fmt.Errorf("literal output size mismatch want %d, got %d", litRegenSize, len(literals))
 		}
 
 	case literalsBlockCompressed:
 		if len(in) < litCompSize {
 			println("too small: litType:", litType, " sizeFormat", sizeFormat, "remain:", len(in), "want:", litCompSize)
-			return nil, in, ErrBlockTooSmall
+			return in, ErrBlockTooSmall
 		}
 		literals = in[:litCompSize]
 		in = in[litCompSize:]
@@ -407,7 +408,7 @@ func (b *blockDec) decodeLiterals(in []byte, hist *history) (literals, remain []
 		huff, literals, err = huff0.ReadTable(literals, huff)
 		if err != nil {
 			println("reading huffman table:", err)
-			return nil, in, err
+			return in, err
 		}
 		hist.huffTree = huff
 		// Use our out buffer.
@@ -418,36 +419,46 @@ func (b *blockDec) decodeLiterals(in []byte, hist *history) (literals, remain []
 		}
 		if err != nil {
 			println("decoding compressed literals:", err)
-			return nil, in, err
+			return in, err
 		}
 		// Make sure we don't leak our literals buffer
 		if len(literals) != litRegenSize {
-			return nil, in, fmt.Errorf("literal output size mismatch want %d, got %d", litRegenSize, len(literals))
+			return in, fmt.Errorf("literal output size mismatch want %d, got %d", litRegenSize, len(literals))
 		}
 		if debugDecoder {
 			printf("Decompressed %d literals into %d bytes\n", litCompSize, litRegenSize)
 		}
 	}
-	return literals, in, nil
+	hist.decoders.literals = literals
+	return in, nil
 }
 
 // decodeCompressed will start decompressing a block.
 func (b *blockDec) decodeCompressed(hist *history) error {
 	in := b.data
-	literals, in, err := b.decodeLiterals(in, hist)
+	in, err := b.decodeLiterals(in, hist)
 	if err != nil {
 		return err
 	}
+	err = b.prepareSequences(in, hist)
+	if err != nil {
+		return err
+	}
+	err = hist.decoders.decodeSync(hist.b)
+	if err != nil {
+		return err
+	}
+	return b.updateHistory(hist)
 }
 
-func (b *blockDec) decodeSequences(in, literals []byte, hist *history) error {
+func (b *blockDec) prepareSequences(in []byte, hist *history) (err error) {
 	// Decode Sequences
 	// https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#sequences-section
 	if len(in) < 1 {
 		return ErrBlockTooSmall
 	}
+	var nSeqs int
 	seqHeader := in[0]
-	nSeqs := 0
 	switch {
 	case seqHeader == 0:
 		in = in[1:]
@@ -469,6 +480,7 @@ func (b *blockDec) decodeSequences(in, literals []byte, hist *history) error {
 	}
 
 	var seqs = &hist.decoders
+	seqs.nSeqs = nSeqs
 	if nSeqs > 0 {
 		if len(in) < 1 {
 			return ErrBlockTooSmall
@@ -541,38 +553,27 @@ func (b *blockDec) decodeSequences(in, literals []byte, hist *history) error {
 		}
 		in = br.unread()
 	}
-
 	if debugDecoder {
-		println("Final literals:", len(literals), "hash:", xxhash.Sum64(literals), "and", nSeqs, "sequences.")
+		println("Literals:", len(seqs.literals), "hash:", xxhash.Sum64(seqs.literals), "and", seqs.nSeqs, "sequences.")
 	}
 
 	if nSeqs == 0 {
-		// Decompressed content is defined entirely as Literals Section content.
 		return nil
 	}
-
 	br := &bitReader{}
 	if err := br.init(in); err != nil {
 		return err
 	}
 
-	if err := seqs.initialize(br, hist, literals, b.dst); err != nil {
+	if err := seqs.initialize(br, hist, b.dst); err != nil {
 		println("initializing sequences:", err)
 		return err
 	}
+	return nil
+}
 
-	err := seqs.decode(nSeqs, br)
-	if err != nil {
-		return err
-	}
-	if !br.finished() {
-		return fmt.Errorf("%d extra bits on block, should be 0", br.remain())
-	}
-	err = br.close()
-	if err != nil {
-		printf("Closing sequences: %v, %+v\n", err, *br)
-	}
-	return err
+func (b *blockDec) decodeSequences(hist *history) error {
+	return hist.decoders.decode()
 }
 
 func (b *blockDec) executeSequences(hist *history) error {
@@ -584,19 +585,22 @@ func (b *blockDec) executeSequences(hist *history) error {
 			hist.dict.content = nil
 		}
 	}
-	err = seqs.execute(hist.b)
+	err := hist.decoders.execute(hist.b)
 	if err != nil {
 		return err
 	}
+	return b.updateHistory(hist)
+}
 
+func (b *blockDec) updateHistory(hist *history) error {
 	if len(b.data) > maxCompressedBlockSize {
 		return fmt.Errorf("compressed block size too large (%d)", len(b.data))
 	}
 	// Set output and release references.
-	b.dst = seqs.out
-	seqs.out, seqs.literals = nil, nil
+	b.dst = hist.decoders.out
+	hist.decoders.out, hist.decoders.literals = nil, nil
 
-	hist.recentOffsets = seqs.prevOffset
+	hist.recentOffsets = hist.decoders.prevOffset
 	if b.Last {
 		// if last block we don't care about history.
 		println("Last block, no history returned")
@@ -605,8 +609,7 @@ func (b *blockDec) executeSequences(hist *history) error {
 	}
 	hist.append(b.dst)
 	if debugDecoder {
-		println("Finished block with literals:", len(literals), "and", nSeqs, "sequences.")
+		println("Finished block with literals:", len(hist.decoders.literals), "and", len(hist.decoders.seq), "sequences.")
 	}
-
 	return nil
 }
