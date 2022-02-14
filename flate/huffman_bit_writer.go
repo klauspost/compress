@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 )
 
 const (
@@ -23,6 +24,10 @@ const (
 	// The number of codegen codes.
 	codegenCodeCount = 19
 	badCode          = 255
+
+	// maxPredefinedTokens is the maximum number of tokens
+	// where we check if fixed size is smaller.
+	maxPredefinedTokens = 250
 
 	// bufferFlushSize indicates the buffer size
 	// after which bytes are flushed to the writer.
@@ -577,7 +582,10 @@ func (w *huffmanBitWriter) writeBlock(tokens *tokens, eof bool, input []byte) {
 	// Fixed Huffman baseline.
 	var literalEncoding = fixedLiteralEncoding
 	var offsetEncoding = fixedOffsetEncoding
-	var size = w.fixedSize(extraBits)
+	var size = math.MaxInt32
+	if tokens.n < maxPredefinedTokens {
+		size = w.fixedSize(extraBits)
+	}
 
 	// Dynamic Huffman?
 	var numCodegens int
@@ -678,19 +686,21 @@ func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []b
 			size = reuseSize
 		}
 
-		if preSize := w.fixedSize(extraBits) + 7; usePrefs && preSize < size {
-			// Check if we get a reasonable size decrease.
-			if storable && ssize <= size {
-				w.writeStoredHeader(len(input), eof)
-				w.writeBytes(input)
+		if tokens.n < maxPredefinedTokens {
+			if preSize := w.fixedSize(extraBits) + 7; usePrefs && preSize < size {
+				// Check if we get a reasonable size decrease.
+				if storable && ssize <= size {
+					w.writeStoredHeader(len(input), eof)
+					w.writeBytes(input)
+					return
+				}
+				w.writeFixedHeader(eof)
+				if !sync {
+					tokens.AddEOB()
+				}
+				w.writeTokens(tokens.Slice(), fixedLiteralEncoding.codes, fixedOffsetEncoding.codes)
 				return
 			}
-			w.writeFixedHeader(eof)
-			if !sync {
-				tokens.AddEOB()
-			}
-			w.writeTokens(tokens.Slice(), fixedLiteralEncoding.codes, fixedOffsetEncoding.codes)
-			return
 		}
 		// Check if we get a reasonable size decrease.
 		if storable && ssize <= size {
@@ -723,19 +733,21 @@ func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []b
 		size, numCodegens = w.dynamicSize(w.literalEncoding, w.offsetEncoding, extraBits)
 
 		// Store predefined, if we don't get a reasonable improvement.
-		if preSize := w.fixedSize(extraBits); usePrefs && preSize <= size {
-			// Store bytes, if we don't get an improvement.
-			if storable && ssize <= preSize {
-				w.writeStoredHeader(len(input), eof)
-				w.writeBytes(input)
+		if tokens.n < maxPredefinedTokens {
+			if preSize := w.fixedSize(extraBits); usePrefs && preSize <= size {
+				// Store bytes, if we don't get an improvement.
+				if storable && ssize <= preSize {
+					w.writeStoredHeader(len(input), eof)
+					w.writeBytes(input)
+					return
+				}
+				w.writeFixedHeader(eof)
+				if !sync {
+					tokens.AddEOB()
+				}
+				w.writeTokens(tokens.Slice(), fixedLiteralEncoding.codes, fixedOffsetEncoding.codes)
 				return
 			}
-			w.writeFixedHeader(eof)
-			if !sync {
-				tokens.AddEOB()
-			}
-			w.writeTokens(tokens.Slice(), fixedLiteralEncoding.codes, fixedOffsetEncoding.codes)
-			return
 		}
 
 		if storable && ssize <= size {
