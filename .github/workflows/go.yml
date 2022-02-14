@@ -61,6 +61,9 @@ jobs:
     - name: Build s2c
       run: go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d&&./s2c -verify s2c &&./s2d s2c.s2&&rm ./s2c&&rm s2d&&rm s2c.s2
 
+    - name: install garble
+      run: go install mvdan.cc/garble@latest
+
     - name: goreleaser deprecation
       run: curl -sfL https://git.io/goreleaser | VERSION=v1.5.0 sh -s -- check
       

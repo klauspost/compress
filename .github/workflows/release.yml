@@ -20,6 +20,9 @@ jobs:
         with:
           go-version: 1.17.x
       -
+        name: install garble
+        run: go install mvdan.cc/garble@latest
+      -
         name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v2
         with:
