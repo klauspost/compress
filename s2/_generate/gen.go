@@ -2,9 +2,7 @@ package main
 
 //go:generate go run gen.go -out ../encodeblock_amd64.s -stubs ../encodeblock_amd64.go -pkg=s2
 //go:generate gofmt -w ../encodeblock_amd64.go
-
-//go:generate go run gen.go -x64v3 -out ../encodeblock_v3_amd64.s -stubs ../encodeblock_v3_amd64.go -pkg=s2
-//go:generate gofmt -w ../encodeblock_v3_amd64.go
+//go:generate go run cleanup.go ../encodeblock_amd64.s
 
 import (
 	"flag"
@@ -31,23 +29,16 @@ const (
 	limit8B = 512 - 1
 )
 
-var x64v3 = flag.Bool("x64v3", false, "Generate for amd64-v3")
-
 func main() {
 	flag.Parse()
 	Constraint(buildtags.Not("appengine").ToConstraint())
 	Constraint(buildtags.Not("noasm").ToConstraint())
 	Constraint(buildtags.Term("gc").ToConstraint())
-	if *x64v3 {
-		Constraint(buildtags.Term("goamd64_v3").ToConstraint())
-	} else {
-		Constraint(buildtags.Not("goamd64_v3").ToConstraint())
-	}
 	Constraint(buildtags.Not("noasm").ToConstraint())
 
 	o := options{
-		bmi1:         *x64v3,
-		bmi2:         *x64v3, // Currently unused....
+		bmi1:         false,
+		bmi2:         false,
 		snappy:       false,
 		outputMargin: 9,
 	}
@@ -2511,13 +2502,23 @@ func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) re
 	TESTQ(tmp, tmp)
 	JZ(LabelRef("matchlen_loop_" + name))
 	// Not all match.
-	if o.bmi1 {
-		// 2016 BMI                 :TZCNT r64, r64                        L:   0.57ns=  2.0c  T:   0.29ns=  1.00c
-		//  315 AMD64               :BSF r64, r64                          L:   0.88ns=  3.1c  T:   0.86ns=  3.00c
-		TZCNTQ(tmp, tmp)
-	} else {
-		BSFQ(tmp, tmp)
-	}
+
+	Comment("#ifdef GOAMD64_v3")
+	// 2016 BMI                 :TZCNT r64, r64                        L:   0.57ns=  2.0c  T:   0.29ns=  1.00c
+	//  315 AMD64               :BSF r64, r64                          L:   0.88ns=  3.1c  T:   0.86ns=  3.00c
+	TZCNTQ(tmp, tmp)
+	Comment("#define TZCNTQ_EMITTED 1")
+	Comment("#endif\n")
+	Comment("#ifdef GOAMD64_v4")
+	TZCNTQ(tmp, tmp)
+	Comment("#define TZCNTQ_EMITTED 1")
+	Comment("#endif\n")
+	Comment("#ifdef TZCNTQ_EMITTED")
+	Comment("#undef TZCNTQ_EMITTED")
+	Comment("#else")
+	BSFQ(tmp, tmp)
+	Comment("#endif")
+
 	SARQ(U8(3), tmp)
 	LEAL(Mem{Base: matched, Index: tmp, Scale: 1}, matched)
 	JMP(end)
