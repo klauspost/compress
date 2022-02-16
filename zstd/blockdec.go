@@ -78,6 +78,9 @@ type blockDec struct {
 
 	err error
 
+	// Check against this crc
+	checkCRC []byte
+
 	// Frame to use for singlethreaded decoding.
 	// Should not be used by the decoder itself since parent may be another frame.
 	localFrame *frameDec
@@ -87,6 +90,7 @@ type blockDec struct {
 		literals []byte
 		seqData  []byte
 		sequence []seqVals
+		seqSize  int // Size of uncompressed sequences
 	}
 
 	// Block is RLE, this is the size.
@@ -515,6 +519,9 @@ func (b *blockDec) prepareSequences(in []byte, hist *history) (err error) {
 			}
 			switch mode {
 			case compModePredefined:
+				if seq.fse != nil && !seq.fse.preDefined {
+					fseDecoderPool.Put(seq.fse)
+				}
 				seq.fse = &fsePredef[i]
 			case compModeRLE:
 				if br.remain() < 1 {
@@ -522,34 +529,36 @@ func (b *blockDec) prepareSequences(in []byte, hist *history) (err error) {
 				}
 				v := br.Uint8()
 				br.advance(1)
-				dec := fseDecoderPool.Get().(*fseDecoder)
+				if seq.fse == nil || seq.fse.preDefined {
+					seq.fse = fseDecoderPool.Get().(*fseDecoder)
+				}
 				symb, err := decSymbolValue(v, symbolTableX[i])
 				if err != nil {
 					printf("RLE Transform table (%v) error: %v", tableIndex(i), err)
 					return err
 				}
-				dec.setRLE(symb)
-				seq.fse = dec
+				seq.fse.setRLE(symb)
 				if debugDecoder {
 					printf("RLE set to %+v, code: %v", symb, v)
 				}
 			case compModeFSE:
 				println("Reading table for", tableIndex(i))
-				dec := fseDecoderPool.Get().(*fseDecoder)
-				err := dec.readNCount(&br, uint16(maxTableSymbol[i]))
+				if seq.fse == nil || seq.fse.preDefined {
+					seq.fse = fseDecoderPool.Get().(*fseDecoder)
+				}
+				err := seq.fse.readNCount(&br, uint16(maxTableSymbol[i]))
 				if err != nil {
 					println("Read table error:", err)
 					return err
 				}
-				err = dec.transform(symbolTableX[i])
+				err = seq.fse.transform(symbolTableX[i])
 				if err != nil {
 					println("Transform table error:", err)
 					return err
 				}
 				if debugDecoder {
-					println("Read table ok", "symbolLen:", dec.symbolLen)
+					println("Read table ok", "symbolLen:", seq.fse.symbolLen)
 				}
-				seq.fse = dec
 			case compModeRepeat:
 				seq.repeat = true
 			}
@@ -579,7 +588,13 @@ func (b *blockDec) prepareSequences(in []byte, hist *history) (err error) {
 }
 
 func (b *blockDec) decodeSequences(hist *history) error {
-	return hist.decoders.decode()
+	if hist.decoders.nSeqs == 0 {
+		return nil
+	}
+	hist.decoders.prevOffset = hist.recentOffsets
+	err := hist.decoders.decode()
+	hist.recentOffsets = hist.decoders.prevOffset
+	return err
 }
 
 func (b *blockDec) executeSequences(hist *history) error {
@@ -591,7 +606,8 @@ func (b *blockDec) executeSequences(hist *history) error {
 			hist.dict.content = nil
 		}
 	}
-	err := hist.decoders.execute(hist.b)
+	hist.decoders.windowSize = hist.windowSize
+	err := hist.decoders.execute(hbytes)
 	if err != nil {
 		return err
 	}
@@ -604,18 +620,20 @@ func (b *blockDec) updateHistory(hist *history) error {
 	}
 	// Set output and release references.
 	b.dst = hist.decoders.out
-	hist.decoders.out, hist.decoders.literals = nil, nil
-
 	hist.recentOffsets = hist.decoders.prevOffset
+
 	if b.Last {
 		// if last block we don't care about history.
 		println("Last block, no history returned")
 		hist.b = hist.b[:0]
 		return nil
+	} else {
+		hist.append(b.dst)
 	}
-	hist.append(b.dst)
 	if debugDecoder {
-		println("Finished block with literals:", len(hist.decoders.literals), "and", len(hist.decoders.seq), "sequences.")
+		println("Finished block with ", len(hist.decoders.seq), "sequences.")
 	}
+	hist.decoders.out, hist.decoders.literals = nil, nil
+
 	return nil
 }

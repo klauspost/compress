@@ -10,23 +10,20 @@ import (
 
 // history contains the information transferred between blocks.
 type history struct {
-	// Needed first, if needed.
+	// Literal decompression
 	huffTree *huff0.Scratch
 
-	// Needed second, if needed...
-	decoders sequenceDecs
-
-	// Maybe needed...
+	// Sequence decompression
+	decoders      sequenceDecs
 	recentOffsets [3]int
 
-	// Needed last...
-	b   []byte
-	bCh chan []byte
+	// History buffer...
+	b []byte
 
-	windowSize int
-	maxSize    int
-	error      bool
-	dict       *dict
+	windowSize       int
+	allocFrameBuffer int // needed?
+	error            bool
+	dict             *dict
 }
 
 // reset will reset the history to initial state of a frame.

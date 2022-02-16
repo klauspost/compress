@@ -161,7 +161,7 @@ func (s *sequenceDecs) decode() error {
 
 					if temp == 0 {
 						// 0 is not valid; input is corrupted; force offset to 1
-						println("temp was 0")
+						println("WARNING: temp was 0")
 						temp = 1
 					}
 
@@ -249,6 +249,7 @@ func (s *sequenceDecs) decode() error {
 // execute will execute the decoded sequence with the provided history.
 // The sequence must be evaluated before being sent.
 func (s *sequenceDecs) execute(hist []byte) error {
+	// Ensure we have enough output size...
 	if len(s.out)+s.seqSize > cap(s.out) {
 		addBytes := s.seqSize + len(s.out)
 		s.out = append(s.out, make([]byte, addBytes)...)
@@ -271,7 +272,7 @@ func (s *sequenceDecs) execute(hist []byte) error {
 			// we may be in dictionary.
 			dictO := len(s.dict) - (mo - (len(s.out) + len(hist)))
 			if dictO < 0 || dictO >= len(s.dict) {
-				return fmt.Errorf("match offset (%d) bigger than current history (%d)", mo, len(s.out)+len(hist))
+				return fmt.Errorf("match offset (%d) bigger than current history+dict (%d)", mo, len(s.out)+len(hist)+len(s.dict))
 			}
 			end := dictO + ml
 			if end > len(s.dict) {
@@ -388,7 +389,7 @@ func (s *sequenceDecs) decodeSync(hist []byte) error {
 
 					if temp == 0 {
 						// 0 is not valid; input is corrupted; force offset to 1
-						println("temp was 0")
+						println("WARNING: temp was 0")
 						temp = 1
 					}
 

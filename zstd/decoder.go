@@ -5,10 +5,12 @@
 package zstd
 
 import (
+	"bytes"
 	"context"
-	"errors"
 	"io"
 	"sync"
+
+	"github.com/klauspost/compress/zstd/internal/xxhash"
 )
 
 // Decoder provides decoding of zstandard streams.
@@ -46,6 +48,9 @@ type decoderState struct {
 	// cancel remaining output.
 	cancel context.CancelFunc
 
+	// crc of current frame
+	crc *xxhash.Digest
+
 	flushed bool
 }
 
@@ -79,7 +84,7 @@ func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
 			return nil, err
 		}
 	}
-	d.current.output = make(chan decodeOutput, d.o.concurrent)
+	d.current.crc = xxhash.New()
 	d.current.flushed = true
 
 	if r == nil {
@@ -194,6 +199,7 @@ func (d *Decoder) Reset(r io.Reader) error {
 		return nil
 	}
 
+	d.current.output = make(chan decodeOutput, d.o.concurrent)
 	ctx, cancel := context.WithCancel(context.Background())
 	d.streamWg.Add(1)
 	go d.startStreamDecoder(ctx, r, d.current.output)
@@ -234,12 +240,9 @@ func (d *Decoder) drainOutput() {
 			}
 			d.decoders <- v.d
 		}
-		if v.err == errEndOfStream {
-			println("current flushed")
-			d.current.flushed = true
-			return
-		}
 	}
+	d.current.output = nil
+	d.current.flushed = true
 }
 
 // WriteTo writes data to w until there's no more data to write or when an error occurs.
@@ -380,6 +383,38 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 			return false
 		}
 	}
+	next := d.current.decodeOutput
+	if next.d != nil && next.d.async.newHist != nil {
+		d.current.crc.Reset()
+	}
+	if len(next.b) > 0 {
+		n, err := d.current.crc.Write(next.b)
+		if err == nil {
+			if n != len(next.b) {
+				d.current.err = io.ErrShortWrite
+			}
+		}
+	}
+	if next.err == nil && next.d != nil && len(next.d.checkCRC) != 0 {
+		got := d.current.crc.Sum64()
+		var tmp [4]byte
+		// Flip to match file order.
+		tmp[0] = byte(got >> 0)
+		tmp[1] = byte(got >> 8)
+		tmp[2] = byte(got >> 16)
+		tmp[3] = byte(got >> 24)
+
+		if !bytes.Equal(tmp[:], next.d.checkCRC) {
+			if debugDecoder {
+				println("CRC Check Failed:", tmp[:], "!=", next.d.checkCRC)
+			}
+			d.current.err = ErrCRCMismatch
+		} else {
+			if debugDecoder {
+				println("CRC ok", tmp[:])
+			}
+		}
+	}
 	if debugDecoder {
 		println("got", len(d.current.b), "bytes, error:", d.current.err)
 	}
@@ -457,12 +492,10 @@ type decodeStream struct {
 	cancel chan struct{}
 }
 
-// errEndOfStream indicates that everything from the stream was read.
-var errEndOfStream = errors.New("end-of-stream")
-
 // Create Decoder:
 // ASYNC:
-// Spawn 3 go routines.
+// Spawn 4 go routines.
+// 0: Read frames and decode blocks.
 // 1: Decode block and literals. Receives hufftree and seqdecs, returns seqdecs and huff tree.
 // 2: Wait for recentOffsets if needed. Decode sequences, send recentOffsets.
 // 3: Wait for stream history, execute sequences, send stream history.
@@ -472,9 +505,6 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 
 	br := readerWrapper{r: r}
 
-	// TODO: Needed?
-	frame.initAsync()
-
 	var seqPrepare = make(chan *blockDec, d.o.concurrent)
 	var seqDecode = make(chan *blockDec, d.o.concurrent)
 	var seqExecute = make(chan *blockDec, d.o.concurrent)
@@ -482,13 +512,20 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 	go func() {
 		var hist history
 		for block := range seqPrepare {
-			if block.err != nil {
+			if block.async.newHist != nil {
+				if debugDecoder {
+					println("Async 1: new history")
+				}
+				hist.reset()
+				if block.async.newHist.dict != nil {
+					hist.setDict(block.async.newHist.dict)
+				}
+			}
+			if block.err != nil || block.Type != blockTypeCompressed {
 				seqDecode <- block
 				continue
 			}
-			if block.async.newHist != nil {
-				hist.huffTree = block.async.newHist.huffTree
-			}
+
 			remain, err := block.decodeLiterals(block.data, &hist)
 			block.err = err
 			if err == nil {
@@ -504,16 +541,34 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 		var hist history
 
 		for block := range seqDecode {
-			if block.err != nil {
+			if block.async.newHist != nil {
+				if debugDecoder {
+					println("Async 2: new history, recent:", block.async.newHist.recentOffsets)
+				}
+				hist.decoders = block.async.newHist.decoders
+				hist.recentOffsets = block.async.newHist.recentOffsets
+				if block.async.newHist.dict != nil {
+					hist.setDict(block.async.newHist.dict)
+				}
+			}
+			if block.err != nil || block.Type != blockTypeCompressed {
 				seqExecute <- block
 				continue
 			}
-			if block.async.newHist != nil {
-				hist.decoders = block.async.newHist.decoders
-				hist.recentOffsets = block.async.newHist.recentOffsets
-			}
+
 			hist.decoders.literals = block.async.literals
-			block.err = block.decodeSequences(&hist)
+			block.err = block.prepareSequences(block.async.seqData, &hist)
+			if debugDecoder && block.err != nil {
+				println("prepareSequences returned:", block.err)
+			}
+			if block.err == nil {
+				block.err = block.decodeSequences(&hist)
+				if debugDecoder && block.err != nil {
+					println("decodeSequences returned:", block.err)
+				}
+				block.async.sequence = hist.decoders.seq[:hist.decoders.nSeqs]
+				block.async.seqSize = hist.decoders.seqSize
+			}
 			seqExecute <- block
 		}
 		close(seqExecute)
@@ -529,22 +584,71 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 				continue
 			}
 			if block.async.newHist != nil {
-				hist.dict = block.async.newHist.dict
-				hist.b = append(hist.b[:0], block.async.newHist.b...)
+				if debugDecoder {
+					println("Async 3: new history")
+				}
+				hist.windowSize = block.async.newHist.windowSize
+				hist.allocFrameBuffer = block.async.newHist.allocFrameBuffer
+				if block.async.newHist.dict != nil {
+					hist.setDict(block.async.newHist.dict)
+				}
+				if cap(hist.b) < hist.allocFrameBuffer {
+					hist.b = make([]byte, 0, hist.allocFrameBuffer)
+					println("Alloc history sized", hist.allocFrameBuffer)
+				}
+				hist.b = hist.b[:0]
 			}
-
+			do := decodeOutput{err: block.err, d: block}
+			switch block.Type {
+			case blockTypeRLE:
+				if cap(block.dst) < int(block.RLESize) {
+					if block.lowMem {
+						block.dst = make([]byte, block.RLESize)
+					} else {
+						block.dst = make([]byte, maxBlockSize)
+					}
+				}
+				block.dst = block.dst[:block.RLESize]
+				v := block.data[0]
+				for i := range block.dst {
+					block.dst[i] = v
+				}
+				hist.append(block.dst)
+				do.b = block.dst
+			case blockTypeRaw:
+				hist.append(block.data)
+				do.b = block.data
+			case blockTypeCompressed:
+				if debugDecoder {
+					println("execute with history length:", len(hist.b), "window:", hist.windowSize)
+				}
+				hist.decoders.seq = block.async.sequence
+				hist.decoders.nSeqs = len(block.async.sequence)
+				hist.decoders.seqSize = block.async.seqSize
+				hist.decoders.literals = block.async.literals
+				do.err = block.executeSequences(&hist)
+				if debugDecoder && block.err != nil {
+					println("executeSequences returned:", block.err)
+				}
+				do.b = block.dst
+			}
+			output <- do
 		}
 		close(output)
+		if debugDecoder {
+			println("decoder goroutines finished")
+		}
 	}()
 
 decodeStream:
 	for {
+		if debugDecoder {
+			println("New frame...")
+		}
 		var historySent bool
 		frame.history.reset()
 		err := frame.reset(&br)
 		switch err {
-		case io.EOF:
-			break decodeStream
 		default:
 			dec := <-d.decoders
 			dec.sendErr(err)
@@ -577,26 +681,42 @@ decodeStream:
 			case <-ctx.Done():
 				dec.sendErr(ctx.Err())
 				seqPrepare <- dec
-				break decodeFrame
+				break decodeStream
 			default:
 			}
 			err := frame.next(dec)
 			if !historySent {
 				h := frame.history
+				if debugDecoder {
+					println("Alloc History:", h.allocFrameBuffer)
+				}
 				dec.async.newHist = &h
 				historySent = true
+			} else {
+				dec.async.newHist = nil
 			}
-			seqPrepare <- dec
-			switch err {
-			case io.EOF:
-				// End of current frame, no error
-				println("EOF on next block")
+			dec.err = err
+			dec.checkCRC = nil
+			if dec.Last && frame.HasCheckSum && err == nil {
+				dec.checkCRC, err = frame.rawInput.readSmall(4)
+				if err != nil {
+					println("CRC missing?", err)
+					dec.err = err
+				}
+				if debugDecoder {
+					println("found crc to check:", dec.checkCRC)
+				}
+			}
+			select {
+			case <-ctx.Done():
 				break decodeFrame
-			case nil:
-				continue
-			default:
-				println("block decoder returned", err)
+			case seqPrepare <- dec:
+			}
+			if err != nil {
 				break decodeStream
+			}
+			if dec.Last {
+				break
 			}
 		}
 	}

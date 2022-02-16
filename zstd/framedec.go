@@ -8,15 +8,15 @@ import (
 	"bytes"
 	"encoding/hex"
 	"errors"
-	"hash"
 	"io"
 
 	"github.com/klauspost/compress/zstd/internal/xxhash"
 )
 
 type frameDec struct {
-	o      decoderOptions
-	crc    hash.Hash64
+	o   decoderOptions
+	crc *xxhash.Digest
+
 	offset int64
 
 	WindowSize uint64
@@ -220,7 +220,7 @@ func (d *frameDec) reset(br byteBuffer) error {
 			d.FrameContentSize = uint64(d1) | (uint64(d2) << 32)
 		}
 		if debugDecoder {
-			println("field size bits:", v, "fcsSize:", fcsSize, "FrameContentSize:", d.FrameContentSize, hex.EncodeToString(b[:fcsSize]), "singleseg:", d.SingleSegment, "window:", d.WindowSize)
+			println("field size bits:", v, "fcsSize:", fcsSize, "FrameContentSize:", d.FrameContentSize, hex.EncodeToString(b[:fcsSize]), "singleseg:", d.SingleSegment, "window:", d.WindowSize, "crc:", d.HasCheckSum)
 		}
 	}
 	// Move this to shared.
@@ -255,9 +255,10 @@ func (d *frameDec) reset(br byteBuffer) error {
 	}
 	d.history.windowSize = int(d.WindowSize)
 	if d.o.lowMem && d.history.windowSize < maxBlockSize {
-		d.history.maxSize = d.history.windowSize * 2
+		d.history.allocFrameBuffer = d.history.windowSize * 2
+		// TODO: Maybe use FrameContent size
 	} else {
-		d.history.maxSize = d.history.windowSize + maxBlockSize
+		d.history.allocFrameBuffer = d.history.windowSize + maxBlockSize
 	}
 	// history contains input - maybe we do something
 	d.rawInput = br
@@ -310,24 +311,6 @@ func (d *frameDec) checkCRC() error {
 		println("CRC ok", tmp[:])
 	}
 	return nil
-}
-
-func (d *frameDec) initAsync() {
-	if !d.o.lowMem && !d.SingleSegment {
-		// set max extra size history to 2MB.
-		d.history.maxSize = d.history.windowSize + maxBlockSize
-	}
-	// re-alloc if more than one extra block size.
-	if d.o.lowMem && cap(d.history.b) > d.history.maxSize+maxBlockSize {
-		d.history.b = make([]byte, 0, d.history.maxSize)
-	}
-	if cap(d.history.b) < d.history.maxSize {
-		d.history.b = make([]byte, 0, d.history.maxSize)
-	}
-	if debugDecoder {
-		h := d.history
-		printf("history init. len: %d, cap: %d", len(h.b), cap(h.b))
-	}
 }
 
 /*

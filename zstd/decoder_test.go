@@ -202,11 +202,13 @@ func TestErrorWriter(t *testing.T) {
 func TestNewDecoder(t *testing.T) {
 	defer timeout(60 * time.Second)()
 	testDecoderFile(t, "testdata/decoder.zip")
-	dec, err := NewReader(nil)
-	if err != nil {
-		t.Fatal(err)
+	if true {
+		dec, err := NewReader(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		testDecoderDecodeAll(t, "testdata/decoder.zip", dec)
 	}
-	testDecoderDecodeAll(t, "testdata/decoder.zip", dec)
 }
 
 func TestNewDecoderMemory(t *testing.T) {
@@ -967,7 +969,7 @@ func testDecoderFile(t *testing.T, fn string) {
 		want[tt.Name+".zst"], _ = ioutil.ReadAll(r)
 	}
 
-	dec, err := NewReader(nil)
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
 	if err != nil {
 		t.Error(err)
 		return
@@ -1430,7 +1432,7 @@ func testDecoderDecodeAll(t *testing.T, fn string, dec *Decoder) {
 		wg.Add(1)
 		t.Run("DecodeAll-"+tt.Name, func(t *testing.T) {
 			defer wg.Done()
-			t.Parallel()
+			//t.Parallel()
 			r, err := tt.Open()
 			if err != nil {
 				t.Fatal(err)
