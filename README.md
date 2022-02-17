@@ -314,11 +314,6 @@ This package provides various compression algorithms.
 
 # deflate usage
 
-* [High Throughput Benchmark](http://blog.klauspost.com/go-gzipdeflate-benchmarks/).
-* [Small Payload/Webserver Benchmarks](http://blog.klauspost.com/gzip-performance-for-go-webservers/).
-* [Linear Time Compression](http://blog.klauspost.com/constant-time-gzipzip-compression/).
-* [Re-balancing Deflate Compression Levels](https://blog.klauspost.com/rebalancing-deflate-compression-levels/)
-
 The packages are drop-in replacements for standard libraries. Simply replace the import path to use them:
 
 | old import         | new import                              | Documentation
@@ -339,6 +334,8 @@ Currently there is only minor speedup on decompression (mostly CRC32 calculation
 Memory usage is typically 1MB for a Writer. stdlib is in the same range. 
 If you expect to have a lot of concurrently allocated Writers consider using 
 the stateless compress described below.
+
+For compression performance, see: [this spreadsheet](https://docs.google.com/spreadsheets/d/1nuNE2nPfuINCZJRMt6wFWhKpToF95I47XjSsc-1rbPQ/edit?usp=sharing).
 
 # Stateless compression
 
