@@ -459,7 +459,7 @@ func TestNewDecoderBigFile(t *testing.T) {
 	}
 	defer f.Close()
 	start := time.Now()
-	dec, err := NewReader(f)
+	dec, err := NewReader(f, WithDecoderConcurrency(4))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -969,7 +969,7 @@ func testDecoderFile(t *testing.T, fn string) {
 		want[tt.Name+".zst"], _ = ioutil.ReadAll(r)
 	}
 
-	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	dec, err := NewReader(nil)
 	if err != nil {
 		t.Error(err)
 		return

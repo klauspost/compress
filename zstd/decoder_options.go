@@ -28,6 +28,9 @@ func (o *decoderOptions) setDefault() {
 		concurrent:    runtime.GOMAXPROCS(0),
 		maxWindowSize: MaxWindowSize,
 	}
+	if o.concurrent > 4 {
+		o.concurrent = 4
+	}
 	o.maxDecodedSize = 1 << 63
 }
 
@@ -40,7 +43,7 @@ func WithDecoderLowmem(b bool) DOption {
 // WithDecoderConcurrency will set the concurrency,
 // meaning the maximum number of decoders to run concurrently.
 // The value supplied must be at least 1.
-// By default this will be set to GOMAXPROCS.
+// By default this will be set to 4 or GOMAXPROCS, whatever is lower.
 func WithDecoderConcurrency(n int) DOption {
 	return func(o *decoderOptions) error {
 		if n <= 0 {

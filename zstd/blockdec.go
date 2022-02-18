@@ -85,11 +85,12 @@ type blockDec struct {
 	// Should not be used by the decoder itself since parent may be another frame.
 	localFrame *frameDec
 
+	sequence []seqVals
+
 	async struct {
 		newHist  *history
 		literals []byte
 		seqData  []byte
-		sequence []seqVals
 		seqSize  int // Size of uncompressed sequences
 	}
 
@@ -402,7 +403,7 @@ func (b *blockDec) decodeLiterals(in []byte, hist *history) (remain []byte, err 
 			}
 		}
 		huff := hist.huffTree
-		if huff == nil {
+		if huff == nil || (hist.dict != nil && huff == hist.dict.litEnc) {
 			huff = huffDecoderPool.Get().(*huff0.Scratch)
 			if huff == nil {
 				huff = &huff0.Scratch{}
@@ -573,6 +574,9 @@ func (b *blockDec) prepareSequences(in []byte, hist *history) (err error) {
 	}
 
 	if nSeqs == 0 {
+		if len(b.sequence) > 0 {
+			b.sequence = b.sequence[:0]
+		}
 		return nil
 	}
 	br := &bitReader{}
@@ -588,11 +592,19 @@ func (b *blockDec) prepareSequences(in []byte, hist *history) (err error) {
 }
 
 func (b *blockDec) decodeSequences(hist *history) error {
+	if cap(b.sequence) < hist.decoders.nSeqs {
+		if b.lowMem {
+			b.sequence = make([]seqVals, 0, hist.decoders.nSeqs)
+		} else {
+			b.sequence = make([]seqVals, 0, 0x7F00+0xffff)
+		}
+	}
+	b.sequence = b.sequence[:hist.decoders.nSeqs]
 	if hist.decoders.nSeqs == 0 {
 		return nil
 	}
 	hist.decoders.prevOffset = hist.recentOffsets
-	err := hist.decoders.decode()
+	err := hist.decoders.decode(b.sequence)
 	hist.recentOffsets = hist.decoders.prevOffset
 	return err
 }
@@ -607,7 +619,7 @@ func (b *blockDec) executeSequences(hist *history) error {
 		}
 	}
 	hist.decoders.windowSize = hist.windowSize
-	err := hist.decoders.execute(hbytes)
+	err := hist.decoders.execute(b.sequence, hbytes)
 	if err != nil {
 		return err
 	}
@@ -629,9 +641,9 @@ func (b *blockDec) updateHistory(hist *history) error {
 		return nil
 	} else {
 		hist.append(b.dst)
-	}
-	if debugDecoder {
-		println("Finished block with ", len(hist.decoders.seq), "sequences.")
+		if debugDecoder {
+			println("Finished block with ", len(b.sequence), "sequences. Added", len(b.dst), "to history, now length", len(hist.b))
+		}
 	}
 	hist.decoders.out, hist.decoders.literals = nil, nil
 

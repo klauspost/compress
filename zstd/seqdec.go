@@ -68,12 +68,12 @@ type sequenceDecs struct {
 	dict         []byte
 	literals     []byte
 	out          []byte
-	seq          []seqVals
-	nSeqs        int
-	br           *bitReader
-	seqSize      int
-	windowSize   int
-	maxBits      uint8
+	//seq          []seqVals
+	nSeqs      int
+	br         *bitReader
+	seqSize    int
+	windowSize int
+	maxBits    uint8
 }
 
 // initialize all 3 decoders from the stream input.
@@ -100,21 +100,16 @@ func (s *sequenceDecs) initialize(br *bitReader, hist *history, out []byte) erro
 }
 
 // decode sequences from the stream with the provided history.
-func (s *sequenceDecs) decode() error {
-	seqs := s.nSeqs
+func (s *sequenceDecs) decode(seqs []seqVals) error {
 	br := s.br
 
 	// Grab full sizes tables, to avoid bounds checks.
 	llTable, mlTable, ofTable := s.litLengths.fse.dt[:maxTablesize], s.matchLengths.fse.dt[:maxTablesize], s.offsets.fse.dt[:maxTablesize]
 	llState, mlState, ofState := s.litLengths.state.state, s.matchLengths.state.state, s.offsets.state.state
-	if cap(s.seq) < seqs {
-		s.seq = make([]seqVals, 0, seqs)
-	}
-	s.seq = s.seq[:seqs]
 	s.seqSize = 0
 	litRemain := len(s.literals)
 
-	for i := range s.seq {
+	for i := range seqs {
 		var ll, mo, ml int
 		if br.off > 4+((maxOffsetBits+16+16)>>3) {
 			// inlined function:
@@ -202,12 +197,12 @@ func (s *sequenceDecs) decode() error {
 		if litRemain < 0 {
 			return fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available", ll, litRemain)
 		}
-		s.seq[i] = seqVals{
+		seqs[i] = seqVals{
 			ll: ll,
 			ml: ml,
 			mo: mo,
 		}
-		if i == len(s.seq)-1 {
+		if i == len(seqs)-1 {
 			// This is the last sequence, so we shouldn't update state.
 			break
 		}
@@ -248,7 +243,7 @@ func (s *sequenceDecs) decode() error {
 
 // execute will execute the decoded sequence with the provided history.
 // The sequence must be evaluated before being sent.
-func (s *sequenceDecs) execute(hist []byte) error {
+func (s *sequenceDecs) execute(seqs []seqVals, hist []byte) error {
 	// Ensure we have enough output size...
 	if len(s.out)+s.seqSize > cap(s.out) {
 		addBytes := s.seqSize + len(s.out)
@@ -256,7 +251,11 @@ func (s *sequenceDecs) execute(hist []byte) error {
 		s.out = s.out[:len(s.out)-addBytes]
 	}
 
-	for _, seq := range s.seq {
+	if debugDecoder {
+		printf("Execute %d seqs with hist %d, dict %d, literals: %d bytes\n", len(seqs), len(hist), len(s.dict), len(s.literals))
+	}
+
+	for _, seq := range seqs {
 		ll, ml, mo := seq.ll, seq.ml, seq.mo
 
 		// Add literals

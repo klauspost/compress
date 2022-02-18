@@ -13,13 +13,13 @@ import (
 )
 
 // enable debug printing
-const debug = true
+const debug = false
 
 // enable encoding debug printing
 const debugEncoder = debug
 
 // enable decoding debug printing
-const debugDecoder = debug
+const debugDecoder = false
 
 // Enable extra assertions.
 const debugAsserts = debug || false

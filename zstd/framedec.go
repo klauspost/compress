@@ -219,10 +219,8 @@ func (d *frameDec) reset(br byteBuffer) error {
 			d2 := uint32(b[4]) | (uint32(b[5]) << 8) | (uint32(b[6]) << 16) | (uint32(b[7]) << 24)
 			d.FrameContentSize = uint64(d1) | (uint64(d2) << 32)
 		}
-		if debugDecoder {
-			println("field size bits:", v, "fcsSize:", fcsSize, "FrameContentSize:", d.FrameContentSize, hex.EncodeToString(b[:fcsSize]), "singleseg:", d.SingleSegment, "window:", d.WindowSize, "crc:", d.HasCheckSum)
-		}
 	}
+
 	// Move this to shared.
 	d.HasCheckSum = fhd&(1<<2) != 0
 	if d.HasCheckSum {
@@ -260,6 +258,11 @@ func (d *frameDec) reset(br byteBuffer) error {
 	} else {
 		d.history.allocFrameBuffer = d.history.windowSize + maxBlockSize
 	}
+
+	if debugDecoder {
+		println("Frame: Dict:", d.DictionaryID, "FrameContentSize:", d.FrameContentSize, "singleseg:", d.SingleSegment, "window:", d.WindowSize, "crc:", d.HasCheckSum)
+	}
+
 	// history contains input - maybe we do something
 	d.rawInput = br
 	return nil
@@ -268,7 +271,7 @@ func (d *frameDec) reset(br byteBuffer) error {
 // next will start decoding the next block from stream.
 func (d *frameDec) next(block *blockDec) error {
 	if debugDecoder {
-		printf("decoding new block %p:%p", block, block.data)
+		println("decoding new block")
 	}
 	err := block.reset(d.rawInput, d.WindowSize)
 	if err != nil {

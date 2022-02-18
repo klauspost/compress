@@ -7,6 +7,7 @@ package zstd
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"io"
 	"sync"
 
@@ -312,6 +313,9 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 			if !ok {
 				return nil, ErrUnknownDictionary
 			}
+			if debugDecoder {
+				println("setting dict", frame.DictionaryID)
+			}
 			frame.history.setDict(&dict)
 		}
 		if err != nil {
@@ -375,18 +379,29 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 	}
 
 	if blocking {
-		d.current.decodeOutput = <-d.current.output
+		d.current.decodeOutput, ok = <-d.current.output
 	} else {
 		select {
-		case d.current.decodeOutput = <-d.current.output:
+		case d.current.decodeOutput, ok = <-d.current.output:
 		default:
 			return false
 		}
+	}
+	if !ok {
+		// This should not happen, so signal error state...
+		d.current.err = io.ErrUnexpectedEOF
+		return false
 	}
 	next := d.current.decodeOutput
 	if next.d != nil && next.d.async.newHist != nil {
 		d.current.crc.Reset()
 	}
+	if debugDecoder {
+		var tmp [4]byte
+		binary.LittleEndian.PutUint32(tmp[:], uint32(xxhash.Sum64(next.b)))
+		println("got", len(d.current.b), "bytes, error:", d.current.err, "data crc:", tmp)
+	}
+
 	if len(next.b) > 0 {
 		n, err := d.current.crc.Write(next.b)
 		if err == nil {
@@ -406,7 +421,7 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 
 		if !bytes.Equal(tmp[:], next.d.checkCRC) {
 			if debugDecoder {
-				println("CRC Check Failed:", tmp[:], "!=", next.d.checkCRC)
+				println("CRC Check Failed:", tmp[:], " (got) !=", next.d.checkCRC, "(on stream)")
 			}
 			d.current.err = ErrCRCMismatch
 		} else {
@@ -415,9 +430,7 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 			}
 		}
 	}
-	if debugDecoder {
-		println("got", len(d.current.b), "bytes, error:", d.current.err)
-	}
+
 	return true
 }
 
@@ -511,7 +524,11 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 	// Async 1: Prepare blocks...
 	go func() {
 		var hist history
+		var hasErr bool
 		for block := range seqPrepare {
+			if hasErr {
+				continue
+			}
 			if block.async.newHist != nil {
 				if debugDecoder {
 					println("Async 1: new history")
@@ -522,15 +539,19 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 				}
 			}
 			if block.err != nil || block.Type != blockTypeCompressed {
+				hasErr = block.err != nil
 				seqDecode <- block
 				continue
 			}
 
 			remain, err := block.decodeLiterals(block.data, &hist)
 			block.err = err
+			hasErr = block.err != nil
 			if err == nil {
 				block.async.literals = hist.decoders.literals
 				block.async.seqData = remain
+			} else if debugDecoder {
+				println("decodeLiterals error:", err)
 			}
 			seqDecode <- block
 		}
@@ -539,8 +560,12 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 	// Async 2: Decode sequences...
 	go func() {
 		var hist history
+		var hasErr bool
 
 		for block := range seqDecode {
+			if hasErr {
+				continue
+			}
 			if block.async.newHist != nil {
 				if debugDecoder {
 					println("Async 2: new history, recent:", block.async.newHist.recentOffsets)
@@ -552,6 +577,7 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 				}
 			}
 			if block.err != nil || block.Type != blockTypeCompressed {
+				hasErr = block.err != nil
 				seqExecute <- block
 				continue
 			}
@@ -561,12 +587,14 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 			if debugDecoder && block.err != nil {
 				println("prepareSequences returned:", block.err)
 			}
+			hasErr = block.err != nil
 			if block.err == nil {
 				block.err = block.decodeSequences(&hist)
 				if debugDecoder && block.err != nil {
 					println("decodeSequences returned:", block.err)
 				}
-				block.async.sequence = hist.decoders.seq[:hist.decoders.nSeqs]
+				hasErr = block.err != nil
+				//				block.async.sequence = hist.decoders.seq[:hist.decoders.nSeqs]
 				block.async.seqSize = hist.decoders.seqSize
 			}
 			seqExecute <- block
@@ -576,10 +604,11 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 	// Async 3: Execute sequences...
 	go func() {
 		var hist history
-
+		var hasErr bool
 		for block := range seqExecute {
 			out := decodeOutput{err: block.err, d: block}
-			if block.err != nil {
+			if block.err != nil || hasErr {
+				hasErr = true
 				output <- out
 				continue
 			}
@@ -601,6 +630,10 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 			do := decodeOutput{err: block.err, d: block}
 			switch block.Type {
 			case blockTypeRLE:
+				if debugDecoder {
+					println("add rle block length:", block.RLESize)
+				}
+
 				if cap(block.dst) < int(block.RLESize) {
 					if block.lowMem {
 						block.dst = make([]byte, block.RLESize)
@@ -616,19 +649,21 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 				hist.append(block.dst)
 				do.b = block.dst
 			case blockTypeRaw:
+				if debugDecoder {
+					println("add raw block length:", len(block.data))
+				}
 				hist.append(block.data)
 				do.b = block.data
 			case blockTypeCompressed:
 				if debugDecoder {
 					println("execute with history length:", len(hist.b), "window:", hist.windowSize)
 				}
-				hist.decoders.seq = block.async.sequence
-				hist.decoders.nSeqs = len(block.async.sequence)
 				hist.decoders.seqSize = block.async.seqSize
 				hist.decoders.literals = block.async.literals
 				do.err = block.executeSequences(&hist)
-				if debugDecoder && block.err != nil {
-					println("executeSequences returned:", block.err)
+				hasErr = do.err != nil
+				if debugDecoder && hasErr {
+					println("executeSequences returned:", do.err)
 				}
 				do.b = block.dst
 			}
@@ -698,11 +733,14 @@ decodeStream:
 			dec.err = err
 			dec.checkCRC = nil
 			if dec.Last && frame.HasCheckSum && err == nil {
-				dec.checkCRC, err = frame.rawInput.readSmall(4)
+				crc, err := frame.rawInput.readSmall(4)
 				if err != nil {
 					println("CRC missing?", err)
 					dec.err = err
 				}
+				var tmp [4]byte
+				copy(tmp[:], crc)
+				dec.checkCRC = tmp[:]
 				if debugDecoder {
 					println("found crc to check:", dec.checkCRC)
 				}
