@@ -29,6 +29,15 @@ type Decoder struct {
 	// Current read position used for Reader functionality.
 	current decoderState
 
+	// sync stream decoding
+	syncStream struct {
+		br      readerWrapper
+		enabled bool
+		inFrame bool
+	}
+
+	frame *frameDec
+
 	// Custom dictionaries.
 	// Always uses copies.
 	dicts map[uint32]dict
@@ -134,7 +143,7 @@ func (d *Decoder) Read(p []byte) (int, error) {
 				break
 			}
 			if !d.nextBlock(n == 0) {
-				return n, nil
+				return n, d.current.err
 			}
 		}
 	}
@@ -199,18 +208,25 @@ func (d *Decoder) Reset(r io.Reader) error {
 		}
 		return nil
 	}
-
-	d.current.output = make(chan decodeOutput, d.o.concurrent)
-	ctx, cancel := context.WithCancel(context.Background())
-	d.streamWg.Add(1)
-	go d.startStreamDecoder(ctx, r, d.current.output)
-
+	if d.frame == nil {
+		d.frame = newFrameDec(d.o)
+	}
 	// Remove current block.
+	d.stashDecoder()
 	d.current.decodeOutput = decodeOutput{}
 	d.current.err = nil
-	d.current.cancel = cancel
 	d.current.flushed = false
 	d.current.d = nil
+
+	if d.o.concurrent == 1 {
+		return d.startSyncDecoder(r)
+	}
+
+	d.current.output = make(chan decodeOutput, d.o.concurrent)
+	d.streamWg.Add(1)
+	ctx, cancel := context.WithCancel(context.Background())
+	d.current.cancel = cancel
+	go d.startStreamDecoder(ctx, r, d.current.output)
 
 	return nil
 }
@@ -366,16 +382,70 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 // If non-blocking mode is used the returned boolean will be false
 // if no data was available without blocking.
 func (d *Decoder) nextBlock(blocking bool) (ok bool) {
+	if d.current.err != nil {
+		// Keep error state.
+		return false
+	}
+	d.current.b = d.current.b[:0]
+	if d.syncStream.enabled {
+		if !blocking {
+			return false
+		}
+		if d.current.d == nil {
+			d.current.d = <-d.decoders
+		}
+		for len(d.current.b) == 0 {
+			if !d.syncStream.inFrame {
+				d.current.err = d.frame.reset(&d.syncStream.br)
+				if d.current.err != nil {
+					d.stashDecoder()
+					return false
+				}
+				d.syncStream.inFrame = true
+			}
+			d.current.err = d.frame.next(d.current.d)
+			if d.current.err != nil {
+				d.stashDecoder()
+				return false
+			}
+			d.frame.history.ensureBlock()
+			if debugDecoder {
+				println("history trimmed:", len(d.frame.history.b))
+			}
+			histBefore := len(d.frame.history.b)
+			d.current.err = d.current.d.decodeBuf(&d.frame.history)
+			if d.current.err != nil {
+				d.stashDecoder()
+				return false
+			}
+			d.current.b = d.frame.history.b[histBefore:]
+			if debugDecoder {
+				println("history after:", len(d.frame.history.b))
+			}
+
+			// Update/Check CRC
+			if d.frame.HasCheckSum {
+				d.frame.crc.Write(d.current.b)
+				if d.current.d.Last {
+					d.current.err = d.frame.checkCRC()
+					if d.current.err != nil {
+						println("CRC error:", d.current.err)
+						d.stashDecoder()
+						return false
+					}
+				}
+			}
+			d.syncStream.inFrame = !d.current.d.Last
+		}
+		return true
+	}
+
 	if d.current.d != nil {
 		if debugDecoder {
 			printf("re-adding current decoder %p", d.current.d)
 		}
 		d.decoders <- d.current.d
 		d.current.d = nil
-	}
-	if d.current.err != nil {
-		// Keep error state.
-		return blocking
 	}
 
 	if blocking {
@@ -413,12 +483,7 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 	if next.err == nil && next.d != nil && len(next.d.checkCRC) != 0 {
 		got := d.current.crc.Sum64()
 		var tmp [4]byte
-		// Flip to match file order.
-		tmp[0] = byte(got >> 0)
-		tmp[1] = byte(got >> 8)
-		tmp[2] = byte(got >> 16)
-		tmp[3] = byte(got >> 24)
-
+		binary.LittleEndian.PutUint32(tmp[:], uint32(got))
 		if !bytes.Equal(tmp[:], next.d.checkCRC) {
 			if debugDecoder {
 				println("CRC Check Failed:", tmp[:], " (got) !=", next.d.checkCRC, "(on stream)")
@@ -432,6 +497,13 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 	}
 
 	return true
+}
+
+func (d *Decoder) stashDecoder() {
+	if d.current.d != nil {
+		d.decoders <- d.current.d
+		d.current.d = nil
+	}
 }
 
 // Close will release all resources.
@@ -495,14 +567,12 @@ type decodeOutput struct {
 	err error
 }
 
-type decodeStream struct {
-	r io.Reader
-
-	// Blocks ready to be written to output.
-	output chan decodeOutput
-
-	// cancel reading from the input
-	cancel chan struct{}
+func (d *Decoder) startSyncDecoder(r io.Reader) error {
+	d.frame.history.reset()
+	d.syncStream.br = readerWrapper{r: r}
+	d.syncStream.inFrame = false
+	d.syncStream.enabled = true
+	return nil
 }
 
 // Create Decoder:
@@ -514,8 +584,6 @@ type decodeStream struct {
 // 3: Wait for stream history, execute sequences, send stream history.
 func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output chan decodeOutput) {
 	defer d.streamWg.Done()
-	frame := newFrameDec(d.o)
-
 	br := readerWrapper{r: r}
 
 	var seqPrepare = make(chan *blockDec, d.o.concurrent)
@@ -677,6 +745,7 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 
 decodeStream:
 	for {
+		frame := d.frame
 		if debugDecoder {
 			println("New frame...")
 		}

@@ -89,6 +89,24 @@ func (h *history) append(b []byte) {
 	copy(h.b[h.windowSize-len(b):], b)
 }
 
+// ensureBlock will ensure there is space for at least one block...
+func (h *history) ensureBlock() {
+	if cap(h.b) < h.allocFrameBuffer {
+		h.b = make([]byte, 0, h.allocFrameBuffer)
+		return
+	}
+
+	avail := cap(h.b) - len(h.b)
+	if avail >= h.windowSize || avail > maxCompressedBlockSize {
+		return
+	}
+	// Move data down so we only have window size left.
+	// We know we have less than window size in b at this point.
+	discard := len(h.b) - h.windowSize
+	copy(h.b, h.b[discard:])
+	h.b = h.b[:h.windowSize]
+}
+
 // append bytes to history without ever discarding anything.
 func (h *history) appendKeep(b []byte) {
 	h.b = append(h.b, b...)

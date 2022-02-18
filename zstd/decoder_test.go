@@ -200,14 +200,19 @@ func TestErrorWriter(t *testing.T) {
 }
 
 func TestNewDecoder(t *testing.T) {
-	defer timeout(60 * time.Second)()
-	testDecoderFile(t, "testdata/decoder.zip")
-	if true {
-		dec, err := NewReader(nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		testDecoderDecodeAll(t, "testdata/decoder.zip", dec)
+	for _, n := range []int{1, 4} {
+		t.Run(fmt.Sprintf("cpu-%d", n), func(t *testing.T) {
+			defer timeout(60 * time.Second)()
+			newFn := func() (*Decoder, error) {
+				return NewReader(nil, WithDecoderConcurrency(n))
+			}
+			testDecoderFile(t, "testdata/decoder.zip", newFn)
+			dec, err := newFn()
+			if err != nil {
+				t.Fatal(err)
+			}
+			testDecoderDecodeAll(t, "testdata/decoder.zip", dec)
+		})
 	}
 }
 
@@ -386,13 +391,20 @@ func TestNewDecoderFrameSize(t *testing.T) {
 }
 
 func TestNewDecoderGood(t *testing.T) {
-	defer timeout(30 * time.Second)()
-	testDecoderFile(t, "testdata/good.zip")
-	dec, err := NewReader(nil)
-	if err != nil {
-		t.Fatal(err)
+	for _, n := range []int{1, 4} {
+		t.Run(fmt.Sprintf("cpu-%d", n), func(t *testing.T) {
+			defer timeout(30 * time.Second)()
+			newFn := func() (*Decoder, error) {
+				return NewReader(nil, WithDecoderConcurrency(n))
+			}
+			testDecoderFile(t, "testdata/good.zip", newFn)
+			dec, err := newFn()
+			if err != nil {
+				t.Fatal(err)
+			}
+			testDecoderDecodeAll(t, "testdata/good.zip", dec)
+		})
 	}
-	testDecoderDecodeAll(t, "testdata/good.zip", dec)
 }
 
 func TestNewDecoderBad(t *testing.T) {
@@ -405,7 +417,10 @@ func TestNewDecoderBad(t *testing.T) {
 }
 
 func TestNewDecoderLarge(t *testing.T) {
-	testDecoderFile(t, "testdata/large.zip")
+	newFn := func() (*Decoder, error) {
+		return NewReader(nil)
+	}
+	testDecoderFile(t, "testdata/large.zip", newFn)
 	dec, err := NewReader(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -435,7 +450,10 @@ func TestNewDecoderBig(t *testing.T) {
 		t.Skip("To run extended tests, download https://files.klauspost.com/compress/zstd-10kfiles.zip \n" +
 			"and place it in " + file + "\n" + "Running it requires about 5GB of RAM")
 	}
-	testDecoderFile(t, file)
+	newFn := func() (*Decoder, error) {
+		return NewReader(nil)
+	}
+	testDecoderFile(t, file, newFn)
 	dec, err := NewReader(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -948,7 +966,7 @@ func TestDecoderMultiFrameReset(t *testing.T) {
 	}
 }
 
-func testDecoderFile(t *testing.T, fn string) {
+func testDecoderFile(t *testing.T, fn string, newDec func() (*Decoder, error)) {
 	data, err := ioutil.ReadFile(fn)
 	if err != nil {
 		t.Fatal(err)
@@ -970,7 +988,7 @@ func testDecoderFile(t *testing.T, fn string) {
 		want[tt.Name+".zst"], _ = ioutil.ReadAll(r)
 	}
 
-	dec, err := NewReader(nil)
+	dec, err := newDec()
 	if err != nil {
 		t.Error(err)
 		return

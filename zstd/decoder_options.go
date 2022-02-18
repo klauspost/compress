@@ -40,8 +40,13 @@ func WithDecoderLowmem(b bool) DOption {
 	return func(o *decoderOptions) error { o.lowMem = b; return nil }
 }
 
-// WithDecoderConcurrency will set the concurrency,
-// meaning the maximum number of decoders to run concurrently.
+// WithDecoderConcurrency will set the concurrency.
+// When decoding block with DecodeAll, this will limit the number
+// of possible concurrently running decodes.
+// When decoding streams, this will limit the number of
+// inflight blocks.
+// When decoding streams and setting maximum to 1,
+// no async decoding will be done.
 // The value supplied must be at least 1.
 // By default this will be set to 4 or GOMAXPROCS, whatever is lower.
 func WithDecoderConcurrency(n int) DOption {

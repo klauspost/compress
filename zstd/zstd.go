@@ -19,7 +19,7 @@ const debug = false
 const debugEncoder = debug
 
 // enable decoding debug printing
-const debugDecoder = false
+const debugDecoder = debug
 
 // Enable extra assertions.
 const debugAsserts = debug || false

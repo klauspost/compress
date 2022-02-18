@@ -263,6 +263,7 @@ func (s *sequenceDecs) execute(seqs []seqVals, hist []byte) error {
 		s.literals = s.literals[ll:]
 		out := s.out
 
+		// Copy form dictionary...
 		if mo > len(s.out)+len(hist) || mo > s.windowSize {
 			if len(s.dict) == 0 {
 				return fmt.Errorf("match offset (%d) bigger than current history (%d)", mo, len(s.out)+len(hist))
@@ -279,14 +280,12 @@ func (s *sequenceDecs) execute(seqs []seqVals, hist []byte) error {
 				mo -= len(s.dict) - dictO
 				ml -= len(s.dict) - dictO
 			} else {
-				out = append(out, s.dict[dictO:end]...)
-				mo = 0
-				ml = 0
+				s.out = append(out, s.dict[dictO:end]...)
+				continue
 			}
 		}
 
 		// Copy from history.
-		// TODO: Blocks without history could be made to ignore this completely.
 		if v := mo - len(s.out); v > 0 {
 			// v is the start position in history from end.
 			start := len(hist) - v
@@ -297,8 +296,8 @@ func (s *sequenceDecs) execute(seqs []seqVals, hist []byte) error {
 				mo -= v
 				ml -= v
 			} else {
-				out = append(out, hist[start:start+ml]...)
-				ml = 0
+				s.out = append(out, hist[start:start+ml]...)
+				continue
 			}
 		}
 		// We must be in current buffer now
@@ -306,7 +305,8 @@ func (s *sequenceDecs) execute(seqs []seqVals, hist []byte) error {
 			start := len(s.out) - mo
 			if ml <= len(s.out)-start {
 				// No overlap
-				out = append(out, s.out[start:start+ml]...)
+				s.out = append(out, s.out[start:start+ml]...)
+				continue
 			} else {
 				// Overlapping copy
 				// Extend destination slice and copy one byte at the time.

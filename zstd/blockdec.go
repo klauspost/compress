@@ -225,6 +225,7 @@ func (b *blockDec) decodeBuf(hist *history) error {
 		return nil
 	case blockTypeCompressed:
 		saved := b.dst
+		// Append directly to history
 		b.dst = hist.b
 		hist.b = nil
 		err := b.decodeCompressed(hist)
