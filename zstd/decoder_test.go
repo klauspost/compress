@@ -459,10 +459,11 @@ func TestNewDecoderBigFile(t *testing.T) {
 	}
 	defer f.Close()
 	start := time.Now()
-	dec, err := NewReader(f, WithDecoderConcurrency(4))
+	dec, err := NewReader(f, WithDecoderConcurrency(4), WithDecoderLowmem(true))
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer dec.Close()
 	n, err := io.Copy(ioutil.Discard, dec)
 	if err != nil {
 		t.Fatal(err)

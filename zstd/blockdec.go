@@ -579,7 +579,10 @@ func (b *blockDec) prepareSequences(in []byte, hist *history) (err error) {
 		}
 		return nil
 	}
-	br := &bitReader{}
+	br := seqs.br
+	if br == nil {
+		br = &bitReader{}
+	}
 	if err := br.init(in); err != nil {
 		return err
 	}
@@ -619,6 +622,7 @@ func (b *blockDec) executeSequences(hist *history) error {
 		}
 	}
 	hist.decoders.windowSize = hist.windowSize
+	hist.decoders.out = b.dst[:0]
 	err := hist.decoders.execute(b.sequence, hbytes)
 	if err != nil {
 		return err
