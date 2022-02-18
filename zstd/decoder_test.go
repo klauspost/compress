@@ -477,7 +477,7 @@ func TestNewDecoderBigFile(t *testing.T) {
 	}
 	defer f.Close()
 	start := time.Now()
-	dec, err := NewReader(f, WithDecoderConcurrency(4), WithDecoderLowmem(true))
+	dec, err := NewReader(f)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1159,7 +1159,7 @@ func BenchmarkDecoder_DecodeAllParallel(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	dec, err := NewReader(nil)
+	dec, err := NewReader(nil, WithDecoderConcurrency(runtime.GOMAXPROCS(0)))
 	if err != nil {
 		b.Fatal(err)
 		return
@@ -1198,150 +1198,6 @@ func BenchmarkDecoder_DecodeAllParallel(b *testing.B) {
 		})
 	}
 }
-
-/*
-func BenchmarkDecoder_DecodeAllCgo(b *testing.B) {
-	fn := "testdata/benchdecoder.zip"
-	data, err := ioutil.ReadFile(fn)
-	if err != nil {
-		b.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		b.Fatal(err)
-	}
-	for _, tt := range zr.File {
-		if !strings.HasSuffix(tt.Name, ".zst") {
-			continue
-		}
-		b.Run(tt.Name, func(b *testing.B) {
-			tt := tt
-			r, err := tt.Open()
-			if err != nil {
-				b.Fatal(err)
-			}
-			defer r.Close()
-			in, err := ioutil.ReadAll(r)
-			if err != nil {
-				b.Fatal(err)
-			}
-			got, err := zstd.Decompress(nil, in)
-			if err != nil {
-				b.Fatal(err)
-			}
-			b.SetBytes(int64(len(got)))
-			b.ReportAllocs()
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				got, err = zstd.Decompress(got, in)
-				if err != nil {
-					b.Fatal(err)
-				}
-			}
-		})
-	}
-}
-
-func BenchmarkDecoder_DecodeAllParallelCgo(b *testing.B) {
-	fn := "testdata/benchdecoder.zip"
-	data, err := ioutil.ReadFile(fn)
-	if err != nil {
-		b.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		b.Fatal(err)
-	}
-	for _, tt := range zr.File {
-		if !strings.HasSuffix(tt.Name, ".zst") {
-			continue
-		}
-		b.Run(tt.Name, func(b *testing.B) {
-			r, err := tt.Open()
-			if err != nil {
-				b.Fatal(err)
-			}
-			defer r.Close()
-			in, err := ioutil.ReadAll(r)
-			if err != nil {
-				b.Fatal(err)
-			}
-			got, err := zstd.Decompress(nil, in)
-			if err != nil {
-				b.Fatal(err)
-			}
-			b.SetBytes(int64(len(got)))
-			b.ReportAllocs()
-			b.ResetTimer()
-			b.RunParallel(func(pb *testing.PB) {
-				got := make([]byte, len(got))
-				for pb.Next() {
-					got, err = zstd.Decompress(got, in)
-					if err != nil {
-						b.Fatal(err)
-					}
-				}
-			})
-		})
-	}
-}
-
-func BenchmarkDecoderSilesiaCgo(b *testing.B) {
-	fn := "testdata/silesia.tar.zst"
-	data, err := ioutil.ReadFile(fn)
-	if err != nil {
-		if os.IsNotExist(err) {
-			b.Skip("Missing testdata/silesia.tar.zst")
-			return
-		}
-		b.Fatal(err)
-	}
-	dec := zstd.NewReader(bytes.NewBuffer(data))
-	n, err := io.Copy(ioutil.Discard, dec)
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	b.SetBytes(n)
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		dec := zstd.NewReader(bytes.NewBuffer(data))
-		_, err := io.CopyN(ioutil.Discard, dec, n)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-func BenchmarkDecoderEnwik9Cgo(b *testing.B) {
-	fn := "testdata/enwik9-1.zst"
-	data, err := ioutil.ReadFile(fn)
-	if err != nil {
-		if os.IsNotExist(err) {
-			b.Skip("Missing " + fn)
-			return
-		}
-		b.Fatal(err)
-	}
-	dec := zstd.NewReader(bytes.NewBuffer(data))
-	n, err := io.Copy(ioutil.Discard, dec)
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	b.SetBytes(n)
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		dec := zstd.NewReader(bytes.NewBuffer(data))
-		_, err := io.CopyN(ioutil.Discard, dec, n)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-*/
 
 func BenchmarkDecoderSilesia(b *testing.B) {
 	fn := "testdata/silesia.tar.zst"

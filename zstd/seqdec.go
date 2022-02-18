@@ -68,12 +68,11 @@ type sequenceDecs struct {
 	dict         []byte
 	literals     []byte
 	out          []byte
-	//seq          []seqVals
-	nSeqs      int
-	br         *bitReader
-	seqSize    int
-	windowSize int
-	maxBits    uint8
+	nSeqs        int
+	br           *bitReader
+	seqSize      int
+	windowSize   int
+	maxBits      uint8
 }
 
 // initialize all 3 decoders from the stream input.
@@ -256,29 +255,27 @@ func (s *sequenceDecs) execute(seqs []seqVals, hist []byte) error {
 	}
 
 	for _, seq := range seqs {
-		ll, ml, mo := seq.ll, seq.ml, seq.mo
-
 		// Add literals
-		s.out = append(s.out, s.literals[:ll]...)
-		s.literals = s.literals[ll:]
+		s.out = append(s.out, s.literals[:seq.ll]...)
+		s.literals = s.literals[seq.ll:]
 		out := s.out
 
 		// Copy form dictionary...
-		if mo > len(s.out)+len(hist) || mo > s.windowSize {
+		if seq.mo > len(s.out)+len(hist) || seq.mo > s.windowSize {
 			if len(s.dict) == 0 {
-				return fmt.Errorf("match offset (%d) bigger than current history (%d)", mo, len(s.out)+len(hist))
+				return fmt.Errorf("match offset (%d) bigger than current history (%d)", seq.mo, len(s.out)+len(hist))
 			}
 
 			// we may be in dictionary.
-			dictO := len(s.dict) - (mo - (len(s.out) + len(hist)))
+			dictO := len(s.dict) - (seq.mo - (len(s.out) + len(hist)))
 			if dictO < 0 || dictO >= len(s.dict) {
-				return fmt.Errorf("match offset (%d) bigger than current history+dict (%d)", mo, len(s.out)+len(hist)+len(s.dict))
+				return fmt.Errorf("match offset (%d) bigger than current history+dict (%d)", seq.mo, len(s.out)+len(hist)+len(s.dict))
 			}
-			end := dictO + ml
+			end := dictO + seq.ml
 			if end > len(s.dict) {
 				out = append(out, s.dict[dictO:]...)
-				mo -= len(s.dict) - dictO
-				ml -= len(s.dict) - dictO
+				seq.mo -= len(s.dict) - dictO
+				seq.ml -= len(s.dict) - dictO
 			} else {
 				s.out = append(out, s.dict[dictO:end]...)
 				continue
@@ -286,34 +283,34 @@ func (s *sequenceDecs) execute(seqs []seqVals, hist []byte) error {
 		}
 
 		// Copy from history.
-		if v := mo - len(s.out); v > 0 {
+		if v := seq.mo - len(s.out); v > 0 {
 			// v is the start position in history from end.
 			start := len(hist) - v
-			if ml > v {
+			if seq.ml > v {
 				// Some goes into current block.
 				// Copy remainder of history
 				out = append(out, hist[start:]...)
-				mo -= v
-				ml -= v
+				seq.mo -= v
+				seq.ml -= v
 			} else {
-				s.out = append(out, hist[start:start+ml]...)
+				s.out = append(out, hist[start:start+seq.ml]...)
 				continue
 			}
 		}
 		// We must be in current buffer now
-		if ml > 0 {
-			start := len(s.out) - mo
-			if ml <= len(s.out)-start {
+		if seq.ml > 0 {
+			start := len(s.out) - seq.mo
+			if seq.ml <= len(s.out)-start {
 				// No overlap
-				s.out = append(out, s.out[start:start+ml]...)
+				s.out = append(out, s.out[start:start+seq.ml]...)
 				continue
 			} else {
 				// Overlapping copy
 				// Extend destination slice and copy one byte at the time.
-				out = out[:len(out)+ml]
-				src := out[start : start+ml]
+				out = out[:len(out)+seq.ml]
+				src := out[start : start+seq.ml]
 				// Destination is the space we just added.
-				dst := out[len(out)-ml:]
+				dst := out[len(out)-seq.ml:]
 				dst = dst[:len(src)]
 				for i := range src {
 					dst[i] = src[i]

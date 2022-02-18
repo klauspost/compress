@@ -41,7 +41,7 @@ func (h *history) reset() {
 	if f := h.decoders.matchLengths.fse; f != nil && !f.preDefined {
 		fseDecoderPool.Put(f)
 	}
-	h.decoders = sequenceDecs{}
+	h.decoders = sequenceDecs{br: h.decoders.br}
 	if h.huffTree != nil {
 		if h.dict == nil || h.dict.litEnc != h.huffTree {
 			huffDecoderPool.Put(h.huffTree)
