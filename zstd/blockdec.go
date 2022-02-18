@@ -92,6 +92,7 @@ type blockDec struct {
 		literals []byte
 		seqData  []byte
 		seqSize  int // Size of uncompressed sequences
+		fcs      uint64
 	}
 
 	// Block is RLE, this is the size.

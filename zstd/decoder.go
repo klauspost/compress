@@ -31,9 +31,11 @@ type Decoder struct {
 
 	// sync stream decoding
 	syncStream struct {
-		br      readerWrapper
-		enabled bool
-		inFrame bool
+		decoded      uint64
+		decodedFrame uint64
+		br           readerWrapper
+		enabled      bool
+		inFrame      bool
 	}
 
 	frame *frameDec
@@ -401,6 +403,16 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 					d.stashDecoder()
 					return false
 				}
+				if d.frame.DictionaryID != nil {
+					dict, ok := d.dicts[*d.frame.DictionaryID]
+					if !ok {
+						d.current.err = ErrUnknownDictionary
+						return false
+					} else {
+						d.frame.history.setDict(&dict)
+					}
+				}
+				d.syncStream.decodedFrame = 0
 				d.syncStream.inFrame = true
 			}
 			d.current.err = d.frame.next(d.current.d)
@@ -421,6 +433,16 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 			d.current.b = d.frame.history.b[histBefore:]
 			if debugDecoder {
 				println("history after:", len(d.frame.history.b))
+			}
+			d.syncStream.decoded += uint64(len(d.current.b))
+			d.syncStream.decodedFrame += uint64(len(d.current.b))
+			if d.syncStream.decoded > d.o.maxDecodedSize {
+				d.current.err = ErrDecoderSizeExceeded
+				return false
+			}
+			if d.frame.FrameContentSize > 0 && d.syncStream.decodedFrame > d.frame.FrameContentSize {
+				d.current.err = ErrFrameSizeExceeded
+				return false
 			}
 
 			// Update/Check CRC
@@ -572,6 +594,8 @@ func (d *Decoder) startSyncDecoder(r io.Reader) error {
 	d.syncStream.br = readerWrapper{r: r}
 	d.syncStream.inFrame = false
 	d.syncStream.enabled = true
+	d.syncStream.decoded = 0
+	d.syncStream.decodedFrame = 0
 	return nil
 }
 
@@ -672,6 +696,8 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 	// Async 3: Execute sequences...
 	go func() {
 		var hist history
+		var decoded, decodedFrame uint64
+		var fcs uint64
 		var hasErr bool
 		for block := range seqExecute {
 			out := decodeOutput{err: block.err, d: block}
@@ -694,6 +720,8 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 					println("Alloc history sized", hist.allocFrameBuffer)
 				}
 				hist.b = hist.b[:0]
+				fcs = block.async.fcs
+				decodedFrame = 0
 			}
 			do := decodeOutput{err: block.err, d: block}
 			switch block.Type {
@@ -734,6 +762,16 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 					println("executeSequences returned:", do.err)
 				}
 				do.b = block.dst
+			}
+			if !hasErr {
+				decoded += uint64(len(do.b))
+				decodedFrame += uint64(len(do.b))
+				if decoded > d.o.maxDecodedSize {
+					do.err = ErrDecoderSizeExceeded
+				}
+				if fcs > 0 && decodedFrame > fcs {
+					d.current.err = ErrFrameSizeExceeded
+				}
 			}
 			output <- do
 		}
@@ -795,6 +833,7 @@ decodeStream:
 					println("Alloc History:", h.allocFrameBuffer)
 				}
 				dec.async.newHist = &h
+				dec.async.fcs = frame.FrameContentSize
 				historySent = true
 			} else {
 				dec.async.newHist = nil
