@@ -17,8 +17,6 @@ type frameDec struct {
 	o   decoderOptions
 	crc *xxhash.Digest
 
-	offset int64
-
 	WindowSize uint64
 
 	// Frame history passed between blocks

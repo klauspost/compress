@@ -694,36 +694,3 @@ func (s *sequenceDecs) adjustOffset(offset, litLen int, offsetB uint8) int {
 	s.prevOffset[0] = temp
 	return temp
 }
-
-// mergeHistory will merge history.
-func (s *sequenceDecs) mergeHistory(hist *sequenceDecs) (*sequenceDecs, error) {
-	for i := uint(0); i < 3; i++ {
-		var sNew, sHist *sequenceDec
-		switch i {
-		default:
-			// same as "case 0":
-			sNew = &s.litLengths
-			sHist = &hist.litLengths
-		case 1:
-			sNew = &s.offsets
-			sHist = &hist.offsets
-		case 2:
-			sNew = &s.matchLengths
-			sHist = &hist.matchLengths
-		}
-		if sNew.repeat {
-			if sHist.fse == nil {
-				return nil, fmt.Errorf("sequence stream %d, repeat requested, but no history", i)
-			}
-			continue
-		}
-		if sNew.fse == nil {
-			return nil, fmt.Errorf("sequence stream %d, no fse found", i)
-		}
-		if sHist.fse != nil && !sHist.fse.preDefined {
-			fseDecoderPool.Put(sHist.fse)
-		}
-		sHist.fse = sNew.fse
-	}
-	return hist, nil
-}
