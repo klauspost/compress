@@ -31,7 +31,6 @@ type Decoder struct {
 
 	// sync stream decoding
 	syncStream struct {
-		decoded      uint64
 		decodedFrame uint64
 		br           readerWrapper
 		enabled      bool
@@ -415,6 +414,11 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 						d.frame.history.setDict(&dict)
 					}
 				}
+				if d.frame.WindowSize > d.o.maxDecodedSize || d.frame.WindowSize > d.o.maxWindowSize {
+					d.current.err = ErrDecoderSizeExceeded
+					return false
+				}
+
 				d.syncStream.decodedFrame = 0
 				d.syncStream.inFrame = true
 			}
@@ -437,12 +441,8 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 			if debugDecoder {
 				println("history after:", len(d.frame.history.b))
 			}
-			d.syncStream.decoded += uint64(len(d.current.b))
+
 			d.syncStream.decodedFrame += uint64(len(d.current.b))
-			if d.syncStream.decoded > d.o.maxDecodedSize {
-				d.current.err = ErrDecoderSizeExceeded
-				return false
-			}
 			if d.frame.FrameContentSize > 0 && d.syncStream.decodedFrame > d.frame.FrameContentSize {
 				d.current.err = ErrFrameSizeExceeded
 				return false
@@ -597,7 +597,6 @@ func (d *Decoder) startSyncDecoder(r io.Reader) error {
 	d.syncStream.br = readerWrapper{r: r}
 	d.syncStream.inFrame = false
 	d.syncStream.enabled = true
-	d.syncStream.decoded = 0
 	d.syncStream.decodedFrame = 0
 	return nil
 }
@@ -699,7 +698,7 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 	// Async 3: Execute sequences...
 	go func() {
 		var hist history
-		var decoded, decodedFrame uint64
+		var decodedFrame uint64
 		var fcs uint64
 		var hasErr bool
 		for block := range seqExecute {
@@ -767,11 +766,7 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 				do.b = block.dst
 			}
 			if !hasErr {
-				decoded += uint64(len(do.b))
 				decodedFrame += uint64(len(do.b))
-				if decoded > d.o.maxDecodedSize {
-					do.err = ErrDecoderSizeExceeded
-				}
 				if fcs > 0 && decodedFrame > fcs {
 					d.current.err = ErrFrameSizeExceeded
 				}
@@ -811,6 +806,9 @@ decodeStream:
 			} else {
 				frame.history.setDict(&dict)
 			}
+		}
+		if d.frame.FrameContentSize > d.o.maxDecodedSize || d.frame.WindowSize > d.o.maxWindowSize {
+			err = ErrDecoderSizeExceeded
 		}
 		if err != nil {
 			output <- decodeOutput{
