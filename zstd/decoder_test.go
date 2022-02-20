@@ -1323,7 +1323,7 @@ func BenchmarkDecoderEnwik9Cgo(b *testing.B) {
 */
 
 func BenchmarkDecoderSilesia(b *testing.B) {
-	fn := "testdata/github-june-2days-2019.json.zst"
+	fn := "testdata/silesia.tar.zst"
 	data, err := ioutil.ReadFile(fn)
 	if err != nil {
 		if os.IsNotExist(err) {
