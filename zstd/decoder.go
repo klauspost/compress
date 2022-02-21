@@ -392,6 +392,8 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 		return false
 	}
 	d.current.b = d.current.b[:0]
+
+	// SYNC:
 	if d.syncStream.enabled {
 		if !blocking {
 			return false
@@ -431,12 +433,14 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 			}
 			d.frame.history.ensureBlock()
 			if debugDecoder {
-				println("history trimmed:", len(d.frame.history.b))
+				println("History trimmed:", len(d.frame.history.b), "decoded already:", d.syncStream.decodedFrame)
 			}
 			histBefore := len(d.frame.history.b)
 			d.current.err = d.current.d.decodeBuf(&d.frame.history)
+
 			if d.current.err != nil {
 				d.stashDecoder()
+				println("error after:", d.current.err)
 				return false
 			}
 			d.current.b = d.frame.history.b[histBefore:]
@@ -444,9 +448,24 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 				println("history after:", len(d.frame.history.b))
 			}
 
+			// Check frame size (before CRC)
 			d.syncStream.decodedFrame += uint64(len(d.current.b))
 			if d.frame.FrameContentSize > 0 && d.syncStream.decodedFrame > d.frame.FrameContentSize {
+				if debugDecoder {
+					printf("DecodedFrame (%d) > FrameContentSize (%d)\n", d.syncStream.decodedFrame, d.frame.FrameContentSize)
+				}
 				d.current.err = ErrFrameSizeExceeded
+				d.stashDecoder()
+				return false
+			}
+
+			// Check FCS
+			if d.current.d.Last && d.frame.FrameContentSize > 0 && d.syncStream.decodedFrame != d.frame.FrameContentSize {
+				if debugDecoder {
+					printf("DecodedFrame (%d) != FrameContentSize (%d)\n", d.syncStream.decodedFrame, d.frame.FrameContentSize)
+				}
+				d.current.err = ErrFrameSizeMismatch
+				d.stashDecoder()
 				return false
 			}
 
@@ -467,6 +486,7 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 		return true
 	}
 
+	//ASYNC:
 	if d.current.d != nil {
 		if debugDecoder {
 			printf("re-adding current decoder %p", d.current.d)
@@ -770,7 +790,14 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 			if !hasErr {
 				decodedFrame += uint64(len(do.b))
 				if fcs > 0 && decodedFrame > fcs {
-					d.current.err = ErrFrameSizeExceeded
+					println("fcs exceeded", block.Last, fcs, decodedFrame)
+					do.err = ErrFrameSizeExceeded
+					hasErr = true
+				} else if block.Last && fcs > 0 && decodedFrame != fcs {
+					do.err = ErrFrameSizeMismatch
+					hasErr = true
+				} else {
+					println("fcs ok", block.Last, fcs, decodedFrame)
 				}
 			}
 			output <- do
@@ -809,7 +836,7 @@ decodeStream:
 				frame.history.setDict(&dict)
 			}
 		}
-		if d.frame.FrameContentSize > d.o.maxDecodedSize || d.frame.WindowSize > d.o.maxWindowSize {
+		if d.frame.WindowSize > d.o.maxWindowSize {
 			err = ErrDecoderSizeExceeded
 		}
 		if err != nil {

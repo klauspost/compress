@@ -408,19 +408,20 @@ func TestNewDecoderGood(t *testing.T) {
 }
 
 func TestNewDecoderBad(t *testing.T) {
+	var errMap = make(map[string]string)
 	if true {
 		t.Run("Reader-4", func(t *testing.T) {
 			newFn := func() (*Decoder, error) {
 				return NewReader(nil, WithDecoderConcurrency(4))
 			}
-			testDecoderFileBad(t, "testdata/bad.zip", newFn)
+			testDecoderFileBad(t, "testdata/bad.zip", newFn, errMap)
 
 		})
 		t.Run("Reader-1", func(t *testing.T) {
 			newFn := func() (*Decoder, error) {
 				return NewReader(nil, WithDecoderConcurrency(1))
 			}
-			testDecoderFileBad(t, "testdata/bad.zip", newFn)
+			testDecoderFileBad(t, "testdata/bad.zip", newFn, errMap)
 		})
 	}
 	t.Run("DecodeAll", func(t *testing.T) {
@@ -429,7 +430,7 @@ func TestNewDecoderBad(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		testDecoderDecodeAllError(t, "testdata/bad.zip", dec)
+		testDecoderDecodeAllError(t, "testdata/bad.zip", dec, errMap)
 	})
 }
 
@@ -1058,7 +1059,7 @@ func testDecoderFile(t *testing.T, fn string, newDec func() (*Decoder, error)) {
 	}
 }
 
-func testDecoderFileBad(t *testing.T, fn string, newDec func() (*Decoder, error)) {
+func testDecoderFileBad(t *testing.T, fn string, newDec func() (*Decoder, error), errMap map[string]string) {
 	data, err := ioutil.ReadFile(fn)
 	if err != nil {
 		t.Fatal(err)
@@ -1090,7 +1091,7 @@ func testDecoderFileBad(t *testing.T, fn string, newDec func() (*Decoder, error)
 		if !strings.HasSuffix(tt.Name, ".zst") || (testing.Short() && i > 20) {
 			continue
 		}
-		t.Run("Reader-"+tt.Name, func(t *testing.T) {
+		t.Run(tt.Name, func(t *testing.T) {
 			r, err := tt.Open()
 			if err != nil {
 				t.Error(err)
@@ -1102,11 +1103,21 @@ func testDecoderFileBad(t *testing.T, fn string, newDec func() (*Decoder, error)
 				t.Error(err)
 				return
 			}
-			_, err = ioutil.ReadAll(dec)
+			got, err := ioutil.ReadAll(dec)
 			if err == nil {
-				t.Error("Did not get expected error")
+				t.Error("Did not get expected error, got ", len(got), "bytes")
+				return
 			}
-			t.Log("get error", err)
+			if errMap[tt.Name] == "" {
+				errMap[tt.Name] = err.Error()
+			} else {
+				want := errMap[tt.Name]
+				if want != err.Error() {
+					t.Errorf("error mismatch, prev run got %s, now got %s", want, err.Error())
+				}
+				return
+			}
+			t.Log("got error", err)
 		})
 	}
 }
@@ -1423,7 +1434,7 @@ func testDecoderDecodeAll(t *testing.T, fn string, dec *Decoder) {
 	}()
 }
 
-func testDecoderDecodeAllError(t *testing.T, fn string, dec *Decoder) {
+func testDecoderDecodeAllError(t *testing.T, fn string, dec *Decoder, errMap map[string]string) {
 	data, err := ioutil.ReadFile(fn)
 	if err != nil {
 		t.Fatal(err)
@@ -1454,6 +1465,16 @@ func testDecoderDecodeAllError(t *testing.T, fn string, dec *Decoder) {
 			got, err := dec.DecodeAll(in, make([]byte, 0, 20))
 			if err == nil {
 				t.Error("Did not get expected error, got", len(got), "bytes")
+				return
+			}
+			if errMap[tt.Name] == "" {
+				t.Error("cannot check error")
+			} else {
+				want := errMap[tt.Name]
+				if want != err.Error() {
+					t.Errorf("error mismatch, prev run got %s, now got %s", want, err.Error())
+				}
+				return
 			}
 		})
 	}

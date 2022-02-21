@@ -237,7 +237,7 @@ func (s *sequenceDecs) decode(seqs []seqVals) error {
 	if err != nil {
 		printf("Closing sequences: %v, %+v\n", err, *br)
 	}
-	return nil
+	return err
 }
 
 // execute will execute the decoded sequence with the provided history.
@@ -528,7 +528,7 @@ func (s *sequenceDecs) decodeSync(history *history) error {
 
 	// Add final literals
 	s.out = append(s.out, s.literals...)
-	return nil
+	return br.close()
 }
 
 // update states, at least 27 bits must be available.

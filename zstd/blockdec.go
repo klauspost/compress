@@ -141,6 +141,13 @@ func (b *blockDec) reset(br byteBuffer, windowSize uint64) error {
 	case blockTypeReserved:
 		return ErrReservedBlockType
 	case blockTypeRLE:
+		if cSize > maxCompressedBlockSize || cSize > int(b.WindowSize) {
+			if debugDecoder {
+				printf("rle block too big: csize:%d block: %+v\n", uint64(cSize), b)
+			}
+			// TODO: Likely enable:
+			//return  ErrWindowSizeExceeded
+		}
 		b.RLESize = uint32(cSize)
 		if b.lowMem {
 			maxSize = cSize
@@ -162,6 +169,14 @@ func (b *blockDec) reset(br byteBuffer, windowSize uint64) error {
 			return ErrCompressedSizeTooBig
 		}
 	case blockTypeRaw:
+		if cSize > maxCompressedBlockSize || cSize > int(b.WindowSize) {
+			if debugDecoder {
+				printf("rle block too big: csize:%d block: %+v\n", uint64(cSize), b)
+			}
+			// TODO: Likely enable:
+			//return  ErrWindowSizeExceeded
+		}
+
 		b.RLESize = 0
 		// We do not need a destination for raw blocks.
 		maxSize = -1
