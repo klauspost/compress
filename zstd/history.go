@@ -20,6 +20,10 @@ type history struct {
 	// History buffer...
 	b []byte
 
+	// ignoreBuffer is meant to ignore a number of bytes
+	// when checking for matches in history
+	ignoreBuffer int
+
 	windowSize       int
 	allocFrameBuffer int // needed?
 	error            bool
@@ -30,6 +34,7 @@ type history struct {
 // The history must already have been initialized to the desired size.
 func (h *history) reset() {
 	h.b = h.b[:0]
+	h.ignoreBuffer = 0
 	h.error = false
 	h.recentOffsets = [3]int{1, 4, 8}
 	if f := h.decoders.litLengths.fse; f != nil && !f.preDefined {

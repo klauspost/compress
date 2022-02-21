@@ -320,6 +320,7 @@ func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {
 
 	// We use the history for output to avoid copying it.
 	d.history.b = dst
+	d.history.ignoreBuffer = len(dst)
 	// Store input length, so we only check new data.
 	crcStart := len(dst)
 	var err error

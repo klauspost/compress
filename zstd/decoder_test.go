@@ -408,6 +408,21 @@ func TestNewDecoderGood(t *testing.T) {
 }
 
 func TestNewDecoderBad(t *testing.T) {
+	if true {
+		t.Run("conc-4", func(t *testing.T) {
+			newFn := func() (*Decoder, error) {
+				return NewReader(nil, WithDecoderConcurrency(4))
+			}
+			testDecoderFileBad(t, "testdata/bad.zip", newFn)
+
+		})
+		t.Run("conc-1", func(t *testing.T) {
+			newFn := func() (*Decoder, error) {
+				return NewReader(nil, WithDecoderConcurrency(1))
+			}
+			testDecoderFileBad(t, "testdata/bad.zip", newFn)
+		})
+	}
 	defer timeout(10 * time.Second)()
 	dec, err := NewReader(nil)
 	if err != nil {
@@ -1041,6 +1056,59 @@ func testDecoderFile(t *testing.T, fn string, newDec func() (*Decoder, error)) {
 	}
 }
 
+func testDecoderFileBad(t *testing.T, fn string, newDec func() (*Decoder, error)) {
+	data, err := ioutil.ReadFile(fn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want = make(map[string][]byte)
+	for _, tt := range zr.File {
+		if strings.HasSuffix(tt.Name, ".zst") {
+			continue
+		}
+		r, err := tt.Open()
+		if err != nil {
+			t.Fatal(err)
+			return
+		}
+		want[tt.Name+".zst"], _ = ioutil.ReadAll(r)
+	}
+
+	dec, err := newDec()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	defer dec.Close()
+	for i, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, ".zst") || (testing.Short() && i > 20) {
+			continue
+		}
+		t.Run("Reader-"+tt.Name, func(t *testing.T) {
+			r, err := tt.Open()
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer r.Close()
+			err = dec.Reset(r)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			_, err = ioutil.ReadAll(dec)
+			if err == nil {
+				t.Error("Did not get expected error")
+			}
+			t.Log("get error", err)
+		})
+	}
+}
+
 func BenchmarkDecoder_DecoderSmall(b *testing.B) {
 	fn := "testdata/benchdecoder.zip"
 	data, err := ioutil.ReadFile(fn)
@@ -1372,7 +1440,6 @@ func testDecoderDecodeAllError(t *testing.T, fn string, dec *Decoder) {
 		wg.Add(1)
 		t.Run("DecodeAll-"+tt.Name, func(t *testing.T) {
 			defer wg.Done()
-			t.Parallel()
 			r, err := tt.Open()
 			if err != nil {
 				t.Fatal(err)
@@ -1381,10 +1448,10 @@ func testDecoderDecodeAllError(t *testing.T, fn string, dec *Decoder) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// make a buffer that is too small.
-			_, err = dec.DecodeAll(in, make([]byte, 0, 200))
+			// make a buffer that is small.
+			got, err := dec.DecodeAll(in, make([]byte, 0, 20))
 			if err == nil {
-				t.Error("Did not get expected error")
+				t.Error("Did not get expected error, got", len(got), "bytes")
 			}
 		})
 	}

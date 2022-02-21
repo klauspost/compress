@@ -227,14 +227,22 @@ func (b *blockDec) decodeBuf(hist *history) error {
 	case blockTypeCompressed:
 		saved := b.dst
 		// Append directly to history
-		b.dst = hist.b
-		hist.b = nil
+		if hist.ignoreBuffer == 0 {
+			b.dst = hist.b
+			hist.b = nil
+		} else {
+			b.dst = b.dst[:0]
+		}
 		err := b.decodeCompressed(hist)
 		if debugDecoder {
 			println("Decompressed to total", len(b.dst), "bytes, hash:", xxhash.Sum64(b.dst), "error:", err)
 		}
-		hist.b = b.dst
-		b.dst = saved
+		if hist.ignoreBuffer == 0 {
+			hist.b = b.dst
+			b.dst = saved
+		} else {
+			hist.appendKeep(b.dst)
+		}
 		return err
 	case blockTypeReserved:
 		// Used for returning errors.
@@ -455,7 +463,7 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		b.dst = append(b.dst, hist.decoders.literals...)
 		return nil
 	}
-	err = hist.decoders.decodeSync(hist.b)
+	err = hist.decoders.decodeSync(hist)
 	if err != nil {
 		return err
 	}

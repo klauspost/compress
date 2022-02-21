@@ -322,11 +322,14 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 	for {
 		frame.history.reset()
 		err := frame.reset(&frame.bBuf)
-		if err == io.EOF {
-			if debugDecoder {
-				println("frame reset return EOF")
+		if err != nil {
+			if err == io.EOF {
+				if debugDecoder {
+					println("frame reset return EOF")
+				}
+				return dst, nil
 			}
-			return dst, nil
+			return dst, err
 		}
 		if frame.DictionaryID != nil {
 			dict, ok := d.dicts[*frame.DictionaryID]
@@ -338,9 +341,7 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 			}
 			frame.history.setDict(&dict)
 		}
-		if err != nil {
-			return dst, err
-		}
+
 		if frame.FrameContentSize > d.o.maxDecodedSize-uint64(len(dst)) {
 			return dst, ErrDecoderSizeExceeded
 		}
@@ -400,6 +401,7 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 		}
 		for len(d.current.b) == 0 {
 			if !d.syncStream.inFrame {
+				d.frame.history.reset()
 				d.current.err = d.frame.reset(&d.syncStream.br)
 				if d.current.err != nil {
 					d.stashDecoder()
