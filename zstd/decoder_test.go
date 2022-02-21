@@ -1087,10 +1087,7 @@ func testDecoderFileBad(t *testing.T, fn string, newDec func() (*Decoder, error)
 		return
 	}
 	defer dec.Close()
-	for i, tt := range zr.File {
-		if !strings.HasSuffix(tt.Name, ".zst") || (testing.Short() && i > 20) {
-			continue
-		}
+	for _, tt := range zr.File {
 		t.Run(tt.Name, func(t *testing.T) {
 			r, err := tt.Open()
 			if err != nil {
