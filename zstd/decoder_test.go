@@ -409,26 +409,28 @@ func TestNewDecoderGood(t *testing.T) {
 
 func TestNewDecoderBad(t *testing.T) {
 	if true {
-		t.Run("conc-4", func(t *testing.T) {
+		t.Run("Reader-4", func(t *testing.T) {
 			newFn := func() (*Decoder, error) {
 				return NewReader(nil, WithDecoderConcurrency(4))
 			}
 			testDecoderFileBad(t, "testdata/bad.zip", newFn)
 
 		})
-		t.Run("conc-1", func(t *testing.T) {
+		t.Run("Reader-1", func(t *testing.T) {
 			newFn := func() (*Decoder, error) {
 				return NewReader(nil, WithDecoderConcurrency(1))
 			}
 			testDecoderFileBad(t, "testdata/bad.zip", newFn)
 		})
 	}
-	defer timeout(10 * time.Second)()
-	dec, err := NewReader(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	testDecoderDecodeAllError(t, "testdata/bad.zip", dec)
+	t.Run("DecodeAll", func(t *testing.T) {
+		defer timeout(10 * time.Second)()
+		dec, err := NewReader(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		testDecoderDecodeAllError(t, "testdata/bad.zip", dec)
+	})
 }
 
 func TestNewDecoderLarge(t *testing.T) {
@@ -1438,7 +1440,7 @@ func testDecoderDecodeAllError(t *testing.T, fn string, dec *Decoder) {
 			continue
 		}
 		wg.Add(1)
-		t.Run("DecodeAll-"+tt.Name, func(t *testing.T) {
+		t.Run(tt.Name, func(t *testing.T) {
 			defer wg.Done()
 			r, err := tt.Open()
 			if err != nil {

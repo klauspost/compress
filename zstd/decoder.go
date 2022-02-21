@@ -816,7 +816,7 @@ decodeStream:
 			output <- decodeOutput{
 				err: err,
 			}
-			return
+			break decodeStream
 		}
 	decodeFrame:
 		// Go through all blocks of the frame.
