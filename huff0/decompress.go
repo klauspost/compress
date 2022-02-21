@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/klauspost/compress/fse"
 )
@@ -216,6 +217,7 @@ func (s *Scratch) Decoder() *Decoder {
 	return &Decoder{
 		dt:             s.dt,
 		actualTableLog: s.actualTableLog,
+		bufs:           &s.decPool,
 	}
 }
 
@@ -223,7 +225,15 @@ func (s *Scratch) Decoder() *Decoder {
 type Decoder struct {
 	dt             dTable
 	actualTableLog uint8
-	buf            [4][256]byte
+	bufs           *sync.Pool
+}
+
+func (d *Decoder) buffer() *[4][256]byte {
+	buf, ok := d.bufs.Get().(*[4][256]byte)
+	if ok {
+		return buf
+	}
+	return &[4][256]byte{}
 }
 
 // Decompress1X will decompress a 1X encoded stream.
@@ -250,7 +260,8 @@ func (d *Decoder) Decompress1X(dst, src []byte) ([]byte, error) {
 	dt := d.dt.single[:tlSize]
 
 	// Use temp table to avoid bound checks/append penalty.
-	var buf [256]byte
+	bufs := d.buffer()
+	buf := &bufs[0]
 	var off uint8
 
 	for br.off >= 8 {
@@ -278,6 +289,7 @@ func (d *Decoder) Decompress1X(dst, src []byte) ([]byte, error) {
 		if off == 0 {
 			if len(dst)+256 > maxDecodedSize {
 				br.close()
+				d.bufs.Put(bufs)
 				return nil, ErrMaxDecodedSizeExceeded
 			}
 			dst = append(dst, buf[:]...)
@@ -285,6 +297,7 @@ func (d *Decoder) Decompress1X(dst, src []byte) ([]byte, error) {
 	}
 
 	if len(dst)+int(off) > maxDecodedSize {
+		d.bufs.Put(bufs)
 		br.close()
 		return nil, ErrMaxDecodedSizeExceeded
 	}
@@ -311,6 +324,7 @@ func (d *Decoder) Decompress1X(dst, src []byte) ([]byte, error) {
 			}
 		}
 		if len(dst) >= maxDecodedSize {
+			d.bufs.Put(bufs)
 			br.close()
 			return nil, ErrMaxDecodedSizeExceeded
 		}
@@ -320,6 +334,7 @@ func (d *Decoder) Decompress1X(dst, src []byte) ([]byte, error) {
 		bitsLeft -= nBits
 		dst = append(dst, uint8(v.entry>>8))
 	}
+	d.bufs.Put(bufs)
 	return dst, br.close()
 }
 
@@ -342,7 +357,8 @@ func (d *Decoder) decompress1X8Bit(dst, src []byte) ([]byte, error) {
 	dt := d.dt.single[:256]
 
 	// Use temp table to avoid bound checks/append penalty.
-	var buf [256]byte
+	bufs := d.buffer()
+	buf := &bufs[0]
 	var off uint8
 
 	switch d.actualTableLog {
@@ -370,6 +386,7 @@ func (d *Decoder) decompress1X8Bit(dst, src []byte) ([]byte, error) {
 			if off == 0 {
 				if len(dst)+256 > maxDecodedSize {
 					br.close()
+					d.bufs.Put(bufs)
 					return nil, ErrMaxDecodedSizeExceeded
 				}
 				dst = append(dst, buf[:]...)
@@ -399,6 +416,7 @@ func (d *Decoder) decompress1X8Bit(dst, src []byte) ([]byte, error) {
 			if off == 0 {
 				if len(dst)+256 > maxDecodedSize {
 					br.close()
+					d.bufs.Put(bufs)
 					return nil, ErrMaxDecodedSizeExceeded
 				}
 				dst = append(dst, buf[:]...)
@@ -427,6 +445,7 @@ func (d *Decoder) decompress1X8Bit(dst, src []byte) ([]byte, error) {
 			off += 4
 			if off == 0 {
 				if len(dst)+256 > maxDecodedSize {
+					d.bufs.Put(bufs)
 					br.close()
 					return nil, ErrMaxDecodedSizeExceeded
 				}
@@ -456,6 +475,7 @@ func (d *Decoder) decompress1X8Bit(dst, src []byte) ([]byte, error) {
 			off += 4
 			if off == 0 {
 				if len(dst)+256 > maxDecodedSize {
+					d.bufs.Put(bufs)
 					br.close()
 					return nil, ErrMaxDecodedSizeExceeded
 				}
@@ -485,6 +505,7 @@ func (d *Decoder) decompress1X8Bit(dst, src []byte) ([]byte, error) {
 			off += 4
 			if off == 0 {
 				if len(dst)+256 > maxDecodedSize {
+					d.bufs.Put(bufs)
 					br.close()
 					return nil, ErrMaxDecodedSizeExceeded
 				}
@@ -514,6 +535,7 @@ func (d *Decoder) decompress1X8Bit(dst, src []byte) ([]byte, error) {
 			off += 4
 			if off == 0 {
 				if len(dst)+256 > maxDecodedSize {
+					d.bufs.Put(bufs)
 					br.close()
 					return nil, ErrMaxDecodedSizeExceeded
 				}
@@ -543,6 +565,7 @@ func (d *Decoder) decompress1X8Bit(dst, src []byte) ([]byte, error) {
 			off += 4
 			if off == 0 {
 				if len(dst)+256 > maxDecodedSize {
+					d.bufs.Put(bufs)
 					br.close()
 					return nil, ErrMaxDecodedSizeExceeded
 				}
@@ -572,6 +595,7 @@ func (d *Decoder) decompress1X8Bit(dst, src []byte) ([]byte, error) {
 			off += 4
 			if off == 0 {
 				if len(dst)+256 > maxDecodedSize {
+					d.bufs.Put(bufs)
 					br.close()
 					return nil, ErrMaxDecodedSizeExceeded
 				}
@@ -579,10 +603,12 @@ func (d *Decoder) decompress1X8Bit(dst, src []byte) ([]byte, error) {
 			}
 		}
 	default:
+		d.bufs.Put(bufs)
 		return nil, fmt.Errorf("invalid tablelog: %d", d.actualTableLog)
 	}
 
 	if len(dst)+int(off) > maxDecodedSize {
+		d.bufs.Put(bufs)
 		br.close()
 		return nil, ErrMaxDecodedSizeExceeded
 	}
@@ -602,6 +628,7 @@ func (d *Decoder) decompress1X8Bit(dst, src []byte) ([]byte, error) {
 		}
 		if len(dst) >= maxDecodedSize {
 			br.close()
+			d.bufs.Put(bufs)
 			return nil, ErrMaxDecodedSizeExceeded
 		}
 		v := dt[br.peekByteFast()>>shift]
@@ -610,6 +637,7 @@ func (d *Decoder) decompress1X8Bit(dst, src []byte) ([]byte, error) {
 		bitsLeft -= int8(nBits)
 		dst = append(dst, uint8(v.entry>>8))
 	}
+	d.bufs.Put(bufs)
 	return dst, br.close()
 }
 
@@ -629,7 +657,8 @@ func (d *Decoder) decompress1X8BitExactly(dst, src []byte) ([]byte, error) {
 	dt := d.dt.single[:256]
 
 	// Use temp table to avoid bound checks/append penalty.
-	var buf [256]byte
+	bufs := d.buffer()
+	buf := &bufs[0]
 	var off uint8
 
 	const shift = 56
@@ -656,6 +685,7 @@ func (d *Decoder) decompress1X8BitExactly(dst, src []byte) ([]byte, error) {
 		off += 4
 		if off == 0 {
 			if len(dst)+256 > maxDecodedSize {
+				d.bufs.Put(bufs)
 				br.close()
 				return nil, ErrMaxDecodedSizeExceeded
 			}
@@ -664,6 +694,7 @@ func (d *Decoder) decompress1X8BitExactly(dst, src []byte) ([]byte, error) {
 	}
 
 	if len(dst)+int(off) > maxDecodedSize {
+		d.bufs.Put(bufs)
 		br.close()
 		return nil, ErrMaxDecodedSizeExceeded
 	}
@@ -680,6 +711,7 @@ func (d *Decoder) decompress1X8BitExactly(dst, src []byte) ([]byte, error) {
 			}
 		}
 		if len(dst) >= maxDecodedSize {
+			d.bufs.Put(bufs)
 			br.close()
 			return nil, ErrMaxDecodedSizeExceeded
 		}
@@ -689,6 +721,7 @@ func (d *Decoder) decompress1X8BitExactly(dst, src []byte) ([]byte, error) {
 		bitsLeft -= int8(nBits)
 		dst = append(dst, uint8(v.entry>>8))
 	}
+	d.bufs.Put(bufs)
 	return dst, br.close()
 }
 
@@ -736,7 +769,7 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 	single := d.dt.single[:tlSize]
 
 	// Use temp table to avoid bound checks/append penalty.
-	buf := &d.buf
+	buf := d.buffer()
 	var off uint8
 	var decoded int
 
@@ -801,6 +834,7 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 
 		if off == 0 {
 			if bufoff > dstEvery {
+				d.bufs.Put(buf)
 				return nil, errors.New("corruption detected: stream overrun 1")
 			}
 			copy(out, buf[0][:])
@@ -811,6 +845,7 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 			decoded += bufoff * 4
 			// There must at least be 3 buffers left.
 			if len(out) < dstEvery*3 {
+				d.bufs.Put(buf)
 				return nil, errors.New("corruption detected: stream overrun 2")
 			}
 		}
@@ -818,6 +853,7 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 	if off > 0 {
 		ioff := int(off)
 		if len(out) < dstEvery*3+ioff {
+			d.bufs.Put(buf)
 			return nil, errors.New("corruption detected: stream overrun 3")
 		}
 		copy(out, buf[0][:off])
@@ -853,6 +889,7 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 			}
 			// end inline...
 			if offset >= len(out) {
+				d.bufs.Put(buf)
 				return nil, errors.New("corruption detected: stream overrun 4")
 			}
 
@@ -871,6 +908,7 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 			return nil, err
 		}
 	}
+	d.bufs.Put(buf)
 	if dstSize != decoded {
 		return nil, errors.New("corruption detected: short output block")
 	}
@@ -916,7 +954,7 @@ func (d *Decoder) decompress4X8bit(dst, src []byte) ([]byte, error) {
 	single := d.dt.single[:tlSize]
 
 	// Use temp table to avoid bound checks/append penalty.
-	buf := &d.buf
+	buf := d.buffer()
 	var off uint8
 	var decoded int
 
@@ -1022,6 +1060,7 @@ func (d *Decoder) decompress4X8bit(dst, src []byte) ([]byte, error) {
 
 		if off == 0 {
 			if bufoff > dstEvery {
+				d.bufs.Put(buf)
 				return nil, errors.New("corruption detected: stream overrun 1")
 			}
 			copy(out, buf[0][:])
@@ -1032,6 +1071,7 @@ func (d *Decoder) decompress4X8bit(dst, src []byte) ([]byte, error) {
 			decoded += bufoff * 4
 			// There must at least be 3 buffers left.
 			if len(out) < dstEvery*3 {
+				d.bufs.Put(buf)
 				return nil, errors.New("corruption detected: stream overrun 2")
 			}
 		}
@@ -1039,6 +1079,7 @@ func (d *Decoder) decompress4X8bit(dst, src []byte) ([]byte, error) {
 	if off > 0 {
 		ioff := int(off)
 		if len(out) < dstEvery*3+ioff {
+			d.bufs.Put(buf)
 			return nil, errors.New("corruption detected: stream overrun 3")
 		}
 		copy(out, buf[0][:off])
@@ -1056,6 +1097,7 @@ func (d *Decoder) decompress4X8bit(dst, src []byte) ([]byte, error) {
 		bitsLeft := int(br.off*8) + int(64-br.bitsRead)
 		for bitsLeft > 0 {
 			if br.finished() {
+				d.bufs.Put(buf)
 				return nil, io.ErrUnexpectedEOF
 			}
 			if br.bitsRead >= 56 {
@@ -1076,6 +1118,7 @@ func (d *Decoder) decompress4X8bit(dst, src []byte) ([]byte, error) {
 			}
 			// end inline...
 			if offset >= len(out) {
+				d.bufs.Put(buf)
 				return nil, errors.New("corruption detected: stream overrun 4")
 			}
 
@@ -1090,9 +1133,11 @@ func (d *Decoder) decompress4X8bit(dst, src []byte) ([]byte, error) {
 		decoded += offset - dstEvery*i
 		err = br.close()
 		if err != nil {
+			d.bufs.Put(buf)
 			return nil, err
 		}
 	}
+	d.bufs.Put(buf)
 	if dstSize != decoded {
 		return nil, errors.New("corruption detected: short output block")
 	}
@@ -1134,7 +1179,7 @@ func (d *Decoder) decompress4X8bitExactly(dst, src []byte) ([]byte, error) {
 	single := d.dt.single[:tlSize]
 
 	// Use temp table to avoid bound checks/append penalty.
-	buf := &d.buf
+	buf := d.buffer()
 	var off uint8
 	var decoded int
 
@@ -1240,6 +1285,7 @@ func (d *Decoder) decompress4X8bitExactly(dst, src []byte) ([]byte, error) {
 
 		if off == 0 {
 			if bufoff > dstEvery {
+				d.bufs.Put(buf)
 				return nil, errors.New("corruption detected: stream overrun 1")
 			}
 			copy(out, buf[0][:])
@@ -1250,6 +1296,7 @@ func (d *Decoder) decompress4X8bitExactly(dst, src []byte) ([]byte, error) {
 			decoded += bufoff * 4
 			// There must at least be 3 buffers left.
 			if len(out) < dstEvery*3 {
+				d.bufs.Put(buf)
 				return nil, errors.New("corruption detected: stream overrun 2")
 			}
 		}
@@ -1274,6 +1321,7 @@ func (d *Decoder) decompress4X8bitExactly(dst, src []byte) ([]byte, error) {
 		bitsLeft := int(br.off*8) + int(64-br.bitsRead)
 		for bitsLeft > 0 {
 			if br.finished() {
+				d.bufs.Put(buf)
 				return nil, io.ErrUnexpectedEOF
 			}
 			if br.bitsRead >= 56 {
@@ -1294,6 +1342,7 @@ func (d *Decoder) decompress4X8bitExactly(dst, src []byte) ([]byte, error) {
 			}
 			// end inline...
 			if offset >= len(out) {
+				d.bufs.Put(buf)
 				return nil, errors.New("corruption detected: stream overrun 4")
 			}
 
@@ -1308,9 +1357,11 @@ func (d *Decoder) decompress4X8bitExactly(dst, src []byte) ([]byte, error) {
 		decoded += offset - dstEvery*i
 		err = br.close()
 		if err != nil {
+			d.bufs.Put(buf)
 			return nil, err
 		}
 	}
+	d.bufs.Put(buf)
 	if dstSize != decoded {
 		return nil, errors.New("corruption detected: short output block")
 	}
