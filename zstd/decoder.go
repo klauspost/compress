@@ -817,18 +817,10 @@ decodeStream:
 		var historySent bool
 		frame.history.reset()
 		err := frame.reset(&br)
-		switch err {
-		default:
-			dec := <-d.decoders
-			dec.sendErr(err)
-			seqPrepare <- dec
-			break decodeStream
-		case nil:
-		}
 		if debugDecoder && err != nil {
 			println("Frame decoder returned", err)
 		}
-		if frame.DictionaryID != nil {
+		if err == nil && frame.DictionaryID != nil {
 			dict, ok := d.dicts[*frame.DictionaryID]
 			if !ok {
 				err = ErrUnknownDictionary
@@ -836,25 +828,29 @@ decodeStream:
 				frame.history.setDict(&dict)
 			}
 		}
-		if d.frame.WindowSize > d.o.maxWindowSize {
+		if err == nil && d.frame.WindowSize > d.o.maxWindowSize {
 			err = ErrDecoderSizeExceeded
 		}
 		if err != nil {
-			output <- decodeOutput{
-				err: err,
+			select {
+			case <-ctx.Done():
+			case dec := <-d.decoders:
+				dec.sendErr(err)
+				select {
+				case seqPrepare <- dec:
+				case <-ctx.Done():
+				}
 			}
 			break decodeStream
 		}
 	decodeFrame:
 		// Go through all blocks of the frame.
 		for {
-			dec := <-d.decoders
+			var dec *blockDec
 			select {
 			case <-ctx.Done():
-				dec.sendErr(ctx.Err())
-				seqPrepare <- dec
 				break decodeStream
-			default:
+			case dec = <-d.decoders:
 			}
 			err := frame.next(dec)
 			if !historySent {
@@ -867,6 +863,9 @@ decodeStream:
 				historySent = true
 			} else {
 				dec.async.newHist = nil
+			}
+			if debugDecoder && err != nil {
+				println("next block returned error:", err)
 			}
 			dec.err = err
 			dec.checkCRC = nil

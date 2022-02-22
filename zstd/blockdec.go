@@ -145,8 +145,7 @@ func (b *blockDec) reset(br byteBuffer, windowSize uint64) error {
 			if debugDecoder {
 				printf("rle block too big: csize:%d block: %+v\n", uint64(cSize), b)
 			}
-			// TODO: Likely enable:
-			//return  ErrWindowSizeExceeded
+			return ErrWindowSizeExceeded
 		}
 		b.RLESize = uint32(cSize)
 		if b.lowMem {
@@ -173,8 +172,7 @@ func (b *blockDec) reset(br byteBuffer, windowSize uint64) error {
 			if debugDecoder {
 				printf("rle block too big: csize:%d block: %+v\n", uint64(cSize), b)
 			}
-			// TODO: Likely enable:
-			//return  ErrWindowSizeExceeded
+			return ErrWindowSizeExceeded
 		}
 
 		b.RLESize = 0
