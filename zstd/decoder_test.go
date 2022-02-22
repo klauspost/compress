@@ -202,7 +202,6 @@ func TestErrorWriter(t *testing.T) {
 func TestNewDecoder(t *testing.T) {
 	for _, n := range []int{1, 4} {
 		t.Run(fmt.Sprintf("cpu-%d", n), func(t *testing.T) {
-			defer timeout(60 * time.Second)()
 			newFn := func() (*Decoder, error) {
 				return NewReader(nil, WithDecoderConcurrency(n))
 			}
@@ -393,7 +392,6 @@ func TestNewDecoderFrameSize(t *testing.T) {
 func TestNewDecoderGood(t *testing.T) {
 	for _, n := range []int{1, 4} {
 		t.Run(fmt.Sprintf("cpu-%d", n), func(t *testing.T) {
-			defer timeout(30 * time.Second)()
 			newFn := func() (*Decoder, error) {
 				return NewReader(nil, WithDecoderConcurrency(n))
 			}
@@ -1017,24 +1015,48 @@ func testDecoderFile(t *testing.T, fn string, newDec func() (*Decoder, error)) {
 			continue
 		}
 		t.Run("Reader-"+tt.Name, func(t *testing.T) {
+			defer timeout(10 * time.Second)()
 			r, err := tt.Open()
 			if err != nil {
 				t.Error(err)
 				return
 			}
-			defer r.Close()
-			err = dec.Reset(r)
+			data, err := ioutil.ReadAll(r)
+			r.Close()
 			if err != nil {
 				t.Error(err)
 				return
 			}
-			got, err := ioutil.ReadAll(dec)
+			err = dec.Reset(ioutil.NopCloser(bytes.NewBuffer(data)))
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			var got []byte
+			var gotError error
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				got, gotError = ioutil.ReadAll(dec)
+				wg.Done()
+			}()
+
+			// This decode should not interfere with the stream...
+			gotDecAll, err := dec.DecodeAll(data, nil)
 			if err != nil {
 				t.Error(err)
 				if err != ErrCRCMismatch {
 					return
 				}
 			}
+			wg.Wait()
+			if gotError != nil {
+				t.Error(err)
+				if err != ErrCRCMismatch {
+					return
+				}
+			}
+
 			wantB := want[tt.Name]
 			if !bytes.Equal(wantB, got) {
 				if len(wantB)+len(got) < 1000 {
@@ -1053,6 +1075,23 @@ func testDecoderFile(t *testing.T, fn string, newDec func() (*Decoder, error)) {
 				t.Logf("Length, want: %d, got: %d", len(wantB), len(got))
 				t.Error("Output mismatch")
 				return
+			}
+			if !bytes.Equal(wantB, gotDecAll) {
+				if len(wantB)+len(got) < 1000 {
+					t.Logf(" got: %v\nwant: %v", got, wantB)
+				} else {
+					fileName, _ := filepath.Abs(filepath.Join("testdata", t.Name()+"-want.bin"))
+					_ = os.MkdirAll(filepath.Dir(fileName), os.ModePerm)
+					err := ioutil.WriteFile(fileName, wantB, os.ModePerm)
+					t.Log("Wrote file", fileName, err)
+
+					fileName, _ = filepath.Abs(filepath.Join("testdata", t.Name()+"-got.bin"))
+					_ = os.MkdirAll(filepath.Dir(fileName), os.ModePerm)
+					err = ioutil.WriteFile(fileName, got, os.ModePerm)
+					t.Log("Wrote file", fileName, err)
+				}
+				t.Logf("Length, want: %d, got: %d", len(wantB), len(got))
+				t.Error("DecodeAll Output mismatch")
 			}
 			t.Log(len(got), "bytes returned, matches input, ok!")
 		})
@@ -1102,7 +1141,11 @@ func testDecoderFileBad(t *testing.T, fn string, newDec func() (*Decoder, error)
 			}
 			got, err := ioutil.ReadAll(dec)
 			if err == nil {
-				t.Error("Did not get expected error, got ", len(got), "bytes")
+				want := errMap[tt.Name]
+				if want == "" {
+					want = "<error>"
+				}
+				t.Error("Did not get expected error", want, "- got ", len(got), "bytes")
 				return
 			}
 			if errMap[tt.Name] == "" {

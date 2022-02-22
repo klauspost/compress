@@ -65,6 +65,7 @@ func (h *history) setDict(dict *dict) {
 	h.decoders.litLengths = dict.llDec
 	h.decoders.offsets = dict.ofDec
 	h.decoders.matchLengths = dict.mlDec
+	h.decoders.dict = dict.content
 	h.recentOffsets = dict.offsets
 	h.huffTree = dict.litEnc
 }

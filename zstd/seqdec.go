@@ -230,9 +230,6 @@ func (s *sequenceDecs) decode(seqs []seqVals) error {
 	if s.seqSize > maxBlockSize {
 		return fmt.Errorf("output (%d) bigger than max block size", s.seqSize)
 	}
-	if !br.finished() {
-		return fmt.Errorf("%d extra bits on block, should be 0", br.remain())
-	}
 	err := br.close()
 	if err != nil {
 		printf("Closing sequences: %v, %+v\n", err, *br)

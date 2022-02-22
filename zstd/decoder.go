@@ -838,10 +838,7 @@ decodeStream:
 			case <-ctx.Done():
 			case dec := <-d.decoders:
 				dec.sendErr(err)
-				select {
-				case seqPrepare <- dec:
-				case <-ctx.Done():
-				}
+				seqPrepare <- dec
 			}
 			break decodeStream
 		}
@@ -853,6 +850,7 @@ decodeStream:
 			case <-ctx.Done():
 				break decodeStream
 			case dec = <-d.decoders:
+				// Once we have a decoder, we MUST return it.
 			}
 			err := frame.next(dec)
 			if !historySent {
@@ -885,11 +883,7 @@ decodeStream:
 				}
 			}
 			err = dec.err
-			select {
-			case <-ctx.Done():
-				break decodeStream
-			case seqPrepare <- dec:
-			}
+			seqPrepare <- dec
 			if err != nil {
 				break decodeStream
 			}
