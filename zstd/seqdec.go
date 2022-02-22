@@ -194,7 +194,7 @@ func (s *sequenceDecs) decode(seqs []seqVals) error {
 		}
 		litRemain -= ll
 		if litRemain < 0 {
-			return fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available", ll, litRemain)
+			return fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available", ll, litRemain+ll)
 		}
 		seqs[i] = seqVals{
 			ll: ll,
