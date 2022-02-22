@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -1225,6 +1226,51 @@ func BenchmarkDecoder_DecodeAll(b *testing.B) {
 			}
 		})
 	}
+}
+
+func BenchmarkDecoder_DecodeAllFiles(b *testing.B) {
+	filepath.Walk("../testdata/", func(path string, info fs.FileInfo, err error) error {
+		if info.IsDir() || info.Size() < 100 {
+			return nil
+		}
+		b.Run(filepath.Base(path), func(b *testing.B) {
+			raw, err := ioutil.ReadFile(path)
+			if err != nil {
+				b.Error(err)
+			}
+			for i := SpeedFastest; i <= SpeedBestCompression; i++ {
+				b.Run(i.String(), func(b *testing.B) {
+					enc, err := NewWriter(nil, WithEncoderLevel(i), WithSingleSegment(true))
+					if err != nil {
+						b.Error(err)
+					}
+					encoded := enc.EncodeAll(raw, nil)
+					if err != nil {
+						b.Error(err)
+					}
+					dec, err := NewReader(nil, WithDecoderConcurrency(1))
+					if err != nil {
+						b.Error(err)
+					}
+					decoded, err := dec.DecodeAll(encoded, nil)
+					if err != nil {
+						b.Error(err)
+					}
+					b.SetBytes(int64(len(raw)))
+					b.ReportAllocs()
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						decoded, err = dec.DecodeAll(encoded, decoded[:0])
+						if err != nil {
+							b.Error(err)
+						}
+					}
+					b.ReportMetric(100*float64(len(encoded))/float64(len(raw)), "pct")
+				})
+			}
+		})
+		return nil
+	})
 }
 
 func BenchmarkDecoder_DecodeAllParallel(b *testing.B) {
