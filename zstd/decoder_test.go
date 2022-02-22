@@ -460,7 +460,7 @@ func TestNewReaderRead(t *testing.T) {
 }
 
 func TestNewDecoderBig(t *testing.T) {
-	if testing.Short() {
+	if testing.Short() || isRaceTest {
 		t.SkipNow()
 	}
 	file := "testdata/zstd-10kfiles.zip"
@@ -480,7 +480,7 @@ func TestNewDecoderBig(t *testing.T) {
 }
 
 func TestNewDecoderBigFile(t *testing.T) {
-	if testing.Short() {
+	if testing.Short() || isRaceTest {
 		t.SkipNow()
 	}
 	file := "testdata/enwik9.zst"
@@ -1430,7 +1430,7 @@ func testDecoderDecodeAll(t *testing.T, fn string, dec *Decoder) {
 		wg.Add(1)
 		t.Run("DecodeAll-"+tt.Name, func(t *testing.T) {
 			defer wg.Done()
-			//t.Parallel()
+			t.Parallel()
 			r, err := tt.Open()
 			if err != nil {
 				t.Fatal(err)

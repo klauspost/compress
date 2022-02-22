@@ -398,92 +398,11 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 		if !blocking {
 			return false
 		}
-		if d.current.d == nil {
-			d.current.d = <-d.decoders
+		ok = d.nextBlockSync()
+		if !ok {
+			d.stashDecoder()
 		}
-		for len(d.current.b) == 0 {
-			if !d.syncStream.inFrame {
-				d.frame.history.reset()
-				d.current.err = d.frame.reset(&d.syncStream.br)
-				if d.current.err != nil {
-					d.stashDecoder()
-					return false
-				}
-				if d.frame.DictionaryID != nil {
-					dict, ok := d.dicts[*d.frame.DictionaryID]
-					if !ok {
-						d.current.err = ErrUnknownDictionary
-						return false
-					} else {
-						d.frame.history.setDict(&dict)
-					}
-				}
-				if d.frame.WindowSize > d.o.maxDecodedSize || d.frame.WindowSize > d.o.maxWindowSize {
-					d.current.err = ErrDecoderSizeExceeded
-					return false
-				}
-
-				d.syncStream.decodedFrame = 0
-				d.syncStream.inFrame = true
-			}
-			d.current.err = d.frame.next(d.current.d)
-			if d.current.err != nil {
-				d.stashDecoder()
-				return false
-			}
-			d.frame.history.ensureBlock()
-			if debugDecoder {
-				println("History trimmed:", len(d.frame.history.b), "decoded already:", d.syncStream.decodedFrame)
-			}
-			histBefore := len(d.frame.history.b)
-			d.current.err = d.current.d.decodeBuf(&d.frame.history)
-
-			if d.current.err != nil {
-				d.stashDecoder()
-				println("error after:", d.current.err)
-				return false
-			}
-			d.current.b = d.frame.history.b[histBefore:]
-			if debugDecoder {
-				println("history after:", len(d.frame.history.b))
-			}
-
-			// Check frame size (before CRC)
-			d.syncStream.decodedFrame += uint64(len(d.current.b))
-			if d.frame.FrameContentSize > 0 && d.syncStream.decodedFrame > d.frame.FrameContentSize {
-				if debugDecoder {
-					printf("DecodedFrame (%d) > FrameContentSize (%d)\n", d.syncStream.decodedFrame, d.frame.FrameContentSize)
-				}
-				d.current.err = ErrFrameSizeExceeded
-				d.stashDecoder()
-				return false
-			}
-
-			// Check FCS
-			if d.current.d.Last && d.frame.FrameContentSize > 0 && d.syncStream.decodedFrame != d.frame.FrameContentSize {
-				if debugDecoder {
-					printf("DecodedFrame (%d) != FrameContentSize (%d)\n", d.syncStream.decodedFrame, d.frame.FrameContentSize)
-				}
-				d.current.err = ErrFrameSizeMismatch
-				d.stashDecoder()
-				return false
-			}
-
-			// Update/Check CRC
-			if d.frame.HasCheckSum {
-				d.frame.crc.Write(d.current.b)
-				if d.current.d.Last {
-					d.current.err = d.frame.checkCRC()
-					if d.current.err != nil {
-						println("CRC error:", d.current.err)
-						d.stashDecoder()
-						return false
-					}
-				}
-			}
-			d.syncStream.inFrame = !d.current.d.Last
-		}
-		return true
+		return ok
 	}
 
 	//ASYNC:
@@ -543,6 +462,89 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 		}
 	}
 
+	return true
+}
+
+func (d *Decoder) nextBlockSync() (ok bool) {
+	if d.current.d == nil {
+		d.current.d = <-d.decoders
+	}
+	for len(d.current.b) == 0 {
+		if !d.syncStream.inFrame {
+			d.frame.history.reset()
+			d.current.err = d.frame.reset(&d.syncStream.br)
+			if d.current.err != nil {
+				return false
+			}
+			if d.frame.DictionaryID != nil {
+				dict, ok := d.dicts[*d.frame.DictionaryID]
+				if !ok {
+					d.current.err = ErrUnknownDictionary
+					return false
+				} else {
+					d.frame.history.setDict(&dict)
+				}
+			}
+			if d.frame.WindowSize > d.o.maxDecodedSize || d.frame.WindowSize > d.o.maxWindowSize {
+				d.current.err = ErrDecoderSizeExceeded
+				return false
+			}
+
+			d.syncStream.decodedFrame = 0
+			d.syncStream.inFrame = true
+		}
+		d.current.err = d.frame.next(d.current.d)
+		if d.current.err != nil {
+			return false
+		}
+		d.frame.history.ensureBlock()
+		if debugDecoder {
+			println("History trimmed:", len(d.frame.history.b), "decoded already:", d.syncStream.decodedFrame)
+		}
+		histBefore := len(d.frame.history.b)
+		d.current.err = d.current.d.decodeBuf(&d.frame.history)
+
+		if d.current.err != nil {
+			println("error after:", d.current.err)
+			return false
+		}
+		d.current.b = d.frame.history.b[histBefore:]
+		if debugDecoder {
+			println("history after:", len(d.frame.history.b))
+		}
+
+		// Check frame size (before CRC)
+		d.syncStream.decodedFrame += uint64(len(d.current.b))
+		if d.frame.FrameContentSize > 0 && d.syncStream.decodedFrame > d.frame.FrameContentSize {
+			if debugDecoder {
+				printf("DecodedFrame (%d) > FrameContentSize (%d)\n", d.syncStream.decodedFrame, d.frame.FrameContentSize)
+			}
+			d.current.err = ErrFrameSizeExceeded
+			return false
+		}
+
+		// Check FCS
+		if d.current.d.Last && d.frame.FrameContentSize > 0 && d.syncStream.decodedFrame != d.frame.FrameContentSize {
+			if debugDecoder {
+				printf("DecodedFrame (%d) != FrameContentSize (%d)\n", d.syncStream.decodedFrame, d.frame.FrameContentSize)
+			}
+			d.current.err = ErrFrameSizeMismatch
+			return false
+		}
+
+		// Update/Check CRC
+		if d.frame.HasCheckSum {
+			d.frame.crc.Write(d.current.b)
+			if d.current.d.Last {
+				d.current.err = d.frame.checkCRC()
+				if d.current.err != nil {
+					println("CRC error:", d.current.err)
+					return false
+				}
+			}
+		}
+		d.syncStream.inFrame = !d.current.d.Last
+	}
 	return true
 }
 
