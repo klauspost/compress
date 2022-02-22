@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -1229,7 +1228,7 @@ func BenchmarkDecoder_DecodeAll(b *testing.B) {
 }
 
 func BenchmarkDecoder_DecodeAllFiles(b *testing.B) {
-	filepath.Walk("../testdata/", func(path string, info fs.FileInfo, err error) error {
+	filepath.Walk("../testdata/", func(path string, info os.FileInfo, err error) error {
 		if info.IsDir() || info.Size() < 100 {
 			return nil
 		}
