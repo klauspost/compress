@@ -843,7 +843,7 @@ decodeStream:
 			}
 			break decodeStream
 		}
-	decodeFrame:
+
 		// Go through all blocks of the frame.
 		for {
 			var dec *blockDec
@@ -884,10 +884,10 @@ decodeStream:
 			}
 			select {
 			case <-ctx.Done():
-				break decodeFrame
+				break decodeStream
 			case seqPrepare <- dec:
 			}
-			if err != nil {
+			if dec.err != nil {
 				break decodeStream
 			}
 			if dec.Last {
