@@ -1074,7 +1074,7 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 
 		if estBits < reuseSize {
 			if debugDeflate {
-				fmt.Println("not reusing, reuse:", reuseSize/8, "> new:", estBits/8, "- header est:", w.lastHeader/8)
+				fmt.Println("NOT reusing, reuse:", reuseSize/8, "> new:", estBits/8, "header est:", w.lastHeader/8, "bytes")
 			}
 			// We owe an EOB
 			w.writeCode(w.literalEncoding.codes[endBlockMarker])
@@ -1108,6 +1108,9 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 	// Go 1.16 LOVES having these on stack. At least 1.5x the speed.
 	bits, nbits, nbytes := w.bits, w.nbits, w.nbytes
 
+	if debugDeflate {
+		count -= int(nbytes)*8 + int(nbits)
+	}
 	// Unroll, write 3 codes/loop.
 	// Fastest number of unrolls.
 	for len(input) > 3 {
@@ -1123,6 +1126,9 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 			if w.err != nil {
 				nbytes = 0
 				return
+			}
+			if debugDeflate {
+				count += int(nbytes) * 8
 			}
 			_, w.err = w.writer.Write(w.bytes[:nbytes])
 			nbytes = 0
@@ -1150,6 +1156,9 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 					nbytes = 0
 					return
 				}
+				if debugDeflate {
+					count += int(nbytes) * 8
+				}
 				_, w.err = w.writer.Write(w.bytes[:nbytes])
 				nbytes = 0
 			}
@@ -1166,8 +1175,14 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 	w.bits, w.nbits, w.nbytes = bits, nbits, nbytes
 
 	if debugDeflate {
-		fmt.Println("wrote", count/8, "bytes")
+		nb := count + int(nbytes)*8 + int(nbits)
+		fmt.Println("wrote", nb, "bits,", nb/8, "bytes.")
 	}
+	// Flush if needed to have space.
+	if w.nbits >= 48 {
+		w.writeOutBits()
+	}
+
 	if eof || sync {
 		w.writeCode(w.literalEncoding.codes[endBlockMarker])
 		w.lastHeader = 0
