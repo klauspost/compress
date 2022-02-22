@@ -884,12 +884,13 @@ decodeStream:
 					println("found crc to check:", dec.checkCRC)
 				}
 			}
+			err = dec.err
 			select {
 			case <-ctx.Done():
 				break decodeStream
 			case seqPrepare <- dec:
 			}
-			if dec.err != nil {
+			if err != nil {
 				break decodeStream
 			}
 			if dec.Last {

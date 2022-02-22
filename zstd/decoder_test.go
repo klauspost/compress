@@ -1683,6 +1683,9 @@ func TestResetNil(t *testing.T) {
 }
 
 func timeout(after time.Duration) (cancel func()) {
+	if isRaceTest {
+		return func() {}
+	}
 	c := time.After(after)
 	cc := make(chan struct{})
 	go func() {
