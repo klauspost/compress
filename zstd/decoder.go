@@ -635,6 +635,7 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 	var seqPrepare = make(chan *blockDec, d.o.concurrent)
 	var seqDecode = make(chan *blockDec, d.o.concurrent)
 	var seqExecute = make(chan *blockDec, d.o.concurrent)
+
 	// Async 1: Prepare blocks...
 	go func() {
 		var hist history
@@ -674,6 +675,7 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 		}
 		close(seqDecode)
 	}()
+
 	// Async 2: Decode sequences...
 	go func() {
 		var hist history
@@ -721,7 +723,12 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 		}
 		close(seqExecute)
 	}()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
 	// Async 3: Execute sequences...
+	frameHistCache := d.frame.history.b
 	go func() {
 		var hist history
 		var decodedFrame uint64
@@ -743,9 +750,14 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 				if block.async.newHist.dict != nil {
 					hist.setDict(block.async.newHist.dict)
 				}
+
 				if cap(hist.b) < hist.allocFrameBuffer {
-					hist.b = make([]byte, 0, hist.allocFrameBuffer)
-					println("Alloc history sized", hist.allocFrameBuffer)
+					if cap(frameHistCache) >= hist.allocFrameBuffer {
+						hist.b = frameHistCache
+					} else {
+						hist.b = make([]byte, 0, hist.allocFrameBuffer)
+						println("Alloc history sized", hist.allocFrameBuffer)
+					}
 				}
 				hist.b = hist.b[:0]
 				fcs = block.async.fcs
@@ -807,6 +819,8 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 			output <- do
 		}
 		close(output)
+		frameHistCache = hist.b
+		wg.Done()
 		if debugDecoder {
 			println("decoder goroutines finished")
 		}
@@ -896,4 +910,6 @@ decodeStream:
 		}
 	}
 	close(seqPrepare)
+	wg.Wait()
+	d.frame.history.b = frameHistCache
 }
