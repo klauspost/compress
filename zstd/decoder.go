@@ -885,11 +885,12 @@ decodeStream:
 				}
 			}
 			err = dec.err
+			last := dec.Last
 			seqPrepare <- dec
 			if err != nil {
 				break decodeStream
 			}
-			if dec.Last {
+			if last {
 				break
 			}
 		}
