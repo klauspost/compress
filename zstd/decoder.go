@@ -406,14 +406,7 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 	}
 
 	//ASYNC:
-	if d.current.d != nil {
-		if debugDecoder {
-			printf("re-adding current decoder %p", d.current.d)
-		}
-		d.decoders <- d.current.d
-		d.current.d = nil
-	}
-
+	d.stashDecoder()
 	if blocking {
 		d.current.decodeOutput, ok = <-d.current.output
 	} else {
@@ -550,6 +543,9 @@ func (d *Decoder) nextBlockSync() (ok bool) {
 
 func (d *Decoder) stashDecoder() {
 	if d.current.d != nil {
+		if debugDecoder {
+			printf("re-adding current decoder %p", d.current.d)
+		}
 		d.decoders <- d.current.d
 		d.current.d = nil
 	}
@@ -645,6 +641,9 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 		var hasErr bool
 		for block := range seqPrepare {
 			if hasErr {
+				if block != nil {
+					d.decoders <- block
+				}
 				continue
 			}
 			if block.async.newHist != nil {
@@ -682,6 +681,9 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 
 		for block := range seqDecode {
 			if hasErr {
+				if block != nil {
+					d.decoders <- block
+				}
 				continue
 			}
 			if block.async.newHist != nil {

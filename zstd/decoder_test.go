@@ -1128,6 +1128,7 @@ func testDecoderFileBad(t *testing.T, fn string, newDec func() (*Decoder, error)
 	defer dec.Close()
 	for _, tt := range zr.File {
 		t.Run(tt.Name, func(t *testing.T) {
+			defer timeout(10 * time.Second)()
 			r, err := tt.Open()
 			if err != nil {
 				t.Error(err)
