@@ -1046,6 +1046,7 @@ func testDecoderFile(t *testing.T, fn string, newDec func() (*Decoder, error)) {
 			if err != nil {
 				t.Error(err)
 				if err != ErrCRCMismatch {
+					wg.Wait()
 					return
 				}
 			}

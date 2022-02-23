@@ -299,7 +299,7 @@ func (d *Decoder) WriteTo(w io.Writer) (int64, error) {
 // DecodeAll can be used concurrently.
 // The Decoder concurrency limits will be respected.
 func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
-	if d.current.err == ErrDecoderClosed {
+	if d.decoders == nil {
 		return dst, ErrDecoderClosed
 	}
 
