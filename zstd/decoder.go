@@ -642,7 +642,7 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 		for block := range seqPrepare {
 			if hasErr {
 				if block != nil {
-					d.decoders <- block
+					seqDecode <- block
 				}
 				continue
 			}
@@ -682,7 +682,7 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 		for block := range seqDecode {
 			if hasErr {
 				if block != nil {
-					d.decoders <- block
+					seqExecute <- block
 				}
 				continue
 			}
