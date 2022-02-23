@@ -450,7 +450,7 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 		got := d.current.crc.Sum64()
 		var tmp [4]byte
 		binary.LittleEndian.PutUint32(tmp[:], uint32(got))
-		if !bytes.Equal(tmp[:], next.d.checkCRC) {
+		if !bytes.Equal(tmp[:], next.d.checkCRC) && !ignoreCRC {
 			if debugDecoder {
 				println("CRC Check Failed:", tmp[:], " (got) !=", next.d.checkCRC, "(on stream)")
 			}

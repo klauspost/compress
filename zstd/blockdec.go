@@ -335,6 +335,9 @@ func (b *blockDec) decodeLiterals(in []byte, hist *history) (remain []byte, err 
 	if debugDecoder {
 		println("literals type:", litType, "litRegenSize:", litRegenSize, "litCompSize:", litCompSize, "sizeFormat:", sizeFormat, "4X:", fourStreams)
 	}
+	if litRegenSize > int(b.WindowSize) || litRegenSize > maxCompressedBlockSize {
+		return in, ErrWindowSizeExceeded
+	}
 
 	switch litType {
 	case literalsBlockRaw:
@@ -396,6 +399,7 @@ func (b *blockDec) decodeLiterals(in []byte, hist *history) (remain []byte, err 
 		}
 		var err error
 		// Use our out buffer.
+		huff.MaxDecodedSize = maxCompressedBlockSize
 		if fourStreams {
 			literals, err = huff.Decoder().Decompress4X(b.literalBuf[:0:litRegenSize], literals)
 		} else {
@@ -422,7 +426,7 @@ func (b *blockDec) decodeLiterals(in []byte, hist *history) (remain []byte, err 
 			if b.lowMem {
 				b.literalBuf = make([]byte, 0, litRegenSize)
 			} else {
-				b.literalBuf = make([]byte, 0, maxCompressedLiteralSize)
+				b.literalBuf = make([]byte, 0, maxCompressedBlockSize)
 			}
 		}
 		huff := hist.huffTree
@@ -439,6 +443,7 @@ func (b *blockDec) decodeLiterals(in []byte, hist *history) (remain []byte, err 
 			return in, err
 		}
 		hist.huffTree = huff
+		huff.MaxDecodedSize = maxCompressedBlockSize
 		// Use our out buffer.
 		if fourStreams {
 			literals, err = huff.Decoder().Decompress4X(b.literalBuf[:0:litRegenSize], literals)
