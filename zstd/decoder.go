@@ -209,9 +209,6 @@ func (d *Decoder) Reset(r io.Reader) error {
 		}
 		return nil
 	}
-	if d.frame == nil {
-		d.frame = newFrameDec(d.o)
-	}
 	// Remove current block.
 	d.stashDecoder()
 	d.current.decodeOutput = decodeOutput{}
@@ -219,14 +216,20 @@ func (d *Decoder) Reset(r io.Reader) error {
 	d.current.flushed = false
 	d.current.d = nil
 
+	// Ensure no-one else is still running...
+	d.streamWg.Wait()
+	if d.frame == nil {
+		d.frame = newFrameDec(d.o)
+	}
+
 	if d.o.concurrent == 1 {
 		return d.startSyncDecoder(r)
 	}
 
 	d.current.output = make(chan decodeOutput, d.o.concurrent)
-	d.streamWg.Add(1)
 	ctx, cancel := context.WithCancel(context.Background())
 	d.current.cancel = cancel
+	d.streamWg.Add(1)
 	go d.startStreamDecoder(ctx, r, d.current.output)
 
 	return nil
