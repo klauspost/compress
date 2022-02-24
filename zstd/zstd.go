@@ -77,7 +77,7 @@ var (
 
 	// ErrFrameSizeMismatch is returned if the stated frame size does not match the expected size.
 	// This is only returned if SingleSegment is specified on the frame.
-	ErrFrameSizeMismatch = errors.New("frame size does not match on stream size")
+	ErrFrameSizeMismatch = errors.New("frame size does not match size on stream")
 
 	// ErrCRCMismatch is returned if CRC mismatches.
 	ErrCRCMismatch = errors.New("CRC check failed")
