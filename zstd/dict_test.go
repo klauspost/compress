@@ -411,3 +411,69 @@ func TestDecoder_MoreDicts(t *testing.T) {
 		})
 	}
 }
+
+func TestDecoder_MoreDicts2(t *testing.T) {
+	// All files have CRC
+	// https://files.klauspost.com/compress/zstd-dict-tests.zip
+	fn := "testdata/zstd-dict-tests.zip"
+	data, err := ioutil.ReadFile(fn)
+	if err != nil {
+		t.Skip("extended dict test not found.")
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var dicts [][]byte
+	for _, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, ".dict") {
+			continue
+		}
+		func() {
+			r, err := tt.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer r.Close()
+			in, err := ioutil.ReadAll(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			dicts = append(dicts, in)
+		}()
+	}
+	dec, err := NewReader(nil, WithDecoderConcurrency(2), WithDecoderDicts(dicts...))
+	if err != nil {
+		t.Fatal(err)
+		return
+	}
+	defer dec.Close()
+	for i, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, ".zst") {
+			continue
+		}
+		if testing.Short() && i > 50 {
+			continue
+		}
+		t.Run("decodeall-"+tt.Name, func(t *testing.T) {
+			r, err := tt.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer r.Close()
+			in, err := ioutil.ReadAll(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := dec.DecodeAll(in, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = dec.DecodeAll(in, got[:0])
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
