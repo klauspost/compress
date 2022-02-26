@@ -98,23 +98,25 @@ func (e *Encoder) Reset(w io.Writer) {
 	if cap(s.filling) == 0 {
 		s.filling = make([]byte, 0, e.o.blockSize)
 	}
-	if cap(s.current) == 0 {
-		s.current = make([]byte, 0, e.o.blockSize)
-	}
-	if cap(s.previous) == 0 {
-		s.previous = make([]byte, 0, e.o.blockSize)
+	if e.o.concurrent > 1 {
+		if cap(s.current) == 0 {
+			s.current = make([]byte, 0, e.o.blockSize)
+		}
+		if cap(s.previous) == 0 {
+			s.previous = make([]byte, 0, e.o.blockSize)
+		}
+		s.current = s.current[:0]
+		s.previous = s.previous[:0]
+		if s.writing == nil {
+			s.writing = &blockEnc{lowMem: e.o.lowMem}
+			s.writing.init()
+		}
+		s.writing.initNewEncode()
 	}
 	if s.encoder == nil {
 		s.encoder = e.o.encoder()
 	}
-	if s.writing == nil {
-		s.writing = &blockEnc{lowMem: e.o.lowMem}
-		s.writing.init()
-	}
-	s.writing.initNewEncode()
 	s.filling = s.filling[:0]
-	s.current = s.current[:0]
-	s.previous = s.previous[:0]
 	s.encoder.Reset(e.o.dict, false)
 	s.headerWritten = false
 	s.eofWritten = false

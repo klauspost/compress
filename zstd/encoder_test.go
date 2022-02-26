@@ -506,7 +506,7 @@ func testEncoderRoundtrip(t *testing.T, file string, wantCRC []byte) {
 	for _, opt := range getEncOpts(1) {
 		t.Run(opt.name, func(t *testing.T) {
 			opt := opt
-			t.Parallel()
+			//t.Parallel()
 			f, err := os.Open(file)
 			if err != nil {
 				if os.IsNotExist(err) {
@@ -851,7 +851,7 @@ func TestEncoder_EncodeAllEmpty(t *testing.T) {
 }
 
 func TestEncoder_EncodeAllEnwik9(t *testing.T) {
-	if false || testing.Short() {
+	if testing.Short() {
 		t.SkipNow()
 	}
 	file := "testdata/enwik9.zst"
@@ -873,8 +873,11 @@ func TestEncoder_EncodeAllEnwik9(t *testing.T) {
 	}
 
 	start := time.Now()
-	var e Encoder
+	e, err := NewWriter(nil)
 	dst := e.EncodeAll(in, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
 	mbpersec := (float64(len(in)) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
 	t.Logf("Encoded %d bytes with %.2f MB/s", len(in), mbpersec)
@@ -887,6 +890,52 @@ func TestEncoder_EncodeAllEnwik9(t *testing.T) {
 		t.Fatal("Decoded does not match")
 	}
 	t.Log("Encoded content matched")
+}
+
+func TestEncoder_EncoderStreamEnwik9(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
+	file := "testdata/enwik9.zst"
+	f, err := os.Open(file)
+	if err != nil {
+		if os.IsNotExist(err) {
+			t.Skip("To run extended tests, download http://mattmahoney.net/dc/enwik9.zip unzip it \n" +
+				"compress it with 'zstd -15 -T0 enwik9' and place it in " + file)
+		}
+	}
+	dec, err := NewReader(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	in, err := ioutil.ReadAll(dec)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	start := time.Now()
+	var dst bytes.Buffer
+	e, err := NewWriter(&dst)
+	_, err = io.Copy(e, bytes.NewBuffer(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Close()
+	t.Log("Full Encoder len", len(in), "-> zstd len", dst.Len())
+	mbpersec := (float64(len(in)) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
+	t.Logf("Encoded %d bytes with %.2f MB/s", len(in), mbpersec)
+	if false {
+		decoded, err := dec.DecodeAll(dst.Bytes(), nil)
+		if err != nil {
+			t.Error(err, len(decoded))
+		}
+		if !bytes.Equal(decoded, in) {
+			ioutil.WriteFile("testdata/"+t.Name()+"-enwik9.got", decoded, os.ModePerm)
+			t.Fatal("Decoded does not match")
+		}
+		t.Log("Encoded content matched")
+	}
 }
 
 func BenchmarkEncoder_EncodeAllXML(b *testing.B) {
