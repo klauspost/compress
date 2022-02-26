@@ -258,6 +258,46 @@ func (e *Encoder) nextBlock(final bool) error {
 		return s.err
 	}
 
+	// SYNC:
+	if e.o.concurrent == 1 {
+		src := s.filling
+		s.nInput += int64(len(s.filling))
+		if debugEncoder {
+			println("Adding sync block,", len(src), "bytes, final:", final)
+		}
+		enc := s.encoder
+		blk := enc.Block()
+		blk.reset(nil)
+		enc.Encode(blk, src)
+		blk.last = final
+		if final {
+			s.eofWritten = true
+		}
+
+		err := errIncompressible
+		// If we got the exact same number of literals as input,
+		// assume the literals cannot be compressed.
+		if len(src) != len(blk.literals) || len(src) != e.o.blockSize {
+			err = blk.encode(src, e.o.noEntropy, !e.o.allLitEntropy)
+		}
+		switch err {
+		case errIncompressible:
+			if debugEncoder {
+				println("Storing incompressible block as raw")
+			}
+			blk.encodeRaw(src)
+			// In fast mode, we do not transfer offsets, so we don't have to deal with changing the.
+		case nil:
+		default:
+			s.err = err
+			return err
+		}
+		_, s.err = s.w.Write(blk.output)
+		s.nWritten += int64(len(blk.output))
+		s.filling = s.filling[:0]
+		return s.err
+	}
+
 	// Move blocks forward.
 	s.filling, s.current, s.previous = s.previous[:0], s.filling, s.current
 	s.nInput += int64(len(s.current))
