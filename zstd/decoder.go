@@ -238,7 +238,9 @@ func (d *Decoder) Reset(r io.Reader) error {
 // drainOutput will drain the output until errEndOfStream is sent.
 func (d *Decoder) drainOutput() {
 	if d.current.cancel != nil {
-		println("cancelling current")
+		if debugDecoder {
+			println("cancelling current")
+		}
 		d.current.cancel()
 		d.current.cancel = nil
 	}
@@ -816,7 +818,9 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 					do.err = ErrFrameSizeMismatch
 					hasErr = true
 				} else {
-					println("fcs ok", block.Last, fcs, decodedFrame)
+					if debugDecoder {
+						println("fcs ok", block.Last, fcs, decodedFrame)
+					}
 				}
 			}
 			output <- do
