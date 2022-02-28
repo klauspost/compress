@@ -144,6 +144,9 @@ type zstdReader struct {
 }
 
 func (zr *zstdReader) Read(p []byte) (n int, err error) {
+	if zr.zerr != nil {
+		return 0, zr.zerr
+	}
 	if zr.zr == nil {
 		if zr.zerr == nil {
 			reader, ok := zstdReaderPool.Get().(*zstd.Decoder)
@@ -158,12 +161,21 @@ func (zr *zstdReader) Read(p []byte) (n int, err error) {
 			return 0, zr.zerr
 		}
 	}
-
-	return zr.zr.Read(p)
+	n, err = zr.zr.Read(p)
+	if err != nil {
+		// Usually this will be io.EOF,
+		// stash the decoder and keep the error.
+		zr.zr.Reset(nil)
+		zstdReaderPool.Put(zr.zr)
+		zr.zr = nil
+		zr.zerr = err
+	}
+	return
 }
 
 func (zr *zstdReader) Close() error {
 	if zr.zr != nil {
+		zr.zr.Reset(nil)
 		zstdReaderPool.Put(zr.zr)
 		zr.zr = nil
 	}
