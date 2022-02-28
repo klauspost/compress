@@ -39,6 +39,61 @@ func TestTransport(t *testing.T) {
 	}
 }
 
+func TestTransportForced(t *testing.T) {
+	raw, err := ioutil.ReadFile("testdata/benchmark.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	zw.Write(raw)
+	zw.Close()
+	bin := buf.Bytes()
+
+	server := httptest.NewServer(newTestHandler(bin))
+
+	c := http.Client{Transport: Transport(http.DefaultTransport)}
+	resp, err := c.Get(server.URL + "/gzipped")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, raw) {
+		t.Errorf("data mismatch")
+	}
+}
+
+func TestTransportForcedDisabled(t *testing.T) {
+	raw, err := ioutil.ReadFile("testdata/benchmark.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	zw.Write(raw)
+	zw.Close()
+	bin := buf.Bytes()
+
+	server := httptest.NewServer(newTestHandler(bin))
+	c := http.Client{Transport: Transport(http.DefaultTransport, TransportEnableGzip(false))}
+	resp, err := c.Get(server.URL + "/gzipped")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(bin, got) {
+		t.Errorf("data mismatch")
+	}
+}
+
 func TestTransportZstd(t *testing.T) {
 	bin, err := ioutil.ReadFile("testdata/benchmark.json")
 	if err != nil {
@@ -80,6 +135,31 @@ func TestTransportInvalid(t *testing.T) {
 	_, err = ioutil.ReadAll(resp.Body)
 	if err == nil {
 		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestTransportZstdDisabled(t *testing.T) {
+	raw, err := ioutil.ReadFile("testdata/benchmark.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	enc, _ := zstd.NewWriter(nil)
+	defer enc.Close()
+	zsBin := enc.EncodeAll(raw, nil)
+
+	server := httptest.NewServer(newTestHandler(zsBin))
+	c := http.Client{Transport: Transport(http.DefaultTransport, TransportEnableZstd(false))}
+	resp, err := c.Get(server.URL + "/zstd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(zsBin, got) {
+		t.Errorf("data mismatch")
 	}
 }
 

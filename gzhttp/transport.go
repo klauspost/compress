@@ -7,6 +7,7 @@ package gzhttp
 import (
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/klauspost/compress/gzip"
@@ -16,17 +17,48 @@ import (
 // Transport will wrap a transport with a custom handler
 // that will request gzip and automatically decompress it.
 // Using this is significantly faster than using the default transport.
-func Transport(parent http.RoundTripper) http.RoundTripper {
-	return gzRoundtripper{parent: parent, withZstd: true}
+func Transport(parent http.RoundTripper, opts ...transportOption) http.RoundTripper {
+	g := gzRoundtripper{parent: parent, withZstd: true, withGzip: true}
+	for _, o := range opts {
+		o(&g)
+	}
+	var ae []string
+	if g.withZstd {
+		ae = append(ae, "zstd")
+	}
+	if g.withGzip {
+		ae = append(ae, "gzip")
+	}
+	g.acceptEncoding = strings.Join(ae, ",")
+	return &g
+}
+
+type transportOption func(c *gzRoundtripper)
+
+// TransportEnableZstd will send Zstandard as a compression option to the server.
+// Enabled by default, but may be disabled if future problems arise.
+func TransportEnableZstd(b bool) transportOption {
+	return func(c *gzRoundtripper) {
+		c.withZstd = b
+	}
+}
+
+// TransportEnableGzip will send Gzip as a compression option to the server.
+// Enabled by default.
+func TransportEnableGzip(b bool) transportOption {
+	return func(c *gzRoundtripper) {
+		c.withGzip = b
+	}
 }
 
 type gzRoundtripper struct {
-	parent   http.RoundTripper
-	withZstd bool
+	parent             http.RoundTripper
+	acceptEncoding     string
+	withZstd, withGzip bool
 }
 
-func (g gzRoundtripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	var requestedGzip bool
+func (g *gzRoundtripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	var requestedComp bool
 	if req.Header.Get("Accept-Encoding") == "" &&
 		req.Header.Get("Range") == "" &&
 		req.Method != "HEAD" {
@@ -42,33 +74,29 @@ func (g gzRoundtripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		// We don't request gzip if the request is for a range, since
 		// auto-decoding a portion of a gzipped document will just fail
 		// anyway. See https://golang.org/issue/8923
-		requestedGzip = true
-		if g.withZstd {
-			// Swap when we want zstd to default.
-			req.Header.Set("Accept-Encoding", "zstd,gzip")
-		} else {
-			req.Header.Set("Accept-Encoding", "gzip")
-		}
+		requestedComp = len(g.acceptEncoding) > 0
+		req.Header.Set("Accept-Encoding", g.acceptEncoding)
 	}
+
 	resp, err := g.parent.RoundTrip(req)
-	if err != nil || !requestedGzip {
+	if err != nil || !requestedComp {
 		return resp, err
 	}
-	if asciiEqualFold(resp.Header.Get("Content-Encoding"), "gzip") {
+
+	// Decompress
+	if g.withGzip && asciiEqualFold(resp.Header.Get("Content-Encoding"), "gzip") {
 		resp.Body = &gzipReader{body: resp.Body}
 		resp.Header.Del("Content-Encoding")
 		resp.Header.Del("Content-Length")
 		resp.ContentLength = -1
 		resp.Uncompressed = true
 	}
-	if g.withZstd {
-		if asciiEqualFold(resp.Header.Get("Content-Encoding"), "zstd") {
-			resp.Body = &zstdReader{body: resp.Body}
-			resp.Header.Del("Content-Encoding")
-			resp.Header.Del("Content-Length")
-			resp.ContentLength = -1
-			resp.Uncompressed = true
-		}
+	if g.withZstd && asciiEqualFold(resp.Header.Get("Content-Encoding"), "zstd") {
+		resp.Body = &zstdReader{body: resp.Body}
+		resp.Header.Del("Content-Encoding")
+		resp.Header.Del("Content-Length")
+		resp.ContentLength = -1
+		resp.Uncompressed = true
 	}
 
 	return resp, nil
