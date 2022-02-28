@@ -45,7 +45,7 @@ func (g gzRoundtripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		requestedGzip = true
 		if g.withZstd {
 			// Swap when we want zstd to default.
-			req.Header.Set("Accept-Encoding", "gzip,zstd")
+			req.Header.Set("Accept-Encoding", "zstd,gzip")
 		} else {
 			req.Header.Set("Accept-Encoding", "gzip")
 		}
@@ -132,7 +132,10 @@ func lower(b byte) byte {
 	return b
 }
 
-// gzipReader wraps a response body so it can lazily
+// zstdReaderPool pools zstd decoders.
+var zstdReaderPool sync.Pool
+
+// zstdReader wraps a response body so it can lazily
 // call gzip.NewReader on the first call to Read
 type zstdReader struct {
 	body io.ReadCloser // underlying HTTP/1 response body framing
@@ -143,7 +146,13 @@ type zstdReader struct {
 func (zr *zstdReader) Read(p []byte) (n int, err error) {
 	if zr.zr == nil {
 		if zr.zerr == nil {
-			zr.zr, zr.zerr = zstd.NewReader(zr.body, zstd.WithDecoderLowmem(true), zstd.WithDecoderMaxWindow(32<<20))
+			reader, ok := zstdReaderPool.Get().(*zstd.Decoder)
+			if ok {
+				zr.zerr = reader.Reset(zr.body)
+				zr.zr = reader
+			} else {
+				zr.zr, zr.zerr = zstd.NewReader(zr.body, zstd.WithDecoderLowmem(true), zstd.WithDecoderMaxWindow(32<<20), zstd.WithDecoderConcurrency(1))
+			}
 		}
 		if zr.zerr != nil {
 			return 0, zr.zerr
@@ -155,7 +164,7 @@ func (zr *zstdReader) Read(p []byte) (n int, err error) {
 
 func (zr *zstdReader) Close() error {
 	if zr.zr != nil {
-		zr.zr.Close()
+		zstdReaderPool.Put(zr.zr)
 		zr.zr = nil
 	}
 	return zr.body.Close()
