@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/klauspost/compress/gzip"
+	"github.com/klauspost/compress/zstd"
 )
 
 func TestTransport(t *testing.T) {
@@ -26,6 +27,30 @@ func TestTransport(t *testing.T) {
 
 	c := http.Client{Transport: Transport(http.DefaultTransport)}
 	resp, err := c.Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, bin) {
+		t.Errorf("data mismatch")
+	}
+}
+
+func TestTransportZstd(t *testing.T) {
+	bin, err := ioutil.ReadFile("testdata/benchmark.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	enc, _ := zstd.NewWriter(nil)
+	defer enc.Close()
+	zsBin := enc.EncodeAll(bin, nil)
+	server := httptest.NewServer(newTestHandler(zsBin))
+
+	c := http.Client{Transport: Transport(http.DefaultTransport)}
+	resp, err := c.Get(server.URL + "/zstd")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,6 +83,26 @@ func TestTransportInvalid(t *testing.T) {
 	}
 }
 
+func TestTransportZstdInvalid(t *testing.T) {
+	bin, err := ioutil.ReadFile("testdata/benchmark.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Do not encode...
+	server := httptest.NewServer(newTestHandler(bin))
+
+	c := http.Client{Transport: Transport(http.DefaultTransport)}
+	resp, err := c.Get(server.URL + "/zstd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = ioutil.ReadAll(resp.Body)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	t.Log("expected error:", err)
+}
+
 func TestDefaultTransport(t *testing.T) {
 	bin, err := ioutil.ReadFile("testdata/benchmark.json")
 	if err != nil {
@@ -82,21 +127,30 @@ func TestDefaultTransport(t *testing.T) {
 }
 
 func BenchmarkTransport(b *testing.B) {
-	bin, err := ioutil.ReadFile("testdata/benchmark.json")
+	raw, err := ioutil.ReadFile("testdata/benchmark.json")
 	if err != nil {
 		b.Fatal(err)
 	}
-	sz := len(bin)
+	sz := int64(len(raw))
 	var buf bytes.Buffer
 	zw := gzip.NewWriter(&buf)
-	zw.Write(bin)
+	zw.Write(raw)
 	zw.Close()
-	bin = buf.Bytes()
+	bin := buf.Bytes()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Body.Close()
 		w.Header().Set("Content-Encoding", "gzip")
 		w.WriteHeader(http.StatusOK)
 		w.Write(bin)
+	}))
+	enc, _ := zstd.NewWriter(nil, zstd.WithWindowSize(128<<10), zstd.WithEncoderLevel(zstd.SpeedBestCompression))
+	defer enc.Close()
+	zsBin := enc.EncodeAll(raw, nil)
+	serverZstd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body.Close()
+		w.Header().Set("Content-Encoding", "zstd")
+		w.WriteHeader(http.StatusOK)
+		w.Write(zsBin)
 	}))
 	b.Run("gzhttp", func(b *testing.B) {
 		c := http.Client{Transport: Transport(http.DefaultTransport)}
@@ -109,12 +163,16 @@ func BenchmarkTransport(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			_, err = io.Copy(ioutil.Discard, resp.Body)
+			n, err := io.Copy(ioutil.Discard, resp.Body)
 			if err != nil {
 				b.Fatal(err)
 			}
+			if n != sz {
+				b.Fatalf("size mismatch: want %d, got %d", sz, n)
+			}
 			resp.Body.Close()
 		}
+		b.ReportMetric(100*float64(len(bin))/float64(len(raw)), "pct")
 	})
 	b.Run("stdlib", func(b *testing.B) {
 		c := http.Client{Transport: http.DefaultTransport}
@@ -126,12 +184,38 @@ func BenchmarkTransport(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			_, err = io.Copy(ioutil.Discard, resp.Body)
+			n, err := io.Copy(ioutil.Discard, resp.Body)
 			if err != nil {
 				b.Fatal(err)
 			}
+			if n != sz {
+				b.Fatalf("size mismatch: want %d, got %d", sz, n)
+			}
 			resp.Body.Close()
 		}
+		b.ReportMetric(100*float64(len(bin))/float64(len(raw)), "pct")
+	})
+	b.Run("zstd", func(b *testing.B) {
+		c := http.Client{Transport: Transport(http.DefaultTransport)}
+
+		b.SetBytes(int64(sz))
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			resp, err := c.Get(serverZstd.URL + "/zstd")
+			if err != nil {
+				b.Fatal(err)
+			}
+			n, err := io.Copy(ioutil.Discard, resp.Body)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if n != sz {
+				b.Fatalf("size mismatch: want %d, got %d", sz, n)
+			}
+			resp.Body.Close()
+		}
+		b.ReportMetric(100*float64(len(zsBin))/float64(len(raw)), "pct")
 	})
 	b.Run("gzhttp-par", func(b *testing.B) {
 		c := http.Client{
@@ -150,13 +234,17 @@ func BenchmarkTransport(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				_, err = io.Copy(ioutil.Discard, resp.Body)
+				n, err := io.Copy(ioutil.Discard, resp.Body)
 				if err != nil {
 					b.Fatal(err)
+				}
+				if n != sz {
+					b.Fatalf("size mismatch: want %d, got %d", sz, n)
 				}
 				resp.Body.Close()
 			}
 		})
+		b.ReportMetric(100*float64(len(bin))/float64(len(raw)), "pct")
 	})
 	b.Run("stdlib-par", func(b *testing.B) {
 		c := http.Client{Transport: &http.Transport{
@@ -172,12 +260,45 @@ func BenchmarkTransport(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				_, err = io.Copy(ioutil.Discard, resp.Body)
+				n, err := io.Copy(ioutil.Discard, resp.Body)
 				if err != nil {
 					b.Fatal(err)
+				}
+				if n != sz {
+					b.Fatalf("size mismatch: want %d, got %d", sz, n)
 				}
 				resp.Body.Close()
 			}
 		})
+		b.ReportMetric(100*float64(len(bin))/float64(len(raw)), "pct")
+	})
+	b.Run("zstd-par", func(b *testing.B) {
+		c := http.Client{
+			Transport: Transport(&http.Transport{
+				MaxConnsPerHost:     runtime.GOMAXPROCS(0),
+				MaxIdleConnsPerHost: runtime.GOMAXPROCS(0),
+			}),
+		}
+
+		b.SetBytes(int64(sz))
+		b.ReportAllocs()
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				resp, err := c.Get(serverZstd.URL + "/zstd")
+				if err != nil {
+					b.Fatal(err)
+				}
+				n, err := io.Copy(ioutil.Discard, resp.Body)
+				if err != nil {
+					b.Fatal(err)
+				}
+				if n != sz {
+					b.Fatalf("size mismatch: want %d, got %d", sz, n)
+				}
+				resp.Body.Close()
+			}
+		})
+		b.ReportMetric(100*float64(len(zsBin))/float64(len(raw)), "pct")
 	})
 }
