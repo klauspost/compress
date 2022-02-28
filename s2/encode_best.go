@@ -62,6 +62,7 @@ func encodeBlockBest(dst, src []byte) (d int) {
 	getPrev := func(x uint64) int {
 		return int(x >> 32)
 	}
+	const maxSkip = 64
 
 	for {
 		type match struct {
@@ -74,7 +75,12 @@ func encodeBlockBest(dst, src []byte) (d int) {
 		var best match
 		for {
 			// Next src position to check
-			nextS := s + (s-nextEmit)>>8 + 1
+			nextS := (s-nextEmit)>>8 + 1
+			if nextS > maxSkip {
+				nextS = s + maxSkip
+			} else {
+				nextS += s
+			}
 			if nextS > sLimit {
 				goto emitRemainder
 			}
@@ -329,6 +335,7 @@ func encodeBlockBestSnappy(dst, src []byte) (d int) {
 	getPrev := func(x uint64) int {
 		return int(x >> 32)
 	}
+	const maxSkip = 64
 
 	for {
 		type match struct {
@@ -340,7 +347,12 @@ func encodeBlockBestSnappy(dst, src []byte) (d int) {
 		var best match
 		for {
 			// Next src position to check
-			nextS := s + (s-nextEmit)>>8 + 1
+			nextS := (s-nextEmit)>>8 + 1
+			if nextS > maxSkip {
+				nextS = s + maxSkip
+			} else {
+				nextS += s
+			}
 			if nextS > sLimit {
 				goto emitRemainder
 			}

@@ -317,10 +317,10 @@ func (w *GzipResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 var _ http.Hijacker = &GzipResponseWriter{}
 
 var onceDefault sync.Once
-var defaultWrapper func(http.Handler) http.Handler
+var defaultWrapper func(http.Handler) http.HandlerFunc
 
 // GzipHandler allows to easily wrap an http handler with default settings.
-func GzipHandler(h http.Handler) http.Handler {
+func GzipHandler(h http.Handler) http.HandlerFunc {
 	onceDefault.Do(func() {
 		var err error
 		defaultWrapper, err = NewWrapper()
@@ -335,7 +335,7 @@ func GzipHandler(h http.Handler) http.Handler {
 var grwPool = sync.Pool{New: func() interface{} { return &GzipResponseWriter{} }}
 
 // NewWrapper returns a reusable wrapper with the supplied options.
-func NewWrapper(opts ...option) (func(http.Handler) http.Handler, error) {
+func NewWrapper(opts ...option) (func(http.Handler) http.HandlerFunc, error) {
 	c := &config{
 		level:   gzip.DefaultCompression,
 		minSize: DefaultMinSize,
@@ -354,8 +354,8 @@ func NewWrapper(opts ...option) (func(http.Handler) http.Handler, error) {
 		return nil, err
 	}
 
-	return func(h http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return func(h http.Handler) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add(vary, acceptEncoding)
 			if acceptsGzip(r) {
 				gw := grwPool.Get().(*GzipResponseWriter)
@@ -383,11 +383,10 @@ func NewWrapper(opts ...option) (func(http.Handler) http.Handler, error) {
 				} else {
 					h.ServeHTTP(gw, r)
 				}
-
 			} else {
 				h.ServeHTTP(w, r)
 			}
-		})
+		}
 	}, nil
 }
 

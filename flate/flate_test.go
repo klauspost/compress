@@ -163,7 +163,7 @@ func TestRegressions(t *testing.T) {
 					t.Error(err)
 				}
 				if !bytes.Equal(data1, data2) {
-					fmt.Printf("want:%x\ngot: %x\n", data1, data2)
+					//fmt.Printf("want:%x\ngot: %x\n", data1, data2)
 					t.Error("not equal")
 				}
 			})

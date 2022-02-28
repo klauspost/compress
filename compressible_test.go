@@ -3,13 +3,7 @@ package compress
 import (
 	"crypto/rand"
 	"encoding/base32"
-	"io/ioutil"
-	"strconv"
-	"strings"
 	"testing"
-
-	"github.com/klauspost/compress/flate"
-	"github.com/klauspost/compress/gzip"
 )
 
 func BenchmarkEstimate(b *testing.B) {
@@ -237,66 +231,5 @@ Thoughts?`)
 			ShannonEntropyBits(testData)
 		}
 		b.Log(ShannonEntropyBits(testData))
-	})
-}
-
-func BenchmarkCompressAllocations(b *testing.B) {
-	payload := []byte(strings.Repeat("Tiny payload", 20))
-	for j := -2; j <= 9; j++ {
-		b.Run("level("+strconv.Itoa(j)+")", func(b *testing.B) {
-			b.Run("flate", func(b *testing.B) {
-				b.ReportAllocs()
-
-				for i := 0; i < b.N; i++ {
-					w, err := flate.NewWriter(ioutil.Discard, j)
-					if err != nil {
-						b.Fatal(err)
-					}
-					w.Write(payload)
-					w.Close()
-				}
-			})
-			b.Run("gzip", func(b *testing.B) {
-				b.ReportAllocs()
-
-				for i := 0; i < b.N; i++ {
-					w, err := gzip.NewWriterLevel(ioutil.Discard, j)
-					if err != nil {
-						b.Fatal(err)
-					}
-					w.Write(payload)
-					w.Close()
-				}
-			})
-		})
-	}
-}
-
-func BenchmarkCompressAllocationsSingle(b *testing.B) {
-	payload := []byte(strings.Repeat("Tiny payload", 20))
-	const level = 2
-	b.Run("flate", func(b *testing.B) {
-		b.ReportAllocs()
-
-		for i := 0; i < b.N; i++ {
-			w, err := flate.NewWriter(ioutil.Discard, level)
-			if err != nil {
-				b.Fatal(err)
-			}
-			w.Write(payload)
-			w.Close()
-		}
-	})
-	b.Run("gzip", func(b *testing.B) {
-		b.ReportAllocs()
-
-		for i := 0; i < b.N; i++ {
-			w, err := gzip.NewWriterLevel(ioutil.Discard, level)
-			if err != nil {
-				b.Fatal(err)
-			}
-			w.Write(payload)
-			w.Close()
-		}
 	})
 }
