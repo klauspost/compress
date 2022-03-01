@@ -63,6 +63,7 @@ type GzipResponseWriter struct {
 	buf              []byte // Holds the first part of the write before reaching the minSize or the end of the write.
 	ignore           bool   // If true, then we immediately passthru writes to the underlying ResponseWriter.
 	keepAcceptRanges bool   // Keep "Accept-Ranges" header.
+	setContentType   bool   // Add content type, if missing and detected.
 
 	contentTypeFilter func(ct string) bool // Only compress if the response is one of these content-types. All are accepted if empty.
 }
@@ -120,7 +121,7 @@ func (w *GzipResponseWriter) Write(b []byte) (int, error) {
 
 				// Handles the intended case of setting a nil Content-Type (as for http/server or http/fs)
 				// Set the header only if the key does not exist
-				if _, ok := w.Header()[contentType]; !ok {
+				if _, ok := w.Header()[contentType]; w.setContentType && !ok {
 					w.Header().Set(contentType, ct)
 				}
 
@@ -278,7 +279,7 @@ func (w *GzipResponseWriter) Flush() {
 
 			// Handles the intended case of setting a nil Content-Type (as for http/server or http/fs)
 			// Set the header only if the key does not exist
-			if _, ok := w.Header()[contentType]; !ok {
+			if _, ok := w.Header()[contentType]; w.setContentType && !ok {
 				w.Header().Set(contentType, ct)
 			}
 		}
@@ -343,7 +344,8 @@ func NewWrapper(opts ...option) (func(http.Handler) http.HandlerFunc, error) {
 			Levels: gzkp.Levels,
 			New:    gzkp.NewWriter,
 		},
-		contentTypes: DefaultContentTypeFilter,
+		contentTypes:   DefaultContentTypeFilter,
+		setContentType: true,
 	}
 
 	for _, o := range opts {
@@ -367,6 +369,7 @@ func NewWrapper(opts ...option) (func(http.Handler) http.HandlerFunc, error) {
 					contentTypeFilter: c.contentTypes,
 					keepAcceptRanges:  c.keepAcceptRanges,
 					buf:               gw.buf,
+					setContentType:    c.setContentType,
 				}
 				if len(gw.buf) > 0 {
 					gw.buf = gw.buf[:0]
@@ -426,6 +429,7 @@ type config struct {
 	writer           writer.GzipWriterFactory
 	contentTypes     func(ct string) bool
 	keepAcceptRanges bool
+	setContentType   bool
 }
 
 func (c *config) validate() error {
@@ -453,6 +457,15 @@ func MinSize(size int) option {
 func CompressionLevel(level int) option {
 	return func(c *config) {
 		c.level = level
+	}
+}
+
+// SetContentType sets the content type before returning
+// requests, if unset before returning, and it was detected.
+// Default: true.
+func SetContentType(b bool) option {
+	return func(c *config) {
+		c.setContentType = b
 	}
 }
 
