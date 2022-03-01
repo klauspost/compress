@@ -254,11 +254,11 @@ func (s *sequenceDecs) execute(seqs []seqVals, hist []byte) error {
 	}
 
 	var t = len(s.out)
-	s.out = s.out[:t+s.seqSize]
+	out := s.out[:t+s.seqSize]
 
 	for _, seq := range seqs {
 		// Add literals
-		copy(s.out[t:], s.literals[:seq.ll])
+		copy(out[t:], s.literals[:seq.ll])
 		t += seq.ll
 		s.literals = s.literals[seq.ll:]
 
@@ -276,11 +276,11 @@ func (s *sequenceDecs) execute(seqs []seqVals, hist []byte) error {
 			end := dictO + seq.ml
 			if end > len(s.dict) {
 				n := len(s.dict) - dictO
-				copy(s.out[t:], s.dict[dictO:])
+				copy(out[t:], s.dict[dictO:])
 				t += n
 				seq.ml -= n
 			} else {
-				copy(s.out[t:], s.dict[dictO:end])
+				copy(out[t:], s.dict[dictO:end])
 				t += end - dictO
 				continue
 			}
@@ -293,11 +293,11 @@ func (s *sequenceDecs) execute(seqs []seqVals, hist []byte) error {
 			if seq.ml > v {
 				// Some goes into current block.
 				// Copy remainder of history
-				copy(s.out[t:], hist[start:])
+				copy(out[t:], hist[start:])
 				t += v
 				seq.ml -= v
 			} else {
-				copy(s.out[t:], hist[start:start+seq.ml])
+				copy(out[t:], hist[start:start+seq.ml])
 				t += seq.ml
 				continue
 			}
@@ -307,29 +307,30 @@ func (s *sequenceDecs) execute(seqs []seqVals, hist []byte) error {
 			start := t - seq.mo
 			if seq.ml <= t-start {
 				// No overlap
-				copy(s.out[t:], s.out[start:start+seq.ml])
+				copy(out[t:], out[start:start+seq.ml])
 				t += seq.ml
 				continue
 			} else {
 				// Overlapping copy
 				// Extend destination slice and copy one byte at the time.
-				src := s.out[start : start+seq.ml]
+				src := out[start : start+seq.ml]
 				// Destination is the space we just added.
 				for i := range src {
-					s.out[t] = src[i]
+					out[t] = src[i]
 					t++
 				}
 			}
 		}
 	}
 	// Add final literals
-	copy(s.out[t:], s.literals)
+	copy(out[t:], s.literals)
 	if debugDecoder {
 		t += len(s.literals)
-		if t != len(s.out) {
-			panic(fmt.Errorf("length mismatch, want %d, got %d, ss: %d", len(s.out), t, s.seqSize))
+		if t != len(out) {
+			panic(fmt.Errorf("length mismatch, want %d, got %d, ss: %d", len(out), t, s.seqSize))
 		}
 	}
+	s.out = out
 
 	return nil
 }
