@@ -314,10 +314,12 @@ func (s *sequenceDecs) execute(seqs []seqVals, hist []byte) error {
 				// Overlapping copy
 				// Extend destination slice and copy one byte at the time.
 				src := out[start : start+seq.ml]
+				dst := out[t:]
+				dst = dst[:len(src)]
+				t += len(src)
 				// Destination is the space we just added.
 				for i := range src {
-					out[t] = src[i]
-					t++
+					dst[i] = src[i]
 				}
 			}
 		}
