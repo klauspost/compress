@@ -157,7 +157,8 @@ func TestVeryLongSparseChunk(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping sparse chunk during short test")
 	}
-	w, err := NewWriter(ioutil.Discard, 1)
+	var buf bytes.Buffer
+	w, err := NewWriter(&buf, 1)
 	if err != nil {
 		t.Errorf("NewWriter: %v", err)
 		return
@@ -166,6 +167,7 @@ func TestVeryLongSparseChunk(t *testing.T) {
 		t.Errorf("Compress failed: %v", err)
 		return
 	}
+	t.Log("Length:", buf.Len())
 }
 
 type syncBuffer struct {
