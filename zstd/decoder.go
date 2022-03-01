@@ -176,6 +176,7 @@ func (d *Decoder) Reset(r io.Reader) error {
 
 	d.drainOutput()
 
+	d.syncStream.br.r = nil
 	if r == nil {
 		d.current.err = ErrDecoderNilInput
 		if len(d.current.b) > 0 {
