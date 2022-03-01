@@ -1133,6 +1133,9 @@ func newTestHandler(body []byte) http.Handler {
 		case "/gzipped":
 			w.Header().Set("Content-Encoding", "gzip")
 			w.Write(body)
+		case "/zstd":
+			w.Header().Set("Content-Encoding", "zstd")
+			w.Write(body)
 		default:
 			w.Write(body)
 		}
