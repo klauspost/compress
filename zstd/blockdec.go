@@ -632,6 +632,7 @@ func (b *blockDec) decodeSequences(hist *history) error {
 	}
 	b.sequence = b.sequence[:hist.decoders.nSeqs]
 	if hist.decoders.nSeqs == 0 {
+		hist.decoders.seqSize = len(hist.decoders.literals)
 		return nil
 	}
 	hist.decoders.prevOffset = hist.recentOffsets
