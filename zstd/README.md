@@ -107,7 +107,8 @@ and seems to ignore concatenated streams, even though [it is part of the spec](h
 For compressing small blocks, the returned encoder has a function called `EncodeAll(src, dst []byte) []byte`.
 
 `EncodeAll` will encode all input in src and append it to dst.
-This function can be called concurrently, but each call will only run on a single goroutine.
+This function can be called concurrently. 
+Each call will only run on a same goroutine as the caller.
 
 Encoded blocks can be concatenated and the result will be the combined input stream.
 Data compressed with EncodeAll can be decoded with the Decoder, using either a stream or `DecodeAll`.
@@ -288,6 +289,7 @@ func Decompress(in io.Reader, out io.Writer) error {
 
 It is important to use the "Close" function when you no longer need the Reader to stop running goroutines, 
 when running with default settings.
+Goroutines will exit once an error has been returned, including `io.EOF` at the end of a stream.
 
 Streams are decoded concurrently in 4 asynchronous stages to give the best possible throughput.
 However, if you prefer synchronous decompression, use `WithDecoderConcurrency(1)` which will decompress data 
