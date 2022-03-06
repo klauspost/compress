@@ -20,7 +20,7 @@ const ZipMethodPKWare = 20
 
 var zipReaderPool sync.Pool
 
-// newZipReader cannot be used since we would leak goroutines...
+// newZipReader creates a pooled zip decompressor.
 func newZipReader(r io.Reader) io.ReadCloser {
 	dec, ok := zipReaderPool.Get().(*Decoder)
 	if ok {
@@ -47,7 +47,11 @@ func (r *pooledZipReader) Read(p []byte) (n int, err error) {
 		return 0, errors.New("Read after Close")
 	}
 	dec, err := r.dec.Read(p)
-
+	if err == io.EOF {
+		err = r.dec.Reset(nil)
+		zipReaderPool.Put(r.dec)
+		r.dec = nil
+	}
 	return dec, err
 }
 
@@ -112,11 +116,5 @@ func ZipCompressor(opts ...EOption) func(w io.Writer) (io.WriteCloser, error) {
 // ZipDecompressor returns a decompressor that can be registered with zip libraries.
 // See ZipCompressor for example.
 func ZipDecompressor() func(r io.Reader) io.ReadCloser {
-	return func(r io.Reader) io.ReadCloser {
-		d, err := NewReader(r, WithDecoderConcurrency(1), WithDecoderLowmem(true))
-		if err != nil {
-			panic(err)
-		}
-		return d.IOReadCloser()
-	}
+	return newZipReader
 }
