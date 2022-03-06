@@ -44,7 +44,7 @@ func (r *pooledZipReader) Read(p []byte) (n int, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.dec == nil {
-		return 0, errors.New("Read after Close")
+		return 0, errors.New("read after close or EOF")
 	}
 	dec, err := r.dec.Read(p)
 	if err == io.EOF {
