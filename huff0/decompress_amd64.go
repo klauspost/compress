@@ -11,9 +11,16 @@ import (
 )
 
 // decompress4x_main_loop_x86 is an x86 assembler implementation
-// of Decompress4X that uses BMI1 instructions.
+// of Decompress4X when tablelog > 8.
 // go:noescape
 func decompress4x_main_loop_x86(pbr0, pbr1, pbr2, pbr3 *bitReaderShifted,
+	peekBits uint8, buf *byte, tbl *dEntrySingle) uint8
+
+// decompress4x_8b_loop_x86 is an x86 assembler implementation
+// of Decompress4X when tablelog <= 8 which decodes 4 entries
+// per loop.
+// go:noescape
+func decompress4x_8b_loop_x86(pbr0, pbr1, pbr2, pbr3 *bitReaderShifted,
 	peekBits uint8, buf *byte, tbl *dEntrySingle) uint8
 
 // Decompress4X will decompress a 4X encoded stream.
@@ -27,9 +34,8 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 	if len(src) < 6+(4*1) {
 		return nil, errors.New("input too small")
 	}
-	if use8BitTables && d.actualTableLog <= 8 {
-		return d.decompress4X8bit(dst, src)
-	}
+
+	use8BitTables := d.actualTableLog <= 8
 
 	var br [4]bitReaderShifted
 	// Decode "jump table"
@@ -77,7 +83,11 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 			break
 		}
 
-		off = decompress4x_main_loop_x86(&br[0], &br[1], &br[2], &br[3], peekBits, &buf[0][0], &single[0])
+		if use8BitTables {
+			off = decompress4x_8b_loop_x86(&br[0], &br[1], &br[2], &br[3], peekBits, &buf[0][0], &single[0])
+		} else {
+			off = decompress4x_main_loop_x86(&br[0], &br[1], &br[2], &br[3], peekBits, &buf[0][0], &single[0])
+		}
 		if debug {
 			fmt.Print("DEBUG: ")
 			fmt.Printf("off=%d,", off)

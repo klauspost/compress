@@ -18,6 +18,10 @@ func main() {
 		template: "decompress_amd64.s.in",
 		output:   "decompress_amd64.s",
 	},
+		{
+			template: "decompress_8b_amd64.s.in",
+			output:   "decompress_8b_amd64.s",
+		},
 	}
 
 	for i := range mapping {
