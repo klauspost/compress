@@ -66,13 +66,13 @@ main_loop:
     MOVQ    br_bits_read, CX
     SHLQ    CL, AX
     ORQ     AX, br_value
-    // }
-skip_fill{{ var "id" }}:
 
     // exhausted = exhausted || (br{{ var "id"}}.off < 4)
     CMPQ    br_offset, $4
     SETLT   DL
     ORB     DL, DH
+    // }
+skip_fill{{ var "id" }}:
 
     // val0 := br{{ var "id"}}.peekTopBits(peekBits)
     MOVQ    br_value, AX
