@@ -23,6 +23,9 @@ func decompress4x_main_loop_x86(pbr0, pbr1, pbr2, pbr3 *bitReaderShifted,
 func decompress4x_8b_loop_x86(pbr0, pbr1, pbr2, pbr3 *bitReaderShifted,
 	peekBits uint8, buf *byte, tbl *dEntrySingle) uint8
 
+// fallback8BitSize is the size where using Go version is faster.
+const fallback8BitSize = 800
+
 // Decompress4X will decompress a 4X encoded stream.
 // The length of the supplied input must match the end of a block exactly.
 // The *capacity* of the dst slice must match the destination size of
@@ -36,7 +39,9 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 	}
 
 	use8BitTables := d.actualTableLog <= 8
-
+	if cap(dst) < fallback8BitSize && use8BitTables {
+		return d.decompress4X8bit(dst, src)
+	}
 	var br [4]bitReaderShifted
 	// Decode "jump table"
 	start := 6
