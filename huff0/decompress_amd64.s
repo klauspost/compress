@@ -66,13 +66,13 @@ main_loop:
 	SHLQ CL, AX
 	ORQ  AX, br_value
 
-	// }
-skip_fill0:
-
 	// exhausted = exhausted || (br0.off < 4)
 	CMPQ  br_offset, $4
 	SETLT DL
 	ORB   DL, DH
+
+	// }
+skip_fill0:
 
 	// val0 := br0.peekTopBits(peekBits)
 	MOVQ br_value, AX
@@ -136,13 +136,13 @@ skip_fill0:
 	SHLQ CL, AX
 	ORQ  AX, br_value
 
-	// }
-skip_fill1:
-
 	// exhausted = exhausted || (br1.off < 4)
 	CMPQ  br_offset, $4
 	SETLT DL
 	ORB   DL, DH
+
+	// }
+skip_fill1:
 
 	// val0 := br1.peekTopBits(peekBits)
 	MOVQ br_value, AX
@@ -206,13 +206,13 @@ skip_fill1:
 	SHLQ CL, AX
 	ORQ  AX, br_value
 
-	// }
-skip_fill2:
-
 	// exhausted = exhausted || (br2.off < 4)
 	CMPQ  br_offset, $4
 	SETLT DL
 	ORB   DL, DH
+
+	// }
+skip_fill2:
 
 	// val0 := br2.peekTopBits(peekBits)
 	MOVQ br_value, AX
@@ -276,13 +276,13 @@ skip_fill2:
 	SHLQ CL, AX
 	ORQ  AX, br_value
 
-	// }
-skip_fill3:
-
 	// exhausted = exhausted || (br3.off < 4)
 	CMPQ  br_offset, $4
 	SETLT DL
 	ORB   DL, DH
+
+	// }
+skip_fill3:
 
 	// val0 := br3.peekTopBits(peekBits)
 	MOVQ br_value, AX
