@@ -421,30 +421,43 @@ func BenchmarkDecompress1XNoTable(b *testing.B) {
 			continue
 		}
 		b.Run(test.name, func(b *testing.B) {
-			var s = &Scratch{}
-			s.Reuse = ReusePolicyNone
-			buf0, err := test.fn()
-			if err != nil {
-				b.Fatal(err)
-			}
-			if len(buf0) > BlockSizeMax {
-				buf0 = buf0[:BlockSizeMax]
-			}
-			compressed, _, err := Compress1X(buf0, s)
-			if err != test.err1X {
-				b.Fatal("unexpected error:", err)
-			}
-			s.Out = nil
-			s, remain, _ := ReadTable(compressed, s)
-			s.Decompress1X(remain)
-			b.ResetTimer()
-			b.ReportAllocs()
-			b.SetBytes(int64(len(buf0)))
-			for i := 0; i < b.N; i++ {
-				_, err = s.Decompress1X(remain)
-				if err != nil {
-					b.Fatal(err)
-				}
+			for _, sz := range []int{1e2, 1e4, BlockSizeMax} {
+				b.Run(fmt.Sprintf("%d", sz), func(b *testing.B) {
+					var s = &Scratch{}
+					s.Reuse = ReusePolicyNone
+					buf0, err := test.fn()
+					if err != nil {
+						b.Fatal(err)
+					}
+					for len(buf0) < sz {
+						buf0 = append(buf0, buf0...)
+					}
+					if len(buf0) > sz {
+						buf0 = buf0[:sz]
+					}
+					compressed, _, err := Compress1X(buf0, s)
+					if err != test.err1X {
+						if err == ErrUseRLE {
+							b.Skip("RLE")
+							return
+						}
+						b.Fatal("unexpected error:", err)
+					}
+					s.Out = nil
+					s, remain, _ := ReadTable(compressed, s)
+					s.Decompress1X(remain)
+					b.ResetTimer()
+					b.ReportAllocs()
+					b.SetBytes(int64(len(buf0)))
+					for i := 0; i < b.N; i++ {
+						_, err = s.Decompress1X(remain)
+						if err != nil {
+							b.Fatal(err)
+						}
+					}
+					b.ReportMetric(float64(s.actualTableLog), "log")
+					b.ReportMetric(100*float64(len(compressed))/float64(len(buf0)), "pct")
+				})
 			}
 		})
 	}
@@ -457,30 +470,44 @@ func BenchmarkDecompress4XNoTable(b *testing.B) {
 			continue
 		}
 		b.Run(test.name, func(b *testing.B) {
-			var s = &Scratch{}
-			s.Reuse = ReusePolicyNone
-			buf0, err := test.fn()
-			if err != nil {
-				b.Fatal(err)
-			}
-			if len(buf0) > BlockSizeMax {
-				buf0 = buf0[:BlockSizeMax]
-			}
-			compressed, _, err := Compress4X(buf0, s)
-			if err != test.err1X {
-				b.Fatal("unexpected error:", err)
-			}
-			s.Out = nil
-			s, remain, _ := ReadTable(compressed, s)
-			s.Decompress4X(remain, len(buf0))
-			b.ResetTimer()
-			b.ReportAllocs()
-			b.SetBytes(int64(len(buf0)))
-			for i := 0; i < b.N; i++ {
-				_, err = s.Decompress4X(remain, len(buf0))
-				if err != nil {
-					b.Fatal(err)
-				}
+			for _, sz := range []int{1e2, 1e4, BlockSizeMax} {
+				b.Run(fmt.Sprintf("%d", sz), func(b *testing.B) {
+					var s = &Scratch{}
+					s.Reuse = ReusePolicyNone
+					buf0, err := test.fn()
+					if err != nil {
+						b.Fatal(err)
+					}
+					for len(buf0) < sz {
+						buf0 = append(buf0, buf0...)
+					}
+					if len(buf0) > sz {
+						buf0 = buf0[:sz]
+					}
+					compressed, _, err := Compress4X(buf0, s)
+					if err != test.err4X {
+						if err == ErrUseRLE {
+							b.Skip("RLE")
+							return
+						}
+						b.Fatal("unexpected error:", err)
+					}
+					s.Out = nil
+					s, remain, _ := ReadTable(compressed, s)
+					s.Decompress4X(remain, len(buf0))
+					b.ResetTimer()
+					b.ReportAllocs()
+					b.SetBytes(int64(len(buf0)))
+					for i := 0; i < b.N; i++ {
+						_, err = s.Decompress4X(remain, len(buf0))
+						if err != nil {
+							b.Fatal(err)
+						}
+					}
+					b.ReportMetric(float64(s.actualTableLog), "log")
+					b.ReportMetric(100*float64(len(compressed))/float64(len(buf0)), "pct")
+
+				})
 			}
 		})
 	}
