@@ -52,6 +52,10 @@ var (
 	// Typically returned on invalid input.
 	ErrBlockTooSmall = errors.New("block too small")
 
+	// ErrUnexpectedBlockSize is returned when a block has unexpected size.
+	// Typically returned on invalid input.
+	ErrUnexpectedBlockSize = errors.New("unexpected block size")
+
 	// ErrMagicMismatch is returned when a "magic" number isn't what is expected.
 	// Typically this indicates wrong or corrupted input.
 	ErrMagicMismatch = errors.New("invalid input: magic number mismatch")
