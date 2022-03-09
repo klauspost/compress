@@ -700,6 +700,7 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 				}
 				hist.decoders = block.async.newHist.decoders
 				hist.recentOffsets = block.async.newHist.recentOffsets
+				hist.windowSize = block.async.newHist.windowSize
 				if block.async.newHist.dict != nil {
 					hist.setDict(block.async.newHist.dict)
 				}
