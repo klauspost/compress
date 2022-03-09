@@ -167,6 +167,11 @@ func (b *blockDec) reset(br byteBuffer, windowSize uint64) error {
 			}
 			return ErrCompressedSizeTooBig
 		}
+		// Empty compressed blocks not valid in practice,
+		// see https://github.com/facebook/zstd/issues/3090
+		if cSize < 3 {
+			return ErrBlockTooSmall
+		}
 	case blockTypeRaw:
 		if cSize > maxCompressedBlockSize || cSize > int(b.WindowSize) {
 			if debugDecoder {
@@ -491,6 +496,9 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 }
 
 func (b *blockDec) prepareSequences(in []byte, hist *history) (err error) {
+	if debugDecoder {
+		printf("prepareSequences: %d byte(s) input\n", len(in))
+	}
 	// Decode Sequences
 	// https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#sequences-section
 	if len(in) < 1 {
@@ -499,8 +507,6 @@ func (b *blockDec) prepareSequences(in []byte, hist *history) (err error) {
 	var nSeqs int
 	seqHeader := in[0]
 	switch {
-	case seqHeader == 0:
-		in = in[1:]
 	case seqHeader < 128:
 		nSeqs = int(seqHeader)
 		in = in[1:]
