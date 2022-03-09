@@ -1610,6 +1610,7 @@ func testDecoderDecodeAllError(t *testing.T, fn string, dec *Decoder, errMap map
 				t.Error("Did not get expected error, got", len(got), "bytes")
 				return
 			}
+			t.Log(err)
 			if errMap[tt.Name] == "" {
 				t.Error("cannot check error")
 			} else {

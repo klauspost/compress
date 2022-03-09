@@ -517,6 +517,10 @@ func (b *blockDec) prepareSequences(in []byte, hist *history) (err error) {
 		nSeqs = 0x7f00 + int(in[1]) + (int(in[2]) << 8)
 		in = in[3:]
 	}
+	if nSeqs == 0 && len(in) != 0 {
+		// When no sequences, there should not be any more data...
+		return ErrUnexpectedBlockSize
+	}
 
 	var seqs = &hist.decoders
 	seqs.nSeqs = nSeqs
