@@ -525,6 +525,9 @@ func (b *blockDec) prepareSequences(in []byte, hist *history) (err error) {
 	}
 	if nSeqs == 0 && len(in) != 0 {
 		// When no sequences, there should not be any more data...
+		if debugDecoder {
+			printf("prepareSequences: 0 sequences, but %d byte(s) left on stream\n", len(in))
+		}
 		return ErrUnexpectedBlockSize
 	}
 
@@ -645,6 +648,7 @@ func (b *blockDec) decodeSequences(hist *history) error {
 		hist.decoders.seqSize = len(hist.decoders.literals)
 		return nil
 	}
+	hist.decoders.windowSize = hist.windowSize
 	hist.decoders.prevOffset = hist.recentOffsets
 	err := hist.decoders.decode(b.sequence)
 	hist.recentOffsets = hist.decoders.prevOffset
