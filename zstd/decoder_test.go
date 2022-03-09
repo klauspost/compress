@@ -1142,6 +1142,10 @@ func testDecoderFileBad(t *testing.T, fn string, newDec func() (*Decoder, error)
 				return
 			}
 			got, err := ioutil.ReadAll(dec)
+			if err == ErrCRCMismatch && !strings.Contains(tt.Name, "badsum") {
+				t.Error(err)
+				return
+			}
 			if err == nil {
 				want := errMap[tt.Name]
 				if want == "" {
