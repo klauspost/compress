@@ -137,8 +137,8 @@ skip_fill0:
 	ADDQ    CX, br_bits_read // bits_read += n
 
 	// these two writes get coalesced
-	// buf[stream][off] = uint8(v0.entry >> 8)
-	// buf[stream][off+1] = uint8(v1.entry >> 8)
+	// buf[stream][off+2] = uint8(v2.entry >> 8)
+	// buf[stream][off+3] = uint8(v3.entry >> 8)
 	MOVW BX, 0+2(buffer)(off*1)
 
 	// update the bitrader reader structure
@@ -241,8 +241,8 @@ skip_fill1:
 	ADDQ    CX, br_bits_read // bits_read += n
 
 	// these two writes get coalesced
-	// buf[stream][off] = uint8(v0.entry >> 8)
-	// buf[stream][off+1] = uint8(v1.entry >> 8)
+	// buf[stream][off+2] = uint8(v2.entry >> 8)
+	// buf[stream][off+3] = uint8(v3.entry >> 8)
 	MOVW BX, 256+2(buffer)(off*1)
 
 	// update the bitrader reader structure
@@ -345,8 +345,8 @@ skip_fill2:
 	ADDQ    CX, br_bits_read // bits_read += n
 
 	// these two writes get coalesced
-	// buf[stream][off] = uint8(v0.entry >> 8)
-	// buf[stream][off+1] = uint8(v1.entry >> 8)
+	// buf[stream][off+2] = uint8(v2.entry >> 8)
+	// buf[stream][off+3] = uint8(v3.entry >> 8)
 	MOVW BX, 512+2(buffer)(off*1)
 
 	// update the bitrader reader structure
@@ -449,8 +449,8 @@ skip_fill3:
 	ADDQ    CX, br_bits_read // bits_read += n
 
 	// these two writes get coalesced
-	// buf[stream][off] = uint8(v0.entry >> 8)
-	// buf[stream][off+1] = uint8(v1.entry >> 8)
+	// buf[stream][off+2] = uint8(v2.entry >> 8)
+	// buf[stream][off+3] = uint8(v3.entry >> 8)
 	MOVW BX, 768+2(buffer)(off*1)
 
 	// update the bitrader reader structure
