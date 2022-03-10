@@ -1427,14 +1427,18 @@ func BenchmarkDecoder_DecodeAllParallel(b *testing.B) {
 	}
 }
 
-func BenchmarkDecoderSilesia(b *testing.B) {
-	fn := "testdata/silesia.tar.zst"
-	data, err := ioutil.ReadFile(fn)
+func benchmarkDecoderWithFile(path string, b *testing.B) {
+	_, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			b.Skip("Missing testdata/silesia.tar.zst")
+			b.Skipf("Missing %s", path)
 			return
 		}
+		b.Fatal(err)
+	}
+
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
 		b.Fatal(err)
 	}
 	dec, err := NewReader(nil, WithDecoderLowmem(false))
@@ -1466,43 +1470,12 @@ func BenchmarkDecoderSilesia(b *testing.B) {
 	}
 }
 
-func BenchmarkDecoderEnwik9(b *testing.B) {
-	fn := "testdata/enwik8.zst"
-	data, err := ioutil.ReadFile(fn)
-	if err != nil {
-		if os.IsNotExist(err) {
-			b.Skip("Missing " + fn)
-			return
-		}
-		b.Fatal(err)
-	}
-	dec, err := NewReader(nil, WithDecoderLowmem(false))
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer dec.Close()
-	err = dec.Reset(bytes.NewBuffer(data))
-	if err != nil {
-		b.Fatal(err)
-	}
-	n, err := io.Copy(ioutil.Discard, dec)
-	if err != nil {
-		b.Fatal(err)
-	}
+func BenchmarkDecoderSilesia(b *testing.B) {
+	benchmarkDecoderWithFile("testdata/silesia.tar.zst", b)
+}
 
-	b.SetBytes(n)
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		err = dec.Reset(bytes.NewBuffer(data))
-		if err != nil {
-			b.Fatal(err)
-		}
-		_, err := io.CopyN(ioutil.Discard, dec, n)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
+func BenchmarkDecoderEnwik9(b *testing.B) {
+	benchmarkDecoderWithFile("testdata/enwik9.zst", b)
 }
 
 func testDecoderDecodeAll(t *testing.T, fn string, dec *Decoder) {
