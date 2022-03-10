@@ -167,9 +167,9 @@ func (b *blockDec) reset(br byteBuffer, windowSize uint64) error {
 			}
 			return ErrCompressedSizeTooBig
 		}
-		// Empty compressed blocks not valid in practice,
-		// see https://github.com/facebook/zstd/issues/3090
-		if cSize < 3 {
+		// Empty compressed blocks must at least be 2 bytes
+		// for Literals_Block_Type and one for Sequences_Section_Header.
+		if cSize < 2 {
 			return ErrBlockTooSmall
 		}
 	case blockTypeRaw:
