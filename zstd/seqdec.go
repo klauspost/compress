@@ -341,14 +341,13 @@ func (s *sequenceDecs) execute(seqs []seqVals, hist []byte) error {
 }
 
 // decode sequences from the stream with the provided history.
-func (s *sequenceDecs) decodeSync(history *history) error {
+func (s *sequenceDecs) decodeSync(hist []byte) error {
 	br := s.br
 	seqs := s.nSeqs
 	startSize := len(s.out)
 	// Grab full sizes tables, to avoid bounds checks.
 	llTable, mlTable, ofTable := s.litLengths.fse.dt[:maxTablesize], s.matchLengths.fse.dt[:maxTablesize], s.offsets.fse.dt[:maxTablesize]
 	llState, mlState, ofState := s.litLengths.state.state, s.matchLengths.state.state, s.offsets.state.state
-	hist := history.b[history.ignoreBuffer:]
 	out := s.out
 	maxBlockSize := maxCompressedBlockSize
 	if s.windowSize < maxBlockSize {
