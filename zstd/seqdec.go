@@ -101,6 +101,10 @@ func (s *sequenceDecs) initialize(br *bitReader, hist *history, out []byte) erro
 // execute will execute the decoded sequence with the provided history.
 // The sequence must be evaluated before being sent.
 func (s *sequenceDecs) execute(seqs []seqVals, hist []byte) error {
+	if len(hist) == 0 && len(s.dict) == 0 {
+		return s.executeSimple(seqs)
+	}
+
 	// Ensure we have enough output size...
 	if len(s.out)+s.seqSize > cap(s.out) {
 		addBytes := s.seqSize + len(s.out)
