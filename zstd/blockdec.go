@@ -5,9 +5,14 @@
 package zstd
 
 import (
+	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/klauspost/compress/huff0"
@@ -486,7 +491,8 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		b.dst = append(b.dst, hist.decoders.literals...)
 		return nil
 	}
-	err = hist.decoders.decodeSync(hist)
+
+	err = hist.decoders.decodeSync(hist.b[hist.ignoreBuffer:])
 	if err != nil {
 		return err
 	}
@@ -632,6 +638,22 @@ func (b *blockDec) prepareSequences(in []byte, hist *history) (err error) {
 		println("initializing sequences:", err)
 		return err
 	}
+	// Extract blocks...
+	if false && hist.dict == nil {
+		fatalErr := func(err error) {
+			if err != nil {
+				panic(err)
+			}
+		}
+		fn := fmt.Sprintf("n-%d-lits-%d-prev-%d-%d-%d-win-%d.blk", hist.decoders.nSeqs, len(hist.decoders.literals), hist.recentOffsets[0], hist.recentOffsets[1], hist.recentOffsets[2], hist.windowSize)
+		var buf bytes.Buffer
+		fatalErr(binary.Write(&buf, binary.LittleEndian, hist.decoders.litLengths.fse))
+		fatalErr(binary.Write(&buf, binary.LittleEndian, hist.decoders.matchLengths.fse))
+		fatalErr(binary.Write(&buf, binary.LittleEndian, hist.decoders.offsets.fse))
+		buf.Write(in)
+		ioutil.WriteFile(filepath.Join("testdata", "seqs", fn), buf.Bytes(), os.ModePerm)
+	}
+
 	return nil
 }
 
@@ -650,6 +672,7 @@ func (b *blockDec) decodeSequences(hist *history) error {
 	}
 	hist.decoders.windowSize = hist.windowSize
 	hist.decoders.prevOffset = hist.recentOffsets
+
 	err := hist.decoders.decode(b.sequence)
 	hist.recentOffsets = hist.decoders.prevOffset
 	return err
