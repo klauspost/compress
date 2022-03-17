@@ -281,7 +281,7 @@ sequenceDecs_decode_amd64_adjust_end:
 	MOVQ  ctx+16(FP), R12
 	SUBQ  CX, 128(R12)
 	CMPQ  AX, $0x00020002
-	JA    sequenceDecs_decode_amd64_error_match_len_ofs_mismatch
+	JA    sequenceDecs_decode_amd64_error_match_len_too_big
 	TESTQ R11, R11
 	JNZ   sequenceDecs_decode_amd64_match_len_ofs_ok
 	TESTQ AX, AX
@@ -307,6 +307,7 @@ sequenceDecs_decode_amd64_error_match_len_ofs_mismatch:
 	RET
 
 	// Return with match too long error
+sequenceDecs_decode_amd64_error_match_len_too_big:
 	MOVQ $0x00000002, ret+24(FP)
 	RET
 
@@ -561,7 +562,7 @@ sequenceDecs_decode_bmi2_adjust_end:
 	MOVQ  ctx+16(FP), R12
 	SUBQ  R10, 128(R12)
 	CMPQ  CX, $0x00020002
-	JA    sequenceDecs_decode_bmi2_error_match_len_ofs_mismatch
+	JA    sequenceDecs_decode_bmi2_error_match_len_too_big
 	TESTQ R11, R11
 	JNZ   sequenceDecs_decode_bmi2_match_len_ofs_ok
 	TESTQ CX, CX
@@ -587,5 +588,6 @@ sequenceDecs_decode_bmi2_error_match_len_ofs_mismatch:
 	RET
 
 	// Return with match too long error
+sequenceDecs_decode_bmi2_error_match_len_too_big:
 	MOVQ $0x00000002, ret+24(FP)
 	RET

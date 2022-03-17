@@ -225,7 +225,7 @@ func (o options) genDecodeSeqAsm(name string) {
 		//		return fmt.Errorf("match len (%d) bigger than max allowed length", ml)
 		//	}
 		CMPQ(ml, U32(maxMatchLen))
-		JA(LabelRef(name + "_error_match_len_ofs_mismatch"))
+		JA(LabelRef(name + "_error_match_len_too_big"))
 	}
 	{
 		// 	if mo == 0 && ml > 0 {
