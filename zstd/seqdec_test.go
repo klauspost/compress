@@ -258,7 +258,7 @@ func Test_seqdec_decoder(t *testing.T) {
 			fatalIf(s.offsets.init(s.br))
 			fatalIf(s.matchLengths.init(s.br))
 
-			err := s.decodeAsm(seqs)
+			err := s.decode(seqs)
 			if err != nil {
 				t.Error(err)
 			}
