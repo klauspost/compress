@@ -11,9 +11,9 @@ type decodeAsmContext struct {
 	llTable   []decSymbol
 	mlTable   []decSymbol
 	ofTable   []decSymbol
-	llState   decSymbol
-	mlState   decSymbol
-	ofState   decSymbol
+	llState   uint64
+	mlState   uint64
+	ofState   uint64
 	iteration int
 	seqs      []seqVals
 	litRemain int
@@ -43,9 +43,9 @@ func (s *sequenceDecs) decode(seqs []seqVals) error {
 		llTable:   s.litLengths.fse.dt[:maxTablesize],
 		mlTable:   s.matchLengths.fse.dt[:maxTablesize],
 		ofTable:   s.offsets.fse.dt[:maxTablesize],
-		llState:   s.litLengths.state.state,
-		mlState:   s.matchLengths.state.state,
-		ofState:   s.offsets.state.state,
+		llState:   uint64(s.litLengths.state.state),
+		mlState:   uint64(s.matchLengths.state.state),
+		ofState:   uint64(s.offsets.state.state),
 		seqs:      seqs,
 		iteration: len(seqs) - 1,
 		litRemain: len(s.literals),
