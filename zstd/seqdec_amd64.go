@@ -5,6 +5,8 @@ package zstd
 
 import (
 	"fmt"
+
+	"github.com/klauspost/compress/internal/cpuinfo"
 )
 
 type decodeAsmContext struct {
@@ -30,6 +32,21 @@ const errorMatchLenTooBig = 2
 // Please refer to seqdec_generic.go for the reference implementation.
 func sequenceDecs_decode_amd64(s *sequenceDecs, br *bitReader, ctx *decodeAsmContext) int
 
+// sequenceDecs_decode implements the main loop of sequenceDecs in x86 asm with BMI2 extensions.
+func sequenceDecs_decode_bmi2(s *sequenceDecs, br *bitReader, ctx *decodeAsmContext) int
+
+type sequenceDecs_decode_function = func(s *sequenceDecs, br *bitReader, ctx *decodeAsmContext) int
+
+var sequenceDecs_decode sequenceDecs_decode_function
+
+func init() {
+	if cpuinfo.HasBMI2() {
+		sequenceDecs_decode = sequenceDecs_decode_bmi2
+	} else {
+		sequenceDecs_decode = sequenceDecs_decode_amd64
+	}
+}
+
 // decode sequences from the stream without the provided history.
 func (s *sequenceDecs) decode(seqs []seqVals) error {
 	br := s.br
@@ -53,7 +70,7 @@ func (s *sequenceDecs) decode(seqs []seqVals) error {
 
 	s.seqSize = 0
 
-	errCode := sequenceDecs_decode_amd64(s, br, &ctx)
+	errCode := sequenceDecs_decode(s, br, &ctx)
 	if errCode != 0 {
 		i := len(seqs) - ctx.iteration
 		switch errCode {
