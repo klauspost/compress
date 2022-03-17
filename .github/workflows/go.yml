@@ -73,9 +73,9 @@ jobs:
     - name: Test S2 GOAMD64 v3
       env:
         GOAMD64: v3
-      run: go test -asmflags=-D=GOAMD64_v3 ./s2/...
+      run: go test . -test.run=None;if [ $? -eq 0 ]; then go test ./s2/...; else true; fi
 
-    - name: Test S2 GOAMD64 v4
+    - name: Test GOAMD64 v4
       env:
         GOAMD64: v4
-      run: go test -asmflags=-D=GOAMD64_v4 ./s2/...
+      run: go test . -test.run=None;if [ $? -eq 0 ]; then go test ./s2/...; else true; fi
