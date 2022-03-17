@@ -55,7 +55,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	err = ioutil.WriteFile(filepath.Join("..", out.Value.String()), b, os.ModePerm)
+	const readOnly = 0444
+	err = ioutil.WriteFile(filepath.Join("..", out.Value.String()), b, readOnly)
 	if err != nil {
 		panic(err)
 	}
