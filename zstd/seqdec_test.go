@@ -2,8 +2,12 @@ package zstd
 
 import (
 	"bytes"
+	"encoding/csv"
 	"fmt"
 	"io/ioutil"
+	"os"
+	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
@@ -164,6 +168,55 @@ func readDecoders(tb testing.TB, buf *bytes.Buffer, ref testSequence) sequenceDe
 }
 
 func Test_seqdec_decoder(t *testing.T) {
+	const writeWant = false
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+
+	want := map[string][]seqVals{}
+	var wantOffsets = map[string][3]int{}
+	if !writeWant {
+		fn := "testdata/seqs-want.zip"
+		data, err := ioutil.ReadFile(fn)
+		tb := t
+		if err != nil {
+			tb.Fatal(err)
+		}
+		zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+		if err != nil {
+			tb.Fatal(err)
+		}
+		for _, tt := range zr.File {
+			var ref testSequence
+			if !ref.parse(tt.Name) {
+				tb.Skip("unable to parse:", tt.Name)
+			}
+			o, err := tt.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := csv.NewReader(o)
+			recs, err := r.ReadAll()
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i, rec := range recs {
+				if i == 0 {
+					var o [3]int
+					o[0], _ = strconv.Atoi(rec[0])
+					o[1], _ = strconv.Atoi(rec[1])
+					o[2], _ = strconv.Atoi(rec[2])
+					wantOffsets[tt.Name] = o
+					continue
+				}
+				s := seqVals{}
+				s.mo, _ = strconv.Atoi(rec[0])
+				s.ml, _ = strconv.Atoi(rec[1])
+				s.ll, _ = strconv.Atoi(rec[2])
+				want[tt.Name] = append(want[tt.Name], s)
+			}
+			o.Close()
+		}
+	}
 	fn := "testdata/seqs.zip"
 	data, err := ioutil.ReadFile(fn)
 	tb := t
@@ -209,7 +262,29 @@ func Test_seqdec_decoder(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
+			if writeWant {
+				w, err := zw.Create(tt.Name)
+				fatalIf(err)
+				c := csv.NewWriter(w)
+				w.Write([]byte(fmt.Sprintf("%d,%d,%d\n", s.prevOffset[0], s.prevOffset[1], s.prevOffset[2])))
+				for _, seq := range seqs {
+					c.Write([]string{strconv.Itoa(seq.mo), strconv.Itoa(seq.ml), strconv.Itoa(seq.ll)})
+				}
+				c.Flush()
+			} else {
+				if s.prevOffset != wantOffsets[tt.Name] {
+					t.Errorf("want offsets %v, got %v", wantOffsets[tt.Name], s.prevOffset)
+				}
+
+				if !reflect.DeepEqual(want[tt.Name], seqs) {
+					t.Errorf("got %v\nwant %v", seqs, want[tt.Name])
+				}
+			}
 		})
+	}
+	if writeWant {
+		zw.Close()
+		ioutil.WriteFile("testdata/seqs-want.zip", buf.Bytes(), os.ModePerm)
 	}
 }
 
