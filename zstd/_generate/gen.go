@@ -165,7 +165,16 @@ func (o options) genDecodeSeqAsm(name string) {
 	}
 
 	R14 := GP64()
-	MOVQ(ofState, R14) // copy ofState, its current value is needed below
+	if o.bmi2 {
+		tmp := GP64()
+		MOVQ(U32(8|(8<<8)), tmp)
+		BEXTRQ(tmp, ofState, R14)
+	} else {
+		MOVQ(ofState, R14) // copy ofState, its current value is needed below
+		SHRQ(U8(8), R14)   // moB (from the ofState before its update)
+		MOVBQZX(R14.As8(), R14)
+	}
+
 	// Reload ctx
 	ctx := Dereference(Param("ctx"))
 	iteration, err := ctx.Field("iteration").Resolve()
@@ -188,8 +197,6 @@ func (o options) genDecodeSeqAsm(name string) {
 	Label(name + "_skip_update")
 
 	// mo = s.adjustOffset(mo, ll, moB)
-	SHRQ(U8(8), R14) // moB (from the ofState before its update)
-	MOVBQZX(R14.As8(), R14)
 
 	Comment("Adjust offset")
 
@@ -373,27 +380,27 @@ func (o options) updateState(name string, state, brValue, brBitsRead reg.GPVirtu
 	})
 
 	DX := GP64()
-	MOVQ(state, DX) // TODO: maybe use BEXTR?
-	SHRQ(U8(16), DX)
-	MOVWQZX(DX.As16(), DX)
-
-	if !o.bmi2 {
-		// TODO: Probably reasonable to kip if AX==0s
-		CMPQ(AX, U8(0))
-		JZ(LabelRef(name + "_skip"))
+	if o.bmi2 {
+		tmp := GP64()
+		MOVQ(U32(16|(16<<8)), tmp)
+		BEXTRQ(tmp, state, DX)
+	} else {
+		MOVQ(state, DX)
+		SHRQ(U8(16), DX)
+		MOVWQZX(DX.As16(), DX)
 	}
 
 	{
-		lowBits := o.getBits(name+"_getBits", AX, brValue, brBitsRead)
+		lowBits := o.getBits(name+"_getBits", AX, brValue, brBitsRead, LabelRef(name+"_skip_zero"))
 		// Check if below tablelog
 		assert(func(ok LabelRef) {
 			CMPQ(lowBits, U32(512))
 			JB(ok)
 		})
 		ADDQ(lowBits, DX)
+		Label(name + "_skip_zero")
 	}
 
-	Label(name + "_skip")
 	// Load table pointer
 	tablePtr := GP64()
 	Comment("Load ctx." + table)
@@ -413,7 +420,9 @@ func (o options) updateState(name string, state, brValue, brBitsRead reg.GPVirtu
 	MOVQ(Mem{Base: tablePtr, Index: DX, Scale: 8}, state)
 }
 
-func (o options) getBits(name string, nBits, brValue, brBitsRead reg.GPVirtual) reg.GPVirtual {
+// getBits will return nbits bits from brValue.
+// If nbits == 0 it *may* jump to jmpZero, otherwise 0 is returned.
+func (o options) getBits(name string, nBits, brValue, brBitsRead reg.GPVirtual, jmpZero LabelRef) reg.GPVirtual {
 	BX := GP64()
 	CX := reg.CL
 	if o.bmi2 {
@@ -423,6 +432,8 @@ func (o options) getBits(name string, nBits, brValue, brBitsRead reg.GPVirtual) 
 		ROLQ(CX, BX)
 		BZHIQ(nBits, BX, BX)
 	} else {
+		CMPQ(nBits, U8(0))
+		JZ(jmpZero)
 		MOVQ(brBitsRead, CX.As64())
 		ADDQ(nBits, brBitsRead)
 		MOVQ(brValue, BX)
@@ -430,8 +441,6 @@ func (o options) getBits(name string, nBits, brValue, brBitsRead reg.GPVirtual) 
 		MOVQ(nBits, CX.As64())
 		NEGQ(CX.As64())
 		SHRQ(CX, BX)
-		TESTQ(nBits, nBits)
-		CMOVQEQ(nBits, BX)
 	}
 	return BX
 }
