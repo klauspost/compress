@@ -595,15 +595,18 @@ sequenceDecs_decode_bmi2_error_match_len_too_big:
 // func sequenceDecs_executeSimple_amd64(ctx *executeAsmContext) bool
 // Requires: SSE
 TEXT ·sequenceDecs_executeSimple_amd64(SB), $0-9
-	MOVQ ctx+0(FP), R9
-	MOVQ (R9), AX
-	MOVQ 8(R9), CX
-	MOVQ 24(R9), DX
-	MOVQ 32(R9), BX
-	MOVQ 40(R9), SI
-	MOVQ 56(R9), DI
-	MOVQ 80(R9), R8
-	MOVQ 88(R9), R9
+	MOVQ  ctx+0(FP), DI
+	MOVQ  8(DI), CX
+	TESTQ CX, CX
+	JZ    empty_seqs
+	MOVQ  (DI), AX
+	MOVQ  24(DI), DX
+	MOVQ  32(DI), BX
+	MOVQ  40(DI), SI
+	MOVQ  56(DI), SI
+	MOVQ  80(DI), R8
+	MOVQ  88(DI), R9
+	MOVQ  96(DI), DI
 
 	// seqsBase += 24 * seqIndex
 	LEAQ (DX)(DX*2), R10
@@ -617,37 +620,35 @@ main_loop:
 	MOVQ 8(AX), R10
 	MOVQ (AX), R11
 
-	// Check if we won't overflow ctx.out while fast copying
-	LEAQ (R10)(R11*1), R12
-	LEAQ 16(R8)(R12*1), R13
-	CMPQ R13, SI
-	JA   slow_path
-
-	// Update the counters upfront
-	ADDQ R12, R8
-	ADDQ R11, R9
-
 	// Copy literals
 	TESTQ R11, R11
 	JZ    copy_match
 	XORQ  R12, R12
 
 copy_1:
-	MOVUPS (DI)(R12*1), X0
+	MOVUPS (SI)(R12*1), X0
 	MOVUPS X0, (BX)(R12*1)
 	ADDQ   $0x10, R12
 	CMPQ   R12, R11
 	JB     copy_1
-	ADDQ   R11, DI
+	ADDQ   R11, SI
+	ADDQ   R11, R9
 	ADDQ   R11, BX
+	ADDQ   R11, R8
 
 	// Copy match
 copy_match:
 	TESTQ R10, R10
 	JZ    handle_loop
 	MOVQ  16(AX), R11
-	MOVQ  BX, R12
-	SUBQ  R11, R12
+
+	// Malformed input if seq.mo > t || seq.mo > s.windowSize)
+	CMPQ R11, R8
+	JG   error_match_off_to_big
+	CMPQ R11, DI
+	JG   error_match_off_to_big
+	MOVQ BX, R12
+	SUBQ R11, R12
 
 	// ml <= mo
 	CMPQ R10, R11
@@ -663,6 +664,7 @@ copy_2:
 	CMPQ   R11, R10
 	JB     copy_2
 	ADDQ   R10, BX
+	ADDQ   R10, R8
 	JMP    handle_loop
 
 	// Copy overlapping match
@@ -676,6 +678,7 @@ copy_slow_3:
 	CMPQ R11, R10
 	JB   copy_slow_3
 	ADDQ R10, BX
+	ADDQ R10, R8
 
 handle_loop:
 	ADDQ $0x18, AX
@@ -693,7 +696,7 @@ handle_loop:
 	MOVQ R9, 88(AX)
 	RET
 
-slow_path:
+error_match_off_to_big:
 	// Return value
 	MOVB $0x00, ret+8(FP)
 
@@ -702,4 +705,9 @@ slow_path:
 	MOVQ DX, 24(AX)
 	MOVQ R8, 80(AX)
 	MOVQ R9, 88(AX)
+	RET
+
+empty_seqs:
+	// Return value
+	MOVB $0x01, ret+8(FP)
 	RET

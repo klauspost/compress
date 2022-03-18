@@ -1151,7 +1151,7 @@ func testDecoderFileBad(t *testing.T, fn string, newDec func() (*Decoder, error)
 				if want == "" {
 					want = "<error>"
 				}
-				t.Error("Did not get expected error", want, "- got ", len(got), "bytes")
+				t.Error("Did not get expected error", want, "- got", len(got), "bytes")
 				return
 			}
 			if errMap[tt.Name] == "" {

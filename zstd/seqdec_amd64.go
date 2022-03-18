@@ -109,19 +109,24 @@ type executeAsmContext struct {
 	literals    []byte
 	outPosition int
 	litPosition int
+	windowSize  int
 }
 
 // sequenceDecs_executeSimple_amd64 implements the main loop of sequenceDecs.executeSimple in x86 asm.
+//
+// Returns false if a match offset is too big.
 //
 // Please refer to seqdec_generic.go for the reference implementation.
 //go:noescape
 func sequenceDecs_executeSimple_amd64(ctx *executeAsmContext) bool
 
+const overwriteSize = 16
+
 // executeSimple handles cases when no history nor dictionary are used.
 func (s *sequenceDecs) executeSimple(seqs []seqVals) error {
 	// Ensure we have enough output size...
-	if len(s.out)+s.seqSize > cap(s.out) {
-		addBytes := s.seqSize + len(s.out)
+	if len(s.out)+s.seqSize+overwriteSize > cap(s.out) {
+		addBytes := s.seqSize + len(s.out) + overwriteSize
 		s.out = append(s.out, make([]byte, addBytes)...)
 		s.out = s.out[:len(s.out)-addBytes]
 	}
@@ -134,61 +139,22 @@ func (s *sequenceDecs) executeSimple(seqs []seqVals) error {
 	out := s.out[:t+s.seqSize]
 
 	ctx := executeAsmContext{
-		seqs:     seqs,
-		seqIndex: 0,
-		out:      out,
+		seqs:        seqs,
+		seqIndex:    0,
+		out:         out,
+		outPosition: t,
+		litPosition: 0,
+		literals:    s.literals,
+		windowSize:  s.windowSize,
 	}
 
-	for ctx.seqIndex < len(seqs) {
-		ctx.outPosition = t
-		ctx.litPosition = 0
-		ctx.literals = s.literals
-		completed := sequenceDecs_executeSimple_amd64(&ctx)
-		if completed {
-			// The asm routine did everything
-			s.literals = s.literals[ctx.litPosition:]
-			t = ctx.outPosition
-			break
-		}
-
-		// The asm routine cannot handle seq[ctx.index]
-		seq := seqs[ctx.seqIndex]
-		t = ctx.outPosition
-		s.literals = s.literals[ctx.litPosition:]
-
-		ctx.seqIndex += 1
-
-		// Add literals
-		copy(out[t:], s.literals[:seq.ll])
-		t += seq.ll
-		s.literals = s.literals[seq.ll:]
-
-		// Malformed input
-		if seq.mo > t || seq.mo > s.windowSize {
-			return fmt.Errorf("match offset (%d) bigger than current history (%d)", seq.mo, t)
-		}
-
-		// We must be in current buffer now
-		if seq.ml > 0 {
-			start := t - seq.mo
-			if seq.ml <= t-start {
-				// No overlap
-				copy(out[t:], out[start:start+seq.ml])
-				t += seq.ml
-			} else {
-				// Overlapping copy
-				// Extend destination slice and copy one byte at the time.
-				src := out[start : start+seq.ml]
-				dst := out[t:]
-				dst = dst[:len(src)]
-				t += len(src)
-				// Destination is the space we just added.
-				for i := range src {
-					dst[i] = src[i]
-				}
-			}
-		}
+	ok := sequenceDecs_executeSimple_amd64(&ctx)
+	if !ok {
+		return fmt.Errorf("match offset (%d) bigger than current history (%d)",
+			seqs[ctx.seqIndex].mo, ctx.outPosition)
 	}
+	s.literals = s.literals[ctx.litPosition:]
+	t = ctx.outPosition
 
 	// Add final literals
 	copy(out[t:], s.literals)

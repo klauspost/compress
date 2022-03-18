@@ -578,17 +578,21 @@ func (e executeSimple) generateProcedure(name string) {
 	literals := GP64()
 	outPosition := GP64()
 	litPosition := GP64()
+	windowSize := GP64()
 
 	{
 		ctx := Dereference(Param("ctx"))
-		Load(ctx.Field("seqs").Base(), seqsBase)
 		Load(ctx.Field("seqs").Len(), seqsLen)
+		TESTQ(seqsLen, seqsLen)
+		JZ(LabelRef("empty_seqs"))
+		Load(ctx.Field("seqs").Base(), seqsBase)
 		Load(ctx.Field("seqIndex"), seqIndex)
 		Load(ctx.Field("out").Base(), outBase)
 		Load(ctx.Field("out").Len(), outLen)
 		Load(ctx.Field("literals").Base(), literals)
 		Load(ctx.Field("outPosition"), outPosition)
 		Load(ctx.Field("litPosition"), litPosition)
+		Load(ctx.Field("windowSize"), windowSize)
 
 		tmp := GP64()
 		Comment("seqsBase += 24 * seqIndex")
@@ -613,22 +617,6 @@ func (e executeSimple) generateProcedure(name string) {
 	MOVQ(mlPtr, ml)
 	MOVQ(llPtr, ll)
 
-	Comment("Check if we won't overflow ctx.out while fast copying")
-	total := GP64()
-	{
-		max := GP64()
-		LEAQ(Mem{Base: ml, Index: ll, Scale: 1}, total) // ml + ll
-		LEAQ(Mem{Base: outPosition, Index: total, Scale: 1, Disp: e.copySize()}, max)
-		CMPQ(max, outLen)
-		JA(LabelRef("slow_path"))
-	}
-
-	Comment("Update the counters upfront")
-	{
-		ADDQ(total, outPosition)
-		ADDQ(ll, litPosition)
-	}
-
 	Comment("Copy literals")
 	Label("copy_literals")
 	{
@@ -637,7 +625,9 @@ func (e executeSimple) generateProcedure(name string) {
 		e.copyMemory("1", literals, outBase, ll)
 
 		ADDQ(ll, literals)
+		ADDQ(ll, litPosition)
 		ADDQ(ll, outBase)
+		ADDQ(ll, outPosition)
 	}
 
 	Comment("Copy match")
@@ -647,6 +637,13 @@ func (e executeSimple) generateProcedure(name string) {
 		JZ(LabelRef("handle_loop"))
 
 		MOVQ(moPtr, mo)
+
+		Comment("Malformed input if seq.mo > t || seq.mo > s.windowSize)")
+		CMPQ(mo, outPosition)
+		JG(LabelRef("error_match_off_to_big"))
+		CMPQ(mo, windowSize)
+		JG(LabelRef("error_match_off_to_big"))
+
 		src := GP64()
 		MOVQ(outBase, src)
 		SUBQ(mo, src) // src = &s.out[t - mo]
@@ -670,6 +667,7 @@ func (e executeSimple) generateProcedure(name string) {
 		{
 			e.copyMemory("2", src, outBase, ml)
 			ADDQ(ml, outBase)
+			ADDQ(ml, outPosition)
 			JMP(LabelRef("handle_loop"))
 		}
 
@@ -678,6 +676,7 @@ func (e executeSimple) generateProcedure(name string) {
 		{
 			e.copyOverlappedMemory("3", src, outBase, ml)
 			ADDQ(ml, outBase)
+			ADDQ(ml, outPosition)
 		}
 	}
 
@@ -687,11 +686,12 @@ func (e executeSimple) generateProcedure(name string) {
 	CMPQ(seqIndex, seqsLen)
 	JB(LabelRef("main_loop"))
 
+	ret, err := ReturnIndex(0).Resolve()
+	if err != nil {
+		panic(err)
+	}
+
 	returnValue := func(val int) {
-		ret, err := ReturnIndex(0).Resolve()
-		if err != nil {
-			panic(err)
-		}
 
 		Comment("Return value")
 		MOVB(U8(val), ret.Addr)
@@ -702,12 +702,16 @@ func (e executeSimple) generateProcedure(name string) {
 		Store(outPosition, ctx.Field("outPosition"))
 		Store(litPosition, ctx.Field("litPosition"))
 	}
-
 	returnValue(1)
 	RET()
 
-	Label("slow_path")
+	Label("error_match_off_to_big")
 	returnValue(0)
+	RET()
+
+	Label("empty_seqs")
+	Comment("Return value")
+	MOVB(U8(1), ret.Addr)
 	RET()
 }
 
