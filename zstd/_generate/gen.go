@@ -577,7 +577,6 @@ func (e executeSimple) generateProcedure(name string) {
 	outLen := GP64()
 	literals := GP64()
 	outPosition := GP64()
-	litPosition := GP64()
 	windowSize := GP64()
 
 	{
@@ -591,7 +590,6 @@ func (e executeSimple) generateProcedure(name string) {
 		Load(ctx.Field("out").Len(), outLen)
 		Load(ctx.Field("literals").Base(), literals)
 		Load(ctx.Field("outPosition"), outPosition)
-		Load(ctx.Field("litPosition"), litPosition)
 		Load(ctx.Field("windowSize"), windowSize)
 
 		tmp := GP64()
@@ -625,7 +623,6 @@ func (e executeSimple) generateProcedure(name string) {
 		e.copyMemory("1", literals, outBase, ll)
 
 		ADDQ(ll, literals)
-		ADDQ(ll, litPosition)
 		ADDQ(ll, outBase)
 		ADDQ(ll, outPosition)
 	}
@@ -700,7 +697,12 @@ func (e executeSimple) generateProcedure(name string) {
 		ctx := Dereference(Param("ctx"))
 		Store(seqIndex, ctx.Field("seqIndex"))
 		Store(outPosition, ctx.Field("outPosition"))
-		Store(litPosition, ctx.Field("litPosition"))
+
+		// compute litPosition
+		tmp := GP64()
+		Load(ctx.Field("literals").Base(), tmp)
+		SUBQ(tmp, literals) // litPosition := current - initial literals pointer
+		Store(literals, ctx.Field("litPosition"))
 	}
 	returnValue(1)
 	RET()

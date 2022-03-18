@@ -605,80 +605,78 @@ TEXT ·sequenceDecs_executeSimple_amd64(SB), $0-9
 	MOVQ  40(DI), SI
 	MOVQ  56(DI), SI
 	MOVQ  80(DI), R8
-	MOVQ  88(DI), R9
 	MOVQ  96(DI), DI
 
 	// seqsBase += 24 * seqIndex
-	LEAQ (DX)(DX*2), R10
-	SHLQ $0x03, R10
-	ADDQ R10, AX
+	LEAQ (DX)(DX*2), R9
+	SHLQ $0x03, R9
+	ADDQ R9, AX
 
 	// outBase += outPosition
 	ADDQ R8, BX
 
 main_loop:
-	MOVQ 8(AX), R10
-	MOVQ (AX), R11
+	MOVQ 8(AX), R9
+	MOVQ (AX), R10
 
 	// Copy literals
-	TESTQ R11, R11
+	TESTQ R10, R10
 	JZ    copy_match
-	XORQ  R12, R12
+	XORQ  R11, R11
 
 copy_1:
-	MOVUPS (SI)(R12*1), X0
-	MOVUPS X0, (BX)(R12*1)
-	ADDQ   $0x10, R12
-	CMPQ   R12, R11
-	JB     copy_1
-	ADDQ   R11, SI
-	ADDQ   R11, R9
-	ADDQ   R11, BX
-	ADDQ   R11, R8
-
-	// Copy match
-copy_match:
-	TESTQ R10, R10
-	JZ    handle_loop
-	MOVQ  16(AX), R11
-
-	// Malformed input if seq.mo > t || seq.mo > s.windowSize)
-	CMPQ R11, R8
-	JG   error_match_off_to_big
-	CMPQ R11, DI
-	JG   error_match_off_to_big
-	MOVQ BX, R12
-	SUBQ R11, R12
-
-	// ml <= mo
-	CMPQ R10, R11
-	JA   copy_overalapping_match
-
-	// Copy non-overlapping match
-	XORQ R11, R11
-
-copy_2:
-	MOVUPS (R12)(R11*1), X0
+	MOVUPS (SI)(R11*1), X0
 	MOVUPS X0, (BX)(R11*1)
 	ADDQ   $0x10, R11
 	CMPQ   R11, R10
-	JB     copy_2
+	JB     copy_1
+	ADDQ   R10, SI
 	ADDQ   R10, BX
 	ADDQ   R10, R8
+
+	// Copy match
+copy_match:
+	TESTQ R9, R9
+	JZ    handle_loop
+	MOVQ  16(AX), R10
+
+	// Malformed input if seq.mo > t || seq.mo > s.windowSize)
+	CMPQ R10, R8
+	JG   error_match_off_to_big
+	CMPQ R10, DI
+	JG   error_match_off_to_big
+	MOVQ BX, R11
+	SUBQ R10, R11
+
+	// ml <= mo
+	CMPQ R9, R10
+	JA   copy_overalapping_match
+
+	// Copy non-overlapping match
+	XORQ R10, R10
+
+copy_2:
+	MOVUPS (R11)(R10*1), X0
+	MOVUPS X0, (BX)(R10*1)
+	ADDQ   $0x10, R10
+	CMPQ   R10, R9
+	JB     copy_2
+	ADDQ   R9, BX
+	ADDQ   R9, R8
 	JMP    handle_loop
 
 	// Copy overlapping match
 copy_overalapping_match:
-	XORQ R11, R11
+	XORQ R10, R10
 
 copy_slow_3:
-	MOVB (R12)(R11*1), R13
-	MOVB R13, (BX)(R11*1)
-	INCQ R11
-	CMPQ R11, R10
+	MOVB (R11)(R10*1), R12
+	MOVB R12, (BX)(R10*1)
+	INCQ R10
+	CMPQ R10, R9
 	JB   copy_slow_3
-	ADDQ R10, BX
-	ADDQ R10, R8
+	ADDQ R9, BX
+	ADDQ R9, R8
 
 handle_loop:
 	ADDQ $0x18, AX
@@ -693,7 +691,9 @@ handle_loop:
 	MOVQ ctx+0(FP), AX
 	MOVQ DX, 24(AX)
 	MOVQ R8, 80(AX)
-	MOVQ R9, 88(AX)
+	MOVQ 56(AX), CX
+	SUBQ CX, SI
+	MOVQ SI, 88(AX)
 	RET
 
 error_match_off_to_big:
@@ -704,7 +704,9 @@ error_match_off_to_big:
 	MOVQ ctx+0(FP), AX
 	MOVQ DX, 24(AX)
 	MOVQ R8, 80(AX)
-	MOVQ R9, 88(AX)
+	MOVQ 56(AX), CX
+	SUBQ CX, SI
+	MOVQ SI, 88(AX)
 	RET
 
 empty_seqs:
