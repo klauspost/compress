@@ -19,25 +19,20 @@ import (
 
 func Benchmark_seqdec_decodeNoBMI(b *testing.B) {
 	if !cpuinfo.HasBMI2() {
-		b.Skip("Already tested, platform does not have bmi")
+		b.Skip("Already tested, platform does not have bmi2")
 		return
 	}
-	sequenceDecs_decode = sequenceDecs_decode_amd64
-	defer func() {
-		sequenceDecs_decode = sequenceDecs_decode_bmi2
-	}()
+	defer cpuinfo.DisableBMI2()()
+
 	benchmark_seqdec_decode(b)
 }
 
 func Test_sequenceDecs_decodeNoBMI(t *testing.T) {
 	if !cpuinfo.HasBMI2() {
-		t.Skip("Already tested, platform does not have bmi")
+		t.Skip("Already tested, platform does not have bmi2")
 		return
 	}
-	sequenceDecs_decode = sequenceDecs_decode_amd64
-	defer func() {
-		sequenceDecs_decode = sequenceDecs_decode_bmi2
-	}()
+	defer cpuinfo.DisableBMI2()()
 
 	const writeWant = false
 	var buf bytes.Buffer

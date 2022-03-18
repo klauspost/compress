@@ -15,6 +15,16 @@ func HasBMI2() bool {
 	return hasBMI2
 }
 
+// DisableBMI2 will disable BMI2, for testing purposes.
+// Call returned function to restore previous state.
+func DisableBMI2() func() {
+	old := hasBMI2
+	hasBMI2 = false
+	return func() {
+		hasBMI2 = old
+	}
+}
+
 // HasBMI checks whether an x86 CPU supports both BMI1 and BMI2 extensions.
 func HasBMI() bool {
 	return HasBMI1() && HasBMI2()
