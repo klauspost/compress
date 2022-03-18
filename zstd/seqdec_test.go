@@ -404,6 +404,10 @@ func Test_seqdec_decodeSync(t *testing.T) {
 }
 
 func Benchmark_seqdec_decode(b *testing.B) {
+	benchmark_seqdec_decode(b)
+}
+
+func benchmark_seqdec_decode(b *testing.B) {
 	fn := "testdata/seqs.zip"
 	data, err := ioutil.ReadFile(fn)
 	tb := b

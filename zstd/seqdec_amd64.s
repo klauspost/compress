@@ -142,18 +142,20 @@ sequenceDecs_decode_amd64_fill_3_byte_by_byte:
 	JMP     sequenceDecs_decode_amd64_fill_3_byte_by_byte
 
 sequenceDecs_decode_amd64_fill_3_end:
-	MOVQ R11, (SP)
-	MOVQ R9, AX
-	MOVQ ctx+16(FP), CX
-	CMPQ 96(CX), $0x00
-	JZ   sequenceDecs_decode_amd64_skip_update
+	MOVQ    R11, (SP)
+	MOVQ    R9, AX
+	SHRQ    $0x08, AX
+	MOVBQZX AL, AX
+	MOVQ    ctx+16(FP), CX
+	CMPQ    96(CX), $0x00
+	JZ      sequenceDecs_decode_amd64_skip_update
 
 	// Update Literal Length State
 	MOVBQZX DI, R11
 	SHRQ    $0x10, DI
 	MOVWQZX DI, DI
 	CMPQ    R11, $0x00
-	JZ      sequenceDecs_decode_amd64_llState_updateState_skip
+	JZ      sequenceDecs_decode_amd64_llState_updateState_skip_zero
 	MOVQ    BX, CX
 	ADDQ    R11, BX
 	MOVQ    DX, R12
@@ -161,11 +163,9 @@ sequenceDecs_decode_amd64_fill_3_end:
 	MOVQ    R11, CX
 	NEGQ    CX
 	SHRQ    CL, R12
-	TESTQ   R11, R11
-	CMOVQEQ R11, R12
 	ADDQ    R12, DI
 
-sequenceDecs_decode_amd64_llState_updateState_skip:
+sequenceDecs_decode_amd64_llState_updateState_skip_zero:
 	// Load ctx.llTable
 	MOVQ ctx+16(FP), CX
 	MOVQ (CX), CX
@@ -176,7 +176,7 @@ sequenceDecs_decode_amd64_llState_updateState_skip:
 	SHRQ    $0x10, R8
 	MOVWQZX R8, R8
 	CMPQ    R11, $0x00
-	JZ      sequenceDecs_decode_amd64_mlState_updateState_skip
+	JZ      sequenceDecs_decode_amd64_mlState_updateState_skip_zero
 	MOVQ    BX, CX
 	ADDQ    R11, BX
 	MOVQ    DX, R12
@@ -184,11 +184,9 @@ sequenceDecs_decode_amd64_llState_updateState_skip:
 	MOVQ    R11, CX
 	NEGQ    CX
 	SHRQ    CL, R12
-	TESTQ   R11, R11
-	CMOVQEQ R11, R12
 	ADDQ    R12, R8
 
-sequenceDecs_decode_amd64_mlState_updateState_skip:
+sequenceDecs_decode_amd64_mlState_updateState_skip_zero:
 	// Load ctx.mlTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 24(CX), CX
@@ -199,7 +197,7 @@ sequenceDecs_decode_amd64_mlState_updateState_skip:
 	SHRQ    $0x10, R9
 	MOVWQZX R9, R9
 	CMPQ    R11, $0x00
-	JZ      sequenceDecs_decode_amd64_ofState_updateState_skip
+	JZ      sequenceDecs_decode_amd64_ofState_updateState_skip_zero
 	MOVQ    BX, CX
 	ADDQ    R11, BX
 	MOVQ    DX, R12
@@ -207,20 +205,15 @@ sequenceDecs_decode_amd64_mlState_updateState_skip:
 	MOVQ    R11, CX
 	NEGQ    CX
 	SHRQ    CL, R12
-	TESTQ   R11, R11
-	CMOVQEQ R11, R12
 	ADDQ    R12, R9
 
-sequenceDecs_decode_amd64_ofState_updateState_skip:
+sequenceDecs_decode_amd64_ofState_updateState_skip_zero:
 	// Load ctx.ofTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 48(CX), CX
 	MOVQ (CX)(R9*8), R9
 
 sequenceDecs_decode_amd64_skip_update:
-	SHRQ    $0x08, AX
-	MOVBQZX AL, AX
-
 	// Adjust offset
 	MOVQ s+0(FP), CX
 	MOVQ 16(R10), R11
@@ -444,16 +437,17 @@ sequenceDecs_decode_bmi2_fill_3_byte_by_byte:
 	JMP     sequenceDecs_decode_bmi2_fill_3_byte_by_byte
 
 sequenceDecs_decode_bmi2_fill_3_end:
-	MOVQ R10, (SP)
-	MOVQ R8, R10
-	MOVQ ctx+16(FP), CX
-	CMPQ 96(CX), $0x00
-	JZ   sequenceDecs_decode_bmi2_skip_update
+	MOVQ   R10, (SP)
+	MOVQ   $0x00000808, CX
+	BEXTRQ CX, R8, R10
+	MOVQ   ctx+16(FP), CX
+	CMPQ   96(CX), $0x00
+	JZ     sequenceDecs_decode_bmi2_skip_update
 
 	// Update Literal Length State
 	MOVBQZX SI, R11
-	SHRQ    $0x10, SI
-	MOVWQZX SI, SI
+	MOVQ    $0x00001010, CX
+	BEXTRQ  CX, SI, SI
 	LEAQ    (DX)(R11*1), CX
 	MOVQ    AX, R12
 	MOVQ    CX, DX
@@ -468,8 +462,8 @@ sequenceDecs_decode_bmi2_fill_3_end:
 
 	// Update Match Length State
 	MOVBQZX DI, R11
-	SHRQ    $0x10, DI
-	MOVWQZX DI, DI
+	MOVQ    $0x00001010, CX
+	BEXTRQ  CX, DI, DI
 	LEAQ    (DX)(R11*1), CX
 	MOVQ    AX, R12
 	MOVQ    CX, DX
@@ -484,8 +478,8 @@ sequenceDecs_decode_bmi2_fill_3_end:
 
 	// Update Offset State
 	MOVBQZX R8, R11
-	SHRQ    $0x10, R8
-	MOVWQZX R8, R8
+	MOVQ    $0x00001010, CX
+	BEXTRQ  CX, R8, R8
 	LEAQ    (DX)(R11*1), CX
 	MOVQ    AX, R12
 	MOVQ    CX, DX
@@ -499,9 +493,6 @@ sequenceDecs_decode_bmi2_fill_3_end:
 	MOVQ (CX)(R8*8), R8
 
 sequenceDecs_decode_bmi2_skip_update:
-	SHRQ    $0x08, R10
-	MOVBQZX R10, R10
-
 	// Adjust offset
 	MOVQ s+0(FP), CX
 	MOVQ 16(R9), R11
