@@ -96,3 +96,70 @@ func (s *sequenceDecs) decode(seqs []seqVals) error {
 	}
 	return err
 }
+
+type executeAsmContext struct {
+	seqs        []seqVals
+	seqIndex    int
+	out         []byte
+	literals    []byte
+	outPosition int
+	litPosition int
+	windowSize  int
+}
+
+// sequenceDecs_executeSimple_amd64 implements the main loop of sequenceDecs.executeSimple in x86 asm.
+//
+// Returns false if a match offset is too big.
+//
+// Please refer to seqdec_generic.go for the reference implementation.
+//go:noescape
+func sequenceDecs_executeSimple_amd64(ctx *executeAsmContext) bool
+
+const overwriteSize = 16
+
+// executeSimple handles cases when no history nor dictionary are used.
+func (s *sequenceDecs) executeSimple(seqs []seqVals) error {
+	// Ensure we have enough output size...
+	if len(s.out)+s.seqSize+overwriteSize > cap(s.out) {
+		addBytes := s.seqSize + len(s.out) + overwriteSize
+		s.out = append(s.out, make([]byte, addBytes)...)
+		s.out = s.out[:len(s.out)-addBytes]
+	}
+
+	if debugDecoder {
+		printf("Execute %d seqs with literals: %d into %d bytes\n", len(seqs), len(s.literals), s.seqSize)
+	}
+
+	var t = len(s.out)
+	out := s.out[:t+s.seqSize]
+
+	ctx := executeAsmContext{
+		seqs:        seqs,
+		seqIndex:    0,
+		out:         out,
+		outPosition: t,
+		litPosition: 0,
+		literals:    s.literals,
+		windowSize:  s.windowSize,
+	}
+
+	ok := sequenceDecs_executeSimple_amd64(&ctx)
+	if !ok {
+		return fmt.Errorf("match offset (%d) bigger than current history (%d)",
+			seqs[ctx.seqIndex].mo, ctx.outPosition)
+	}
+	s.literals = s.literals[ctx.litPosition:]
+	t = ctx.outPosition
+
+	// Add final literals
+	copy(out[t:], s.literals)
+	if debugDecoder {
+		t += len(s.literals)
+		if t != len(out) {
+			panic(fmt.Errorf("length mismatch, want %d, got %d, ss: %d", len(out), t, s.seqSize))
+		}
+	}
+	s.out = out
+
+	return nil
+}

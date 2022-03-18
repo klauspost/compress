@@ -152,3 +152,64 @@ func (s *sequenceDecs) decode(seqs []seqVals) error {
 	}
 	return err
 }
+
+// executeSimple handles cases when no history nor dictionary are used.
+func (s *sequenceDecs) executeSimple(seqs []seqVals) error {
+	// Ensure we have enough output size...
+	if len(s.out)+s.seqSize > cap(s.out) {
+		addBytes := s.seqSize + len(s.out)
+		s.out = append(s.out, make([]byte, addBytes)...)
+		s.out = s.out[:len(s.out)-addBytes]
+	}
+
+	if debugDecoder {
+		printf("Execute %d seqs with literals: %d into %d bytes\n", len(seqs), len(s.literals), s.seqSize)
+	}
+
+	var t = len(s.out)
+	out := s.out[:t+s.seqSize]
+
+	for _, seq := range seqs {
+		// Add literals
+		copy(out[t:], s.literals[:seq.ll])
+		t += seq.ll
+		s.literals = s.literals[seq.ll:]
+
+		// Malformed input
+		if seq.mo > t || seq.mo > s.windowSize {
+			return fmt.Errorf("match offset (%d) bigger than current history (%d)", seq.mo, t)
+		}
+
+		// We must be in current buffer now
+		if seq.ml > 0 {
+			start := t - seq.mo
+			if seq.ml <= t-start {
+				// No overlap
+				copy(out[t:], out[start:start+seq.ml])
+				t += seq.ml
+			} else {
+				// Overlapping copy
+				// Extend destination slice and copy one byte at the time.
+				src := out[start : start+seq.ml]
+				dst := out[t:]
+				dst = dst[:len(src)]
+				t += len(src)
+				// Destination is the space we just added.
+				for i := range src {
+					dst[i] = src[i]
+				}
+			}
+		}
+	}
+	// Add final literals
+	copy(out[t:], s.literals)
+	if debugDecoder {
+		t += len(s.literals)
+		if t != len(out) {
+			panic(fmt.Errorf("length mismatch, want %d, got %d, ss: %d", len(out), t, s.seqSize))
+		}
+	}
+	s.out = out
+
+	return nil
+}
