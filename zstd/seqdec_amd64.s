@@ -641,7 +641,7 @@ copy_match:
 
 	// ml <= mo
 	CMPQ R9, R10
-	JA   copy_overalapping_match
+	JA   copy_overlapping_match
 
 	// Copy non-overlapping match
 	XORQ R10, R10
@@ -657,7 +657,7 @@ copy_2:
 	JMP    handle_loop
 
 	// Copy overlapping match
-copy_overalapping_match:
+copy_overlapping_match:
 	XORQ R10, R10
 
 copy_slow_3:

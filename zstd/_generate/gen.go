@@ -666,10 +666,9 @@ func (e executeSimple) generateProcedure(name string) {
 		//       ml <= mo
 		Comment("ml <= mo")
 		CMPQ(ml, mo)
-		JA(LabelRef("copy_overalapping_match"))
+		JA(LabelRef("copy_overlapping_match"))
 
 		Comment("Copy non-overlapping match")
-		Label("copy_non_overalapping_match")
 		{
 			e.copyMemory("2", src, outBase, ml)
 			ADDQ(ml, outBase)
@@ -678,7 +677,7 @@ func (e executeSimple) generateProcedure(name string) {
 		}
 
 		Comment("Copy overlapping match")
-		Label("copy_overalapping_match")
+		Label("copy_overlapping_match")
 		{
 			e.copyOverlappedMemory("3", src, outBase, ml)
 			ADDQ(ml, outBase)
@@ -726,8 +725,8 @@ func (e executeSimple) generateProcedure(name string) {
 	RET()
 }
 
-// copyMemory will copy memory in blocks of 16 or 32 bytes,
-// overwriting up to 15 or 31 extra bytes.
+// copyMemory will copy memory in blocks of 16 bytes,
+// overwriting up to 15 extra bytes.
 func (e executeSimple) copyMemory(suffix string, src, dst, length reg.GPVirtual) {
 	label := "copy_" + suffix
 	ofs := GP64()
