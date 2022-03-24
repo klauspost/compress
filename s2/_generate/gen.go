@@ -38,8 +38,9 @@ func main() {
 
 	TEXT("_dummy_", 0, "func()")
 	Comment("#ifdef GOAMD64_v4")
-	Comment("#undef GOAMD64_v3")
+	Comment("#ifndef GOAMD64_v3")
 	Comment("#define GOAMD64_v3")
+	Comment("#endif")
 	Comment("#endif")
 	RET()
 
