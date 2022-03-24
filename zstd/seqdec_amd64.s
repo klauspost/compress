@@ -652,7 +652,11 @@ copy_4:
 	JB     copy_4
 	ADDQ   R11, R8
 	ADDQ   R11, BX
-	JMP    handle_loop
+	ADDQ   $0x18, AX
+	INCQ   DX
+	CMPQ   DX, CX
+	JB     main_loop
+	JMP    loop_finished
 
 copy_all_from_history:
 	XORQ R15, R15
@@ -710,6 +714,7 @@ handle_loop:
 	CMPQ DX, CX
 	JB   main_loop
 
+loop_finished:
 	// Return value
 	MOVB $0x01, ret+8(FP)
 

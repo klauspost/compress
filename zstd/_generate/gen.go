@@ -631,6 +631,14 @@ func (e executeSimple) generateProcedure(name string) {
 	MOVQ(mlPtr, ml)
 	MOVQ(moPtr, mo)
 
+	// generates the loop tail
+	handleLoop := func() {
+		ADDQ(U8(seqValsSize), seqsBase) // seqs += sizeof(seqVals)
+		INCQ(seqIndex)
+		CMPQ(seqIndex, seqsLen)
+		JB(LabelRef("main_loop"))
+	}
+
 	Comment("Copy literals")
 	Label("copy_literals")
 	{
@@ -681,7 +689,10 @@ func (e executeSimple) generateProcedure(name string) {
 
 		ADDQ(ml, outPosition)
 		ADDQ(ml, outBase)
-		JMP(LabelRef("handle_loop"))
+		// Note: for the current go tests this branch is taken in 99.53% cases,
+		//       this is why we repeat a little code here.
+		handleLoop()
+		JMP(LabelRef("loop_finished"))
 
 		Label("copy_all_from_history")
 		/*  if seq.ml > v {
@@ -741,10 +752,7 @@ func (e executeSimple) generateProcedure(name string) {
 	}
 
 	Label("handle_loop")
-	ADDQ(U8(seqValsSize), seqsBase) // seqs += sizeof(seqVals)
-	INCQ(seqIndex)
-	CMPQ(seqIndex, seqsLen)
-	JB(LabelRef("main_loop"))
+	handleLoop()
 
 	ret, err := ReturnIndex(0).Resolve()
 	if err != nil {
@@ -767,6 +775,7 @@ func (e executeSimple) generateProcedure(name string) {
 		SUBQ(tmp, literals) // litPosition := current - initial literals pointer
 		Store(literals, ctx.Field("litPosition"))
 	}
+	Label("loop_finished")
 	returnValue(1)
 	RET()
 
