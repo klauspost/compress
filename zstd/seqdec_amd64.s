@@ -4,7 +4,7 @@
 // +build !appengine,!noasm,gc,!noasm
 
 // func sequenceDecs_decode_amd64(s *sequenceDecs, br *bitReader, ctx *decodeAsmContext) int
-// Requires: CMOV
+// Requires: CMOV, SSE
 TEXT ·sequenceDecs_decode_amd64(SB), $8-32
 	MOVQ    br+8(FP), AX
 	MOVQ    32(AX), DX
@@ -215,16 +215,14 @@ sequenceDecs_decode_amd64_ofState_updateState_skip_zero:
 
 sequenceDecs_decode_amd64_skip_update:
 	// Adjust offset
-	MOVQ s+0(FP), CX
-	MOVQ 16(R10), R11
-	CMPQ AX, $0x01
-	JBE  sequenceDecs_decode_amd64_adjust_offsetB_1_or_0
-	MOVQ 144(CX), AX
-	MOVQ 152(CX), R12
-	MOVQ R11, 144(CX)
-	MOVQ AX, 152(CX)
-	MOVQ R12, 160(CX)
-	JMP  sequenceDecs_decode_amd64_adjust_end
+	MOVQ   s+0(FP), CX
+	MOVQ   16(R10), R11
+	CMPQ   AX, $0x01
+	JBE    sequenceDecs_decode_amd64_adjust_offsetB_1_or_0
+	MOVUPS 144(CX), X0
+	MOVQ   R11, 144(CX)
+	MOVUPS X0, 152(CX)
+	JMP    sequenceDecs_decode_amd64_adjust_end
 
 sequenceDecs_decode_amd64_adjust_offsetB_1_or_0:
 	CMPQ (R10), $0x00000000
@@ -305,7 +303,7 @@ sequenceDecs_decode_amd64_error_match_len_too_big:
 	RET
 
 // func sequenceDecs_decode_bmi2(s *sequenceDecs, br *bitReader, ctx *decodeAsmContext) int
-// Requires: BMI, BMI2, CMOV
+// Requires: BMI, BMI2, CMOV, SSE
 TEXT ·sequenceDecs_decode_bmi2(SB), $8-32
 	MOVQ    br+8(FP), CX
 	MOVQ    32(CX), AX
@@ -494,16 +492,14 @@ sequenceDecs_decode_bmi2_fill_3_end:
 
 sequenceDecs_decode_bmi2_skip_update:
 	// Adjust offset
-	MOVQ s+0(FP), CX
-	MOVQ 16(R9), R11
-	CMPQ R10, $0x01
-	JBE  sequenceDecs_decode_bmi2_adjust_offsetB_1_or_0
-	MOVQ 144(CX), R10
-	MOVQ 152(CX), R12
-	MOVQ R11, 144(CX)
-	MOVQ R10, 152(CX)
-	MOVQ R12, 160(CX)
-	JMP  sequenceDecs_decode_bmi2_adjust_end
+	MOVQ   s+0(FP), CX
+	MOVQ   16(R9), R11
+	CMPQ   R10, $0x01
+	JBE    sequenceDecs_decode_bmi2_adjust_offsetB_1_or_0
+	MOVUPS 144(CX), X0
+	MOVQ   R11, 144(CX)
+	MOVUPS X0, 152(CX)
+	JMP    sequenceDecs_decode_bmi2_adjust_end
 
 sequenceDecs_decode_bmi2_adjust_offsetB_1_or_0:
 	CMPQ (R9), $0x00000000

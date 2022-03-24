@@ -467,13 +467,10 @@ func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual) 
 		CMPQ(offsetB, U8(1))
 		JBE(LabelRef(name + "_offsetB_1_or_0"))
 
-		// TODO: Test if 1 SSE2 move + write is faster...
-		tmp, tmp2 := GP64(), GP64()
-		MOVQ(po0.Addr, tmp)    // tmp = s.prevOffset[0]
-		MOVQ(po1.Addr, tmp2)   // tmp2 = s.prevOffset[1]
+		tmp := XMM()
+		MOVUPS(po0.Addr, tmp)  // tmp = (s.prevOffset[0], s.prevOffset[1])
 		MOVQ(offset, po0.Addr) // s.prevOffset[0] = offset
-		MOVQ(tmp, po1.Addr)    // s.prevOffset[1] = s.prevOffset[0]
-		MOVQ(tmp2, po2.Addr)   // s.prevOffset[2] = s.prevOffset[1]
+		MOVUPS(tmp, po1.Addr)  // s.prevOffset[1], s.prevOffset[2] = s.prevOffset[0], s.prevOffset[1]
 		JMP(LabelRef(name + "_end"))
 	}
 
