@@ -590,80 +590,119 @@ TEXT ·sequenceDecs_executeSimple_amd64(SB), $0-9
 	MOVQ  24(DI), DX
 	MOVQ  32(DI), BX
 	MOVQ  40(DI), SI
-	MOVQ  56(DI), SI
-	MOVQ  80(DI), R8
-	MOVQ  96(DI), DI
+	MOVQ  80(DI), SI
+	MOVQ  104(DI), R8
+	MOVQ  120(DI), R9
+	MOVQ  56(DI), R10
+	MOVQ  64(DI), DI
+	ADDQ  DI, R10
 
 	// seqsBase += 24 * seqIndex
-	LEAQ (DX)(DX*2), R9
-	SHLQ $0x03, R9
-	ADDQ R9, AX
+	LEAQ (DX)(DX*2), R11
+	SHLQ $0x03, R11
+	ADDQ R11, AX
 
 	// outBase += outPosition
 	ADDQ R8, BX
 
 main_loop:
-	MOVQ 8(AX), R9
-	MOVQ (AX), R10
+	MOVQ (AX), R13
+	MOVQ 8(AX), R11
+	MOVQ 16(AX), R12
 
 	// Copy literals
-	TESTQ R10, R10
-	JZ    copy_match
-	XORQ  R11, R11
+	TESTQ R13, R13
+	JZ    copy_history
+	XORQ  R14, R14
 
 copy_1:
-	MOVUPS (SI)(R11*1), X0
-	MOVUPS X0, (BX)(R11*1)
-	ADDQ   $0x10, R11
-	CMPQ   R11, R10
+	MOVUPS (SI)(R14*1), X0
+	MOVUPS X0, (BX)(R14*1)
+	ADDQ   $0x10, R14
+	CMPQ   R14, R13
 	JB     copy_1
-	ADDQ   R10, SI
-	ADDQ   R10, BX
-	ADDQ   R10, R8
+	ADDQ   R13, SI
+	ADDQ   R13, BX
+	ADDQ   R13, R8
 
-	// Copy match
+	// Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)
+	LEAQ (R8)(DI*1), R13
+	CMPQ R12, R13
+	JG   error_match_off_too_big
+	CMPQ R12, R9
+	JG   error_match_off_too_big
+
+	// Copy match from history
+copy_history:
+	MOVQ R12, R13
+	SUBQ R8, R13
+	CMPQ R13, $0x00
+	JLE  copy_match
+	MOVQ R10, R14
+	SUBQ R13, R14
+	CMPQ R11, R13
+	JGE  copy_all_from_history
+	XORQ R12, R12
+
+copy_4:
+	MOVUPS (R14)(R12*1), X0
+	MOVUPS X0, (BX)(R12*1)
+	ADDQ   $0x10, R12
+	CMPQ   R12, R11
+	JB     copy_4
+	ADDQ   R11, R8
+	ADDQ   R11, BX
+	JMP    handle_loop
+
+copy_all_from_history:
+	XORQ R15, R15
+
+copy_5:
+	MOVUPS (R14)(R15*1), X0
+	MOVUPS X0, (BX)(R15*1)
+	ADDQ   $0x10, R15
+	CMPQ   R15, R13
+	JB     copy_5
+	ADDQ   R13, BX
+	ADDQ   R13, R8
+	SUBQ   R13, R11
+
+	// Copy match from the current buffer
 copy_match:
-	TESTQ R9, R9
+	TESTQ R11, R11
 	JZ    handle_loop
-	MOVQ  16(AX), R10
-
-	// Malformed input if seq.mo > t || seq.mo > s.windowSize)
-	CMPQ R10, R8
-	JG   error_match_off_to_big
-	CMPQ R10, DI
-	JG   error_match_off_to_big
-	MOVQ BX, R11
-	SUBQ R10, R11
+	MOVQ  BX, R13
+	SUBQ  R12, R13
 
 	// ml <= mo
-	CMPQ R9, R10
+	CMPQ R11, R12
 	JA   copy_overlapping_match
 
 	// Copy non-overlapping match
-	XORQ R10, R10
+	XORQ R12, R12
 
 copy_2:
-	MOVUPS (R11)(R10*1), X0
-	MOVUPS X0, (BX)(R10*1)
-	ADDQ   $0x10, R10
-	CMPQ   R10, R9
+	MOVUPS (R13)(R12*1), X0
+	MOVUPS X0, (BX)(R12*1)
+	ADDQ   $0x10, R12
+	CMPQ   R12, R11
 	JB     copy_2
-	ADDQ   R9, BX
-	ADDQ   R9, R8
+	ADDQ   R11, BX
+	ADDQ   R11, R8
 	JMP    handle_loop
 
 	// Copy overlapping match
 copy_overlapping_match:
-	XORQ R10, R10
+	XORQ R12, R12
 
 copy_slow_3:
-	MOVB (R11)(R10*1), R12
-	MOVB R12, (BX)(R10*1)
-	INCQ R10
-	CMPQ R10, R9
+	MOVB (R13)(R12*1), R14
+	MOVB R14, (BX)(R12*1)
+	INCQ R12
+	CMPQ R12, R11
 	JB   copy_slow_3
-	ADDQ R9, BX
-	ADDQ R9, R8
+	ADDQ R11, BX
+	ADDQ R11, R8
 
 handle_loop:
 	ADDQ $0x18, AX
@@ -677,23 +716,23 @@ handle_loop:
 	// Update the context
 	MOVQ ctx+0(FP), AX
 	MOVQ DX, 24(AX)
-	MOVQ R8, 80(AX)
-	MOVQ 56(AX), CX
+	MOVQ R8, 104(AX)
+	MOVQ 80(AX), CX
 	SUBQ CX, SI
-	MOVQ SI, 88(AX)
+	MOVQ SI, 112(AX)
 	RET
 
-error_match_off_to_big:
+error_match_off_too_big:
 	// Return value
 	MOVB $0x00, ret+8(FP)
 
 	// Update the context
 	MOVQ ctx+0(FP), AX
 	MOVQ DX, 24(AX)
-	MOVQ R8, 80(AX)
-	MOVQ 56(AX), CX
+	MOVQ R8, 104(AX)
+	MOVQ 80(AX), CX
 	SUBQ CX, SI
-	MOVQ SI, 88(AX)
+	MOVQ SI, 112(AX)
 	RET
 
 empty_seqs:

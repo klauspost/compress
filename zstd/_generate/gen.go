@@ -29,6 +29,9 @@ const errorMatchLenTooBig = 2
 
 const maxMatchLen = 131074
 
+// size of struct seqVals
+const seqValsSize = 24
+
 func main() {
 	flag.Parse()
 	out := flag.Lookup("out")
@@ -250,7 +253,7 @@ func (o options) genDecodeSeqAsm(name string) {
 	}
 
 	Label(name + "_match_len_ofs_ok")
-	ADDQ(U8(24), seqBase) // sizof(seqVals) == 3*8
+	ADDQ(U8(seqValsSize), seqBase)
 	ctx = Dereference(Param("ctx"))
 	iterationP, err := ctx.Field("iteration").Resolve()
 	if err != nil {
@@ -584,6 +587,8 @@ func (e executeSimple) generateProcedure(name string) {
 	literals := GP64()
 	outPosition := GP64()
 	windowSize := GP64()
+	histBase := GP64()
+	histLen := GP64()
 
 	{
 		ctx := Dereference(Param("ctx"))
@@ -597,6 +602,10 @@ func (e executeSimple) generateProcedure(name string) {
 		Load(ctx.Field("literals").Base(), literals)
 		Load(ctx.Field("outPosition"), outPosition)
 		Load(ctx.Field("windowSize"), windowSize)
+		Load(ctx.Field("history").Base(), histBase)
+		Load(ctx.Field("history").Len(), histLen)
+
+		ADDQ(histLen, histBase) // Note: we always copy from &hist[len(hist) - v]
 
 		tmp := GP64()
 		Comment("seqsBase += 24 * seqIndex")
@@ -618,14 +627,15 @@ func (e executeSimple) generateProcedure(name string) {
 	mlPtr := Mem{Base: seqsBase, Disp: 1 * 8}
 	llPtr := Mem{Base: seqsBase, Disp: 0 * 8}
 
-	MOVQ(mlPtr, ml)
 	MOVQ(llPtr, ll)
+	MOVQ(mlPtr, ml)
+	MOVQ(moPtr, mo)
 
 	Comment("Copy literals")
 	Label("copy_literals")
 	{
 		TESTQ(ll, ll)
-		JZ(LabelRef("copy_match"))
+		JZ(LabelRef("copy_history"))
 		e.copyMemory("1", literals, outBase, ll)
 
 		ADDQ(ll, literals)
@@ -633,19 +643,67 @@ func (e executeSimple) generateProcedure(name string) {
 		ADDQ(ll, outPosition)
 	}
 
-	Comment("Copy match")
+	Comment("Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)")
+	{
+		tmp := GP64()
+		LEAQ(Mem{Base: outPosition, Index: histLen, Scale: 1}, tmp)
+		CMPQ(mo, tmp)
+		JG(LabelRef("error_match_off_too_big"))
+		CMPQ(mo, windowSize)
+		JG(LabelRef("error_match_off_too_big"))
+	}
+
+	Comment("Copy match from history")
+	{
+		Label("copy_history")
+		v := GP64()
+		MOVQ(mo, v)
+		SUBQ(outPosition, v) // v := seq.mo - outPosition
+		CMPQ(v, U8(0))       // do nothing if v <= 0
+		JLE(LabelRef("copy_match"))
+
+		// v := seq.mo - t; v > 0 {
+		//     start := len(hist) - v
+		//     ...
+		// }
+		ptr := GP64()
+		MOVQ(histBase, ptr)
+		SUBQ(v, ptr) // ptr := &hist[len(hist) - v]
+		CMPQ(ml, v)
+		JGE(LabelRef("copy_all_from_history"))
+		/*  if ml <= v {
+		        copy(out[outPosition:], hist[start:start+seq.ml])
+		        t += seq.ml
+		        continue
+		    }
+		*/
+		e.copyMemory("4", ptr, outBase, ml)
+
+		ADDQ(ml, outPosition)
+		ADDQ(ml, outBase)
+		JMP(LabelRef("handle_loop"))
+
+		Label("copy_all_from_history")
+		/*  if seq.ml > v {
+		        // Some goes into current block.
+		        // Copy remainder of history
+		        copy(out[outPosition:], hist[start:])
+		        outPosition += v
+		        seq.ml -= v
+		    }
+		*/
+		e.copyMemory("5", ptr, outBase, v)
+		ADDQ(v, outBase)
+		ADDQ(v, outPosition)
+		SUBQ(v, ml)
+		// fallback to the next block
+	}
+
+	Comment("Copy match from the current buffer")
 	Label("copy_match")
 	{
 		TESTQ(ml, ml)
 		JZ(LabelRef("handle_loop"))
-
-		MOVQ(moPtr, mo)
-
-		Comment("Malformed input if seq.mo > t || seq.mo > s.windowSize)")
-		CMPQ(mo, outPosition)
-		JG(LabelRef("error_match_off_to_big"))
-		CMPQ(mo, windowSize)
-		JG(LabelRef("error_match_off_to_big"))
 
 		src := GP64()
 		MOVQ(outBase, src)
@@ -683,7 +741,7 @@ func (e executeSimple) generateProcedure(name string) {
 	}
 
 	Label("handle_loop")
-	ADDQ(U8(24), seqsBase) // seqs += sizeof(seqVals)
+	ADDQ(U8(seqValsSize), seqsBase) // seqs += sizeof(seqVals)
 	INCQ(seqIndex)
 	CMPQ(seqIndex, seqsLen)
 	JB(LabelRef("main_loop"))
@@ -712,7 +770,7 @@ func (e executeSimple) generateProcedure(name string) {
 	returnValue(1)
 	RET()
 
-	Label("error_match_off_to_big")
+	Label("error_match_off_too_big")
 	returnValue(0)
 	RET()
 

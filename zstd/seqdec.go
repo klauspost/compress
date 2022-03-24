@@ -101,8 +101,8 @@ func (s *sequenceDecs) initialize(br *bitReader, hist *history, out []byte) erro
 // execute will execute the decoded sequence with the provided history.
 // The sequence must be evaluated before being sent.
 func (s *sequenceDecs) execute(seqs []seqVals, hist []byte) error {
-	if len(hist) == 0 && len(s.dict) == 0 {
-		return s.executeSimple(seqs)
+	if len(s.dict) == 0 {
+		return s.executeSimple(seqs, hist)
 	}
 
 	// Ensure we have enough output size...
@@ -208,6 +208,21 @@ func (s *sequenceDecs) decodeSync(hist []byte) error {
 	// Grab full sizes tables, to avoid bounds checks.
 	llTable, mlTable, ofTable := s.litLengths.fse.dt[:maxTablesize], s.matchLengths.fse.dt[:maxTablesize], s.offsets.fse.dt[:maxTablesize]
 	llState, mlState, ofState := s.litLengths.state.state, s.matchLengths.state.state, s.offsets.state.state
+
+	// XXX: remove before merge
+	const asyncHack = true
+	if asyncHack {
+		seqs := make([]seqVals, s.nSeqs)
+		s.decode(seqs)
+		if false {
+			for i, s := range seqs {
+				fmt.Printf("%d: mo = %d\n", i, s.mo)
+			}
+		panic("XXX")
+		}
+		return s.execute(seqs, hist)
+	}
+
 	out := s.out
 	maxBlockSize := maxCompressedBlockSize
 	if s.windowSize < maxBlockSize {
