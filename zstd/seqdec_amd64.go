@@ -148,7 +148,7 @@ func (s *sequenceDecs) executeSimple(seqs []seqVals, hist []byte) error {
 	ok := sequenceDecs_executeSimple_amd64(&ctx)
 	if !ok {
 		return fmt.Errorf("match offset (%d) bigger than current history (%d)",
-			seqs[ctx.seqIndex].mo, ctx.outPosition + len(hist))
+			seqs[ctx.seqIndex].mo, ctx.outPosition+len(hist))
 	}
 	s.literals = s.literals[ctx.litPosition:]
 	t = ctx.outPosition

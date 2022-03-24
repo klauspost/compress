@@ -213,12 +213,9 @@ func (s *sequenceDecs) decodeSync(hist []byte) error {
 	const asyncHack = true
 	if asyncHack {
 		seqs := make([]seqVals, s.nSeqs)
-		s.decode(seqs)
-		if false {
-			for i, s := range seqs {
-				fmt.Printf("%d: mo = %d\n", i, s.mo)
-			}
-		panic("XXX")
+		err := s.decode(seqs)
+		if err != nil {
+			return err
 		}
 		return s.execute(seqs, hist)
 	}
