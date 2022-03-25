@@ -36,6 +36,7 @@ func main() {
 	Constraint(buildtags.Term("gc").ToConstraint())
 	Constraint(buildtags.Not("noasm").ToConstraint())
 
+	// We need a function to add comments.
 	TEXT("_dummy_", 0, "func()")
 	Comment("#ifdef GOAMD64_v4")
 	Comment("#ifndef GOAMD64_v3")
