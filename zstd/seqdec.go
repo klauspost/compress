@@ -202,6 +202,12 @@ func (s *sequenceDecs) execute(seqs []seqVals, hist []byte) error {
 
 // decode sequences from the stream with the provided history.
 func (s *sequenceDecs) decodeSync(hist []byte) error {
+	{
+		supported, err := s.decodeSyncSimple(hist)
+		if supported {
+			return err
+		}
+	}
 	br := s.br
 	seqs := s.nSeqs
 	startSize := len(s.out)

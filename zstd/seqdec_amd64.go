@@ -9,6 +9,98 @@ import (
 	"github.com/klauspost/compress/internal/cpuinfo"
 )
 
+type decodeSyncAsmContext struct {
+	llTable     []decSymbol
+	mlTable     []decSymbol
+	ofTable     []decSymbol
+	llState     uint64
+	mlState     uint64
+	ofState     uint64
+	iteration   int
+	litRemain   int
+	out         []byte
+	literals    []byte
+	history     []byte
+	outPosition int
+	windowSize  int
+	ml          int // set on error
+}
+
+// sequenceDecs_decodeSync_amd64 implements the main loop of sequenceDecs.decodeSync in x86 asm.
+//
+// Please refer to seqdec_generic.go for the reference implementation.
+//go:noescape
+func sequenceDecs_decodeSync_amd64(s *sequenceDecs, br *bitReader, ctx *decodeSyncAsmContext) int
+
+// sequenceDecs_decodeSync_bmi2 implements the main loop of sequenceDecs.decodeSync in x86 asm with BMI2 extensions.
+//go:noescape
+func sequenceDecs_decodeSync_bmi2(s *sequenceDecs, br *bitReader, ctx *decodeSyncAsmContext) int
+
+// decode sequences from the stream with the provided history but without a dictionary.
+func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
+	if len(s.dict) > 0 {
+		return false, nil
+	}
+
+	br := s.br
+
+	maxBlockSize := maxCompressedBlockSize
+	if s.windowSize < maxBlockSize {
+		maxBlockSize = s.windowSize
+	}
+
+	ctx := decodeSyncAsmContext{
+		llTable:   s.litLengths.fse.dt[:maxTablesize],
+		mlTable:   s.matchLengths.fse.dt[:maxTablesize],
+		ofTable:   s.offsets.fse.dt[:maxTablesize],
+		llState:   uint64(s.litLengths.state.state),
+		mlState:   uint64(s.matchLengths.state.state),
+		ofState:   uint64(s.offsets.state.state),
+		iteration: s.nSeqs - 1,
+		litRemain: len(s.literals),
+	}
+
+	s.seqSize = 0
+
+	var errCode int
+	if cpuinfo.HasBMI2() {
+		errCode = sequenceDecs_decodeSync_bmi2(s, br, &ctx)
+	} else {
+		errCode = sequenceDecs_decodeSync_amd64(s, br, &ctx)
+	}
+	if errCode != 0 {
+		switch errCode {
+		case errorMatchLenOfsMismatch:
+			return true, fmt.Errorf("zero matchoff and matchlen (%d) > 0", ctx.ml)
+
+		case errorMatchLenTooBig:
+			return true, fmt.Errorf("match len (%d) bigger than max allowed length", ctx.ml)
+
+		case errorMatchOffTooBig:
+			return true, fmt.Errorf("match offset (%d) bigger than max allowed length", ctx.ml)
+		}
+
+		return true, fmt.Errorf("sequenceDecs_decode_amd64 returned erronous code %d", errCode)
+	}
+
+	if ctx.litRemain < 0 {
+		return true, fmt.Errorf("literal count is too big: total available %d, total requested %d",
+			len(s.literals), len(s.literals)-ctx.litRemain)
+	}
+
+	s.seqSize += ctx.litRemain
+	if s.seqSize > maxBlockSize {
+		return true, fmt.Errorf("output (%d) bigger than max block size (%d)", s.seqSize, maxBlockSize)
+	}
+	err := br.close()
+	if err != nil {
+		printf("Closing sequences: %v, %+v\n", err, *br)
+	}
+	return true, err
+}
+
+// --------------------------------------------------------------------------------
+
 type decodeAsmContext struct {
 	llTable   []decSymbol
 	mlTable   []decSymbol
@@ -26,6 +118,9 @@ const errorMatchLenOfsMismatch = 1
 
 // error reported when ml > maxMatchLen
 const errorMatchLenTooBig = 2
+
+// error reported when mo > t or mo > s.windowSize
+const errorMatchOffTooBig = 3
 
 // sequenceDecs_decode implements the main loop of sequenceDecs in x86 asm.
 //
@@ -114,6 +209,8 @@ func (s *sequenceDecs) decode(seqs []seqVals) error {
 	}
 	return err
 }
+
+// --------------------------------------------------------------------------------
 
 type executeAsmContext struct {
 	seqs        []seqVals

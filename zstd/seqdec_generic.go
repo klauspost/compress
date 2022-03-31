@@ -8,6 +8,11 @@ import (
 	"io"
 )
 
+// decode sequences from the stream with the provided history but without dictionary.
+func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
+	return false, nil
+}
+
 // decode sequences from the stream without the provided history.
 func (s *sequenceDecs) decode(seqs []seqVals) error {
 	br := s.br
