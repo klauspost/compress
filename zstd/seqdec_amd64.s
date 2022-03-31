@@ -721,10 +721,9 @@ TEXT ·sequenceDecs_decodeSync_amd64(SB), $32-32
 	MOVQ    80(AX), R8
 	MOVQ    88(AX), R9
 	MOVQ    112(AX), R11
-	MOVQ    120(AX), CX
-	MOVQ    136(AX), R12
-	MOVQ    160(AX), R13
-	MOVQ    168(AX), AX
+	MOVQ    144(AX), R12
+	MOVQ    136(AX), R13
+	MOVQ    176(AX), AX
 
 	// outBase += outPosition
 	ADDQ R13, R11
@@ -1058,24 +1057,39 @@ handle_loop:
 	MOVB BL, 40(AX)
 	MOVQ SI, 24(AX)
 
+	// Update the context
+	MOVQ ctx+16(FP), AX
+	MOVQ R13, 136(AX)
+	MOVQ 144(AX), CX
+	SUBQ CX, R12
+	MOVQ R12, 168(AX)
+
 	// Return success
 	MOVQ $0x00000000, ret+24(FP)
 	RET
 
 	// Return with match length error
 sequenceDecs_decodeSync_amd64_error_match_len_ofs_mismatch:
+	MOVQ 16(SP), AX
+	MOVQ ctx+16(FP), CX
+	MOVQ AX, 184(CX)
 	MOVQ $0x00000001, ret+24(FP)
 	RET
 
 	// Return with match length too long error
 sequenceDecs_decodeSync_amd64_error_match_len_too_big:
+	MOVQ 16(SP), AX
+	MOVQ ctx+16(FP), CX
+	MOVQ AX, 184(CX)
 	MOVQ $0x00000002, ret+24(FP)
 	RET
 
 	// Return with match offset too long error
 error_match_off_too_big:
+	MOVQ 8(SP), AX
+	MOVQ ctx+16(FP), CX
+	MOVQ AX, 192(CX)
 	MOVQ $0x00000003, ret+24(FP)
-	RET
 	RET
 
 // func sequenceDecs_decodeSync_bmi2(s *sequenceDecs, br *bitReader, ctx *decodeSyncAsmContext) int
@@ -1093,10 +1107,9 @@ TEXT ·sequenceDecs_decodeSync_bmi2(SB), $32-32
 	MOVQ    80(CX), DI
 	MOVQ    88(CX), R8
 	MOVQ    112(CX), R10
-	MOVQ    120(CX), R11
-	MOVQ    136(CX), R11
-	MOVQ    160(CX), R12
-	MOVQ    168(CX), CX
+	MOVQ    144(CX), R11
+	MOVQ    136(CX), R12
+	MOVQ    176(CX), CX
 
 	// outBase += outPosition
 	ADDQ R12, R10
@@ -1408,22 +1421,37 @@ handle_loop:
 	MOVB DL, 40(CX)
 	MOVQ BX, 24(CX)
 
+	// Update the context
+	MOVQ ctx+16(FP), AX
+	MOVQ R12, 136(AX)
+	MOVQ 144(AX), CX
+	SUBQ CX, R11
+	MOVQ R11, 168(AX)
+
 	// Return success
 	MOVQ $0x00000000, ret+24(FP)
 	RET
 
 	// Return with match length error
 sequenceDecs_decodeSync_bmi2_error_match_len_ofs_mismatch:
+	MOVQ 16(SP), AX
+	MOVQ ctx+16(FP), CX
+	MOVQ AX, 184(CX)
 	MOVQ $0x00000001, ret+24(FP)
 	RET
 
 	// Return with match length too long error
 sequenceDecs_decodeSync_bmi2_error_match_len_too_big:
+	MOVQ 16(SP), AX
+	MOVQ ctx+16(FP), CX
+	MOVQ AX, 184(CX)
 	MOVQ $0x00000002, ret+24(FP)
 	RET
 
 	// Return with match offset too long error
 error_match_off_too_big:
+	MOVQ 8(SP), AX
+	MOVQ ctx+16(FP), CX
+	MOVQ AX, 192(CX)
 	MOVQ $0x00000003, ret+24(FP)
-	RET
 	RET

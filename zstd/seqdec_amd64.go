@@ -22,8 +22,11 @@ type decodeSyncAsmContext struct {
 	literals    []byte
 	history     []byte
 	outPosition int
+	literals    []byte
+	litPosition int
 	windowSize  int
 	ml          int // set on error
+	mo          int // set on error
 }
 
 // sequenceDecs_decodeSync_amd64 implements the main loop of sequenceDecs.decodeSync in x86 asm.
@@ -50,14 +53,19 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 	}
 
 	ctx := decodeSyncAsmContext{
-		llTable:   s.litLengths.fse.dt[:maxTablesize],
-		mlTable:   s.matchLengths.fse.dt[:maxTablesize],
-		ofTable:   s.offsets.fse.dt[:maxTablesize],
-		llState:   uint64(s.litLengths.state.state),
-		mlState:   uint64(s.matchLengths.state.state),
-		ofState:   uint64(s.offsets.state.state),
-		iteration: s.nSeqs - 1,
-		litRemain: len(s.literals),
+		llTable:     s.litLengths.fse.dt[:maxTablesize],
+		mlTable:     s.matchLengths.fse.dt[:maxTablesize],
+		ofTable:     s.offsets.fse.dt[:maxTablesize],
+		llState:     uint64(s.litLengths.state.state),
+		mlState:     uint64(s.matchLengths.state.state),
+		ofState:     uint64(s.offsets.state.state),
+		iteration:   s.nSeqs - 1,
+		litRemain:   len(s.literals),
+		out:         s.out,
+		outPosition: len(s.out),
+		literals:    s.literals,
+		litPosition: 0,
+		windowSize:  s.windowSize,
 	}
 
 	s.seqSize = 0
@@ -77,7 +85,7 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 			return true, fmt.Errorf("match len (%d) bigger than max allowed length", ctx.ml)
 
 		case errorMatchOffTooBig:
-			return true, fmt.Errorf("match offset (%d) bigger than max allowed length", ctx.ml)
+			return true, fmt.Errorf("XXX: match offset (%d) bigger than max allowed length (%d)", ctx.mo, ctx.outPosition)
 		}
 
 		return true, fmt.Errorf("sequenceDecs_decode_amd64 returned erronous code %d", errCode)
@@ -95,8 +103,26 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 	err := br.close()
 	if err != nil {
 		printf("Closing sequences: %v, %+v\n", err, *br)
+		return true, err
 	}
-	return true, err
+
+	s.literals = s.literals[ctx.litPosition:]
+	t := ctx.outPosition
+	s.out = s.out[:t]
+
+	// XXX: remove
+	//fmt.Printf("len(out) = %d, cap(out) = %d, outPosition = %d\n", len(s.out), cap(s.out), ctx.outPosition)
+
+	// Add final literals
+	s.out = append(s.out, s.literals...)
+	if debugDecoder {
+		t += len(s.literals)
+		if t != len(s.out) {
+			panic(fmt.Errorf("length mismatch, want %d, got %d", len(s.out), t))
+		}
+	}
+
+	return true, nil
 }
 
 // --------------------------------------------------------------------------------

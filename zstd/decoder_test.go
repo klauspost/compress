@@ -806,6 +806,7 @@ func TestDecoder_Reset(t *testing.T) {
 		t.Error(err, len(decoded))
 	}
 	if !bytes.Equal(decoded, in) {
+		t.Logf("size = %d, got = %d", len(decoded), len(in))
 		t.Fatal("Decoded does not match")
 	}
 	t.Log("Encoded content matched")

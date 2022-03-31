@@ -54,7 +54,7 @@ func main() {
 	o := options{
 		bmi2:     false,
 		fiftysix: false,
-        useSeqs: true,
+		useSeqs: true,
 	}
 	o.genDecodeSeqAsm("sequenceDecs_decode_amd64")
 	o.fiftysix = true
@@ -153,7 +153,6 @@ func (o options) generateBody(name string, executeSingleTriple func(literals, ou
 
 	// for execute
 	outBase := GP64()
-	outLen := GP64()
 	literals := GP64()
 	outPosition := GP64()
     histLen := GP64()
@@ -185,7 +184,6 @@ func (o options) generateBody(name string, executeSingleTriple func(literals, ou
 			Load(ctx.Field("seqs").Base(), seqBase)
 		} else {
 			Load(ctx.Field("out").Base(), outBase)
-			Load(ctx.Field("out").Len(), outLen)
 			Load(ctx.Field("literals").Base(), literals)
 			Load(ctx.Field("outPosition"), outPosition)
 			Load(ctx.Field("windowSize"), windowSize)
@@ -375,20 +373,57 @@ func (o options) generateBody(name string, executeSingleTriple func(literals, ou
 	Store(brBitsRead.As8(), br.Field("bitsRead"))
 	Store(brOffset, br.Field("off"))
 
+	if !o.useSeqs {
+		Comment("Update the context")
+		ctx := Dereference(Param("ctx"))
+		Store(outPosition, ctx.Field("outPosition"))
+
+		// compute litPosition
+		tmp := GP64()
+		Load(ctx.Field("literals").Base(), tmp)
+		SUBQ(tmp, literals) // litPosition := current - initial literals pointer
+		Store(literals, ctx.Field("litPosition"))
+	}
+
 	Comment("Return success")
 	o.returnWithCode(0)
 
 	Comment("Return with match length error")
-	Label(name + "_error_match_len_ofs_mismatch")
-	o.returnWithCode(errorMatchLenOfsMismatch)
+	{
+		Label(name + "_error_match_len_ofs_mismatch")
+		if !o.useSeqs {
+			tmp := GP64()
+			MOVQ(mlP, tmp)
+			ctx := Dereference(Param("ctx"))
+			Store(tmp, ctx.Field("ml"))
+		}
+		o.returnWithCode(errorMatchLenOfsMismatch)
+	}
 
 	Comment("Return with match length too long error")
-	Label(name + "_error_match_len_too_big")
-	o.returnWithCode(errorMatchLenTooBig)
+	{
+		Label(name + "_error_match_len_too_big")
+		if !o.useSeqs {
+			tmp := GP64()
+			MOVQ(mlP, tmp)
+			ctx := Dereference(Param("ctx"))
+			Store(tmp, ctx.Field("ml"))
+		}
+		o.returnWithCode(errorMatchLenTooBig)
+	}
 
 	Comment("Return with match offset too long error")
-	Label("error_match_off_too_big")
-	o.returnWithCode(errorMatchOffTooBig)
+	{
+		Label("error_match_off_too_big")
+		if !o.useSeqs {
+			tmp := GP64()
+			MOVQ(moP, tmp)
+			ctx := Dereference(Param("ctx"))
+			Store(tmp, ctx.Field("mo"))
+			Store(outPosition, ctx.Field("outPosition"))
+		}
+		o.returnWithCode(errorMatchOffTooBig)
+	}
 }
 
 func (o options) returnWithCode(returnCode uint32) {
@@ -895,7 +930,7 @@ func (e executeSimple) executeSingleTriple(literals, outBase, outPosition, windo
 		CMPQ(mo, outPosition)
 		JG(LabelRef("error_match_off_too_big"))
 		if false {
-			// XXX -- when enabled: allocation failure
+			// XXX -- when enabled: register allocation failure
 			CMPQ(mo, windowSize)
 			JG(LabelRef("error_match_off_too_big"))
 		}
@@ -1046,6 +1081,4 @@ func (d *decodeSync) generateProcedure(name string) {
 	Pragma("noescape")
 
 	d.decode.generateBody(name, d.execute.executeSingleTriple)
-
-	RET()
 }
