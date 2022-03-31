@@ -581,7 +581,7 @@ sequenceDecs_decode_bmi2_error_match_len_too_big:
 
 // func sequenceDecs_executeSimple_amd64(ctx *executeAsmContext) bool
 // Requires: SSE
-TEXT ·sequenceDecs_executeSimple_amd64(SB), $0-9
+TEXT ·sequenceDecs_executeSimple_amd64(SB), $8-9
 	MOVQ  ctx+0(FP), DI
 	MOVQ  8(DI), CX
 	TESTQ CX, CX
@@ -634,42 +634,100 @@ copy_1:
 
 	// Copy match from history
 copy_history:
-	MOVQ R12, R13
-	SUBQ R8, R13
-	CMPQ R13, $0x00
-	JLE  copy_match
-	MOVQ R10, R14
-	SUBQ R13, R14
-	CMPQ R11, R13
-	JGE  copy_all_from_history
-	XORQ R12, R12
+	MOVQ  R12, R13
+	SUBQ  R8, R13
+	CMPQ  R13, $0x00
+	JLE   copy_match
+	MOVQ  R10, R14
+	SUBQ  R13, R14
+	CMPQ  R11, R13
+	JGE   copy_all_from_history
+	XORQ  R12, R12
+	TESTQ $0x00000001, R11
+	JZ    copy_4_word
+	MOVB  (R14)(R12*1), R13
+	MOVB  R13, (BX)(R12*1)
+	ADDQ  $0x01, R12
+
+copy_4_word:
+	TESTQ $0x00000002, R11
+	JZ    copy_4_dword
+	MOVW  (R14)(R12*1), R13
+	MOVW  R13, (BX)(R12*1)
+	ADDQ  $0x02, R12
+
+copy_4_dword:
+	TESTQ $0x00000004, R11
+	JZ    copy_4_qword
+	MOVL  (R14)(R12*1), R13
+	MOVL  R13, (BX)(R12*1)
+	ADDQ  $0x04, R12
+
+copy_4_qword:
+	TESTQ $0x00000008, R11
+	JZ    copy_4_test
+	MOVQ  (R14)(R12*1), R13
+	MOVQ  R13, (BX)(R12*1)
+	ADDQ  $0x08, R12
+	JMP   copy_4_test
 
 copy_4:
 	MOVUPS (R14)(R12*1), X0
 	MOVUPS X0, (BX)(R12*1)
 	ADDQ   $0x10, R12
-	CMPQ   R12, R11
-	JB     copy_4
-	ADDQ   R11, R8
-	ADDQ   R11, BX
-	ADDQ   $0x18, AX
-	INCQ   DX
-	CMPQ   DX, CX
-	JB     main_loop
-	JMP    loop_finished
+
+copy_4_test:
+	CMPQ R12, R11
+	JB   copy_4
+	ADDQ R11, R8
+	ADDQ R11, BX
+	ADDQ $0x18, AX
+	INCQ DX
+	CMPQ DX, CX
+	JB   main_loop
+	JMP  loop_finished
 
 copy_all_from_history:
-	XORQ R15, R15
+	XORQ  R15, R15
+	TESTQ $0x00000001, R13
+	JZ    copy_5_word
+	MOVB  (R14)(R15*1), BP
+	MOVB  BP, (BX)(R15*1)
+	ADDQ  $0x01, R15
+
+copy_5_word:
+	TESTQ $0x00000002, R13
+	JZ    copy_5_dword
+	MOVW  (R14)(R15*1), BP
+	MOVW  BP, (BX)(R15*1)
+	ADDQ  $0x02, R15
+
+copy_5_dword:
+	TESTQ $0x00000004, R13
+	JZ    copy_5_qword
+	MOVL  (R14)(R15*1), BP
+	MOVL  BP, (BX)(R15*1)
+	ADDQ  $0x04, R15
+
+copy_5_qword:
+	TESTQ $0x00000008, R13
+	JZ    copy_5_test
+	MOVQ  (R14)(R15*1), BP
+	MOVQ  BP, (BX)(R15*1)
+	ADDQ  $0x08, R15
+	JMP   copy_5_test
 
 copy_5:
 	MOVUPS (R14)(R15*1), X0
 	MOVUPS X0, (BX)(R15*1)
 	ADDQ   $0x10, R15
-	CMPQ   R15, R13
-	JB     copy_5
-	ADDQ   R13, BX
-	ADDQ   R13, R8
-	SUBQ   R13, R11
+
+copy_5_test:
+	CMPQ R15, R13
+	JB   copy_5
+	ADDQ R13, BX
+	ADDQ R13, R8
+	SUBQ R13, R11
 
 	// Copy match from the current buffer
 copy_match:

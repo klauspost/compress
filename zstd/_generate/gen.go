@@ -132,6 +132,8 @@ func (o options) genDecodeSeqAsm(name string) {
 		ADDQ(brOffset, brPointer) // Add current offset to read pointer.
 		MOVQ(brPointer, brPointerStash)
 	}
+
+	// 2. load states (done once)
 	{
 		ctx := Dereference(Param("ctx"))
 		Load(ctx.Field("llState"), llState)
@@ -685,7 +687,7 @@ func (e executeSimple) generateProcedure(name string) {
 		        continue
 		    }
 		*/
-		e.copyMemory("4", ptr, outBase, ml)
+		e.copyMemoryPrecise("4", ptr, outBase, ml)
 
 		ADDQ(ml, outPosition)
 		ADDQ(ml, outBase)
@@ -703,7 +705,7 @@ func (e executeSimple) generateProcedure(name string) {
 		        seq.ml -= v
 		    }
 		*/
-		e.copyMemory("5", ptr, outBase, v)
+		e.copyMemoryPrecise("5", ptr, outBase, v)
 		ADDQ(v, outBase)
 		ADDQ(v, outPosition)
 		SUBQ(v, ml)
@@ -803,6 +805,65 @@ func (e executeSimple) copyMemory(suffix string, src, dst, length reg.GPVirtual)
 	MOVUPS(s, t)
 	MOVUPS(t, d)
 	ADDQ(U8(e.copySize()), ofs)
+	CMPQ(ofs, length)
+	JB(LabelRef(label))
+}
+
+// copyMemoryPrecise will copy memory in blocks of 16 bytes,
+// without overwriting nor overreading.
+func (e executeSimple) copyMemoryPrecise(suffix string, src, dst, length reg.GPVirtual) {
+	label := "copy_" + suffix
+	ofs := GP64()
+	s := Mem{Base: src, Index: ofs, Scale: 1}
+	d := Mem{Base: dst, Index: ofs, Scale: 1}
+
+	tmp := GP64()
+	XORQ(ofs, ofs)
+
+	Label("copy_" + suffix + "_byte")
+	TESTQ(U32(0x1), length)
+	JZ(LabelRef("copy_" + suffix + "_word"))
+
+	// copy one byte if length & 0x01 != 0
+	MOVB(s, tmp.As8())
+	MOVB(tmp.As8(), d)
+	ADDQ(U8(1), ofs)
+
+	Label("copy_" + suffix + "_word")
+	TESTQ(U32(0x2), length)
+	JZ(LabelRef("copy_" + suffix + "_dword"))
+
+	// copy two bytes if length & 0x02 != 0
+	MOVW(s, tmp.As16())
+	MOVW(tmp.As16(), d)
+	ADDQ(U8(2), ofs)
+
+	Label("copy_" + suffix + "_dword")
+	TESTQ(U32(0x4), length)
+	JZ(LabelRef("copy_" + suffix + "_qword"))
+
+	// copy four bytes if length & 0x04 != 0
+	MOVL(s, tmp.As32())
+	MOVL(tmp.As32(), d)
+	ADDQ(U8(4), ofs)
+
+	Label("copy_" + suffix + "_qword")
+	TESTQ(U32(0x8), length)
+	JZ(LabelRef("copy_" + suffix + "_test"))
+
+	// copy eight bytes if length & 0x08 != 0
+	MOVQ(s, tmp)
+	MOVQ(tmp, d)
+	ADDQ(U8(8), ofs)
+	JMP(LabelRef("copy_" + suffix + "_test"))
+
+	// copy in 16-byte chunks
+	Label(label)
+	t := XMM()
+	MOVUPS(s, t)
+	MOVUPS(t, d)
+	ADDQ(U8(e.copySize()), ofs)
+	Label("copy_" + suffix + "_test")
 	CMPQ(ofs, length)
 	JB(LabelRef(label))
 }
