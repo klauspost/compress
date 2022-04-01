@@ -30,6 +30,9 @@ const errorMatchLenTooBig = 2
 // error reported when mo > t or mo > s.windowSize
 const errorMatchOffTooBig = 3
 
+// error reported by decodeSync when out buffer is too small
+const errorOutOfCapacity = 4
+
 const maxMatchLen = 131074
 
 // size of struct seqVals
@@ -175,6 +178,11 @@ func (o options) generateBody(name string, executeSingleTriple func(literals, ou
 	}
 
 	// 2. load states (done once)
+	var moP Mem
+	var mlP Mem
+	var llP Mem
+	var outCapPtr Mem
+
 	{
 		ctx := Dereference(Param("ctx"))
 		Load(ctx.Field("llState"), llState)
@@ -182,7 +190,16 @@ func (o options) generateBody(name string, executeSingleTriple func(literals, ou
 		Load(ctx.Field("ofState"), ofState)
 		if o.useSeqs {
 			Load(ctx.Field("seqs").Base(), seqBase)
+
+			moP = Mem{Base: seqBase, Disp: 2 * 8} // Pointer to current mo
+			mlP = Mem{Base: seqBase, Disp: 1 * 8} // Pointer to current ml
+			llP = Mem{Base: seqBase, Disp: 0 * 8} // Pointer to current ll
 		} else {
+			moP = AllocLocal(8)
+			mlP = AllocLocal(8)
+			llP = AllocLocal(8)
+			outCapPtr = AllocLocal(8)
+
 			Load(ctx.Field("out").Base(), outBase)
 			Load(ctx.Field("literals").Base(), literals)
 			Load(ctx.Field("outPosition"), outPosition)
@@ -200,23 +217,31 @@ func (o options) generateBody(name string, executeSingleTriple func(literals, ou
             MOVQ(base, histBasePtr)
             MOVQ(length, histLenPtr)
 
+			tmp := GP64()
+			Load(ctx.Field("out").Cap(), tmp)
+			MOVQ(tmp, outCapPtr)
+
 			Comment("outBase += outPosition")
 			ADDQ(outPosition, outBase)
+
+			Comment("Check if we're retrying after `out` resize")
+			retry, err := ctx.Field("retry").Resolve()
+			if err != nil {
+				panic(err)
+			}
+			CMPQ(retry.Addr, U8(1))
+			JNE(LabelRef(name + "_main_loop"))
+
+			tmp = GP64()
+			Load(ctx.Field("ll"), tmp)
+			MOVQ(tmp, llP)
+			Load(ctx.Field("mo"), tmp)
+			MOVQ(tmp, moP)
+			Load(ctx.Field("ml"), tmp)
+			MOVQ(tmp, mlP)
+
+			JMP(LabelRef("execute_single_triple"))
 		}
-	}
-
-	var moP Mem
-	var mlP Mem
-	var llP Mem
-
-	if o.useSeqs {
-		moP = Mem{Base: seqBase, Disp: 2 * 8} // Pointer to current mo
-		mlP = Mem{Base: seqBase, Disp: 1 * 8} // Pointer to current ml
-		llP = Mem{Base: seqBase, Disp: 0 * 8} // Pointer to current ll
-	} else {
-		moP = AllocLocal(8)
-		mlP = AllocLocal(8)
-		llP = AllocLocal(8)
 	}
 
 	// Store previous offsets in registers.
@@ -342,6 +367,7 @@ func (o options) generateBody(name string, executeSingleTriple func(literals, ou
 	}
 
 	Label(name + "_match_len_ofs_ok")
+	Label("execute_single_triple")
 
     handleLoop := func() {
         JMP(LabelRef("handle_loop"))
@@ -416,13 +442,30 @@ func (o options) generateBody(name string, executeSingleTriple func(literals, ou
 	{
 		Label("error_match_off_too_big")
 		if !o.useSeqs {
+			ctx := Dereference(Param("ctx"))
 			tmp := GP64()
 			MOVQ(moP, tmp)
-			ctx := Dereference(Param("ctx"))
 			Store(tmp, ctx.Field("mo"))
 			Store(outPosition, ctx.Field("outPosition"))
 		}
 		o.returnWithCode(errorMatchOffTooBig)
+	}
+
+	if !o.useSeqs {
+		Comment("Return request to resize `out` by at least ll + ml bytes")
+		Label("error_out_of_capacity")
+		ctx := Dereference(Param("ctx"))
+		tmp := GP64()
+		MOVQ(llP, tmp)
+		Store(tmp, ctx.Field("ll"))
+		MOVQ(mlP, tmp)
+		Store(tmp, ctx.Field("ml"))
+		Store(outPosition, ctx.Field("outPosition"))
+
+		br := Dereference(Param("br"))
+		Store(brValue, br.Field("value"))
+		Store(brBitsRead.As8(), br.Field("bitsRead"))
+		Store(brOffset, br.Field("off"))
 	}
 }
 
@@ -773,6 +816,7 @@ func (e executeSimple) generateBody(name string) {
 	moPtr := Mem{Base: seqsBase, Disp: 2 * 8}
 	mlPtr := Mem{Base: seqsBase, Disp: 1 * 8}
 	llPtr := Mem{Base: seqsBase, Disp: 0 * 8}
+	var outCapPtr Mem // Note: unused in this case
 
     var unusedHistBasePtr Mem
     var unusedHistLenPtr Mem
@@ -825,6 +869,16 @@ func (e executeSimple) generateBody(name string) {
 }
 
 func (e executeSimple) executeSingleTriple(literals, outBase, outPosition, windowSize, histBase, histLen reg.GPVirtual, llPtr, moPtr, mlPtr, histBasePtr, histLenPtr Mem, handleLoop func()) {
+	if !e.useSeqs {
+		Comment("Check if ll + ml < cap(out)")
+		capacity := GP64()
+		MOVQ(outCapPtr, capacity)
+		sum := GP64()
+		MOVQ(llPtr, sum)
+		ADDQ(mlPtr, sum)
+		CMPQ(sum, capacity)
+		JA(LabelRef("error_out_of_capacity"))
+	}
 
 	Comment("Copy literals")
 	Label("copy_literals")

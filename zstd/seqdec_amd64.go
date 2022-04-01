@@ -25,8 +25,10 @@ type decodeSyncAsmContext struct {
 	literals    []byte
 	litPosition int
 	windowSize  int
-	ml          int // set on error
-	mo          int // set on error
+	retry       bool // set be the caller when `out` got resized after reporting errorOutOfCapacity
+	ll          int  // set on error
+	ml          int  // set on error
+	mo          int  // set on error
 }
 
 // sequenceDecs_decodeSync_amd64 implements the main loop of sequenceDecs.decodeSync in x86 asm.
@@ -70,14 +72,35 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 
 	s.seqSize = 0
 
-	var errCode int
-	if cpuinfo.HasBMI2() {
-		errCode = sequenceDecs_decodeSync_bmi2(s, br, &ctx)
-	} else {
-		errCode = sequenceDecs_decodeSync_amd64(s, br, &ctx)
-	}
-	if errCode != 0 {
+	for true {
+		var errCode int
+		if cpuinfo.HasBMI2() {
+			errCode = sequenceDecs_decodeSync_bmi2(s, br, &ctx)
+		} else {
+			errCode = sequenceDecs_decodeSync_amd64(s, br, &ctx)
+		}
+		if errCode == 0 {
+			break
+		}
+
 		switch errCode {
+		case errorOutOfCapacity:
+			// Not enough size, which can happen under high volume block streaming conditions
+			// but could be if destination slice is too small for sync operations.
+			// over-allocating here can create a large amount of GC pressure so we try to keep
+			// it as contained as possible
+			used := ctx.outPosition
+			addBytes := 256 + ctx.ll + ctx.ml + used>>2
+			// Clamp to max block size.
+			if used+addBytes > maxBlockSize {
+				addBytes = maxBlockSize - used
+			}
+			s.out = append(s.out, make([]byte, addBytes)...)
+			s.out = s.out[:len(s.out)-addBytes]
+
+			ctx.out = s.out
+			ctx.retry = true
+
 		case errorMatchLenOfsMismatch:
 			return true, fmt.Errorf("zero matchoff and matchlen (%d) > 0", ctx.ml)
 
@@ -86,9 +109,10 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 
 		case errorMatchOffTooBig:
 			return true, fmt.Errorf("XXX: match offset (%d) bigger than max allowed length (%d)", ctx.mo, ctx.outPosition)
+		default:
+			return true, fmt.Errorf("sequenceDecs_decode_amd64 returned erronous code %d", errCode)
 		}
 
-		return true, fmt.Errorf("sequenceDecs_decode_amd64 returned erronous code %d", errCode)
 	}
 
 	if ctx.litRemain < 0 {
@@ -147,6 +171,9 @@ const errorMatchLenTooBig = 2
 
 // error reported when mo > t or mo > s.windowSize
 const errorMatchOffTooBig = 3
+
+// error reported by decodeSync when out buffer is too small
+const errorOutOfCapacity = 4
 
 // sequenceDecs_decode implements the main loop of sequenceDecs in x86 asm.
 //

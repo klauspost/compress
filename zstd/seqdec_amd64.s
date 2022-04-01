@@ -708,7 +708,7 @@ empty_seqs:
 
 // func sequenceDecs_decodeSync_amd64(s *sequenceDecs, br *bitReader, ctx *decodeSyncAsmContext) int
 // Requires: CMOV, SSE
-TEXT ·sequenceDecs_decodeSync_amd64(SB), $32-32
+TEXT ·sequenceDecs_decodeSync_amd64(SB), $40-32
 	MOVQ    br+8(FP), AX
 	MOVQ    32(AX), DX
 	MOVBQZX 40(AX), BX
@@ -716,17 +716,30 @@ TEXT ·sequenceDecs_decodeSync_amd64(SB), $32-32
 	MOVQ    (AX), AX
 	ADDQ    SI, AX
 	MOVQ    AX, (SP)
-	MOVQ    ctx+16(FP), AX
-	MOVQ    72(AX), DI
-	MOVQ    80(AX), R8
-	MOVQ    88(AX), R9
-	MOVQ    112(AX), R11
-	MOVQ    144(AX), R12
-	MOVQ    136(AX), R13
-	MOVQ    176(AX), AX
+	MOVQ    ctx+16(FP), CX
+	MOVQ    72(CX), DI
+	MOVQ    80(CX), R8
+	MOVQ    88(CX), R9
+	MOVQ    112(CX), R11
+	MOVQ    144(CX), R12
+	MOVQ    136(CX), R13
+	MOVQ    176(CX), AX
+	MOVQ    128(CX), AX
+	MOVQ    AX, 32(SP)
 
 	// outBase += outPosition
 	ADDQ R13, R11
+
+	// Check if we're retrying after `out` resize
+	CMPQ 184(CX), $0x01
+	JNE  sequenceDecs_decodeSync_amd64_main_loop
+	MOVQ 192(CX), AX
+	MOVQ AX, 24(SP)
+	MOVQ 208(CX), AX
+	MOVQ AX, 8(SP)
+	MOVQ 200(CX), AX
+	MOVQ AX, 16(SP)
+	JMP  execute_single_triple
 
 sequenceDecs_decodeSync_amd64_main_loop:
 	MOVQ (SP), R14
@@ -988,6 +1001,14 @@ sequenceDecs_decodeSync_amd64_adjust_end:
 	JNZ   sequenceDecs_decodeSync_amd64_error_match_len_ofs_mismatch
 
 sequenceDecs_decodeSync_amd64_match_len_ofs_ok:
+execute_single_triple:
+	// Check if ll + ml < cap(out)
+	MOVQ 32(SP), AX
+	MOVQ 24(SP), CX
+	ADDQ 16(SP), CX
+	CMPQ CX, AX
+	JA   error_out_of_capacity
+
 	// Copy literals
 	MOVQ  24(SP), AX
 	TESTQ AX, AX
@@ -1072,7 +1093,7 @@ handle_loop:
 sequenceDecs_decodeSync_amd64_error_match_len_ofs_mismatch:
 	MOVQ 16(SP), AX
 	MOVQ ctx+16(FP), CX
-	MOVQ AX, 184(CX)
+	MOVQ AX, 200(CX)
 	MOVQ $0x00000001, ret+24(FP)
 	RET
 
@@ -1080,21 +1101,35 @@ sequenceDecs_decodeSync_amd64_error_match_len_ofs_mismatch:
 sequenceDecs_decodeSync_amd64_error_match_len_too_big:
 	MOVQ 16(SP), AX
 	MOVQ ctx+16(FP), CX
-	MOVQ AX, 184(CX)
+	MOVQ AX, 200(CX)
 	MOVQ $0x00000002, ret+24(FP)
 	RET
 
 	// Return with match offset too long error
 error_match_off_too_big:
-	MOVQ 8(SP), AX
-	MOVQ ctx+16(FP), CX
-	MOVQ AX, 192(CX)
+	MOVQ ctx+16(FP), AX
+	MOVQ 8(SP), CX
+	MOVQ CX, 208(AX)
+	MOVQ R13, 136(AX)
 	MOVQ $0x00000003, ret+24(FP)
 	RET
 
+	// Return request to resize `out` by at least ll + ml bytes
+error_out_of_capacity:
+	MOVQ ctx+16(FP), AX
+	MOVQ 24(SP), CX
+	MOVQ CX, 192(AX)
+	MOVQ 16(SP), CX
+	MOVQ CX, 200(AX)
+	MOVQ R13, 136(AX)
+	MOVQ br+8(FP), AX
+	MOVQ DX, 32(AX)
+	MOVB BL, 40(AX)
+	MOVQ SI, 24(AX)
+
 // func sequenceDecs_decodeSync_bmi2(s *sequenceDecs, br *bitReader, ctx *decodeSyncAsmContext) int
 // Requires: BMI, BMI2, CMOV, SSE
-TEXT ·sequenceDecs_decodeSync_bmi2(SB), $32-32
+TEXT ·sequenceDecs_decodeSync_bmi2(SB), $40-32
 	MOVQ    br+8(FP), CX
 	MOVQ    32(CX), AX
 	MOVBQZX 40(CX), DX
@@ -1102,17 +1137,30 @@ TEXT ·sequenceDecs_decodeSync_bmi2(SB), $32-32
 	MOVQ    (CX), CX
 	ADDQ    BX, CX
 	MOVQ    CX, (SP)
-	MOVQ    ctx+16(FP), CX
-	MOVQ    72(CX), SI
-	MOVQ    80(CX), DI
-	MOVQ    88(CX), R8
-	MOVQ    112(CX), R10
-	MOVQ    144(CX), R11
-	MOVQ    136(CX), R12
-	MOVQ    176(CX), CX
+	MOVQ    ctx+16(FP), R13
+	MOVQ    72(R13), SI
+	MOVQ    80(R13), DI
+	MOVQ    88(R13), R8
+	MOVQ    112(R13), R10
+	MOVQ    144(R13), R11
+	MOVQ    136(R13), R12
+	MOVQ    176(R13), CX
+	MOVQ    128(R13), CX
+	MOVQ    CX, 32(SP)
 
 	// outBase += outPosition
 	ADDQ R12, R10
+
+	// Check if we're retrying after `out` resize
+	CMPQ 184(R13), $0x01
+	JNE  sequenceDecs_decodeSync_bmi2_main_loop
+	MOVQ 192(R13), CX
+	MOVQ CX, 24(SP)
+	MOVQ 208(R13), CX
+	MOVQ CX, 8(SP)
+	MOVQ 200(R13), CX
+	MOVQ CX, 16(SP)
+	JMP  execute_single_triple
 
 sequenceDecs_decodeSync_bmi2_main_loop:
 	MOVQ (SP), R13
@@ -1352,6 +1400,14 @@ sequenceDecs_decodeSync_bmi2_adjust_end:
 	JNZ   sequenceDecs_decodeSync_bmi2_error_match_len_ofs_mismatch
 
 sequenceDecs_decodeSync_bmi2_match_len_ofs_ok:
+execute_single_triple:
+	// Check if ll + ml < cap(out)
+	MOVQ 32(SP), CX
+	MOVQ 24(SP), R13
+	ADDQ 16(SP), R13
+	CMPQ R13, CX
+	JA   error_out_of_capacity
+
 	// Copy literals
 	MOVQ  24(SP), CX
 	TESTQ CX, CX
@@ -1436,7 +1492,7 @@ handle_loop:
 sequenceDecs_decodeSync_bmi2_error_match_len_ofs_mismatch:
 	MOVQ 16(SP), AX
 	MOVQ ctx+16(FP), CX
-	MOVQ AX, 184(CX)
+	MOVQ AX, 200(CX)
 	MOVQ $0x00000001, ret+24(FP)
 	RET
 
@@ -1444,14 +1500,28 @@ sequenceDecs_decodeSync_bmi2_error_match_len_ofs_mismatch:
 sequenceDecs_decodeSync_bmi2_error_match_len_too_big:
 	MOVQ 16(SP), AX
 	MOVQ ctx+16(FP), CX
-	MOVQ AX, 184(CX)
+	MOVQ AX, 200(CX)
 	MOVQ $0x00000002, ret+24(FP)
 	RET
 
 	// Return with match offset too long error
 error_match_off_too_big:
-	MOVQ 8(SP), AX
-	MOVQ ctx+16(FP), CX
-	MOVQ AX, 192(CX)
+	MOVQ ctx+16(FP), AX
+	MOVQ 8(SP), CX
+	MOVQ CX, 208(AX)
+	MOVQ R12, 136(AX)
 	MOVQ $0x00000003, ret+24(FP)
 	RET
+
+	// Return request to resize `out` by at least ll + ml bytes
+error_out_of_capacity:
+	MOVQ ctx+16(FP), CX
+	MOVQ 24(SP), SI
+	MOVQ SI, 192(CX)
+	MOVQ 16(SP), SI
+	MOVQ SI, 200(CX)
+	MOVQ R12, 136(CX)
+	MOVQ br+8(FP), CX
+	MOVQ AX, 32(CX)
+	MOVB DL, 40(CX)
+	MOVQ BX, 24(CX)
