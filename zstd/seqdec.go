@@ -208,18 +208,6 @@ func (s *sequenceDecs) decodeSync(hist []byte) error {
 	// Grab full sizes tables, to avoid bounds checks.
 	llTable, mlTable, ofTable := s.litLengths.fse.dt[:maxTablesize], s.matchLengths.fse.dt[:maxTablesize], s.offsets.fse.dt[:maxTablesize]
 	llState, mlState, ofState := s.litLengths.state.state, s.matchLengths.state.state, s.offsets.state.state
-
-	// XXX: remove before merge
-	const asyncHack = true
-	if asyncHack {
-		seqs := make([]seqVals, s.nSeqs)
-		err := s.decode(seqs)
-		if err != nil {
-			return err
-		}
-		return s.execute(seqs, hist)
-	}
-
 	out := s.out
 	maxBlockSize := maxCompressedBlockSize
 	if s.windowSize < maxBlockSize {
