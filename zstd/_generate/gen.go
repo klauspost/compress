@@ -296,7 +296,7 @@ func (o options) returnWithCode(returnCode uint32) {
 // bitreaderFill will make sure at least 56 bits are available.
 func (o options) bitreaderFill(name string, brValue, brBitsRead, brOffset, brPointer reg.GPVirtual) {
 	// bitreader_fill begin
-	CMPQ(brOffset, U8(16)) //  b.off >= 16
+	CMPQ(brOffset, U8(8)) //  b.off >= 8
 	JL(LabelRef(name + "_byte_by_byte"))
 
 	off := GP64()

@@ -23,7 +23,7 @@ sequenceDecs_decode_amd64_main_loop:
 	MOVQ (SP), R11
 
 	// Fill bitreader to have enough for the offset and match length.
-	CMPQ SI, $0x10
+	CMPQ SI, $0x08
 	JL   sequenceDecs_decode_amd64_fill_byte_by_byte
 	MOVQ BX, AX
 	SHRQ $0x03, AX
@@ -77,7 +77,7 @@ sequenceDecs_decode_amd64_fill_end:
 	MOVQ    AX, 8(R10)
 
 	// Fill bitreader to have enough for the remaining
-	CMPQ SI, $0x10
+	CMPQ SI, $0x08
 	JL   sequenceDecs_decode_amd64_fill_2_byte_by_byte
 	MOVQ BX, AX
 	SHRQ $0x03, AX
@@ -296,7 +296,7 @@ sequenceDecs_decode_bmi2_main_loop:
 	MOVQ (SP), R10
 
 	// Fill bitreader to have enough for the offset and match length.
-	CMPQ BX, $0x10
+	CMPQ BX, $0x08
 	JL   sequenceDecs_decode_bmi2_fill_byte_by_byte
 	MOVQ DX, CX
 	SHRQ $0x03, CX
@@ -346,7 +346,7 @@ sequenceDecs_decode_bmi2_fill_end:
 	MOVQ   CX, 8(R9)
 
 	// Fill bitreader to have enough for the remaining
-	CMPQ BX, $0x10
+	CMPQ BX, $0x08
 	JL   sequenceDecs_decode_bmi2_fill_2_byte_by_byte
 	MOVQ DX, CX
 	SHRQ $0x03, CX
