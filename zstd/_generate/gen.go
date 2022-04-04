@@ -152,24 +152,25 @@ func (o options) genDecodeSeqAsm(name string) {
 	{
 		brPointer := GP64()
 		MOVQ(brPointerStash, brPointer)
-		Comment("Fill bitreader to have enough for the offset.")
+		Comment("Fill bitreader to have enough for the offset and match length.")
 		o.bitreaderFill(name+"_fill", brValue, brBitsRead, brOffset, brPointer)
 
 		Comment("Update offset")
+		// Up to 32 extra bits
 		o.updateLength(name+"_of_update", brValue, brBitsRead, ofState, moP)
 
-		// Refill if needed.
-		Comment("Fill bitreader for match and literal")
-		o.bitreaderFill(name+"_fill_2", brValue, brBitsRead, brOffset, brPointer)
-
 		Comment("Update match length")
+		// Up to 16 extra bits
 		o.updateLength(name+"_ml_update", brValue, brBitsRead, mlState, mlP)
 
+		Comment("Fill bitreader to have enough for the remaining")
+		o.bitreaderFill(name+"_fill_2", brValue, brBitsRead, brOffset, brPointer)
+
 		Comment("Update literal length")
+		// Up to 16 bits
 		o.updateLength(name+"_ll_update", brValue, brBitsRead, llState, llP)
 
 		Comment("Fill bitreader for state updates")
-		o.bitreaderFill(name+"_fill_3", brValue, brBitsRead, brOffset, brPointer)
 		MOVQ(brPointer, brPointerStash)
 	}
 
@@ -194,7 +195,7 @@ func (o options) genDecodeSeqAsm(name string) {
 	CMPQ(iteration.Addr, U8(0))
 	JZ(LabelRef(name + "_skip_update"))
 
-	// Update states
+	// Update states, max tablelog 28
 	{
 		Comment("Update Literal Length State")
 		o.updateState(name+"_llState", llState, brValue, brBitsRead, "llTable")
@@ -292,26 +293,26 @@ func (o options) returnWithCode(returnCode uint32) {
 	RET()
 }
 
+// bitreaderFill will make sure at least 56 bits are available.
 func (o options) bitreaderFill(name string, brValue, brBitsRead, brOffset, brPointer reg.GPVirtual) {
 	// bitreader_fill begin
-	CMPQ(brBitsRead, U8(32)) //  b.bitsRead < 32
-	JL(LabelRef(name + "_end"))
-
-	CMPQ(brOffset, U8(4)) //  b.off >= 4
+	CMPQ(brOffset, U8(16)) //  b.off >= 16
 	JL(LabelRef(name + "_byte_by_byte"))
 
-	// Label(name + "_fast")
-	SHLQ(U8(32), brValue) // b.value << 32 | uint32(mem)
-	SUBQ(U8(4), brPointer)
-	SUBQ(U8(4), brOffset)
-	SUBQ(U8(32), brBitsRead)
-	tmp := GP64()
-	MOVLQZX(Mem{Base: brPointer}, tmp)
-	ORQ(tmp, brValue)
+	off := GP64()
+	MOVQ(brBitsRead, off)
+	SHRQ(U8(3), off)                    // off = brBitsRead / 8
+	SUBQ(off, brPointer)                // brPointer = brPointer - off
+	MOVQ(Mem{Base: brPointer}, brValue) // brValue = brPointer[0]
+	SUBQ(off, brOffset)                 // brOffset = brOffset - off
+	ANDQ(U8(7), brBitsRead)             // brBitsRead = brBitsRead & 7
 	JMP(LabelRef(name + "_end"))
 
 	Label(name + "_byte_by_byte")
 	CMPQ(brOffset, U8(0)) /* for b.off > 0 */
+	JLE(LabelRef(name + "_end"))
+
+	CMPQ(brBitsRead, U8(7)) /* for brBitsRead > 7 */
 	JLE(LabelRef(name + "_end"))
 
 	SHLQ(U8(8), brValue) /* b.value << 8 | uint8(mem) */
@@ -319,10 +320,13 @@ func (o options) bitreaderFill(name string, brValue, brBitsRead, brOffset, brPoi
 	SUBQ(U8(1), brOffset)
 	SUBQ(U8(8), brBitsRead)
 
-	tmp = GP64()
-	MOVBQZX(Mem{Base: brPointer}, tmp)
-	ORQ(tmp, brValue)
-
+	if true {
+		MOVB(Mem{Base: brPointer}, brValue.As8L())
+	} else {
+		tmp := GP64()
+		MOVBQZX(Mem{Base: brPointer}, tmp)
+		ORQ(tmp, brValue)
+	}
 	JMP(LabelRef(name + "_byte_by_byte"))
 
 	Label(name + "_end")

@@ -22,29 +22,28 @@ TEXT ·sequenceDecs_decode_amd64(SB), $8-32
 sequenceDecs_decode_amd64_main_loop:
 	MOVQ (SP), R11
 
-	// Fill bitreader to have enough for the offset.
-	CMPQ    BX, $0x20
-	JL      sequenceDecs_decode_amd64_fill_end
-	CMPQ    SI, $0x04
-	JL      sequenceDecs_decode_amd64_fill_byte_by_byte
-	SHLQ    $0x20, DX
-	SUBQ    $0x04, R11
-	SUBQ    $0x04, SI
-	SUBQ    $0x20, BX
-	MOVLQZX (R11), AX
-	ORQ     AX, DX
-	JMP     sequenceDecs_decode_amd64_fill_end
+	// Fill bitreader to have enough for the offset and match length.
+	CMPQ SI, $0x10
+	JL   sequenceDecs_decode_amd64_fill_byte_by_byte
+	MOVQ BX, AX
+	SHRQ $0x03, AX
+	SUBQ AX, R11
+	MOVQ (R11), DX
+	SUBQ AX, SI
+	ANDQ $0x07, BX
+	JMP  sequenceDecs_decode_amd64_fill_end
 
 sequenceDecs_decode_amd64_fill_byte_by_byte:
-	CMPQ    SI, $0x00
-	JLE     sequenceDecs_decode_amd64_fill_end
-	SHLQ    $0x08, DX
-	SUBQ    $0x01, R11
-	SUBQ    $0x01, SI
-	SUBQ    $0x08, BX
-	MOVBQZX (R11), AX
-	ORQ     AX, DX
-	JMP     sequenceDecs_decode_amd64_fill_byte_by_byte
+	CMPQ SI, $0x00
+	JLE  sequenceDecs_decode_amd64_fill_end
+	CMPQ BX, $0x07
+	JLE  sequenceDecs_decode_amd64_fill_end
+	SHLQ $0x08, DX
+	SUBQ $0x01, R11
+	SUBQ $0x01, SI
+	SUBQ $0x08, BX
+	MOVB (R11), DL
+	JMP  sequenceDecs_decode_amd64_fill_byte_by_byte
 
 sequenceDecs_decode_amd64_fill_end:
 	// Update offset
@@ -62,31 +61,6 @@ sequenceDecs_decode_amd64_fill_end:
 	ADDQ    R12, AX
 	MOVQ    AX, 16(R10)
 
-	// Fill bitreader for match and literal
-	CMPQ    BX, $0x20
-	JL      sequenceDecs_decode_amd64_fill_2_end
-	CMPQ    SI, $0x04
-	JL      sequenceDecs_decode_amd64_fill_2_byte_by_byte
-	SHLQ    $0x20, DX
-	SUBQ    $0x04, R11
-	SUBQ    $0x04, SI
-	SUBQ    $0x20, BX
-	MOVLQZX (R11), AX
-	ORQ     AX, DX
-	JMP     sequenceDecs_decode_amd64_fill_2_end
-
-sequenceDecs_decode_amd64_fill_2_byte_by_byte:
-	CMPQ    SI, $0x00
-	JLE     sequenceDecs_decode_amd64_fill_2_end
-	SHLQ    $0x08, DX
-	SUBQ    $0x01, R11
-	SUBQ    $0x01, SI
-	SUBQ    $0x08, BX
-	MOVBQZX (R11), AX
-	ORQ     AX, DX
-	JMP     sequenceDecs_decode_amd64_fill_2_byte_by_byte
-
-sequenceDecs_decode_amd64_fill_2_end:
 	// Update match length
 	MOVQ    R8, AX
 	MOVQ    BX, CX
@@ -102,6 +76,30 @@ sequenceDecs_decode_amd64_fill_2_end:
 	ADDQ    R12, AX
 	MOVQ    AX, 8(R10)
 
+	// Fill bitreader to have enough for the remaining
+	CMPQ SI, $0x10
+	JL   sequenceDecs_decode_amd64_fill_2_byte_by_byte
+	MOVQ BX, AX
+	SHRQ $0x03, AX
+	SUBQ AX, R11
+	MOVQ (R11), DX
+	SUBQ AX, SI
+	ANDQ $0x07, BX
+	JMP  sequenceDecs_decode_amd64_fill_2_end
+
+sequenceDecs_decode_amd64_fill_2_byte_by_byte:
+	CMPQ SI, $0x00
+	JLE  sequenceDecs_decode_amd64_fill_2_end
+	CMPQ BX, $0x07
+	JLE  sequenceDecs_decode_amd64_fill_2_end
+	SHLQ $0x08, DX
+	SUBQ $0x01, R11
+	SUBQ $0x01, SI
+	SUBQ $0x08, BX
+	MOVB (R11), DL
+	JMP  sequenceDecs_decode_amd64_fill_2_byte_by_byte
+
+sequenceDecs_decode_amd64_fill_2_end:
 	// Update literal length
 	MOVQ    DI, AX
 	MOVQ    BX, CX
@@ -118,30 +116,6 @@ sequenceDecs_decode_amd64_fill_2_end:
 	MOVQ    AX, (R10)
 
 	// Fill bitreader for state updates
-	CMPQ    BX, $0x20
-	JL      sequenceDecs_decode_amd64_fill_3_end
-	CMPQ    SI, $0x04
-	JL      sequenceDecs_decode_amd64_fill_3_byte_by_byte
-	SHLQ    $0x20, DX
-	SUBQ    $0x04, R11
-	SUBQ    $0x04, SI
-	SUBQ    $0x20, BX
-	MOVLQZX (R11), AX
-	ORQ     AX, DX
-	JMP     sequenceDecs_decode_amd64_fill_3_end
-
-sequenceDecs_decode_amd64_fill_3_byte_by_byte:
-	CMPQ    SI, $0x00
-	JLE     sequenceDecs_decode_amd64_fill_3_end
-	SHLQ    $0x08, DX
-	SUBQ    $0x01, R11
-	SUBQ    $0x01, SI
-	SUBQ    $0x08, BX
-	MOVBQZX (R11), AX
-	ORQ     AX, DX
-	JMP     sequenceDecs_decode_amd64_fill_3_byte_by_byte
-
-sequenceDecs_decode_amd64_fill_3_end:
 	MOVQ    R11, (SP)
 	MOVQ    R9, AX
 	SHRQ    $0x08, AX
@@ -321,29 +295,28 @@ TEXT ·sequenceDecs_decode_bmi2(SB), $8-32
 sequenceDecs_decode_bmi2_main_loop:
 	MOVQ (SP), R10
 
-	// Fill bitreader to have enough for the offset.
-	CMPQ    DX, $0x20
-	JL      sequenceDecs_decode_bmi2_fill_end
-	CMPQ    BX, $0x04
-	JL      sequenceDecs_decode_bmi2_fill_byte_by_byte
-	SHLQ    $0x20, AX
-	SUBQ    $0x04, R10
-	SUBQ    $0x04, BX
-	SUBQ    $0x20, DX
-	MOVLQZX (R10), CX
-	ORQ     CX, AX
-	JMP     sequenceDecs_decode_bmi2_fill_end
+	// Fill bitreader to have enough for the offset and match length.
+	CMPQ BX, $0x10
+	JL   sequenceDecs_decode_bmi2_fill_byte_by_byte
+	MOVQ DX, CX
+	SHRQ $0x03, CX
+	SUBQ CX, R10
+	MOVQ (R10), AX
+	SUBQ CX, BX
+	ANDQ $0x07, DX
+	JMP  sequenceDecs_decode_bmi2_fill_end
 
 sequenceDecs_decode_bmi2_fill_byte_by_byte:
-	CMPQ    BX, $0x00
-	JLE     sequenceDecs_decode_bmi2_fill_end
-	SHLQ    $0x08, AX
-	SUBQ    $0x01, R10
-	SUBQ    $0x01, BX
-	SUBQ    $0x08, DX
-	MOVBQZX (R10), CX
-	ORQ     CX, AX
-	JMP     sequenceDecs_decode_bmi2_fill_byte_by_byte
+	CMPQ BX, $0x00
+	JLE  sequenceDecs_decode_bmi2_fill_end
+	CMPQ DX, $0x07
+	JLE  sequenceDecs_decode_bmi2_fill_end
+	SHLQ $0x08, AX
+	SUBQ $0x01, R10
+	SUBQ $0x01, BX
+	SUBQ $0x08, DX
+	MOVB (R10), AL
+	JMP  sequenceDecs_decode_bmi2_fill_byte_by_byte
 
 sequenceDecs_decode_bmi2_fill_end:
 	// Update offset
@@ -359,31 +332,6 @@ sequenceDecs_decode_bmi2_fill_end:
 	ADDQ   R12, CX
 	MOVQ   CX, 16(R9)
 
-	// Fill bitreader for match and literal
-	CMPQ    DX, $0x20
-	JL      sequenceDecs_decode_bmi2_fill_2_end
-	CMPQ    BX, $0x04
-	JL      sequenceDecs_decode_bmi2_fill_2_byte_by_byte
-	SHLQ    $0x20, AX
-	SUBQ    $0x04, R10
-	SUBQ    $0x04, BX
-	SUBQ    $0x20, DX
-	MOVLQZX (R10), CX
-	ORQ     CX, AX
-	JMP     sequenceDecs_decode_bmi2_fill_2_end
-
-sequenceDecs_decode_bmi2_fill_2_byte_by_byte:
-	CMPQ    BX, $0x00
-	JLE     sequenceDecs_decode_bmi2_fill_2_end
-	SHLQ    $0x08, AX
-	SUBQ    $0x01, R10
-	SUBQ    $0x01, BX
-	SUBQ    $0x08, DX
-	MOVBQZX (R10), CX
-	ORQ     CX, AX
-	JMP     sequenceDecs_decode_bmi2_fill_2_byte_by_byte
-
-sequenceDecs_decode_bmi2_fill_2_end:
 	// Update match length
 	MOVQ   $0x00000808, CX
 	BEXTRQ CX, DI, R11
@@ -397,6 +345,30 @@ sequenceDecs_decode_bmi2_fill_2_end:
 	ADDQ   R12, CX
 	MOVQ   CX, 8(R9)
 
+	// Fill bitreader to have enough for the remaining
+	CMPQ BX, $0x10
+	JL   sequenceDecs_decode_bmi2_fill_2_byte_by_byte
+	MOVQ DX, CX
+	SHRQ $0x03, CX
+	SUBQ CX, R10
+	MOVQ (R10), AX
+	SUBQ CX, BX
+	ANDQ $0x07, DX
+	JMP  sequenceDecs_decode_bmi2_fill_2_end
+
+sequenceDecs_decode_bmi2_fill_2_byte_by_byte:
+	CMPQ BX, $0x00
+	JLE  sequenceDecs_decode_bmi2_fill_2_end
+	CMPQ DX, $0x07
+	JLE  sequenceDecs_decode_bmi2_fill_2_end
+	SHLQ $0x08, AX
+	SUBQ $0x01, R10
+	SUBQ $0x01, BX
+	SUBQ $0x08, DX
+	MOVB (R10), AL
+	JMP  sequenceDecs_decode_bmi2_fill_2_byte_by_byte
+
+sequenceDecs_decode_bmi2_fill_2_end:
 	// Update literal length
 	MOVQ   $0x00000808, CX
 	BEXTRQ CX, SI, R11
@@ -411,30 +383,6 @@ sequenceDecs_decode_bmi2_fill_2_end:
 	MOVQ   CX, (R9)
 
 	// Fill bitreader for state updates
-	CMPQ    DX, $0x20
-	JL      sequenceDecs_decode_bmi2_fill_3_end
-	CMPQ    BX, $0x04
-	JL      sequenceDecs_decode_bmi2_fill_3_byte_by_byte
-	SHLQ    $0x20, AX
-	SUBQ    $0x04, R10
-	SUBQ    $0x04, BX
-	SUBQ    $0x20, DX
-	MOVLQZX (R10), CX
-	ORQ     CX, AX
-	JMP     sequenceDecs_decode_bmi2_fill_3_end
-
-sequenceDecs_decode_bmi2_fill_3_byte_by_byte:
-	CMPQ    BX, $0x00
-	JLE     sequenceDecs_decode_bmi2_fill_3_end
-	SHLQ    $0x08, AX
-	SUBQ    $0x01, R10
-	SUBQ    $0x01, BX
-	SUBQ    $0x08, DX
-	MOVBQZX (R10), CX
-	ORQ     CX, AX
-	JMP     sequenceDecs_decode_bmi2_fill_3_byte_by_byte
-
-sequenceDecs_decode_bmi2_fill_3_end:
 	MOVQ   R10, (SP)
 	MOVQ   $0x00000808, CX
 	BEXTRQ CX, R8, R10
