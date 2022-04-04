@@ -116,13 +116,11 @@ type executeAsmContext struct {
 //go:noescape
 func sequenceDecs_executeSimple_amd64(ctx *executeAsmContext) bool
 
-const overwriteSize = 16
-
 // executeSimple handles cases when dictionary is not used.
 func (s *sequenceDecs) executeSimple(seqs []seqVals, hist []byte) error {
 	// Ensure we have enough output size...
-	if len(s.out)+s.seqSize+overwriteSize > cap(s.out) {
-		addBytes := s.seqSize + len(s.out) + overwriteSize
+	if len(s.out)+s.seqSize+compressedBlockOverAlloc > cap(s.out) {
+		addBytes := s.seqSize + len(s.out) + compressedBlockOverAlloc
 		s.out = append(s.out, make([]byte, addBytes)...)
 		s.out = s.out[:len(s.out)-addBytes]
 	}

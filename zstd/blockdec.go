@@ -43,6 +43,9 @@ const (
 	// maxCompressedBlockSize is the biggest allowed compressed block size (128KB)
 	maxCompressedBlockSize = 128 << 10
 
+	compressedBlockOverAlloc    = 16
+	maxCompressedBlockSizeAlloc = 128<<10 + compressedBlockOverAlloc
+
 	// Maximum possible block size (all Raw+Uncompressed).
 	maxBlockSize = (1 << 21) - 1
 
@@ -141,7 +144,7 @@ func (b *blockDec) reset(br byteBuffer, windowSize uint64) error {
 	b.Type = blockType((bh >> 1) & 3)
 	// find size.
 	cSize := int(bh >> 3)
-	maxSize := maxBlockSize
+	maxSize := maxCompressedBlockSizeAlloc
 	switch b.Type {
 	case blockTypeReserved:
 		return ErrReservedBlockType
@@ -162,9 +165,9 @@ func (b *blockDec) reset(br byteBuffer, windowSize uint64) error {
 			println("Data size on stream:", cSize)
 		}
 		b.RLESize = 0
-		maxSize = maxCompressedBlockSize
+		maxSize = maxCompressedBlockSizeAlloc
 		if windowSize < maxCompressedBlockSize && b.lowMem {
-			maxSize = int(windowSize)
+			maxSize = int(windowSize) + compressedBlockOverAlloc
 		}
 		if cSize > maxCompressedBlockSize || uint64(cSize) > b.WindowSize {
 			if debugDecoder {
@@ -195,9 +198,9 @@ func (b *blockDec) reset(br byteBuffer, windowSize uint64) error {
 	// Read block data.
 	if cap(b.dataStorage) < cSize {
 		if b.lowMem || cSize > maxCompressedBlockSize {
-			b.dataStorage = make([]byte, 0, cSize)
+			b.dataStorage = make([]byte, 0, cSize+compressedBlockOverAlloc)
 		} else {
-			b.dataStorage = make([]byte, 0, maxCompressedBlockSize)
+			b.dataStorage = make([]byte, 0, maxCompressedBlockSizeAlloc)
 		}
 	}
 	if cap(b.dst) <= maxSize {
