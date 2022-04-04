@@ -153,8 +153,8 @@ func (s *sequenceDecs) decode(seqs []seqVals) error {
 	return err
 }
 
-// executeSimple handles cases when no history nor dictionary are used.
-func (s *sequenceDecs) executeSimple(seqs []seqVals) error {
+// executeSimple handles cases when a dictionary is not used.
+func (s *sequenceDecs) executeSimple(seqs []seqVals, hist []byte) error {
 	// Ensure we have enough output size...
 	if len(s.out)+s.seqSize > cap(s.out) {
 		addBytes := s.seqSize + len(s.out)
@@ -176,11 +176,28 @@ func (s *sequenceDecs) executeSimple(seqs []seqVals) error {
 		s.literals = s.literals[seq.ll:]
 
 		// Malformed input
-		if seq.mo > t || seq.mo > s.windowSize {
-			return fmt.Errorf("match offset (%d) bigger than current history (%d)", seq.mo, t)
+		if seq.mo > t+len(hist) || seq.mo > s.windowSize {
+			return fmt.Errorf("match offset (%d) bigger than current history (%d)", seq.mo, t+len(hist))
 		}
 
-		// We must be in current buffer now
+		// Copy from history.
+		if v := seq.mo - t; v > 0 {
+			// v is the start position in history from end.
+			start := len(hist) - v
+			if seq.ml > v {
+				// Some goes into the current block.
+				// Copy remainder of history
+				copy(out[t:], hist[start:])
+				t += v
+				seq.ml -= v
+			} else {
+				copy(out[t:], hist[start:start+seq.ml])
+				t += seq.ml
+				continue
+			}
+		}
+
+		// We must be in the current buffer now
 		if seq.ml > 0 {
 			start := t - seq.mo
 			if seq.ml <= t-start {

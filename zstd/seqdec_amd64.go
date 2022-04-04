@@ -101,6 +101,7 @@ type executeAsmContext struct {
 	seqs        []seqVals
 	seqIndex    int
 	out         []byte
+	history     []byte
 	literals    []byte
 	outPosition int
 	litPosition int
@@ -117,8 +118,8 @@ func sequenceDecs_executeSimple_amd64(ctx *executeAsmContext) bool
 
 const overwriteSize = 16
 
-// executeSimple handles cases when no history nor dictionary are used.
-func (s *sequenceDecs) executeSimple(seqs []seqVals) error {
+// executeSimple handles cases when dictionary is not used.
+func (s *sequenceDecs) executeSimple(seqs []seqVals, hist []byte) error {
 	// Ensure we have enough output size...
 	if len(s.out)+s.seqSize+overwriteSize > cap(s.out) {
 		addBytes := s.seqSize + len(s.out) + overwriteSize
@@ -137,6 +138,7 @@ func (s *sequenceDecs) executeSimple(seqs []seqVals) error {
 		seqs:        seqs,
 		seqIndex:    0,
 		out:         out,
+		history:     hist,
 		outPosition: t,
 		litPosition: 0,
 		literals:    s.literals,
@@ -146,7 +148,7 @@ func (s *sequenceDecs) executeSimple(seqs []seqVals) error {
 	ok := sequenceDecs_executeSimple_amd64(&ctx)
 	if !ok {
 		return fmt.Errorf("match offset (%d) bigger than current history (%d)",
-			seqs[ctx.seqIndex].mo, ctx.outPosition)
+			seqs[ctx.seqIndex].mo, ctx.outPosition+len(hist))
 	}
 	s.literals = s.literals[ctx.litPosition:]
 	t = ctx.outPosition
