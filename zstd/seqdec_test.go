@@ -448,12 +448,13 @@ func benchmark_seqdec_decode(b *testing.B) {
 			b.ResetTimer()
 			t := time.Now()
 			decoded := 0
+			remain := uint(0)
 			for i := 0; i < b.N; i++ {
 				fatalIf(s.br.init(buf.Bytes()))
 				fatalIf(s.litLengths.init(s.br))
 				fatalIf(s.offsets.init(s.br))
 				fatalIf(s.matchLengths.init(s.br))
-
+				remain = s.br.remain()
 				err := s.decode(seqs)
 				if err != nil {
 					b.Fatal(err)
@@ -461,6 +462,7 @@ func benchmark_seqdec_decode(b *testing.B) {
 				decoded += ref.n
 			}
 			b.ReportMetric(float64(decoded)/time.Since(t).Seconds(), "seq/s")
+			b.ReportMetric(float64(remain)/float64(s.nSeqs), "b/seq")
 		})
 	}
 }
