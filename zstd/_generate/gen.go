@@ -146,6 +146,16 @@ func (o options) genDecodeSeqAsm(name string) {
 	mlP := Mem{Base: seqBase, Disp: 1 * 8} // Pointer to current ml
 	llP := Mem{Base: seqBase, Disp: 0 * 8} // Pointer to current ll
 
+	// Store previous offsets in registers.
+	var offsets [3]reg.GPVirtual
+	s := Dereference(Param("s"))
+	for i := range offsets {
+		offsets[i] = GP64()
+		po, _ := s.Field("prevOffset").Index(i).Resolve()
+
+		MOVQ(po.Addr, offsets[i])
+	}
+
 	// MAIN LOOP:
 	Label(name + "_main_loop")
 
@@ -210,7 +220,7 @@ func (o options) genDecodeSeqAsm(name string) {
 
 	Comment("Adjust offset")
 
-	offset := o.adjustOffset(name+"_adjust", moP, llP, R14)
+	offset := o.adjustOffset(name+"_adjust", moP, llP, R14, &offsets)
 	MOVQ(offset, moP) // Store offset
 
 	Comment("Check values")
@@ -265,6 +275,13 @@ func (o options) genDecodeSeqAsm(name string) {
 
 	DECQ(iterationP.Addr)
 	JNS(LabelRef(name + "_main_loop"))
+
+	// Store offsets
+	s = Dereference(Param("s"))
+	for i := range offsets {
+		po, _ := s.Field("prevOffset").Index(i).Resolve()
+		MOVQ(offsets[i], po.Addr)
+	}
 
 	// update bitreader state before returning
 	br := Dereference(Param("br"))
@@ -458,12 +475,7 @@ func (o options) getBits(name string, nBits, brValue, brBitsRead reg.GPVirtual, 
 	return BX
 }
 
-func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual) (offset reg.GPVirtual) {
-	s := Dereference(Param("s"))
-
-	po0, _ := s.Field("prevOffset").Index(0).Resolve()
-	po1, _ := s.Field("prevOffset").Index(1).Resolve()
-	po2, _ := s.Field("prevOffset").Index(2).Resolve()
+func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual, offsets *[3]reg.GPVirtual) (offset reg.GPVirtual) {
 	offset = GP64()
 	MOVQ(moP, offset)
 	{
@@ -476,10 +488,9 @@ func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual) 
 		CMPQ(offsetB, U8(1))
 		JBE(LabelRef(name + "_offsetB_1_or_0"))
 
-		tmp := XMM()
-		MOVUPS(po0.Addr, tmp)  // tmp = (s.prevOffset[0], s.prevOffset[1])
-		MOVQ(offset, po0.Addr) // s.prevOffset[0] = offset
-		MOVUPS(tmp, po1.Addr)  // s.prevOffset[1], s.prevOffset[2] = s.prevOffset[0], s.prevOffset[1]
+		MOVQ(offsets[1], offsets[2]) //  s.prevOffset[2] = s.prevOffset[1]
+		MOVQ(offsets[0], offsets[1]) // s.prevOffset[1] = s.prevOffset[0]
+		MOVQ(offset, offsets[0])     // s.prevOffset[0] = offset
 		JMP(LabelRef(name + "_end"))
 	}
 
@@ -508,7 +519,7 @@ func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual) 
 			Label(name + "_offset_maybezero")
 			TESTQ(offset, offset)
 			JNZ(LabelRef(name + "_offset_nonzero"))
-			MOVQ(po0.Addr, offset)
+			MOVQ(offsets[0], offset)
 			JMP(LabelRef(name + "_end"))
 		}
 	}
@@ -519,31 +530,34 @@ func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual) 
 		// } else {
 		//     temp = s.prevOffset[offset]
 		// }
-		//
-		// this if got transformed into:
-		//
-		// ofs   := offset
-		// shift := 0
-		// if offset == 3 {
-		//     ofs   = 0
-		//     shift = -1
-		// }
-		// temp := s.prevOffset[ofs] + shift
-		// TODO: This should be easier...
-		CX, DX, R15 := GP64(), GP64(), GP64()
-		MOVQ(offset, CX)
-		XORQ(DX, DX)
-		MOVQ(I32(-1), R15)
-		CMPQ(offset, U8(3))
-		CMOVQEQ(DX, CX)
-		CMOVQEQ(R15, DX)
-		prevOffset := GP64()
-		LEAQ(po0.Addr, prevOffset) // &prevOffset[0]
-		ADDQ(Mem{Base: prevOffset, Index: CX, Scale: 8}, DX)
-		temp := DX
+		temp := GP64()
+		CMPQ(offset, U8(1))
+		JB(LabelRef(name + "_zero"))
+		JEQ(LabelRef(name + "_one"))
+		CMPQ(offset, U8(2))
+		JA(LabelRef(name + "_three"))
+		JMP(LabelRef(name + "_two"))
+
+		Label(name + "_zero")
+		MOVQ(offsets[0], temp)
+		JMP(LabelRef(name + "_test_temp_valid"))
+
+		Label(name + "_one")
+		MOVQ(offsets[1], temp)
+		JMP(LabelRef(name + "_test_temp_valid"))
+
+		Label(name + "_two")
+		MOVQ(offsets[2], temp)
+		JMP(LabelRef(name + "_test_temp_valid"))
+
+		Label(name + "_three")
+		LEAQ(Mem{Base: offsets[0], Disp: -1}, temp)
+
+		Label(name + "_test_temp_valid")
 		// if temp == 0 {
 		//     temp = 1
 		// }
+		TESTQ(temp, temp)
 		JNZ(LabelRef(name + "_temp_valid"))
 		MOVQ(U32(1), temp)
 
@@ -552,19 +566,18 @@ func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual) 
 		//     s.prevOffset[2] = s.prevOffset[1]
 		// }
 		CMPQ(offset, U8(1))
-		JZ(LabelRef(name + "_skip"))
-		tmp := GP64()
-		MOVQ(po1.Addr, tmp)
-		MOVQ(tmp, po2.Addr) // s.prevOffset[2] = s.prevOffset[1]
-
-		Label(name + "_skip")
+		if false {
+			JZ(LabelRef(name + "_skip"))
+			MOVQ(offsets[1], offsets[2]) // s.prevOffset[2] = s.prevOffset[1]
+			Label(name + "_skip")
+		} else {
+			CMOVQNE(offsets[1], offsets[2])
+		}
 		// s.prevOffset[1] = s.prevOffset[0]
 		// s.prevOffset[0] = temp
-		tmp = GP64()
-		MOVQ(po0.Addr, tmp)
-		MOVQ(tmp, po1.Addr)  // s.prevOffset[1] = s.prevOffset[0]
-		MOVQ(temp, po0.Addr) // s.prevOffset[0] = temp
-		MOVQ(temp, offset)   // return temp
+		MOVQ(offsets[0], offsets[1])
+		MOVQ(temp, offsets[0])
+		MOVQ(temp, offset) // return temp
 	}
 	Label(name + "_end")
 	return offset
