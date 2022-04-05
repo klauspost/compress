@@ -632,7 +632,7 @@ func TestDecoderRegression(t *testing.T) {
 	}
 	defer dec.Close()
 	for i, tt := range zr.File {
-		if !strings.HasSuffix(tt.Name, "artifact (5)") || (testing.Short() && i > 10) {
+		if testing.Short() && i > 10 {
 			continue
 		}
 		t.Run("Reader-"+tt.Name, func(t *testing.T) {

@@ -673,7 +673,7 @@ func (e executeSimple) generateProcedure(name string) {
 	Label("copy_literals")
 	{
 		TESTQ(ll, ll)
-		JZ(LabelRef("copy_history"))
+		JZ(LabelRef("check_offset"))
 		e.copyMemory("1", literals, outBase, ll)
 
 		ADDQ(ll, literals)
@@ -683,6 +683,7 @@ func (e executeSimple) generateProcedure(name string) {
 
 	Comment("Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)")
 	{
+		Label("check_offset")
 		tmp := GP64()
 		LEAQ(Mem{Base: outPosition, Index: histLen, Scale: 1}, tmp)
 		CMPQ(mo, tmp)
@@ -693,17 +694,19 @@ func (e executeSimple) generateProcedure(name string) {
 
 	Comment("Copy match from history")
 	{
-		Label("copy_history")
 		v := GP64()
 		MOVQ(mo, v)
-		SUBQ(outPosition, v) // v := seq.mo - outPosition
-		CMPQ(v, U8(0))       // do nothing if v <= 0
-		JLE(LabelRef("copy_match"))
+		SUBQ(outPosition, v)        // v := seq.mo - outPosition
+		JLS(LabelRef("copy_match")) // do nothing if v <= 0
 
 		// v := seq.mo - t; v > 0 {
 		//     start := len(hist) - v
 		//     ...
 		// }
+		assert(func(ok LabelRef) {
+			TESTQ(histLen, histLen)
+			JNZ(ok)
+		})
 		ptr := GP64()
 		MOVQ(histBase, ptr)
 		SUBQ(v, ptr) // ptr := &hist[len(hist) - v]
