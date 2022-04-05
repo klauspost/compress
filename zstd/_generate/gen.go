@@ -48,11 +48,17 @@ func main() {
 	Constraint(buildtags.Not("noasm").ToConstraint())
 
 	o := options{
-		bmi2: false,
+		bmi2:     false,
+		fiftysix: false,
 	}
 	o.genDecodeSeqAsm("sequenceDecs_decode_amd64")
+	o.fiftysix = true
+	o.genDecodeSeqAsm("sequenceDecs_decode_56_amd64")
 	o.bmi2 = true
+	o.fiftysix = false
 	o.genDecodeSeqAsm("sequenceDecs_decode_bmi2")
+	o.fiftysix = true
+	o.genDecodeSeqAsm("sequenceDecs_decode_56_bmi2")
 
 	exec := executeSimple{}
 	exec.generateProcedure("sequenceDecs_executeSimple_amd64")
@@ -103,7 +109,8 @@ func assert(fn func(ok LabelRef)) {
 }
 
 type options struct {
-	bmi2 bool
+	bmi2     bool
+	fiftysix bool // Less than max 56 bits/loop
 }
 
 func (o options) genDecodeSeqAsm(name string) {
@@ -173,8 +180,11 @@ func (o options) genDecodeSeqAsm(name string) {
 		// Up to 16 extra bits
 		o.updateLength(name+"_ml_update", brValue, brBitsRead, mlState, mlP)
 
-		Comment("Fill bitreader to have enough for the remaining")
-		o.bitreaderFill(name+"_fill_2", brValue, brBitsRead, brOffset, brPointer)
+		// If we need more than 56 in total, we must refill here.
+		if !o.fiftysix {
+			Comment("Fill bitreader to have enough for the remaining")
+			o.bitreaderFill(name+"_fill_2", brValue, brBitsRead, brOffset, brPointer)
+		}
 
 		Comment("Update literal length")
 		// Up to 16 bits
@@ -337,7 +347,8 @@ func (o options) bitreaderFill(name string, brValue, brBitsRead, brOffset, brPoi
 	SUBQ(U8(1), brOffset)
 	SUBQ(U8(8), brBitsRead)
 
-	if true {
+	if false {
+		// Appears slightly worse (AMD Zen2)
 		MOVB(Mem{Base: brPointer}, brValue.As8L())
 	} else {
 		tmp := GP64()

@@ -33,9 +33,19 @@ const errorMatchLenTooBig = 2
 //go:noescape
 func sequenceDecs_decode_amd64(s *sequenceDecs, br *bitReader, ctx *decodeAsmContext) int
 
+// sequenceDecs_decode implements the main loop of sequenceDecs in x86 asm.
+//
+// Please refer to seqdec_generic.go for the reference implementation.
+//go:noescape
+func sequenceDecs_decode_56_amd64(s *sequenceDecs, br *bitReader, ctx *decodeAsmContext) int
+
 // sequenceDecs_decode implements the main loop of sequenceDecs in x86 asm with BMI2 extensions.
 //go:noescape
 func sequenceDecs_decode_bmi2(s *sequenceDecs, br *bitReader, ctx *decodeAsmContext) int
+
+// sequenceDecs_decode implements the main loop of sequenceDecs in x86 asm with BMI2 extensions.
+//go:noescape
+func sequenceDecs_decode_56_bmi2(s *sequenceDecs, br *bitReader, ctx *decodeAsmContext) int
 
 // decode sequences from the stream without the provided history.
 func (s *sequenceDecs) decode(seqs []seqVals) error {
@@ -59,12 +69,20 @@ func (s *sequenceDecs) decode(seqs []seqVals) error {
 	}
 
 	s.seqSize = 0
-
+	lte56bits := s.maxBits+s.offsets.fse.actualTableLog+s.matchLengths.fse.actualTableLog+s.litLengths.fse.actualTableLog <= 56
 	var errCode int
 	if cpuinfo.HasBMI2() {
-		errCode = sequenceDecs_decode_bmi2(s, br, &ctx)
+		if lte56bits {
+			errCode = sequenceDecs_decode_56_bmi2(s, br, &ctx)
+		} else {
+			errCode = sequenceDecs_decode_bmi2(s, br, &ctx)
+		}
 	} else {
-		errCode = sequenceDecs_decode_amd64(s, br, &ctx)
+		if lte56bits {
+			errCode = sequenceDecs_decode_56_amd64(s, br, &ctx)
+		} else {
+			errCode = sequenceDecs_decode_amd64(s, br, &ctx)
+		}
 	}
 	if errCode != 0 {
 		i := len(seqs) - ctx.iteration
