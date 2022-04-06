@@ -1116,16 +1116,45 @@ main_loop:
 	TESTQ R13, R13
 	JZ    check_offset
 	XORQ  R14, R14
+	TESTQ $0x00000001, R13
+	JZ    copy_1_word
+	MOVB  (SI)(R14*1), R15
+	MOVB  R15, (BX)(R14*1)
+	ADDQ  $0x01, R14
+
+copy_1_word:
+	TESTQ $0x00000002, R13
+	JZ    copy_1_dword
+	MOVW  (SI)(R14*1), R15
+	MOVW  R15, (BX)(R14*1)
+	ADDQ  $0x02, R14
+
+copy_1_dword:
+	TESTQ $0x00000004, R13
+	JZ    copy_1_qword
+	MOVL  (SI)(R14*1), R15
+	MOVL  R15, (BX)(R14*1)
+	ADDQ  $0x04, R14
+
+copy_1_qword:
+	TESTQ $0x00000008, R13
+	JZ    copy_1_test
+	MOVQ  (SI)(R14*1), R15
+	MOVQ  R15, (BX)(R14*1)
+	ADDQ  $0x08, R14
+	JMP   copy_1_test
 
 copy_1:
 	MOVUPS (SI)(R14*1), X0
 	MOVUPS X0, (BX)(R14*1)
 	ADDQ   $0x10, R14
-	CMPQ   R14, R13
-	JB     copy_1
-	ADDQ   R13, SI
-	ADDQ   R13, BX
-	ADDQ   R13, R8
+
+copy_1_test:
+	CMPQ R14, R13
+	JB   copy_1
+	ADDQ R13, SI
+	ADDQ R13, BX
+	ADDQ R13, R8
 
 	// Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)
 check_offset:

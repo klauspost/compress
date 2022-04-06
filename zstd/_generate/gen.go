@@ -674,7 +674,8 @@ func (e executeSimple) generateProcedure(name string) {
 	{
 		TESTQ(ll, ll)
 		JZ(LabelRef("check_offset"))
-		e.copyMemory("1", literals, outBase, ll)
+		// TODO: Investigate if it is possible to consistently overallocate literals.
+		e.copyMemoryPrecise("1", literals, outBase, ll)
 
 		ADDQ(ll, literals)
 		ADDQ(ll, outBase)
