@@ -1114,7 +1114,7 @@ main_loop:
 
 	// Copy literals
 	TESTQ R13, R13
-	JZ    copy_history
+	JZ    check_offset
 	XORQ  R14, R14
 
 copy_1:
@@ -1128,6 +1128,7 @@ copy_1:
 	ADDQ   R13, R8
 
 	// Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)
+check_offset:
 	LEAQ (R8)(DI*1), R13
 	CMPQ R12, R13
 	JG   error_match_off_too_big
@@ -1135,11 +1136,9 @@ copy_1:
 	JG   error_match_off_too_big
 
 	// Copy match from history
-copy_history:
 	MOVQ  R12, R13
 	SUBQ  R8, R13
-	CMPQ  R13, $0x00
-	JLE   copy_match
+	JLS   copy_match
 	MOVQ  R10, R14
 	SUBQ  R13, R14
 	CMPQ  R11, R13
