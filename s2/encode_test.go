@@ -351,6 +351,43 @@ func TestIndex(t *testing.T) {
 	}
 }
 
+func BenchmarkIndexFind(b *testing.B) {
+	fatalErr := func(t testing.TB, err error) {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	for blocks := 1; blocks <= 65536; blocks *= 2 {
+		if blocks == 65536 {
+			blocks = 65535
+		}
+
+		var index Index
+		index.reset(100)
+		index.TotalUncompressed = int64(blocks) * 100
+		index.TotalCompressed = int64(blocks) * 100
+		for i := 0; i < blocks; i++ {
+			err := index.add(int64(i*100), int64(i*100))
+			fatalErr(b, err)
+		}
+
+		rng := rand.New(rand.NewSource(0xabeefcafe))
+		b.Run(fmt.Sprintf("blocks-%d", len(index.info)), func(b *testing.B) {
+			b.ResetTimer()
+			b.ReportAllocs()
+			const prime4bytes = 2654435761
+			rng2 := rng.Int63()
+			for i := 0; i < b.N; i++ {
+				rng2 = ((rng2 + prime4bytes) * prime4bytes) >> 32
+				// Find offset:
+				_, _, err := index.Find(rng2 % (int64(blocks) * 100))
+				fatalErr(b, err)
+			}
+		})
+	}
+
+}
+
 func TestWriterPadding(t *testing.T) {
 	n := 100
 	if testing.Short() {
