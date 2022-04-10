@@ -19,11 +19,10 @@ type decodeSyncAsmContext struct {
 	iteration   int
 	litRemain   int
 	out         []byte
-	literals    []byte
-	history     []byte
 	outPosition int
 	literals    []byte
 	litPosition int
+	history     []byte
 	windowSize  int
 	retry       bool // set be the caller when `out` got resized after reporting errorOutOfCapacity
 	ll          int  // set on error

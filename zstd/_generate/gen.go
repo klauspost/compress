@@ -27,12 +27,6 @@ const errorMatchLenOfsMismatch = 1
 // error reported when ml > maxMatchLen
 const errorMatchLenTooBig = 2
 
-// error reported when mo > t or mo > s.windowSize
-const errorMatchOffTooBig = 3
-
-// error reported by decodeSync when out buffer is too small
-const errorOutOfCapacity = 4
-
 const maxMatchLen = 131074
 
 // size of struct seqVals
@@ -53,11 +47,9 @@ func main() {
 	Constraint(buildtags.Term("gc").ToConstraint())
 	Constraint(buildtags.Not("noasm").ToConstraint())
 
-    /*
 	o := options{
 		bmi2:     false,
 		fiftysix: false,
-		useSeqs: true,
 	}
 	o.genDecodeSeqAsm("sequenceDecs_decode_amd64")
 	o.fiftysix = true
@@ -68,19 +60,8 @@ func main() {
 	o.fiftysix = true
 	o.genDecodeSeqAsm("sequenceDecs_decode_56_bmi2")
 
-	exec := executeSimple{
-        useSeqs: true
-    }
+	exec := executeSimple{}
 	exec.generateProcedure("sequenceDecs_executeSimple_amd64")
-    */
-
-	decodeSync := decodeSync{}
-	decodeSync.setBMI2(false)
-	decodeSync.generateProcedure("sequenceDecs_decodeSync_amd64")
-    /*
-	decodeSync.setBMI2(true)
-	decodeSync.generateProcedure("sequenceDecs_decodeSync_bmi2")
-    */
 
 	Generate()
 	b, err := ioutil.ReadFile(out.Value.String())
@@ -130,7 +111,6 @@ func assert(fn func(ok LabelRef)) {
 type options struct {
 	bmi2     bool
 	fiftysix bool // Less than max 56 bits/loop
-	useSeqs bool // When true generate code for `decode`, otherwise for `decodeSync`
 }
 
 func (o options) genDecodeSeqAsm(name string) {
@@ -139,13 +119,6 @@ func (o options) genDecodeSeqAsm(name string) {
 	Doc(name+" decodes a sequence", "")
 	Pragma("noescape")
 
-	nop := func(literals, outBase, outPosition, windowSize, histBase, histLen reg.GPVirtual, llPtr, moPtr, mlPtr, histBasePtr, histLenPtr Mem, handleLoop func()) {}
-
-	o.generateBody(name, nop)
-}
-
-func (o options) generateBody(name string, executeSingleTriple func(literals, outBase, outPosition, windowSize, histBase, histLen reg.GPVirtual, llPtr, moPtr, mlPtr, histBasePtr, histLenPtr Mem, handleLoop func())) {
-	// for decode
 	brValue := GP64()
 	brBitsRead := GP64()
 	brOffset := GP64()
@@ -153,16 +126,6 @@ func (o options) generateBody(name string, executeSingleTriple func(literals, ou
 	mlState := GP64()
 	ofState := GP64()
 	seqBase := GP64()
-
-	// for execute
-	outBase := GP64()
-	literals := GP64()
-	outPosition := GP64()
-    histLen := GP64()
-    histBase := GP64()
-	windowSize := GP64()
-    var histBasePtr Mem
-    var histLenPtr Mem
 
 	// 1. load bitReader (done once)
 	brPointerStash := AllocLocal(8)
@@ -178,71 +141,17 @@ func (o options) generateBody(name string, executeSingleTriple func(literals, ou
 	}
 
 	// 2. load states (done once)
-	var moP Mem
-	var mlP Mem
-	var llP Mem
-	var outCapPtr Mem
-
 	{
 		ctx := Dereference(Param("ctx"))
 		Load(ctx.Field("llState"), llState)
 		Load(ctx.Field("mlState"), mlState)
 		Load(ctx.Field("ofState"), ofState)
-		if o.useSeqs {
-			Load(ctx.Field("seqs").Base(), seqBase)
-
-			moP = Mem{Base: seqBase, Disp: 2 * 8} // Pointer to current mo
-			mlP = Mem{Base: seqBase, Disp: 1 * 8} // Pointer to current ml
-			llP = Mem{Base: seqBase, Disp: 0 * 8} // Pointer to current ll
-		} else {
-			moP = AllocLocal(8)
-			mlP = AllocLocal(8)
-			llP = AllocLocal(8)
-			outCapPtr = AllocLocal(8)
-
-			Load(ctx.Field("out").Base(), outBase)
-			Load(ctx.Field("literals").Base(), literals)
-			Load(ctx.Field("outPosition"), outPosition)
-			Load(ctx.Field("windowSize"), windowSize)
-            base := GP64()
-            length := GP64()
-            Load(ctx.Field("history").Base(), base)
-            Load(ctx.Field("history").Len(), length)
-
-            ADDQ(length, base) // Note: we always copy from &hist[len(hist) - v]
-
-            histBasePtr = AllocLocal(8)
-            histLenPtr = AllocLocal(8)
-
-            MOVQ(base, histBasePtr)
-            MOVQ(length, histLenPtr)
-
-			tmp := GP64()
-			Load(ctx.Field("out").Cap(), tmp)
-			MOVQ(tmp, outCapPtr)
-
-			Comment("outBase += outPosition")
-			ADDQ(outPosition, outBase)
-
-			Comment("Check if we're retrying after `out` resize")
-			retry, err := ctx.Field("retry").Resolve()
-			if err != nil {
-				panic(err)
-			}
-			CMPQ(retry.Addr, U8(1))
-			JNE(LabelRef(name + "_main_loop"))
-
-			tmp = GP64()
-			Load(ctx.Field("ll"), tmp)
-			MOVQ(tmp, llP)
-			Load(ctx.Field("mo"), tmp)
-			MOVQ(tmp, moP)
-			Load(ctx.Field("ml"), tmp)
-			MOVQ(tmp, mlP)
-
-			JMP(LabelRef("execute_single_triple"))
-		}
+		Load(ctx.Field("seqs").Base(), seqBase)
 	}
+
+	moP := Mem{Base: seqBase, Disp: 2 * 8} // Pointer to current mo
+	mlP := Mem{Base: seqBase, Disp: 1 * 8} // Pointer to current ml
+	llP := Mem{Base: seqBase, Disp: 0 * 8} // Pointer to current ll
 
 	// Store previous offsets in registers.
 	var offsets [3]reg.GPVirtual
@@ -367,15 +276,6 @@ func (o options) generateBody(name string, executeSingleTriple func(literals, ou
 	}
 
 	Label(name + "_match_len_ofs_ok")
-	Label("execute_single_triple")
-
-    handleLoop := func() {
-        JMP(LabelRef("handle_loop"))
-    }
-
-	executeSingleTriple(literals, outBase, outPosition, windowSize, histBase, histLen, llP, moP, mlP, histBasePtr, histLenPtr, handleLoop)
-
-	Label("handle_loop")
 	ADDQ(U8(seqValsSize), seqBase)
 	ctx = Dereference(Param("ctx"))
 	iterationP, err := ctx.Field("iteration").Resolve()
@@ -399,74 +299,16 @@ func (o options) generateBody(name string, executeSingleTriple func(literals, ou
 	Store(brBitsRead.As8(), br.Field("bitsRead"))
 	Store(brOffset, br.Field("off"))
 
-	if !o.useSeqs {
-		Comment("Update the context")
-		ctx := Dereference(Param("ctx"))
-		Store(outPosition, ctx.Field("outPosition"))
-
-		// compute litPosition
-		tmp := GP64()
-		Load(ctx.Field("literals").Base(), tmp)
-		SUBQ(tmp, literals) // litPosition := current - initial literals pointer
-		Store(literals, ctx.Field("litPosition"))
-	}
-
 	Comment("Return success")
 	o.returnWithCode(0)
 
 	Comment("Return with match length error")
-	{
-		Label(name + "_error_match_len_ofs_mismatch")
-		if !o.useSeqs {
-			tmp := GP64()
-			MOVQ(mlP, tmp)
-			ctx := Dereference(Param("ctx"))
-			Store(tmp, ctx.Field("ml"))
-		}
-		o.returnWithCode(errorMatchLenOfsMismatch)
-	}
+	Label(name + "_error_match_len_ofs_mismatch")
+	o.returnWithCode(errorMatchLenOfsMismatch)
 
-	Comment("Return with match length too long error")
-	{
-		Label(name + "_error_match_len_too_big")
-		if !o.useSeqs {
-			tmp := GP64()
-			MOVQ(mlP, tmp)
-			ctx := Dereference(Param("ctx"))
-			Store(tmp, ctx.Field("ml"))
-		}
-		o.returnWithCode(errorMatchLenTooBig)
-	}
-
-	Comment("Return with match offset too long error")
-	{
-		Label("error_match_off_too_big")
-		if !o.useSeqs {
-			ctx := Dereference(Param("ctx"))
-			tmp := GP64()
-			MOVQ(moP, tmp)
-			Store(tmp, ctx.Field("mo"))
-			Store(outPosition, ctx.Field("outPosition"))
-		}
-		o.returnWithCode(errorMatchOffTooBig)
-	}
-
-	if !o.useSeqs {
-		Comment("Return request to resize `out` by at least ll + ml bytes")
-		Label("error_out_of_capacity")
-		ctx := Dereference(Param("ctx"))
-		tmp := GP64()
-		MOVQ(llP, tmp)
-		Store(tmp, ctx.Field("ll"))
-		MOVQ(mlP, tmp)
-		Store(tmp, ctx.Field("ml"))
-		Store(outPosition, ctx.Field("outPosition"))
-
-		br := Dereference(Param("br"))
-		Store(brValue, br.Field("value"))
-		Store(brBitsRead.As8(), br.Field("bitsRead"))
-		Store(brOffset, br.Field("off"))
-	}
+	Comment("Return with match too long error")
+	Label(name + "_error_match_len_too_big")
+	o.returnWithCode(errorMatchLenTooBig)
 }
 
 func (o options) returnWithCode(returnCode uint32) {
@@ -752,9 +594,7 @@ func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual, 
 	return offset
 }
 
-type executeSimple struct{
-    useSeqs bool
-}
+type executeSimple struct{}
 
 // copySize returns register size used to fast copy.
 //
@@ -769,10 +609,6 @@ func (e executeSimple) generateProcedure(name string) {
 	Doc(name+" implements the main loop of sequenceDecs.decode in x86 asm", "")
 	Pragma("noescape")
 
-	e.generateBody(name)
-}
-
-func (e executeSimple) generateBody(name string) {
 	seqsBase := GP64()
 	seqsLen := GP64()
 	seqIndex := GP64()
@@ -813,13 +649,17 @@ func (e executeSimple) generateBody(name string) {
 
 	Label("main_loop")
 
+	ml := GP64()
+	mo := GP64()
+	ll := GP64()
+
 	moPtr := Mem{Base: seqsBase, Disp: 2 * 8}
 	mlPtr := Mem{Base: seqsBase, Disp: 1 * 8}
 	llPtr := Mem{Base: seqsBase, Disp: 0 * 8}
-	var outCapPtr Mem // Note: unused in this case
 
-    var unusedHistBasePtr Mem
-    var unusedHistLenPtr Mem
+	MOVQ(llPtr, ll)
+	MOVQ(mlPtr, ml)
+	MOVQ(moPtr, mo)
 
 	// generates the loop tail
 	handleLoop := func() {
@@ -829,62 +669,9 @@ func (e executeSimple) generateBody(name string) {
 		JB(LabelRef("main_loop"))
 	}
 
-	e.executeSingleTriple(literals, outBase, outPosition, windowSize, histBase, histLen, llPtr, moPtr, mlPtr, unusedHistBasePtr, unusedHistLenPtr, handleLoop)
-
-	Label("handle_loop")
-    handleLoop()
-
-	ret, err := ReturnIndex(0).Resolve()
-	if err != nil {
-		panic(err)
-	}
-
-	returnValue := func(val int) {
-
-		Comment("Return value")
-		MOVB(U8(val), ret.Addr)
-
-		Comment("Update the context")
-		ctx := Dereference(Param("ctx"))
-		Store(seqIndex, ctx.Field("seqIndex"))
-		Store(outPosition, ctx.Field("outPosition"))
-
-		// compute litPosition
-		tmp := GP64()
-		Load(ctx.Field("literals").Base(), tmp)
-		SUBQ(tmp, literals) // litPosition := current - initial literals pointer
-		Store(literals, ctx.Field("litPosition"))
-	}
-	returnValue(1)
-	RET()
-
-	Label("error_match_off_too_big")
-	returnValue(0)
-	RET()
-
-	Label("empty_seqs")
-	Comment("Return value")
-	MOVB(U8(1), ret.Addr)
-	RET()
-}
-
-func (e executeSimple) executeSingleTriple(literals, outBase, outPosition, windowSize, histBase, histLen reg.GPVirtual, llPtr, moPtr, mlPtr, histBasePtr, histLenPtr Mem, handleLoop func()) {
-	if !e.useSeqs {
-		Comment("Check if ll + ml < cap(out)")
-		capacity := GP64()
-		MOVQ(outCapPtr, capacity)
-		sum := GP64()
-		MOVQ(llPtr, sum)
-		ADDQ(mlPtr, sum)
-		CMPQ(sum, capacity)
-		JA(LabelRef("error_out_of_capacity"))
-	}
-
 	Comment("Copy literals")
 	Label("copy_literals")
 	{
-		ll := GP64()
-		MOVQ(llPtr, ll)
 		TESTQ(ll, ll)
 		JZ(LabelRef("check_offset"))
 		// TODO: Investigate if it is possible to consistently overallocate literals.
@@ -895,32 +682,19 @@ func (e executeSimple) executeSingleTriple(literals, outBase, outPosition, windo
 		ADDQ(ll, outPosition)
 	}
 
-    mo := GP64()
-
 	Comment("Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)")
 	{
 		Label("check_offset")
-        MOVQ(moPtr, mo)
-        tmp := GP64()
-        if e.useSeqs {
-            LEAQ(Mem{Base: outPosition, Index: histLen, Scale: 1}, tmp)
-        } else {
-            fmt.Printf("%v\n", histLenPtr)
-            MOVQ(histLenPtr, tmp)
-            ADDQ(outPosition, tmp)
-        }
-
-        CMPQ(mo, tmp)
-        JG(LabelRef("error_match_off_too_big"))
-        CMPQ(mo, windowSize)
-        JG(LabelRef("error_match_off_too_big"))
+		tmp := GP64()
+		LEAQ(Mem{Base: outPosition, Index: histLen, Scale: 1}, tmp)
+		CMPQ(mo, tmp)
+		JG(LabelRef("error_match_off_too_big"))
+		CMPQ(mo, windowSize)
+		JG(LabelRef("error_match_off_too_big"))
 	}
-
-	ml := GP64()
 
 	Comment("Copy match from history")
 	{
-		MOVQ(mlPtr, ml)
 		v := GP64()
 		MOVQ(mo, v)
 		SUBQ(outPosition, v)        // v := seq.mo - outPosition
@@ -952,7 +726,7 @@ func (e executeSimple) executeSingleTriple(literals, outBase, outPosition, windo
 		// Note: for the current go tests this branch is taken in 99.53% cases,
 		//       this is why we repeat a little code here.
 		handleLoop()
-		//JMP(LabelRef("loop_finished")) XXX -- sort it out...
+		JMP(LabelRef("loop_finished"))
 
 		Label("copy_all_from_history")
 		/*  if seq.ml > v {
@@ -970,24 +744,11 @@ func (e executeSimple) executeSingleTriple(literals, outBase, outPosition, windo
 		// fallback to the next block
 	}
 
-
 	Comment("Copy match from the current buffer")
 	Label("copy_match")
 	{
 		TESTQ(ml, ml)
 		JZ(LabelRef("handle_loop"))
-
-		mo := GP64()
-		MOVQ(moPtr, mo)
-
-		Comment("Malformed input if seq.mo > t || seq.mo > s.windowSize")
-		CMPQ(mo, outPosition)
-		JG(LabelRef("error_match_off_too_big"))
-		if false {
-			// XXX -- when enabled: register allocation failure
-			CMPQ(mo, windowSize)
-			JG(LabelRef("error_match_off_too_big"))
-		}
 
 		src := GP64()
 		MOVQ(outBase, src)
@@ -1023,6 +784,43 @@ func (e executeSimple) executeSingleTriple(literals, outBase, outPosition, windo
 			ADDQ(ml, outPosition)
 		}
 	}
+
+	Label("handle_loop")
+	handleLoop()
+
+	ret, err := ReturnIndex(0).Resolve()
+	if err != nil {
+		panic(err)
+	}
+
+	returnValue := func(val int) {
+
+		Comment("Return value")
+		MOVB(U8(val), ret.Addr)
+
+		Comment("Update the context")
+		ctx := Dereference(Param("ctx"))
+		Store(seqIndex, ctx.Field("seqIndex"))
+		Store(outPosition, ctx.Field("outPosition"))
+
+		// compute litPosition
+		tmp := GP64()
+		Load(ctx.Field("literals").Base(), tmp)
+		SUBQ(tmp, literals) // litPosition := current - initial literals pointer
+		Store(literals, ctx.Field("litPosition"))
+	}
+	Label("loop_finished")
+	returnValue(1)
+	RET()
+
+	Label("error_match_off_too_big")
+	returnValue(0)
+	RET()
+
+	Label("empty_seqs")
+	Comment("Return value")
+	MOVB(U8(1), ret.Addr)
+	RET()
 }
 
 // copyMemory will copy memory in blocks of 16 bytes,
@@ -1117,22 +915,4 @@ func (e executeSimple) copyOverlappedMemory(suffix string, src, dst, length reg.
 	INCQ(ofs)
 	CMPQ(ofs, length)
 	JB(LabelRef(label))
-}
-
-type decodeSync struct {
-	decode  options
-	execute executeSimple
-}
-
-func (d *decodeSync) setBMI2(flag bool) {
-	d.decode.bmi2 = flag
-}
-
-func (d *decodeSync) generateProcedure(name string) {
-	Package("github.com/klauspost/compress/zstd")
-	TEXT(name, 0, "func (s *sequenceDecs, br *bitReader, ctx *decodeSyncAsmContext) int")
-	Doc(name+" implements the main loop of sequenceDecs.decodeSync in x86 asm", "")
-	Pragma("noescape")
-
-	d.decode.generateBody(name, d.execute.executeSingleTriple)
 }
