@@ -27,6 +27,12 @@ const errorMatchLenOfsMismatch = 1
 // error reported when ml > maxMatchLen
 const errorMatchLenTooBig = 2
 
+// error reported when mo > t or mo > s.windowSize
+const errorMatchOffTooBig = 3
+
+// error reported by decodeSync when out buffer is too small
+const errorOutOfCapacity = 4
+
 const maxMatchLen = 131074
 
 // size of struct seqVals
@@ -47,21 +53,32 @@ func main() {
 	Constraint(buildtags.Term("gc").ToConstraint())
 	Constraint(buildtags.Not("noasm").ToConstraint())
 
-	o := options{
-		bmi2:     false,
-		fiftysix: false,
-	}
-	o.genDecodeSeqAsm("sequenceDecs_decode_amd64")
-	o.fiftysix = true
-	o.genDecodeSeqAsm("sequenceDecs_decode_56_amd64")
-	o.bmi2 = true
-	o.fiftysix = false
-	o.genDecodeSeqAsm("sequenceDecs_decode_bmi2")
-	o.fiftysix = true
-	o.genDecodeSeqAsm("sequenceDecs_decode_56_bmi2")
+	if false {
+		o := options{
+			bmi2:     false,
+			fiftysix: false,
+			useSeqs:  true,
+		}
+		o.genDecodeSeqAsm("sequenceDecs_decode_amd64")
+		o.fiftysix = true
+		o.genDecodeSeqAsm("sequenceDecs_decode_56_amd64")
+		o.bmi2 = true
+		o.fiftysix = false
+		o.genDecodeSeqAsm("sequenceDecs_decode_bmi2")
+		o.fiftysix = true
+		o.genDecodeSeqAsm("sequenceDecs_decode_56_bmi2")
 
-	exec := executeSimple{}
-	exec.generateProcedure("sequenceDecs_executeSimple_amd64")
+		exec := executeSimple{}
+		exec.generateProcedure("sequenceDecs_executeSimple_amd64")
+	}
+
+	decodeSync := decodeSync{}
+	decodeSync.setBMI2(false)
+	decodeSync.generateProcedure("sequenceDecs_decodeSync_amd64")
+	if false {
+		decodeSync.setBMI2(true)
+		decodeSync.generateProcedure("sequenceDecs_decodeSync_bmi2")
+	}
 
 	Generate()
 	b, err := ioutil.ReadFile(out.Value.String())
@@ -111,6 +128,7 @@ func assert(fn func(ok LabelRef)) {
 type options struct {
 	bmi2     bool
 	fiftysix bool // Less than max 56 bits/loop
+	useSeqs  bool // Generate code that uses the `seqs` auxiliary table
 }
 
 func (o options) genDecodeSeqAsm(name string) {
@@ -119,13 +137,23 @@ func (o options) genDecodeSeqAsm(name string) {
 	Doc(name+" decodes a sequence", "")
 	Pragma("noescape")
 
+	nop := func(ctx *executeSingleTripleContext, handleLoop func()) {}
+
+	o.generateBody(name, nop)
+}
+
+func (o options) generateBody(name string, executeSingleTriple func(ctx *executeSingleTripleContext, handleLoop func())) {
+	// registers used by `decode`
 	brValue := GP64()
 	brBitsRead := GP64()
 	brOffset := GP64()
 	llState := GP64()
 	mlState := GP64()
 	ofState := GP64()
-	seqBase := GP64()
+	var seqBase reg.GPVirtual
+
+	// values used by `execute` (allocated only when o.useSeqs is false)
+	ec := executeSingleTripleContext{}
 
 	// 1. load bitReader (done once)
 	brPointerStash := AllocLocal(8)
@@ -141,17 +169,105 @@ func (o options) genDecodeSeqAsm(name string) {
 	}
 
 	// 2. load states (done once)
+	var moP Mem
+	var mlP Mem
+	var llP Mem
+
 	{
 		ctx := Dereference(Param("ctx"))
 		Load(ctx.Field("llState"), llState)
 		Load(ctx.Field("mlState"), mlState)
 		Load(ctx.Field("ofState"), ofState)
-		Load(ctx.Field("seqs").Base(), seqBase)
-	}
 
-	moP := Mem{Base: seqBase, Disp: 2 * 8} // Pointer to current mo
-	mlP := Mem{Base: seqBase, Disp: 1 * 8} // Pointer to current ml
-	llP := Mem{Base: seqBase, Disp: 0 * 8} // Pointer to current ll
+		if o.useSeqs {
+			seqBase := GP64()
+			Load(ctx.Field("seqs").Base(), seqBase)
+			moP = Mem{Base: seqBase, Disp: 2 * 8} // Pointer to current mo
+			mlP = Mem{Base: seqBase, Disp: 1 * 8} // Pointer to current ml
+			llP = Mem{Base: seqBase, Disp: 0 * 8} // Pointer to current ll
+		} else {
+			moP = AllocLocal(8)
+			mlP = AllocLocal(8)
+			llP = AllocLocal(8)
+			ec.moPtr = moP
+			ec.mlPtr = mlP
+			ec.llPtr = llP
+			ec.outCapPtr = AllocLocal(8)
+
+			ec.outBasePtr = AllocLocal(8)
+			ec.literalsPtr = AllocLocal(8)
+			ec.outPositionPtr = AllocLocal(8)
+			ec.histLenPtr = AllocLocal(8)
+			ec.histBasePtr = AllocLocal(8)
+			ec.windowSizePtr = AllocLocal(8)
+
+			loadField := func(field string, target Mem) {
+				tmp := GP64()
+				Load(ctx.Field(field), tmp)
+				MOVQ(tmp, target)
+			}
+
+			loadFieldBase := func(field string, target Mem) {
+				tmp := GP64()
+				Load(ctx.Field(field).Base(), tmp)
+				MOVQ(tmp, target)
+			}
+
+			loadFieldLen := func(field string, target Mem) {
+				tmp := GP64()
+				Load(ctx.Field(field).Len(), tmp)
+				MOVQ(tmp, target)
+			}
+
+			loadFieldCap := func(field string, target Mem) {
+				tmp := GP64()
+				Load(ctx.Field(field).Cap(), tmp)
+				MOVQ(tmp, target)
+			}
+
+			loadFieldBase("out", ec.outBasePtr)
+			loadFieldBase("literals", ec.literalsPtr)
+			loadField("outPosition", ec.outPositionPtr)
+			loadField("windowSize", ec.windowSizePtr)
+			loadFieldBase("history", ec.histBasePtr)
+			loadFieldLen("history", ec.histLenPtr)
+
+			{
+				tmp := GP64()
+				MOVQ(ec.histLenPtr, tmp)
+				ADDQ(tmp, ec.histBasePtr) // Note: we always copy from &hist[len(hist) - v]
+			}
+
+			Comment("outBase += outPosition")
+			{
+				tmp := GP64()
+				MOVQ(ec.outPositionPtr, tmp)
+				ADDQ(tmp, ec.outBasePtr)
+			}
+
+			loadFieldCap("out", ec.outCapPtr)
+
+			Comment("Check if we're retrying after `out` resize")
+			retry, err := ctx.Field("retry").Resolve()
+			if err != nil {
+				panic(err)
+			}
+			CMPQ(retry.Addr, U8(1))
+			JNE(LabelRef(name + "_main_loop"))
+
+			{
+				tmp := GP64()
+				Load(ctx.Field("ll"), tmp)
+				MOVQ(tmp, llP)
+				Load(ctx.Field("mo"), tmp)
+				MOVQ(tmp, moP)
+				Load(ctx.Field("ml"), tmp)
+				MOVQ(tmp, mlP)
+			}
+
+			JMP(LabelRef("execute_single_triple"))
+		}
+	}
 
 	// Store previous offsets in registers.
 	var offsets [3]reg.GPVirtual
@@ -276,7 +392,20 @@ func (o options) genDecodeSeqAsm(name string) {
 	}
 
 	Label(name + "_match_len_ofs_ok")
-	ADDQ(U8(seqValsSize), seqBase)
+
+	if !o.useSeqs {
+		Label("execute_single_triple")
+		handleLoop := func() {
+			JMP(LabelRef("handle_loop"))
+		}
+
+		executeSingleTriple(&ec, handleLoop)
+	}
+
+	Label("handle_loop")
+	if o.useSeqs {
+		ADDQ(U8(seqValsSize), seqBase)
+	}
 	ctx = Dereference(Param("ctx"))
 	iterationP, err := ctx.Field("iteration").Resolve()
 	if err != nil {
@@ -285,6 +414,8 @@ func (o options) genDecodeSeqAsm(name string) {
 
 	DECQ(iterationP.Addr)
 	JNS(LabelRef(name + "_main_loop"))
+
+	Label("loop_finished")
 
 	// Store offsets
 	s = Dereference(Param("s"))
@@ -303,12 +434,61 @@ func (o options) genDecodeSeqAsm(name string) {
 	o.returnWithCode(0)
 
 	Comment("Return with match length error")
-	Label(name + "_error_match_len_ofs_mismatch")
-	o.returnWithCode(errorMatchLenOfsMismatch)
+	{
+		Label(name + "_error_match_len_ofs_mismatch")
+		if !o.useSeqs {
+			tmp := GP64()
+			MOVQ(mlP, tmp)
+			ctx := Dereference(Param("ctx"))
+			Store(tmp, ctx.Field("ml"))
+		}
+		o.returnWithCode(errorMatchLenOfsMismatch)
+	}
 
 	Comment("Return with match too long error")
-	Label(name + "_error_match_len_too_big")
-	o.returnWithCode(errorMatchLenTooBig)
+	{
+		Label(name + "_error_match_len_too_big")
+		if !o.useSeqs {
+			tmp := GP64()
+			MOVQ(mlP, tmp)
+			ctx := Dereference(Param("ctx"))
+			Store(tmp, ctx.Field("ml"))
+		}
+		o.returnWithCode(errorMatchLenTooBig)
+	}
+
+	Comment("Return with match offset too long error")
+	{
+		Label("error_match_off_too_big")
+		if !o.useSeqs {
+			ctx := Dereference(Param("ctx"))
+			tmp := GP64()
+			MOVQ(moP, tmp)
+			Store(tmp, ctx.Field("mo"))
+			MOVQ(ec.outPositionPtr, tmp)
+			Store(tmp, ctx.Field("outPosition"))
+		}
+		o.returnWithCode(errorMatchOffTooBig)
+	}
+
+	if !o.useSeqs {
+		Comment("Return request to resize `out` by at least ll + ml bytes")
+		Label("error_out_of_capacity")
+		ctx := Dereference(Param("ctx"))
+		tmp := GP64()
+		MOVQ(llP, tmp)
+		Store(tmp, ctx.Field("ll"))
+		MOVQ(mlP, tmp)
+		Store(tmp, ctx.Field("ml"))
+		MOVQ(ec.outPositionPtr, tmp)
+		Store(tmp, ctx.Field("outPosition"))
+
+		br := Dereference(Param("br"))
+		Store(brValue, br.Field("value"))
+		Store(brBitsRead.As8(), br.Field("bitsRead"))
+		Store(brOffset, br.Field("off"))
+		o.returnWithCode(errorOutOfCapacity)
+	}
 }
 
 func (o options) returnWithCode(returnCode uint32) {
@@ -594,7 +774,9 @@ func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual, 
 	return offset
 }
 
-type executeSimple struct{}
+type executeSimple struct {
+	useSeqs bool // Generate code that uses the `seqs` auxiliary table
+}
 
 // copySize returns register size used to fast copy.
 //
@@ -661,7 +843,19 @@ func (e executeSimple) generateProcedure(name string) {
 		JB(LabelRef("main_loop"))
 	}
 
-    e.executeSingleTriple(llPtr, moPtr, mlPtr, literals, outBase, outPosition, histBase, histLen, windowSize, handleLoop)
+	ctx := executeSingleTripleContext{
+		llPtr:       llPtr,
+		moPtr:       moPtr,
+		mlPtr:       mlPtr,
+		literals:    literals,
+		outBase:     outBase,
+		outPosition: outPosition,
+		histBase:    histBase,
+		histLen:     histLen,
+		windowSize:  windowSize,
+	}
+
+	e.executeSingleTriple(&ctx, handleLoop)
 
 	Label("handle_loop")
 	handleLoop()
@@ -701,46 +895,110 @@ func (e executeSimple) generateProcedure(name string) {
 	RET()
 }
 
+type executeSingleTripleContext struct {
+	// common values
+	llPtr Mem
+	moPtr Mem
+	mlPtr Mem
+
+	literals    reg.GPVirtual
+	outBase     reg.GPVirtual
+	outPosition reg.GPVirtual
+
+	// values used when useSeqs is true
+	histBase   reg.GPVirtual
+	histLen    reg.GPVirtual
+	windowSize reg.GPVirtual
+
+	// values used when useSeqs is false
+	outCapPtr      Mem
+	literalsPtr    Mem
+	outBasePtr     Mem
+	outPositionPtr Mem
+	histBasePtr    Mem
+	histLenPtr     Mem
+	windowSizePtr  Mem
+}
+
 // executeSingleTriple performs copy from literals and history according
 // to the decoded values ll, mo and ml.
-func (e executeSimple) executeSingleTriple(llPtr, moPtr, mlPtr Mem, literals, outBase, outPosition, histBase, histLen, windowSize reg.GPVirtual, handleLoop func()) {
-	ml := GP64()
-	mo := GP64()
-	ll := GP64()
-
-	MOVQ(llPtr, ll)
-	MOVQ(mlPtr, ml)
-	MOVQ(moPtr, mo)
+func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handleLoop func()) {
+	if !e.useSeqs {
+		Comment("Check if ll + ml < cap(out)")
+		capacity := GP64()
+		MOVQ(c.outCapPtr, capacity)
+		sum := GP64()
+		MOVQ(c.llPtr, sum)
+		ADDQ(c.mlPtr, sum)
+		CMPQ(sum, capacity)
+		JA(LabelRef("error_out_of_capacity"))
+	}
 
 	Comment("Copy literals")
 	Label("copy_literals")
 	{
+		ll := GP64()
+		MOVQ(c.llPtr, ll)
 		TESTQ(ll, ll)
 		JZ(LabelRef("check_offset"))
 		// TODO: Investigate if it is possible to consistently overallocate literals.
-		e.copyMemoryPrecise("1", literals, outBase, ll)
+		if e.useSeqs {
+			e.copyMemoryPrecise("1", c.literals, c.outBase, ll)
+			ADDQ(ll, c.literals)
+			ADDQ(ll, c.outBase)
+			ADDQ(ll, c.outPosition)
+		} else {
+			literals := GP64()
+			outBase := GP64()
+			MOVQ(c.literalsPtr, literals)
+			MOVQ(c.outBasePtr, outBase)
+			e.copyMemoryPrecise("1", literals, outBase, ll)
 
-		ADDQ(ll, literals)
-		ADDQ(ll, outBase)
-		ADDQ(ll, outPosition)
+			ADDQ(ll, c.literalsPtr)
+			ADDQ(ll, c.outBasePtr)
+			ADDQ(ll, c.outPositionPtr)
+		}
 	}
+
+	mo := GP64()
+	MOVQ(c.moPtr, mo)
 
 	Comment("Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)")
 	{
 		Label("check_offset")
+
 		tmp := GP64()
-		LEAQ(Mem{Base: outPosition, Index: histLen, Scale: 1}, tmp)
+		if e.useSeqs {
+			LEAQ(Mem{Base: c.outPosition, Index: c.histLen, Scale: 1}, tmp)
+		} else {
+			MOVQ(c.outPositionPtr, tmp)
+			ADDQ(c.histLenPtr, tmp)
+		}
 		CMPQ(mo, tmp)
 		JG(LabelRef("error_match_off_too_big"))
-		CMPQ(mo, windowSize)
+
+		if e.useSeqs {
+			CMPQ(mo, c.windowSize)
+		} else {
+			CMPQ(mo, c.windowSizePtr)
+		}
 		JG(LabelRef("error_match_off_too_big"))
 	}
+
+	ml := GP64()
+	MOVQ(c.mlPtr, ml)
 
 	Comment("Copy match from history")
 	{
 		v := GP64()
 		MOVQ(mo, v)
-		SUBQ(outPosition, v)        // v := seq.mo - outPosition
+
+		// v := seq.mo - outPosition
+		if e.useSeqs {
+			SUBQ(c.outPosition, v)
+		} else {
+			SUBQ(c.outPositionPtr, v)
+		}
 		JLS(LabelRef("copy_match")) // do nothing if v <= 0
 
 		// v := seq.mo - t; v > 0 {
@@ -748,11 +1006,15 @@ func (e executeSimple) executeSingleTriple(llPtr, moPtr, mlPtr Mem, literals, ou
 		//     ...
 		// }
 		assert(func(ok LabelRef) {
-			TESTQ(histLen, histLen)
+			TESTQ(c.histLen, c.histLen)
 			JNZ(ok)
 		})
 		ptr := GP64()
-		MOVQ(histBase, ptr)
+		if e.useSeqs {
+			MOVQ(c.histBase, ptr)
+		} else {
+			MOVQ(c.histBasePtr, ptr)
+		}
 		SUBQ(v, ptr) // ptr := &hist[len(hist) - v]
 		CMPQ(ml, v)
 		JGE(LabelRef("copy_all_from_history"))
@@ -762,10 +1024,17 @@ func (e executeSimple) executeSingleTriple(llPtr, moPtr, mlPtr Mem, literals, ou
 		        continue
 		    }
 		*/
-		e.copyMemoryPrecise("4", ptr, outBase, ml)
-
-		ADDQ(ml, outPosition)
-		ADDQ(ml, outBase)
+		if e.useSeqs {
+			e.copyMemoryPrecise("4", ptr, c.outBase, ml)
+			ADDQ(ml, c.outPosition)
+			ADDQ(ml, c.outBase)
+		} else {
+			outBase := GP64()
+			MOVQ(c.outBasePtr, outBase)
+			e.copyMemoryPrecise("4", ptr, outBase, ml)
+			ADDQ(ml, c.outPositionPtr)
+			ADDQ(ml, c.outBasePtr)
+		}
 		// Note: for the current go tests this branch is taken in 99.53% cases,
 		//       this is why we repeat a little code here.
 		handleLoop()
@@ -780,10 +1049,19 @@ func (e executeSimple) executeSingleTriple(llPtr, moPtr, mlPtr Mem, literals, ou
 		        seq.ml -= v
 		    }
 		*/
-		e.copyMemoryPrecise("5", ptr, outBase, v)
-		ADDQ(v, outBase)
-		ADDQ(v, outPosition)
-		SUBQ(v, ml)
+		if e.useSeqs {
+			e.copyMemoryPrecise("5", ptr, c.outBase, v)
+			ADDQ(v, c.outBase)
+			ADDQ(v, c.outPosition)
+			SUBQ(v, ml)
+		} else {
+			outBase := GP64()
+			MOVQ(c.outBasePtr, outBase)
+			//e.copyMemoryPrecise("5", ptr, outBase, v) // XXX: allocation failure
+			ADDQ(v, c.outBasePtr)
+			ADDQ(v, c.outPositionPtr)
+			SUBQ(v, ml)
+		}
 		// fallback to the next block
 	}
 
@@ -794,7 +1072,11 @@ func (e executeSimple) executeSingleTriple(llPtr, moPtr, mlPtr Mem, literals, ou
 		JZ(LabelRef("handle_loop"))
 
 		src := GP64()
-		MOVQ(outBase, src)
+		if e.useSeqs {
+			MOVQ(c.outBase, src)
+		} else {
+			MOVQ(c.outBasePtr, src)
+		}
 		SUBQ(mo, src) // src = &s.out[t - mo]
 
 		// start := t - mo
@@ -813,18 +1095,34 @@ func (e executeSimple) executeSingleTriple(llPtr, moPtr, mlPtr Mem, literals, ou
 
 		Comment("Copy non-overlapping match")
 		{
-			e.copyMemory("2", src, outBase, ml)
-			ADDQ(ml, outBase)
-			ADDQ(ml, outPosition)
+			if e.useSeqs {
+				e.copyMemory("2", src, c.outBase, ml)
+				ADDQ(ml, c.outBase)
+				ADDQ(ml, c.outPosition)
+			} else {
+				outBase := GP64()
+				MOVQ(c.outBasePtr, outBase)
+				e.copyMemory("2", src, outBase, ml)
+				ADDQ(ml, c.outBasePtr)
+				ADDQ(ml, c.outPositionPtr)
+			}
 			JMP(LabelRef("handle_loop"))
 		}
 
 		Comment("Copy overlapping match")
 		Label("copy_overlapping_match")
 		{
-			e.copyOverlappedMemory("3", src, outBase, ml)
-			ADDQ(ml, outBase)
-			ADDQ(ml, outPosition)
+			if e.useSeqs {
+				e.copyOverlappedMemory("3", src, c.outBase, ml)
+				ADDQ(ml, c.outBase)
+				ADDQ(ml, c.outPosition)
+			} else {
+				outBase := GP64()
+				MOVQ(c.outBasePtr, outBase)
+				e.copyOverlappedMemory("3", src, outBase, ml)
+				ADDQ(ml, c.outBasePtr)
+				ADDQ(ml, c.outPositionPtr)
+			}
 		}
 	}
 }
@@ -921,4 +1219,22 @@ func (e executeSimple) copyOverlappedMemory(suffix string, src, dst, length reg.
 	INCQ(ofs)
 	CMPQ(ofs, length)
 	JB(LabelRef(label))
+}
+
+type decodeSync struct {
+	decode  options
+	execute executeSimple
+}
+
+func (d *decodeSync) setBMI2(flag bool) {
+	d.decode.bmi2 = flag
+}
+
+func (d *decodeSync) generateProcedure(name string) {
+	Package("github.com/klauspost/compress/zstd")
+	TEXT(name, 0, "func (s *sequenceDecs, br *bitReader, ctx *decodeSyncAsmContext) int")
+	Doc(name+" implements the main loop of sequenceDecs.decodeSync in x86 asm", "")
+	Pragma("noescape")
+
+	d.decode.generateBody(name, d.execute.executeSingleTriple)
 }
