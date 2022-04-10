@@ -649,17 +649,9 @@ func (e executeSimple) generateProcedure(name string) {
 
 	Label("main_loop")
 
-	ml := GP64()
-	mo := GP64()
-	ll := GP64()
-
 	moPtr := Mem{Base: seqsBase, Disp: 2 * 8}
 	mlPtr := Mem{Base: seqsBase, Disp: 1 * 8}
 	llPtr := Mem{Base: seqsBase, Disp: 0 * 8}
-
-	MOVQ(llPtr, ll)
-	MOVQ(mlPtr, ml)
-	MOVQ(moPtr, mo)
 
 	// generates the loop tail
 	handleLoop := func() {
@@ -668,6 +660,57 @@ func (e executeSimple) generateProcedure(name string) {
 		CMPQ(seqIndex, seqsLen)
 		JB(LabelRef("main_loop"))
 	}
+
+    e.executeSingleTriple(llPtr, moPtr, mlPtr, literals, outBase, outPosition, histBase, histLen, windowSize, handleLoop)
+
+	Label("handle_loop")
+	handleLoop()
+
+	ret, err := ReturnIndex(0).Resolve()
+	if err != nil {
+		panic(err)
+	}
+
+	returnValue := func(val int) {
+
+		Comment("Return value")
+		MOVB(U8(val), ret.Addr)
+
+		Comment("Update the context")
+		ctx := Dereference(Param("ctx"))
+		Store(seqIndex, ctx.Field("seqIndex"))
+		Store(outPosition, ctx.Field("outPosition"))
+
+		// compute litPosition
+		tmp := GP64()
+		Load(ctx.Field("literals").Base(), tmp)
+		SUBQ(tmp, literals) // litPosition := current - initial literals pointer
+		Store(literals, ctx.Field("litPosition"))
+	}
+	Label("loop_finished")
+	returnValue(1)
+	RET()
+
+	Label("error_match_off_too_big")
+	returnValue(0)
+	RET()
+
+	Label("empty_seqs")
+	Comment("Return value")
+	MOVB(U8(1), ret.Addr)
+	RET()
+}
+
+// executeSingleTriple performs copy from literals and history according
+// to the decoded values ll, mo and ml.
+func (e executeSimple) executeSingleTriple(llPtr, moPtr, mlPtr Mem, literals, outBase, outPosition, histBase, histLen, windowSize reg.GPVirtual, handleLoop func()) {
+	ml := GP64()
+	mo := GP64()
+	ll := GP64()
+
+	MOVQ(llPtr, ll)
+	MOVQ(mlPtr, ml)
+	MOVQ(moPtr, mo)
 
 	Comment("Copy literals")
 	Label("copy_literals")
@@ -784,43 +827,6 @@ func (e executeSimple) generateProcedure(name string) {
 			ADDQ(ml, outPosition)
 		}
 	}
-
-	Label("handle_loop")
-	handleLoop()
-
-	ret, err := ReturnIndex(0).Resolve()
-	if err != nil {
-		panic(err)
-	}
-
-	returnValue := func(val int) {
-
-		Comment("Return value")
-		MOVB(U8(val), ret.Addr)
-
-		Comment("Update the context")
-		ctx := Dereference(Param("ctx"))
-		Store(seqIndex, ctx.Field("seqIndex"))
-		Store(outPosition, ctx.Field("outPosition"))
-
-		// compute litPosition
-		tmp := GP64()
-		Load(ctx.Field("literals").Base(), tmp)
-		SUBQ(tmp, literals) // litPosition := current - initial literals pointer
-		Store(literals, ctx.Field("litPosition"))
-	}
-	Label("loop_finished")
-	returnValue(1)
-	RET()
-
-	Label("error_match_off_too_big")
-	returnValue(0)
-	RET()
-
-	Label("empty_seqs")
-	Comment("Return value")
-	MOVB(U8(1), ret.Addr)
-	RET()
 }
 
 // copyMemory will copy memory in blocks of 16 bytes,
