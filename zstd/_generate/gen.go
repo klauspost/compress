@@ -195,7 +195,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			ec.outCapPtr = AllocLocal(8)
 
 			ec.outBase = GP64()
-			ec.literalsPtr = AllocLocal(8)
+			ec.literals = GP64()
 			ec.outPosition = GP64()
 			ec.histLenPtr = AllocLocal(8)
 			ec.histBasePtr = AllocLocal(8)
@@ -226,7 +226,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			}
 
 			Load(ctx.Field("out").Base(), ec.outBase)
-			loadFieldBase("literals", ec.literalsPtr)
+			Load(ctx.Field("literals").Base(), ec.literals)
 			Load(ctx.Field("outPosition"), ec.outPosition)
 			loadField("windowSize", ec.windowSizePtr)
 			loadFieldBase("history", ec.histBasePtr)
@@ -1021,7 +1021,6 @@ type executeSingleTripleContext struct {
 
 	// values used when useSeqs is false
 	outCapPtr     Mem
-	literalsPtr   Mem
 	histBasePtr   Mem
 	histLenPtr    Mem
 	windowSizePtr Mem
@@ -1049,20 +1048,10 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		TESTQ(ll, ll)
 		JZ(LabelRef("check_offset"))
 		// TODO: Investigate if it is possible to consistently overallocate literals.
-		if e.useSeqs {
-			e.copyMemoryPrecise("1", c.literals, c.outBase, ll)
-			ADDQ(ll, c.literals)
-			ADDQ(ll, c.outBase)
-			ADDQ(ll, c.outPosition)
-		} else {
-			literals := GP64()
-			MOVQ(c.literalsPtr, literals)
-			e.copyMemoryPrecise("1", literals, c.outBase, ll)
-
-			ADDQ(ll, c.literalsPtr)
-			ADDQ(ll, c.outBase)
-			ADDQ(ll, c.outPosition)
-		}
+		e.copyMemoryPrecise("1", c.literals, c.outBase, ll)
+		ADDQ(ll, c.literals)
+		ADDQ(ll, c.outBase)
+		ADDQ(ll, c.outPosition)
 	}
 
 	mo := GP64()
