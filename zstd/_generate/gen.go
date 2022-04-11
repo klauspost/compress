@@ -194,7 +194,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			ec.llPtr = llP
 			ec.outCapPtr = AllocLocal(8)
 
-			ec.outBasePtr = AllocLocal(8)
+			ec.outBase = GP64()
 			ec.literalsPtr = AllocLocal(8)
 			ec.outPositionPtr = AllocLocal(8)
 			ec.histLenPtr = AllocLocal(8)
@@ -225,7 +225,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 				MOVQ(tmp, target)
 			}
 
-			loadFieldBase("out", ec.outBasePtr)
+			Load(ctx.Field("out").Base(), ec.outBase)
 			loadFieldBase("literals", ec.literalsPtr)
 			loadField("outPosition", ec.outPositionPtr)
 			loadField("windowSize", ec.windowSizePtr)
@@ -239,11 +239,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			}
 
 			Comment("outBase += outPosition")
-			{
-				tmp := GP64()
-				MOVQ(ec.outPositionPtr, tmp)
-				ADDQ(tmp, ec.outBasePtr)
-			}
+			ADDQ(ec.outPositionPtr, ec.outBase)
 
 			loadFieldCap("out", ec.outCapPtr)
 
@@ -1028,7 +1024,6 @@ type executeSingleTripleContext struct {
 	// values used when useSeqs is false
 	outCapPtr      Mem
 	literalsPtr    Mem
-	outBasePtr     Mem
 	outPositionPtr Mem
 	histBasePtr    Mem
 	histLenPtr     Mem
@@ -1064,13 +1059,11 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 			ADDQ(ll, c.outPosition)
 		} else {
 			literals := GP64()
-			outBase := GP64()
 			MOVQ(c.literalsPtr, literals)
-			MOVQ(c.outBasePtr, outBase)
-			e.copyMemoryPrecise("1", literals, outBase, ll)
+			e.copyMemoryPrecise("1", literals, c.outBase, ll)
 
 			ADDQ(ll, c.literalsPtr)
-			ADDQ(ll, c.outBasePtr)
+			ADDQ(ll, c.outBase)
 			ADDQ(ll, c.outPositionPtr)
 		}
 	}
@@ -1144,11 +1137,9 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 			ADDQ(ml, c.outPosition)
 			ADDQ(ml, c.outBase)
 		} else {
-			outBase := GP64()
-			MOVQ(c.outBasePtr, outBase)
-			e.copyMemoryPrecise("4", ptr, outBase, ml)
+			e.copyMemoryPrecise("4", ptr, c.outBase, ml)
 			ADDQ(ml, c.outPositionPtr)
-			ADDQ(ml, c.outBasePtr)
+			ADDQ(ml, c.outBase)
 		}
 		// Note: for the current go tests this branch is taken in 99.53% cases,
 		//       this is why we repeat a little code here.
@@ -1170,10 +1161,8 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 			ADDQ(v, c.outPosition)
 			SUBQ(v, ml)
 		} else {
-			outBase := GP64()
-			MOVQ(c.outBasePtr, outBase)
-			e.copyMemoryPrecise("5", ptr, outBase, v)
-			ADDQ(v, c.outBasePtr)
+			e.copyMemoryPrecise("5", ptr, c.outBase, v)
+			ADDQ(v, c.outBase)
 			ADDQ(v, c.outPositionPtr)
 			SUBQ(v, ml)
 		}
@@ -1187,11 +1176,7 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		JZ(LabelRef("handle_loop"))
 
 		src := GP64()
-		if e.useSeqs {
-			MOVQ(c.outBase, src)
-		} else {
-			MOVQ(c.outBasePtr, src)
-		}
+		MOVQ(c.outBase, src)
 		SUBQ(mo, src) // src = &s.out[t - mo]
 
 		// start := t - mo
@@ -1215,10 +1200,8 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 				ADDQ(ml, c.outBase)
 				ADDQ(ml, c.outPosition)
 			} else {
-				outBase := GP64()
-				MOVQ(c.outBasePtr, outBase)
-				e.copyMemory("2", src, outBase, ml)
-				ADDQ(ml, c.outBasePtr)
+				e.copyMemory("2", src, c.outBase, ml)
+				ADDQ(ml, c.outBase)
 				ADDQ(ml, c.outPositionPtr)
 			}
 			JMP(LabelRef("handle_loop"))
@@ -1232,10 +1215,8 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 				ADDQ(ml, c.outBase)
 				ADDQ(ml, c.outPosition)
 			} else {
-				outBase := GP64()
-				MOVQ(c.outBasePtr, outBase)
-				e.copyOverlappedMemory("3", src, outBase, ml)
-				ADDQ(ml, c.outBasePtr)
+				e.copyOverlappedMemory("3", src, c.outBase, ml)
+				ADDQ(ml, c.outBase)
 				ADDQ(ml, c.outPositionPtr)
 			}
 		}
