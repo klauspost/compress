@@ -196,7 +196,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 
 			ec.outBase = GP64()
 			ec.literalsPtr = AllocLocal(8)
-			ec.outPositionPtr = AllocLocal(8)
+			ec.outPosition = GP64()
 			ec.histLenPtr = AllocLocal(8)
 			ec.histBasePtr = AllocLocal(8)
 			ec.windowSizePtr = AllocLocal(8)
@@ -227,7 +227,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 
 			Load(ctx.Field("out").Base(), ec.outBase)
 			loadFieldBase("literals", ec.literalsPtr)
-			loadField("outPosition", ec.outPositionPtr)
+			Load(ctx.Field("outPosition"), ec.outPosition)
 			loadField("windowSize", ec.windowSizePtr)
 			loadFieldBase("history", ec.histBasePtr)
 			loadFieldLen("history", ec.histLenPtr)
@@ -239,7 +239,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			}
 
 			Comment("outBase += outPosition")
-			ADDQ(ec.outPositionPtr, ec.outBase)
+			ADDQ(ec.outPosition, ec.outBase)
 
 			loadFieldCap("out", ec.outCapPtr)
 
@@ -462,8 +462,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			tmp := GP64()
 			MOVQ(moP, tmp)
 			Store(tmp, ctx.Field("mo"))
-			MOVQ(ec.outPositionPtr, tmp)
-			Store(tmp, ctx.Field("outPosition"))
+			Store(ec.outPosition, ctx.Field("outPosition"))
 		}
 		o.returnWithCode(errorMatchOffTooBig)
 	}
@@ -477,8 +476,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 		Store(tmp, ctx.Field("ll"))
 		MOVQ(mlP, tmp)
 		Store(tmp, ctx.Field("ml"))
-		MOVQ(ec.outPositionPtr, tmp)
-		Store(tmp, ctx.Field("outPosition"))
+		Store(ec.outPosition, ctx.Field("outPosition"))
 
 		br := Dereference(Param("br"))
 		Store(brValue, br.Field("value"))
@@ -1022,12 +1020,11 @@ type executeSingleTripleContext struct {
 	windowSize reg.GPVirtual
 
 	// values used when useSeqs is false
-	outCapPtr      Mem
-	literalsPtr    Mem
-	outPositionPtr Mem
-	histBasePtr    Mem
-	histLenPtr     Mem
-	windowSizePtr  Mem
+	outCapPtr     Mem
+	literalsPtr   Mem
+	histBasePtr   Mem
+	histLenPtr    Mem
+	windowSizePtr Mem
 }
 
 // executeSingleTriple performs copy from literals and history according
@@ -1064,7 +1061,7 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 
 			ADDQ(ll, c.literalsPtr)
 			ADDQ(ll, c.outBase)
-			ADDQ(ll, c.outPositionPtr)
+			ADDQ(ll, c.outPosition)
 		}
 	}
 
@@ -1079,7 +1076,7 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		if e.useSeqs {
 			LEAQ(Mem{Base: c.outPosition, Index: c.histLen, Scale: 1}, tmp)
 		} else {
-			MOVQ(c.outPositionPtr, tmp)
+			MOVQ(c.outPosition, tmp)
 			ADDQ(c.histLenPtr, tmp)
 		}
 		CMPQ(mo, tmp)
@@ -1102,11 +1099,7 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		MOVQ(mo, v)
 
 		// v := seq.mo - outPosition
-		if e.useSeqs {
-			SUBQ(c.outPosition, v)
-		} else {
-			SUBQ(c.outPositionPtr, v)
-		}
+		SUBQ(c.outPosition, v)
 		JLS(LabelRef("copy_match")) // do nothing if v <= 0
 
 		// v := seq.mo - t; v > 0 {
@@ -1132,15 +1125,9 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		        continue
 		    }
 		*/
-		if e.useSeqs {
-			e.copyMemoryPrecise("4", ptr, c.outBase, ml)
-			ADDQ(ml, c.outPosition)
-			ADDQ(ml, c.outBase)
-		} else {
-			e.copyMemoryPrecise("4", ptr, c.outBase, ml)
-			ADDQ(ml, c.outPositionPtr)
-			ADDQ(ml, c.outBase)
-		}
+		e.copyMemoryPrecise("4", ptr, c.outBase, ml)
+		ADDQ(ml, c.outPosition)
+		ADDQ(ml, c.outBase)
 		// Note: for the current go tests this branch is taken in 99.53% cases,
 		//       this is why we repeat a little code here.
 		handleLoop()
@@ -1155,17 +1142,10 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		        seq.ml -= v
 		    }
 		*/
-		if e.useSeqs {
-			e.copyMemoryPrecise("5", ptr, c.outBase, v)
-			ADDQ(v, c.outBase)
-			ADDQ(v, c.outPosition)
-			SUBQ(v, ml)
-		} else {
-			e.copyMemoryPrecise("5", ptr, c.outBase, v)
-			ADDQ(v, c.outBase)
-			ADDQ(v, c.outPositionPtr)
-			SUBQ(v, ml)
-		}
+		e.copyMemoryPrecise("5", ptr, c.outBase, v)
+		ADDQ(v, c.outBase)
+		ADDQ(v, c.outPosition)
+		SUBQ(v, ml)
 		// fallback to the next block
 	}
 
@@ -1195,30 +1175,18 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 
 		Comment("Copy non-overlapping match")
 		{
-			if e.useSeqs {
-				e.copyMemory("2", src, c.outBase, ml)
-				ADDQ(ml, c.outBase)
-				ADDQ(ml, c.outPosition)
-			} else {
-				e.copyMemory("2", src, c.outBase, ml)
-				ADDQ(ml, c.outBase)
-				ADDQ(ml, c.outPositionPtr)
-			}
+			e.copyMemory("2", src, c.outBase, ml)
+			ADDQ(ml, c.outBase)
+			ADDQ(ml, c.outPosition)
 			JMP(LabelRef("handle_loop"))
 		}
 
 		Comment("Copy overlapping match")
 		Label("copy_overlapping_match")
 		{
-			if e.useSeqs {
-				e.copyOverlappedMemory("3", src, c.outBase, ml)
-				ADDQ(ml, c.outBase)
-				ADDQ(ml, c.outPosition)
-			} else {
-				e.copyOverlappedMemory("3", src, c.outBase, ml)
-				ADDQ(ml, c.outBase)
-				ADDQ(ml, c.outPositionPtr)
-			}
+			e.copyOverlappedMemory("3", src, c.outBase, ml)
+			ADDQ(ml, c.outBase)
+			ADDQ(ml, c.outPosition)
 		}
 	}
 }
