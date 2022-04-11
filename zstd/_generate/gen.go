@@ -14,6 +14,7 @@ import (
 
 	. "github.com/mmcloughlin/avo/build"
 	"github.com/mmcloughlin/avo/buildtags"
+	"github.com/mmcloughlin/avo/gotypes"
 	. "github.com/mmcloughlin/avo/operand"
 	"github.com/mmcloughlin/avo/reg"
 )
@@ -201,36 +202,18 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			ec.histBasePtr = AllocLocal(8)
 			ec.windowSizePtr = AllocLocal(8)
 
-			loadField := func(field string, target Mem) {
+			loadField := func(field gotypes.Component, target Mem) {
 				tmp := GP64()
-				Load(ctx.Field(field), tmp)
-				MOVQ(tmp, target)
-			}
-
-			loadFieldBase := func(field string, target Mem) {
-				tmp := GP64()
-				Load(ctx.Field(field).Base(), tmp)
-				MOVQ(tmp, target)
-			}
-
-			loadFieldLen := func(field string, target Mem) {
-				tmp := GP64()
-				Load(ctx.Field(field).Len(), tmp)
-				MOVQ(tmp, target)
-			}
-
-			loadFieldCap := func(field string, target Mem) {
-				tmp := GP64()
-				Load(ctx.Field(field).Cap(), tmp)
+				Load(field, tmp)
 				MOVQ(tmp, target)
 			}
 
 			Load(ctx.Field("out").Base(), ec.outBase)
 			Load(ctx.Field("literals").Base(), ec.literals)
 			Load(ctx.Field("outPosition"), ec.outPosition)
-			loadField("windowSize", ec.windowSizePtr)
-			loadFieldBase("history", ec.histBasePtr)
-			loadFieldLen("history", ec.histLenPtr)
+			loadField(ctx.Field("windowSize"), ec.windowSizePtr)
+			loadField(ctx.Field("history").Base(), ec.histBasePtr)
+			loadField(ctx.Field("history").Len(), ec.histLenPtr)
 
 			{
 				tmp := GP64()
@@ -241,7 +224,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			Comment("outBase += outPosition")
 			ADDQ(ec.outPosition, ec.outBase)
 
-			loadFieldCap("out", ec.outCapPtr)
+			loadField(ctx.Field("out").Cap(), ec.outCapPtr)
 
 			Comment("Check if we're retrying after `out` resize")
 			retry, err := ctx.Field("retry").Resolve()
@@ -251,9 +234,9 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			CMPQ(retry.Addr, U8(1))
 			JNE(LabelRef(name + "_main_loop"))
 
-			loadField("ll", llP)
-			loadField("mo", moP)
-			loadField("ml", mlP)
+			loadField(ctx.Field("ll"), llP)
+			loadField(ctx.Field("mo"), moP)
+			loadField(ctx.Field("ml"), mlP)
 
 			JMP(LabelRef("execute_single_triple"))
 		}
