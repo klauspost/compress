@@ -30,7 +30,7 @@ const errorMatchLenTooBig = 2
 // error reported when mo > t or mo > s.windowSize
 const errorMatchOffTooBig = 3
 
-// error reported by decodeSync when out buffer is too small
+// error reported by decodeSync when the `out` buffer is too small
 const errorOutOfCapacity = 4
 
 const maxMatchLen = 131074
@@ -255,15 +255,9 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			CMPQ(retry.Addr, U8(1))
 			JNE(LabelRef(name + "_main_loop"))
 
-			{
-				tmp := GP64()
-				Load(ctx.Field("ll"), tmp)
-				MOVQ(tmp, llP)
-				Load(ctx.Field("mo"), tmp)
-				MOVQ(tmp, moP)
-				Load(ctx.Field("ml"), tmp)
-				MOVQ(tmp, mlP)
-			}
+			loadField("ll", llP)
+			loadField("mo", moP)
+			loadField("ml", mlP)
 
 			JMP(LabelRef("execute_single_triple"))
 		}
@@ -272,11 +266,13 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 	// Store previous offsets in registers.
 	var offsets [3]reg.GPVirtual
 	s := Dereference(Param("s"))
-	for i := range offsets {
-		offsets[i] = GP64()
-		po, _ := s.Field("prevOffset").Index(i).Resolve()
+	if o.useSeqs {
+		for i := range offsets {
+			offsets[i] = GP64()
+			po, _ := s.Field("prevOffset").Index(i).Resolve()
 
-		MOVQ(po.Addr, offsets[i])
+			MOVQ(po.Addr, offsets[i])
+		}
 	}
 
 	// MAIN LOOP:
@@ -342,11 +338,14 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 	}
 	Label(name + "_skip_update")
 
-	// mo = s.adjustOffset(mo, ll, moB)
-
 	Comment("Adjust offset")
 
-	offset := o.adjustOffset(name+"_adjust", moP, llP, R14, &offsets)
+	var offset reg.GPVirtual
+	if o.useSeqs {
+		offset = o.adjustOffset(name+"_adjust", moP, llP, R14, &offsets)
+	} else {
+		offset = o.adjustOffsetInMemory(name+"_adjust", moP, llP, R14)
+	}
 	MOVQ(offset, moP) // Store offset
 
 	Comment("Check values")
@@ -419,9 +418,11 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 
 	// Store offsets
 	s = Dereference(Param("s"))
-	for i := range offsets {
-		po, _ := s.Field("prevOffset").Index(i).Resolve()
-		MOVQ(offsets[i], po.Addr)
+	if o.useSeqs {
+		for i := range offsets {
+			po, _ := s.Field("prevOffset").Index(i).Resolve()
+			MOVQ(offsets[i], po.Addr)
+		}
 	}
 
 	// update bitreader state before returning
@@ -774,6 +775,120 @@ func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual, 
 	return offset
 }
 
+// adjustOffsetInMemory is an adjustOffset version that does not cache prevOffset values in registers.
+// It fetches and stores values directly into the fields of `sequenceDecs` structure.
+func (o options) adjustOffsetInMemory(name string, moP, llP Mem, offsetB reg.GPVirtual) (offset reg.GPVirtual) {
+	s := Dereference(Param("s"))
+
+	po0, _ := s.Field("prevOffset").Index(0).Resolve()
+	po1, _ := s.Field("prevOffset").Index(1).Resolve()
+	po2, _ := s.Field("prevOffset").Index(2).Resolve()
+	offset = GP64()
+	MOVQ(moP, offset)
+	{
+		// if offsetB > 1 {
+		//     s.prevOffset[2] = s.prevOffset[1]
+		//     s.prevOffset[1] = s.prevOffset[0]
+		//     s.prevOffset[0] = offset
+		//     return offset
+		// }
+		CMPQ(offsetB, U8(1))
+		JBE(LabelRef(name + "_offsetB_1_or_0"))
+
+		tmp := XMM()
+		MOVUPS(po0.Addr, tmp)  // tmp = (s.prevOffset[0], s.prevOffset[1])
+		MOVQ(offset, po0.Addr) // s.prevOffset[0] = offset
+		MOVUPS(tmp, po1.Addr)  // s.prevOffset[1], s.prevOffset[2] = s.prevOffset[0], s.prevOffset[1]
+		JMP(LabelRef(name + "_end"))
+	}
+
+	Label(name + "_offsetB_1_or_0")
+	// if litLen == 0 {
+	//     offset++
+	// }
+	{
+		if true {
+			CMPQ(llP, U32(0))
+			JNE(LabelRef(name + "_offset_maybezero"))
+			INCQ(offset)
+			JMP(LabelRef(name + "_offset_nonzero"))
+		} else {
+			// No idea why this doesn't work:
+			tmp := GP64()
+			LEAQ(Mem{Base: offset, Disp: 1}, tmp)
+			CMPQ(llP, U32(0))
+			CMOVQEQ(tmp, offset)
+		}
+
+		// if offset == 0 {
+		//     return s.prevOffset[0]
+		// }
+		{
+			Label(name + "_offset_maybezero")
+			TESTQ(offset, offset)
+			JNZ(LabelRef(name + "_offset_nonzero"))
+			MOVQ(po0.Addr, offset)
+			JMP(LabelRef(name + "_end"))
+		}
+	}
+	Label(name + "_offset_nonzero")
+	{
+		// if offset == 3 {
+		//     temp = s.prevOffset[0] - 1
+		// } else {
+		//     temp = s.prevOffset[offset]
+		// }
+		//
+		// this if got transformed into:
+		//
+		// ofs   := offset
+		// shift := 0
+		// if offset == 3 {
+		//     ofs   = 0
+		//     shift = -1
+		// }
+		// temp := s.prevOffset[ofs] + shift
+		// TODO: This should be easier...
+		CX, DX, R15 := GP64(), GP64(), GP64()
+		MOVQ(offset, CX)
+		XORQ(DX, DX)
+		MOVQ(I32(-1), R15)
+		CMPQ(offset, U8(3))
+		CMOVQEQ(DX, CX)
+		CMOVQEQ(R15, DX)
+		prevOffset := GP64()
+		LEAQ(po0.Addr, prevOffset) // &prevOffset[0]
+		ADDQ(Mem{Base: prevOffset, Index: CX, Scale: 8}, DX)
+		temp := DX
+		// if temp == 0 {
+		//     temp = 1
+		// }
+		JNZ(LabelRef(name + "_temp_valid"))
+		MOVQ(U32(1), temp)
+
+		Label(name + "_temp_valid")
+		// if offset != 1 {
+		//     s.prevOffset[2] = s.prevOffset[1]
+		// }
+		CMPQ(offset, U8(1))
+		JZ(LabelRef(name + "_skip"))
+		tmp := GP64()
+		MOVQ(po1.Addr, tmp)
+		MOVQ(tmp, po2.Addr) // s.prevOffset[2] = s.prevOffset[1]
+
+		Label(name + "_skip")
+		// s.prevOffset[1] = s.prevOffset[0]
+		// s.prevOffset[0] = temp
+		tmp = GP64()
+		MOVQ(po0.Addr, tmp)
+		MOVQ(tmp, po1.Addr)  // s.prevOffset[1] = s.prevOffset[0]
+		MOVQ(temp, po0.Addr) // s.prevOffset[0] = temp
+		MOVQ(temp, offset)   // return temp
+	}
+	Label(name + "_end")
+	return offset
+}
+
 type executeSimple struct {
 	useSeqs bool // Generate code that uses the `seqs` auxiliary table
 }
@@ -1057,7 +1172,7 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		} else {
 			outBase := GP64()
 			MOVQ(c.outBasePtr, outBase)
-			//e.copyMemoryPrecise("5", ptr, outBase, v) // XXX: allocation failure
+			e.copyMemoryPrecise("5", ptr, outBase, v)
 			ADDQ(v, c.outBasePtr)
 			ADDQ(v, c.outPositionPtr)
 			SUBQ(v, ml)

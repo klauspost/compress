@@ -45,24 +45,21 @@ TEXT ·sequenceDecs_decodeSync_amd64(SB), $88-32
 	MOVQ CX, 24(SP)
 	MOVQ 232(AX), CX
 	MOVQ CX, 8(SP)
-	MOVQ 224(AX), CX
-	MOVQ CX, 16(SP)
+	MOVQ 224(AX), AX
+	MOVQ AX, 16(SP)
 	JMP  execute_single_triple
 	MOVQ s+0(FP), AX
-	MOVQ 144(AX), R10
-	MOVQ 152(AX), R11
-	MOVQ 160(AX), R12
 
 sequenceDecs_decodeSync_amd64_main_loop:
-	MOVQ (SP), R13
+	MOVQ (SP), R10
 
 	// Fill bitreader to have enough for the offset and match length.
 	CMPQ SI, $0x08
 	JL   sequenceDecs_decodeSync_amd64_fill_byte_by_byte
 	MOVQ BX, AX
 	SHRQ $0x03, AX
-	SUBQ AX, R13
-	MOVQ (R13), DX
+	SUBQ AX, R10
+	MOVQ (R10), DX
 	SUBQ AX, SI
 	ANDQ $0x07, BX
 	JMP  sequenceDecs_decodeSync_amd64_fill_end
@@ -73,10 +70,10 @@ sequenceDecs_decodeSync_amd64_fill_byte_by_byte:
 	CMPQ    BX, $0x07
 	JLE     sequenceDecs_decodeSync_amd64_fill_end
 	SHLQ    $0x08, DX
-	SUBQ    $0x01, R13
+	SUBQ    $0x01, R10
 	SUBQ    $0x01, SI
 	SUBQ    $0x08, BX
-	MOVBQZX (R13), AX
+	MOVBQZX (R10), AX
 	ORQ     AX, DX
 	JMP     sequenceDecs_decodeSync_amd64_fill_byte_by_byte
 
@@ -84,31 +81,31 @@ sequenceDecs_decodeSync_amd64_fill_end:
 	// Update offset
 	MOVQ    R9, AX
 	MOVQ    BX, CX
-	MOVQ    DX, R14
-	SHLQ    CL, R14
+	MOVQ    DX, R11
+	SHLQ    CL, R11
 	MOVB    AH, CL
 	ADDQ    CX, BX
 	NEGL    CX
-	SHRQ    CL, R14
+	SHRQ    CL, R11
 	SHRQ    $0x20, AX
 	TESTQ   CX, CX
-	CMOVQEQ CX, R14
-	ADDQ    R14, AX
+	CMOVQEQ CX, R11
+	ADDQ    R11, AX
 	MOVQ    AX, 8(SP)
 
 	// Update match length
 	MOVQ    R8, AX
 	MOVQ    BX, CX
-	MOVQ    DX, R14
-	SHLQ    CL, R14
+	MOVQ    DX, R11
+	SHLQ    CL, R11
 	MOVB    AH, CL
 	ADDQ    CX, BX
 	NEGL    CX
-	SHRQ    CL, R14
+	SHRQ    CL, R11
 	SHRQ    $0x20, AX
 	TESTQ   CX, CX
-	CMOVQEQ CX, R14
-	ADDQ    R14, AX
+	CMOVQEQ CX, R11
+	ADDQ    R11, AX
 	MOVQ    AX, 16(SP)
 
 	// Fill bitreader to have enough for the remaining
@@ -116,8 +113,8 @@ sequenceDecs_decodeSync_amd64_fill_end:
 	JL   sequenceDecs_decodeSync_amd64_fill_2_byte_by_byte
 	MOVQ BX, AX
 	SHRQ $0x03, AX
-	SUBQ AX, R13
-	MOVQ (R13), DX
+	SUBQ AX, R10
+	MOVQ (R10), DX
 	SUBQ AX, SI
 	ANDQ $0x07, BX
 	JMP  sequenceDecs_decodeSync_amd64_fill_2_end
@@ -128,10 +125,10 @@ sequenceDecs_decodeSync_amd64_fill_2_byte_by_byte:
 	CMPQ    BX, $0x07
 	JLE     sequenceDecs_decodeSync_amd64_fill_2_end
 	SHLQ    $0x08, DX
-	SUBQ    $0x01, R13
+	SUBQ    $0x01, R10
 	SUBQ    $0x01, SI
 	SUBQ    $0x08, BX
-	MOVBQZX (R13), AX
+	MOVBQZX (R10), AX
 	ORQ     AX, DX
 	JMP     sequenceDecs_decodeSync_amd64_fill_2_byte_by_byte
 
@@ -139,20 +136,20 @@ sequenceDecs_decodeSync_amd64_fill_2_end:
 	// Update literal length
 	MOVQ    DI, AX
 	MOVQ    BX, CX
-	MOVQ    DX, R14
-	SHLQ    CL, R14
+	MOVQ    DX, R11
+	SHLQ    CL, R11
 	MOVB    AH, CL
 	ADDQ    CX, BX
 	NEGL    CX
-	SHRQ    CL, R14
+	SHRQ    CL, R11
 	SHRQ    $0x20, AX
 	TESTQ   CX, CX
-	CMOVQEQ CX, R14
-	ADDQ    R14, AX
+	CMOVQEQ CX, R11
+	ADDQ    R11, AX
 	MOVQ    AX, 24(SP)
 
 	// Fill bitreader for state updates
-	MOVQ    R13, (SP)
+	MOVQ    R10, (SP)
 	MOVQ    R9, AX
 	SHRQ    $0x08, AX
 	MOVBQZX AL, AX
@@ -161,19 +158,19 @@ sequenceDecs_decodeSync_amd64_fill_2_end:
 	JZ      sequenceDecs_decodeSync_amd64_skip_update
 
 	// Update Literal Length State
-	MOVBQZX DI, R13
+	MOVBQZX DI, R10
 	SHRQ    $0x10, DI
 	MOVWQZX DI, DI
-	CMPQ    R13, $0x00
+	CMPQ    R10, $0x00
 	JZ      sequenceDecs_decodeSync_amd64_llState_updateState_skip_zero
 	MOVQ    BX, CX
-	ADDQ    R13, BX
-	MOVQ    DX, R14
-	SHLQ    CL, R14
-	MOVQ    R13, CX
+	ADDQ    R10, BX
+	MOVQ    DX, R11
+	SHLQ    CL, R11
+	MOVQ    R10, CX
 	NEGQ    CX
-	SHRQ    CL, R14
-	ADDQ    R14, DI
+	SHRQ    CL, R11
+	ADDQ    R11, DI
 
 sequenceDecs_decodeSync_amd64_llState_updateState_skip_zero:
 	// Load ctx.llTable
@@ -182,19 +179,19 @@ sequenceDecs_decodeSync_amd64_llState_updateState_skip_zero:
 	MOVQ (CX)(DI*8), DI
 
 	// Update Match Length State
-	MOVBQZX R8, R13
+	MOVBQZX R8, R10
 	SHRQ    $0x10, R8
 	MOVWQZX R8, R8
-	CMPQ    R13, $0x00
+	CMPQ    R10, $0x00
 	JZ      sequenceDecs_decodeSync_amd64_mlState_updateState_skip_zero
 	MOVQ    BX, CX
-	ADDQ    R13, BX
-	MOVQ    DX, R14
-	SHLQ    CL, R14
-	MOVQ    R13, CX
+	ADDQ    R10, BX
+	MOVQ    DX, R11
+	SHLQ    CL, R11
+	MOVQ    R10, CX
 	NEGQ    CX
-	SHRQ    CL, R14
-	ADDQ    R14, R8
+	SHRQ    CL, R11
+	ADDQ    R11, R8
 
 sequenceDecs_decodeSync_amd64_mlState_updateState_skip_zero:
 	// Load ctx.mlTable
@@ -203,19 +200,19 @@ sequenceDecs_decodeSync_amd64_mlState_updateState_skip_zero:
 	MOVQ (CX)(R8*8), R8
 
 	// Update Offset State
-	MOVBQZX R9, R13
+	MOVBQZX R9, R10
 	SHRQ    $0x10, R9
 	MOVWQZX R9, R9
-	CMPQ    R13, $0x00
+	CMPQ    R10, $0x00
 	JZ      sequenceDecs_decodeSync_amd64_ofState_updateState_skip_zero
 	MOVQ    BX, CX
-	ADDQ    R13, BX
-	MOVQ    DX, R14
-	SHLQ    CL, R14
-	MOVQ    R13, CX
+	ADDQ    R10, BX
+	MOVQ    DX, R11
+	SHLQ    CL, R11
+	MOVQ    R10, CX
 	NEGQ    CX
-	SHRQ    CL, R14
-	ADDQ    R14, R9
+	SHRQ    CL, R11
+	ADDQ    R11, R9
 
 sequenceDecs_decodeSync_amd64_ofState_updateState_skip_zero:
 	// Load ctx.ofTable
@@ -225,75 +222,65 @@ sequenceDecs_decodeSync_amd64_ofState_updateState_skip_zero:
 
 sequenceDecs_decodeSync_amd64_skip_update:
 	// Adjust offset
-	MOVQ 8(SP), CX
-	CMPQ AX, $0x01
-	JBE  sequenceDecs_decodeSync_amd64_adjust_offsetB_1_or_0
-	MOVQ R11, R12
-	MOVQ R10, R11
-	MOVQ CX, R10
-	JMP  sequenceDecs_decodeSync_amd64_adjust_end
+	MOVQ   s+0(FP), CX
+	MOVQ   8(SP), R10
+	CMPQ   AX, $0x01
+	JBE    sequenceDecs_decodeSync_amd64_adjust_offsetB_1_or_0
+	MOVUPS 144(CX), X0
+	MOVQ   R10, 144(CX)
+	MOVUPS X0, 152(CX)
+	JMP    sequenceDecs_decodeSync_amd64_adjust_end
 
 sequenceDecs_decodeSync_amd64_adjust_offsetB_1_or_0:
 	CMPQ 24(SP), $0x00000000
 	JNE  sequenceDecs_decodeSync_amd64_adjust_offset_maybezero
-	INCQ CX
+	INCQ R10
 	JMP  sequenceDecs_decodeSync_amd64_adjust_offset_nonzero
 
 sequenceDecs_decodeSync_amd64_adjust_offset_maybezero:
-	TESTQ CX, CX
+	TESTQ R10, R10
 	JNZ   sequenceDecs_decodeSync_amd64_adjust_offset_nonzero
-	MOVQ  R10, CX
+	MOVQ  144(CX), R10
 	JMP   sequenceDecs_decodeSync_amd64_adjust_end
 
 sequenceDecs_decodeSync_amd64_adjust_offset_nonzero:
-	CMPQ CX, $0x01
-	JB   sequenceDecs_decodeSync_amd64_adjust_zero
-	JEQ  sequenceDecs_decodeSync_amd64_adjust_one
-	CMPQ CX, $0x02
-	JA   sequenceDecs_decodeSync_amd64_adjust_three
-	JMP  sequenceDecs_decodeSync_amd64_adjust_two
-
-sequenceDecs_decodeSync_amd64_adjust_zero:
-	MOVQ R10, AX
-	JMP  sequenceDecs_decodeSync_amd64_adjust_test_temp_valid
-
-sequenceDecs_decodeSync_amd64_adjust_one:
-	MOVQ R11, AX
-	JMP  sequenceDecs_decodeSync_amd64_adjust_test_temp_valid
-
-sequenceDecs_decodeSync_amd64_adjust_two:
-	MOVQ R12, AX
-	JMP  sequenceDecs_decodeSync_amd64_adjust_test_temp_valid
-
-sequenceDecs_decodeSync_amd64_adjust_three:
-	LEAQ -1(R10), AX
-
-sequenceDecs_decodeSync_amd64_adjust_test_temp_valid:
-	TESTQ AX, AX
-	JNZ   sequenceDecs_decodeSync_amd64_adjust_temp_valid
-	MOVQ  $0x00000001, AX
+	MOVQ    R10, AX
+	XORQ    R11, R11
+	MOVQ    $-1, R13
+	CMPQ    R10, $0x03
+	CMOVQEQ R11, AX
+	CMOVQEQ R13, R11
+	LEAQ    144(CX), R13
+	ADDQ    (R13)(AX*8), R11
+	JNZ     sequenceDecs_decodeSync_amd64_adjust_temp_valid
+	MOVQ    $0x00000001, R11
 
 sequenceDecs_decodeSync_amd64_adjust_temp_valid:
-	CMPQ    CX, $0x01
-	CMOVQNE R11, R12
-	MOVQ    R10, R11
-	MOVQ    AX, R10
-	MOVQ    AX, CX
+	CMPQ R10, $0x01
+	JZ   sequenceDecs_decodeSync_amd64_adjust_skip
+	MOVQ 152(CX), AX
+	MOVQ AX, 160(CX)
+
+sequenceDecs_decodeSync_amd64_adjust_skip:
+	MOVQ 144(CX), AX
+	MOVQ AX, 152(CX)
+	MOVQ R11, 144(CX)
+	MOVQ R11, R10
 
 sequenceDecs_decodeSync_amd64_adjust_end:
-	MOVQ CX, 8(SP)
+	MOVQ R10, 8(SP)
 
 	// Check values
 	MOVQ  16(SP), AX
-	MOVQ  24(SP), R13
-	LEAQ  (AX)(R13*1), R14
-	MOVQ  s+0(FP), BP
-	ADDQ  R14, 256(BP)
-	MOVQ  ctx+16(FP), R14
-	SUBQ  R13, 104(R14)
+	MOVQ  24(SP), CX
+	LEAQ  (AX)(CX*1), R11
+	MOVQ  s+0(FP), R13
+	ADDQ  R11, 256(R13)
+	MOVQ  ctx+16(FP), R11
+	SUBQ  CX, 104(R11)
 	CMPQ  AX, $0x00020002
 	JA    sequenceDecs_decodeSync_amd64_error_match_len_too_big
-	TESTQ CX, CX
+	TESTQ R10, R10
 	JNZ   sequenceDecs_decodeSync_amd64_match_len_ofs_ok
 	TESTQ AX, AX
 	JNZ   sequenceDecs_decodeSync_amd64_error_match_len_ofs_mismatch
@@ -312,104 +299,104 @@ execute_single_triple:
 	TESTQ AX, AX
 	JZ    check_offset
 	MOVQ  48(SP), CX
-	MOVQ  40(SP), R13
-	XORQ  R14, R14
+	MOVQ  40(SP), R10
+	XORQ  R11, R11
 	TESTQ $0x00000001, AX
 	JZ    copy_1_word
-	MOVB  (CX)(R14*1), R15
-	MOVB  R15, (R13)(R14*1)
-	ADDQ  $0x01, R14
+	MOVB  (CX)(R11*1), R12
+	MOVB  R12, (R10)(R11*1)
+	ADDQ  $0x01, R11
 
 copy_1_word:
 	TESTQ $0x00000002, AX
 	JZ    copy_1_dword
-	MOVW  (CX)(R14*1), R15
-	MOVW  R15, (R13)(R14*1)
-	ADDQ  $0x02, R14
+	MOVW  (CX)(R11*1), R12
+	MOVW  R12, (R10)(R11*1)
+	ADDQ  $0x02, R11
 
 copy_1_dword:
 	TESTQ $0x00000004, AX
 	JZ    copy_1_qword
-	MOVL  (CX)(R14*1), R15
-	MOVL  R15, (R13)(R14*1)
-	ADDQ  $0x04, R14
+	MOVL  (CX)(R11*1), R12
+	MOVL  R12, (R10)(R11*1)
+	ADDQ  $0x04, R11
 
 copy_1_qword:
 	TESTQ $0x00000008, AX
 	JZ    copy_1_test
-	MOVQ  (CX)(R14*1), R15
-	MOVQ  R15, (R13)(R14*1)
-	ADDQ  $0x08, R14
+	MOVQ  (CX)(R11*1), R12
+	MOVQ  R12, (R10)(R11*1)
+	ADDQ  $0x08, R11
 	JMP   copy_1_test
 
 copy_1:
-	MOVUPS (CX)(R14*1), X0
-	MOVUPS X0, (R13)(R14*1)
-	ADDQ   $0x10, R14
+	MOVUPS (CX)(R11*1), X0
+	MOVUPS X0, (R10)(R11*1)
+	ADDQ   $0x10, R11
 
 copy_1_test:
-	CMPQ R14, AX
+	CMPQ R11, AX
 	JB   copy_1
 	ADDQ AX, 48(SP)
 	ADDQ AX, 40(SP)
 	ADDQ AX, 56(SP)
-	MOVQ 8(SP), R15
+	MOVQ 8(SP), R12
 
 	// Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)
 check_offset:
 	MOVQ 56(SP), AX
 	ADDQ 64(SP), AX
-	CMPQ R15, AX
+	CMPQ R12, AX
 	JG   error_match_off_too_big
-	CMPQ R15, 80(SP)
+	CMPQ R12, 80(SP)
 	JG   error_match_off_too_big
 	MOVQ 16(SP), AX
 
 	// Copy match from history
-	MOVQ  R15, CX
+	MOVQ  R12, CX
 	SUBQ  56(SP), CX
 	JLS   copy_match
-	MOVQ  72(SP), R13
-	SUBQ  CX, R13
+	MOVQ  72(SP), R10
+	SUBQ  CX, R10
 	CMPQ  AX, CX
 	JGE   copy_all_from_history
 	MOVQ  40(SP), CX
-	XORQ  R14, R14
+	XORQ  R11, R11
 	TESTQ $0x00000001, AX
 	JZ    copy_4_word
-	MOVB  (R13)(R14*1), BP
-	MOVB  BP, (CX)(R14*1)
-	ADDQ  $0x01, R14
+	MOVB  (R10)(R11*1), R13
+	MOVB  R13, (CX)(R11*1)
+	ADDQ  $0x01, R11
 
 copy_4_word:
 	TESTQ $0x00000002, AX
 	JZ    copy_4_dword
-	MOVW  (R13)(R14*1), BP
-	MOVW  BP, (CX)(R14*1)
-	ADDQ  $0x02, R14
+	MOVW  (R10)(R11*1), R13
+	MOVW  R13, (CX)(R11*1)
+	ADDQ  $0x02, R11
 
 copy_4_dword:
 	TESTQ $0x00000004, AX
 	JZ    copy_4_qword
-	MOVL  (R13)(R14*1), BP
-	MOVL  BP, (CX)(R14*1)
-	ADDQ  $0x04, R14
+	MOVL  (R10)(R11*1), R13
+	MOVL  R13, (CX)(R11*1)
+	ADDQ  $0x04, R11
 
 copy_4_qword:
 	TESTQ $0x00000008, AX
 	JZ    copy_4_test
-	MOVQ  (R13)(R14*1), BP
-	MOVQ  BP, (CX)(R14*1)
-	ADDQ  $0x08, R14
+	MOVQ  (R10)(R11*1), R13
+	MOVQ  R13, (CX)(R11*1)
+	ADDQ  $0x08, R11
 	JMP   copy_4_test
 
 copy_4:
-	MOVUPS (R13)(R14*1), X0
-	MOVUPS X0, (CX)(R14*1)
-	ADDQ   $0x10, R14
+	MOVUPS (R10)(R11*1), X0
+	MOVUPS X0, (CX)(R11*1)
+	ADDQ   $0x10, R11
 
 copy_4_test:
-	CMPQ R14, AX
+	CMPQ R11, AX
 	JB   copy_4
 	ADDQ AX, 56(SP)
 	ADDQ AX, 40(SP)
@@ -417,7 +404,44 @@ copy_4_test:
 	JMP loop_finished
 
 copy_all_from_history:
-	MOVQ 40(SP), R13
+	MOVQ  40(SP), R11
+	XORQ  R13, R13
+	TESTQ $0x00000001, CX
+	JZ    copy_5_word
+	MOVB  (R10)(R13*1), R14
+	MOVB  R14, (R11)(R13*1)
+	ADDQ  $0x01, R13
+
+copy_5_word:
+	TESTQ $0x00000002, CX
+	JZ    copy_5_dword
+	MOVW  (R10)(R13*1), R14
+	MOVW  R14, (R11)(R13*1)
+	ADDQ  $0x02, R13
+
+copy_5_dword:
+	TESTQ $0x00000004, CX
+	JZ    copy_5_qword
+	MOVL  (R10)(R13*1), R14
+	MOVL  R14, (R11)(R13*1)
+	ADDQ  $0x04, R13
+
+copy_5_qword:
+	TESTQ $0x00000008, CX
+	JZ    copy_5_test
+	MOVQ  (R10)(R13*1), R14
+	MOVQ  R14, (R11)(R13*1)
+	ADDQ  $0x08, R13
+	JMP   copy_5_test
+
+copy_5:
+	MOVUPS (R10)(R13*1), X0
+	MOVUPS X0, (R11)(R13*1)
+	ADDQ   $0x10, R13
+
+copy_5_test:
+	CMPQ R13, CX
+	JB   copy_5
 	ADDQ CX, 40(SP)
 	ADDQ CX, 56(SP)
 	SUBQ CX, AX
@@ -427,21 +451,21 @@ copy_match:
 	TESTQ AX, AX
 	JZ    handle_loop
 	MOVQ  40(SP), CX
-	SUBQ  R15, CX
+	SUBQ  R12, CX
 
 	// ml <= mo
-	CMPQ AX, R15
+	CMPQ AX, R12
 	JA   copy_overlapping_match
 
 	// Copy non-overlapping match
-	MOVQ 40(SP), R13
-	XORQ R14, R14
+	MOVQ 40(SP), R10
+	XORQ R11, R11
 
 copy_2:
-	MOVUPS (CX)(R14*1), X0
-	MOVUPS X0, (R13)(R14*1)
-	ADDQ   $0x10, R14
-	CMPQ   R14, AX
+	MOVUPS (CX)(R11*1), X0
+	MOVUPS X0, (R10)(R11*1)
+	ADDQ   $0x10, R11
+	CMPQ   R11, AX
 	JB     copy_2
 	ADDQ   AX, 40(SP)
 	ADDQ   AX, 56(SP)
@@ -449,14 +473,14 @@ copy_2:
 
 	// Copy overlapping match
 copy_overlapping_match:
-	MOVQ 40(SP), R13
-	XORQ R14, R14
+	MOVQ 40(SP), R10
+	XORQ R11, R11
 
 copy_slow_3:
-	MOVB (CX)(R14*1), BP
-	MOVB BP, (R13)(R14*1)
-	INCQ R14
-	CMPQ R14, AX
+	MOVB (CX)(R11*1), R13
+	MOVB R13, (R10)(R11*1)
+	INCQ R11
+	CMPQ R11, AX
 	JB   copy_slow_3
 	ADDQ AX, 40(SP)
 	ADDQ AX, 56(SP)
@@ -468,9 +492,6 @@ handle_loop:
 
 loop_finished:
 	MOVQ s+0(FP), AX
-	MOVQ R10, 144(AX)
-	MOVQ R11, 152(AX)
-	MOVQ R12, 160(AX)
 	MOVQ br+8(FP), AX
 	MOVQ DX, 32(AX)
 	MOVB BL, 40(AX)
