@@ -54,32 +54,30 @@ func main() {
 	Constraint(buildtags.Term("gc").ToConstraint())
 	Constraint(buildtags.Not("noasm").ToConstraint())
 
-	if false {
-		o := options{
-			bmi2:     false,
-			fiftysix: false,
-			useSeqs:  true,
-		}
-		o.genDecodeSeqAsm("sequenceDecs_decode_amd64")
-		o.fiftysix = true
-		o.genDecodeSeqAsm("sequenceDecs_decode_56_amd64")
-		o.bmi2 = true
-		o.fiftysix = false
-		o.genDecodeSeqAsm("sequenceDecs_decode_bmi2")
-		o.fiftysix = true
-		o.genDecodeSeqAsm("sequenceDecs_decode_56_bmi2")
-
-		exec := executeSimple{}
-		exec.generateProcedure("sequenceDecs_executeSimple_amd64")
+	o := options{
+		bmi2:     false,
+		fiftysix: false,
+		useSeqs:  true,
 	}
+	o.genDecodeSeqAsm("sequenceDecs_decode_amd64")
+	o.fiftysix = true
+	o.genDecodeSeqAsm("sequenceDecs_decode_56_amd64")
+	o.bmi2 = true
+	o.fiftysix = false
+	o.genDecodeSeqAsm("sequenceDecs_decode_bmi2")
+	o.fiftysix = true
+	o.genDecodeSeqAsm("sequenceDecs_decode_56_bmi2")
+
+	exec := executeSimple{
+		useSeqs: true,
+	}
+	exec.generateProcedure("sequenceDecs_executeSimple_amd64")
 
 	decodeSync := decodeSync{}
 	decodeSync.setBMI2(false)
 	decodeSync.generateProcedure("sequenceDecs_decodeSync_amd64")
-	if false {
-		decodeSync.setBMI2(true)
-		decodeSync.generateProcedure("sequenceDecs_decodeSync_bmi2")
-	}
+	decodeSync.setBMI2(true)
+	decodeSync.generateProcedure("sequenceDecs_decodeSync_bmi2")
 
 	Generate()
 	b, err := ioutil.ReadFile(out.Value.String())
@@ -151,7 +149,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 	llState := GP64()
 	mlState := GP64()
 	ofState := GP64()
-	var seqBase reg.GPVirtual
+	var seqBase reg.GPVirtual // allocated only when o.useSeqs is true
 
 	// values used by `execute` (allocated only when o.useSeqs is false)
 	ec := executeSingleTripleContext{}
@@ -181,7 +179,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 		Load(ctx.Field("ofState"), ofState)
 
 		if o.useSeqs {
-			seqBase := GP64()
+			seqBase = GP64()
 			Load(ctx.Field("seqs").Base(), seqBase)
 			moP = Mem{Base: seqBase, Disp: 2 * 8} // Pointer to current mo
 			mlP = Mem{Base: seqBase, Disp: 1 * 8} // Pointer to current ml
@@ -409,6 +407,18 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 	Store(brValue, br.Field("value"))
 	Store(brBitsRead.As8(), br.Field("bitsRead"))
 	Store(brOffset, br.Field("off"))
+
+	if !o.useSeqs {
+		Comment("Update the context")
+		ctx := Dereference(Param("ctx"))
+		Store(ec.outPosition, ctx.Field("outPosition"))
+
+		// compute litPosition
+		tmp := GP64()
+		Load(ctx.Field("literals").Base(), tmp)
+		SUBQ(tmp, ec.literals) // litPosition := current - initial literals pointer
+		Store(ec.literals, ctx.Field("litPosition"))
+	}
 
 	Comment("Return success")
 	o.returnWithCode(0)

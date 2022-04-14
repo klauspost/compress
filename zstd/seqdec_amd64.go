@@ -42,8 +42,7 @@ func sequenceDecs_decodeSync_bmi2(s *sequenceDecs, br *bitReader, ctx *decodeSyn
 
 // decode sequences from the stream with the provided history but without a dictionary.
 func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
-	// XXX: history is not supported yet (waiting for another PR)
-	if len(s.dict) > 0 || len(hist) > 0 {
+	if len(s.dict) > 0 {
 		return false, nil
 	}
 
@@ -72,7 +71,7 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 
 	s.seqSize = 0
 
-	for true {
+	for {
 		var errCode int
 		if cpuinfo.HasBMI2() {
 			errCode = sequenceDecs_decodeSync_bmi2(s, br, &ctx)
