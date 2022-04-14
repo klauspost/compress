@@ -24,10 +24,10 @@ type decodeSyncAsmContext struct {
 	litPosition int
 	history     []byte
 	windowSize  int
-	retry       bool // set be the caller when `out` got resized after reporting errorOutOfCapacity
-	ll          int  // set on error
-	ml          int  // set on error
-	mo          int  // set on error
+	retry       bool // set by the caller when `out` got resized after reporting errorOutOfCapacity
+	ll          int  // set on error (not for all errors, please refer to _generate/gen.go)
+	ml          int  // set on error (not for all errors, please refer to _generate/gen.go)
+	mo          int  // set on error (not for all errors, please refer to _generate/gen.go)
 }
 
 // sequenceDecs_decodeSync_amd64 implements the main loop of sequenceDecs.decodeSync in x86 asm.
@@ -107,7 +107,9 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 			return true, fmt.Errorf("match len (%d) bigger than max allowed length", ctx.ml)
 
 		case errorMatchOffTooBig:
-			return true, fmt.Errorf("XXX: match offset (%d) bigger than max allowed length (%d)", ctx.mo, ctx.outPosition)
+			return true, fmt.Errorf("match offset (%d) bigger than max allowed length (%d)", ctx.mo, ctx.outPosition)
+		case errorNotEnoughLiterals:
+			return true, fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available", ctx.ll, ctx.litRemain+ctx.ll)
 		default:
 			return true, fmt.Errorf("sequenceDecs_decode_amd64 returned erronous code %d", errCode)
 		}
@@ -132,9 +134,6 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 	s.literals = s.literals[ctx.litPosition:]
 	t := ctx.outPosition
 	s.out = s.out[:t]
-
-	// XXX: remove
-	//fmt.Printf("len(out) = %d, cap(out) = %d, outPosition = %d\n", len(s.out), cap(s.out), ctx.outPosition)
 
 	// Add final literals
 	s.out = append(s.out, s.literals...)
@@ -173,6 +172,9 @@ const errorMatchOffTooBig = 3
 
 // error reported by decodeSync when out buffer is too small
 const errorOutOfCapacity = 4
+
+// error reported when the sum of literal lengths exeeceds the literal buffer size
+const errorNotEnoughLiterals = 5
 
 // sequenceDecs_decode implements the main loop of sequenceDecs in x86 asm.
 //
@@ -241,6 +243,10 @@ func (s *sequenceDecs) decode(seqs []seqVals) error {
 		case errorMatchLenTooBig:
 			ml := ctx.seqs[i].ml
 			return fmt.Errorf("match len (%d) bigger than max allowed length", ml)
+
+		case errorNotEnoughLiterals:
+			ll := ctx.seqs[i].ll
+			fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available", ll, ctx.litRemain+ll)
 		}
 
 		return fmt.Errorf("sequenceDecs_decode_amd64 returned erronous code %d", errCode)

@@ -34,6 +34,9 @@ const errorMatchOffTooBig = 3
 // error reported by decodeSync when the `out` buffer is too small
 const errorOutOfCapacity = 4
 
+// error reported when the sum of literal lengths exeeceds the literal buffer size
+const errorNotEnoughLiterals = 5
+
 const maxMatchLen = 131074
 
 // size of struct seqVals
@@ -191,6 +194,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			ec.moPtr = moP
 			ec.mlPtr = mlP
 			ec.llPtr = llP
+			ec.outLenPtr = AllocLocal(8)
 			ec.outCapPtr = AllocLocal(8)
 
 			ec.outBase = GP64()
@@ -222,6 +226,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			Comment("outBase += outPosition")
 			ADDQ(ec.outPosition, ec.outBase)
 
+			loadField(ctx.Field("out").Len(), ec.outLenPtr)
 			loadField(ctx.Field("out").Cap(), ec.outCapPtr)
 
 			Comment("Check if we're retrying after `out` resize")
@@ -246,7 +251,10 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 	if o.useSeqs {
 		for i := range offsets {
 			offsets[i] = GP64()
-			po, _ := s.Field("prevOffset").Index(i).Resolve()
+			po, err := s.Field("prevOffset").Index(i).Resolve()
+			if err != nil {
+				panic(err)
+			}
 
 			MOVQ(po.Addr, offsets[i])
 		}
@@ -350,6 +358,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 		panic(err)
 	}
 	SUBQ(ll, litRemainP.Addr) // ctx.litRemain -= ll
+	JS(LabelRef("error_not_enough_literals"))
 	{
 		// 	if ml > maxMatchLen {
 		//		return fmt.Errorf("match len (%d) bigger than max allowed length", ml)
@@ -460,6 +469,20 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 		o.returnWithCode(errorMatchOffTooBig)
 	}
 
+	Comment("Return with not enough literals error")
+	{
+		Label("error_not_enough_literals")
+		if !o.useSeqs {
+			ctx := Dereference(Param("ctx"))
+			tmp := GP64()
+			MOVQ(llP, tmp)
+			Store(tmp, ctx.Field("ll"))
+		}
+		// Note: the `litRemain` field is updated in-place (for both useSeqs values)
+
+		o.returnWithCode(errorNotEnoughLiterals)
+	}
+
 	if !o.useSeqs {
 		Comment("Return request to resize `out` by at least ll + ml bytes")
 		Label("error_out_of_capacity")
@@ -467,6 +490,8 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 		tmp := GP64()
 		MOVQ(llP, tmp)
 		Store(tmp, ctx.Field("ll"))
+		MOVQ(moP, tmp)
+		Store(tmp, ctx.Field("mo"))
 		MOVQ(mlP, tmp)
 		Store(tmp, ctx.Field("ml"))
 		Store(ec.outPosition, ctx.Field("outPosition"))
@@ -1013,6 +1038,7 @@ type executeSingleTripleContext struct {
 	windowSize reg.GPVirtual
 
 	// values used when useSeqs is false
+	outLenPtr     Mem
 	outCapPtr     Mem
 	histBasePtr   Mem
 	histLenPtr    Mem
@@ -1022,22 +1048,25 @@ type executeSingleTripleContext struct {
 // executeSingleTriple performs copy from literals and history according
 // to the decoded values ll, mo and ml.
 func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handleLoop func()) {
+	ll := GP64()
+	MOVQ(c.llPtr, ll)
+	mo := GP64()
+	MOVQ(c.moPtr, mo)
+	ml := GP64()
+	MOVQ(c.mlPtr, ml)
+
 	if !e.useSeqs {
-		Comment("Check if ll + ml < cap(out)")
-		capacity := GP64()
-		MOVQ(c.outCapPtr, capacity)
+		Comment("Check if ll + ml + len(out) < cap(out)")
 		sum := GP64()
-		MOVQ(c.llPtr, sum)
-		ADDQ(c.mlPtr, sum)
-		CMPQ(sum, capacity)
+		LEAQ(Mem{Base: ll, Index: ml, Scale: 1}, sum)
+		ADDQ(c.outLenPtr, sum)
+		CMPQ(sum, c.outCapPtr)
 		JA(LabelRef("error_out_of_capacity"))
 	}
 
 	Comment("Copy literals")
 	Label("copy_literals")
 	{
-		ll := GP64()
-		MOVQ(c.llPtr, ll)
 		TESTQ(ll, ll)
 		JZ(LabelRef("check_offset"))
 		// TODO: Investigate if it is possible to consistently overallocate literals.
@@ -1046,9 +1075,6 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		ADDQ(ll, c.outBase)
 		ADDQ(ll, c.outPosition)
 	}
-
-	mo := GP64()
-	MOVQ(c.moPtr, mo)
 
 	Comment("Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)")
 	{
@@ -1072,9 +1098,6 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		JG(LabelRef("error_match_off_too_big"))
 	}
 
-	ml := GP64()
-	MOVQ(c.mlPtr, ml)
-
 	Comment("Copy match from history")
 	{
 		v := GP64()
@@ -1089,7 +1112,13 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		//     ...
 		// }
 		assert(func(ok LabelRef) {
-			TESTQ(c.histLen, c.histLen)
+			if e.useSeqs {
+				TESTQ(c.histLen, c.histLen)
+			} else {
+				t := GP64()
+				MOVQ(c.histLenPtr, t)
+				TESTQ(t, t)
+			}
 			JNZ(ok)
 		})
 		ptr := GP64()
