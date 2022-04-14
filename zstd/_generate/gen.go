@@ -448,9 +448,9 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 	{
 		Label(name + "_error_match_len_too_big")
 		if !o.useSeqs {
+			ctx := Dereference(Param("ctx"))
 			tmp := GP64()
 			MOVQ(mlP, tmp)
-			ctx := Dereference(Param("ctx"))
 			Store(tmp, ctx.Field("ml"))
 		}
 		o.returnWithCode(errorMatchLenTooBig)

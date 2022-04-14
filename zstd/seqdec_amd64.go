@@ -70,6 +70,7 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 	}
 
 	s.seqSize = 0
+	startSize := len(s.out)
 
 	for {
 		var errCode int
@@ -107,18 +108,13 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 			return true, fmt.Errorf("match len (%d) bigger than max allowed length", ctx.ml)
 
 		case errorMatchOffTooBig:
-			return true, fmt.Errorf("match offset (%d) bigger than max allowed length (%d)", ctx.mo, ctx.outPosition)
+			return true, fmt.Errorf("match offset (%d) bigger than current history (%d)", ctx.mo, ctx.outPosition+len(hist)-startSize)
 		case errorNotEnoughLiterals:
 			return true, fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available", ctx.ll, ctx.litRemain+ctx.ll)
 		default:
 			return true, fmt.Errorf("sequenceDecs_decode_amd64 returned erronous code %d", errCode)
 		}
 
-	}
-
-	if ctx.litRemain < 0 {
-		return true, fmt.Errorf("literal count is too big: total available %d, total requested %d",
-			len(s.literals), len(s.literals)-ctx.litRemain)
 	}
 
 	s.seqSize += ctx.litRemain

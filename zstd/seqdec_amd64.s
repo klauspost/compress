@@ -1881,9 +1881,10 @@ sequenceDecs_decodeSync_amd64_error_match_len_ofs_mismatch:
 
 	// Return with match too long error
 sequenceDecs_decodeSync_amd64_error_match_len_too_big:
-	MOVQ 16(SP), AX
-	MOVQ ctx+16(FP), CX
-	MOVQ AX, 224(CX)
+	MOVQ ctx+16(FP), AX
+	MOVQ 16(SP), CX
+	MOVQ CX, 224(AX)
+	MOVQ R12, 136(AX)
 	MOVQ $0x00000002, ret+24(FP)
 	RET
 
@@ -2407,9 +2408,10 @@ sequenceDecs_decodeSync_bmi2_error_match_len_ofs_mismatch:
 
 	// Return with match too long error
 sequenceDecs_decodeSync_bmi2_error_match_len_too_big:
-	MOVQ 16(SP), AX
-	MOVQ ctx+16(FP), CX
-	MOVQ AX, 224(CX)
+	MOVQ ctx+16(FP), AX
+	MOVQ 16(SP), CX
+	MOVQ CX, 224(AX)
+	MOVQ R11, 136(AX)
 	MOVQ $0x00000002, ret+24(FP)
 	RET
 
