@@ -1124,20 +1124,19 @@ error_not_enough_literals:
 // func sequenceDecs_executeSimple_amd64(ctx *executeAsmContext) bool
 // Requires: SSE
 TEXT ·sequenceDecs_executeSimple_amd64(SB), $8-9
-	MOVQ  ctx+0(FP), DI
-	MOVQ  8(DI), CX
+	MOVQ  ctx+0(FP), R10
+	MOVQ  8(R10), CX
 	TESTQ CX, CX
 	JZ    empty_seqs
-	MOVQ  (DI), AX
-	MOVQ  24(DI), DX
-	MOVQ  32(DI), BX
-	MOVQ  40(DI), SI
-	MOVQ  80(DI), SI
-	MOVQ  104(DI), R8
-	MOVQ  120(DI), R9
-	MOVQ  56(DI), R10
-	MOVQ  64(DI), DI
-	ADDQ  DI, R10
+	MOVQ  (R10), AX
+	MOVQ  24(R10), DX
+	MOVQ  32(R10), BX
+	MOVQ  80(R10), SI
+	MOVQ  104(R10), DI
+	MOVQ  120(R10), R8
+	MOVQ  56(R10), R9
+	MOVQ  64(R10), R10
+	ADDQ  R10, R9
 
 	// seqsBase += 24 * seqIndex
 	LEAQ (DX)(DX*2), R11
@@ -1145,7 +1144,7 @@ TEXT ·sequenceDecs_executeSimple_amd64(SB), $8-9
 	ADDQ R11, AX
 
 	// outBase += outPosition
-	ADDQ R8, BX
+	ADDQ DI, BX
 
 main_loop:
 	MOVQ (AX), R11
@@ -1194,21 +1193,21 @@ copy_1_test:
 	JB   copy_1
 	ADDQ R11, SI
 	ADDQ R11, BX
-	ADDQ R11, R8
+	ADDQ R11, DI
 
 	// Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)
 check_offset:
-	LEAQ (R8)(DI*1), R11
+	LEAQ (DI)(R10*1), R11
 	CMPQ R12, R11
 	JG   error_match_off_too_big
-	CMPQ R12, R9
+	CMPQ R12, R8
 	JG   error_match_off_too_big
 
 	// Copy match from history
 	MOVQ  R12, R11
-	SUBQ  R8, R11
+	SUBQ  DI, R11
 	JLS   copy_match
-	MOVQ  R10, R14
+	MOVQ  R9, R14
 	SUBQ  R11, R14
 	CMPQ  R13, R11
 	JGE   copy_all_from_history
@@ -1249,7 +1248,7 @@ copy_4:
 copy_4_test:
 	CMPQ R11, R13
 	JB   copy_4
-	ADDQ R13, R8
+	ADDQ R13, DI
 	ADDQ R13, BX
 	ADDQ $0x18, AX
 	INCQ DX
@@ -1296,7 +1295,7 @@ copy_5_test:
 	CMPQ R15, R11
 	JB   copy_5
 	ADDQ R11, BX
-	ADDQ R11, R8
+	ADDQ R11, DI
 	SUBQ R11, R13
 
 	// Copy match from the current buffer
@@ -1320,7 +1319,7 @@ copy_2:
 	CMPQ   R12, R13
 	JB     copy_2
 	ADDQ   R13, BX
-	ADDQ   R13, R8
+	ADDQ   R13, DI
 	JMP    handle_loop
 
 	// Copy overlapping match
@@ -1334,7 +1333,7 @@ copy_slow_3:
 	CMPQ R12, R13
 	JB   copy_slow_3
 	ADDQ R13, BX
-	ADDQ R13, R8
+	ADDQ R13, DI
 
 handle_loop:
 	ADDQ $0x18, AX
@@ -1349,7 +1348,7 @@ loop_finished:
 	// Update the context
 	MOVQ ctx+0(FP), AX
 	MOVQ DX, 24(AX)
-	MOVQ R8, 104(AX)
+	MOVQ DI, 104(AX)
 	MOVQ 80(AX), CX
 	SUBQ CX, SI
 	MOVQ SI, 112(AX)
@@ -1362,7 +1361,7 @@ error_match_off_too_big:
 	// Update the context
 	MOVQ ctx+0(FP), AX
 	MOVQ DX, 24(AX)
-	MOVQ R8, 104(AX)
+	MOVQ DI, 104(AX)
 	MOVQ 80(AX), CX
 	SUBQ CX, SI
 	MOVQ SI, 112(AX)
@@ -1375,7 +1374,7 @@ empty_seqs:
 
 // func sequenceDecs_decodeSync_amd64(s *sequenceDecs, br *bitReader, ctx *decodeSyncAsmContext) int
 // Requires: CMOV, SSE
-TEXT ·sequenceDecs_decodeSync_amd64(SB), $72-32
+TEXT ·sequenceDecs_decodeSync_amd64(SB), $64-32
 	MOVQ    br+8(FP), AX
 	MOVQ    32(AX), DX
 	MOVBQZX 40(AX), BX
@@ -1388,23 +1387,21 @@ TEXT ·sequenceDecs_decodeSync_amd64(SB), $72-32
 	MOVQ    80(AX), R8
 	MOVQ    88(AX), R9
 	MOVQ    112(AX), R10
+	MOVQ    128(AX), CX
+	MOVQ    CX, 32(SP)
 	MOVQ    144(AX), R11
 	MOVQ    136(AX), R12
 	MOVQ    200(AX), CX
-	MOVQ    CX, 64(SP)
-	MOVQ    176(AX), CX
 	MOVQ    CX, 56(SP)
-	MOVQ    184(AX), CX
+	MOVQ    176(AX), CX
 	MOVQ    CX, 48(SP)
-	MOVQ    48(SP), CX
-	ADDQ    CX, 56(SP)
+	MOVQ    184(AX), CX
+	MOVQ    CX, 40(SP)
+	MOVQ    40(SP), CX
+	ADDQ    CX, 48(SP)
 
 	// outBase += outPosition
 	ADDQ R12, R10
-	MOVQ 120(AX), CX
-	MOVQ CX, 32(SP)
-	MOVQ 128(AX), CX
-	MOVQ CX, 40(SP)
 
 	// Check if we're retrying after `out` resize
 	CMPQ 208(AX), $0x01
@@ -1413,10 +1410,11 @@ TEXT ·sequenceDecs_decodeSync_amd64(SB), $72-32
 	MOVQ CX, 24(SP)
 	MOVQ 232(AX), CX
 	MOVQ CX, 8(SP)
-	MOVQ 224(AX), AX
-	MOVQ AX, 16(SP)
+	MOVQ 224(AX), CX
+	MOVQ CX, 16(SP)
+	MOVQ 168(AX), AX
+	ADDQ AX, R11
 	JMP  execute_single_triple
-	MOVQ s+0(FP), AX
 
 sequenceDecs_decodeSync_amd64_main_loop:
 	MOVQ (SP), R13
@@ -1660,10 +1658,10 @@ execute_single_triple:
 	MOVQ 8(SP), CX
 	MOVQ 16(SP), R13
 
-	// Check if ll + ml + len(out) < cap(out)
+	// Check if ll + ml + outPosition < cap(out)
 	LEAQ (AX)(R13*1), R14
-	ADDQ 32(SP), R14
-	CMPQ R14, 40(SP)
+	ADDQ R12, R14
+	CMPQ R14, 32(SP)
 	JA   error_out_of_capacity
 
 	// Copy literals
@@ -1713,17 +1711,17 @@ copy_1_test:
 	// Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)
 check_offset:
 	MOVQ R12, AX
-	ADDQ 48(SP), AX
+	ADDQ 40(SP), AX
 	CMPQ CX, AX
 	JG   error_match_off_too_big
-	CMPQ CX, 64(SP)
+	CMPQ CX, 56(SP)
 	JG   error_match_off_too_big
 
 	// Copy match from history
 	MOVQ  CX, AX
 	SUBQ  R12, AX
 	JLS   copy_match
-	MOVQ  56(SP), R14
+	MOVQ  48(SP), R14
 	SUBQ  AX, R14
 	CMPQ  R13, AX
 	JGE   copy_all_from_history
@@ -1854,7 +1852,6 @@ handle_loop:
 	JNS  sequenceDecs_decodeSync_amd64_main_loop
 
 loop_finished:
-	MOVQ s+0(FP), AX
 	MOVQ br+8(FP), AX
 	MOVQ DX, 32(AX)
 	MOVB BL, 40(AX)
@@ -1884,7 +1881,6 @@ sequenceDecs_decodeSync_amd64_error_match_len_too_big:
 	MOVQ ctx+16(FP), AX
 	MOVQ 16(SP), CX
 	MOVQ CX, 224(AX)
-	MOVQ R12, 136(AX)
 	MOVQ $0x00000002, ret+24(FP)
 	RET
 
@@ -1915,6 +1911,12 @@ error_out_of_capacity:
 	MOVQ 16(SP), CX
 	MOVQ CX, 224(AX)
 	MOVQ R12, 136(AX)
+	MOVQ DI, 72(AX)
+	MOVQ R8, 80(AX)
+	MOVQ R9, 88(AX)
+	MOVQ 144(AX), CX
+	SUBQ CX, R11
+	MOVQ R11, 168(AX)
 	MOVQ br+8(FP), AX
 	MOVQ DX, 32(AX)
 	MOVB BL, 40(AX)
@@ -1924,7 +1926,7 @@ error_out_of_capacity:
 
 // func sequenceDecs_decodeSync_bmi2(s *sequenceDecs, br *bitReader, ctx *decodeSyncAsmContext) int
 // Requires: BMI, BMI2, CMOV, SSE
-TEXT ·sequenceDecs_decodeSync_bmi2(SB), $72-32
+TEXT ·sequenceDecs_decodeSync_bmi2(SB), $64-32
 	MOVQ    br+8(FP), CX
 	MOVQ    32(CX), AX
 	MOVBQZX 40(CX), DX
@@ -1937,23 +1939,21 @@ TEXT ·sequenceDecs_decodeSync_bmi2(SB), $72-32
 	MOVQ    80(CX), DI
 	MOVQ    88(CX), R8
 	MOVQ    112(CX), R9
+	MOVQ    128(CX), R10
+	MOVQ    R10, 32(SP)
 	MOVQ    144(CX), R10
 	MOVQ    136(CX), R11
 	MOVQ    200(CX), R12
-	MOVQ    R12, 64(SP)
-	MOVQ    176(CX), R12
 	MOVQ    R12, 56(SP)
-	MOVQ    184(CX), R12
+	MOVQ    176(CX), R12
 	MOVQ    R12, 48(SP)
-	MOVQ    48(SP), R12
-	ADDQ    R12, 56(SP)
+	MOVQ    184(CX), R12
+	MOVQ    R12, 40(SP)
+	MOVQ    40(SP), R12
+	ADDQ    R12, 48(SP)
 
 	// outBase += outPosition
 	ADDQ R11, R9
-	MOVQ 120(CX), R12
-	MOVQ R12, 32(SP)
-	MOVQ 128(CX), R12
-	MOVQ R12, 40(SP)
 
 	// Check if we're retrying after `out` resize
 	CMPQ 208(CX), $0x01
@@ -1962,10 +1962,11 @@ TEXT ·sequenceDecs_decodeSync_bmi2(SB), $72-32
 	MOVQ R12, 24(SP)
 	MOVQ 232(CX), R12
 	MOVQ R12, 8(SP)
-	MOVQ 224(CX), CX
-	MOVQ CX, 16(SP)
+	MOVQ 224(CX), R12
+	MOVQ R12, 16(SP)
+	MOVQ 168(CX), CX
+	ADDQ CX, R10
 	JMP  execute_single_triple
-	MOVQ s+0(FP), CX
 
 sequenceDecs_decodeSync_bmi2_main_loop:
 	MOVQ (SP), R12
@@ -2187,10 +2188,10 @@ execute_single_triple:
 	MOVQ 8(SP), R12
 	MOVQ 16(SP), R13
 
-	// Check if ll + ml + len(out) < cap(out)
+	// Check if ll + ml + outPosition < cap(out)
 	LEAQ (CX)(R13*1), R14
-	ADDQ 32(SP), R14
-	CMPQ R14, 40(SP)
+	ADDQ R11, R14
+	CMPQ R14, 32(SP)
 	JA   error_out_of_capacity
 
 	// Copy literals
@@ -2240,17 +2241,17 @@ copy_1_test:
 	// Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)
 check_offset:
 	MOVQ R11, CX
-	ADDQ 48(SP), CX
+	ADDQ 40(SP), CX
 	CMPQ R12, CX
 	JG   error_match_off_too_big
-	CMPQ R12, 64(SP)
+	CMPQ R12, 56(SP)
 	JG   error_match_off_too_big
 
 	// Copy match from history
 	MOVQ  R12, CX
 	SUBQ  R11, CX
 	JLS   copy_match
-	MOVQ  56(SP), R14
+	MOVQ  48(SP), R14
 	SUBQ  CX, R14
 	CMPQ  R13, CX
 	JGE   copy_all_from_history
@@ -2381,7 +2382,6 @@ handle_loop:
 	JNS  sequenceDecs_decodeSync_bmi2_main_loop
 
 loop_finished:
-	MOVQ s+0(FP), CX
 	MOVQ br+8(FP), CX
 	MOVQ AX, 32(CX)
 	MOVB DL, 40(CX)
@@ -2411,7 +2411,6 @@ sequenceDecs_decodeSync_bmi2_error_match_len_too_big:
 	MOVQ ctx+16(FP), AX
 	MOVQ 16(SP), CX
 	MOVQ CX, 224(AX)
-	MOVQ R11, 136(AX)
 	MOVQ $0x00000002, ret+24(FP)
 	RET
 
@@ -2435,13 +2434,19 @@ error_not_enough_literals:
 	// Return request to resize `out` by at least ll + ml bytes
 error_out_of_capacity:
 	MOVQ ctx+16(FP), CX
-	MOVQ 24(SP), SI
-	MOVQ SI, 216(CX)
-	MOVQ 8(SP), SI
-	MOVQ SI, 232(CX)
-	MOVQ 16(SP), SI
-	MOVQ SI, 224(CX)
+	MOVQ 24(SP), R9
+	MOVQ R9, 216(CX)
+	MOVQ 8(SP), R9
+	MOVQ R9, 232(CX)
+	MOVQ 16(SP), R9
+	MOVQ R9, 224(CX)
 	MOVQ R11, 136(CX)
+	MOVQ SI, 72(CX)
+	MOVQ DI, 80(CX)
+	MOVQ R8, 88(CX)
+	MOVQ 144(CX), R9
+	SUBQ R9, R10
+	MOVQ R10, 168(CX)
 	MOVQ br+8(FP), CX
 	MOVQ AX, 32(CX)
 	MOVB DL, 40(CX)

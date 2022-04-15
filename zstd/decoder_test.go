@@ -1060,7 +1060,12 @@ func testDecoderFile(t *testing.T, fn string, newDec func() (*Decoder, error)) {
 			}
 
 			wantB := want[tt.Name]
-			if !bytes.Equal(wantB, got) {
+
+			compareWith := func(got []byte, displayName, name string) bool {
+				if bytes.Equal(wantB, got) {
+					return false
+				}
+
 				if len(wantB)+len(got) < 1000 {
 					t.Logf(" got: %v\nwant: %v", got, wantB)
 				} else {
@@ -1069,32 +1074,24 @@ func testDecoderFile(t *testing.T, fn string, newDec func() (*Decoder, error)) {
 					err := ioutil.WriteFile(fileName, wantB, os.ModePerm)
 					t.Log("Wrote file", fileName, err)
 
-					fileName, _ = filepath.Abs(filepath.Join("testdata", t.Name()+"-got.bin"))
+					fileName, _ = filepath.Abs(filepath.Join("testdata", t.Name()+"-"+name+".bin"))
 					_ = os.MkdirAll(filepath.Dir(fileName), os.ModePerm)
 					err = ioutil.WriteFile(fileName, got, os.ModePerm)
 					t.Log("Wrote file", fileName, err)
 				}
 				t.Logf("Length, want: %d, got: %d", len(wantB), len(got))
-				t.Error("Output mismatch")
+				t.Errorf("%s mismatch", displayName)
+				return true
+			}
+
+			if compareWith(got, "Output", "got") {
 				return
 			}
-			if !bytes.Equal(wantB, gotDecAll) {
-				if len(wantB)+len(got) < 1000 {
-					t.Logf(" got: %v\nwant: %v", got, wantB)
-				} else {
-					fileName, _ := filepath.Abs(filepath.Join("testdata", t.Name()+"-want.bin"))
-					_ = os.MkdirAll(filepath.Dir(fileName), os.ModePerm)
-					err := ioutil.WriteFile(fileName, wantB, os.ModePerm)
-					t.Log("Wrote file", fileName, err)
 
-					fileName, _ = filepath.Abs(filepath.Join("testdata", t.Name()+"-got.bin"))
-					_ = os.MkdirAll(filepath.Dir(fileName), os.ModePerm)
-					err = ioutil.WriteFile(fileName, got, os.ModePerm)
-					t.Log("Wrote file", fileName, err)
-				}
-				t.Logf("Length, want: %d, got: %d", len(wantB), len(got))
-				t.Error("DecodeAll Output mismatch")
+			if compareWith(gotDecAll, "DecodeAll Output", "decoded") {
+				return
 			}
+
 			t.Log(len(got), "bytes returned, matches input, ok!")
 		})
 	}

@@ -194,7 +194,6 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			ec.moPtr = moP
 			ec.mlPtr = mlP
 			ec.llPtr = llP
-			ec.outLenPtr = AllocLocal(8)
 			ec.outCapPtr = AllocLocal(8)
 
 			ec.outBase = GP64()
@@ -211,6 +210,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			}
 
 			Load(ctx.Field("out").Base(), ec.outBase)
+			loadField(ctx.Field("out").Cap(), ec.outCapPtr)
 			Load(ctx.Field("literals").Base(), ec.literals)
 			Load(ctx.Field("outPosition"), ec.outPosition)
 			loadField(ctx.Field("windowSize"), ec.windowSizePtr)
@@ -226,9 +226,6 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			Comment("outBase += outPosition")
 			ADDQ(ec.outPosition, ec.outBase)
 
-			loadField(ctx.Field("out").Len(), ec.outLenPtr)
-			loadField(ctx.Field("out").Cap(), ec.outCapPtr)
-
 			Comment("Check if we're retrying after `out` resize")
 			retry, err := ctx.Field("retry").Resolve()
 			if err != nil {
@@ -241,14 +238,20 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			loadField(ctx.Field("mo"), moP)
 			loadField(ctx.Field("ml"), mlP)
 
+			{
+				litPosition := GP64()
+				Load(ctx.Field("litPosition"), litPosition)
+				ADDQ(litPosition, ec.literals)
+			}
+
 			JMP(LabelRef("execute_single_triple"))
 		}
 	}
 
 	// Store previous offsets in registers.
 	var offsets [3]reg.GPVirtual
-	s := Dereference(Param("s"))
 	if o.useSeqs {
+		s := Dereference(Param("s"))
 		for i := range offsets {
 			offsets[i] = GP64()
 			po, err := s.Field("prevOffset").Index(i).Resolve()
@@ -403,8 +406,8 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 	Label("loop_finished")
 
 	// Store offsets
-	s = Dereference(Param("s"))
 	if o.useSeqs {
+		s := Dereference(Param("s"))
 		for i := range offsets {
 			po, _ := s.Field("prevOffset").Index(i).Resolve()
 			MOVQ(offsets[i], po.Addr)
@@ -495,6 +498,15 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 		MOVQ(mlP, tmp)
 		Store(tmp, ctx.Field("ml"))
 		Store(ec.outPosition, ctx.Field("outPosition"))
+
+		Store(llState, ctx.Field("llState"))
+		Store(mlState, ctx.Field("mlState"))
+		Store(ofState, ctx.Field("ofState"))
+
+		// compute litPosition
+		Load(ctx.Field("literals").Base(), tmp)
+		SUBQ(tmp, ec.literals) // litPosition := current - initial literals pointer
+		Store(ec.literals, ctx.Field("litPosition"))
 
 		br := Dereference(Param("br"))
 		Store(brValue, br.Field("value"))
@@ -922,7 +934,6 @@ func (e executeSimple) generateProcedure(name string) {
 	seqsLen := GP64()
 	seqIndex := GP64()
 	outBase := GP64()
-	outLen := GP64()
 	literals := GP64()
 	outPosition := GP64()
 	windowSize := GP64()
@@ -931,13 +942,13 @@ func (e executeSimple) generateProcedure(name string) {
 
 	{
 		ctx := Dereference(Param("ctx"))
+		tmp := GP64()
 		Load(ctx.Field("seqs").Len(), seqsLen)
 		TESTQ(seqsLen, seqsLen)
 		JZ(LabelRef("empty_seqs"))
 		Load(ctx.Field("seqs").Base(), seqsBase)
 		Load(ctx.Field("seqIndex"), seqIndex)
 		Load(ctx.Field("out").Base(), outBase)
-		Load(ctx.Field("out").Len(), outLen)
 		Load(ctx.Field("literals").Base(), literals)
 		Load(ctx.Field("outPosition"), outPosition)
 		Load(ctx.Field("windowSize"), windowSize)
@@ -946,7 +957,6 @@ func (e executeSimple) generateProcedure(name string) {
 
 		ADDQ(histLen, histBase) // Note: we always copy from &hist[len(hist) - v]
 
-		tmp := GP64()
 		Comment("seqsBase += 24 * seqIndex")
 		LEAQ(Mem{Base: seqIndex, Index: seqIndex, Scale: 2}, tmp) // * 3
 		SHLQ(U8(3), tmp)                                          // * 8
@@ -1038,7 +1048,6 @@ type executeSingleTripleContext struct {
 	windowSize reg.GPVirtual
 
 	// values used when useSeqs is false
-	outLenPtr     Mem
 	outCapPtr     Mem
 	histBasePtr   Mem
 	histLenPtr    Mem
@@ -1056,10 +1065,10 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 	MOVQ(c.mlPtr, ml)
 
 	if !e.useSeqs {
-		Comment("Check if ll + ml + len(out) < cap(out)")
+		Comment("Check if ll + ml + outPosition < cap(out)")
 		sum := GP64()
 		LEAQ(Mem{Base: ll, Index: ml, Scale: 1}, sum)
-		ADDQ(c.outLenPtr, sum)
+		ADDQ(c.outPosition, sum)
 		CMPQ(sum, c.outCapPtr)
 		JA(LabelRef("error_out_of_capacity"))
 	}

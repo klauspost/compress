@@ -67,6 +67,7 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 		literals:    s.literals,
 		litPosition: 0,
 		windowSize:  s.windowSize,
+		history:     hist,
 	}
 
 	s.seqSize = 0
@@ -89,14 +90,14 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 			// but could be if destination slice is too small for sync operations.
 			// over-allocating here can create a large amount of GC pressure so we try to keep
 			// it as contained as possible
-			used := ctx.outPosition
+			used := ctx.outPosition - startSize
 			addBytes := 256 + ctx.ll + ctx.ml + used>>2
 			// Clamp to max block size.
 			if used+addBytes > maxBlockSize {
 				addBytes = maxBlockSize - used
 			}
+			s.out = s.out[:ctx.outPosition]
 			s.out = append(s.out, make([]byte, addBytes)...)
-			s.out = s.out[:len(s.out)-addBytes]
 
 			ctx.out = s.out
 			ctx.retry = true
@@ -108,11 +109,15 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 			return true, fmt.Errorf("match len (%d) bigger than max allowed length", ctx.ml)
 
 		case errorMatchOffTooBig:
-			return true, fmt.Errorf("match offset (%d) bigger than current history (%d)", ctx.mo, ctx.outPosition+len(hist)-startSize)
+			return true, fmt.Errorf("match offset (%d) bigger than current history (%d)",
+				ctx.mo, ctx.outPosition+len(hist)-startSize)
+
 		case errorNotEnoughLiterals:
-			return true, fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available", ctx.ll, ctx.litRemain+ctx.ll)
+			return true, fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available",
+				ctx.ll, ctx.litRemain+ctx.ll)
+
 		default:
-			return true, fmt.Errorf("sequenceDecs_decode_amd64 returned erronous code %d", errCode)
+			return true, fmt.Errorf("sequenceDecs_decode returned erronous code %d", errCode)
 		}
 
 	}

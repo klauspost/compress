@@ -202,7 +202,7 @@ func (s *sequenceDecs) execute(seqs []seqVals, hist []byte) error {
 
 // decode sequences from the stream with the provided history.
 func (s *sequenceDecs) decodeSync(hist []byte) error {
-	{
+	if true {
 		supported, err := s.decodeSyncSimple(hist)
 		if supported {
 			return err
