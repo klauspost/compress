@@ -223,7 +223,7 @@ func (s *sequenceDecs) decode(seqs []seqVals) error {
 
 		case errorNotEnoughLiterals:
 			ll := ctx.seqs[i].ll
-			fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available", ll, ctx.litRemain+ll)
+			return fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available", ll, ctx.litRemain+ll)
 		}
 
 		return fmt.Errorf("sequenceDecs_decode_amd64 returned erronous code %d", errCode)
