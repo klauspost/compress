@@ -24,10 +24,9 @@ type decodeSyncAsmContext struct {
 	litPosition int
 	history     []byte
 	windowSize  int
-	retry       bool // set by the caller when `out` got resized after reporting errorOutOfCapacity
-	ll          int  // set on error (not for all errors, please refer to _generate/gen.go)
-	ml          int  // set on error (not for all errors, please refer to _generate/gen.go)
-	mo          int  // set on error (not for all errors, please refer to _generate/gen.go)
+	ll          int // set on error (not for all errors, please refer to _generate/gen.go)
+	ml          int // set on error (not for all errors, please refer to _generate/gen.go)
+	mo          int // set on error (not for all errors, please refer to _generate/gen.go)
 }
 
 // sequenceDecs_decodeSync_amd64 implements the main loop of sequenceDecs.decodeSync in x86 asm.
@@ -65,7 +64,6 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 		out:         s.out,
 		outPosition: len(s.out),
 		literals:    s.literals,
-		litPosition: 0,
 		windowSize:  s.windowSize,
 		history:     hist,
 	}
@@ -73,53 +71,32 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 	s.seqSize = 0
 	startSize := len(s.out)
 
-	for {
-		var errCode int
-		if cpuinfo.HasBMI2() {
-			errCode = sequenceDecs_decodeSync_bmi2(s, br, &ctx)
-		} else {
-			errCode = sequenceDecs_decodeSync_amd64(s, br, &ctx)
-		}
-		if errCode == 0 {
-			break
-		}
+	var errCode int
+	if cpuinfo.HasBMI2() {
+		errCode = sequenceDecs_decodeSync_bmi2(s, br, &ctx)
+	} else {
+		errCode = sequenceDecs_decodeSync_amd64(s, br, &ctx)
+	}
+	switch errCode {
+	case noError:
+		break
 
-		switch errCode {
-		case errorOutOfCapacity:
-			// Not enough size, which can happen under high volume block streaming conditions
-			// but could be if destination slice is too small for sync operations.
-			// over-allocating here can create a large amount of GC pressure so we try to keep
-			// it as contained as possible
-			used := ctx.outPosition - startSize
-			addBytes := 256 + ctx.ll + ctx.ml + used>>2
-			// Clamp to max block size.
-			if used+addBytes > maxBlockSize {
-				addBytes = maxBlockSize - used
-			}
-			s.out = s.out[:ctx.outPosition]
-			s.out = append(s.out, make([]byte, addBytes)...)
+	case errorMatchLenOfsMismatch:
+		return true, fmt.Errorf("zero matchoff and matchlen (%d) > 0", ctx.ml)
 
-			ctx.out = s.out
-			ctx.retry = true
+	case errorMatchLenTooBig:
+		return true, fmt.Errorf("match len (%d) bigger than max allowed length", ctx.ml)
 
-		case errorMatchLenOfsMismatch:
-			return true, fmt.Errorf("zero matchoff and matchlen (%d) > 0", ctx.ml)
+	case errorMatchOffTooBig:
+		return true, fmt.Errorf("match offset (%d) bigger than current history (%d)",
+			ctx.mo, ctx.outPosition+len(hist)-startSize)
 
-		case errorMatchLenTooBig:
-			return true, fmt.Errorf("match len (%d) bigger than max allowed length", ctx.ml)
+	case errorNotEnoughLiterals:
+		return true, fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available",
+			ctx.ll, ctx.litRemain+ctx.ll)
 
-		case errorMatchOffTooBig:
-			return true, fmt.Errorf("match offset (%d) bigger than current history (%d)",
-				ctx.mo, ctx.outPosition+len(hist)-startSize)
-
-		case errorNotEnoughLiterals:
-			return true, fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available",
-				ctx.ll, ctx.litRemain+ctx.ll)
-
-		default:
-			return true, fmt.Errorf("sequenceDecs_decode returned erronous code %d", errCode)
-		}
-
+	default:
+		return true, fmt.Errorf("sequenceDecs_decode returned erronous code %d", errCode)
 	}
 
 	s.seqSize += ctx.litRemain
@@ -162,6 +139,8 @@ type decodeAsmContext struct {
 	litRemain int
 }
 
+const noError = 0
+
 // error reported when mo == 0 && ml > 0
 const errorMatchLenOfsMismatch = 1
 
@@ -171,11 +150,8 @@ const errorMatchLenTooBig = 2
 // error reported when mo > t or mo > s.windowSize
 const errorMatchOffTooBig = 3
 
-// error reported by decodeSync when out buffer is too small
-const errorOutOfCapacity = 4
-
 // error reported when the sum of literal lengths exeeceds the literal buffer size
-const errorNotEnoughLiterals = 5
+const errorNotEnoughLiterals = 4
 
 // sequenceDecs_decode implements the main loop of sequenceDecs in x86 asm.
 //
