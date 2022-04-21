@@ -70,6 +70,7 @@ func main() {
 
 	exec := executeSimple{
 		useSeqs: true,
+		safeMem: false,
 	}
 	exec.generateProcedure("sequenceDecs_executeSimple_amd64")
 
@@ -79,6 +80,11 @@ func main() {
 	decodeSync.setBMI2(true)
 	decodeSync.generateProcedure("sequenceDecs_decodeSync_bmi2")
 
+	decodeSync.execute.safeMem = true
+	decodeSync.setBMI2(false)
+	decodeSync.generateProcedure("sequenceDecs_decodeSync_safe_amd64")
+	decodeSync.setBMI2(true)
+	decodeSync.generateProcedure("sequenceDecs_decodeSync_safe_bmi2")
 	Generate()
 	b, err := ioutil.ReadFile(out.Value.String())
 	if err != nil {
@@ -860,6 +866,7 @@ func (o options) adjustOffsetInMemory(name string, moP, llP Mem, offsetB reg.GPV
 
 type executeSimple struct {
 	useSeqs bool // Generate code that uses the `seqs` auxiliary table
+	safeMem bool
 }
 
 // copySize returns register size used to fast copy.
@@ -1130,7 +1137,11 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 
 		Comment("Copy non-overlapping match")
 		{
-			e.copyMemoryPrecise("2", src, c.outBase, ml)
+			if e.safeMem {
+				e.copyMemoryPrecise("2", src, c.outBase, ml)
+			} else {
+				e.copyMemory("2", src, c.outBase, ml)
+			}
 			ADDQ(ml, c.outBase)
 			ADDQ(ml, c.outPosition)
 			JMP(LabelRef("handle_loop"))

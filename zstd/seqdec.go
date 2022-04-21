@@ -73,6 +73,7 @@ type sequenceDecs struct {
 	seqSize      int
 	windowSize   int
 	maxBits      uint8
+	maxSyncLen   uint64
 }
 
 // initialize all 3 decoders from the stream input.

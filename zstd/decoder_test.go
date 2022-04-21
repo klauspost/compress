@@ -1591,6 +1591,9 @@ func testDecoderDecodeAllError(t *testing.T, fn string, dec *Decoder, errMap map
 			} else {
 				want := errMap[tt.Name]
 				if want != err.Error() {
+					if want == ErrFrameSizeMismatch.Error() && err == ErrDecoderSizeExceeded {
+						return
+					}
 					t.Errorf("error mismatch, prev run got %s, now got %s", want, err.Error())
 				}
 				return
