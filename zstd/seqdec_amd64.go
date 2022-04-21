@@ -42,7 +42,7 @@ func sequenceDecs_decodeSync_bmi2(s *sequenceDecs, br *bitReader, ctx *decodeSyn
 
 // decode sequences from the stream with the provided history but without a dictionary.
 func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
-	if len(s.dict) > 0 {
+	if len(s.dict) > 0 || cap(s.out)-len(s.out) < maxCompressedBlockSizeAlloc {
 		return false, nil
 	}
 

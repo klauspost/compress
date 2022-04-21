@@ -1195,7 +1195,7 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 
 		Comment("Copy non-overlapping match")
 		{
-			e.copyMemory("2", src, c.outBase, ml)
+			e.copyMemoryPrecise("2", src, c.outBase, ml)
 			ADDQ(ml, c.outBase)
 			ADDQ(ml, c.outPosition)
 			JMP(LabelRef("handle_loop"))
