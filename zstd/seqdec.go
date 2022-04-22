@@ -299,7 +299,7 @@ func (s *sequenceDecs) decodeSync(hist []byte) error {
 		}
 		size := ll + ml + len(out)
 		if size-startSize > maxBlockSize {
-			return fmt.Errorf("output (%d) bigger than max block size (%d)", size, maxBlockSize)
+			return fmt.Errorf("output (%d) bigger than max block size (%d)", size-startSize, maxBlockSize)
 		}
 		if size > cap(out) {
 			// Not enough size, which can happen under high volume block streaming conditions
@@ -409,8 +409,8 @@ func (s *sequenceDecs) decodeSync(hist []byte) error {
 	}
 
 	// Check if space for literals
-	if len(s.literals)+len(s.out)-startSize > maxBlockSize {
-		return fmt.Errorf("output (%d) bigger than max block size (%d)", len(s.out), maxBlockSize)
+	if size := len(s.literals) + len(s.out) - startSize; size > maxBlockSize {
+		return fmt.Errorf("output (%d) bigger than max block size (%d)", size, maxBlockSize)
 	}
 
 	// Add final literals
