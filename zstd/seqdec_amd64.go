@@ -237,7 +237,7 @@ func (s *sequenceDecs) decode(seqs []seqVals) error {
 		}
 	}
 	if errCode != 0 {
-		i := len(seqs) - ctx.iteration
+		i := len(seqs) - ctx.iteration - 1
 		switch errCode {
 		case errorMatchLenOfsMismatch:
 			ml := ctx.seqs[i].ml
