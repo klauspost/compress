@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/csv"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"reflect"
@@ -165,6 +166,35 @@ func readDecoders(tb testing.TB, buf *bytes.Buffer, ref testSequence) sequenceDe
 	s.maxBits = s.litLengths.fse.maxBits + s.offsets.fse.maxBits + s.matchLengths.fse.maxBits
 	s.br = &bitReader{}
 	return s
+}
+
+func Test_seqdec_decode_regression(t *testing.T) {
+	zr := testCreateZipReader("testdata/decode-regression.zip", t)
+
+	for _, tt := range zr.File {
+		t.Run(tt.Name, func(t *testing.T) {
+			f, err := tt.Open()
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer f.Close()
+
+			// Note: make sure we create stream reader
+			dec, err := NewReader(f, WithDecoderConcurrency(4))
+			if err != nil {
+				t.Error(err)
+				return
+			}
+
+			var buf []byte
+			_, err = io.ReadFull(dec, buf)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+		})
+	}
 }
 
 func Test_seqdec_decoder(t *testing.T) {
