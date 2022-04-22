@@ -34,6 +34,9 @@ const errorMatchOffTooBig = 3
 // error reported when the sum of literal lengths exeeceds the literal buffer size
 const errorNotEnoughLiterals = 4
 
+// error reported when capacity of `out` is too small
+const errorNotEnoughSpace = 5
+
 const maxMatchLen = 131074
 
 // size of struct seqVals
@@ -199,6 +202,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			ec.llPtr = llP
 
 			ec.outBase = GP64()
+			ec.outEndPtr = AllocLocal(8)
 			ec.literals = GP64()
 			ec.outPosition = GP64()
 			ec.histLenPtr = AllocLocal(8)
@@ -212,6 +216,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			}
 
 			Load(ctx.Field("out").Base(), ec.outBase)
+			loadField(ctx.Field("out").Cap(), ec.outEndPtr)
 			Load(ctx.Field("literals").Base(), ec.literals)
 			Load(ctx.Field("outPosition"), ec.outPosition)
 			loadField(ctx.Field("windowSize"), ec.windowSizePtr)
@@ -224,8 +229,12 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 				ADDQ(tmp, ec.histBasePtr) // Note: we always copy from &hist[len(hist) - v]
 			}
 
+			Comment("Calculate poiter to s.out[cap(s.out)] (a past-end pointer)")
+			ADDQ(ec.outBase, ec.outEndPtr)
+
 			Comment("outBase += outPosition")
 			ADDQ(ec.outPosition, ec.outBase)
+
 		}
 	}
 
@@ -464,6 +473,22 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 		// Note: the `litRemain` field is updated in-place (for both useSeqs values)
 
 		o.returnWithCode(errorNotEnoughLiterals)
+	}
+
+	Comment("Return with not enough output space error")
+	{
+		Label("error_not_enough_space")
+		if !o.useSeqs {
+			ctx := Dereference(Param("ctx"))
+			tmp := GP64()
+			MOVQ(llP, tmp)
+			Store(tmp, ctx.Field("ll"))
+			MOVQ(mlP, tmp)
+			Store(tmp, ctx.Field("ml"))
+			Store(ec.outPosition, ctx.Field("outPosition"))
+		}
+
+		o.returnWithCode(errorNotEnoughSpace)
 	}
 }
 
@@ -1000,6 +1025,7 @@ type executeSingleTripleContext struct {
 	windowSize reg.GPVirtual
 
 	// values used when useSeqs is false
+	outEndPtr     Mem // pointer to s.out[cap(s.out)]
 	histBasePtr   Mem
 	histLenPtr    Mem
 	windowSizePtr Mem
@@ -1014,6 +1040,18 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 	MOVQ(c.moPtr, mo)
 	ml := GP64()
 	MOVQ(c.mlPtr, ml)
+
+	if !e.useSeqs {
+		Comment("Check if we have enough space in s.out")
+		{
+			// baseAfterCopy = ll + ml + c.outBese
+			baseAfterCopy := GP64()
+			LEAQ(Mem{Base: ll, Index: ml, Scale: 1}, baseAfterCopy)
+			ADDQ(c.outBase, baseAfterCopy)
+			CMPQ(baseAfterCopy, c.outEndPtr)
+			JAE(LabelRef("error_not_enough_space"))
+		}
+	}
 
 	Comment("Copy literals")
 	Label("copy_literals")
