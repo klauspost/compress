@@ -39,10 +39,28 @@ func sequenceDecs_decodeSync_amd64(s *sequenceDecs, br *bitReader, ctx *decodeSy
 //go:noescape
 func sequenceDecs_decodeSync_bmi2(s *sequenceDecs, br *bitReader, ctx *decodeSyncAsmContext) int
 
+// sequenceDecs_decodeSync_safe_amd64 does the same as above, but does not write more than output buffer.
+//go:noescape
+func sequenceDecs_decodeSync_safe_amd64(s *sequenceDecs, br *bitReader, ctx *decodeSyncAsmContext) int
+
+// sequenceDecs_decodeSync_safe_bmi2 does the same as above, but does not write more than output buffer.
+//go:noescape
+func sequenceDecs_decodeSync_safe_bmi2(s *sequenceDecs, br *bitReader, ctx *decodeSyncAsmContext) int
+
 // decode sequences from the stream with the provided history but without a dictionary.
 func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
-	if len(s.dict) > 0 || cap(s.out)-len(s.out) < maxCompressedBlockSizeAlloc {
+	if len(s.dict) > 0 {
 		return false, nil
+	}
+	if s.maxSyncLen == 0 && cap(s.out)-len(s.out) < maxCompressedBlockSize {
+		return false, nil
+	}
+	useSafe := false
+	if s.maxSyncLen == 0 && cap(s.out)-len(s.out) < maxCompressedBlockSizeAlloc {
+		useSafe = true
+	}
+	if s.maxSyncLen > 0 && uint64(cap(s.out))-compressedBlockOverAlloc < s.maxSyncLen {
+		useSafe = true
 	}
 
 	br := s.br
@@ -73,9 +91,17 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 
 	var errCode int
 	if cpuinfo.HasBMI2() {
-		errCode = sequenceDecs_decodeSync_bmi2(s, br, &ctx)
+		if useSafe {
+			errCode = sequenceDecs_decodeSync_safe_bmi2(s, br, &ctx)
+		} else {
+			errCode = sequenceDecs_decodeSync_bmi2(s, br, &ctx)
+		}
 	} else {
-		errCode = sequenceDecs_decodeSync_amd64(s, br, &ctx)
+		if useSafe {
+			errCode = sequenceDecs_decodeSync_safe_amd64(s, br, &ctx)
+		} else {
+			errCode = sequenceDecs_decodeSync_amd64(s, br, &ctx)
+		}
 	}
 	switch errCode {
 	case noError:
@@ -211,7 +237,7 @@ func (s *sequenceDecs) decode(seqs []seqVals) error {
 		}
 	}
 	if errCode != 0 {
-		i := len(seqs) - ctx.iteration
+		i := len(seqs) - ctx.iteration - 1
 		switch errCode {
 		case errorMatchLenOfsMismatch:
 			ml := ctx.seqs[i].ml

@@ -410,21 +410,42 @@ func TestNewDecoderBad(t *testing.T) {
 	if true {
 		t.Run("Reader-4", func(t *testing.T) {
 			newFn := func() (*Decoder, error) {
-				return NewReader(nil, WithDecoderConcurrency(4))
+				return NewReader(nil, WithDecoderConcurrency(4), WithDecoderMaxMemory(1<<30))
 			}
 			testDecoderFileBad(t, "testdata/bad.zip", newFn, errMap)
 
 		})
 		t.Run("Reader-1", func(t *testing.T) {
 			newFn := func() (*Decoder, error) {
-				return NewReader(nil, WithDecoderConcurrency(1))
+				return NewReader(nil, WithDecoderConcurrency(1), WithDecoderMaxMemory(1<<30))
+			}
+			testDecoderFileBad(t, "testdata/bad.zip", newFn, errMap)
+		})
+		t.Run("Reader-4-bigmem", func(t *testing.T) {
+			newFn := func() (*Decoder, error) {
+				return NewReader(nil, WithDecoderConcurrency(4), WithDecoderMaxMemory(1<<30), WithDecoderLowmem(false))
+			}
+			testDecoderFileBad(t, "testdata/bad.zip", newFn, errMap)
+
+		})
+		t.Run("Reader-1-bigmem", func(t *testing.T) {
+			newFn := func() (*Decoder, error) {
+				return NewReader(nil, WithDecoderConcurrency(1), WithDecoderMaxMemory(1<<30), WithDecoderLowmem(false))
 			}
 			testDecoderFileBad(t, "testdata/bad.zip", newFn, errMap)
 		})
 	}
 	t.Run("DecodeAll", func(t *testing.T) {
 		defer timeout(10 * time.Second)()
-		dec, err := NewReader(nil)
+		dec, err := NewReader(nil, WithDecoderMaxMemory(1<<30))
+		if err != nil {
+			t.Fatal(err)
+		}
+		testDecoderDecodeAllError(t, "testdata/bad.zip", dec, errMap)
+	})
+	t.Run("DecodeAll-bigmem", func(t *testing.T) {
+		defer timeout(10 * time.Second)()
+		dec, err := NewReader(nil, WithDecoderMaxMemory(1<<30), WithDecoderLowmem(false))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1591,6 +1612,12 @@ func testDecoderDecodeAllError(t *testing.T, fn string, dec *Decoder, errMap map
 			} else {
 				want := errMap[tt.Name]
 				if want != err.Error() {
+					if want == ErrFrameSizeMismatch.Error() && err == ErrDecoderSizeExceeded {
+						return
+					}
+					if want == ErrWindowSizeExceeded.Error() && err == ErrDecoderSizeExceeded {
+						return
+					}
 					t.Errorf("error mismatch, prev run got %s, now got %s", want, err.Error())
 				}
 				return
