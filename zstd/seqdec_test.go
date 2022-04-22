@@ -175,16 +175,8 @@ func Test_seqdec_decoder(t *testing.T) {
 	want := map[string][]seqVals{}
 	var wantOffsets = map[string][3]int{}
 	if !writeWant {
-		fn := "testdata/seqs-want.zip"
-		data, err := ioutil.ReadFile(fn)
+		zr := testCreateZipReader("testdata/seqs-want.zip", t)
 		tb := t
-		if err != nil {
-			tb.Fatal(err)
-		}
-		zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-		if err != nil {
-			tb.Fatal(err)
-		}
 		for _, tt := range zr.File {
 			var ref testSequence
 			if !ref.parse(tt.Name) {
@@ -217,16 +209,8 @@ func Test_seqdec_decoder(t *testing.T) {
 			o.Close()
 		}
 	}
-	fn := "testdata/seqs.zip"
-	data, err := ioutil.ReadFile(fn)
+	zr := testCreateZipReader("testdata/seqs.zip", t)
 	tb := t
-	if err != nil {
-		tb.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		tb.Fatal(err)
-	}
 	for _, tt := range zr.File {
 		var ref testSequence
 		if !ref.parse(tt.Name) {
@@ -289,16 +273,8 @@ func Test_seqdec_decoder(t *testing.T) {
 }
 
 func Test_seqdec_execute(t *testing.T) {
-	fn := "testdata/seqs.zip"
-	data, err := ioutil.ReadFile(fn)
+	zr := testCreateZipReader("testdata/seqs.zip", t)
 	tb := t
-	if err != nil {
-		tb.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		tb.Fatal(err)
-	}
 	for _, tt := range zr.File {
 		var ref testSequence
 		if !ref.parse(tt.Name) {
@@ -350,16 +326,8 @@ func Test_seqdec_execute(t *testing.T) {
 }
 
 func Test_seqdec_decodeSync(t *testing.T) {
-	fn := "testdata/seqs.zip"
-	data, err := ioutil.ReadFile(fn)
+	zr := testCreateZipReader("testdata/seqs.zip", t)
 	tb := t
-	if err != nil {
-		tb.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		tb.Fatal(err)
-	}
 	for _, tt := range zr.File {
 		var ref testSequence
 		if !ref.parse(tt.Name) {
@@ -408,16 +376,8 @@ func Benchmark_seqdec_decode(b *testing.B) {
 }
 
 func benchmark_seqdec_decode(b *testing.B) {
-	fn := "testdata/seqs.zip"
-	data, err := ioutil.ReadFile(fn)
+	zr := testCreateZipReader("testdata/seqs.zip", b)
 	tb := b
-	if err != nil {
-		tb.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		tb.Fatal(err)
-	}
 	for _, tt := range zr.File {
 		var ref testSequence
 		if !ref.parse(tt.Name) {
@@ -468,16 +428,8 @@ func benchmark_seqdec_decode(b *testing.B) {
 }
 
 func Benchmark_seqdec_execute(b *testing.B) {
-	fn := "testdata/seqs.zip"
-	data, err := ioutil.ReadFile(fn)
+	zr := testCreateZipReader("testdata/seqs.zip", b)
 	tb := b
-	if err != nil {
-		tb.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		tb.Fatal(err)
-	}
 	for _, tt := range zr.File {
 		var ref testSequence
 		if !ref.parse(tt.Name) {
@@ -532,16 +484,8 @@ func Benchmark_seqdec_execute(b *testing.B) {
 }
 
 func Benchmark_seqdec_decodeSync(b *testing.B) {
-	fn := "testdata/seqs.zip"
-	data, err := ioutil.ReadFile(fn)
+	zr := testCreateZipReader("testdata/seqs.zip", b)
 	tb := b
-	if err != nil {
-		tb.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		tb.Fatal(err)
-	}
 	for _, tt := range zr.File {
 		var ref testSequence
 		if !ref.parse(tt.Name) {
@@ -593,4 +537,20 @@ func Benchmark_seqdec_decodeSync(b *testing.B) {
 			b.ReportMetric(float64(decoded)/time.Since(t).Seconds(), "seq/s")
 		})
 	}
+}
+
+func testCreateZipReader(path string, tb testing.TB) *zip.Reader {
+	failOnError := func(err error) {
+		if err != nil {
+			tb.Fatal(err)
+		}
+	}
+
+	data, err := ioutil.ReadFile(path)
+	failOnError(err)
+
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	failOnError(err)
+
+	return zr
 }
