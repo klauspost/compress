@@ -7,19 +7,10 @@ import (
 	"os"
 	"strings"
 	"testing"
-
-	"github.com/klauspost/compress/zip"
 )
 
 func TestHeader_Decode(t *testing.T) {
-	data, err := ioutil.ReadFile("testdata/headers.zip")
-	if err != nil {
-		t.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		t.Fatal(err)
-	}
+	zr := testCreateZipReader("testdata/headers.zip", t)
 
 	// Regenerate golden data...
 	const regen = false

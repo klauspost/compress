@@ -12,15 +12,7 @@ import (
 
 func TestDecoder_SmallDict(t *testing.T) {
 	// All files have CRC
-	fn := "testdata/dict-tests-small.zip"
-	data, err := ioutil.ReadFile(fn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		t.Fatal(err)
-	}
+	zr := testCreateZipReader("testdata/dict-tests-small.zip", t)
 	var dicts [][]byte
 	for _, tt := range zr.File {
 		if !strings.HasSuffix(tt.Name, ".dict") {
@@ -73,15 +65,7 @@ func TestDecoder_SmallDict(t *testing.T) {
 
 func TestEncoder_SmallDict(t *testing.T) {
 	// All files have CRC
-	fn := "testdata/dict-tests-small.zip"
-	data, err := ioutil.ReadFile(fn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		t.Fatal(err)
-	}
+	zr := testCreateZipReader("testdata/dict-tests-small.zip", t)
 	var dicts [][]byte
 	var encs []*Encoder
 	var noDictEncs []*Encoder
@@ -222,17 +206,9 @@ func TestEncoder_SmallDict(t *testing.T) {
 }
 
 func benchmarkEncodeAllLimitedBySize(b *testing.B, lowerLimit int, upperLimit int) {
-	fn := "testdata/dict-tests-small.zip"
-	data, err := ioutil.ReadFile(fn)
+	zr := testCreateZipReader("testdata/dict-tests-small.zip", b)
 	t := testing.TB(b)
 
-	if err != nil {
-		t.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		t.Fatal(err)
-	}
 	var dicts [][]byte
 	var encs []*Encoder
 	var encNames []string
