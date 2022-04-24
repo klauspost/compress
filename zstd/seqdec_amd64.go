@@ -121,6 +121,10 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 		return true, fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available",
 			ctx.ll, ctx.litRemain+ctx.ll)
 
+	case errorNotEnoughSpace:
+		size := ctx.outPosition + ctx.ll + ctx.ml
+		return true, fmt.Errorf("output (%d) bigger than max block size (%d)", size-startSize, maxBlockSize)
+
 	default:
 		return true, fmt.Errorf("sequenceDecs_decode returned erronous code %d", errCode)
 	}
@@ -173,11 +177,14 @@ const errorMatchLenOfsMismatch = 1
 // error reported when ml > maxMatchLen
 const errorMatchLenTooBig = 2
 
-// error reported when mo > t or mo > s.windowSize
+// error reported when mo > available history or mo > s.windowSize
 const errorMatchOffTooBig = 3
 
 // error reported when the sum of literal lengths exeeceds the literal buffer size
 const errorNotEnoughLiterals = 4
+
+// error reported when capacity of `out` is too small
+const errorNotEnoughSpace = 5
 
 // sequenceDecs_decode implements the main loop of sequenceDecs in x86 asm.
 //

@@ -306,6 +306,10 @@ error_not_enough_literals:
 	MOVQ $0x00000004, ret+24(FP)
 	RET
 
+	// Return with not enough output space error
+	MOVQ $0x00000005, ret+24(FP)
+	RET
+
 // func sequenceDecs_decode_56_amd64(s *sequenceDecs, br *bitReader, ctx *decodeAsmContext) int
 // Requires: CMOV
 TEXT ·sequenceDecs_decode_56_amd64(SB), $8-32
@@ -582,6 +586,10 @@ sequenceDecs_decode_56_amd64_error_match_len_too_big:
 	// Return with not enough literals error
 error_not_enough_literals:
 	MOVQ $0x00000004, ret+24(FP)
+	RET
+
+	// Return with not enough output space error
+	MOVQ $0x00000005, ret+24(FP)
 	RET
 
 // func sequenceDecs_decode_bmi2(s *sequenceDecs, br *bitReader, ctx *decodeAsmContext) int
@@ -865,6 +873,10 @@ error_not_enough_literals:
 	MOVQ $0x00000004, ret+24(FP)
 	RET
 
+	// Return with not enough output space error
+	MOVQ $0x00000005, ret+24(FP)
+	RET
+
 // func sequenceDecs_decode_56_bmi2(s *sequenceDecs, br *bitReader, ctx *decodeAsmContext) int
 // Requires: BMI, BMI2, CMOV
 TEXT ·sequenceDecs_decode_56_bmi2(SB), $8-32
@@ -1121,6 +1133,10 @@ error_not_enough_literals:
 	MOVQ $0x00000004, ret+24(FP)
 	RET
 
+	// Return with not enough output space error
+	MOVQ $0x00000005, ret+24(FP)
+	RET
+
 // func sequenceDecs_executeSimple_amd64(ctx *executeAsmContext) bool
 // Requires: SSE
 TEXT ·sequenceDecs_executeSimple_amd64(SB), $8-9
@@ -1374,7 +1390,7 @@ empty_seqs:
 
 // func sequenceDecs_decodeSync_amd64(s *sequenceDecs, br *bitReader, ctx *decodeSyncAsmContext) int
 // Requires: CMOV, SSE
-TEXT ·sequenceDecs_decodeSync_amd64(SB), $56-32
+TEXT ·sequenceDecs_decodeSync_amd64(SB), $64-32
 	MOVQ    br+8(FP), AX
 	MOVQ    32(AX), DX
 	MOVBQZX 40(AX), BX
@@ -1387,16 +1403,21 @@ TEXT ·sequenceDecs_decodeSync_amd64(SB), $56-32
 	MOVQ    80(AX), R8
 	MOVQ    88(AX), R9
 	MOVQ    112(AX), R10
+	MOVQ    128(AX), CX
+	MOVQ    CX, 32(SP)
 	MOVQ    144(AX), R11
 	MOVQ    136(AX), R12
 	MOVQ    200(AX), CX
-	MOVQ    CX, 48(SP)
+	MOVQ    CX, 56(SP)
 	MOVQ    176(AX), CX
-	MOVQ    CX, 40(SP)
+	MOVQ    CX, 48(SP)
 	MOVQ    184(AX), AX
-	MOVQ    AX, 32(SP)
-	MOVQ    32(SP), AX
-	ADDQ    AX, 40(SP)
+	MOVQ    AX, 40(SP)
+	MOVQ    40(SP), AX
+	ADDQ    AX, 48(SP)
+
+	// Calculate poiter to s.out[cap(s.out)] (a past-end pointer)
+	ADDQ R10, 32(SP)
 
 	// outBase += outPosition
 	ADDQ R12, R10
@@ -1642,6 +1663,12 @@ sequenceDecs_decodeSync_amd64_match_len_ofs_ok:
 	MOVQ 8(SP), CX
 	MOVQ 16(SP), R13
 
+	// Check if we have enough space in s.out
+	LEAQ (AX)(R13*1), R14
+	ADDQ R10, R14
+	CMPQ R14, 32(SP)
+	JAE  error_not_enough_space
+
 	// Copy literals
 	TESTQ AX, AX
 	JZ    check_offset
@@ -1689,17 +1716,17 @@ copy_1_test:
 	// Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)
 check_offset:
 	MOVQ R12, AX
-	ADDQ 32(SP), AX
+	ADDQ 40(SP), AX
 	CMPQ CX, AX
 	JG   error_match_off_too_big
-	CMPQ CX, 48(SP)
+	CMPQ CX, 56(SP)
 	JG   error_match_off_too_big
 
 	// Copy match from history
 	MOVQ  CX, AX
 	SUBQ  R12, AX
 	JLS   copy_match
-	MOVQ  40(SP), R14
+	MOVQ  48(SP), R14
 	SUBQ  AX, R14
 	CMPQ  R13, AX
 	JGE   copy_all_from_history
@@ -1879,9 +1906,19 @@ error_not_enough_literals:
 	MOVQ $0x00000004, ret+24(FP)
 	RET
 
+	// Return with not enough output space error
+error_not_enough_space:
+	MOVQ ctx+16(FP), AX
+	MOVQ 24(SP), CX
+	MOVQ CX, 208(AX)
+	MOVQ 16(SP), CX
+	MOVQ CX, 216(AX)
+	MOVQ $0x00000005, ret+24(FP)
+	RET
+
 // func sequenceDecs_decodeSync_bmi2(s *sequenceDecs, br *bitReader, ctx *decodeSyncAsmContext) int
 // Requires: BMI, BMI2, CMOV, SSE
-TEXT ·sequenceDecs_decodeSync_bmi2(SB), $56-32
+TEXT ·sequenceDecs_decodeSync_bmi2(SB), $64-32
 	MOVQ    br+8(FP), CX
 	MOVQ    32(CX), AX
 	MOVBQZX 40(CX), DX
@@ -1894,16 +1931,21 @@ TEXT ·sequenceDecs_decodeSync_bmi2(SB), $56-32
 	MOVQ    80(CX), DI
 	MOVQ    88(CX), R8
 	MOVQ    112(CX), R9
+	MOVQ    128(CX), R10
+	MOVQ    R10, 32(SP)
 	MOVQ    144(CX), R10
 	MOVQ    136(CX), R11
 	MOVQ    200(CX), R12
-	MOVQ    R12, 48(SP)
+	MOVQ    R12, 56(SP)
 	MOVQ    176(CX), R12
-	MOVQ    R12, 40(SP)
+	MOVQ    R12, 48(SP)
 	MOVQ    184(CX), CX
-	MOVQ    CX, 32(SP)
-	MOVQ    32(SP), CX
-	ADDQ    CX, 40(SP)
+	MOVQ    CX, 40(SP)
+	MOVQ    40(SP), CX
+	ADDQ    CX, 48(SP)
+
+	// Calculate poiter to s.out[cap(s.out)] (a past-end pointer)
+	ADDQ R9, 32(SP)
 
 	// outBase += outPosition
 	ADDQ R11, R9
@@ -2127,6 +2169,12 @@ sequenceDecs_decodeSync_bmi2_match_len_ofs_ok:
 	MOVQ 8(SP), R12
 	MOVQ 16(SP), R13
 
+	// Check if we have enough space in s.out
+	LEAQ (CX)(R13*1), R14
+	ADDQ R9, R14
+	CMPQ R14, 32(SP)
+	JAE  error_not_enough_space
+
 	// Copy literals
 	TESTQ CX, CX
 	JZ    check_offset
@@ -2174,17 +2222,17 @@ copy_1_test:
 	// Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)
 check_offset:
 	MOVQ R11, CX
-	ADDQ 32(SP), CX
+	ADDQ 40(SP), CX
 	CMPQ R12, CX
 	JG   error_match_off_too_big
-	CMPQ R12, 48(SP)
+	CMPQ R12, 56(SP)
 	JG   error_match_off_too_big
 
 	// Copy match from history
 	MOVQ  R12, CX
 	SUBQ  R11, CX
 	JLS   copy_match
-	MOVQ  40(SP), R14
+	MOVQ  48(SP), R14
 	SUBQ  CX, R14
 	CMPQ  R13, CX
 	JGE   copy_all_from_history
@@ -2364,9 +2412,19 @@ error_not_enough_literals:
 	MOVQ $0x00000004, ret+24(FP)
 	RET
 
+	// Return with not enough output space error
+error_not_enough_space:
+	MOVQ ctx+16(FP), AX
+	MOVQ 24(SP), CX
+	MOVQ CX, 208(AX)
+	MOVQ 16(SP), CX
+	MOVQ CX, 216(AX)
+	MOVQ $0x00000005, ret+24(FP)
+	RET
+
 // func sequenceDecs_decodeSync_safe_amd64(s *sequenceDecs, br *bitReader, ctx *decodeSyncAsmContext) int
 // Requires: CMOV, SSE
-TEXT ·sequenceDecs_decodeSync_safe_amd64(SB), $56-32
+TEXT ·sequenceDecs_decodeSync_safe_amd64(SB), $64-32
 	MOVQ    br+8(FP), AX
 	MOVQ    32(AX), DX
 	MOVBQZX 40(AX), BX
@@ -2379,16 +2437,21 @@ TEXT ·sequenceDecs_decodeSync_safe_amd64(SB), $56-32
 	MOVQ    80(AX), R8
 	MOVQ    88(AX), R9
 	MOVQ    112(AX), R10
+	MOVQ    128(AX), CX
+	MOVQ    CX, 32(SP)
 	MOVQ    144(AX), R11
 	MOVQ    136(AX), R12
 	MOVQ    200(AX), CX
-	MOVQ    CX, 48(SP)
+	MOVQ    CX, 56(SP)
 	MOVQ    176(AX), CX
-	MOVQ    CX, 40(SP)
+	MOVQ    CX, 48(SP)
 	MOVQ    184(AX), AX
-	MOVQ    AX, 32(SP)
-	MOVQ    32(SP), AX
-	ADDQ    AX, 40(SP)
+	MOVQ    AX, 40(SP)
+	MOVQ    40(SP), AX
+	ADDQ    AX, 48(SP)
+
+	// Calculate poiter to s.out[cap(s.out)] (a past-end pointer)
+	ADDQ R10, 32(SP)
 
 	// outBase += outPosition
 	ADDQ R12, R10
@@ -2634,6 +2697,12 @@ sequenceDecs_decodeSync_safe_amd64_match_len_ofs_ok:
 	MOVQ 8(SP), CX
 	MOVQ 16(SP), R13
 
+	// Check if we have enough space in s.out
+	LEAQ (AX)(R13*1), R14
+	ADDQ R10, R14
+	CMPQ R14, 32(SP)
+	JAE  error_not_enough_space
+
 	// Copy literals
 	TESTQ AX, AX
 	JZ    check_offset
@@ -2681,17 +2750,17 @@ copy_1_test:
 	// Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)
 check_offset:
 	MOVQ R12, AX
-	ADDQ 32(SP), AX
+	ADDQ 40(SP), AX
 	CMPQ CX, AX
 	JG   error_match_off_too_big
-	CMPQ CX, 48(SP)
+	CMPQ CX, 56(SP)
 	JG   error_match_off_too_big
 
 	// Copy match from history
 	MOVQ  CX, AX
 	SUBQ  R12, AX
 	JLS   copy_match
-	MOVQ  40(SP), R14
+	MOVQ  48(SP), R14
 	SUBQ  AX, R14
 	CMPQ  R13, AX
 	JGE   copy_all_from_history
@@ -2900,9 +2969,19 @@ error_not_enough_literals:
 	MOVQ $0x00000004, ret+24(FP)
 	RET
 
+	// Return with not enough output space error
+error_not_enough_space:
+	MOVQ ctx+16(FP), AX
+	MOVQ 24(SP), CX
+	MOVQ CX, 208(AX)
+	MOVQ 16(SP), CX
+	MOVQ CX, 216(AX)
+	MOVQ $0x00000005, ret+24(FP)
+	RET
+
 // func sequenceDecs_decodeSync_safe_bmi2(s *sequenceDecs, br *bitReader, ctx *decodeSyncAsmContext) int
 // Requires: BMI, BMI2, CMOV, SSE
-TEXT ·sequenceDecs_decodeSync_safe_bmi2(SB), $56-32
+TEXT ·sequenceDecs_decodeSync_safe_bmi2(SB), $64-32
 	MOVQ    br+8(FP), CX
 	MOVQ    32(CX), AX
 	MOVBQZX 40(CX), DX
@@ -2915,16 +2994,21 @@ TEXT ·sequenceDecs_decodeSync_safe_bmi2(SB), $56-32
 	MOVQ    80(CX), DI
 	MOVQ    88(CX), R8
 	MOVQ    112(CX), R9
+	MOVQ    128(CX), R10
+	MOVQ    R10, 32(SP)
 	MOVQ    144(CX), R10
 	MOVQ    136(CX), R11
 	MOVQ    200(CX), R12
-	MOVQ    R12, 48(SP)
+	MOVQ    R12, 56(SP)
 	MOVQ    176(CX), R12
-	MOVQ    R12, 40(SP)
+	MOVQ    R12, 48(SP)
 	MOVQ    184(CX), CX
-	MOVQ    CX, 32(SP)
-	MOVQ    32(SP), CX
-	ADDQ    CX, 40(SP)
+	MOVQ    CX, 40(SP)
+	MOVQ    40(SP), CX
+	ADDQ    CX, 48(SP)
+
+	// Calculate poiter to s.out[cap(s.out)] (a past-end pointer)
+	ADDQ R9, 32(SP)
 
 	// outBase += outPosition
 	ADDQ R11, R9
@@ -3148,6 +3232,12 @@ sequenceDecs_decodeSync_safe_bmi2_match_len_ofs_ok:
 	MOVQ 8(SP), R12
 	MOVQ 16(SP), R13
 
+	// Check if we have enough space in s.out
+	LEAQ (CX)(R13*1), R14
+	ADDQ R9, R14
+	CMPQ R14, 32(SP)
+	JAE  error_not_enough_space
+
 	// Copy literals
 	TESTQ CX, CX
 	JZ    check_offset
@@ -3195,17 +3285,17 @@ copy_1_test:
 	// Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)
 check_offset:
 	MOVQ R11, CX
-	ADDQ 32(SP), CX
+	ADDQ 40(SP), CX
 	CMPQ R12, CX
 	JG   error_match_off_too_big
-	CMPQ R12, 48(SP)
+	CMPQ R12, 56(SP)
 	JG   error_match_off_too_big
 
 	// Copy match from history
 	MOVQ  R12, CX
 	SUBQ  R11, CX
 	JLS   copy_match
-	MOVQ  40(SP), R14
+	MOVQ  48(SP), R14
 	SUBQ  CX, R14
 	CMPQ  R13, CX
 	JGE   copy_all_from_history
@@ -3412,4 +3502,14 @@ error_not_enough_literals:
 	MOVQ 24(SP), CX
 	MOVQ CX, 208(AX)
 	MOVQ $0x00000004, ret+24(FP)
+	RET
+
+	// Return with not enough output space error
+error_not_enough_space:
+	MOVQ ctx+16(FP), AX
+	MOVQ 24(SP), CX
+	MOVQ CX, 208(AX)
+	MOVQ 16(SP), CX
+	MOVQ CX, 216(AX)
+	MOVQ $0x00000005, ret+24(FP)
 	RET
