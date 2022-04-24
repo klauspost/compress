@@ -1497,6 +1497,31 @@ func BenchmarkDecoderEnwik9(b *testing.B) {
 	benchmarkDecoderWithFile("testdata/enwik9.zst", b)
 }
 
+func BenchmarkDecoderWithCustomFiles(b *testing.B) {
+	const info = "To run benchmark on custom .zst files, please place your files in subdirectory 'testdata/benchmark-custom'.\nEach file is tested in a separate benchmark, thus it is possible to select files with the standard command 'go test -bench BenchmarkDecoderWithCustomFiles/<pattern>."
+
+	const subdir = "testdata/benchmark-custom"
+
+	if _, err := os.Stat(subdir); os.IsNotExist(err) {
+		b.Skip(info)
+	}
+
+	files, err := filepath.Glob(filepath.Join(subdir, "*.zst"))
+	if err != nil {
+		b.Error(err)
+		return
+	}
+
+	if len(files) == 0 {
+		b.Skip(info)
+	}
+
+	for _, path := range files {
+		name := filepath.Base(path)
+		b.Run(name, func(b *testing.B) { benchmarkDecoderWithFile(path, b) })
+	}
+}
+
 func testDecoderDecodeAll(t *testing.T, fn string, dec *Decoder) {
 	data, err := ioutil.ReadFile(fn)
 	if err != nil {
