@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 
 	_ "github.com/klauspost/compress"
 
@@ -75,12 +76,13 @@ func main() {
 	exec.generateProcedure("sequenceDecs_executeSimple_amd64")
 
 	decodeSync := decodeSync{}
+	decodeSync.setSafeMem(false)
 	decodeSync.setBMI2(false)
 	decodeSync.generateProcedure("sequenceDecs_decodeSync_amd64")
 	decodeSync.setBMI2(true)
 	decodeSync.generateProcedure("sequenceDecs_decodeSync_bmi2")
 
-	decodeSync.execute.safeMem = true
+	decodeSync.setSafeMem(true)
 	decodeSync.setBMI2(false)
 	decodeSync.generateProcedure("sequenceDecs_decodeSync_safe_amd64")
 	decodeSync.setBMI2(true)
@@ -134,6 +136,7 @@ type options struct {
 	bmi2     bool
 	fiftysix bool // Less than max 56 bits/loop
 	useSeqs  bool // Generate code that uses the `seqs` auxiliary table
+	safeMem  bool // Copy of executeSimple.safeMem member, when useSeqs is true
 }
 
 func (o options) genDecodeSeqAsm(name string) {
@@ -218,10 +221,22 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			loadField(ctx.Field("history").Base(), ec.histBasePtr)
 			loadField(ctx.Field("history").Len(), ec.histLenPtr)
 
+			if !o.safeMem {
+				Comment("Calculate cap(s.literals) - len(s.literals)")
+				l := GP64()
+				c := GP64()
+				Load(ctx.Field("literals").Len(), l)
+				Load(ctx.Field("literals").Cap(), c)
+				SUBQ(l, c)
+				ec.literalsOverallocatedPtr = AllocLocal(8)
+				MOVQ(c, ec.literalsOverallocatedPtr)
+			}
+
 			{
+				Comment("Calculate end-of-hist pointer, as we always copy from &hist[len(hist) - v]")
 				tmp := GP64()
 				MOVQ(ec.histLenPtr, tmp)
-				ADDQ(tmp, ec.histBasePtr) // Note: we always copy from &hist[len(hist) - v]
+				ADDQ(tmp, ec.histBasePtr)
 			}
 
 			Comment("outBase += outPosition")
@@ -867,6 +882,7 @@ func (o options) adjustOffsetInMemory(name string, moP, llP Mem, offsetB reg.GPV
 type executeSimple struct {
 	useSeqs bool // Generate code that uses the `seqs` auxiliary table
 	safeMem bool
+	copyId  int // A unique id for labels generated inside copyMemory & copyMemoryPrecise
 }
 
 // copySize returns register size used to fast copy.
@@ -984,6 +1000,7 @@ func (e executeSimple) generateProcedure(name string) {
 	RET()
 }
 
+// executeSingleTripleContext carries details of how to generate executeSingleTriple code.
 type executeSingleTripleContext struct {
 	// common values
 	llPtr Mem
@@ -1000,9 +1017,10 @@ type executeSingleTripleContext struct {
 	windowSize reg.GPVirtual
 
 	// values used when useSeqs is false
-	histBasePtr   Mem
-	histLenPtr    Mem
-	windowSizePtr Mem
+	histBasePtr              Mem
+	histLenPtr               Mem
+	windowSizePtr            Mem
+	literalsOverallocatedPtr Mem // cap(s.literals) - len(s.literals) [used when safeMem is false]
 }
 
 // executeSingleTriple performs copy from literals and history according
@@ -1021,10 +1039,33 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		TESTQ(ll, ll)
 		JZ(LabelRef("check_offset"))
 		// TODO: Investigate if it is possible to consistently overallocate literals.
-		e.copyMemoryPrecise("1", c.literals, c.outBase, ll)
-		ADDQ(ll, c.literals)
-		ADDQ(ll, c.outBase)
-		ADDQ(ll, c.outPosition)
+
+		if !e.useSeqs && !e.safeMem {
+			// Note: in case of `go test` it's true for approx 16% cases
+			CMPQ(c.literalsOverallocatedPtr, U32(e.copySize()))
+			JBE(LabelRef("copy_literals_precise"))
+			{
+				Label("copy_literals_fast")
+				e.copyMemory(c.literals, c.outBase, ll)
+				ADDQ(ll, c.literals)
+				ADDQ(ll, c.outBase)
+				ADDQ(ll, c.outPosition)
+				JMP(LabelRef("check_offset"))
+			}
+			Label("copy_literals_precise")
+			{
+				e.copyMemoryPrecise(c.literals, c.outBase, ll)
+				ADDQ(ll, c.literals)
+				ADDQ(ll, c.outBase)
+				ADDQ(ll, c.outPosition)
+			}
+			// fallthrough to the check_offset
+		} else {
+			e.copyMemoryPrecise(c.literals, c.outBase, ll)
+			ADDQ(ll, c.literals)
+			ADDQ(ll, c.outBase)
+			ADDQ(ll, c.outPosition)
+		}
 	}
 
 	Comment("Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)")
@@ -1087,7 +1128,7 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		        continue
 		    }
 		*/
-		e.copyMemoryPrecise("4", ptr, c.outBase, ml)
+		e.copyMemoryPrecise(ptr, c.outBase, ml)
 		ADDQ(ml, c.outPosition)
 		ADDQ(ml, c.outBase)
 		// Note: for the current go tests this branch is taken in 99.53% cases,
@@ -1104,11 +1145,11 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		        seq.ml -= v
 		    }
 		*/
-		e.copyMemoryPrecise("5", ptr, c.outBase, v)
+		e.copyMemoryPrecise(ptr, c.outBase, v)
 		ADDQ(v, c.outBase)
 		ADDQ(v, c.outPosition)
 		SUBQ(v, ml)
-		// fallback to the next block
+		// fallthrough to the next block
 	}
 
 	Comment("Copy match from the current buffer")
@@ -1138,9 +1179,9 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		Comment("Copy non-overlapping match")
 		{
 			if e.safeMem {
-				e.copyMemoryPrecise("2", src, c.outBase, ml)
+				e.copyMemoryPrecise(src, c.outBase, ml)
 			} else {
-				e.copyMemory("2", src, c.outBase, ml)
+				e.copyMemory(src, c.outBase, ml)
 			}
 			ADDQ(ml, c.outBase)
 			ADDQ(ml, c.outPosition)
@@ -1159,8 +1200,11 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 
 // copyMemory will copy memory in blocks of 16 bytes,
 // overwriting up to 15 extra bytes.
-func (e executeSimple) copyMemory(suffix string, src, dst, length reg.GPVirtual) {
+func (e *executeSimple) copyMemory(src, dst, length reg.GPVirtual) {
+	e.copyId += 1
+	suffix := strconv.Itoa(e.copyId)
 	label := "copy_" + suffix
+
 	ofs := GP64()
 	s := Mem{Base: src, Index: ofs, Scale: 1}
 	d := Mem{Base: dst, Index: ofs, Scale: 1}
@@ -1177,8 +1221,11 @@ func (e executeSimple) copyMemory(suffix string, src, dst, length reg.GPVirtual)
 
 // copyMemoryPrecise will copy memory in blocks of 16 bytes,
 // without overwriting nor overreading.
-func (e executeSimple) copyMemoryPrecise(suffix string, src, dst, length reg.GPVirtual) {
+func (e *executeSimple) copyMemoryPrecise(src, dst, length reg.GPVirtual) {
+	e.copyId += 1
+	suffix := strconv.Itoa(e.copyId)
 	label := "copy_" + suffix
+
 	ofs := GP64()
 	s := Mem{Base: src, Index: ofs, Scale: 1}
 	d := Mem{Base: dst, Index: ofs, Scale: 1}
@@ -1258,6 +1305,11 @@ type decodeSync struct {
 
 func (d *decodeSync) setBMI2(flag bool) {
 	d.decode.bmi2 = flag
+}
+
+func (d *decodeSync) setSafeMem(flag bool) {
+	d.decode.safeMem = flag
+	d.execute.safeMem = flag
 }
 
 func (d *decodeSync) generateProcedure(name string) {
