@@ -27,7 +27,6 @@ import (
 	// "github.com/DataDog/zstd"
 	// zstd "github.com/valyala/gozstd"
 
-	"github.com/klauspost/compress/zip"
 	"github.com/klauspost/compress/zstd/internal/xxhash"
 )
 
@@ -638,14 +637,8 @@ func TestNewDecoderFlushed(t *testing.T) {
 
 func TestDecoderRegression(t *testing.T) {
 	defer timeout(160 * time.Second)()
-	data, err := ioutil.ReadFile("testdata/regression.zip")
-	if err != nil {
-		t.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		t.Fatal(err)
-	}
+
+	zr := testCreateZipReader("testdata/regression.zip", t)
 	dec, err := NewReader(nil, WithDecoderConcurrency(1), WithDecoderLowmem(true), WithDecoderMaxMemory(1<<20))
 	if err != nil {
 		t.Error(err)
@@ -872,15 +865,7 @@ func TestDecoder_Reset(t *testing.T) {
 }
 
 func TestDecoderMultiFrame(t *testing.T) {
-	fn := "testdata/benchdecoder.zip"
-	data, err := ioutil.ReadFile(fn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		t.Fatal(err)
-	}
+	zr := testCreateZipReader("testdata/benchdecoder.zip", t)
 	dec, err := NewReader(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -933,15 +918,7 @@ func TestDecoderMultiFrame(t *testing.T) {
 }
 
 func TestDecoderMultiFrameReset(t *testing.T) {
-	fn := "testdata/benchdecoder.zip"
-	data, err := ioutil.ReadFile(fn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		t.Fatal(err)
-	}
+	zr := testCreateZipReader("testdata/benchdecoder.zip", t)
 	dec, err := NewReader(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -1005,14 +982,7 @@ func TestDecoderMultiFrameReset(t *testing.T) {
 }
 
 func testDecoderFile(t *testing.T, fn string, newDec func() (*Decoder, error)) {
-	data, err := ioutil.ReadFile(fn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		t.Fatal(err)
-	}
+	zr := testCreateZipReader(fn, t)
 	var want = make(map[string][]byte)
 	for _, tt := range zr.File {
 		if strings.HasSuffix(tt.Name, ".zst") {
@@ -1119,14 +1089,7 @@ func testDecoderFile(t *testing.T, fn string, newDec func() (*Decoder, error)) {
 }
 
 func testDecoderFileBad(t *testing.T, fn string, newDec func() (*Decoder, error), errMap map[string]string) {
-	data, err := ioutil.ReadFile(fn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		t.Fatal(err)
-	}
+	zr := testCreateZipReader(fn, t)
 	var want = make(map[string][]byte)
 	for _, tt := range zr.File {
 		if strings.HasSuffix(tt.Name, ".zst") {
@@ -1188,15 +1151,7 @@ func testDecoderFileBad(t *testing.T, fn string, newDec func() (*Decoder, error)
 }
 
 func BenchmarkDecoder_DecoderSmall(b *testing.B) {
-	fn := "testdata/benchdecoder.zip"
-	data, err := ioutil.ReadFile(fn)
-	if err != nil {
-		b.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		b.Fatal(err)
-	}
+	zr := testCreateZipReader("testdata/benchdecoder.zip", b)
 	dec, err := NewReader(nil)
 	if err != nil {
 		b.Fatal(err)
@@ -1249,15 +1204,7 @@ func BenchmarkDecoder_DecoderSmall(b *testing.B) {
 }
 
 func BenchmarkDecoder_DecodeAll(b *testing.B) {
-	fn := "testdata/benchdecoder.zip"
-	data, err := ioutil.ReadFile(fn)
-	if err != nil {
-		b.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		b.Fatal(err)
-	}
+	zr := testCreateZipReader("testdata/benchdecoder.zip", b)
 	dec, err := NewReader(nil, WithDecoderConcurrency(1))
 	if err != nil {
 		b.Fatal(err)
@@ -1397,15 +1344,7 @@ func BenchmarkDecoder_DecodeAllFilesP(b *testing.B) {
 }
 
 func BenchmarkDecoder_DecodeAllParallel(b *testing.B) {
-	fn := "testdata/benchdecoder.zip"
-	data, err := ioutil.ReadFile(fn)
-	if err != nil {
-		b.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		b.Fatal(err)
-	}
+	zr := testCreateZipReader("testdata/benchdecoder.zip", b)
 	dec, err := NewReader(nil, WithDecoderConcurrency(runtime.GOMAXPROCS(0)))
 	if err != nil {
 		b.Fatal(err)
@@ -1498,14 +1437,7 @@ func BenchmarkDecoderEnwik9(b *testing.B) {
 }
 
 func testDecoderDecodeAll(t *testing.T, fn string, dec *Decoder) {
-	data, err := ioutil.ReadFile(fn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		t.Fatal(err)
-	}
+	zr := testCreateZipReader(fn, t)
 	var want = make(map[string][]byte)
 	for _, tt := range zr.File {
 		if strings.HasSuffix(tt.Name, ".zst") {
@@ -1574,14 +1506,7 @@ func testDecoderDecodeAll(t *testing.T, fn string, dec *Decoder) {
 }
 
 func testDecoderDecodeAllError(t *testing.T, fn string, dec *Decoder, errMap map[string]string) {
-	data, err := ioutil.ReadFile(fn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		t.Fatal(err)
-	}
+	zr := testCreateZipReader(fn, t)
 
 	var wg sync.WaitGroup
 	for _, tt := range zr.File {
