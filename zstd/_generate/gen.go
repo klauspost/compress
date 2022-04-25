@@ -1,13 +1,10 @@
 package main
 
-//go:generate go run gen.go -out seqdec_amd64.s -stubs delme.go -pkg=zstd
+//go:generate go run gen.go -out ../seqdec_amd64.s -pkg=zstd
 
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
-	"os"
-	"path/filepath"
 	"runtime"
 
 	_ "github.com/klauspost/compress"
@@ -31,7 +28,7 @@ const errorMatchLenTooBig = 2
 // error reported when mo > t or mo > s.windowSize
 const errorMatchOffTooBig = 3
 
-// error reported when the sum of literal lengths exeeceds the literal buffer size
+// error reported when the sum of literal lengths exceeds the literal buffer size
 const errorNotEnoughLiterals = 4
 
 // error reported when capacity of `out` is too small
@@ -44,13 +41,6 @@ const seqValsSize = 24
 
 func main() {
 	flag.Parse()
-	out := flag.Lookup("out")
-	os.Remove(filepath.Join("..", out.Value.String()))
-	stub := flag.Lookup("stubs")
-	if stub.Value.String() != "" {
-		os.Remove(stub.Value.String())
-		defer os.Remove(stub.Value.String())
-	}
 
 	Constraint(buildtags.Not("appengine").ToConstraint())
 	Constraint(buildtags.Not("noasm").ToConstraint())
@@ -89,16 +79,6 @@ func main() {
 	decodeSync.setBMI2(true)
 	decodeSync.generateProcedure("sequenceDecs_decodeSync_safe_bmi2")
 	Generate()
-	b, err := ioutil.ReadFile(out.Value.String())
-	if err != nil {
-		panic(err)
-	}
-	const readOnly = 0444
-	err = ioutil.WriteFile(filepath.Join("..", out.Value.String()), b, readOnly)
-	if err != nil {
-		panic(err)
-	}
-	os.Remove(out.Value.String())
 }
 
 func debugval(v Op) {
@@ -1044,12 +1024,12 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 	if !e.useSeqs {
 		Comment("Check if we have enough space in s.out")
 		{
-			// baseAfterCopy = ll + ml + c.outBese
+			// baseAfterCopy = ll + ml + c.outBase
 			baseAfterCopy := GP64()
 			LEAQ(Mem{Base: ll, Index: ml, Scale: 1}, baseAfterCopy)
 			ADDQ(c.outBase, baseAfterCopy)
 			CMPQ(baseAfterCopy, c.outEndPtr)
-			JAE(LabelRef("error_not_enough_space"))
+			JA(LabelRef("error_not_enough_space"))
 		}
 	}
 

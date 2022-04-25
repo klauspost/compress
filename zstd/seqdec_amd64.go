@@ -59,10 +59,9 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 	if s.maxSyncLen == 0 && cap(s.out)-len(s.out) < maxCompressedBlockSizeAlloc {
 		useSafe = true
 	}
-	if s.maxSyncLen > 0 && uint64(cap(s.out))-compressedBlockOverAlloc < s.maxSyncLen {
+	if s.maxSyncLen > 0 && cap(s.out)-len(s.out)-compressedBlockOverAlloc < int(s.maxSyncLen) {
 		useSafe = true
 	}
-
 	br := s.br
 
 	maxBlockSize := maxCompressedBlockSize
@@ -123,6 +122,9 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 
 	case errorNotEnoughSpace:
 		size := ctx.outPosition + ctx.ll + ctx.ml
+		if debugDecoder {
+			println("msl:", s.maxSyncLen, "cap", cap(s.out), "bef:", startSize, "sz:", size-startSize, "mbs:", maxBlockSize, "outsz:", cap(s.out)-startSize)
+		}
 		return true, fmt.Errorf("output (%d) bigger than max block size (%d)", size-startSize, maxBlockSize)
 
 	default:
