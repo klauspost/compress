@@ -62,7 +62,6 @@ jobs:
         git diff
         test -z "$(git status --porcelain)"
 
-
   build-special:
     env:
       CGO_ENABLED: 0
