@@ -1381,6 +1381,7 @@ func BenchmarkDecoder_DecodeAllParallel(b *testing.B) {
 					}
 				}
 			})
+			b.ReportMetric(100*float64(len(in))/float64(len(got)), "pct")
 		})
 	}
 }
