@@ -1044,12 +1044,12 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 	if !e.useSeqs {
 		Comment("Check if we have enough space in s.out")
 		{
-			// baseAfterCopy = ll + ml + c.outBese
+			// baseAfterCopy = ll + ml + c.outBase
 			baseAfterCopy := GP64()
 			LEAQ(Mem{Base: ll, Index: ml, Scale: 1}, baseAfterCopy)
 			ADDQ(c.outBase, baseAfterCopy)
 			CMPQ(baseAfterCopy, c.outEndPtr)
-			JAE(LabelRef("error_not_enough_space"))
+			JA(LabelRef("error_not_enough_space"))
 		}
 	}
 

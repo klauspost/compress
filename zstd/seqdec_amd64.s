@@ -1667,7 +1667,7 @@ sequenceDecs_decodeSync_amd64_match_len_ofs_ok:
 	LEAQ (AX)(R13*1), R14
 	ADDQ R10, R14
 	CMPQ R14, 32(SP)
-	JAE  error_not_enough_space
+	JA   error_not_enough_space
 
 	// Copy literals
 	TESTQ AX, AX
@@ -1913,6 +1913,7 @@ error_not_enough_space:
 	MOVQ CX, 208(AX)
 	MOVQ 16(SP), CX
 	MOVQ CX, 216(AX)
+	MOVQ R12, 136(AX)
 	MOVQ $0x00000005, ret+24(FP)
 	RET
 
@@ -2173,7 +2174,7 @@ sequenceDecs_decodeSync_bmi2_match_len_ofs_ok:
 	LEAQ (CX)(R13*1), R14
 	ADDQ R9, R14
 	CMPQ R14, 32(SP)
-	JAE  error_not_enough_space
+	JA   error_not_enough_space
 
 	// Copy literals
 	TESTQ CX, CX
@@ -2419,6 +2420,7 @@ error_not_enough_space:
 	MOVQ CX, 208(AX)
 	MOVQ 16(SP), CX
 	MOVQ CX, 216(AX)
+	MOVQ R11, 136(AX)
 	MOVQ $0x00000005, ret+24(FP)
 	RET
 
@@ -2701,7 +2703,7 @@ sequenceDecs_decodeSync_safe_amd64_match_len_ofs_ok:
 	LEAQ (AX)(R13*1), R14
 	ADDQ R10, R14
 	CMPQ R14, 32(SP)
-	JAE  error_not_enough_space
+	JA   error_not_enough_space
 
 	// Copy literals
 	TESTQ AX, AX
@@ -2976,6 +2978,7 @@ error_not_enough_space:
 	MOVQ CX, 208(AX)
 	MOVQ 16(SP), CX
 	MOVQ CX, 216(AX)
+	MOVQ R12, 136(AX)
 	MOVQ $0x00000005, ret+24(FP)
 	RET
 
@@ -3236,7 +3239,7 @@ sequenceDecs_decodeSync_safe_bmi2_match_len_ofs_ok:
 	LEAQ (CX)(R13*1), R14
 	ADDQ R9, R14
 	CMPQ R14, 32(SP)
-	JAE  error_not_enough_space
+	JA   error_not_enough_space
 
 	// Copy literals
 	TESTQ CX, CX
@@ -3511,5 +3514,6 @@ error_not_enough_space:
 	MOVQ CX, 208(AX)
 	MOVQ 16(SP), CX
 	MOVQ CX, 216(AX)
+	MOVQ R11, 136(AX)
 	MOVQ $0x00000005, ret+24(FP)
 	RET

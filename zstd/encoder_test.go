@@ -251,12 +251,12 @@ func TestEncoderRegression(t *testing.T) {
 						t.Error(err)
 					}
 					encoded := enc.EncodeAll(in, nil)
-					got, err := dec.DecodeAll(encoded, nil)
+					// Usually too small...
+					got, err := dec.DecodeAll(encoded, make([]byte, 0, len(in)))
 					if err != nil {
 						t.Logf("error: %v\nwant: %v\ngot:  %v", err, len(in), len(got))
 						t.Fatal(err)
 					}
-
 					// Use the Writer
 					var dst bytes.Buffer
 					enc.ResetContentSize(&dst, int64(len(in)))
@@ -269,7 +269,7 @@ func TestEncoderRegression(t *testing.T) {
 						t.Error(err)
 					}
 					encoded = dst.Bytes()
-					got, err = dec.DecodeAll(encoded, nil)
+					got, err = dec.DecodeAll(encoded, make([]byte, 0, len(in)/2))
 					if err != nil {
 						t.Logf("error: %v\nwant: %v\ngot:  %v", err, in, got)
 						t.Error(err)

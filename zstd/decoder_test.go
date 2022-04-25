@@ -703,7 +703,7 @@ func TestDecoderRegression(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			got, gotErr := dec.DecodeAll(in, nil)
+			got, gotErr := dec.DecodeAll(in, make([]byte, 0, len(in)))
 			t.Log("Received:", len(got), gotErr)
 
 			// Check if we got the same:
@@ -713,7 +713,7 @@ func TestDecoderRegression(t *testing.T) {
 				return
 			}
 			defer decL.Close()
-			got2, gotErr2 := decL.DecodeAll(in, nil)
+			got2, gotErr2 := decL.DecodeAll(in, make([]byte, 0, len(in)/2))
 			t.Log("Fresh Reader received:", len(got2), gotErr2)
 			if gotErr != gotErr2 {
 				if gotErr != nil && gotErr2 != nil && gotErr.Error() != gotErr2.Error() {
@@ -741,7 +741,7 @@ func TestDecoderRegression(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			got, gotErr := dec.DecodeAll(in, nil)
+			got, gotErr := dec.DecodeAll(in, make([]byte, 0, len(in)))
 			t.Log("Received:", len(got), gotErr)
 
 			// Check a fresh instance

@@ -494,10 +494,14 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		b.dst = append(b.dst, hist.decoders.literals...)
 		return nil
 	}
-
+	before := len(hist.decoders.out)
 	err = hist.decoders.decodeSync(hist.b[hist.ignoreBuffer:])
 	if err != nil {
 		return err
+	}
+	if hist.decoders.maxSyncLen > 0 {
+		hist.decoders.maxSyncLen += uint64(before)
+		hist.decoders.maxSyncLen -= uint64(len(hist.decoders.out))
 	}
 	b.dst = hist.decoders.out
 	hist.recentOffsets = hist.decoders.prevOffset
