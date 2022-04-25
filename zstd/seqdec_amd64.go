@@ -59,7 +59,7 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 	if s.maxSyncLen == 0 && cap(s.out)-len(s.out) < maxCompressedBlockSizeAlloc {
 		useSafe = true
 	}
-	if s.maxSyncLen > 0 && uint64(cap(s.out))-compressedBlockOverAlloc < s.maxSyncLen {
+	if s.maxSyncLen > 0 && cap(s.out)-len(s.out)-compressedBlockOverAlloc < int(s.maxSyncLen) {
 		useSafe = true
 	}
 	br := s.br
