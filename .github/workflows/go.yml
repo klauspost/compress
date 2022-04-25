@@ -4,6 +4,7 @@ on:
   push:
     branches: [ master ]
   pull_request:
+    branches: [ master ]
 
        
 jobs:
@@ -38,7 +39,7 @@ jobs:
         CGO_ENABLED: 1
       run: go test -cpu="1,4" -short -race -v ./...
 
-  gen:
+  generate:
     strategy:
       matrix:
         pkg: [s2, zstd]
