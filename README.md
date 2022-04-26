@@ -17,7 +17,7 @@ This package provides various compression algorithms.
 
 # changelog
 
-* May 26, 2022 (v1.15.2)
+* Apr 26, 2022 (v1.15.2)
 	* zstd: Add x86-64 assembly for decompression on streams and blocks. Contributed by [@WojciechMula](https://github.com/WojciechMula). Typically 2x faster.  [#528](https://github.com/klauspost/compress/pull/528) [#531](https://github.com/klauspost/compress/pull/531) [#545](https://github.com/klauspost/compress/pull/545) [#537](https://github.com/klauspost/compress/pull/537)
 	* zstd: Add options to ZipDecompressor and fixes [#539](https://github.com/klauspost/compress/pull/539)
 	* s2: Use sorted search for index [#555](https://github.com/klauspost/compress/pull/555)
