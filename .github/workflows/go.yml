@@ -38,7 +38,30 @@ jobs:
       env:
         CGO_ENABLED: 1
       run: go test -cpu="1,4" -short -race -v ./...
-      
+
+  generate:
+    strategy:
+      matrix:
+        pkg: [s2, zstd]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.17.x
+
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Generate
+      working-directory: ${{ matrix.pkg }}/_generate
+      run: go generate -v -x
+
+    - name: Git Status
+      run: |
+        git diff
+        test -z "$(git status --porcelain)"
+
   build-special:
     env:
       CGO_ENABLED: 0
