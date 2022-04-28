@@ -1737,6 +1737,57 @@ func TestResetNil(t *testing.T) {
 	}
 }
 
+func TestIgnoreChecksum(t *testing.T) {
+	// zstd file containing text "compress\n" and has a xxhash checksum
+	zstdBlob := []byte{0x28, 0xb5, 0x2f, 0xfd, 0x24, 0x09, 0x49, 0x00, 0x00, 'C', 'o', 'm', 'p', 'r', 'e', 's', 's', '\n', 0x79, 0x6e, 0xe0, 0xd2}
+
+	// replace letter 'c' with 'C', so decoding should fail.
+	zstdBlob[9] = 'C'
+
+	{
+		// Check if the file is indeed incorrect
+		dec, err := NewReader(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer dec.Close()
+
+		dec.Reset(bytes.NewBuffer(zstdBlob))
+
+		_, err = ioutil.ReadAll(dec)
+		if err == nil {
+			t.Fatal("Expected decoding error")
+		}
+
+		if !errors.Is(err, ErrCRCMismatch) {
+			t.Fatalf("Expected checksum error, got '%s'", err)
+		}
+	}
+
+	{
+		// Ignore CRC error and decompress the content
+		dec, err := NewReader(nil, IgnoreChecksum(true))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer dec.Close()
+
+		dec.Reset(bytes.NewBuffer(zstdBlob))
+
+		res, err := ioutil.ReadAll(dec)
+		if err != nil {
+			t.Fatalf("Unexpected error: '%s'", err)
+		}
+
+		want := []byte{'C', 'o', 'm', 'p', 'r', 'e', 's', 's', '\n'}
+		if !bytes.Equal(res, want) {
+			t.Logf("want: %s", want)
+			t.Logf("got:  %s", res)
+			t.Fatalf("Wrong output")
+		}
+	}
+}
+
 func timeout(after time.Duration) (cancel func()) {
 	if isRaceTest {
 		return func() {}
