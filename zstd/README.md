@@ -412,6 +412,22 @@ BenchmarkDecoder_DecodeAllParallel/comp-data.bin.zst-32     	  923041	      1276
 
 This reflects the performance around May 2022, but this may be out of date.
 
+
+#### Benchmarking decompression
+
+By default benchmarks use the test files committed to the repository.
+
+In order to benchmark against the [Silesia
+Corups|http://www.data-compression.info/Corpora/SilesiaCorpus/index.html]
+(`BenchmarkDecoderSilesia`) or Wikipedia data (`BenchmarkDecoderEnwik9`), it's
+needed to manually download appropriate files and pack them with zstd. The
+compressed files have to be placed in subdirectory `zstd/testdata`.
+
+It's also possible to benchmark with custom files
+(`BenchmarkDecoderWithCustomFiles`). For each `.zst` files present in
+subdirectory `zstd/testdata/benchmark-custom` a separate benchmark will be run.
+
+
 ## Zstd inside ZIP files
 
 It is possible to use zstandard to compress individual files inside zip archives.
