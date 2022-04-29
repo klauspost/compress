@@ -333,7 +333,7 @@ func TestIndex(t *testing.T) {
 					case io.SeekCurrent:
 						toSkip = wantOffset - int64(len(input)/2)
 					case io.SeekEnd:
-						toSkip = int64(len(input)) - wantOffset
+						toSkip = -(int64(len(input)) - wantOffset)
 					}
 					gotOffset, err := rs.Seek(toSkip, i)
 					if gotOffset != wantOffset {

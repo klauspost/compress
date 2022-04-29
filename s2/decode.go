@@ -699,8 +699,16 @@ func (r *ReadSeeker) Seek(offset int64, whence int) (int64, error) {
 	case io.SeekCurrent:
 		offset += r.blockStart + int64(r.i)
 	case io.SeekEnd:
-		offset = -offset
+		if offset > 0 {
+			return 0, errors.New("seek after end of file")
+		}
+		offset = r.index.TotalUncompressed + offset
 	}
+
+	if offset < 0 {
+		return 0, errors.New("seek before start of file")
+	}
+
 	c, u, err := r.index.Find(offset)
 	if err != nil {
 		return r.blockStart + int64(r.i), err
@@ -710,10 +718,6 @@ func (r *ReadSeeker) Seek(offset int64, whence int) (int64, error) {
 	_, err = rs.Seek(c, io.SeekStart)
 	if err != nil {
 		return 0, err
-	}
-
-	if offset < 0 {
-		offset = r.index.TotalUncompressed + offset
 	}
 
 	r.i = r.j // Remove rest of current block.

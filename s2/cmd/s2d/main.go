@@ -278,7 +278,7 @@ Options:`)
 					rs, err := r.ReadSeeker(tailBytes > 0, nil)
 					exitErr(err)
 					if tailBytes > 0 {
-						_, err = rs.Seek(int64(tailBytes), io.SeekEnd)
+						_, err = rs.Seek(-int64(tailBytes), io.SeekEnd)
 					} else {
 						_, err = rs.Seek(int64(offset), io.SeekStart)
 					}
