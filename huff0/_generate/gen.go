@@ -31,26 +31,24 @@ func main() {
 	Generate()
 }
 
-const buffoff = 256 // see decompress.go, we're using [4][256]byte table
-
 type decompress4x struct {
 	bmi2 bool
 }
 
 func (d decompress4x) generateProcedure(name string) {
 	Package("github.com/klauspost/compress/huff0")
-	TEXT(name, 0, "func(ctx* decompress4xContext) uint8")
+	TEXT(name, 0, "func(ctx* decompress4xContext)")
 	Doc(name+" is an x86 assembler implementation of Decompress4X when tablelog > 8.decodes a sequence", "")
 	Pragma("noescape")
-
-	off := GP64()
-	XORQ(off, off)
 
 	exhausted := reg.RBX                     // Fixed since we need 8H
 	XORQ(exhausted.As64(), exhausted.As64()) // exhausted = false
 
+	bufferOrigin := AllocLocal(8)
+
 	peekBits := GP64()
 	buffer := GP64()
+	dstEvery := GP64()
 	table := GP64()
 
 	br0 := GP64()
@@ -62,7 +60,10 @@ func (d decompress4x) generateProcedure(name string) {
 	{
 		ctx := Dereference(Param("ctx"))
 		Load(ctx.Field("peekBits"), peekBits)
-		Load(ctx.Field("buf"), buffer)
+		Load(ctx.Field("out"), buffer)
+		MOVQ(buffer, bufferOrigin)
+		Load(ctx.Field("dstEvery"), dstEvery)
+
 		Load(ctx.Field("tbl"), table)
 		Load(ctx.Field("pbr0"), br0)
 		Load(ctx.Field("pbr1"), br1)
@@ -73,25 +74,31 @@ func (d decompress4x) generateProcedure(name string) {
 	Comment("Main loop")
 	Label("main_loop")
 
-	d.decodeTwoValues(0, br0, peekBits, table, buffer, off, exhausted)
-	d.decodeTwoValues(1, br1, peekBits, table, buffer, off, exhausted)
-	d.decodeTwoValues(2, br2, peekBits, table, buffer, off, exhausted)
-	d.decodeTwoValues(3, br3, peekBits, table, buffer, off, exhausted)
+	MOVQ(bufferOrigin, buffer)
+	d.decodeTwoValues(0, br0, peekBits, table, buffer, exhausted)
+	ADDQ(dstEvery, buffer)
+	d.decodeTwoValues(1, br1, peekBits, table, buffer, exhausted)
+	ADDQ(dstEvery, buffer)
+	d.decodeTwoValues(2, br2, peekBits, table, buffer, exhausted)
+	ADDQ(dstEvery, buffer)
+	d.decodeTwoValues(3, br3, peekBits, table, buffer, exhausted)
 
-	ADDB(U8(2), off.As8()) // off += 2
+	ADDQ(U8(2), bufferOrigin) // off += 2
 
 	TESTB(exhausted.As8H(), exhausted.As8H()) // any br[i].ofs < 4?
-	JNZ(LabelRef("done"))
+	JZ(LabelRef("main_loop"))
 
-	CMPB(off.As8(), U8(0))
-	JNZ(LabelRef("main_loop"))
+	{
+		ctx := Dereference(Param("ctx"))
+		tmp := Load(ctx.Field("out"), GP64())
+		decoded := GP64()
+		MOVQ(bufferOrigin, decoded)
+		SUBQ(tmp, decoded)
+		SHLQ(U8(2), decoded) // decoded *= 4
 
-	Label("done")
-	offsetComp, err := ReturnIndex(0).Resolve()
-	if err != nil {
-		panic(err)
+		Store(decoded, ctx.Field("decoded"))
 	}
-	MOVB(off.As8(), offsetComp.Addr)
+
 	RET()
 }
 
@@ -102,7 +109,7 @@ const bitReader_off = bitReader_in + 3*8 // {ptr, len, cap}
 const bitReader_value = bitReader_off + 8
 const bitReader_bitsRead = bitReader_value + 8
 
-func (d decompress4x) decodeTwoValues(id int, br, peekBits, table, buffer, off reg.GPVirtual, exhausted reg.GPPhysical) {
+func (d decompress4x) decodeTwoValues(id int, br, peekBits, table, buffer reg.GPVirtual, exhausted reg.GPPhysical) {
 	Commentf("br%d.fillFast()", id)
 	brOffset := GP64()
 	brBitsRead := GP64()
@@ -159,7 +166,7 @@ func (d decompress4x) decodeTwoValues(id int, br, peekBits, table, buffer, off r
 	MOVW(Mem{Base: table, Index: val.As64(), Scale: 2}, v.As16())
 
 	Commentf("br%d.advance(uint8(v0.entry)", id)
-	out := reg.RAX // Fixed since we need 8H
+	out := reg.RAX            // Fixed since we need 8H
 	MOVB(v.As8H(), out.As8()) // BL = uint8(v0.entry >> 8)
 
 	MOVBQZX(v.As8(), CX.As64())
@@ -196,9 +203,9 @@ func (d decompress4x) decodeTwoValues(id int, br, peekBits, table, buffer, off r
 	ADDQ(CX.As64(), brBitsRead) // bits_read += n
 
 	Comment("these two writes get coalesced")
-	Comment("buf[stream][off] = uint8(v0.entry >> 8)")
-	Comment("buf[stream][off+1] = uint8(v1.entry >> 8)")
-	MOVW(out.As16(), Mem{Base: buffer, Index: off, Scale: 1, Disp: id * buffoff})
+	Comment("out[stream][off] = uint8(v0.entry >> 8)")
+	Comment("out[stream][off+1] = uint8(v1.entry >> 8)")
+	MOVW(out.As16(), Mem{Base: buffer})
 
 	Comment("update the bitrader reader structure")
 	MOVQ(brOffset, Mem{Base: br, Disp: bitReader_off})
@@ -212,18 +219,18 @@ type decompress4x8bit struct {
 
 func (d decompress4x8bit) generateProcedure(name string) {
 	Package("github.com/klauspost/compress/huff0")
-	TEXT(name, 0, "func(ctx* decompress4xContext) uint8")
+	TEXT(name, 0, "func(ctx* decompress4xContext)")
 	Doc(name+" is an x86 assembler implementation of Decompress4X when tablelog > 8.decodes a sequence", "")
 	Pragma("noescape")
-
-	off := GP64()
-	XORQ(off, off)
 
 	exhausted := reg.RBX                     // Fixed since we need 8H
 	XORQ(exhausted.As64(), exhausted.As64()) // exhausted = false
 
+	bufferOrigin := AllocLocal(8)
+
 	peekBits := GP64()
 	buffer := GP64()
+	dstEvery := GP64()
 	table := GP64()
 
 	br0 := GP64()
@@ -235,7 +242,9 @@ func (d decompress4x8bit) generateProcedure(name string) {
 	{
 		ctx := Dereference(Param("ctx"))
 		Load(ctx.Field("peekBits"), peekBits)
-		Load(ctx.Field("buf"), buffer)
+		Load(ctx.Field("out"), buffer)
+		MOVQ(buffer, bufferOrigin)
+		Load(ctx.Field("dstEvery"), dstEvery)
 		Load(ctx.Field("tbl"), table)
 		Load(ctx.Field("pbr0"), br0)
 		Load(ctx.Field("pbr1"), br1)
@@ -246,29 +255,34 @@ func (d decompress4x8bit) generateProcedure(name string) {
 	Comment("Main loop")
 	Label("main_loop")
 
-	d.decodeFourValues(0, br0, peekBits, table, buffer, off, exhausted)
-	d.decodeFourValues(1, br1, peekBits, table, buffer, off, exhausted)
-	d.decodeFourValues(2, br2, peekBits, table, buffer, off, exhausted)
-	d.decodeFourValues(3, br3, peekBits, table, buffer, off, exhausted)
+	MOVQ(bufferOrigin, buffer)
+	d.decodeFourValues(0, br0, peekBits, table, buffer, exhausted)
+	ADDQ(dstEvery, buffer)
+	d.decodeFourValues(1, br1, peekBits, table, buffer, exhausted)
+	ADDQ(dstEvery, buffer)
+	d.decodeFourValues(2, br2, peekBits, table, buffer, exhausted)
+	ADDQ(dstEvery, buffer)
+	d.decodeFourValues(3, br3, peekBits, table, buffer, exhausted)
 
-	ADDB(U8(4), off.As8()) // off += 4
+	ADDQ(U8(4), bufferOrigin) // off += 4
 
 	TESTB(exhausted.As8H(), exhausted.As8H()) // any br[i].ofs < 4?
-	JNZ(LabelRef("done"))
+	JZ(LabelRef("main_loop"))
 
-	CMPB(off.As8(), U8(0))
-	JNZ(LabelRef("main_loop"))
+	{
+		ctx := Dereference(Param("ctx"))
+		tmp := Load(ctx.Field("out"), GP64())
+		decoded := GP64()
+		MOVQ(bufferOrigin, decoded)
+		SUBQ(tmp, decoded)
+		SHLQ(U8(2), decoded) // decoded *= 4
 
-	Label("done")
-	offsetComp, err := ReturnIndex(0).Resolve()
-	if err != nil {
-		panic(err)
+		Store(decoded, ctx.Field("decoded"))
 	}
-	MOVB(off.As8(), offsetComp.Addr)
 	RET()
 }
 
-func (d decompress4x8bit) decodeFourValues(id int, br, peekBits, table, buffer, off reg.GPVirtual, exhausted reg.GPPhysical) {
+func (d decompress4x8bit) decodeFourValues(id int, br, peekBits, table, buffer reg.GPVirtual, exhausted reg.GPPhysical) {
 	Commentf("br%d.fillFast()", id)
 	brOffset := GP64()
 	brBitsRead := GP64()
@@ -350,7 +364,7 @@ func (d decompress4x8bit) decodeFourValues(id int, br, peekBits, table, buffer, 
 	Comment("buf[stream][off+1] = uint8(v1.entry >> 8)")
 	Comment("buf[stream][off+2] = uint8(v2.entry >> 8)")
 	Comment("buf[stream][off+3] = uint8(v3.entry >> 8)")
-	MOVL(out.As32(), Mem{Base: buffer, Index: off, Scale: 1, Disp: id * buffoff})
+	MOVL(out.As32(), Mem{Base: buffer})
 
 	Comment("update the bitrader reader structure")
 	MOVQ(brOffset, Mem{Base: br, Disp: bitReader_off})
