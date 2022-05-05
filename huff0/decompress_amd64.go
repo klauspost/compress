@@ -13,18 +13,26 @@ import (
 // decompress4x_main_loop_x86 is an x86 assembler implementation
 // of Decompress4X when tablelog > 8.
 //go:noescape
-func decompress4x_main_loop_x86(pbr0, pbr1, pbr2, pbr3 *bitReaderShifted,
-	peekBits uint8, buf *byte, tbl *dEntrySingle) uint8
+func decompress4x_main_loop_amd64(ctx *decompress4xContext) uint8
 
 // decompress4x_8b_loop_x86 is an x86 assembler implementation
 // of Decompress4X when tablelog <= 8 which decodes 4 entries
 // per loop.
 //go:noescape
-func decompress4x_8b_loop_x86(pbr0, pbr1, pbr2, pbr3 *bitReaderShifted,
-	peekBits uint8, buf *byte, tbl *dEntrySingle) uint8
+func decompress4x_8b_main_loop_amd64(ctx *decompress4xContext) uint8
 
 // fallback8BitSize is the size where using Go version is faster.
 const fallback8BitSize = 800
+
+type decompress4xContext struct {
+	pbr0     *bitReaderShifted
+	pbr1     *bitReaderShifted
+	pbr2     *bitReaderShifted
+	pbr3     *bitReaderShifted
+	peekBits uint8
+	buf      *byte
+	tbl      *dEntrySingle
+}
 
 // Decompress4X will decompress a 4X encoded stream.
 // The length of the supplied input must match the end of a block exactly.
@@ -42,6 +50,7 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 	if cap(dst) < fallback8BitSize && use8BitTables {
 		return d.decompress4X8bit(dst, src)
 	}
+
 	var br [4]bitReaderShifted
 	// Decode "jump table"
 	start := 6
@@ -78,8 +87,15 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 
 	const debug = false
 
-	// see: bitReaderShifted.peekBitsFast()
-	peekBits := uint8((64 - d.actualTableLog) & 63)
+	ctx := decompress4xContext{
+		pbr0:     &br[0],
+		pbr1:     &br[1],
+		pbr2:     &br[2],
+		pbr3:     &br[3],
+		peekBits: uint8((64 - d.actualTableLog) & 63), // see: bitReaderShifted.peekBitsFast()
+		buf:      &buf[0][0],
+		tbl:      &single[0],
+	}
 
 	// Decode 2 values from each decoder/loop.
 	const bufoff = 256
@@ -89,10 +105,11 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 		}
 
 		if use8BitTables {
-			off = decompress4x_8b_loop_x86(&br[0], &br[1], &br[2], &br[3], peekBits, &buf[0][0], &single[0])
+			off = decompress4x_8b_main_loop_amd64(&ctx)
 		} else {
-			off = decompress4x_main_loop_x86(&br[0], &br[1], &br[2], &br[3], peekBits, &buf[0][0], &single[0])
+			off = decompress4x_main_loop_amd64(&ctx)
 		}
+
 		if debug {
 			fmt.Print("DEBUG: ")
 			fmt.Printf("off=%d,", off)
