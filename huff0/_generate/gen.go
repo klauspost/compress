@@ -150,19 +150,12 @@ func (d decompress4x) decodeTwoValues(id int, br, peekBits, table, buffer, exhau
 	}
 
 	Comment("v1 := table[val1&mask]")
-	MOVW(Mem{Base: table, Index: val.As64(), Scale: 2}, v.As16()) // tmp - v1
+	MOVW(Mem{Base: table, Index: val.As64(), Scale: 2}, CX.As16()) // tmp - v1
 
 	Commentf("br%d.advance(uint8(v1.entry))", id)
-	MOVB(v.As8H(), out.As8H()) // BH = uint8(v0.entry >> 8)
-
-	MOVBQZX(v.As8(), CX.As64())
-	if d.bmi2 {
-		SHLXQ(v.As64(), brValue, brValue) // value <<= n
-	} else {
-		SHLQ(CX, brValue) // value <<= n
-	}
-
-	ADDQ(CX.As64(), brBitsRead) // bits_read += n
+	MOVB(CX.As8H(), out.As8H())      // BH = uint8(v0.entry >> 8)
+	SHLQ(CX, brValue)                // value <<= n
+	ADDB(CX.As8(), brBitsRead.As8()) // bits_read += n
 
 	Comment("these two writes get coalesced")
 	Comment("out[stream][off] = uint8(v0.entry >> 8)")
