@@ -4,276 +4,268 @@
 
 // func decompress4x_main_loop_amd64(ctx *decompress4xContext)
 TEXT ·decompress4x_main_loop_amd64(SB), $8-8
-	XORQ BX, BX
+	XORQ DX, DX
 
 	// Preload values
 	MOVQ    ctx+0(FP), AX
-	MOVBQZX 32(AX), DI
-	MOVQ    40(AX), R8
-	MOVQ    R8, SI
+	MOVBQZX 32(AX), SI
+	MOVQ    40(AX), DI
+	MOVQ    DI, BX
 	MOVQ    72(AX), CX
 	MOVQ    CX, (SP)
-	MOVQ    48(AX), R9
-	MOVQ    56(AX), R10
-	MOVQ    (AX), R11
-	MOVQ    8(AX), R12
-	MOVQ    16(AX), R13
-	MOVQ    24(AX), R14
+	MOVQ    48(AX), R8
+	MOVQ    56(AX), R9
+	MOVQ    (AX), R10
+	MOVQ    8(AX), R11
+	MOVQ    16(AX), R12
+	MOVQ    24(AX), R13
 
 	// Main loop
 main_loop:
-	MOVQ  SI, R8
-	CMPQ  R8, (SP)
-	SETGE BL
+	MOVQ  BX, DI
+	CMPQ  DI, (SP)
+	SETGE DL
 
 	// br0.fillFast32()
-	MOVQ    32(R11), R15
-	MOVBQZX 40(R11), BP
-	CMPQ    BP, $0x20
+	MOVQ    32(R10), R14
+	MOVBQZX 40(R10), R15
+	CMPQ    R15, $0x20
 	JBE     skip_fill0
-	MOVQ    24(R11), AX
-	SUBQ    $0x20, BP
+	MOVQ    24(R10), AX
+	SUBQ    $0x20, R15
 	SUBQ    $0x04, AX
-	MOVQ    (R11), DX
+	MOVQ    (R10), BP
 
 	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVL (AX)(DX*1), DX
-	MOVQ BP, CX
-	SHLQ CL, DX
-	MOVQ AX, 24(R11)
-	ORQ  DX, R15
+	MOVL (AX)(BP*1), BP
+	MOVQ R15, CX
+	SHLQ CL, BP
+	MOVQ AX, 24(R10)
+	ORQ  BP, R14
 
 	// exhausted = exhausted || (br0.off < 4)
 	CMPQ  AX, $0x04
 	SETLT AL
-	ORB   AL, BL
+	ORB   AL, DL
 
 skip_fill0:
 	// val0 := br0.peekTopBits(peekBits)
-	MOVQ R15, DX
-	MOVQ DI, CX
-	SHRQ CL, DX
+	MOVQ R14, BP
+	MOVQ SI, CX
+	SHRQ CL, BP
 
 	// v0 := table[val0&mask]
-	MOVW (R10)(DX*2), DX
+	MOVW (R9)(BP*2), CX
 
 	// br0.advance(uint8(v0.entry)
-	MOVB    DH, AL
-	MOVBQZX DL, CX
-	SHLQ    CL, R15
-	ADDQ    CX, BP
+	MOVB CH, AL
+	SHLQ CL, R14
+	ADDB CL, R15
 
 	// val1 := br0.peekTopBits(peekBits)
-	MOVQ DI, CX
-	MOVQ R15, DX
-	SHRQ CL, DX
+	MOVQ SI, CX
+	MOVQ R14, BP
+	SHRQ CL, BP
 
 	// v1 := table[val1&mask]
-	MOVW (R10)(DX*2), DX
+	MOVW (R9)(BP*2), CX
 
 	// br0.advance(uint8(v1.entry))
-	MOVB    DH, AH
-	MOVBQZX DL, CX
-	SHLQ    CL, R15
-	ADDQ    CX, BP
+	MOVB CH, AH
+	SHLQ CL, R14
+	ADDB CL, R15
 
 	// these two writes get coalesced
 	// out[stream][off] = uint8(v0.entry >> 8)
 	// out[stream][off+1] = uint8(v1.entry >> 8)
-	MOVW AX, (R8)
+	MOVW AX, (DI)
 
 	// update the bitrader reader structure
-	MOVQ R15, 32(R11)
-	MOVB BP, 40(R11)
-	ADDQ R9, R8
+	MOVQ R14, 32(R10)
+	MOVB R15, 40(R10)
+	ADDQ R8, DI
 
 	// br1.fillFast32()
-	MOVQ    32(R12), R15
-	MOVBQZX 40(R12), BP
-	CMPQ    BP, $0x20
+	MOVQ    32(R11), R14
+	MOVBQZX 40(R11), R15
+	CMPQ    R15, $0x20
 	JBE     skip_fill1
-	MOVQ    24(R12), AX
-	SUBQ    $0x20, BP
+	MOVQ    24(R11), AX
+	SUBQ    $0x20, R15
 	SUBQ    $0x04, AX
-	MOVQ    (R12), DX
+	MOVQ    (R11), BP
 
 	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVL (AX)(DX*1), DX
-	MOVQ BP, CX
-	SHLQ CL, DX
-	MOVQ AX, 24(R12)
-	ORQ  DX, R15
+	MOVL (AX)(BP*1), BP
+	MOVQ R15, CX
+	SHLQ CL, BP
+	MOVQ AX, 24(R11)
+	ORQ  BP, R14
 
 	// exhausted = exhausted || (br1.off < 4)
 	CMPQ  AX, $0x04
 	SETLT AL
-	ORB   AL, BL
+	ORB   AL, DL
 
 skip_fill1:
 	// val0 := br1.peekTopBits(peekBits)
-	MOVQ R15, DX
-	MOVQ DI, CX
-	SHRQ CL, DX
+	MOVQ R14, BP
+	MOVQ SI, CX
+	SHRQ CL, BP
 
 	// v0 := table[val0&mask]
-	MOVW (R10)(DX*2), DX
+	MOVW (R9)(BP*2), CX
 
 	// br1.advance(uint8(v0.entry)
-	MOVB    DH, AL
-	MOVBQZX DL, CX
-	SHLQ    CL, R15
-	ADDQ    CX, BP
+	MOVB CH, AL
+	SHLQ CL, R14
+	ADDB CL, R15
 
 	// val1 := br1.peekTopBits(peekBits)
-	MOVQ DI, CX
-	MOVQ R15, DX
-	SHRQ CL, DX
+	MOVQ SI, CX
+	MOVQ R14, BP
+	SHRQ CL, BP
 
 	// v1 := table[val1&mask]
-	MOVW (R10)(DX*2), DX
+	MOVW (R9)(BP*2), CX
 
 	// br1.advance(uint8(v1.entry))
-	MOVB    DH, AH
-	MOVBQZX DL, CX
-	SHLQ    CL, R15
-	ADDQ    CX, BP
+	MOVB CH, AH
+	SHLQ CL, R14
+	ADDB CL, R15
 
 	// these two writes get coalesced
 	// out[stream][off] = uint8(v0.entry >> 8)
 	// out[stream][off+1] = uint8(v1.entry >> 8)
-	MOVW AX, (R8)
+	MOVW AX, (DI)
 
 	// update the bitrader reader structure
-	MOVQ R15, 32(R12)
-	MOVB BP, 40(R12)
-	ADDQ R9, R8
+	MOVQ R14, 32(R11)
+	MOVB R15, 40(R11)
+	ADDQ R8, DI
 
 	// br2.fillFast32()
-	MOVQ    32(R13), R15
-	MOVBQZX 40(R13), BP
-	CMPQ    BP, $0x20
+	MOVQ    32(R12), R14
+	MOVBQZX 40(R12), R15
+	CMPQ    R15, $0x20
 	JBE     skip_fill2
-	MOVQ    24(R13), AX
-	SUBQ    $0x20, BP
+	MOVQ    24(R12), AX
+	SUBQ    $0x20, R15
 	SUBQ    $0x04, AX
-	MOVQ    (R13), DX
+	MOVQ    (R12), BP
 
 	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVL (AX)(DX*1), DX
-	MOVQ BP, CX
-	SHLQ CL, DX
-	MOVQ AX, 24(R13)
-	ORQ  DX, R15
+	MOVL (AX)(BP*1), BP
+	MOVQ R15, CX
+	SHLQ CL, BP
+	MOVQ AX, 24(R12)
+	ORQ  BP, R14
 
 	// exhausted = exhausted || (br2.off < 4)
 	CMPQ  AX, $0x04
 	SETLT AL
-	ORB   AL, BL
+	ORB   AL, DL
 
 skip_fill2:
 	// val0 := br2.peekTopBits(peekBits)
-	MOVQ R15, DX
-	MOVQ DI, CX
-	SHRQ CL, DX
+	MOVQ R14, BP
+	MOVQ SI, CX
+	SHRQ CL, BP
 
 	// v0 := table[val0&mask]
-	MOVW (R10)(DX*2), DX
+	MOVW (R9)(BP*2), CX
 
 	// br2.advance(uint8(v0.entry)
-	MOVB    DH, AL
-	MOVBQZX DL, CX
-	SHLQ    CL, R15
-	ADDQ    CX, BP
+	MOVB CH, AL
+	SHLQ CL, R14
+	ADDB CL, R15
 
 	// val1 := br2.peekTopBits(peekBits)
-	MOVQ DI, CX
-	MOVQ R15, DX
-	SHRQ CL, DX
+	MOVQ SI, CX
+	MOVQ R14, BP
+	SHRQ CL, BP
 
 	// v1 := table[val1&mask]
-	MOVW (R10)(DX*2), DX
+	MOVW (R9)(BP*2), CX
 
 	// br2.advance(uint8(v1.entry))
-	MOVB    DH, AH
-	MOVBQZX DL, CX
-	SHLQ    CL, R15
-	ADDQ    CX, BP
+	MOVB CH, AH
+	SHLQ CL, R14
+	ADDB CL, R15
 
 	// these two writes get coalesced
 	// out[stream][off] = uint8(v0.entry >> 8)
 	// out[stream][off+1] = uint8(v1.entry >> 8)
-	MOVW AX, (R8)
+	MOVW AX, (DI)
 
 	// update the bitrader reader structure
-	MOVQ R15, 32(R13)
-	MOVB BP, 40(R13)
-	ADDQ R9, R8
+	MOVQ R14, 32(R12)
+	MOVB R15, 40(R12)
+	ADDQ R8, DI
 
 	// br3.fillFast32()
-	MOVQ    32(R14), R15
-	MOVBQZX 40(R14), BP
-	CMPQ    BP, $0x20
+	MOVQ    32(R13), R14
+	MOVBQZX 40(R13), R15
+	CMPQ    R15, $0x20
 	JBE     skip_fill3
-	MOVQ    24(R14), AX
-	SUBQ    $0x20, BP
+	MOVQ    24(R13), AX
+	SUBQ    $0x20, R15
 	SUBQ    $0x04, AX
-	MOVQ    (R14), DX
+	MOVQ    (R13), BP
 
 	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVL (AX)(DX*1), DX
-	MOVQ BP, CX
-	SHLQ CL, DX
-	MOVQ AX, 24(R14)
-	ORQ  DX, R15
+	MOVL (AX)(BP*1), BP
+	MOVQ R15, CX
+	SHLQ CL, BP
+	MOVQ AX, 24(R13)
+	ORQ  BP, R14
 
 	// exhausted = exhausted || (br3.off < 4)
 	CMPQ  AX, $0x04
 	SETLT AL
-	ORB   AL, BL
+	ORB   AL, DL
 
 skip_fill3:
 	// val0 := br3.peekTopBits(peekBits)
-	MOVQ R15, DX
-	MOVQ DI, CX
-	SHRQ CL, DX
+	MOVQ R14, BP
+	MOVQ SI, CX
+	SHRQ CL, BP
 
 	// v0 := table[val0&mask]
-	MOVW (R10)(DX*2), DX
+	MOVW (R9)(BP*2), CX
 
 	// br3.advance(uint8(v0.entry)
-	MOVB    DH, AL
-	MOVBQZX DL, CX
-	SHLQ    CL, R15
-	ADDQ    CX, BP
+	MOVB CH, AL
+	SHLQ CL, R14
+	ADDB CL, R15
 
 	// val1 := br3.peekTopBits(peekBits)
-	MOVQ DI, CX
-	MOVQ R15, DX
-	SHRQ CL, DX
+	MOVQ SI, CX
+	MOVQ R14, BP
+	SHRQ CL, BP
 
 	// v1 := table[val1&mask]
-	MOVW (R10)(DX*2), DX
+	MOVW (R9)(BP*2), CX
 
 	// br3.advance(uint8(v1.entry))
-	MOVB    DH, AH
-	MOVBQZX DL, CX
-	SHLQ    CL, R15
-	ADDQ    CX, BP
+	MOVB CH, AH
+	SHLQ CL, R14
+	ADDB CL, R15
 
 	// these two writes get coalesced
 	// out[stream][off] = uint8(v0.entry >> 8)
 	// out[stream][off+1] = uint8(v1.entry >> 8)
-	MOVW AX, (R8)
+	MOVW AX, (DI)
 
 	// update the bitrader reader structure
-	MOVQ  R15, 32(R14)
-	MOVB  BP, 40(R14)
-	ADDQ  $0x02, SI
-	TESTB BL, BL
+	MOVQ  R14, 32(R13)
+	MOVB  R15, 40(R13)
+	ADDQ  $0x02, BX
+	TESTB DL, DL
 	JZ    main_loop
 	MOVQ  ctx+0(FP), AX
 	MOVQ  40(AX), CX
-	MOVQ  SI, DX
+	MOVQ  BX, DX
 	SUBQ  CX, DX
 	SHLQ  $0x02, DX
 	MOVQ  DX, 64(AX)
@@ -335,10 +327,9 @@ skip_fill1000:
 	MOVW (R8)(R15*2), CX
 
 	// br0.advance(uint8(v0.entry)
-	MOVB    CH, AL
-	MOVBQZX CL, CX
-	SHLQ    CL, R13
-	ADDQ    CX, R14
+	MOVB CH, AL
+	SHLQ CL, R13
+	ADDB CL, R14
 
 	// val1 := br0.peekTopBits(peekBits)
 	MOVQ R13, R15
@@ -349,11 +340,10 @@ skip_fill1000:
 	MOVW (R8)(R15*2), CX
 
 	// br0.advance(uint8(v1.entry)
-	MOVB    CH, AH
-	MOVBQZX CL, CX
-	SHLQ    CL, R13
-	ADDQ    CX, R14
-	BSWAPL  AX
+	MOVB   CH, AH
+	SHLQ   CL, R13
+	ADDB   CL, R14
+	BSWAPL AX
 
 	// val2 := br0.peekTopBits(peekBits)
 	MOVQ R13, R15
@@ -364,10 +354,9 @@ skip_fill1000:
 	MOVW (R8)(R15*2), CX
 
 	// br0.advance(uint8(v2.entry)
-	MOVB    CH, AH
-	MOVBQZX CL, CX
-	SHLQ    CL, R13
-	ADDQ    CX, R14
+	MOVB CH, AH
+	SHLQ CL, R13
+	ADDB CL, R14
 
 	// val3 := br0.peekTopBits(peekBits)
 	MOVQ R13, R15
@@ -378,11 +367,10 @@ skip_fill1000:
 	MOVW (R8)(R15*2), CX
 
 	// br0.advance(uint8(v3.entry)
-	MOVB    CH, AL
-	MOVBQZX CL, CX
-	SHLQ    CL, R13
-	ADDQ    CX, R14
-	BSWAPL  AX
+	MOVB   CH, AL
+	SHLQ   CL, R13
+	ADDB   CL, R14
+	BSWAPL AX
 
 	// these four writes get coalesced
 	// buf[stream][off] = uint8(v0.entry >> 8)
@@ -428,10 +416,9 @@ skip_fill1001:
 	MOVW (R8)(R15*2), CX
 
 	// br1.advance(uint8(v0.entry)
-	MOVB    CH, AL
-	MOVBQZX CL, CX
-	SHLQ    CL, R13
-	ADDQ    CX, R14
+	MOVB CH, AL
+	SHLQ CL, R13
+	ADDB CL, R14
 
 	// val1 := br1.peekTopBits(peekBits)
 	MOVQ R13, R15
@@ -442,11 +429,10 @@ skip_fill1001:
 	MOVW (R8)(R15*2), CX
 
 	// br1.advance(uint8(v1.entry)
-	MOVB    CH, AH
-	MOVBQZX CL, CX
-	SHLQ    CL, R13
-	ADDQ    CX, R14
-	BSWAPL  AX
+	MOVB   CH, AH
+	SHLQ   CL, R13
+	ADDB   CL, R14
+	BSWAPL AX
 
 	// val2 := br1.peekTopBits(peekBits)
 	MOVQ R13, R15
@@ -457,10 +443,9 @@ skip_fill1001:
 	MOVW (R8)(R15*2), CX
 
 	// br1.advance(uint8(v2.entry)
-	MOVB    CH, AH
-	MOVBQZX CL, CX
-	SHLQ    CL, R13
-	ADDQ    CX, R14
+	MOVB CH, AH
+	SHLQ CL, R13
+	ADDB CL, R14
 
 	// val3 := br1.peekTopBits(peekBits)
 	MOVQ R13, R15
@@ -471,11 +456,10 @@ skip_fill1001:
 	MOVW (R8)(R15*2), CX
 
 	// br1.advance(uint8(v3.entry)
-	MOVB    CH, AL
-	MOVBQZX CL, CX
-	SHLQ    CL, R13
-	ADDQ    CX, R14
-	BSWAPL  AX
+	MOVB   CH, AL
+	SHLQ   CL, R13
+	ADDB   CL, R14
+	BSWAPL AX
 
 	// these four writes get coalesced
 	// buf[stream][off] = uint8(v0.entry >> 8)
@@ -521,10 +505,9 @@ skip_fill1002:
 	MOVW (R8)(R15*2), CX
 
 	// br2.advance(uint8(v0.entry)
-	MOVB    CH, AL
-	MOVBQZX CL, CX
-	SHLQ    CL, R13
-	ADDQ    CX, R14
+	MOVB CH, AL
+	SHLQ CL, R13
+	ADDB CL, R14
 
 	// val1 := br2.peekTopBits(peekBits)
 	MOVQ R13, R15
@@ -535,11 +518,10 @@ skip_fill1002:
 	MOVW (R8)(R15*2), CX
 
 	// br2.advance(uint8(v1.entry)
-	MOVB    CH, AH
-	MOVBQZX CL, CX
-	SHLQ    CL, R13
-	ADDQ    CX, R14
-	BSWAPL  AX
+	MOVB   CH, AH
+	SHLQ   CL, R13
+	ADDB   CL, R14
+	BSWAPL AX
 
 	// val2 := br2.peekTopBits(peekBits)
 	MOVQ R13, R15
@@ -550,10 +532,9 @@ skip_fill1002:
 	MOVW (R8)(R15*2), CX
 
 	// br2.advance(uint8(v2.entry)
-	MOVB    CH, AH
-	MOVBQZX CL, CX
-	SHLQ    CL, R13
-	ADDQ    CX, R14
+	MOVB CH, AH
+	SHLQ CL, R13
+	ADDB CL, R14
 
 	// val3 := br2.peekTopBits(peekBits)
 	MOVQ R13, R15
@@ -564,11 +545,10 @@ skip_fill1002:
 	MOVW (R8)(R15*2), CX
 
 	// br2.advance(uint8(v3.entry)
-	MOVB    CH, AL
-	MOVBQZX CL, CX
-	SHLQ    CL, R13
-	ADDQ    CX, R14
-	BSWAPL  AX
+	MOVB   CH, AL
+	SHLQ   CL, R13
+	ADDB   CL, R14
+	BSWAPL AX
 
 	// these four writes get coalesced
 	// buf[stream][off] = uint8(v0.entry >> 8)
@@ -614,10 +594,9 @@ skip_fill1003:
 	MOVW (R8)(R15*2), CX
 
 	// br3.advance(uint8(v0.entry)
-	MOVB    CH, AL
-	MOVBQZX CL, CX
-	SHLQ    CL, R13
-	ADDQ    CX, R14
+	MOVB CH, AL
+	SHLQ CL, R13
+	ADDB CL, R14
 
 	// val1 := br3.peekTopBits(peekBits)
 	MOVQ R13, R15
@@ -628,11 +607,10 @@ skip_fill1003:
 	MOVW (R8)(R15*2), CX
 
 	// br3.advance(uint8(v1.entry)
-	MOVB    CH, AH
-	MOVBQZX CL, CX
-	SHLQ    CL, R13
-	ADDQ    CX, R14
-	BSWAPL  AX
+	MOVB   CH, AH
+	SHLQ   CL, R13
+	ADDB   CL, R14
+	BSWAPL AX
 
 	// val2 := br3.peekTopBits(peekBits)
 	MOVQ R13, R15
@@ -643,10 +621,9 @@ skip_fill1003:
 	MOVW (R8)(R15*2), CX
 
 	// br3.advance(uint8(v2.entry)
-	MOVB    CH, AH
-	MOVBQZX CL, CX
-	SHLQ    CL, R13
-	ADDQ    CX, R14
+	MOVB CH, AH
+	SHLQ CL, R13
+	ADDB CL, R14
 
 	// val3 := br3.peekTopBits(peekBits)
 	MOVQ R13, R15
@@ -657,11 +634,10 @@ skip_fill1003:
 	MOVW (R8)(R15*2), CX
 
 	// br3.advance(uint8(v3.entry)
-	MOVB    CH, AL
-	MOVBQZX CL, CX
-	SHLQ    CL, R13
-	ADDQ    CX, R14
-	BSWAPL  AX
+	MOVB   CH, AL
+	SHLQ   CL, R13
+	ADDB   CL, R14
+	BSWAPL AX
 
 	// these four writes get coalesced
 	// buf[stream][off] = uint8(v0.entry >> 8)
