@@ -76,8 +76,8 @@ skip_fill0:
 	ADDB CL, R15
 
 	// these two writes get coalesced
-	// out[stream][off] = uint8(v0.entry >> 8)
-	// out[stream][off+1] = uint8(v1.entry >> 8)
+	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
+	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
 	MOVW AX, (DI)
 
 	// update the bitrader reader structure
@@ -135,8 +135,8 @@ skip_fill1:
 	ADDB CL, R15
 
 	// these two writes get coalesced
-	// out[stream][off] = uint8(v0.entry >> 8)
-	// out[stream][off+1] = uint8(v1.entry >> 8)
+	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
+	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
 	MOVW AX, (DI)
 
 	// update the bitrader reader structure
@@ -194,8 +194,8 @@ skip_fill2:
 	ADDB CL, R15
 
 	// these two writes get coalesced
-	// out[stream][off] = uint8(v0.entry >> 8)
-	// out[stream][off+1] = uint8(v1.entry >> 8)
+	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
+	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
 	MOVW AX, (DI)
 
 	// update the bitrader reader structure
@@ -253,8 +253,8 @@ skip_fill3:
 	ADDB CL, R15
 
 	// these two writes get coalesced
-	// out[stream][off] = uint8(v0.entry >> 8)
-	// out[stream][off+1] = uint8(v1.entry >> 8)
+	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
+	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
 	MOVW AX, (DI)
 
 	// update the bitrader reader structure
@@ -373,10 +373,10 @@ skip_fill1000:
 	BSWAPL AX
 
 	// these four writes get coalesced
-	// buf[stream][off] = uint8(v0.entry >> 8)
-	// buf[stream][off+1] = uint8(v1.entry >> 8)
-	// buf[stream][off+2] = uint8(v2.entry >> 8)
-	// buf[stream][off+3] = uint8(v3.entry >> 8)
+	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
+	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
+	// out[id * dstEvery + 3] = uint8(v2.entry >> 8)
+	// out[id * dstEvery + 4] = uint8(v3.entry >> 8)
 	MOVL AX, (SI)
 
 	// update the bitreader reader structure
@@ -462,10 +462,10 @@ skip_fill1001:
 	BSWAPL AX
 
 	// these four writes get coalesced
-	// buf[stream][off] = uint8(v0.entry >> 8)
-	// buf[stream][off+1] = uint8(v1.entry >> 8)
-	// buf[stream][off+2] = uint8(v2.entry >> 8)
-	// buf[stream][off+3] = uint8(v3.entry >> 8)
+	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
+	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
+	// out[id * dstEvery + 3] = uint8(v2.entry >> 8)
+	// out[id * dstEvery + 4] = uint8(v3.entry >> 8)
 	MOVL AX, (SI)
 
 	// update the bitreader reader structure
@@ -551,10 +551,10 @@ skip_fill1002:
 	BSWAPL AX
 
 	// these four writes get coalesced
-	// buf[stream][off] = uint8(v0.entry >> 8)
-	// buf[stream][off+1] = uint8(v1.entry >> 8)
-	// buf[stream][off+2] = uint8(v2.entry >> 8)
-	// buf[stream][off+3] = uint8(v3.entry >> 8)
+	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
+	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
+	// out[id * dstEvery + 3] = uint8(v2.entry >> 8)
+	// out[id * dstEvery + 4] = uint8(v3.entry >> 8)
 	MOVL AX, (SI)
 
 	// update the bitreader reader structure
@@ -640,10 +640,10 @@ skip_fill1003:
 	BSWAPL AX
 
 	// these four writes get coalesced
-	// buf[stream][off] = uint8(v0.entry >> 8)
-	// buf[stream][off+1] = uint8(v1.entry >> 8)
-	// buf[stream][off+2] = uint8(v2.entry >> 8)
-	// buf[stream][off+3] = uint8(v3.entry >> 8)
+	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
+	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
+	// out[id * dstEvery + 3] = uint8(v2.entry >> 8)
+	// out[id * dstEvery + 4] = uint8(v3.entry >> 8)
 	MOVL AX, (SI)
 
 	// update the bitreader reader structure

@@ -123,7 +123,7 @@ func (d decompress4x) decodeTwoValues(id int, br, peekBits, table, buffer, exhau
 
 	Commentf("br%d.advance(uint8(v0.entry)", id)
 	out := reg.RAX             // Fixed since we need 8H
-	MOVB(CX.As8H(), out.As8()) // BL = uint8(v0.entry >> 8)
+	MOVB(CX.As8H(), out.As8()) // AL = uint8(v0.entry >> 8)
 
 	SHLQ(CX, brValue)                // value <<= n
 	ADDB(CX.As8(), brBitsRead.As8()) // bits_read += n
@@ -137,13 +137,13 @@ func (d decompress4x) decodeTwoValues(id int, br, peekBits, table, buffer, exhau
 	MOVW(Mem{Base: table, Index: val.As64(), Scale: 2}, CX.As16()) // tmp - v1
 
 	Commentf("br%d.advance(uint8(v1.entry))", id)
-	MOVB(CX.As8H(), out.As8H())      // BH = uint8(v0.entry >> 8)
+	MOVB(CX.As8H(), out.As8H())      // AH = uint8(v0.entry >> 8)
 	SHLQ(CX, brValue)                // value <<= n
 	ADDB(CX.As8(), brBitsRead.As8()) // bits_read += n
 
 	Comment("these two writes get coalesced")
-	Comment("out[stream][off] = uint8(v0.entry >> 8)")
-	Comment("out[stream][off+1] = uint8(v1.entry >> 8)")
+	Comment("out[id * dstEvery + 0] = uint8(v0.entry >> 8)")
+	Comment("out[id * dstEvery + 1] = uint8(v1.entry >> 8)")
 	MOVW(out.As16(), Mem{Base: buffer})
 
 	Comment("update the bitrader reader structure")
@@ -237,7 +237,7 @@ func (d decompress4x) decodeFourValues(id int, br, peekBits, table, buffer, exha
 		MOVW(Mem{Base: table, Index: val.As64(), Scale: 2}, CX.As16())
 
 		Commentf("br%d.advance(uint8(v%d.entry)", id, valID)
-		MOVB(CX.As8H(), outByte) // BL = uint8(v0.entry >> 8)
+		MOVB(CX.As8H(), outByte) // outByte = uint8(v0.entry >> 8)
 
 		SHLQ(CX, brValue)          // value <<= n
 		ADDB(CX, brBitsRead.As8()) // bits_read += n
@@ -252,10 +252,10 @@ func (d decompress4x) decodeFourValues(id int, br, peekBits, table, buffer, exha
 	BSWAPL(out.As32())
 
 	Comment("these four writes get coalesced")
-	Comment("buf[stream][off] = uint8(v0.entry >> 8)")
-	Comment("buf[stream][off+1] = uint8(v1.entry >> 8)")
-	Comment("buf[stream][off+2] = uint8(v2.entry >> 8)")
-	Comment("buf[stream][off+3] = uint8(v3.entry >> 8)")
+	Comment("out[id * dstEvery + 0] = uint8(v0.entry >> 8)")
+	Comment("out[id * dstEvery + 1] = uint8(v1.entry >> 8)")
+	Comment("out[id * dstEvery + 3] = uint8(v2.entry >> 8)")
+	Comment("out[id * dstEvery + 4] = uint8(v3.entry >> 8)")
 	MOVL(out.As32(), Mem{Base: buffer})
 
 	Comment("update the bitreader reader structure")
