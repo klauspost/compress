@@ -34,6 +34,7 @@ type decompress4xContext struct {
 	dstEvery int
 	tbl      *dEntrySingle
 	decoded  int
+	limit    *byte
 }
 
 // Decompress4X will decompress a 4X encoded stream.
@@ -96,6 +97,7 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 		out:      &out[0],
 		dstEvery: dstEvery,
 		tbl:      &single[0],
+		limit:    &out[dstEvery-4], // Always stop decoding when first buffer gets here to avoid writing OOB on last.
 	}
 
 	// Decode 2 values from each decoder/loop.
