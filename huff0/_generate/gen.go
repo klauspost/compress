@@ -252,14 +252,8 @@ func (d decompress4x) decodeFourValues(id int, br, peekBits, table, buffer, exha
 		Commentf("br%d.advance(uint8(v%d.entry)", id, valID)
 		MOVB(CX.As8H(), outByte) // BL = uint8(v0.entry >> 8)
 
-		MOVBQZX(CX.As8(), CX.As64())
-		if d.bmi2 {
-			SHLXQ(CX.As64(), brValue, brValue) // value <<= n
-		} else {
-			SHLQ(CX, brValue) // value <<= n
-		}
-
-		ADDQ(CX.As64(), brBitsRead) // bits_read += n
+		SHLQ(CX, brValue) // value <<= n
+		ADDB(CX, brBitsRead.As8()) // bits_read += n
 	}
 
 	out := reg.RAX // Fixed since we need 8H
