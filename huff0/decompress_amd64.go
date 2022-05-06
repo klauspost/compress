@@ -101,7 +101,7 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 	}
 
 	// Decode 2 values from each decoder/loop.
-	if !(br[0].off < 4 || br[1].off < 4 || br[2].off < 4 || br[3].off < 4) {
+	if len(out) > 4*4 && !(br[0].off < 4 || br[1].off < 4 || br[2].off < 4 || br[3].off < 4) {
 		if use8BitTables {
 			decompress4x_8b_main_loop_amd64(&ctx)
 		} else {
