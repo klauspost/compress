@@ -27,7 +27,6 @@ func main() {
 }
 
 type decompress4x struct {
-	bmi2 bool
 }
 
 func (d decompress4x) generateProcedure(name string) {
@@ -115,13 +114,9 @@ func (d decompress4x) decodeTwoValues(id int, br, peekBits, table, buffer, exhau
 	val := GP64()
 	Commentf("val0 := br%d.peekTopBits(peekBits)", id)
 	CX := reg.CL
-	if d.bmi2 {
-		SHRXQ(peekBits, brValue, val.As64()) // val = (value >> peek_bits) & mask
-	} else {
-		MOVQ(brValue, val.As64())
-		MOVQ(peekBits, CX.As64())
-		SHRQ(CX, val.As64()) // val = (value >> peek_bits) & mask
-	}
+	MOVQ(brValue, val.As64())
+	MOVQ(peekBits, CX.As64())
+	SHRQ(CX, val.As64()) // val = (value >> peek_bits) & mask
 
 	Comment("v0 := table[val0&mask]")
 	MOVW(Mem{Base: table, Index: val.As64(), Scale: 2}, CX.As16())
@@ -134,13 +129,9 @@ func (d decompress4x) decodeTwoValues(id int, br, peekBits, table, buffer, exhau
 	ADDB(CX.As8(), brBitsRead.As8()) // bits_read += n
 
 	Commentf("val1 := br%d.peekTopBits(peekBits)", id)
-	if d.bmi2 {
-		SHRXQ(peekBits, brValue, val.As64()) // val = (value >> peek_bits) & mask
-	} else {
-		MOVQ(peekBits, CX.As64())
-		MOVQ(brValue, val.As64())
-		SHRQ(CX, val.As64()) // val = (value >> peek_bits) & mask
-	}
+	MOVQ(peekBits, CX.As64())
+	MOVQ(brValue, val.As64())
+	SHRQ(CX, val.As64()) // val = (value >> peek_bits) & mask
 
 	Comment("v1 := table[val1&mask]")
 	MOVW(Mem{Base: table, Index: val.As64(), Scale: 2}, CX.As16()) // tmp - v1
@@ -238,13 +229,9 @@ func (d decompress4x) decodeFourValues(id int, br, peekBits, table, buffer, exha
 		CX := reg.CL
 		val := GP64()
 		Commentf("val%d := br%d.peekTopBits(peekBits)", valID, id)
-		if d.bmi2 {
-			SHRXQ(peekBits, brValue, val.As64()) // val = (value >> peek_bits) & mask
-		} else {
-			MOVQ(brValue, val.As64())
-			MOVQ(peekBits, CX.As64())
-			SHRQ(CX, val.As64()) // val = (value >> peek_bits) & mask
-		}
+		MOVQ(brValue, val.As64())
+		MOVQ(peekBits, CX.As64())
+		SHRQ(CX, val.As64()) // val = (value >> peek_bits) & mask
 
 		Commentf("v%d := table[val0&mask]", valID)
 		MOVW(Mem{Base: table, Index: val.As64(), Scale: 2}, CX.As16())
@@ -252,7 +239,7 @@ func (d decompress4x) decodeFourValues(id int, br, peekBits, table, buffer, exha
 		Commentf("br%d.advance(uint8(v%d.entry)", id, valID)
 		MOVB(CX.As8H(), outByte) // BL = uint8(v0.entry >> 8)
 
-		SHLQ(CX, brValue) // value <<= n
+		SHLQ(CX, brValue)          // value <<= n
 		ADDB(CX, brBitsRead.As8()) // bits_read += n
 	}
 
@@ -303,14 +290,10 @@ func (d decompress4x) fillFast32(id, atLeast int, br, exhausted reg.GPVirtual) (
 
 	Comment("b.value |= uint64(low) << (b.bitsRead & 63)")
 	addr := Mem{Base: brOffset, Index: tmp.As64(), Scale: 1}
-	if d.bmi2 {
-		SHLXQ(brBitsRead, addr, tmp.As64()) // tmp = uint32(b.in[b.off:b.off+4]) << (b.bitsRead & 63)
-	} else {
-		CX := reg.CL
-		MOVL(addr, tmp.As32()) // tmp = uint32(b.in[b.off:b.off+4])
-		MOVQ(brBitsRead, CX.As64())
-		SHLQ(CX, tmp.As64())
-	}
+	CX := reg.CL
+	MOVL(addr, tmp.As32()) // tmp = uint32(b.in[b.off:b.off+4])
+	MOVQ(brBitsRead, CX.As64())
+	SHLQ(CX, tmp.As64())
 
 	MOVQ(brOffset, Mem{Base: br, Disp: bitReader_off})
 	ORQ(tmp.As64(), brValue)
