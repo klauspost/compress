@@ -83,25 +83,20 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 	const tlMask = tlSize - 1
 	single := d.dt.single[:tlSize]
 
-	// Use temp table to avoid bound checks/append penalty.
 	var decoded int
 
-	const debug = false
-
-	ctx := decompress4xContext{
-		pbr0:     &br[0],
-		pbr1:     &br[1],
-		pbr2:     &br[2],
-		pbr3:     &br[3],
-		peekBits: uint8((64 - d.actualTableLog) & 63), // see: bitReaderShifted.peekBitsFast()
-		out:      &out[0],
-		dstEvery: dstEvery,
-		tbl:      &single[0],
-		limit:    &out[dstEvery-4], // Always stop decoding when first buffer gets here to avoid writing OOB on last.
-	}
-
-	// Decode 2 values from each decoder/loop.
 	if len(out) > 4*4 && !(br[0].off < 4 || br[1].off < 4 || br[2].off < 4 || br[3].off < 4) {
+		ctx := decompress4xContext{
+			pbr0:     &br[0],
+			pbr1:     &br[1],
+			pbr2:     &br[2],
+			pbr3:     &br[3],
+			peekBits: uint8((64 - d.actualTableLog) & 63), // see: bitReaderShifted.peekBitsFast()
+			out:      &out[0],
+			dstEvery: dstEvery,
+			tbl:      &single[0],
+			limit:    &out[dstEvery-4], // Always stop decoding when first buffer gets here to avoid writing OOB on last.
+		}
 		if use8BitTables {
 			decompress4x_8b_main_loop_amd64(&ctx)
 		} else {
