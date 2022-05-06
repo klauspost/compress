@@ -124,21 +124,14 @@ func (d decompress4x) decodeTwoValues(id int, br, peekBits, table, buffer, exhau
 	}
 
 	Comment("v0 := table[val0&mask]")
-	v := reg.RDX
-	MOVW(Mem{Base: table, Index: val.As64(), Scale: 2}, v.As16())
+	MOVW(Mem{Base: table, Index: val.As64(), Scale: 2}, CX.As16())
 
 	Commentf("br%d.advance(uint8(v0.entry)", id)
-	out := reg.RAX            // Fixed since we need 8H
-	MOVB(v.As8H(), out.As8()) // BL = uint8(v0.entry >> 8)
+	out := reg.RAX             // Fixed since we need 8H
+	MOVB(CX.As8H(), out.As8()) // BL = uint8(v0.entry >> 8)
 
-	MOVBQZX(v.As8(), CX.As64())
-	if d.bmi2 {
-		SHLXQ(v.As64(), brValue, brValue) // value <<= n
-	} else {
-		SHLQ(CX, brValue) // value <<= n
-	}
-
-	ADDQ(CX.As64(), brBitsRead) // bits_read += n
+	SHLQ(CX, brValue)                // value <<= n
+	ADDB(CX.As8(), brBitsRead.As8()) // bits_read += n
 
 	Commentf("val1 := br%d.peekTopBits(peekBits)", id)
 	if d.bmi2 {
