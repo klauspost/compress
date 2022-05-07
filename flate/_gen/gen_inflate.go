@@ -48,7 +48,7 @@ func (f *decompressor) $FUNCNAME$() {
 	// Optimization. Compiler isn't smart enough to keep f.b,f.nb in registers,
 	// but is smart enough to keep local variables in registers, so use nb and b,
 	// inline call to moreBits and reassign b,nb back to f on return.
-	fnb, fb := f.nb, f.b
+	fnb, fb, dict := f.nb, f.b, &f.dict
 
 	switch f.stepState {
 	case stateInit:
@@ -106,9 +106,9 @@ readLiteral:
 		var length int
 		switch {
 		case v < 256:
-			f.dict.writeByte(byte(v))
-			if f.dict.availWrite() == 0 {
-				f.toRead = f.dict.readFlush()
+			dict.writeByte(byte(v))
+			if dict.availWrite() == 0 {
+				f.toRead = dict.readFlush()
 				f.step = (*decompressor).$FUNCNAME$
 				f.stepState = stateInit
 				f.b, f.nb = fb, fnb
@@ -251,10 +251,10 @@ readLiteral:
 		}
 
 		// No check on length; encoding can be prescient.
-		if dist > uint32(f.dict.histSize()) {
+		if dist > uint32(dict.histSize()) {
 			f.b, f.nb = fb, fnb
 			if debugDecode {
-				fmt.Println("dist > f.dict.histSize():", dist, f.dict.histSize())
+				fmt.Println("dist > dict.histSize():", dist, dict.histSize())
 			}
 			f.err = CorruptInputError(f.roffset)
 			return
@@ -267,14 +267,14 @@ readLiteral:
 copyHistory:
 	// Perform a backwards copy according to RFC section 3.2.3.
 	{
-		cnt := f.dict.tryWriteCopy(f.copyDist, f.copyLen)
+		cnt := dict.tryWriteCopy(f.copyDist, f.copyLen)
 		if cnt == 0 {
-			cnt = f.dict.writeCopy(f.copyDist, f.copyLen)
+			cnt = dict.writeCopy(f.copyDist, f.copyLen)
 		}
 		f.copyLen -= cnt
 
-		if f.dict.availWrite() == 0 || f.copyLen > 0 {
-			f.toRead = f.dict.readFlush()
+		if dict.availWrite() == 0 || f.copyLen > 0 {
+			f.toRead = dict.readFlush()
 			f.step = (*decompressor).$FUNCNAME$ // We need to continue this work
 			f.stepState = stateDict
 			f.b, f.nb = fb, fnb
