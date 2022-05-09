@@ -200,17 +200,19 @@ func TestErrorWriter(t *testing.T) {
 
 func TestNewDecoder(t *testing.T) {
 	for _, n := range []int{1, 4} {
-		t.Run(fmt.Sprintf("cpu-%d", n), func(t *testing.T) {
-			newFn := func() (*Decoder, error) {
-				return NewReader(nil, WithDecoderConcurrency(n))
-			}
-			testDecoderFile(t, "testdata/decoder.zip", newFn)
-			dec, err := newFn()
-			if err != nil {
-				t.Fatal(err)
-			}
-			testDecoderDecodeAll(t, "testdata/decoder.zip", dec)
-		})
+		for _, ignoreCRC := range []bool{false, true} {
+			t.Run(fmt.Sprintf("cpu-%d", n), func(t *testing.T) {
+				newFn := func() (*Decoder, error) {
+					return NewReader(nil, WithDecoderConcurrency(n), IgnoreChecksum(ignoreCRC))
+				}
+				testDecoderFile(t, "testdata/decoder.zip", newFn)
+				dec, err := newFn()
+				if err != nil {
+					t.Fatal(err)
+				}
+				testDecoderDecodeAll(t, "testdata/decoder.zip", dec)
+			})
+		}
 	}
 }
 
@@ -1738,7 +1740,7 @@ func TestResetNil(t *testing.T) {
 }
 
 func TestIgnoreChecksum(t *testing.T) {
-	// zstd file containing text "compress\n" and has a xxhash checksum
+	// zstd file containing text "compress\n" and has an xxhash checksum
 	zstdBlob := []byte{0x28, 0xb5, 0x2f, 0xfd, 0x24, 0x09, 0x49, 0x00, 0x00, 'C', 'o', 'm', 'p', 'r', 'e', 's', 's', '\n', 0x79, 0x6e, 0xe0, 0xd2}
 
 	// replace letter 'c' with 'C', so decoding should fail.
