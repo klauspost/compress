@@ -42,7 +42,7 @@ jobs:
   generate:
     strategy:
       matrix:
-        pkg: [s2, zstd]
+        pkg: [s2, zstd, huff0]
     runs-on: ubuntu-latest
     steps:
     - name: Set up Go
