@@ -874,13 +874,6 @@ type executeSimple struct {
 	safeMem bool
 }
 
-// copySize returns register size used to fast copy.
-//
-// See copyMemory()
-func (e executeSimple) copySize() int {
-	return 16
-}
-
 func (e executeSimple) generateProcedure(name string) {
 	Package("github.com/klauspost/compress/zstd")
 	TEXT(name, 0, "func (ctx *executeAsmContext) bool")
@@ -1155,42 +1148,44 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 
 		Comment("Copy non-overlapping match")
 		{
+			ADDQ(ml, c.outPosition)
 			if e.safeMem {
 				e.copyMemoryPrecise("2", src, c.outBase, ml)
+				ADDQ(ml, c.outBase)
 			} else {
-				e.copyMemory("2", src, c.outBase, ml)
+				dst := GP64()
+				MOVQ(c.outBase, dst)
+				ADDQ(ml, c.outBase)
+				e.copyMemory("2", src, dst, ml)
 			}
-			ADDQ(ml, c.outBase)
-			ADDQ(ml, c.outPosition)
+
 			JMP(LabelRef("handle_loop"))
 		}
 
 		Comment("Copy overlapping match")
 		Label("copy_overlapping_match")
 		{
-			e.copyOverlappedMemory("3", src, c.outBase, ml)
-			ADDQ(ml, c.outBase)
 			ADDQ(ml, c.outPosition)
+			e.copyOverlappedMemory("3", src, c.outBase, ml)
 		}
 	}
 }
 
 // copyMemory will copy memory in blocks of 16 bytes,
 // overwriting up to 15 extra bytes.
+// src and dst are updated. length will be zero or less.
 func (e executeSimple) copyMemory(suffix string, src, dst, length reg.GPVirtual) {
 	label := "copy_" + suffix
-	ofs := GP64()
-	s := Mem{Base: src, Index: ofs, Scale: 1}
-	d := Mem{Base: dst, Index: ofs, Scale: 1}
 
-	XORQ(ofs, ofs)
 	Label(label)
 	t := XMM()
-	MOVUPS(s, t)
-	MOVUPS(t, d)
-	ADDQ(U8(e.copySize()), ofs)
-	CMPQ(ofs, length)
-	JB(LabelRef(label))
+	MOVUPS(Mem{Base: src}, t)
+	MOVUPS(t, Mem{Base: dst})
+	ADDQ(U8(16), src)
+	ADDQ(U8(16), dst)
+	SUBQ(U8(16), length)
+	// jump if (CF == 0 and ZF == 0).
+	JHI(LabelRef(label))
 }
 
 // copyMemoryPrecise will copy memory in blocks of 16 bytes,
@@ -1246,27 +1241,25 @@ func (e executeSimple) copyMemoryPrecise(suffix string, src, dst, length reg.GPV
 	t := XMM()
 	MOVUPS(s, t)
 	MOVUPS(t, d)
-	ADDQ(U8(e.copySize()), ofs)
+	ADDQ(U8(16), ofs)
 	Label("copy_" + suffix + "_test")
 	CMPQ(ofs, length)
 	JB(LabelRef(label))
 }
 
 // copyOverlappedMemory will copy one byte at the time from src to dst.
+// src and dst are updated. length will be zero.
 func (e executeSimple) copyOverlappedMemory(suffix string, src, dst, length reg.GPVirtual) {
 	label := "copy_slow_" + suffix
-	ofs := GP64()
-	s := Mem{Base: src, Index: ofs, Scale: 1}
-	d := Mem{Base: dst, Index: ofs, Scale: 1}
-	t := GP64()
+	tmp := GP64()
 
-	XORQ(ofs, ofs)
 	Label(label)
-	MOVB(s, t.As8())
-	MOVB(t.As8(), d)
-	INCQ(ofs)
-	CMPQ(ofs, length)
-	JB(LabelRef(label))
+	MOVB(Mem{Base: src}, tmp.As8())
+	MOVB(tmp.As8(), Mem{Base: dst})
+	INCQ(src)
+	INCQ(dst)
+	DECQ(length)
+	JNZ(LabelRef(label))
 }
 
 type decodeSync struct {

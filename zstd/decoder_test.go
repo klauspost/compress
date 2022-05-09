@@ -1317,7 +1317,7 @@ func BenchmarkDecoder_DecodeAllFilesP(b *testing.B) {
 					if err != nil {
 						b.Error(err)
 					}
-					_, err = dec.DecodeAll(encoded, nil)
+					raw, err := dec.DecodeAll(encoded, nil)
 					if err != nil {
 						b.Error(err)
 					}
@@ -1326,7 +1326,7 @@ func BenchmarkDecoder_DecodeAllFilesP(b *testing.B) {
 					b.ReportAllocs()
 					b.ResetTimer()
 					b.RunParallel(func(pb *testing.PB) {
-						buf := make([]byte, len(raw))
+						buf := make([]byte, cap(raw))
 						var err error
 						for pb.Next() {
 							buf, err = dec.DecodeAll(encoded, buf[:0])
@@ -1373,7 +1373,7 @@ func BenchmarkDecoder_DecodeAllParallel(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			b.RunParallel(func(pb *testing.PB) {
-				got := make([]byte, len(got))
+				got := make([]byte, cap(got))
 				for pb.Next() {
 					_, err = dec.DecodeAll(in, got[:0])
 					if err != nil {
