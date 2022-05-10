@@ -901,6 +901,14 @@ for each entry {
 }
 ```
 
+To decode from any given uncompressed offset `(wantOffset)`:
+
+* Iterate entries until `entry[n].UncompressedOffset > wantOffset`.
+* Start decoding from `entry[n-1].CompressedOffset`.
+* Discard `entry[n-1].UncompressedOffset - wantOffset` bytes from the decoded stream.
+
+See [using indexes](https://github.com/klauspost/compress/tree/master/s2#using-indexes) for functions that perform the operations with a simpler interface.
+
 # Format Extensions
 
 * Frame [Stream identifier](https://github.com/google/snappy/blob/master/framing_format.txt#L68) changed from `sNaPpY` to `S2sTwO`.
