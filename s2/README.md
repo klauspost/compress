@@ -873,7 +873,7 @@ for each entry {
     }
     
     // Uncompressed uses previous offset and adds EstBlockSize
-    entry[entryNum].UncompressedOffset = entry[entryNum-1].UncompressedOffset + EstBlockSize
+    entry[entryNum].UncompressedOffset = entry[entryNum-1].UncompressedOffset + EstBlockSize + uOff
 }
 
 
