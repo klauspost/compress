@@ -35,7 +35,7 @@ const use8BitTables = true
 // If no Scratch is provided a new one is allocated.
 // The returned Scratch can be used for encoding or decoding input using this table.
 func ReadTable(in []byte, s *Scratch) (s2 *Scratch, remain []byte, err error) {
-	s, err = s.prepare(in)
+	s, err = s.prepare(nil)
 	if err != nil {
 		return s, nil, err
 	}
