@@ -1402,12 +1402,7 @@ func benchmarkDecoderWithFile(path string, b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	dec, err := NewReader(nil, WithDecoderLowmem(false))
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer dec.Close()
-	err = dec.Reset(bytes.NewBuffer(data))
+	dec, err := NewReader(bytes.NewBuffer(data), WithDecoderLowmem(false), WithDecoderConcurrency(1))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -1416,19 +1411,69 @@ func benchmarkDecoderWithFile(path string, b *testing.B) {
 		b.Fatal(err)
 	}
 
-	b.SetBytes(n)
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		err = dec.Reset(bytes.NewBuffer(data))
+	b.Run("multithreaded-writer", func(b *testing.B) {
+		dec, err := NewReader(nil)
 		if err != nil {
 			b.Fatal(err)
 		}
-		_, err := io.CopyN(ioutil.Discard, dec, n)
+
+		b.SetBytes(n)
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			err = dec.Reset(bytes.NewBuffer(data))
+			if err != nil {
+				b.Fatal(err)
+			}
+			_, err := io.CopyN(ioutil.Discard, dec, n)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
+	b.Run("singlethreaded-writer", func(b *testing.B) {
+		dec, err := NewReader(nil, WithDecoderConcurrency(1))
 		if err != nil {
 			b.Fatal(err)
 		}
-	}
+
+		b.SetBytes(n)
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			err = dec.Reset(bytes.NewBuffer(data))
+			if err != nil {
+				b.Fatal(err)
+			}
+			_, err := io.CopyN(ioutil.Discard, dec, n)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
+	b.Run("singlethreaded-writerto", func(b *testing.B) {
+		dec, err := NewReader(nil, WithDecoderConcurrency(1))
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		b.SetBytes(n)
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			err = dec.Reset(bytes.NewBuffer(data))
+			if err != nil {
+				b.Fatal(err)
+			}
+			// io.Copy will use io.WriterTo
+			_, err := io.Copy(ioutil.Discard, dec)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
 }
 
 func BenchmarkDecoderSilesia(b *testing.B) {

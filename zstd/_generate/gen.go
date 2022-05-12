@@ -66,6 +66,8 @@ func main() {
 		safeMem: false,
 	}
 	exec.generateProcedure("sequenceDecs_executeSimple_amd64")
+	exec.safeMem = true
+	exec.generateProcedure("sequenceDecs_executeSimple_safe_amd64")
 
 	decodeSync := decodeSync{}
 	decodeSync.setBMI2(false)
@@ -1032,7 +1034,11 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		TESTQ(ll, ll)
 		JZ(LabelRef("check_offset"))
 		// TODO: Investigate if it is possible to consistently overallocate literals.
-		e.copyMemoryPrecise("1", c.literals, c.outBase, ll)
+		if e.safeMem {
+			e.copyMemoryPrecise("1", c.literals, c.outBase, ll)
+		} else {
+			e.copyMemoryND("1", c.literals, c.outBase, ll)
+		}
 		ADDQ(ll, c.literals)
 		ADDQ(ll, c.outBase)
 		ADDQ(ll, c.outPosition)
@@ -1186,6 +1192,26 @@ func (e executeSimple) copyMemory(suffix string, src, dst, length reg.GPVirtual)
 	SUBQ(U8(16), length)
 	// jump if (CF == 0 and ZF == 0).
 	JHI(LabelRef(label))
+}
+
+// copyMemoryND will copy memory in blocks of 16 bytes,
+// overwriting up to 15 extra bytes.
+// All parameters are preserved.
+func (e executeSimple) copyMemoryND(suffix string, src, dst, length reg.GPVirtual) {
+	label := "copy_" + suffix
+
+	ofs := GP64()
+	s := Mem{Base: src, Index: ofs, Scale: 1}
+	d := Mem{Base: dst, Index: ofs, Scale: 1}
+
+	XORQ(ofs, ofs)
+	Label(label)
+	t := XMM()
+	MOVUPS(s, t)
+	MOVUPS(t, d)
+	ADDQ(U8(16), ofs)
+	CMPQ(ofs, length)
+	JB(LabelRef(label))
 }
 
 // copyMemoryPrecise will copy memory in blocks of 16 bytes,
