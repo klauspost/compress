@@ -150,7 +150,7 @@ func readDecoders(tb testing.TB, buf *bytes.Buffer, ref testSequence) sequenceDe
 		matchLengths: sequenceDec{fse: &fseDecoder{}},
 		prevOffset:   ref.prevOffsets,
 		dict:         nil,
-		literals:     make([]byte, ref.lits),
+		literals:     make([]byte, ref.lits, ref.lits+compressedBlockOverAlloc),
 		out:          nil,
 		nSeqs:        ref.n,
 		br:           nil,
