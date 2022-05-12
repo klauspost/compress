@@ -188,6 +188,7 @@ func (s *sequenceDecs) execute(seqs []seqVals, hist []byte) error {
 			}
 		}
 	}
+
 	// Add final literals
 	copy(out[t:], s.literals)
 	if debugDecoder {
@@ -203,12 +204,11 @@ func (s *sequenceDecs) execute(seqs []seqVals, hist []byte) error {
 
 // decode sequences from the stream with the provided history.
 func (s *sequenceDecs) decodeSync(hist []byte) error {
-	if true {
-		supported, err := s.decodeSyncSimple(hist)
-		if supported {
-			return err
-		}
+	supported, err := s.decodeSyncSimple(hist)
+	if supported {
+		return err
 	}
+
 	br := s.br
 	seqs := s.nSeqs
 	startSize := len(s.out)
@@ -396,6 +396,7 @@ func (s *sequenceDecs) decodeSync(hist []byte) error {
 			ofState = ofTable[ofState.newState()&maxTableMask]
 		} else {
 			bits := br.get32BitsFast(nBits)
+
 			lowBits := uint16(bits >> ((ofState.nbBits() + mlState.nbBits()) & 31))
 			llState = llTable[(llState.newState()+lowBits)&maxTableMask]
 
