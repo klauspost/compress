@@ -190,6 +190,9 @@ func TestErrorWriter(t *testing.T) {
 	}
 	wantErr := fmt.Errorf("i'm a failure")
 	zr, err := NewReader(&cmp)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer zr.Close()
 	out := failingWriter{err: wantErr}
 	_, err = zr.WriteTo(out)

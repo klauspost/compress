@@ -102,7 +102,6 @@ type blockDec struct {
 
 	// Block is RLE, this is the size.
 	RLESize uint32
-	tmp     [4]byte
 
 	Type blockType
 
