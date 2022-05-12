@@ -917,6 +917,9 @@ func TestEncoder_EncoderStreamEnwik9(t *testing.T) {
 	start := time.Now()
 	var dst bytes.Buffer
 	e, err := NewWriter(&dst)
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, err = io.Copy(e, bytes.NewBuffer(in))
 	if err != nil {
 		t.Fatal(err)
