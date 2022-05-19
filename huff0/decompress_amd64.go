@@ -178,9 +178,6 @@ func (d *Decoder) Decompress1X(dst, src []byte) ([]byte, error) {
 	if len(d.dt.single) == 0 {
 		return nil, errors.New("no table loaded")
 	}
-	if use8BitTables && d.actualTableLog <= 8 {
-		return d.decompress1X8Bit(dst, src)
-	}
 	var br bitReaderShifted
 	err := br.init(src)
 	if err != nil {
