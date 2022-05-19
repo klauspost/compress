@@ -307,22 +307,6 @@ func (d *Decoder) Decompress1X(dst, src []byte) ([]byte, error) {
 	bitsLeft := uint8(br.off)*8 + 64 - br.bitsRead
 	for bitsLeft > 0 {
 		br.fill()
-		if false && br.bitsRead >= 32 {
-			if br.off >= 4 {
-				v := br.in[br.off-4:]
-				v = v[:4]
-				low := (uint32(v[0])) | (uint32(v[1]) << 8) | (uint32(v[2]) << 16) | (uint32(v[3]) << 24)
-				br.value = (br.value << 32) | uint64(low)
-				br.bitsRead -= 32
-				br.off -= 4
-			} else {
-				for br.off > 0 {
-					br.value = (br.value << 8) | uint64(br.in[br.off-1])
-					br.bitsRead -= 8
-					br.off--
-				}
-			}
-		}
 		if len(dst) >= maxDecodedSize {
 			d.bufs.Put(bufs)
 			br.close()
@@ -342,9 +326,6 @@ func (d *Decoder) Decompress1X(dst, src []byte) ([]byte, error) {
 // The cap of the output buffer will be the maximum decompressed size.
 // The length of the supplied input must match the end of a block exactly.
 func (d *Decoder) decompress1X8Bit(dst, src []byte) ([]byte, error) {
-	if d.actualTableLog == 8 {
-		return d.decompress1X8BitExactly(dst, src)
-	}
 	var br bitReaderBytes
 	err := br.init(src)
 	if err != nil {
@@ -632,90 +613,6 @@ func (d *Decoder) decompress1X8Bit(dst, src []byte) ([]byte, error) {
 			return nil, ErrMaxDecodedSizeExceeded
 		}
 		v := dt[br.peekByteFast()>>shift]
-		nBits := uint8(v.entry)
-		br.advance(nBits)
-		bitsLeft -= int8(nBits)
-		dst = append(dst, uint8(v.entry>>8))
-	}
-	d.bufs.Put(bufs)
-	return dst, br.close()
-}
-
-// decompress1X8Bit will decompress a 1X encoded stream with tablelog <= 8.
-// The cap of the output buffer will be the maximum decompressed size.
-// The length of the supplied input must match the end of a block exactly.
-func (d *Decoder) decompress1X8BitExactly(dst, src []byte) ([]byte, error) {
-	var br bitReaderBytes
-	err := br.init(src)
-	if err != nil {
-		return dst, err
-	}
-	maxDecodedSize := cap(dst)
-	dst = dst[:0]
-
-	// Avoid bounds check by always having full sized table.
-	dt := d.dt.single[:256]
-
-	// Use temp table to avoid bound checks/append penalty.
-	bufs := d.buffer()
-	buf := &bufs[0]
-	var off uint8
-
-	const shift = 56
-
-	//fmt.Printf("mask: %b, tl:%d\n", mask, d.actualTableLog)
-	for br.off >= 4 {
-		br.fillFast()
-		v := dt[uint8(br.value>>shift)]
-		br.advance(uint8(v.entry))
-		buf[off+0] = uint8(v.entry >> 8)
-
-		v = dt[uint8(br.value>>shift)]
-		br.advance(uint8(v.entry))
-		buf[off+1] = uint8(v.entry >> 8)
-
-		v = dt[uint8(br.value>>shift)]
-		br.advance(uint8(v.entry))
-		buf[off+2] = uint8(v.entry >> 8)
-
-		v = dt[uint8(br.value>>shift)]
-		br.advance(uint8(v.entry))
-		buf[off+3] = uint8(v.entry >> 8)
-
-		off += 4
-		if off == 0 {
-			if len(dst)+256 > maxDecodedSize {
-				d.bufs.Put(bufs)
-				br.close()
-				return nil, ErrMaxDecodedSizeExceeded
-			}
-			dst = append(dst, buf[:]...)
-		}
-	}
-
-	if len(dst)+int(off) > maxDecodedSize {
-		d.bufs.Put(bufs)
-		br.close()
-		return nil, ErrMaxDecodedSizeExceeded
-	}
-	dst = append(dst, buf[:off]...)
-
-	// br < 4, so uint8 is fine
-	bitsLeft := int8(uint8(br.off)*8 + (64 - br.bitsRead))
-	for bitsLeft > 0 {
-		if br.bitsRead >= 64-8 {
-			for br.off > 0 {
-				br.value |= uint64(br.in[br.off-1]) << (br.bitsRead - 8)
-				br.bitsRead -= 8
-				br.off--
-			}
-		}
-		if len(dst) >= maxDecodedSize {
-			d.bufs.Put(bufs)
-			br.close()
-			return nil, ErrMaxDecodedSizeExceeded
-		}
-		v := dt[br.peekByteFast()]
 		nBits := uint8(v.entry)
 		br.advance(nBits)
 		bitsLeft -= int8(nBits)
