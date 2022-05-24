@@ -2,9 +2,9 @@
 
 The Snappy compression format in the Go programming language.
 
-This is a plug-in replacement for `github.com/golang/snappy`.
+This is a drop-in replacement for `github.com/golang/snappy`.
 
-It provides full replacement of the Snappy package.
+It provides a full, compatible replacement of the Snappy package by simply changing imports.
 
 See [Snappy Compatibility](https://github.com/klauspost/compress/tree/master/s2#snappy-compatibility) in the S2 documentation.
 
