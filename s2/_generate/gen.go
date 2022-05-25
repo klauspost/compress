@@ -727,19 +727,25 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes, m
 		RET()
 		Label("emit_remainder_ok_" + name)
 	}
-	// emitLiteral(dst[d:], src[nextEmitL:])
-	emitEnd := GP64()
-	MOVQ(lenSrcQ, emitEnd)
+	{
+		// emitLiteral(dst[d:], src[nextEmitL:])
+		emitEnd := GP64()
+		MOVQ(lenSrcQ, emitEnd)
 
-	// Emit final literals.
-	o.emitLiteralsDstP(nextEmitL, emitEnd, src, dst, "emit_remainder_"+name)
-
-	// Assert size is < limit
-	assert(func(ok LabelRef) {
-		// if dstBaseQ <  dstLimitPtrQ: ok
-		CMPQ(dst, dstLimitPtrQ)
-		JL(ok)
-	})
+		// Emit final literals.
+		// Since we may be at the end of source,
+		// we cannot have output margin.
+		x := o.outputMargin
+		o.outputMargin = 0
+		o.emitLiteralsDstP(nextEmitL, emitEnd, src, dst, "emit_remainder_"+name)
+		o.outputMargin = x
+		// Assert size is < limit
+		assert(func(ok LabelRef) {
+			// if dstBaseQ <  dstLimitPtrQ: ok
+			CMPQ(dst, dstLimitPtrQ)
+			JL(ok)
+		})
+	}
 
 	// length := start - base (ptr arithmetic)
 	length := GP64()
@@ -1437,7 +1443,12 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 	MOVQ(lenSrcQ, emitEnd)
 
 	// Emit final literals.
+	// Since we may be at the end of source,
+	// we cannot have output margin.
+	x := o.outputMargin
+	o.outputMargin = 0
 	o.emitLiteralsDstP(nextEmitL, emitEnd, src, dst, "emit_remainder_"+name)
+	o.outputMargin = x
 
 	// Assert size is < limit
 	assert(func(ok LabelRef) {
