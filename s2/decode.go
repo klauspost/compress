@@ -472,6 +472,7 @@ func (r *Reader) DecodeConcurrent(w io.Writer, concurrent int) (written int64, e
 		return v
 	}
 
+	var aWritten int64
 	toRead := make(chan []byte, concurrent)
 	writtenBlocks := make(chan []byte, concurrent)
 	queue := make(chan chan []byte, concurrent)
@@ -504,7 +505,7 @@ func (r *Reader) DecodeConcurrent(w io.Writer, concurrent int) (written int64, e
 				setErr(io.ErrShortWrite)
 				continue
 			}
-			written += int64(n)
+			aWritten += int64(n)
 		}
 	}()
 
@@ -516,6 +517,7 @@ func (r *Reader) DecodeConcurrent(w io.Writer, concurrent int) (written int64, e
 			err = r.err
 		}
 		r.err = err
+		written = aWritten
 	}()
 
 	for !hasErr() {
@@ -523,7 +525,7 @@ func (r *Reader) DecodeConcurrent(w io.Writer, concurrent int) (written int64, e
 			if r.err == io.EOF {
 				r.err = nil
 			}
-			return written, r.err
+			return 0, r.err
 		}
 		chunkType := r.buf[0]
 		if !r.readHeader {

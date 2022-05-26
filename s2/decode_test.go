@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -125,6 +126,7 @@ func TestDecoderMaxBlockSize(t *testing.T) {
 					t.Error(fmt.Errorf("wanted size to be mutiple of %d, got size %d with remainder %d", enc.pad, buf.Len(), buf.Len()%enc.pad))
 					return
 				}
+				encoded := buf.Bytes()
 				dec.Reset(&buf)
 				// Skip first...
 				dec.Skip(int64(len(data)))
@@ -135,6 +137,29 @@ func TestDecoderMaxBlockSize(t *testing.T) {
 				}
 				if !bytes.Equal(data, got) {
 					t.Error("frame (reset) decoder mismatch")
+					return
+				}
+				// Re-add data, Read concurrent.
+				buf.Write(encoded)
+				dec.Reset(&buf)
+				var doubleB bytes.Buffer
+				nb, err := dec.DecodeConcurrent(&doubleB, runtime.GOMAXPROCS(0))
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				if nb != int64(len(data)*2) {
+					t.Errorf("want %d, got %d, err: %v", len(data)*2, nb, err)
+					return
+				}
+				got = doubleB.Bytes()[:len(data)]
+				if !bytes.Equal(data, got) {
+					t.Error("frame (DecodeConcurrent) decoder mismatch")
+					return
+				}
+				got = doubleB.Bytes()[len(data):]
+				if !bytes.Equal(data, got) {
+					t.Error("frame (DecodeConcurrent) decoder mismatch")
 					return
 				}
 			})
