@@ -454,20 +454,21 @@ func (r *Reader) DecodeConcurrent(w io.Writer, concurrent int) (written int64, e
 
 	// Write to output
 	var errMu sync.Mutex
+	var aErr error
 	setErr := func(e error) (ok bool) {
 		errMu.Lock()
 		defer errMu.Unlock()
 		if e == nil {
-			return err == nil
+			return aErr == nil
 		}
-		if err == nil {
-			err = e
+		if aErr == nil {
+			aErr = e
 		}
 		return false
 	}
 	hasErr := func() (ok bool) {
 		errMu.Lock()
-		v := err != nil
+		v := aErr != nil
 		errMu.Unlock()
 		return v
 	}
@@ -512,11 +513,14 @@ func (r *Reader) DecodeConcurrent(w io.Writer, concurrent int) (written int64, e
 	// Reader
 	defer func() {
 		close(queue)
-		wg.Wait()
 		if r.err != nil {
 			err = r.err
+			setErr(r.err)
 		}
-		r.err = err
+		wg.Wait()
+		if err == nil {
+			err = aErr
+		}
 		written = aWritten
 	}()
 
