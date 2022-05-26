@@ -495,6 +495,8 @@ func (d decompress1x) generateProcedure(name string) {
 		MOVQ(I64(-1), tmp)
 		Store(tmp, ctx.Field("decoded"))
 	}
+
+	RET()
 }
 
 func (d decompress1x) decompress(id int, br *bitReader, peekBits, dt reg.GPVirtual, out reg.Register) {

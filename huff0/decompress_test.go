@@ -3,7 +3,10 @@ package huff0
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"testing"
+
+	"github.com/klauspost/compress/zip"
 )
 
 func TestDecompress1X(t *testing.T) {
@@ -92,6 +95,43 @@ func TestDecompress1X(t *testing.T) {
 			if !t.Failed() {
 				t.Log("... roundtrip ok!")
 			}
+		})
+	}
+}
+
+func TestDecompress1XRegression(t *testing.T) {
+	data, err := ioutil.ReadFile("testdata/decompress1x_regression.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range zr.File {
+		if tt.UncompressedSize64 == 0 {
+			continue
+		}
+		rc, err := tt.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := ioutil.ReadAll(rc)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(tt.Name, func(t *testing.T) {
+			s, rem, err := ReadTable(data, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = s.Decompress1X(rem)
+			if err == nil {
+				t.Fatal("expected error to be returned")
+			}
+
+			t.Logf("returned error: %s", err)
 		})
 	}
 }
