@@ -17,7 +17,7 @@ This package provides various compression algorithms.
 
 # changelog
 
-* May 25, 2022 (v1.15.4)
+* May 25, 2022 (v1.15.5)
 	* s2: Add concurrent stream decompression https://github.com/klauspost/compress/pull/602
 	* s2: Fix final emit oob read crash on amd64 https://github.com/klauspost/compress/pull/601
 	* huff0: asm implementation of Decompress1X by @WojciechMula https://github.com/klauspost/compress/pull/596
