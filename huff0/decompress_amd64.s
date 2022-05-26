@@ -765,6 +765,7 @@ error_max_decoded_size_exeeded:
 	MOVQ ctx+0(FP), AX
 	MOVQ $-1, CX
 	MOVQ CX, 40(AX)
+	RET
 
 // func decompress1x_main_loop_bmi2(ctx *decompress1xContext)
 // Requires: BMI2
@@ -861,3 +862,4 @@ error_max_decoded_size_exeeded:
 	MOVQ ctx+0(FP), AX
 	MOVQ $-1, CX
 	MOVQ CX, 40(AX)
+	RET
