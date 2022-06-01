@@ -171,6 +171,14 @@ func ReaderSkippableCB(id uint8, fn func(r io.Reader) error) ReaderOption {
 	}
 }
 
+// ReaderIgnoreCRC will make the reader skip CRC calculation and checks.
+func ReaderIgnoreCRC() ReaderOption {
+	return func(r *Reader) error {
+		r.ignoreCRC = true
+		return nil
+	}
+}
+
 // Reader is an io.Reader that can read Snappy-compressed bytes.
 type Reader struct {
 	r           io.Reader
@@ -193,6 +201,7 @@ type Reader struct {
 	paramsOK       bool
 	snappyFrame    bool
 	ignoreStreamID bool
+	ignoreCRC      bool
 }
 
 // ensureBufferSize will ensure that the buffer can take at least n bytes.
@@ -347,7 +356,7 @@ func (r *Reader) Read(p []byte) (int, error) {
 				r.err = err
 				return 0, r.err
 			}
-			if crc(r.decoded[:n]) != checksum {
+			if !r.ignoreCRC && crc(r.decoded[:n]) != checksum {
 				r.err = ErrCRC
 				return 0, r.err
 			}
@@ -388,7 +397,7 @@ func (r *Reader) Read(p []byte) (int, error) {
 			if !r.readFull(r.decoded[:n], false) {
 				return 0, r.err
 			}
-			if crc(r.decoded[:n]) != checksum {
+			if !r.ignoreCRC && crc(r.decoded[:n]) != checksum {
 				r.err = ErrCRC
 				return 0, r.err
 			}
@@ -594,7 +603,7 @@ func (r *Reader) DecodeConcurrent(w io.Writer, concurrent int) (written int64, e
 					setErr(err)
 					return
 				}
-				if crc(decoded) != checksum {
+				if !r.ignoreCRC && crc(decoded) != checksum {
 					writtenBlocks <- decoded
 					setErr(ErrCRC)
 					return
@@ -638,7 +647,7 @@ func (r *Reader) DecodeConcurrent(w io.Writer, concurrent int) (written int64, e
 				return 0, r.err
 			}
 
-			if crc(buf) != checksum {
+			if !r.ignoreCRC && crc(buf) != checksum {
 				r.err = ErrCRC
 				return 0, r.err
 			}
