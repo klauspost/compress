@@ -55,18 +55,20 @@ func ExampleTransport() {
 }
 ```
 
-Speed compared to standard library `DefaultTransport` for an approximate 127KB payload:
+Speed compared to standard library `DefaultTransport` for an approximate 127KB JSON payload:
 
 ```
 BenchmarkTransport
 
 Single core:
-BenchmarkTransport/gzhttp-32         	    1995	    609791 ns/op	 214.14 MB/s	   10129 B/op	      73 allocs/op
-BenchmarkTransport/stdlib-32         	    1567	    772161 ns/op	 169.11 MB/s	   53950 B/op	      99 allocs/op
+BenchmarkTransport/gzhttp-32                1995        609791 ns/op     214.14 MB/s       10129 B/op         73 allocs/op
+BenchmarkTransport/stdlib-32                1567        772161 ns/op     169.11 MB/s       53950 B/op         99 allocs/op
+BenchmarkTransport/zstd-32                  4579        238503 ns/op     547.51 MB/s       5775 B/op          69 allocs/op
 
 Multi Core:
-BenchmarkTransport/gzhttp-par-32     	   29113	     36802 ns/op	3548.27 MB/s	   11061 B/op	      73 allocs/op
-BenchmarkTransport/stdlib-par-32     	   16114	     66442 ns/op	1965.38 MB/s	   54971 B/op	      99 allocs/op
+BenchmarkTransport/gzhttp-par-32           29113         36802 ns/op    3548.27 MB/s       11061 B/op         73 allocs/op
+BenchmarkTransport/stdlib-par-32           16114         66442 ns/op    1965.38 MB/s       54971 B/op         99 allocs/op
+BenchmarkTransport/zstd-par-32             90177         13110 ns/op    9960.83 MB/s       5361 B/op          67 allocs/op
 ```
 
 This includes both serving the http request, parsing requests and decompressing. 
