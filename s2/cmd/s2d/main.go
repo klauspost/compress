@@ -41,6 +41,11 @@ var (
 	date    = "(unknown)"
 )
 
+const (
+	s2Ext     = ".s2"
+	snappyExt = ".sz" // https://github.com/google/snappy/blob/main/framing_format.txt#L34
+)
+
 func main() {
 	flag.Parse()
 	r := s2.NewReader(nil)
@@ -53,7 +58,7 @@ func main() {
 			"Copyright (c) 2019+ Klaus Post. All rights reserved.\n\n")
 		_, _ = fmt.Fprintln(os.Stderr, `Usage: s2d [options] file1 file2
 
-Decompresses all files supplied as input. Input files must end with '.s2' or '.snappy'.
+Decompresses all files supplied as input. Input files must end with '`+s2Ext+`' or '`+snappyExt+`'.
 Output file names have the extension removed. By default output files will be overwritten.
 Use - as the only file name to read from stdin and write to stdout.
 
@@ -130,7 +135,8 @@ Options:`)
 				block = true
 			}
 			switch {
-			case strings.HasSuffix(dstFilename, ".s2"):
+			case strings.HasSuffix(dstFilename, s2Ext):
+			case strings.HasSuffix(dstFilename, snappyExt):
 			case strings.HasSuffix(dstFilename, ".snappy"):
 			default:
 				if !isHTTP(filename) {
@@ -199,8 +205,10 @@ Options:`)
 		switch {
 		case *out != "":
 			dstFilename = *out
-		case strings.HasSuffix(dstFilename, ".s2"):
-			dstFilename = strings.TrimSuffix(dstFilename, ".s2")
+		case strings.HasSuffix(dstFilename, s2Ext):
+			dstFilename = strings.TrimSuffix(dstFilename, s2Ext)
+		case strings.HasSuffix(dstFilename, snappyExt):
+			dstFilename = strings.TrimSuffix(dstFilename, snappyExt)
 		case strings.HasSuffix(dstFilename, ".snappy"):
 			dstFilename = strings.TrimSuffix(dstFilename, ".snappy")
 		default:

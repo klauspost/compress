@@ -51,6 +51,11 @@ var (
 	date    = "(unknown)"
 )
 
+const (
+	s2Ext     = ".s2"
+	snappyExt = ".sz" // https://github.com/google/snappy/blob/main/framing_format.txt#L34
+)
+
 func main() {
 	if false {
 		flag.StringVar(&cpuprofile, "cpuprofile", "", "write cpu profile to file")
@@ -71,7 +76,7 @@ func main() {
 		_, _ = fmt.Fprintln(os.Stderr, `Usage: s2c [options] file1 file2
 
 Compresses all files supplied as input separately.
-Output files are written as 'filename.ext.s2' or 'filename.ext.snappy'.
+Output files are written as 'filename.ext`+s2Ext+`' or 'filename.ext`+snappyExt+`'.
 By default output files will be overwritten.
 Use - as the only file name to read from stdin and write to stdout.
 
@@ -325,9 +330,9 @@ Options:`)
 		}
 		os.Exit(0)
 	}
-	ext := ".s2"
+	ext := s2Ext
 	if *snappy {
-		ext = ".snappy"
+		ext = snappyExt
 	}
 	if *block {
 		ext += ".block"
