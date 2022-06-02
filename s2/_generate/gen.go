@@ -2050,6 +2050,37 @@ func (o options) emitCopy(name string, length, offset, retval, dstBase reg.GPVir
 	//if length > 64 {
 	CMPL(length.As32(), U8(64))
 	JLE(LabelRef("two_byte_offset_short_" + name))
+
+	// if offset < 2048 {
+	if !o.snappy {
+		CMPL(offset.As32(), U32(2048))
+		JAE(LabelRef("long_offset_short_" + name))
+		// Emit a length 8 copy, encoded as 2 bytes.
+		// Emit remaining as repeat value (minimum 4 bytes).
+		// dst[1] = uint8(offset)
+		// dst[0] = uint8(offset>>8)<<5 | uint8(8-4)<<2 | tagCopy1
+		tmp := GP64()
+		MOVL(U32(tagCopy1), tmp.As32())
+		// Use scale and displacement to shift and subtract values from length.
+		LEAL(Mem{Base: tmp, Disp: (8 - 4) << 2}, tmp.As32())
+		MOVB(offset.As8(), Mem{Base: dstBase, Disp: 1}) // Store offset lower byte
+		tmp2 := GP64()
+		MOVL(offset.As32(), tmp2.As32())
+		SHRL(U8(8), tmp2.As32())     // Remove lower
+		SHLL(U8(5), tmp2.As32())     // Shift back up
+		ORL(tmp2.As32(), tmp.As32()) // OR result
+		MOVB(tmp.As8(), Mem{Base: dstBase, Disp: 0})
+		if retval != nil {
+			ADDQ(U8(2), retval) // i += 2
+		}
+		ADDQ(U8(2), dstBase)       // dst += 2
+		SUBL(U8(8), length.As32()) // length  -= 8
+		// emitRepeat(dst[2:], offset, length)
+		o.emitRepeat(name+"_emit_copy_short_2b", length, offset, retval, dstBase, end)
+
+		Label("long_offset_short_" + name)
+	}
+
 	// Emit a length 60 copy, encoded as 3 bytes.
 	// Emit remaining as repeat value (minimum 4 bytes).
 	//	dst[2] = uint8(offset >> 8)
