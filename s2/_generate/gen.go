@@ -441,7 +441,7 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes, m
 					JZ(LabelRef("repeat_as_copy_" + name))
 
 					// Emit as repeat...
-					o.emitRepeat("match_repeat_"+name, length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name))
+					o.emitRepeat("match_repeat_"+name, length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name), false)
 
 					// Emit as copy instead...
 					Label("repeat_as_copy_" + name)
@@ -1103,7 +1103,7 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 					JZ(LabelRef("repeat_as_copy_" + name))
 
 					// Emit as repeat...
-					o.emitRepeat("match_repeat_"+name, length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name))
+					o.emitRepeat("match_repeat_"+name, length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name), false)
 
 					// Emit as copy instead...
 					Label("repeat_as_copy_" + name)
@@ -1314,7 +1314,7 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 				// length += 4
 				ADDL(U8(4), length.As32())
 				MOVL(s, nextEmitL) // nextEmit = s
-				o.emitRepeat("match_nolit_repeat_"+name, length, offset, nil, dst, LabelRef("match_nolit_emitcopy_end_"+name))
+				o.emitRepeat("match_nolit_repeat_"+name, length, offset, nil, dst, LabelRef("match_nolit_emitcopy_end_"+name), false)
 			}
 		}
 		Label("match_nolit_emitcopy_end_" + name)
@@ -1774,7 +1774,7 @@ func (o options) genEmitRepeat() {
 	Load(Param("dst").Base(), dstBase)
 	Load(Param("offset"), offset)
 	Load(Param("length"), length)
-	o.emitRepeat("standalone", length, offset, retval, dstBase, LabelRef("gen_emit_repeat_end"))
+	o.emitRepeat("standalone", length, offset, retval, dstBase, LabelRef("gen_emit_repeat_end"), false)
 	Label("gen_emit_repeat_end")
 	Store(retval, ReturnIndex(0))
 	RET()
@@ -1786,13 +1786,18 @@ func (o options) genEmitRepeat() {
 // retval can be nil.
 // Will jump to end label when finished.
 // Uses 1 GP register.
-func (o options) emitRepeat(name string, length, offset, retval, dstBase reg.GPVirtual, end LabelRef) {
+// longer indicates we know match will be > 12
+func (o options) emitRepeat(name string, length reg.GPVirtual, offset reg.GPVirtual, retval reg.GPVirtual, dstBase reg.GPVirtual, end LabelRef, longer bool) {
 	Comment("emitRepeat")
+	if longer {
+		// Skip initial length tests
+		LEAL(Mem{Base: length, Disp: -4}, length.As32()) // length -= 4
+		JMP(LabelRef("cant_repeat_two_offset_" + name))
+	}
 	Label("emit_repeat_again_" + name)
 	tmp := GP32()
-	MOVL(length.As32(), tmp) // Copy length
-	// length -= 4
-	LEAL(Mem{Base: length, Disp: -4}, length.As32())
+	MOVL(length.As32(), tmp)                         // Copy length
+	LEAL(Mem{Base: length, Disp: -4}, length.As32()) // length -= 4
 
 	// if length <= 4 (use copied value)
 	CMPL(tmp.As32(), U8(8))
@@ -2014,7 +2019,7 @@ func (o options) emitCopy(name string, length, offset, retval, dstBase reg.GPVir
 		//	return 5 + emitRepeat(dst[5:], offset, length)
 		// Inline call to emitRepeat. Will jump to end
 		if !o.snappy {
-			o.emitRepeat(name+"_emit_copy", length, offset, retval, dstBase, end)
+			o.emitRepeat(name+"_emit_copy", length, offset, retval, dstBase, end, false)
 		}
 		JMP(LabelRef("four_bytes_loop_back_" + name))
 
@@ -2076,7 +2081,7 @@ func (o options) emitCopy(name string, length, offset, retval, dstBase reg.GPVir
 		ADDQ(U8(2), dstBase)       // dst += 2
 		SUBL(U8(8), length.As32()) // length  -= 8
 		// emitRepeat(dst[2:], offset, length)
-		o.emitRepeat(name+"_emit_copy_short_2b", length, offset, retval, dstBase, end)
+		o.emitRepeat(name+"_emit_copy_short_2b", length, offset, retval, dstBase, end, true)
 
 		Label("long_offset_short_" + name)
 	}
@@ -2100,7 +2105,7 @@ func (o options) emitCopy(name string, length, offset, retval, dstBase reg.GPVir
 	}
 	// Inline call to emitRepeat. Will jump to end
 	if !o.snappy {
-		o.emitRepeat(name+"_emit_copy_short", length, offset, retval, dstBase, end)
+		o.emitRepeat(name+"_emit_copy_short", length, offset, retval, dstBase, end, false)
 	}
 	JMP(LabelRef("two_byte_offset_" + name))
 

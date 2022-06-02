@@ -488,6 +488,9 @@ two_byte_offset_repeat_as_copy_encodeBlockAsm:
 	SUBL $0x08, SI
 
 	// emitRepeat
+	LEAL -4(SI), SI
+	JMP  cant_repeat_two_offset_repeat_as_copy_encodeBlockAsm_emit_copy_short_2b
+
 emit_repeat_again_repeat_as_copy_encodeBlockAsm_emit_copy_short_2b:
 	MOVL SI, R8
 	LEAL -4(SI), SI
@@ -1026,6 +1029,9 @@ two_byte_offset_match_nolit_encodeBlockAsm:
 	SUBL $0x08, R10
 
 	// emitRepeat
+	LEAL -4(R10), R10
+	JMP  cant_repeat_two_offset_match_nolit_encodeBlockAsm_emit_copy_short_2b
+
 emit_repeat_again_match_nolit_encodeBlockAsm_emit_copy_short_2b:
 	MOVL R10, DI
 	LEAL -4(R10), R10
@@ -1829,15 +1835,16 @@ two_byte_offset_repeat_as_copy_encodeBlockAsm4MB:
 	MOVL $0x00000001, R8
 	LEAL 16(R8), R8
 	MOVB DI, 1(AX)
-	MOVL DI, R9
-	SHRL $0x08, R9
-	SHLL $0x05, R9
-	ORL  R9, R8
+	SHRL $0x08, DI
+	SHLL $0x05, DI
+	ORL  DI, R8
 	MOVB R8, (AX)
 	ADDQ $0x02, AX
 	SUBL $0x08, SI
 
 	// emitRepeat
+	LEAL -4(SI), SI
+	JMP  cant_repeat_two_offset_repeat_as_copy_encodeBlockAsm4MB_emit_copy_short_2b
 	MOVL SI, R8
 	LEAL -4(SI), SI
 	CMPL R8, $0x08
@@ -2326,15 +2333,16 @@ two_byte_offset_match_nolit_encodeBlockAsm4MB:
 	MOVL $0x00000001, DI
 	LEAL 16(DI), DI
 	MOVB SI, 1(AX)
-	MOVL SI, R8
-	SHRL $0x08, R8
-	SHLL $0x05, R8
-	ORL  R8, DI
+	SHRL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, DI
 	MOVB DI, (AX)
 	ADDQ $0x02, AX
 	SUBL $0x08, R10
 
 	// emitRepeat
+	LEAL -4(R10), R10
+	JMP  cant_repeat_two_offset_match_nolit_encodeBlockAsm4MB_emit_copy_short_2b
 	MOVL R10, DI
 	LEAL -4(R10), R10
 	CMPL DI, $0x08
@@ -3005,15 +3013,16 @@ two_byte_offset_repeat_as_copy_encodeBlockAsm12B:
 	MOVL $0x00000001, R8
 	LEAL 16(R8), R8
 	MOVB DI, 1(AX)
-	MOVL DI, R9
-	SHRL $0x08, R9
-	SHLL $0x05, R9
-	ORL  R9, R8
+	SHRL $0x08, DI
+	SHLL $0x05, DI
+	ORL  DI, R8
 	MOVB R8, (AX)
 	ADDQ $0x02, AX
 	SUBL $0x08, SI
 
 	// emitRepeat
+	LEAL -4(SI), SI
+	JMP  cant_repeat_two_offset_repeat_as_copy_encodeBlockAsm12B_emit_copy_short_2b
 	MOVL SI, R8
 	LEAL -4(SI), SI
 	CMPL R8, $0x08
@@ -3387,15 +3396,16 @@ two_byte_offset_match_nolit_encodeBlockAsm12B:
 	MOVL $0x00000001, DI
 	LEAL 16(DI), DI
 	MOVB SI, 1(AX)
-	MOVL SI, R8
-	SHRL $0x08, R8
-	SHLL $0x05, R8
-	ORL  R8, DI
+	SHRL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, DI
 	MOVB DI, (AX)
 	ADDQ $0x02, AX
 	SUBL $0x08, R10
 
 	// emitRepeat
+	LEAL -4(R10), R10
+	JMP  cant_repeat_two_offset_match_nolit_encodeBlockAsm12B_emit_copy_short_2b
 	MOVL R10, DI
 	LEAL -4(R10), R10
 	CMPL DI, $0x08
@@ -4031,15 +4041,16 @@ two_byte_offset_repeat_as_copy_encodeBlockAsm10B:
 	MOVL $0x00000001, R8
 	LEAL 16(R8), R8
 	MOVB DI, 1(AX)
-	MOVL DI, R9
-	SHRL $0x08, R9
-	SHLL $0x05, R9
-	ORL  R9, R8
+	SHRL $0x08, DI
+	SHLL $0x05, DI
+	ORL  DI, R8
 	MOVB R8, (AX)
 	ADDQ $0x02, AX
 	SUBL $0x08, SI
 
 	// emitRepeat
+	LEAL -4(SI), SI
+	JMP  cant_repeat_two_offset_repeat_as_copy_encodeBlockAsm10B_emit_copy_short_2b
 	MOVL SI, R8
 	LEAL -4(SI), SI
 	CMPL R8, $0x08
@@ -4413,15 +4424,16 @@ two_byte_offset_match_nolit_encodeBlockAsm10B:
 	MOVL $0x00000001, DI
 	LEAL 16(DI), DI
 	MOVB SI, 1(AX)
-	MOVL SI, R8
-	SHRL $0x08, R8
-	SHLL $0x05, R8
-	ORL  R8, DI
+	SHRL $0x08, SI
+	SHLL $0x05, SI
+	ORL  SI, DI
 	MOVB DI, (AX)
 	ADDQ $0x02, AX
 	SUBL $0x08, R10
 
 	// emitRepeat
+	LEAL -4(R10), R10
+	JMP  cant_repeat_two_offset_match_nolit_encodeBlockAsm10B_emit_copy_short_2b
 	MOVL R10, DI
 	LEAL -4(R10), R10
 	CMPL DI, $0x08
@@ -5061,6 +5073,8 @@ two_byte_offset_repeat_as_copy_encodeBlockAsm8B:
 	SUBL $0x08, SI
 
 	// emitRepeat
+	LEAL -4(SI), SI
+	JMP  cant_repeat_two_offset_repeat_as_copy_encodeBlockAsm8B_emit_copy_short_2b
 	MOVL SI, DI
 	LEAL -4(SI), SI
 	CMPL DI, $0x08
@@ -5432,6 +5446,8 @@ two_byte_offset_match_nolit_encodeBlockAsm8B:
 	SUBL $0x08, R10
 
 	// emitRepeat
+	LEAL -4(R10), R10
+	JMP  cant_repeat_two_offset_match_nolit_encodeBlockAsm8B_emit_copy_short_2b
 	MOVL R10, SI
 	LEAL -4(R10), R10
 	CMPL SI, $0x08
@@ -6178,6 +6194,9 @@ two_byte_offset_match_nolit_encodeBetterBlockAsm:
 	SUBL $0x08, R12
 
 	// emitRepeat
+	LEAL -4(R12), R12
+	JMP  cant_repeat_two_offset_match_nolit_encodeBetterBlockAsm_emit_copy_short_2b
+
 emit_repeat_again_match_nolit_encodeBetterBlockAsm_emit_copy_short_2b:
 	MOVL R12, SI
 	LEAL -4(R12), R12
@@ -7219,15 +7238,16 @@ two_byte_offset_match_nolit_encodeBetterBlockAsm4MB:
 	MOVL $0x00000001, SI
 	LEAL 16(SI), SI
 	MOVB R8, 1(AX)
-	MOVL R8, R9
-	SHRL $0x08, R9
-	SHLL $0x05, R9
-	ORL  R9, SI
+	SHRL $0x08, R8
+	SHLL $0x05, R8
+	ORL  R8, SI
 	MOVB SI, (AX)
 	ADDQ $0x02, AX
 	SUBL $0x08, R12
 
 	// emitRepeat
+	LEAL -4(R12), R12
+	JMP  cant_repeat_two_offset_match_nolit_encodeBetterBlockAsm4MB_emit_copy_short_2b
 	MOVL R12, SI
 	LEAL -4(R12), R12
 	CMPL SI, $0x08
@@ -8112,15 +8132,16 @@ two_byte_offset_match_nolit_encodeBetterBlockAsm12B:
 	MOVL $0x00000001, SI
 	LEAL 16(SI), SI
 	MOVB R8, 1(AX)
-	MOVL R8, R9
-	SHRL $0x08, R9
-	SHLL $0x05, R9
-	ORL  R9, SI
+	SHRL $0x08, R8
+	SHLL $0x05, R8
+	ORL  R8, SI
 	MOVB SI, (AX)
 	ADDQ $0x02, AX
 	SUBL $0x08, R12
 
 	// emitRepeat
+	LEAL -4(R12), R12
+	JMP  cant_repeat_two_offset_match_nolit_encodeBetterBlockAsm12B_emit_copy_short_2b
 	MOVL R12, SI
 	LEAL -4(R12), R12
 	CMPL SI, $0x08
@@ -8947,15 +8968,16 @@ two_byte_offset_match_nolit_encodeBetterBlockAsm10B:
 	MOVL $0x00000001, SI
 	LEAL 16(SI), SI
 	MOVB R8, 1(AX)
-	MOVL R8, R9
-	SHRL $0x08, R9
-	SHLL $0x05, R9
-	ORL  R9, SI
+	SHRL $0x08, R8
+	SHLL $0x05, R8
+	ORL  R8, SI
 	MOVB SI, (AX)
 	ADDQ $0x02, AX
 	SUBL $0x08, R12
 
 	// emitRepeat
+	LEAL -4(R12), R12
+	JMP  cant_repeat_two_offset_match_nolit_encodeBetterBlockAsm10B_emit_copy_short_2b
 	MOVL R12, SI
 	LEAL -4(R12), R12
 	CMPL SI, $0x08
@@ -9790,6 +9812,8 @@ two_byte_offset_match_nolit_encodeBetterBlockAsm8B:
 	SUBL $0x08, R12
 
 	// emitRepeat
+	LEAL -4(R12), R12
+	JMP  cant_repeat_two_offset_match_nolit_encodeBetterBlockAsm8B_emit_copy_short_2b
 	MOVL R12, SI
 	LEAL -4(R12), R12
 	CMPL SI, $0x08
@@ -17432,6 +17456,9 @@ two_byte_offset_standalone:
 	SUBL $0x08, DX
 
 	// emitRepeat
+	LEAL -4(DX), DX
+	JMP  cant_repeat_two_offset_standalone_emit_copy_short_2b
+
 emit_repeat_again_standalone_emit_copy_short_2b:
 	MOVL DX, SI
 	LEAL -4(DX), DX
