@@ -588,10 +588,7 @@ func emitCopySize(offset, length int) int {
 //	4 <= length && length <= 1 << 24
 func emitCopyNoRepeatSize(offset, length int) int {
 	if offset >= 65536 {
-		if length > 64 {
-			return 5 + 5*(length/64)
-		}
-		return 5
+		return 5 + 5*(length/64)
 	}
 
 	// Offset no more than 2 bytes.
