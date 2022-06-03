@@ -88,10 +88,10 @@ jobs:
       run: go install mvdan.cc/garble@latest
 
     - name: goreleaser deprecation
-      run: curl -sfL https://git.io/goreleaser | VERSION=v1.5.0 sh -s -- check
+      run: curl -sfL https://git.io/goreleaser | VERSION=v1.9.2 sh -s -- check
       
     - name: goreleaser snapshot
-      run: curl -sL https://git.io/goreleaser | VERSION=v1.5.0 sh -s -- --snapshot --skip-publish --rm-dist
+      run: curl -sL https://git.io/goreleaser | VERSION=v1.9.2 sh -s -- --snapshot --skip-publish --rm-dist
 
     - name: Test S2 GOAMD64 v3
       env:
