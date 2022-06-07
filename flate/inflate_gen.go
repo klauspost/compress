@@ -100,7 +100,7 @@ readLiteral:
 			length = v - (257 - 3)
 		case v < maxNumLit:
 			val := decCodeToLen[(v - 257)]
-			length = int(val.length) + 3
+			length = int(val.length)
 			n := uint(val.extra)
 			for fnb < n {
 				c, err := fr.ReadByte()
@@ -351,7 +351,7 @@ readLiteral:
 			length = v - (257 - 3)
 		case v < maxNumLit:
 			val := decCodeToLen[(v - 257)]
-			length = int(val.length) + 3
+			length = int(val.length)
 			n := uint(val.extra)
 			for fnb < n {
 				c, err := fr.ReadByte()
@@ -602,7 +602,7 @@ readLiteral:
 			length = v - (257 - 3)
 		case v < maxNumLit:
 			val := decCodeToLen[(v - 257)]
-			length = int(val.length) + 3
+			length = int(val.length)
 			n := uint(val.extra)
 			for fnb < n {
 				c, err := fr.ReadByte()
@@ -853,7 +853,7 @@ readLiteral:
 			length = v - (257 - 3)
 		case v < maxNumLit:
 			val := decCodeToLen[(v - 257)]
-			length = int(val.length) + 3
+			length = int(val.length)
 			n := uint(val.extra)
 			for fnb < n {
 				c, err := fr.ReadByte()
@@ -1104,7 +1104,7 @@ readLiteral:
 			length = v - (257 - 3)
 		case v < maxNumLit:
 			val := decCodeToLen[(v - 257)]
-			length = int(val.length) + 3
+			length = int(val.length)
 			n := uint(val.extra)
 			for fnb < n {
 				c, err := fr.ReadByte()
