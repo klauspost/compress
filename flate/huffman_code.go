@@ -17,12 +17,12 @@ const (
 
 // hcode is a huffman code with a bit code and bit length.
 type hcode struct {
-	code uint16
-	len  uint8
+	code []uint16
+	len  []uint8
 }
 
 type huffmanEncoder struct {
-	codes    []hcode
+	codes    hcode
 	bitCount [17]int32
 
 	// Allocate a reusable buffer with the longest possible frequency table.
@@ -56,12 +56,6 @@ type levelInfo struct {
 	needed int32
 }
 
-// set sets the code and length of an hcode.
-func (h *hcode) set(code uint16, length uint8) {
-	h.len = length
-	h.code = code
-}
-
 func reverseBits(number uint16, bitLength byte) uint16 {
 	return bits.Reverse16(number << ((16 - bitLength) & 15))
 }
@@ -71,7 +65,10 @@ func maxNode() literalNode { return literalNode{math.MaxUint16, math.MaxUint16} 
 func newHuffmanEncoder(size int) *huffmanEncoder {
 	// Make capacity to next power of two.
 	c := uint(bits.Len32(uint32(size - 1)))
-	return &huffmanEncoder{codes: make([]hcode, size, 1<<c)}
+	return &huffmanEncoder{codes: hcode{
+		code: make([]uint16, size, 1<<c),
+		len:  make([]uint8, size, 1<<c),
+	}}
 }
 
 // Generates a HuffmanCode corresponding to the fixed literal table
@@ -100,7 +97,8 @@ func generateFixedLiteralEncoding() *huffmanEncoder {
 			bits = ch + 192 - 280
 			size = 8
 		}
-		codes[ch] = hcode{code: reverseBits(bits, size), len: size}
+		codes.code[ch] = reverseBits(bits, size)
+		codes.len[ch] = size
 	}
 	return h
 }
@@ -108,8 +106,9 @@ func generateFixedLiteralEncoding() *huffmanEncoder {
 func generateFixedOffsetEncoding() *huffmanEncoder {
 	h := newHuffmanEncoder(30)
 	codes := h.codes
-	for ch := range codes {
-		codes[ch] = hcode{code: reverseBits(uint16(ch), 5), len: 5}
+	for i := 0; i < len(codes.code); i++ {
+		codes.code[i] = reverseBits(uint16(i), 5)
+		codes.len[i] = 5
 	}
 	return h
 }
@@ -121,7 +120,7 @@ func (h *huffmanEncoder) bitLength(freq []uint16) int {
 	var total int
 	for i, f := range freq {
 		if f != 0 {
-			total += int(f) * int(h.codes[i].len)
+			total += int(f) * int(h.codes.len[i])
 		}
 	}
 	return total
@@ -130,7 +129,7 @@ func (h *huffmanEncoder) bitLength(freq []uint16) int {
 func (h *huffmanEncoder) bitLengthRaw(b []byte) int {
 	var total int
 	for _, f := range b {
-		total += int(h.codes[f].len)
+		total += int(f) * int(h.codes.len[f])
 	}
 	return total
 }
@@ -140,11 +139,11 @@ func (h *huffmanEncoder) canReuseBits(freq []uint16) int {
 	var total int
 	for i, f := range freq {
 		if f != 0 {
-			code := h.codes[i]
-			if code.len == 0 {
+			code := h.codes.len[i]
+			if code == 0 {
 				return math.MaxInt32
 			}
-			total += int(f) * int(code.len)
+			total += int(f) * int(code)
 		}
 	}
 	return total
@@ -308,7 +307,8 @@ func (h *huffmanEncoder) assignEncodingAndSize(bitCount []int32, list []literalN
 
 		sortByLiteral(chunk)
 		for _, node := range chunk {
-			h.codes[node.literal] = hcode{code: reverseBits(code, uint8(n)), len: uint8(n)}
+			h.codes.code[node.literal] = reverseBits(code, uint8(n))
+			h.codes.len[node.literal] = uint8(n)
 			code++
 		}
 		list = list[0 : len(list)-int(bits)]
@@ -321,7 +321,7 @@ func (h *huffmanEncoder) assignEncodingAndSize(bitCount []int32, list []literalN
 // maxBits  The maximum number of bits to use for any literal.
 func (h *huffmanEncoder) generate(freq []uint16, maxBits int32) {
 	list := h.freqcache[:len(freq)+1]
-	codes := h.codes[:len(freq)]
+	lengths := h.codes.len[:len(freq)]
 	// Number of non-zero literals
 	count := 0
 	// Set list to be the set of all non-zero literals and their frequencies
@@ -330,7 +330,7 @@ func (h *huffmanEncoder) generate(freq []uint16, maxBits int32) {
 			list[count] = literalNode{uint16(i), f}
 			count++
 		} else {
-			codes[i].len = 0
+			lengths[i] = 0
 		}
 	}
 	list[count] = literalNode{}
@@ -341,7 +341,8 @@ func (h *huffmanEncoder) generate(freq []uint16, maxBits int32) {
 		// two or fewer literals, everything has bit length 1.
 		for i, node := range list {
 			// "list" is in order of increasing literal value.
-			h.codes[node.literal].set(uint16(i), 1)
+			h.codes.code[node.literal] = uint16(i)
+			h.codes.len[node.literal] = 1
 		}
 		return
 	}
