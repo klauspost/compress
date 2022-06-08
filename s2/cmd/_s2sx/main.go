@@ -27,19 +27,27 @@ import (
 const (
 	opUnpack = iota + 1
 	opUnTar
+	opUnTarExec
 )
 
+type execInfo struct {
+	Cmd  string
+	Args []string
+}
+
 var (
-	goos   = flag.String("os", runtime.GOOS, "Destination operating system")
-	goarch = flag.String("arch", runtime.GOARCH, "Destination architecture")
-	cpu    = flag.Int("cpu", runtime.GOMAXPROCS(0), "Compress using this amount of threads")
-	max    = flag.String("max", "1G", "Maximum executable size. Rest will be written to another file.")
-	safe   = flag.Bool("safe", false, "Do not overwrite output files")
-	stdout = flag.Bool("c", false, "Write all output to stdout. Multiple input files will be concatenated")
-	remove = flag.Bool("rm", false, "Delete source file(s) after successful compression")
-	quiet  = flag.Bool("q", false, "Don't write any output to terminal, except errors")
-	untar  = flag.Bool("untar", false, "Untar on destination")
-	help   = flag.Bool("help", false, "Display help")
+	goos       = flag.String("os", runtime.GOOS, "Destination operating system")
+	goarch     = flag.String("arch", runtime.GOARCH, "Destination architecture")
+	cpu        = flag.Int("cpu", runtime.GOMAXPROCS(0), "Compress using this amount of threads")
+	max        = flag.String("max", "1G", "Maximum executable size. Rest will be written to another file.")
+	safe       = flag.Bool("safe", false, "Do not overwrite output files")
+	stdout     = flag.Bool("c", false, "Write all output to stdout. Multiple input files will be concatenated")
+	remove     = flag.Bool("rm", false, "Delete source file(s) after successful compression")
+	quiet      = flag.Bool("q", false, "Don't write any output to terminal, except errors")
+	untar      = flag.Bool("untar", false, "Untar on destination")
+	execute    = flag.String("exec", "", "Execute on destination")
+	execParams = flag.String()
+	help       = flag.Bool("help", false, "Display help")
 
 	version = "(dev)"
 	date    = "(unknown)"
@@ -56,7 +64,7 @@ func main() {
 	if len(args) == 0 || *help {
 		_, _ = fmt.Fprintf(os.Stderr, "s2sx v%v, built at %v.\n\n", version, date)
 		_, _ = fmt.Fprintf(os.Stderr, "Copyright (c) 2011 The Snappy-Go Authors. All rights reserved.\n"+
-			"Copyright (c) 2021 Klaus Post. All rights reserved.\n\n")
+			"Copyright (c) 2021+ Klaus Post. All rights reserved.\n\n")
 		_, _ = fmt.Fprintln(os.Stderr, `Usage: s2sx [options] file1 file2
 
 Compresses all files supplied as input separately.
@@ -107,6 +115,12 @@ Options:`)
 	mode := byte(opUnpack)
 	if *untar {
 		mode = opUnTar
+	}
+	if *execute != "" {
+		if mode != opUnTar {
+			exitErr(fmt.Errorf("execute function only available when combined with untar"))
+		}
+		mode = opUnTarExec
 	}
 
 	// No args, use stdin/stdout

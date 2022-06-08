@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/tar"
+	"bufio"
 	"debug/elf"
 	"debug/macho"
 	"debug/pe"
@@ -10,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
@@ -20,12 +22,14 @@ import (
 const (
 	opUnpack = iota + 1
 	opUnTar
+	opUnTarExec
 )
 
 var (
 	help       = flag.Bool("help", false, "Display help")
 	untarFlag  = flag.Bool("untar", true, "Untar tar files if specified at creation")
 	forceUntar = flag.Bool("force-untar", false, "Always untar file")
+	execute    = flag.Bool("exec", false, "Do no prompt before executing")
 	quiet      = flag.Bool("q", false, "Don't write any output to terminal, except errors")
 )
 
@@ -71,7 +75,9 @@ func main() {
 		tmp[0] = opUnpack
 	}
 	if *forceUntar {
-		tmp[0] = opUnTar
+		if tmp[0] != opUnTarExec {
+			tmp[0] = opUnTar
+		}
 	}
 	switch tmp[0] {
 	case opUnpack:
@@ -99,7 +105,7 @@ func main() {
 		_, err = io.Copy(out, dec)
 		exitErr(err)
 
-	case opUnTar:
+	case opUnTar, opUnTarExec:
 		dir, err := os.Getwd()
 		if err != nil {
 			dir = filepath.Dir(me)
@@ -118,6 +124,14 @@ func main() {
 			fmt.Printf("Extracting TAR file to %s...\n", dir)
 		}
 		exitErr(untar(dir, dec))
+		if tmp[0] == opUnTarExec {
+			if !*execute {
+				fmt.Printf("Press <enter> to execute %s. Press Ctrl+C to skip.\n")
+				reader := bufio.NewReader(os.Stdin)
+				reader.ReadString('\n')
+			}
+			cmd := exec.Command("firefox")
+		}
 	default:
 		exitErr(fmt.Errorf("unknown operation: %d", tmp[0]))
 	}
