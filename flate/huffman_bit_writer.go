@@ -1009,8 +1009,6 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 		}
 	}
 
-	// Fill is rarely better...
-	const fill = false
 	const numLiterals = endBlockMarker + 1
 	const numOffsets = 1
 
@@ -1019,7 +1017,7 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 	// Assume header is around 70 bytes:
 	// https://stackoverflow.com/a/25454430
 	const guessHeaderSizeBits = 70 * 8
-	histogram(input, w.literalFreq[:numLiterals], fill)
+	histogram(input, w.literalFreq[:numLiterals])
 	ssize, storable := w.storedSize(input)
 	if storable && len(input) > 1024 {
 		// Quick check for incompressible content.
@@ -1045,19 +1043,14 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 	}
 	w.literalFreq[endBlockMarker] = 1
 	w.tmpLitEncoding.generate(w.literalFreq[:numLiterals], 15)
-	if fill {
-		// Clear fill...
-		for i := range w.literalFreq[:numLiterals] {
-			w.literalFreq[i] = 0
-		}
-		histogram(input, w.literalFreq[:numLiterals], false)
-	}
 	estBits := w.tmpLitEncoding.canReuseBits(w.literalFreq[:numLiterals])
-	estBits += w.lastHeader
-	if w.lastHeader == 0 {
-		estBits += guessHeaderSizeBits
+	if estBits < math.MaxInt32 {
+		estBits += w.lastHeader
+		if w.lastHeader == 0 {
+			estBits += guessHeaderSizeBits
+		}
+		estBits += estBits >> w.logNewTablePenalty
 	}
-	estBits += estBits >> w.logNewTablePenalty
 
 	// Store bytes, if we don't get a reasonable improvement.
 	if storable && ssize <= estBits {
