@@ -364,21 +364,37 @@ func atLeastOne(v float32) float32 {
 	return v
 }
 
-// Unassigned values are assigned '1' in the histogram.
-func fillHist(b []uint16) {
-	for i, v := range b {
-		if v == 0 {
-			b[i] = 1
+func histogram(b []byte, h []uint16) {
+	if true && len(b) >= 8<<10 {
+		// Split for bigger inputs
+		histogramSplit(b, h)
+	} else {
+		h = h[:256]
+		for _, t := range b {
+			h[t]++
 		}
 	}
 }
 
-func histogram(b []byte, h []uint16, fill bool) {
+func histogramSplit(b []byte, h []uint16) {
+	// Tested, and slightly faster than 2-way.
+	// Writing to separate arrays and combining is also slightly slower.
 	h = h[:256]
-	for _, t := range b {
-		h[t]++
+	for len(b)&3 != 0 {
+		h[b[0]]++
+		b = b[1:]
 	}
-	if fill {
-		fillHist(h)
+	n := len(b) / 4
+	x, y, z, w := b[:n], b[n:], b[n+n:], b[n+n+n:]
+	y, z, w = y[:len(x)], z[:len(x)], w[:len(x)]
+	for i, t := range x {
+		v0 := &h[t]
+		v1 := &h[y[i]]
+		v3 := &h[w[i]]
+		v2 := &h[z[i]]
+		*v0++
+		*v1++
+		*v2++
+		*v3++
 	}
 }
