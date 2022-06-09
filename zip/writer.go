@@ -125,7 +125,7 @@ func (w *Writer) Close() error {
 		b.uint16(uint16(len(h.Comment)))
 		b = b[4:] // skip disk number start and internal file attr (2x uint16)
 		b.uint32(h.ExternalAttrs)
-		if h.offset > uint32max {
+		if h.isZip64() || h.offset > uint32max {
 			b.uint32(uint32max)
 		} else {
 			b.uint32(uint32(h.offset))
