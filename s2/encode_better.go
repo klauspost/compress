@@ -97,9 +97,20 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 			lTable[hashL] = uint32(s)
 			sTable[hashS] = uint32(s)
 
+			valLong := load64(src, candidateL)
+			// If we have at least 8 bytes match, choose that first.
+			if cv == valLong {
+				break
+			}
+
 			// Check repeat at offset checkRep.
 			const checkRep = 1
-			if false && uint32(cv>>(checkRep*8)) == load32(src, s-repeat+checkRep) {
+			// Minimum length of a repeat. Tested with various values.
+			// While 4-5 offers improvements in some, 6 reduces
+			// regressions significantly.
+			const wantRepeatBytes = 6
+			const repeatMask = ((1 << (wantRepeatBytes * 8)) - 1) << (8 * checkRep)
+			if repeat > 0 && cv&repeatMask == load64(src, s-repeat)&repeatMask {
 				base := s + checkRep
 				// Extend back
 				for i := base - repeat; base > nextEmit && i > 0 && src[i-1] == src[base-1]; {
@@ -109,8 +120,8 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 				d += emitLiteral(dst[d:], src[nextEmit:base])
 
 				// Extend forward
-				candidate := s - repeat + 4 + checkRep
-				s += 4 + checkRep
+				candidate := s - repeat + wantRepeatBytes + checkRep
+				s += wantRepeatBytes + checkRep
 				for s < len(src) {
 					if len(src)-s < 8 {
 						if src[s] == src[candidate] {
@@ -127,13 +138,8 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 					s += 8
 					candidate += 8
 				}
-				if nextEmit > 0 {
-					// same as `add := emitCopy(dst[d:], repeat, s-base)` but skips storing offset.
-					d += emitRepeat(dst[d:], repeat, s-base)
-				} else {
-					// First match, cannot be repeat.
-					d += emitCopy(dst[d:], repeat, s-base)
-				}
+				// same as `add := emitCopy(dst[d:], repeat, s-base)` but skips storing offset.
+				d += emitRepeat(dst[d:], repeat, s-base)
 				nextEmit = s
 				if s >= sLimit {
 					goto emitRemainder
@@ -143,7 +149,8 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 				continue
 			}
 
-			if uint32(cv) == load32(src, candidateL) {
+			// If long matches at least 4 bytes, use that.
+			if uint32(cv) == uint32(valLong) {
 				break
 			}
 

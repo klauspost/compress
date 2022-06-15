@@ -998,10 +998,22 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 			MOVL(s, sTab.Idx(hash1, 4))
 		}
 
+		if !o.snappy {
+			// If we have at least 8 bytes match, choose that first.
+			CMPQ(Mem{Base: src, Index: candidate, Scale: 1}, cv.As64())
+			JEQ(LabelRef("candidate_match_" + name))
+		}
+
 		// En/disable repeat matching.
-		if false {
+		if !o.snappy {
+			{
+				CMPL(repeatL, U8(0))
+				JEQ(LabelRef("no_repeat_found_" + name))
+			}
 			// Check repeat at offset checkRep
 			const checkRep = 1
+			const wantRepeatBytes = 6
+			const repeatMask = ((1 << (wantRepeatBytes * 8)) - 1) << (8 * checkRep)
 			{
 				// rep = s - repeat
 				rep := GP32()
@@ -1010,10 +1022,13 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 
 				// if uint32(cv>>(checkRep*8)) == load32(src, s-repeat+checkRep) {
 				left, right := GP64(), GP64()
-				MOVL(Mem{Base: src, Index: rep, Disp: checkRep, Scale: 1}, right.As32())
+				MOVQ(Mem{Base: src, Index: rep, Disp: 0, Scale: 1}, right.As64())
 				MOVQ(cv, left)
-				SHRQ(U8(checkRep*8), left)
-				CMPL(left.As32(), right.As32())
+				tmp := GP64()
+				MOVQ(U64(repeatMask), tmp)
+				ANDQ(tmp, left)
+				ANDQ(tmp, right)
+				CMPQ(left.As64(), right.As64())
 				// BAIL, no repeat.
 				JNE(LabelRef("no_repeat_found_" + name))
 			}
@@ -1057,7 +1072,7 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 			// Extend forward
 			{
 				// s += 4 + checkRep
-				ADDL(U8(4+checkRep), s)
+				ADDL(U8(wantRepeatBytes+checkRep), s)
 
 				if true {
 					// candidate := s - repeat + 4 + checkRep
@@ -1097,18 +1112,8 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 				offsetVal := GP32()
 				MOVL(repeatL, offsetVal)
 
-				if !o.snappy {
-					// if nextEmit == 0 {do copy instead...}
-					TESTL(nextEmit, nextEmit)
-					JZ(LabelRef("repeat_as_copy_" + name))
-
-					// Emit as repeat...
-					o.emitRepeat("match_repeat_"+name, length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name), false)
-
-					// Emit as copy instead...
-					Label("repeat_as_copy_" + name)
-				}
-				o.emitCopy("repeat_as_copy_"+name, length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name))
+				// Emit as repeat...
+				o.emitRepeat("match_repeat_"+name, length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name), false)
 
 				Label("repeat_end_emit_" + name)
 				// Store new dst and nextEmit
