@@ -98,7 +98,6 @@ build_table_main_table:
 	SUBQ    R9, CX
 	SHLQ    CL, R8
 	SUBQ    AX, R8
-	MOVQ    CX, R9
 	MOVB    CL, (SI)(DI*8)
 	MOVW    R8, 2(SI)(DI*8)
 	CMPQ    R8, AX

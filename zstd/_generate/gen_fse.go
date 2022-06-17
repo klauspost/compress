@@ -281,15 +281,9 @@ func (b *buildDtable) buildTable() {
 		}
 
 		// newState := (nextState << nBits) - tableSize
-		newState := GP64()
-		MOVQ(nextState, newState)
+		newState := Copy64(nextState)
 		SHLQ(reg.CL, newState)
 		SUBQ(b.tableSize, newState)
-
-		{
-			tmp := GP64()
-			MOVQ(nBits, tmp)
-		}
 
 		// s.dt[u&maxTableMask].setNBits(nBits)         // sets byte #0
 		// s.dt[u&maxTableMask].setNewState(newState)   // sets word #1 (bytes #2 & #3)
