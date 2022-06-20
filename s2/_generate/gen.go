@@ -59,12 +59,12 @@ func main() {
 
 	o.outputMargin = 6
 	o.maxSkip = 100 // Blocks can be long, limit max skipping.
-	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm", 16, 7, 7, limit14B)
-	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm4MB", 16, 7, 7, 4<<20)
+	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm", 17, 14, 7, 7, limit14B)
+	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm4MB", 17, 14, 7, 7, 4<<20)
 	o.maxSkip = 0
-	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm12B", 14, 6, 6, limit12B)
-	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm10B", 12, 5, 6, limit10B)
-	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm8B", 10, 4, 6, limit8B)
+	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm12B", 14, 12, 6, 6, limit12B)
+	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm10B", 12, 10, 5, 6, limit10B)
+	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm8B", 10, 8, 4, 6, limit8B)
 
 	// Snappy compatible
 	o.snappy = true
@@ -76,12 +76,12 @@ func main() {
 	o.genEncodeBlockAsm("encodeSnappyBlockAsm8B", 8, 4, 4, limit8B)
 
 	o.maxSkip = 100
-	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm", 16, 7, 7, limit14B)
+	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm", 17, 14, 7, 7, limit14B)
 	o.maxSkip = 0
-	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm64K", 16, 7, 7, 64<<10-1)
-	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm12B", 14, 6, 6, limit12B)
-	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm10B", 12, 5, 6, limit10B)
-	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm8B", 10, 4, 6, limit8B)
+	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm64K", 16, 14, 7, 7, 64<<10-1)
+	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm12B", 14, 12, 6, 6, limit12B)
+	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm10B", 12, 10, 5, 6, limit10B)
+	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm8B", 10, 8, 4, 6, limit8B)
 
 	o.snappy = false
 	o.outputMargin = 0
@@ -785,7 +785,7 @@ func maxLitOverheadFor(n int) int {
 	return 5
 }
 
-func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHashBytes, maxLen int) {
+func (o options) genEncodeBetterBlockAsm(name string, lTableBits, sTableBits, skipLog, lHashBytes, maxLen int) {
 	TEXT(name, 0, "func(dst, src []byte) int")
 	Doc(name+" encodes a non-empty src to a guaranteed-large-enough dst.",
 		fmt.Sprintf("Maximum input %d bytes.", maxLen),
@@ -797,7 +797,6 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 	}
 	var literalMaxOverhead = maxLitOverheadFor(maxLen)
 
-	var sTableBits = lTableBits - 2
 	const sHashBytes = 4
 	o.maxLen = maxLen
 
@@ -998,14 +997,26 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 			MOVL(s, sTab.Idx(hash1, 4))
 		}
 
-		if !o.snappy {
-			// If we have at least 8 bytes match, choose that first.
-			CMPQ(Mem{Base: src, Index: candidate, Scale: 1}, cv.As64())
-			JEQ(LabelRef("candidate_match_" + name))
-		}
+		longVal := GP64()
+		shortVal := GP64()
+		MOVQ(Mem{Base: src, Index: candidate, Scale: 1}, longVal)
+		MOVQ(Mem{Base: src, Index: candidateS, Scale: 1}, shortVal)
+
+		// If we have at least 8 bytes match, choose that first.
+		CMPQ(longVal, cv.As64())
+		JEQ(LabelRef("candidate_match_" + name))
+
+		CMPQ(shortVal, cv.As64())
+		JNE(LabelRef("no_short_found_" + name))
+		MOVL(candidateS.As32(), candidate.As32())
+		JMP(LabelRef("candidate_match_" + name))
+
+		Label("no_short_found_" + name)
+		MOVL(longVal.As32(), longVal.As32())
 
 		// En/disable repeat matching.
-		if !o.snappy {
+		// Too small improvement
+		if false {
 			{
 				CMPL(repeatL, U8(0))
 				JEQ(LabelRef("no_repeat_found_" + name))
@@ -1150,11 +1161,11 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 				JG(ok)
 			})
 
-			CMPL(Mem{Base: src, Index: candidate, Scale: 1}, cv.As32())
+			CMPL(longVal.As32(), cv.As32())
 			JEQ(LabelRef("candidate_match_" + name))
 
 			//if uint32(cv) == load32(src, candidateS)
-			CMPL(Mem{Base: src, Index: candidateS, Scale: 1}, cv.As32())
+			CMPL(shortVal.As32(), cv.As32())
 			JEQ(LabelRef("candidateS_match_" + name))
 
 			// No match found, next loop

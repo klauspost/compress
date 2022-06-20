@@ -56,7 +56,7 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 	// Initialize the hash tables.
 	const (
 		// Long hash matches.
-		lTableBits    = 16
+		lTableBits    = 17
 		maxLTableSize = 1 << lTableBits
 
 		// Short hash matches.
@@ -98,8 +98,14 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 			sTable[hashS] = uint32(s)
 
 			valLong := load64(src, candidateL)
-			// If we have at least 8 bytes match, choose that first.
+			valShort := load64(src, candidateS)
+
+			// If long matches at least 8 bytes, use that.
 			if cv == valLong {
+				break
+			}
+			if cv == valShort {
+				candidateL = candidateS
 				break
 			}
 
@@ -110,7 +116,7 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 			// regressions significantly.
 			const wantRepeatBytes = 6
 			const repeatMask = ((1 << (wantRepeatBytes * 8)) - 1) << (8 * checkRep)
-			if repeat > 0 && cv&repeatMask == load64(src, s-repeat)&repeatMask {
+			if false && repeat > 0 && cv&repeatMask == load64(src, s-repeat)&repeatMask {
 				base := s + checkRep
 				// Extend back
 				for i := base - repeat; base > nextEmit && i > 0 && src[i-1] == src[base-1]; {
@@ -149,13 +155,13 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 				continue
 			}
 
-			// If long matches at least 4 bytes, use that.
+			// Long likely matches 7, so take that.
 			if uint32(cv) == uint32(valLong) {
 				break
 			}
 
 			// Check our short candidate
-			if uint32(cv) == load32(src, candidateS) {
+			if uint32(cv) == uint32(valShort) {
 				// Try a long candidate at s+1
 				hashL = hash7(cv>>8, lTableBits)
 				candidateL = int(lTable[hashL])
