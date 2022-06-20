@@ -80,6 +80,7 @@ func main() {
 	decodeSync.generateProcedure("sequenceDecs_decodeSync_safe_amd64")
 	decodeSync.setBMI2(true)
 	decodeSync.generateProcedure("sequenceDecs_decodeSync_safe_bmi2")
+
 	Generate()
 }
 
