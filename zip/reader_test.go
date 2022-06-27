@@ -2,9 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.16
-// +build go1.16
-
 package zip
 
 import (
@@ -15,6 +12,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -77,6 +75,42 @@ var tests = []ZipTest{
 	},
 	{
 		Name:    "test-trailing-junk.zip",
+		Comment: "This is a zipfile comment.",
+		File: []ZipTestFile{
+			{
+				Name:     "test.txt",
+				Content:  []byte("This is a test text file.\n"),
+				Modified: time.Date(2010, 9, 5, 12, 12, 1, 0, timeZone(+10*time.Hour)),
+				Mode:     0644,
+			},
+			{
+				Name:     "gophercolor16x16.png",
+				File:     "gophercolor16x16.png",
+				Modified: time.Date(2010, 9, 5, 15, 52, 58, 0, timeZone(+10*time.Hour)),
+				Mode:     0644,
+			},
+		},
+	},
+	{
+		Name:    "test-prefix.zip",
+		Comment: "This is a zipfile comment.",
+		File: []ZipTestFile{
+			{
+				Name:     "test.txt",
+				Content:  []byte("This is a test text file.\n"),
+				Modified: time.Date(2010, 9, 5, 12, 12, 1, 0, timeZone(+10*time.Hour)),
+				Mode:     0644,
+			},
+			{
+				Name:     "gophercolor16x16.png",
+				File:     "gophercolor16x16.png",
+				Modified: time.Date(2010, 9, 5, 15, 52, 58, 0, timeZone(+10*time.Hour)),
+				Mode:     0644,
+			},
+		},
+	},
+	{
+		Name:    "test-baddirsz.zip",
 		Comment: "This is a zipfile comment.",
 		File: []ZipTestFile{
 			{
@@ -490,6 +524,35 @@ var tests = []ZipTest{
 			},
 		},
 	},
+	{
+		Name: "dupdir.zip",
+		File: []ZipTestFile{
+			{
+				Name:     "a/",
+				Content:  []byte{},
+				Mode:     fs.ModeDir | 0666,
+				Modified: time.Date(2021, 12, 29, 0, 0, 0, 0, timeZone(0)),
+			},
+			{
+				Name:     "a/b",
+				Content:  []byte{},
+				Mode:     0666,
+				Modified: time.Date(2021, 12, 29, 0, 0, 0, 0, timeZone(0)),
+			},
+			{
+				Name:     "a/b/",
+				Content:  []byte{},
+				Mode:     fs.ModeDir | 0666,
+				Modified: time.Date(2021, 12, 29, 0, 0, 0, 0, timeZone(0)),
+			},
+			{
+				Name:     "a/b/c",
+				Content:  []byte{},
+				Mode:     0666,
+				Modified: time.Date(2021, 12, 29, 0, 0, 0, 0, timeZone(0)),
+			},
+		},
+	},
 }
 
 func TestReader(t *testing.T) {
@@ -868,7 +931,6 @@ func returnRecursiveZip() (r io.ReaderAt, size int64) {
 //
 // It's here in hex for the same reason as rZipBytes above: to avoid
 // problems with on-disk virus scanners or other zip processors.
-//
 func biggestZipBytes() []byte {
 	s := `
 0000000 50 4b 03 04 14 00 08 00 08 00 00 00 00 00 00 00
@@ -1015,7 +1077,7 @@ func TestIssue10957(t *testing.T) {
 		"\x00\x00\x00\x00\x0000000000\x00\x00\x00\x00000" +
 		"00000000PK\x01\x0200000000" +
 		"0000000000000000\v\x00\x00\x00" +
-		"\x00\x0000PK\x05\x06000000\x05\x000000" +
+		"\x00\x0000PK\x05\x06000000\x05\x00\xfd\x00\x00\x00" +
 		"\v\x00\x00\x00\x00\x00")
 	z, err := NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
@@ -1060,7 +1122,7 @@ func TestIssue11146(t *testing.T) {
 		"0000000000000000PK\x01\x02" +
 		"0000\b0\b\x00000000000000" +
 		"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x000000PK\x05\x06\x00\x00" +
-		"\x00\x0000\x01\x0000008\x00\x00\x00\x00\x00")
+		"\x00\x0000\x01\x00\x26\x00\x00\x008\x00\x00\x00\x00\x00")
 	z, err := NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatal(err)
@@ -1127,6 +1189,7 @@ func TestFS(t *testing.T) {
 			[]string{"a/b/c"},
 		},
 	} {
+		test := test
 		t.Run(test.file, func(t *testing.T) {
 			t.Parallel()
 			z, err := OpenReader(test.file)
@@ -1136,6 +1199,60 @@ func TestFS(t *testing.T) {
 			defer z.Close()
 			if err := fstest.TestFS(z, test.want...); err != nil {
 				t.Error(err)
+			}
+		})
+	}
+}
+
+func TestFSWalk(t *testing.T) {
+	for _, test := range []struct {
+		file    string
+		want    []string
+		wantErr bool
+	}{
+		{
+			file: "testdata/unix.zip",
+			want: []string{".", "dir", "dir/bar", "dir/empty", "hello", "readonly"},
+		},
+		{
+			file: "testdata/subdir.zip",
+			want: []string{".", "a", "a/b", "a/b/c"},
+		},
+		{
+			file:    "testdata/dupdir.zip",
+			wantErr: true,
+		},
+	} {
+		test := test
+		t.Run(test.file, func(t *testing.T) {
+			t.Parallel()
+			z, err := OpenReader(test.file)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var files []string
+			sawErr := false
+			err = fs.WalkDir(z, ".", func(path string, d fs.DirEntry, err error) error {
+				if err != nil {
+					if !test.wantErr {
+						t.Errorf("%s: %v", path, err)
+					}
+					sawErr = true
+					return nil
+				}
+				files = append(files, path)
+				return nil
+			})
+			if err != nil {
+				t.Errorf("fs.WalkDir error: %v", err)
+			}
+			if test.wantErr && !sawErr {
+				t.Error("succeeded but want error")
+			} else if !test.wantErr && sawErr {
+				t.Error("unexpected error")
+			}
+			if test.want != nil && !reflect.DeepEqual(files, test.want) {
+				t.Errorf("got %v want %v", files, test.want)
 			}
 		})
 	}
@@ -1206,6 +1323,15 @@ func TestCVE202127919(t *testing.T) {
 	if err != nil {
 		t.Errorf("Error reading file: %v", err)
 	}
+	if len(r.File) != 1 {
+		t.Fatalf("No entries in the file list")
+	}
+	if r.File[0].Name != "../test.txt" {
+		t.Errorf("Unexpected entry name: %s", r.File[0].Name)
+	}
+	if _, err := r.File[0].Open(); err != nil {
+		t.Errorf("Error opening file: %v", err)
+	}
 }
 
 func TestCVE202133196(t *testing.T) {
@@ -1267,16 +1393,165 @@ func TestCVE202133196(t *testing.T) {
 	}
 }
 
-func TestIssue48085(t *testing.T) {
-	z, err := OpenReader("testdata/unix.zip")
+func TestCVE202139293(t *testing.T) {
+	// directory size is so large, that the check in Reader.init
+	// overflows when subtracting from the archive size, causing
+	// the pre-allocation check to be bypassed.
+	data := []byte{
+		0x50, 0x4b, 0x06, 0x06, 0x05, 0x06, 0x31, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x50, 0x4b,
+		0x06, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+		0x00, 0x00, 0x50, 0x4b, 0x05, 0x06, 0x00, 0x1a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x50, 0x4b,
+		0x06, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+		0x00, 0x00, 0x00, 0x50, 0x4b, 0x05, 0x06, 0x00, 0x31, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff,
+		0xff, 0x50, 0xfe, 0x00, 0xff, 0x00, 0x3a, 0x00, 0x00, 0x00, 0xff,
+	}
+	_, err := NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != ErrFormat {
+		t.Fatalf("unexpected error, got: %v, want: %v", err, ErrFormat)
+	}
+}
+
+func TestCVE202141772(t *testing.T) {
+	// Archive contains a file whose name is exclusively made up of '/', '\'
+	// characters, or "../", "..\" paths, which would previously cause a panic.
+	//
+	//  Length   Method    Size  Cmpr    Date    Time   CRC-32   Name
+	// --------  ------  ------- ---- ---------- ----- --------  ----
+	//        0  Stored        0   0% 08-05-2021 18:32 00000000  /
+	//        0  Stored        0   0% 09-14-2021 12:59 00000000  //
+	//        0  Stored        0   0% 09-14-2021 12:59 00000000  \
+	//       11  Stored       11   0% 09-14-2021 13:04 0d4a1185  /test.txt
+	// --------          -------  ---                            -------
+	//       11               11   0%                            4 files
+	data := []byte{
+		0x50, 0x4b, 0x03, 0x04, 0x0a, 0x00, 0x00, 0x08,
+		0x00, 0x00, 0x06, 0x94, 0x05, 0x53, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x2f, 0x50,
+		0x4b, 0x03, 0x04, 0x0a, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x78, 0x67, 0x2e, 0x53, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x02, 0x00, 0x00, 0x00, 0x2f, 0x2f, 0x50,
+		0x4b, 0x03, 0x04, 0x0a, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x78, 0x67, 0x2e, 0x53, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x01, 0x00, 0x00, 0x00, 0x5c, 0x50, 0x4b,
+		0x03, 0x04, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x91, 0x68, 0x2e, 0x53, 0x85, 0x11, 0x4a, 0x0d,
+		0x0b, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x00, 0x00,
+		0x09, 0x00, 0x00, 0x00, 0x2f, 0x74, 0x65, 0x73,
+		0x74, 0x2e, 0x74, 0x78, 0x74, 0x68, 0x65, 0x6c,
+		0x6c, 0x6f, 0x20, 0x77, 0x6f, 0x72, 0x6c, 0x64,
+		0x50, 0x4b, 0x01, 0x02, 0x14, 0x03, 0x0a, 0x00,
+		0x00, 0x08, 0x00, 0x00, 0x06, 0x94, 0x05, 0x53,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00,
+		0xed, 0x41, 0x00, 0x00, 0x00, 0x00, 0x2f, 0x50,
+		0x4b, 0x01, 0x02, 0x3f, 0x00, 0x0a, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x78, 0x67, 0x2e, 0x53, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x02, 0x00, 0x24, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00,
+		0x00, 0x1f, 0x00, 0x00, 0x00, 0x2f, 0x2f, 0x0a,
+		0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+		0x00, 0x18, 0x00, 0x93, 0x98, 0x25, 0x57, 0x25,
+		0xa9, 0xd7, 0x01, 0x93, 0x98, 0x25, 0x57, 0x25,
+		0xa9, 0xd7, 0x01, 0x93, 0x98, 0x25, 0x57, 0x25,
+		0xa9, 0xd7, 0x01, 0x50, 0x4b, 0x01, 0x02, 0x3f,
+		0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x78,
+		0x67, 0x2e, 0x53, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+		0x00, 0x24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x20, 0x00, 0x00, 0x00, 0x3f, 0x00, 0x00,
+		0x00, 0x5c, 0x0a, 0x00, 0x20, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x01, 0x00, 0x18, 0x00, 0x93, 0x98,
+		0x25, 0x57, 0x25, 0xa9, 0xd7, 0x01, 0x93, 0x98,
+		0x25, 0x57, 0x25, 0xa9, 0xd7, 0x01, 0x93, 0x98,
+		0x25, 0x57, 0x25, 0xa9, 0xd7, 0x01, 0x50, 0x4b,
+		0x01, 0x02, 0x3f, 0x00, 0x0a, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x91, 0x68, 0x2e, 0x53, 0x85, 0x11,
+		0x4a, 0x0d, 0x0b, 0x00, 0x00, 0x00, 0x0b, 0x00,
+		0x00, 0x00, 0x09, 0x00, 0x24, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x00,
+		0x5e, 0x00, 0x00, 0x00, 0x2f, 0x74, 0x65, 0x73,
+		0x74, 0x2e, 0x74, 0x78, 0x74, 0x0a, 0x00, 0x20,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x18,
+		0x00, 0xa9, 0x80, 0x51, 0x01, 0x26, 0xa9, 0xd7,
+		0x01, 0x31, 0xd1, 0x57, 0x01, 0x26, 0xa9, 0xd7,
+		0x01, 0xdf, 0x48, 0x85, 0xf9, 0x25, 0xa9, 0xd7,
+		0x01, 0x50, 0x4b, 0x05, 0x06, 0x00, 0x00, 0x00,
+		0x00, 0x04, 0x00, 0x04, 0x00, 0x31, 0x01, 0x00,
+		0x00, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00,
+	}
+	r, err := NewReader(bytes.NewReader([]byte(data)), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Error reading the archive: %v", err)
+	}
+	entryNames := []string{`/`, `//`, `\`, `/test.txt`}
+	var names []string
+	for _, f := range r.File {
+		names = append(names, f.Name)
+		if _, err := f.Open(); err != nil {
+			t.Errorf("Error opening %q: %v", f.Name, err)
+		}
+		if _, err := r.Open(f.Name); err == nil {
+			t.Errorf("Opening %q with fs.FS API succeeded", f.Name)
+		}
+	}
+	if !reflect.DeepEqual(names, entryNames) {
+		t.Errorf("Unexpected file entries: %q", names)
+	}
+	if _, err := r.Open(""); err == nil {
+		t.Errorf("Opening %q with fs.FS API succeeded", "")
+	}
+	if _, err := r.Open("test.txt"); err != nil {
+		t.Errorf("Error opening %q with fs.FS API: %v", "test.txt", err)
+	}
+	dirEntries, err := fs.ReadDir(r, ".")
+	if err != nil {
+		t.Fatalf("Error reading the root directory: %v", err)
+	}
+	if len(dirEntries) != 1 || dirEntries[0].Name() != "test.txt" {
+		t.Errorf("Unexpected directory entries")
+		for _, dirEntry := range dirEntries {
+			_, err := r.Open(dirEntry.Name())
+			t.Logf("%q (Open error: %v)", dirEntry.Name(), err)
+		}
+		t.FailNow()
+	}
+	info, err := dirEntries[0].Info()
+	if err != nil {
+		t.Fatalf("Error reading info entry: %v", err)
+	}
+	if name := info.Name(); name != "test.txt" {
+		t.Errorf("Inconsistent name in info entry: %v", name)
+	}
+}
+
+func TestUnderSize(t *testing.T) {
+	z, err := OpenReader("testdata/readme.zip")
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	defer z.Close()
 
-	f, err := z.Open("")
-	if f != nil || err == nil || !strings.Contains(err.Error(), "invalid argument") {
-		t.Fatalf("expecting open failed with invalid argument, got:%s %q", err, f)
+	for _, f := range z.File {
+		f.UncompressedSize64 = 1
+	}
+
+	for _, f := range z.File {
+		t.Run(f.Name, func(t *testing.T) {
+			rd, err := f.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer rd.Close()
+
+			_, err = io.Copy(io.Discard, rd)
+			if err != ErrFormat {
+				t.Fatalf("Error mismatch\n\tGot:  %v\n\tWant: %v", err, ErrFormat)
+			}
+		})
 	}
 }
