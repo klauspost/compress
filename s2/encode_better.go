@@ -60,7 +60,7 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 		maxLTableSize = 1 << lTableBits
 
 		// Short hash matches.
-		sTableBits    = 14
+		sTableBits    = 15
 		maxSTableSize = 1 << sTableBits
 	)
 
@@ -245,16 +245,24 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 		// Index match end-2 (long) and end-1 (short)
 		index1 := s - 2
 
-		cv0 := load64(src, index0)
-		cv1 := load64(src, index1)
 		cv = load64(src, s)
-		lTable[hash7(cv0, lTableBits)] = uint32(index0)
-		lTable[hash7(cv0>>8, lTableBits)] = uint32(index0 + 1)
-		lTable[hash7(cv1, lTableBits)] = uint32(index1)
-		lTable[hash7(cv1>>8, lTableBits)] = uint32(index1 + 1)
-		sTable[hash4(cv0>>8, sTableBits)] = uint32(index0 + 1)
-		sTable[hash4(cv0>>16, sTableBits)] = uint32(index0 + 2)
-		sTable[hash4(cv1>>8, sTableBits)] = uint32(index1 + 1)
+		for index0 < index1 {
+			cv0 := load64(src, index0)
+			cv1 := load64(src, index1)
+			lTable[hash7(cv0, lTableBits)] = uint32(index0)
+			cv0 >>= 8
+			index0++
+			lTable[hash7(cv0, lTableBits)] = uint32(index0)
+			sTable[hash4(cv0, sTableBits)] = uint32(index0)
+
+			lTable[hash7(cv1, lTableBits)] = uint32(index1)
+			cv1 >>= 8
+			index1++
+			lTable[hash7(cv1, lTableBits)] = uint32(index1)
+			sTable[hash4(cv1, sTableBits)] = uint32(index1)
+			index0 += 1 // (effectively +=2)
+			index1 -= 4 // (effectively -=3)
+		}
 	}
 
 emitRemainder:
