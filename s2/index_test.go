@@ -112,6 +112,7 @@ func TestSeeking(t *testing.T) {
 		nElems = 100_000
 		testSizes = []int{100, 1_000, 10_000, 20_000}
 	}
+	testSizes = append(testSizes, nElems-1)
 	//24 bytes per item plus \n = 25 bytes per record
 	for i := 0; i < nElems; i++ {
 		fmt.Fprintf(enc, "Item %019d\n", i)
@@ -130,7 +131,7 @@ func TestSeeking(t *testing.T) {
 				t.Fatal(err)
 			}
 			buf := make([]byte, 25)
-			for rec := 0; rec < 1_000_000; rec += skip {
+			for rec := 0; rec < nElems; rec += skip {
 				offset := int64(rec * 25)
 				//t.Logf("Reading record %d", rec)
 				_, err := seeker.Seek(offset, io.SeekStart)
@@ -154,7 +155,7 @@ func TestSeeking(t *testing.T) {
 				t.Fatal(err)
 			}
 			buf := make([]byte, 25)
-			for rec := 0; rec < 1_000_000; rec += skip {
+			for rec := 0; rec < nElems; rec += skip {
 				offset := int64(rec * 25)
 				//t.Logf("Reading record %d", rec)
 				_, err := seeker.Seek(offset, io.SeekStart)
@@ -178,7 +179,7 @@ func TestSeeking(t *testing.T) {
 				t.Fatal(err)
 			}
 			buf := make([]byte, 25)
-			for rec := 0; rec < 1_000_000; rec += skip {
+			for rec := 0; rec < nElems; rec += skip {
 				offset := int64(rec * 25)
 				//t.Logf("Reading record %d", rec)
 				_, err := seeker.Seek(offset, io.SeekStart)
@@ -203,7 +204,7 @@ func TestSeeking(t *testing.T) {
 				t.Fatal(err)
 			}
 			buf := make([]byte, 25)
-			for rec := 0; rec < 1_000_000; rec += skip {
+			for rec := 0; rec < nElems; rec += skip {
 				offset := int64(rec * 25)
 				//t.Logf("Reading record %d", rec)
 				_, err := seeker.Seek(offset, io.SeekStart)
