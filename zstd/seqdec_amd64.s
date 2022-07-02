@@ -1181,13 +1181,31 @@ check_offset:
 	JG   error_match_off_too_big
 
 	// Copy match from history
-	MOVQ  R12, R11
-	SUBQ  DI, R11
-	JLS   copy_match
-	MOVQ  R9, R14
-	SUBQ  R11, R14
-	CMPQ  R13, R11
-	JGE   copy_all_from_history
+	MOVQ R12, R11
+	SUBQ DI, R11
+	JLS  copy_match
+	MOVQ R9, R14
+	SUBQ R11, R14
+	CMPQ R13, R11
+	JGE  copy_all_from_history
+	MOVQ R13, R11
+	SUBQ $0x10, R11
+	JB   copy_4_small
+
+copy_4_loop:
+	MOVUPS (R14), X0
+	MOVUPS X0, (BX)
+	ADDQ   $0x10, R14
+	ADDQ   $0x10, BX
+	SUBQ   $0x10, R11
+	JAE    copy_4_loop
+	LEAQ   16(R14)(R11*1), R14
+	LEAQ   16(BX)(R11*1), BX
+	MOVUPS -16(R14), X0
+	MOVUPS X0, -16(BX)
+	JMP    copy_4_end
+
+copy_4_small:
 	XORQ  R11, R11
 	TESTQ $0x00000001, R13
 	JZ    copy_4_word
@@ -1211,22 +1229,17 @@ copy_4_dword:
 
 copy_4_qword:
 	TESTQ $0x00000008, R13
-	JZ    copy_4_test
+	JZ    copy_4_add
 	MOVQ  (R14)(R11*1), R12
 	MOVQ  R12, (BX)(R11*1)
 	ADDQ  $0x08, R11
-	JMP   copy_4_test
 
-copy_4:
-	MOVUPS (R14)(R11*1), X0
-	MOVUPS X0, (BX)(R11*1)
-	ADDQ   $0x10, R11
-
-copy_4_test:
-	CMPQ R11, R13
-	JB   copy_4
-	ADDQ R13, DI
+copy_4_add:
 	ADDQ R13, BX
+	ADDQ R13, R14
+
+copy_4_end:
+	ADDQ R13, DI
 	ADDQ $0x18, AX
 	INCQ DX
 	CMPQ DX, CX
@@ -1234,6 +1247,24 @@ copy_4_test:
 	JMP  loop_finished
 
 copy_all_from_history:
+	MOVQ R11, R15
+	SUBQ $0x10, R15
+	JB   copy_5_small
+
+copy_5_loop:
+	MOVUPS (R14), X0
+	MOVUPS X0, (BX)
+	ADDQ   $0x10, R14
+	ADDQ   $0x10, BX
+	SUBQ   $0x10, R15
+	JAE    copy_5_loop
+	LEAQ   16(R14)(R15*1), R14
+	LEAQ   16(BX)(R15*1), BX
+	MOVUPS -16(R14), X0
+	MOVUPS X0, -16(BX)
+	JMP    copy_5_end
+
+copy_5_small:
 	XORQ  R15, R15
 	TESTQ $0x00000001, R11
 	JZ    copy_5_word
@@ -1257,21 +1288,16 @@ copy_5_dword:
 
 copy_5_qword:
 	TESTQ $0x00000008, R11
-	JZ    copy_5_test
+	JZ    copy_5_add
 	MOVQ  (R14)(R15*1), BP
 	MOVQ  BP, (BX)(R15*1)
 	ADDQ  $0x08, R15
-	JMP   copy_5_test
 
-copy_5:
-	MOVUPS (R14)(R15*1), X0
-	MOVUPS X0, (BX)(R15*1)
-	ADDQ   $0x10, R15
-
-copy_5_test:
-	CMPQ R15, R11
-	JB   copy_5
+copy_5_add:
 	ADDQ R11, BX
+	ADDQ R11, R14
+
+copy_5_end:
 	ADDQ R11, DI
 	SUBQ R11, R13
 
@@ -1382,6 +1408,24 @@ main_loop:
 	// Copy literals
 	TESTQ R11, R11
 	JZ    check_offset
+	MOVQ  R11, R14
+	SUBQ  $0x10, R14
+	JB    copy_1_small
+
+copy_1_loop:
+	MOVUPS (SI), X0
+	MOVUPS X0, (BX)
+	ADDQ   $0x10, SI
+	ADDQ   $0x10, BX
+	SUBQ   $0x10, R14
+	JAE    copy_1_loop
+	LEAQ   16(SI)(R14*1), SI
+	LEAQ   16(BX)(R14*1), BX
+	MOVUPS -16(SI), X0
+	MOVUPS X0, -16(BX)
+	JMP    copy_1_end
+
+copy_1_small:
 	XORQ  R14, R14
 	TESTQ $0x00000001, R11
 	JZ    copy_1_word
@@ -1405,22 +1449,16 @@ copy_1_dword:
 
 copy_1_qword:
 	TESTQ $0x00000008, R11
-	JZ    copy_1_test
+	JZ    copy_1_add
 	MOVQ  (SI)(R14*1), R15
 	MOVQ  R15, (BX)(R14*1)
 	ADDQ  $0x08, R14
-	JMP   copy_1_test
 
-copy_1:
-	MOVUPS (SI)(R14*1), X0
-	MOVUPS X0, (BX)(R14*1)
-	ADDQ   $0x10, R14
-
-copy_1_test:
-	CMPQ R14, R11
-	JB   copy_1
-	ADDQ R11, SI
+copy_1_add:
 	ADDQ R11, BX
+	ADDQ R11, SI
+
+copy_1_end:
 	ADDQ R11, DI
 
 	// Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)
@@ -1432,13 +1470,31 @@ check_offset:
 	JG   error_match_off_too_big
 
 	// Copy match from history
-	MOVQ  R12, R11
-	SUBQ  DI, R11
-	JLS   copy_match
-	MOVQ  R9, R14
-	SUBQ  R11, R14
-	CMPQ  R13, R11
-	JGE   copy_all_from_history
+	MOVQ R12, R11
+	SUBQ DI, R11
+	JLS  copy_match
+	MOVQ R9, R14
+	SUBQ R11, R14
+	CMPQ R13, R11
+	JGE  copy_all_from_history
+	MOVQ R13, R11
+	SUBQ $0x10, R11
+	JB   copy_4_small
+
+copy_4_loop:
+	MOVUPS (R14), X0
+	MOVUPS X0, (BX)
+	ADDQ   $0x10, R14
+	ADDQ   $0x10, BX
+	SUBQ   $0x10, R11
+	JAE    copy_4_loop
+	LEAQ   16(R14)(R11*1), R14
+	LEAQ   16(BX)(R11*1), BX
+	MOVUPS -16(R14), X0
+	MOVUPS X0, -16(BX)
+	JMP    copy_4_end
+
+copy_4_small:
 	XORQ  R11, R11
 	TESTQ $0x00000001, R13
 	JZ    copy_4_word
@@ -1462,22 +1518,17 @@ copy_4_dword:
 
 copy_4_qword:
 	TESTQ $0x00000008, R13
-	JZ    copy_4_test
+	JZ    copy_4_add
 	MOVQ  (R14)(R11*1), R12
 	MOVQ  R12, (BX)(R11*1)
 	ADDQ  $0x08, R11
-	JMP   copy_4_test
 
-copy_4:
-	MOVUPS (R14)(R11*1), X0
-	MOVUPS X0, (BX)(R11*1)
-	ADDQ   $0x10, R11
-
-copy_4_test:
-	CMPQ R11, R13
-	JB   copy_4
-	ADDQ R13, DI
+copy_4_add:
 	ADDQ R13, BX
+	ADDQ R13, R14
+
+copy_4_end:
+	ADDQ R13, DI
 	ADDQ $0x18, AX
 	INCQ DX
 	CMPQ DX, CX
@@ -1485,6 +1536,24 @@ copy_4_test:
 	JMP  loop_finished
 
 copy_all_from_history:
+	MOVQ R11, R15
+	SUBQ $0x10, R15
+	JB   copy_5_small
+
+copy_5_loop:
+	MOVUPS (R14), X0
+	MOVUPS X0, (BX)
+	ADDQ   $0x10, R14
+	ADDQ   $0x10, BX
+	SUBQ   $0x10, R15
+	JAE    copy_5_loop
+	LEAQ   16(R14)(R15*1), R14
+	LEAQ   16(BX)(R15*1), BX
+	MOVUPS -16(R14), X0
+	MOVUPS X0, -16(BX)
+	JMP    copy_5_end
+
+copy_5_small:
 	XORQ  R15, R15
 	TESTQ $0x00000001, R11
 	JZ    copy_5_word
@@ -1508,21 +1577,16 @@ copy_5_dword:
 
 copy_5_qword:
 	TESTQ $0x00000008, R11
-	JZ    copy_5_test
+	JZ    copy_5_add
 	MOVQ  (R14)(R15*1), BP
 	MOVQ  BP, (BX)(R15*1)
 	ADDQ  $0x08, R15
-	JMP   copy_5_test
 
-copy_5:
-	MOVUPS (R14)(R15*1), X0
-	MOVUPS X0, (BX)(R15*1)
-	ADDQ   $0x10, R15
-
-copy_5_test:
-	CMPQ R15, R11
-	JB   copy_5
+copy_5_add:
 	ADDQ R11, BX
+	ADDQ R11, R14
+
+copy_5_end:
 	ADDQ R11, DI
 	SUBQ R11, R13
 
@@ -1538,7 +1602,25 @@ copy_match:
 	JA   copy_overlapping_match
 
 	// Copy non-overlapping match
-	ADDQ  R13, DI
+	ADDQ R13, DI
+	MOVQ R13, R12
+	SUBQ $0x10, R12
+	JB   copy_2_small
+
+copy_2_loop:
+	MOVUPS (R11), X0
+	MOVUPS X0, (BX)
+	ADDQ   $0x10, R11
+	ADDQ   $0x10, BX
+	SUBQ   $0x10, R12
+	JAE    copy_2_loop
+	LEAQ   16(R11)(R12*1), R11
+	LEAQ   16(BX)(R12*1), BX
+	MOVUPS -16(R11), X0
+	MOVUPS X0, -16(BX)
+	JMP    copy_2_end
+
+copy_2_small:
 	XORQ  R12, R12
 	TESTQ $0x00000001, R13
 	JZ    copy_2_word
@@ -1562,22 +1644,17 @@ copy_2_dword:
 
 copy_2_qword:
 	TESTQ $0x00000008, R13
-	JZ    copy_2_test
+	JZ    copy_2_add
 	MOVQ  (R11)(R12*1), R14
 	MOVQ  R14, (BX)(R12*1)
 	ADDQ  $0x08, R12
-	JMP   copy_2_test
 
-copy_2:
-	MOVUPS (R11)(R12*1), X0
-	MOVUPS X0, (BX)(R12*1)
-	ADDQ   $0x10, R12
-
-copy_2_test:
-	CMPQ R12, R13
-	JB   copy_2
+copy_2_add:
 	ADDQ R13, BX
-	JMP  handle_loop
+	ADDQ R13, R11
+
+copy_2_end:
+	JMP handle_loop
 
 	// Copy overlapping match
 copy_overlapping_match:
@@ -1934,13 +2011,31 @@ check_offset:
 	JG   error_match_off_too_big
 
 	// Copy match from history
-	MOVQ  CX, AX
-	SUBQ  R12, AX
-	JLS   copy_match
-	MOVQ  48(SP), R14
-	SUBQ  AX, R14
-	CMPQ  R13, AX
-	JGE   copy_all_from_history
+	MOVQ CX, AX
+	SUBQ R12, AX
+	JLS  copy_match
+	MOVQ 48(SP), R14
+	SUBQ AX, R14
+	CMPQ R13, AX
+	JGE  copy_all_from_history
+	MOVQ R13, AX
+	SUBQ $0x10, AX
+	JB   copy_4_small
+
+copy_4_loop:
+	MOVUPS (R14), X0
+	MOVUPS X0, (R10)
+	ADDQ   $0x10, R14
+	ADDQ   $0x10, R10
+	SUBQ   $0x10, AX
+	JAE    copy_4_loop
+	LEAQ   16(R14)(AX*1), R14
+	LEAQ   16(R10)(AX*1), R10
+	MOVUPS -16(R14), X0
+	MOVUPS X0, -16(R10)
+	JMP    copy_4_end
+
+copy_4_small:
 	XORQ  AX, AX
 	TESTQ $0x00000001, R13
 	JZ    copy_4_word
@@ -1964,26 +2059,39 @@ copy_4_dword:
 
 copy_4_qword:
 	TESTQ $0x00000008, R13
-	JZ    copy_4_test
+	JZ    copy_4_add
 	MOVQ  (R14)(AX*1), CX
 	MOVQ  CX, (R10)(AX*1)
 	ADDQ  $0x08, AX
-	JMP   copy_4_test
 
-copy_4:
-	MOVUPS (R14)(AX*1), X0
-	MOVUPS X0, (R10)(AX*1)
-	ADDQ   $0x10, AX
-
-copy_4_test:
-	CMPQ AX, R13
-	JB   copy_4
-	ADDQ R13, R12
+copy_4_add:
 	ADDQ R13, R10
+	ADDQ R13, R14
+
+copy_4_end:
+	ADDQ R13, R12
 	JMP  handle_loop
 	JMP loop_finished
 
 copy_all_from_history:
+	MOVQ AX, R15
+	SUBQ $0x10, R15
+	JB   copy_5_small
+
+copy_5_loop:
+	MOVUPS (R14), X0
+	MOVUPS X0, (R10)
+	ADDQ   $0x10, R14
+	ADDQ   $0x10, R10
+	SUBQ   $0x10, R15
+	JAE    copy_5_loop
+	LEAQ   16(R14)(R15*1), R14
+	LEAQ   16(R10)(R15*1), R10
+	MOVUPS -16(R14), X0
+	MOVUPS X0, -16(R10)
+	JMP    copy_5_end
+
+copy_5_small:
 	XORQ  R15, R15
 	TESTQ $0x00000001, AX
 	JZ    copy_5_word
@@ -2007,21 +2115,16 @@ copy_5_dword:
 
 copy_5_qword:
 	TESTQ $0x00000008, AX
-	JZ    copy_5_test
+	JZ    copy_5_add
 	MOVQ  (R14)(R15*1), BP
 	MOVQ  BP, (R10)(R15*1)
 	ADDQ  $0x08, R15
-	JMP   copy_5_test
 
-copy_5:
-	MOVUPS (R14)(R15*1), X0
-	MOVUPS X0, (R10)(R15*1)
-	ADDQ   $0x10, R15
-
-copy_5_test:
-	CMPQ R15, AX
-	JB   copy_5
+copy_5_add:
 	ADDQ AX, R10
+	ADDQ AX, R14
+
+copy_5_end:
 	ADDQ AX, R12
 	SUBQ AX, R13
 
@@ -2407,13 +2510,31 @@ check_offset:
 	JG   error_match_off_too_big
 
 	// Copy match from history
-	MOVQ  R12, CX
-	SUBQ  R11, CX
-	JLS   copy_match
-	MOVQ  48(SP), R14
-	SUBQ  CX, R14
-	CMPQ  R13, CX
-	JGE   copy_all_from_history
+	MOVQ R12, CX
+	SUBQ R11, CX
+	JLS  copy_match
+	MOVQ 48(SP), R14
+	SUBQ CX, R14
+	CMPQ R13, CX
+	JGE  copy_all_from_history
+	MOVQ R13, CX
+	SUBQ $0x10, CX
+	JB   copy_4_small
+
+copy_4_loop:
+	MOVUPS (R14), X0
+	MOVUPS X0, (R9)
+	ADDQ   $0x10, R14
+	ADDQ   $0x10, R9
+	SUBQ   $0x10, CX
+	JAE    copy_4_loop
+	LEAQ   16(R14)(CX*1), R14
+	LEAQ   16(R9)(CX*1), R9
+	MOVUPS -16(R14), X0
+	MOVUPS X0, -16(R9)
+	JMP    copy_4_end
+
+copy_4_small:
 	XORQ  CX, CX
 	TESTQ $0x00000001, R13
 	JZ    copy_4_word
@@ -2437,26 +2558,39 @@ copy_4_dword:
 
 copy_4_qword:
 	TESTQ $0x00000008, R13
-	JZ    copy_4_test
+	JZ    copy_4_add
 	MOVQ  (R14)(CX*1), R12
 	MOVQ  R12, (R9)(CX*1)
 	ADDQ  $0x08, CX
-	JMP   copy_4_test
 
-copy_4:
-	MOVUPS (R14)(CX*1), X0
-	MOVUPS X0, (R9)(CX*1)
-	ADDQ   $0x10, CX
-
-copy_4_test:
-	CMPQ CX, R13
-	JB   copy_4
-	ADDQ R13, R11
+copy_4_add:
 	ADDQ R13, R9
+	ADDQ R13, R14
+
+copy_4_end:
+	ADDQ R13, R11
 	JMP  handle_loop
 	JMP loop_finished
 
 copy_all_from_history:
+	MOVQ CX, R15
+	SUBQ $0x10, R15
+	JB   copy_5_small
+
+copy_5_loop:
+	MOVUPS (R14), X0
+	MOVUPS X0, (R9)
+	ADDQ   $0x10, R14
+	ADDQ   $0x10, R9
+	SUBQ   $0x10, R15
+	JAE    copy_5_loop
+	LEAQ   16(R14)(R15*1), R14
+	LEAQ   16(R9)(R15*1), R9
+	MOVUPS -16(R14), X0
+	MOVUPS X0, -16(R9)
+	JMP    copy_5_end
+
+copy_5_small:
 	XORQ  R15, R15
 	TESTQ $0x00000001, CX
 	JZ    copy_5_word
@@ -2480,21 +2614,16 @@ copy_5_dword:
 
 copy_5_qword:
 	TESTQ $0x00000008, CX
-	JZ    copy_5_test
+	JZ    copy_5_add
 	MOVQ  (R14)(R15*1), BP
 	MOVQ  BP, (R9)(R15*1)
 	ADDQ  $0x08, R15
-	JMP   copy_5_test
 
-copy_5:
-	MOVUPS (R14)(R15*1), X0
-	MOVUPS X0, (R9)(R15*1)
-	ADDQ   $0x10, R15
-
-copy_5_test:
-	CMPQ R15, CX
-	JB   copy_5
+copy_5_add:
 	ADDQ CX, R9
+	ADDQ CX, R14
+
+copy_5_end:
 	ADDQ CX, R11
 	SUBQ CX, R13
 
@@ -2885,6 +3014,24 @@ sequenceDecs_decodeSync_safe_amd64_match_len_ofs_ok:
 	// Copy literals
 	TESTQ AX, AX
 	JZ    check_offset
+	MOVQ  AX, R14
+	SUBQ  $0x10, R14
+	JB    copy_1_small
+
+copy_1_loop:
+	MOVUPS (R11), X0
+	MOVUPS X0, (R10)
+	ADDQ   $0x10, R11
+	ADDQ   $0x10, R10
+	SUBQ   $0x10, R14
+	JAE    copy_1_loop
+	LEAQ   16(R11)(R14*1), R11
+	LEAQ   16(R10)(R14*1), R10
+	MOVUPS -16(R11), X0
+	MOVUPS X0, -16(R10)
+	JMP    copy_1_end
+
+copy_1_small:
 	XORQ  R14, R14
 	TESTQ $0x00000001, AX
 	JZ    copy_1_word
@@ -2908,22 +3055,16 @@ copy_1_dword:
 
 copy_1_qword:
 	TESTQ $0x00000008, AX
-	JZ    copy_1_test
+	JZ    copy_1_add
 	MOVQ  (R11)(R14*1), R15
 	MOVQ  R15, (R10)(R14*1)
 	ADDQ  $0x08, R14
-	JMP   copy_1_test
 
-copy_1:
-	MOVUPS (R11)(R14*1), X0
-	MOVUPS X0, (R10)(R14*1)
-	ADDQ   $0x10, R14
-
-copy_1_test:
-	CMPQ R14, AX
-	JB   copy_1
-	ADDQ AX, R11
+copy_1_add:
 	ADDQ AX, R10
+	ADDQ AX, R11
+
+copy_1_end:
 	ADDQ AX, R12
 
 	// Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)
@@ -2936,13 +3077,31 @@ check_offset:
 	JG   error_match_off_too_big
 
 	// Copy match from history
-	MOVQ  CX, AX
-	SUBQ  R12, AX
-	JLS   copy_match
-	MOVQ  48(SP), R14
-	SUBQ  AX, R14
-	CMPQ  R13, AX
-	JGE   copy_all_from_history
+	MOVQ CX, AX
+	SUBQ R12, AX
+	JLS  copy_match
+	MOVQ 48(SP), R14
+	SUBQ AX, R14
+	CMPQ R13, AX
+	JGE  copy_all_from_history
+	MOVQ R13, AX
+	SUBQ $0x10, AX
+	JB   copy_4_small
+
+copy_4_loop:
+	MOVUPS (R14), X0
+	MOVUPS X0, (R10)
+	ADDQ   $0x10, R14
+	ADDQ   $0x10, R10
+	SUBQ   $0x10, AX
+	JAE    copy_4_loop
+	LEAQ   16(R14)(AX*1), R14
+	LEAQ   16(R10)(AX*1), R10
+	MOVUPS -16(R14), X0
+	MOVUPS X0, -16(R10)
+	JMP    copy_4_end
+
+copy_4_small:
 	XORQ  AX, AX
 	TESTQ $0x00000001, R13
 	JZ    copy_4_word
@@ -2966,26 +3125,39 @@ copy_4_dword:
 
 copy_4_qword:
 	TESTQ $0x00000008, R13
-	JZ    copy_4_test
+	JZ    copy_4_add
 	MOVQ  (R14)(AX*1), CX
 	MOVQ  CX, (R10)(AX*1)
 	ADDQ  $0x08, AX
-	JMP   copy_4_test
 
-copy_4:
-	MOVUPS (R14)(AX*1), X0
-	MOVUPS X0, (R10)(AX*1)
-	ADDQ   $0x10, AX
-
-copy_4_test:
-	CMPQ AX, R13
-	JB   copy_4
-	ADDQ R13, R12
+copy_4_add:
 	ADDQ R13, R10
+	ADDQ R13, R14
+
+copy_4_end:
+	ADDQ R13, R12
 	JMP  handle_loop
 	JMP loop_finished
 
 copy_all_from_history:
+	MOVQ AX, R15
+	SUBQ $0x10, R15
+	JB   copy_5_small
+
+copy_5_loop:
+	MOVUPS (R14), X0
+	MOVUPS X0, (R10)
+	ADDQ   $0x10, R14
+	ADDQ   $0x10, R10
+	SUBQ   $0x10, R15
+	JAE    copy_5_loop
+	LEAQ   16(R14)(R15*1), R14
+	LEAQ   16(R10)(R15*1), R10
+	MOVUPS -16(R14), X0
+	MOVUPS X0, -16(R10)
+	JMP    copy_5_end
+
+copy_5_small:
 	XORQ  R15, R15
 	TESTQ $0x00000001, AX
 	JZ    copy_5_word
@@ -3009,21 +3181,16 @@ copy_5_dword:
 
 copy_5_qword:
 	TESTQ $0x00000008, AX
-	JZ    copy_5_test
+	JZ    copy_5_add
 	MOVQ  (R14)(R15*1), BP
 	MOVQ  BP, (R10)(R15*1)
 	ADDQ  $0x08, R15
-	JMP   copy_5_test
 
-copy_5:
-	MOVUPS (R14)(R15*1), X0
-	MOVUPS X0, (R10)(R15*1)
-	ADDQ   $0x10, R15
-
-copy_5_test:
-	CMPQ R15, AX
-	JB   copy_5
+copy_5_add:
 	ADDQ AX, R10
+	ADDQ AX, R14
+
+copy_5_end:
 	ADDQ AX, R12
 	SUBQ AX, R13
 
@@ -3039,7 +3206,25 @@ copy_match:
 	JA   copy_overlapping_match
 
 	// Copy non-overlapping match
-	ADDQ  R13, R12
+	ADDQ R13, R12
+	MOVQ R13, CX
+	SUBQ $0x10, CX
+	JB   copy_2_small
+
+copy_2_loop:
+	MOVUPS (AX), X0
+	MOVUPS X0, (R10)
+	ADDQ   $0x10, AX
+	ADDQ   $0x10, R10
+	SUBQ   $0x10, CX
+	JAE    copy_2_loop
+	LEAQ   16(AX)(CX*1), AX
+	LEAQ   16(R10)(CX*1), R10
+	MOVUPS -16(AX), X0
+	MOVUPS X0, -16(R10)
+	JMP    copy_2_end
+
+copy_2_small:
 	XORQ  CX, CX
 	TESTQ $0x00000001, R13
 	JZ    copy_2_word
@@ -3063,22 +3248,17 @@ copy_2_dword:
 
 copy_2_qword:
 	TESTQ $0x00000008, R13
-	JZ    copy_2_test
+	JZ    copy_2_add
 	MOVQ  (AX)(CX*1), R14
 	MOVQ  R14, (R10)(CX*1)
 	ADDQ  $0x08, CX
-	JMP   copy_2_test
 
-copy_2:
-	MOVUPS (AX)(CX*1), X0
-	MOVUPS X0, (R10)(CX*1)
-	ADDQ   $0x10, CX
-
-copy_2_test:
-	CMPQ CX, R13
-	JB   copy_2
+copy_2_add:
 	ADDQ R13, R10
-	JMP  handle_loop
+	ADDQ R13, AX
+
+copy_2_end:
+	JMP handle_loop
 
 	// Copy overlapping match
 copy_overlapping_match:
@@ -3415,6 +3595,24 @@ sequenceDecs_decodeSync_safe_bmi2_match_len_ofs_ok:
 	// Copy literals
 	TESTQ CX, CX
 	JZ    check_offset
+	MOVQ  CX, R14
+	SUBQ  $0x10, R14
+	JB    copy_1_small
+
+copy_1_loop:
+	MOVUPS (R10), X0
+	MOVUPS X0, (R9)
+	ADDQ   $0x10, R10
+	ADDQ   $0x10, R9
+	SUBQ   $0x10, R14
+	JAE    copy_1_loop
+	LEAQ   16(R10)(R14*1), R10
+	LEAQ   16(R9)(R14*1), R9
+	MOVUPS -16(R10), X0
+	MOVUPS X0, -16(R9)
+	JMP    copy_1_end
+
+copy_1_small:
 	XORQ  R14, R14
 	TESTQ $0x00000001, CX
 	JZ    copy_1_word
@@ -3438,22 +3636,16 @@ copy_1_dword:
 
 copy_1_qword:
 	TESTQ $0x00000008, CX
-	JZ    copy_1_test
+	JZ    copy_1_add
 	MOVQ  (R10)(R14*1), R15
 	MOVQ  R15, (R9)(R14*1)
 	ADDQ  $0x08, R14
-	JMP   copy_1_test
 
-copy_1:
-	MOVUPS (R10)(R14*1), X0
-	MOVUPS X0, (R9)(R14*1)
-	ADDQ   $0x10, R14
-
-copy_1_test:
-	CMPQ R14, CX
-	JB   copy_1
-	ADDQ CX, R10
+copy_1_add:
 	ADDQ CX, R9
+	ADDQ CX, R10
+
+copy_1_end:
 	ADDQ CX, R11
 
 	// Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)
@@ -3466,13 +3658,31 @@ check_offset:
 	JG   error_match_off_too_big
 
 	// Copy match from history
-	MOVQ  R12, CX
-	SUBQ  R11, CX
-	JLS   copy_match
-	MOVQ  48(SP), R14
-	SUBQ  CX, R14
-	CMPQ  R13, CX
-	JGE   copy_all_from_history
+	MOVQ R12, CX
+	SUBQ R11, CX
+	JLS  copy_match
+	MOVQ 48(SP), R14
+	SUBQ CX, R14
+	CMPQ R13, CX
+	JGE  copy_all_from_history
+	MOVQ R13, CX
+	SUBQ $0x10, CX
+	JB   copy_4_small
+
+copy_4_loop:
+	MOVUPS (R14), X0
+	MOVUPS X0, (R9)
+	ADDQ   $0x10, R14
+	ADDQ   $0x10, R9
+	SUBQ   $0x10, CX
+	JAE    copy_4_loop
+	LEAQ   16(R14)(CX*1), R14
+	LEAQ   16(R9)(CX*1), R9
+	MOVUPS -16(R14), X0
+	MOVUPS X0, -16(R9)
+	JMP    copy_4_end
+
+copy_4_small:
 	XORQ  CX, CX
 	TESTQ $0x00000001, R13
 	JZ    copy_4_word
@@ -3496,26 +3706,39 @@ copy_4_dword:
 
 copy_4_qword:
 	TESTQ $0x00000008, R13
-	JZ    copy_4_test
+	JZ    copy_4_add
 	MOVQ  (R14)(CX*1), R12
 	MOVQ  R12, (R9)(CX*1)
 	ADDQ  $0x08, CX
-	JMP   copy_4_test
 
-copy_4:
-	MOVUPS (R14)(CX*1), X0
-	MOVUPS X0, (R9)(CX*1)
-	ADDQ   $0x10, CX
-
-copy_4_test:
-	CMPQ CX, R13
-	JB   copy_4
-	ADDQ R13, R11
+copy_4_add:
 	ADDQ R13, R9
+	ADDQ R13, R14
+
+copy_4_end:
+	ADDQ R13, R11
 	JMP  handle_loop
 	JMP loop_finished
 
 copy_all_from_history:
+	MOVQ CX, R15
+	SUBQ $0x10, R15
+	JB   copy_5_small
+
+copy_5_loop:
+	MOVUPS (R14), X0
+	MOVUPS X0, (R9)
+	ADDQ   $0x10, R14
+	ADDQ   $0x10, R9
+	SUBQ   $0x10, R15
+	JAE    copy_5_loop
+	LEAQ   16(R14)(R15*1), R14
+	LEAQ   16(R9)(R15*1), R9
+	MOVUPS -16(R14), X0
+	MOVUPS X0, -16(R9)
+	JMP    copy_5_end
+
+copy_5_small:
 	XORQ  R15, R15
 	TESTQ $0x00000001, CX
 	JZ    copy_5_word
@@ -3539,21 +3762,16 @@ copy_5_dword:
 
 copy_5_qword:
 	TESTQ $0x00000008, CX
-	JZ    copy_5_test
+	JZ    copy_5_add
 	MOVQ  (R14)(R15*1), BP
 	MOVQ  BP, (R9)(R15*1)
 	ADDQ  $0x08, R15
-	JMP   copy_5_test
 
-copy_5:
-	MOVUPS (R14)(R15*1), X0
-	MOVUPS X0, (R9)(R15*1)
-	ADDQ   $0x10, R15
-
-copy_5_test:
-	CMPQ R15, CX
-	JB   copy_5
+copy_5_add:
 	ADDQ CX, R9
+	ADDQ CX, R14
+
+copy_5_end:
 	ADDQ CX, R11
 	SUBQ CX, R13
 
@@ -3569,7 +3787,25 @@ copy_match:
 	JA   copy_overlapping_match
 
 	// Copy non-overlapping match
-	ADDQ  R13, R11
+	ADDQ R13, R11
+	MOVQ R13, R12
+	SUBQ $0x10, R12
+	JB   copy_2_small
+
+copy_2_loop:
+	MOVUPS (CX), X0
+	MOVUPS X0, (R9)
+	ADDQ   $0x10, CX
+	ADDQ   $0x10, R9
+	SUBQ   $0x10, R12
+	JAE    copy_2_loop
+	LEAQ   16(CX)(R12*1), CX
+	LEAQ   16(R9)(R12*1), R9
+	MOVUPS -16(CX), X0
+	MOVUPS X0, -16(R9)
+	JMP    copy_2_end
+
+copy_2_small:
 	XORQ  R12, R12
 	TESTQ $0x00000001, R13
 	JZ    copy_2_word
@@ -3593,22 +3829,17 @@ copy_2_dword:
 
 copy_2_qword:
 	TESTQ $0x00000008, R13
-	JZ    copy_2_test
+	JZ    copy_2_add
 	MOVQ  (CX)(R12*1), R14
 	MOVQ  R14, (R9)(R12*1)
 	ADDQ  $0x08, R12
-	JMP   copy_2_test
 
-copy_2:
-	MOVUPS (CX)(R12*1), X0
-	MOVUPS X0, (R9)(R12*1)
-	ADDQ   $0x10, R12
-
-copy_2_test:
-	CMPQ R12, R13
-	JB   copy_2
+copy_2_add:
 	ADDQ R13, R9
-	JMP  handle_loop
+	ADDQ R13, CX
+
+copy_2_end:
+	JMP handle_loop
 
 	// Copy overlapping match
 copy_overlapping_match:
