@@ -1135,9 +1135,9 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 			e.copyMemoryPrecise("1", c.literals, c.outBase, ll)
 		} else {
 			e.copyMemoryND("1", c.literals, c.outBase, ll)
+			ADDQ(ll, c.literals)
+			ADDQ(ll, c.outBase)
 		}
-		ADDQ(ll, c.literals)
-		ADDQ(ll, c.outBase)
 		ADDQ(ll, c.outPosition)
 	}
 
@@ -1203,7 +1203,6 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		*/
 		e.copyMemoryPrecise("4", ptr, c.outBase, ml)
 		ADDQ(ml, c.outPosition)
-		ADDQ(ml, c.outBase)
 		// Note: for the current go tests this branch is taken in 99.53% cases,
 		//       this is why we repeat a little code here.
 		handleLoop()
@@ -1219,7 +1218,6 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		    }
 		*/
 		e.copyMemoryPrecise("5", ptr, c.outBase, v)
-		ADDQ(v, c.outBase)
 		ADDQ(v, c.outPosition)
 		SUBQ(v, ml)
 		// fallback to the next block
@@ -1254,7 +1252,6 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 			ADDQ(ml, c.outPosition)
 			if e.safeMem {
 				e.copyMemoryPrecise("2", src, c.outBase, ml)
-				ADDQ(ml, c.outBase)
 			} else {
 				dst := GP64()
 				MOVQ(c.outBase, dst)
@@ -1312,9 +1309,43 @@ func (e executeSimple) copyMemoryND(suffix string, src, dst, length reg.GPVirtua
 }
 
 // copyMemoryPrecise will copy memory in blocks of 16 bytes,
-// without overwriting nor overreading.
+// without overreading. It adds length to src and dst,
+// preserving length.
 func (e executeSimple) copyMemoryPrecise(suffix string, src, dst, length reg.GPVirtual) {
-	label := "copy_" + suffix
+	n := GP64()
+	MOVQ(length, n)
+	SUBQ(U8(16), n)
+	JB(LabelRef("copy_" + suffix + "_small"))
+
+	// If length >= 16, copy blocks of 16 bytes and handle any remainder
+	// by a block copy that overlaps with the last full block.
+	{
+		t := XMM()
+
+		loop := "copy_" + suffix + "_loop"
+		Label(loop)
+		{
+			MOVUPS(Mem{Base: src}, t)
+			MOVUPS(t, Mem{Base: dst})
+			ADDQ(U8(16), src)
+			ADDQ(U8(16), dst)
+			SUBQ(U8(16), n)
+			JAE(LabelRef(loop))
+		}
+
+		// n is now the range [-16,-1].
+		// -16 means we copy the entire last block again.
+		// That should happen about 1/16th of the time,
+		// so we don't bother to check for it.
+		LEAQ(Mem{Base: src, Index: n, Disp: 16, Scale: 1}, src)
+		LEAQ(Mem{Base: dst, Index: n, Disp: 16, Scale: 1}, dst)
+		MOVUPS(Mem{Base: src, Disp: -16}, t)
+		MOVUPS(t, Mem{Base: dst, Disp: -16})
+
+		JMP(LabelRef("copy_" + suffix + "_end"))
+	}
+
+	Label("copy_" + suffix + "_small")
 	ofs := GP64()
 	s := Mem{Base: src, Index: ofs, Scale: 1}
 	d := Mem{Base: dst, Index: ofs, Scale: 1}
@@ -1351,23 +1382,18 @@ func (e executeSimple) copyMemoryPrecise(suffix string, src, dst, length reg.GPV
 
 	Label("copy_" + suffix + "_qword")
 	TESTQ(U32(0x8), length)
-	JZ(LabelRef("copy_" + suffix + "_test"))
+	JZ(LabelRef("copy_" + suffix + "_add"))
 
 	// copy eight bytes if length & 0x08 != 0
 	MOVQ(s, tmp)
 	MOVQ(tmp, d)
 	ADDQ(U8(8), ofs)
-	JMP(LabelRef("copy_" + suffix + "_test"))
 
-	// copy in 16-byte chunks
-	Label(label)
-	t := XMM()
-	MOVUPS(s, t)
-	MOVUPS(t, d)
-	ADDQ(U8(16), ofs)
-	Label("copy_" + suffix + "_test")
-	CMPQ(ofs, length)
-	JB(LabelRef(label))
+	Label("copy_" + suffix + "_add")
+	ADDQ(length, dst)
+	ADDQ(length, src)
+
+	Label("copy_" + suffix + "_end")
 }
 
 // copyOverlappedMemory will copy one byte at the time from src to dst.
