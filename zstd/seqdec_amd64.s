@@ -1187,7 +1187,7 @@ check_offset:
 	MOVQ R9, R14
 	SUBQ R11, R14
 	CMPQ R13, R11
-	JGE  copy_all_from_history
+	JG   copy_all_from_history
 	MOVQ R13, R11
 	SUBQ $0x10, R11
 	JB   copy_4_small
@@ -1313,10 +1313,8 @@ copy_5_end:
 
 	// Copy match from the current buffer
 copy_match:
-	TESTQ R13, R13
-	JZ    handle_loop
-	MOVQ  BX, R11
-	SUBQ  R12, R11
+	MOVQ BX, R11
+	SUBQ R12, R11
 
 	// ml <= mo
 	CMPQ R13, R12
@@ -1496,7 +1494,7 @@ check_offset:
 	MOVQ R9, R14
 	SUBQ R11, R14
 	CMPQ R13, R11
-	JGE  copy_all_from_history
+	JG   copy_all_from_history
 	MOVQ R13, R11
 	SUBQ $0x10, R11
 	JB   copy_4_small
@@ -1622,10 +1620,8 @@ copy_5_end:
 
 	// Copy match from the current buffer
 copy_match:
-	TESTQ R13, R13
-	JZ    handle_loop
-	MOVQ  BX, R11
-	SUBQ  R12, R11
+	MOVQ BX, R11
+	SUBQ R12, R11
 
 	// ml <= mo
 	CMPQ R13, R12
@@ -2057,7 +2053,7 @@ check_offset:
 	MOVQ 48(SP), R14
 	SUBQ AX, R14
 	CMPQ R13, AX
-	JGE  copy_all_from_history
+	JG   copy_all_from_history
 	MOVQ R13, AX
 	SUBQ $0x10, AX
 	JB   copy_4_small
@@ -2180,10 +2176,8 @@ copy_5_end:
 
 	// Copy match from the current buffer
 copy_match:
-	TESTQ R13, R13
-	JZ    handle_loop
-	MOVQ  R10, AX
-	SUBQ  CX, AX
+	MOVQ R10, AX
+	SUBQ CX, AX
 
 	// ml <= mo
 	CMPQ R13, CX
@@ -2566,7 +2560,7 @@ check_offset:
 	MOVQ 48(SP), R14
 	SUBQ CX, R14
 	CMPQ R13, CX
-	JGE  copy_all_from_history
+	JG   copy_all_from_history
 	MOVQ R13, CX
 	SUBQ $0x10, CX
 	JB   copy_4_small
@@ -2689,10 +2683,8 @@ copy_5_end:
 
 	// Copy match from the current buffer
 copy_match:
-	TESTQ R13, R13
-	JZ    handle_loop
-	MOVQ  R9, CX
-	SUBQ  R12, CX
+	MOVQ R9, CX
+	SUBQ R12, CX
 
 	// ml <= mo
 	CMPQ R13, R12
@@ -3153,7 +3145,7 @@ check_offset:
 	MOVQ 48(SP), R14
 	SUBQ AX, R14
 	CMPQ R13, AX
-	JGE  copy_all_from_history
+	JG   copy_all_from_history
 	MOVQ R13, AX
 	SUBQ $0x10, AX
 	JB   copy_4_small
@@ -3276,10 +3268,8 @@ copy_5_end:
 
 	// Copy match from the current buffer
 copy_match:
-	TESTQ R13, R13
-	JZ    handle_loop
-	MOVQ  R10, AX
-	SUBQ  CX, AX
+	MOVQ R10, AX
+	SUBQ CX, AX
 
 	// ml <= mo
 	CMPQ R13, CX
@@ -3764,7 +3754,7 @@ check_offset:
 	MOVQ 48(SP), R14
 	SUBQ CX, R14
 	CMPQ R13, CX
-	JGE  copy_all_from_history
+	JG   copy_all_from_history
 	MOVQ R13, CX
 	SUBQ $0x10, CX
 	JB   copy_4_small
@@ -3887,10 +3877,8 @@ copy_5_end:
 
 	// Copy match from the current buffer
 copy_match:
-	TESTQ R13, R13
-	JZ    handle_loop
-	MOVQ  R9, CX
-	SUBQ  R12, CX
+	MOVQ R9, CX
+	SUBQ R12, CX
 
 	// ml <= mo
 	CMPQ R13, R12

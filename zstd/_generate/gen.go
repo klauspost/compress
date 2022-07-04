@@ -1194,14 +1194,14 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		}
 		SUBQ(v, ptr) // ptr := &hist[len(hist) - v]
 		CMPQ(ml, v)
-		JGE(LabelRef("copy_all_from_history"))
+		JG(LabelRef("copy_all_from_history"))
 		/*  if ml <= v {
 		        copy(out[outPosition:], hist[start:start+seq.ml])
 		        t += seq.ml
 		        continue
 		    }
 		*/
-		// We know ml will be 4
+		// We know ml will be at least 3, since we didn't copy anything yet.
 		e.copyMemoryPrecise("4", ptr, c.outBase, ml, 3)
 		ADDQ(ml, c.outPosition)
 		// Note: for the current go tests this branch is taken in 99.53% cases,
@@ -1221,15 +1221,13 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		e.copyMemoryPrecise("5", ptr, c.outBase, v, 1)
 		ADDQ(v, c.outPosition)
 		SUBQ(v, ml)
-		// fallback to the next block
+		// ml cannot be 0, since we only jump here is ml > v.
+		// Copy rest from current block.
 	}
 
 	Comment("Copy match from the current buffer")
 	Label("copy_match")
 	{
-		TESTQ(ml, ml)
-		JZ(LabelRef("handle_loop"))
-
 		src := GP64()
 		MOVQ(c.outBase, src)
 		SUBQ(mo, src) // src = &s.out[t - mo]
@@ -1313,6 +1311,15 @@ func (e executeSimple) copyMemoryND(suffix string, src, dst, length reg.GPVirtua
 // without overreading. It adds length to src and dst,
 // preserving length.
 func (e executeSimple) copyMemoryPrecise(suffix string, src, dst, length reg.GPVirtual, minLength int) {
+	assert(func(ok LabelRef) {
+		// if length >= minLength, ok
+		CMPQ(length, U8(minLength))
+		JAE(ok)
+	})
+	if minLength == 0 {
+		TESTQ(length, length)
+		JZ(LabelRef("copy_" + suffix + "_end"))
+	}
 	n := GP64()
 	MOVQ(length, n)
 	SUBQ(U8(16), n)
