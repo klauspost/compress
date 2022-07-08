@@ -2,6 +2,7 @@ package s2_test
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -122,6 +123,17 @@ func TestSeeking(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Test trimming
+	slim := s2.RemoveIndexHeaders(index)
+	if slim == nil {
+		t.Error("Removing headers failed")
+	}
+	restored := s2.RestoreIndexHeaders(slim)
+	if !bytes.Equal(restored, index) {
+		t.Errorf("want %s, got %s", hex.EncodeToString(index), hex.EncodeToString(restored))
+	}
+	t.Logf("Saved %d bytes", len(index)-len(slim))
 
 	for _, skip := range testSizes {
 		t.Run(fmt.Sprintf("noSeekSkip=%d", skip), func(t *testing.T) {
