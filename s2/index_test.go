@@ -135,6 +135,17 @@ func TestSeeking(t *testing.T) {
 	}
 	t.Logf("Saved %d bytes", len(index)-len(slim))
 
+	// Test trimming
+	slim := s2.RemoveIndexHeaders(index)
+	if slim == nil {
+		t.Error("Removing headers failed")
+	}
+	restored := s2.RestoreIndexHeaders(slim)
+	if !bytes.Equal(restored, index) {
+		t.Errorf("want %s, got %s", hex.EncodeToString(index), hex.EncodeToString(restored))
+	}
+	t.Logf("Saved %d bytes, %d remain", len(index)-len(slim), len(slim))
+
 	for _, skip := range testSizes {
 		t.Run(fmt.Sprintf("noSeekSkip=%d", skip), func(t *testing.T) {
 			dec := s2.NewReader(io.NopCloser(bytes.NewReader(compressed.Bytes())))

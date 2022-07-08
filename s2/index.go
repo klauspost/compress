@@ -574,7 +574,11 @@ func RemoveIndexHeaders(b []byte) []byte {
 
 // RestoreIndexHeaders will index restore headers removed by RemoveIndexHeaders.
 // No error checking is performed on the input.
+// If a 0 length slice is sent, it is returned without modification.
 func RestoreIndexHeaders(in []byte) []byte {
+	if len(in) == 0 {
+		return in
+	}
 	b := make([]byte, 0, 4+len(S2IndexHeader)+len(in)+len(S2IndexTrailer)+4)
 	b = append(b, ChunkTypeIndex, 0, 0, 0)
 	b = append(b, []byte(S2IndexHeader)...)
