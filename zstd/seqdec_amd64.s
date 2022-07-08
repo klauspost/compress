@@ -134,18 +134,17 @@ sequenceDecs_decode_amd64_fill_2_end:
 	MOVBQZX DI, R14
 	SHRQ    $0x10, DI
 	MOVWQZX DI, DI
-	CMPQ    R14, $0x00
-	JZ      sequenceDecs_decode_amd64_llState_updateState_skip_zero
-	MOVQ    BX, CX
-	ADDQ    R14, BX
+	LEAQ    (BX)(R14*1), CX
 	MOVQ    DX, R15
-	SHLQ    CL, R15
-	MOVQ    R14, CX
-	NEGQ    CX
-	SHRQ    CL, R15
+	MOVQ    CX, BX
+	ROLQ    CL, R15
+	MOVL    $0x00000001, BP
+	MOVB    R14, CL
+	SHLL    CL, BP
+	DECL    BP
+	ANDQ    BP, R15
 	ADDQ    R15, DI
 
-sequenceDecs_decode_amd64_llState_updateState_skip_zero:
 	// Load ctx.llTable
 	MOVQ ctx+16(FP), CX
 	MOVQ (CX), CX
@@ -155,18 +154,17 @@ sequenceDecs_decode_amd64_llState_updateState_skip_zero:
 	MOVBQZX R8, R14
 	SHRQ    $0x10, R8
 	MOVWQZX R8, R8
-	CMPQ    R14, $0x00
-	JZ      sequenceDecs_decode_amd64_mlState_updateState_skip_zero
-	MOVQ    BX, CX
-	ADDQ    R14, BX
+	LEAQ    (BX)(R14*1), CX
 	MOVQ    DX, R15
-	SHLQ    CL, R15
-	MOVQ    R14, CX
-	NEGQ    CX
-	SHRQ    CL, R15
+	MOVQ    CX, BX
+	ROLQ    CL, R15
+	MOVL    $0x00000001, BP
+	MOVB    R14, CL
+	SHLL    CL, BP
+	DECL    BP
+	ANDQ    BP, R15
 	ADDQ    R15, R8
 
-sequenceDecs_decode_amd64_mlState_updateState_skip_zero:
 	// Load ctx.mlTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 24(CX), CX
@@ -176,18 +174,17 @@ sequenceDecs_decode_amd64_mlState_updateState_skip_zero:
 	MOVBQZX R9, R14
 	SHRQ    $0x10, R9
 	MOVWQZX R9, R9
-	CMPQ    R14, $0x00
-	JZ      sequenceDecs_decode_amd64_ofState_updateState_skip_zero
-	MOVQ    BX, CX
-	ADDQ    R14, BX
+	LEAQ    (BX)(R14*1), CX
 	MOVQ    DX, R15
-	SHLQ    CL, R15
-	MOVQ    R14, CX
-	NEGQ    CX
-	SHRQ    CL, R15
+	MOVQ    CX, BX
+	ROLQ    CL, R15
+	MOVL    $0x00000001, BP
+	MOVB    R14, CL
+	SHLL    CL, BP
+	DECL    BP
+	ANDQ    BP, R15
 	ADDQ    R15, R9
 
-sequenceDecs_decode_amd64_ofState_updateState_skip_zero:
 	// Load ctx.ofTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 48(CX), CX
@@ -416,18 +413,17 @@ sequenceDecs_decode_56_amd64_fill_end:
 	MOVBQZX DI, R14
 	SHRQ    $0x10, DI
 	MOVWQZX DI, DI
-	CMPQ    R14, $0x00
-	JZ      sequenceDecs_decode_56_amd64_llState_updateState_skip_zero
-	MOVQ    BX, CX
-	ADDQ    R14, BX
+	LEAQ    (BX)(R14*1), CX
 	MOVQ    DX, R15
-	SHLQ    CL, R15
-	MOVQ    R14, CX
-	NEGQ    CX
-	SHRQ    CL, R15
+	MOVQ    CX, BX
+	ROLQ    CL, R15
+	MOVL    $0x00000001, BP
+	MOVB    R14, CL
+	SHLL    CL, BP
+	DECL    BP
+	ANDQ    BP, R15
 	ADDQ    R15, DI
 
-sequenceDecs_decode_56_amd64_llState_updateState_skip_zero:
 	// Load ctx.llTable
 	MOVQ ctx+16(FP), CX
 	MOVQ (CX), CX
@@ -437,18 +433,17 @@ sequenceDecs_decode_56_amd64_llState_updateState_skip_zero:
 	MOVBQZX R8, R14
 	SHRQ    $0x10, R8
 	MOVWQZX R8, R8
-	CMPQ    R14, $0x00
-	JZ      sequenceDecs_decode_56_amd64_mlState_updateState_skip_zero
-	MOVQ    BX, CX
-	ADDQ    R14, BX
+	LEAQ    (BX)(R14*1), CX
 	MOVQ    DX, R15
-	SHLQ    CL, R15
-	MOVQ    R14, CX
-	NEGQ    CX
-	SHRQ    CL, R15
+	MOVQ    CX, BX
+	ROLQ    CL, R15
+	MOVL    $0x00000001, BP
+	MOVB    R14, CL
+	SHLL    CL, BP
+	DECL    BP
+	ANDQ    BP, R15
 	ADDQ    R15, R8
 
-sequenceDecs_decode_56_amd64_mlState_updateState_skip_zero:
 	// Load ctx.mlTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 24(CX), CX
@@ -458,18 +453,17 @@ sequenceDecs_decode_56_amd64_mlState_updateState_skip_zero:
 	MOVBQZX R9, R14
 	SHRQ    $0x10, R9
 	MOVWQZX R9, R9
-	CMPQ    R14, $0x00
-	JZ      sequenceDecs_decode_56_amd64_ofState_updateState_skip_zero
-	MOVQ    BX, CX
-	ADDQ    R14, BX
+	LEAQ    (BX)(R14*1), CX
 	MOVQ    DX, R15
-	SHLQ    CL, R15
-	MOVQ    R14, CX
-	NEGQ    CX
-	SHRQ    CL, R15
+	MOVQ    CX, BX
+	ROLQ    CL, R15
+	MOVL    $0x00000001, BP
+	MOVB    R14, CL
+	SHLL    CL, BP
+	DECL    BP
+	ANDQ    BP, R15
 	ADDQ    R15, R9
 
-sequenceDecs_decode_56_amd64_ofState_updateState_skip_zero:
 	// Load ctx.ofTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 48(CX), CX
@@ -1886,18 +1880,17 @@ sequenceDecs_decodeSync_amd64_fill_2_end:
 	MOVBQZX DI, R13
 	SHRQ    $0x10, DI
 	MOVWQZX DI, DI
-	CMPQ    R13, $0x00
-	JZ      sequenceDecs_decodeSync_amd64_llState_updateState_skip_zero
-	MOVQ    BX, CX
-	ADDQ    R13, BX
+	LEAQ    (BX)(R13*1), CX
 	MOVQ    DX, R14
-	SHLQ    CL, R14
-	MOVQ    R13, CX
-	NEGQ    CX
-	SHRQ    CL, R14
+	MOVQ    CX, BX
+	ROLQ    CL, R14
+	MOVL    $0x00000001, R15
+	MOVB    R13, CL
+	SHLL    CL, R15
+	DECL    R15
+	ANDQ    R15, R14
 	ADDQ    R14, DI
 
-sequenceDecs_decodeSync_amd64_llState_updateState_skip_zero:
 	// Load ctx.llTable
 	MOVQ ctx+16(FP), CX
 	MOVQ (CX), CX
@@ -1907,18 +1900,17 @@ sequenceDecs_decodeSync_amd64_llState_updateState_skip_zero:
 	MOVBQZX R8, R13
 	SHRQ    $0x10, R8
 	MOVWQZX R8, R8
-	CMPQ    R13, $0x00
-	JZ      sequenceDecs_decodeSync_amd64_mlState_updateState_skip_zero
-	MOVQ    BX, CX
-	ADDQ    R13, BX
+	LEAQ    (BX)(R13*1), CX
 	MOVQ    DX, R14
-	SHLQ    CL, R14
-	MOVQ    R13, CX
-	NEGQ    CX
-	SHRQ    CL, R14
+	MOVQ    CX, BX
+	ROLQ    CL, R14
+	MOVL    $0x00000001, R15
+	MOVB    R13, CL
+	SHLL    CL, R15
+	DECL    R15
+	ANDQ    R15, R14
 	ADDQ    R14, R8
 
-sequenceDecs_decodeSync_amd64_mlState_updateState_skip_zero:
 	// Load ctx.mlTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 24(CX), CX
@@ -1928,18 +1920,17 @@ sequenceDecs_decodeSync_amd64_mlState_updateState_skip_zero:
 	MOVBQZX R9, R13
 	SHRQ    $0x10, R9
 	MOVWQZX R9, R9
-	CMPQ    R13, $0x00
-	JZ      sequenceDecs_decodeSync_amd64_ofState_updateState_skip_zero
-	MOVQ    BX, CX
-	ADDQ    R13, BX
+	LEAQ    (BX)(R13*1), CX
 	MOVQ    DX, R14
-	SHLQ    CL, R14
-	MOVQ    R13, CX
-	NEGQ    CX
-	SHRQ    CL, R14
+	MOVQ    CX, BX
+	ROLQ    CL, R14
+	MOVL    $0x00000001, R15
+	MOVB    R13, CL
+	SHLL    CL, R15
+	DECL    R15
+	ANDQ    R15, R14
 	ADDQ    R14, R9
 
-sequenceDecs_decodeSync_amd64_ofState_updateState_skip_zero:
 	// Load ctx.ofTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 48(CX), CX
@@ -2927,18 +2918,17 @@ sequenceDecs_decodeSync_safe_amd64_fill_2_end:
 	MOVBQZX DI, R13
 	SHRQ    $0x10, DI
 	MOVWQZX DI, DI
-	CMPQ    R13, $0x00
-	JZ      sequenceDecs_decodeSync_safe_amd64_llState_updateState_skip_zero
-	MOVQ    BX, CX
-	ADDQ    R13, BX
+	LEAQ    (BX)(R13*1), CX
 	MOVQ    DX, R14
-	SHLQ    CL, R14
-	MOVQ    R13, CX
-	NEGQ    CX
-	SHRQ    CL, R14
+	MOVQ    CX, BX
+	ROLQ    CL, R14
+	MOVL    $0x00000001, R15
+	MOVB    R13, CL
+	SHLL    CL, R15
+	DECL    R15
+	ANDQ    R15, R14
 	ADDQ    R14, DI
 
-sequenceDecs_decodeSync_safe_amd64_llState_updateState_skip_zero:
 	// Load ctx.llTable
 	MOVQ ctx+16(FP), CX
 	MOVQ (CX), CX
@@ -2948,18 +2938,17 @@ sequenceDecs_decodeSync_safe_amd64_llState_updateState_skip_zero:
 	MOVBQZX R8, R13
 	SHRQ    $0x10, R8
 	MOVWQZX R8, R8
-	CMPQ    R13, $0x00
-	JZ      sequenceDecs_decodeSync_safe_amd64_mlState_updateState_skip_zero
-	MOVQ    BX, CX
-	ADDQ    R13, BX
+	LEAQ    (BX)(R13*1), CX
 	MOVQ    DX, R14
-	SHLQ    CL, R14
-	MOVQ    R13, CX
-	NEGQ    CX
-	SHRQ    CL, R14
+	MOVQ    CX, BX
+	ROLQ    CL, R14
+	MOVL    $0x00000001, R15
+	MOVB    R13, CL
+	SHLL    CL, R15
+	DECL    R15
+	ANDQ    R15, R14
 	ADDQ    R14, R8
 
-sequenceDecs_decodeSync_safe_amd64_mlState_updateState_skip_zero:
 	// Load ctx.mlTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 24(CX), CX
@@ -2969,18 +2958,17 @@ sequenceDecs_decodeSync_safe_amd64_mlState_updateState_skip_zero:
 	MOVBQZX R9, R13
 	SHRQ    $0x10, R9
 	MOVWQZX R9, R9
-	CMPQ    R13, $0x00
-	JZ      sequenceDecs_decodeSync_safe_amd64_ofState_updateState_skip_zero
-	MOVQ    BX, CX
-	ADDQ    R13, BX
+	LEAQ    (BX)(R13*1), CX
 	MOVQ    DX, R14
-	SHLQ    CL, R14
-	MOVQ    R13, CX
-	NEGQ    CX
-	SHRQ    CL, R14
+	MOVQ    CX, BX
+	ROLQ    CL, R14
+	MOVL    $0x00000001, R15
+	MOVB    R13, CL
+	SHLL    CL, R15
+	DECL    R15
+	ANDQ    R15, R14
 	ADDQ    R14, R9
 
-sequenceDecs_decodeSync_safe_amd64_ofState_updateState_skip_zero:
 	// Load ctx.ofTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 48(CX), CX
