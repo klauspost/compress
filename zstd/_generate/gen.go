@@ -298,7 +298,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			MOVBQZX(total.As8(), total) // total = llState.As8() + mlState.As8() + ofState.As8()
 
 			// Read `total` bits
-			bits := o.getBitsValue(name+"_getBits", total, brValue, brBitsRead)
+			bits := o.getBits(total, brValue, brBitsRead)
 
 			// Update states
 			Comment("Update Offset State")
@@ -632,14 +632,13 @@ func (o options) updateState(name string, state, brValue, brBitsRead reg.GPVirtu
 	}
 
 	{
-		lowBits := o.getBits(name+"_getBits", AX, brValue, brBitsRead, LabelRef(name+"_skip_zero"))
+		lowBits := o.getBits(AX, brValue, brBitsRead)
 		// Check if below tablelog
 		assert(func(ok LabelRef) {
 			CMPQ(lowBits, U32(512))
 			JB(ok)
 		})
 		ADDQ(lowBits, DX)
-		Label(name + "_skip_zero")
 	}
 
 	// Load table pointer
@@ -695,53 +694,25 @@ func (o options) nextState(name string, state, lowBits reg.GPVirtual, table stri
 }
 
 // getBits will return nbits bits from brValue.
-// If nbits == 0 it *may* jump to jmpZero, otherwise 0 is returned.
-func (o options) getBits(name string, nBits, brValue, brBitsRead reg.GPVirtual, jmpZero LabelRef) reg.GPVirtual {
+func (o options) getBits(nBits, brValue, brBitsRead reg.GPVirtual) reg.GPVirtual {
 	BX := GP64()
 	CX := reg.CL
-	if o.bmi2 {
-		LEAQ(Mem{Base: brBitsRead, Index: nBits, Scale: 1}, CX.As64())
-		MOVQ(brValue, BX)
-		MOVQ(CX.As64(), brBitsRead)
-		ROLQ(CX, BX)
-		BZHIQ(nBits, BX, BX)
-	} else {
-		CMPQ(nBits, U8(0))
-		JZ(jmpZero)
-		MOVQ(brBitsRead, CX.As64())
-		ADDQ(nBits, brBitsRead)
-		MOVQ(brValue, BX)
-		SHLQ(CX, BX)
-		MOVQ(nBits, CX.As64())
-		NEGQ(CX.As64())
-		SHRQ(CX, BX)
-	}
-	return BX
-}
 
-// getBits will return nbits bits from brValue.
-// If nbits == 0 then 0 is returned.
-func (o options) getBitsValue(name string, nBits, brValue, brBitsRead reg.GPVirtual) reg.GPVirtual {
-	BX := GP64()
-	CX := reg.CL
+	LEAQ(Mem{Base: brBitsRead, Index: nBits, Scale: 1}, CX.As64())
+	MOVQ(brValue, BX)
+	MOVQ(CX.As64(), brBitsRead)
+	ROLQ(CX, BX)
+
+	// BX &= (1<<nBits) - 1
 	if o.bmi2 {
-		LEAQ(Mem{Base: brBitsRead, Index: nBits, Scale: 1}, CX.As64())
-		MOVQ(brValue, BX)
-		MOVQ(CX.As64(), brBitsRead)
-		ROLQ(CX, BX)
 		BZHIQ(nBits, BX, BX)
 	} else {
-		XORQ(BX, BX)
-		CMPQ(nBits, U8(0))
-		JZ(LabelRef(name + "_get_bits_value_zero"))
-		MOVQ(brBitsRead, CX.As64())
-		ADDQ(nBits, brBitsRead)
-		MOVQ(brValue, BX)
-		SHLQ(CX, BX)
-		MOVQ(nBits, CX.As64())
-		NEGQ(CX.As64())
-		SHRQ(CX, BX)
-		Label(name + "_get_bits_value_zero")
+		mask := GP32()
+		MOVL(U32(1), mask)
+		MOVB(nBits.As8(), CX)
+		SHLL(CX, mask)
+		DECL(mask)
+		ANDQ(mask.As64(), BX)
 	}
 	return BX
 }
