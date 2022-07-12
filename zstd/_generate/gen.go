@@ -1132,12 +1132,12 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		JZ(LabelRef("check_offset"))
 		// TODO: Investigate if it is possible to consistently overallocate literals.
 		if e.safeMem {
-			e.copyMemoryPrecise("1", c.literals, c.outBase, ll)
+			e.copyMemoryPrecise("1", c.literals, c.outBase, ll, 1)
 		} else {
 			e.copyMemoryND("1", c.literals, c.outBase, ll)
+			ADDQ(ll, c.literals)
+			ADDQ(ll, c.outBase)
 		}
-		ADDQ(ll, c.literals)
-		ADDQ(ll, c.outBase)
 		ADDQ(ll, c.outPosition)
 	}
 
@@ -1194,16 +1194,16 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		}
 		SUBQ(v, ptr) // ptr := &hist[len(hist) - v]
 		CMPQ(ml, v)
-		JGE(LabelRef("copy_all_from_history"))
+		JG(LabelRef("copy_all_from_history"))
 		/*  if ml <= v {
 		        copy(out[outPosition:], hist[start:start+seq.ml])
 		        t += seq.ml
 		        continue
 		    }
 		*/
-		e.copyMemoryPrecise("4", ptr, c.outBase, ml)
+		// We know ml will be at least 3, since we didn't copy anything yet.
+		e.copyMemoryPrecise("4", ptr, c.outBase, ml, 3)
 		ADDQ(ml, c.outPosition)
-		ADDQ(ml, c.outBase)
 		// Note: for the current go tests this branch is taken in 99.53% cases,
 		//       this is why we repeat a little code here.
 		handleLoop()
@@ -1218,19 +1218,16 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		        seq.ml -= v
 		    }
 		*/
-		e.copyMemoryPrecise("5", ptr, c.outBase, v)
-		ADDQ(v, c.outBase)
+		e.copyMemoryPrecise("5", ptr, c.outBase, v, 1)
 		ADDQ(v, c.outPosition)
 		SUBQ(v, ml)
-		// fallback to the next block
+		// ml cannot be 0, since we only jump here is ml > v.
+		// Copy rest from current block.
 	}
 
 	Comment("Copy match from the current buffer")
 	Label("copy_match")
 	{
-		TESTQ(ml, ml)
-		JZ(LabelRef("handle_loop"))
-
 		src := GP64()
 		MOVQ(c.outBase, src)
 		SUBQ(mo, src) // src = &s.out[t - mo]
@@ -1253,8 +1250,7 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		{
 			ADDQ(ml, c.outPosition)
 			if e.safeMem {
-				e.copyMemoryPrecise("2", src, c.outBase, ml)
-				ADDQ(ml, c.outBase)
+				e.copyMemoryPrecise("2", src, c.outBase, ml, 1)
 			} else {
 				dst := GP64()
 				MOVQ(c.outBase, dst)
@@ -1312,62 +1308,104 @@ func (e executeSimple) copyMemoryND(suffix string, src, dst, length reg.GPVirtua
 }
 
 // copyMemoryPrecise will copy memory in blocks of 16 bytes,
-// without overwriting nor overreading.
-func (e executeSimple) copyMemoryPrecise(suffix string, src, dst, length reg.GPVirtual) {
-	label := "copy_" + suffix
-	ofs := GP64()
-	s := Mem{Base: src, Index: ofs, Scale: 1}
-	d := Mem{Base: dst, Index: ofs, Scale: 1}
+// without overreading. It adds length to src and dst,
+// preserving length.
+func (e executeSimple) copyMemoryPrecise(suffix string, src, dst, length reg.GPVirtual, minLength int) {
+	assert(func(ok LabelRef) {
+		// if length >= minLength, ok
+		CMPQ(length, U8(minLength))
+		JAE(ok)
+	})
+	if minLength == 0 {
+		TESTQ(length, length)
+		JZ(LabelRef("copy_" + suffix + "_end"))
+	}
+	n := GP64()
+	MOVQ(length, n)
+	SUBQ(U8(16), n)
+	JB(LabelRef("copy_" + suffix + "_small"))
 
-	tmp := GP64()
-	XORQ(ofs, ofs)
+	// If length >= 16, copy blocks of 16 bytes and handle any remainder
+	// by a block copy that overlaps with the last full block.
+	{
+		t := XMM()
 
-	Label("copy_" + suffix + "_byte")
-	TESTQ(U32(0x1), length)
-	JZ(LabelRef("copy_" + suffix + "_word"))
+		loop := "copy_" + suffix + "_loop"
+		Label(loop)
+		{
+			MOVUPS(Mem{Base: src}, t)
+			MOVUPS(t, Mem{Base: dst})
+			ADDQ(U8(16), src)
+			ADDQ(U8(16), dst)
+			SUBQ(U8(16), n)
+			JAE(LabelRef(loop))
+		}
 
-	// copy one byte if length & 0x01 != 0
-	MOVB(s, tmp.As8())
-	MOVB(tmp.As8(), d)
-	ADDQ(U8(1), ofs)
+		// n is now the range [-16,-1].
+		// -16 means we copy the entire last block again.
+		// That should happen about 1/16th of the time,
+		// so we don't bother to check for it.
+		LEAQ(Mem{Base: src, Index: n, Disp: 16, Scale: 1}, src)
+		LEAQ(Mem{Base: dst, Index: n, Disp: 16, Scale: 1}, dst)
+		MOVUPS(Mem{Base: src, Disp: -16}, t)
+		MOVUPS(t, Mem{Base: dst, Disp: -16})
 
-	Label("copy_" + suffix + "_word")
-	TESTQ(U32(0x2), length)
-	JZ(LabelRef("copy_" + suffix + "_dword"))
+		JMP(LabelRef("copy_" + suffix + "_end"))
+	}
 
-	// copy two bytes if length & 0x02 != 0
-	MOVW(s, tmp.As16())
-	MOVW(tmp.As16(), d)
-	ADDQ(U8(2), ofs)
+	Label("copy_" + suffix + "_small")
+	{
+		name := "copy_" + suffix + "_"
+		end := LabelRef("copy_" + suffix + "_end")
+		CMPQ(length, U8(3))
+		JE(LabelRef(name + "move_3"))
+		if minLength < 3 {
+			JB(LabelRef(name + "move_1or2"))
+		}
+		CMPQ(length, U8(8))
+		JB(LabelRef(name + "move_4through7"))
+		JMP(LabelRef(name + "move_8through16"))
+		AX, CX := GP64(), GP64()
 
-	Label("copy_" + suffix + "_dword")
-	TESTQ(U32(0x4), length)
-	JZ(LabelRef("copy_" + suffix + "_qword"))
+		if minLength < 3 {
+			Label(name + "move_1or2")
+			MOVB(Mem{Base: src}, AX.As8())
+			MOVB(Mem{Base: src, Disp: -1, Index: length, Scale: 1}, CX.As8())
+			MOVB(AX.As8(), Mem{Base: dst})
+			MOVB(CX.As8(), Mem{Base: dst, Disp: -1, Index: length, Scale: 1})
+			ADDQ(length, src)
+			ADDQ(length, dst)
+			JMP(end)
+		}
 
-	// copy four bytes if length & 0x04 != 0
-	MOVL(s, tmp.As32())
-	MOVL(tmp.As32(), d)
-	ADDQ(U8(4), ofs)
+		Label(name + "move_3")
+		MOVW(Mem{Base: src}, AX.As16())
+		MOVB(Mem{Base: src, Disp: 2}, CX.As8())
+		MOVW(AX.As16(), Mem{Base: dst})
+		MOVB(CX.As8(), Mem{Base: dst, Disp: 2})
+		ADDQ(length, src)
+		ADDQ(length, dst)
+		JMP(end)
 
-	Label("copy_" + suffix + "_qword")
-	TESTQ(U32(0x8), length)
-	JZ(LabelRef("copy_" + suffix + "_test"))
+		Label(name + "move_4through7")
+		MOVL(Mem{Base: src}, AX.As32())
+		MOVL(Mem{Base: src, Disp: -4, Index: length, Scale: 1}, CX.As32())
+		MOVL(AX.As32(), Mem{Base: dst})
+		MOVL(CX.As32(), Mem{Base: dst, Disp: -4, Index: length, Scale: 1})
+		ADDQ(length, src)
+		ADDQ(length, dst)
+		JMP(end)
 
-	// copy eight bytes if length & 0x08 != 0
-	MOVQ(s, tmp)
-	MOVQ(tmp, d)
-	ADDQ(U8(8), ofs)
-	JMP(LabelRef("copy_" + suffix + "_test"))
-
-	// copy in 16-byte chunks
-	Label(label)
-	t := XMM()
-	MOVUPS(s, t)
-	MOVUPS(t, d)
-	ADDQ(U8(16), ofs)
-	Label("copy_" + suffix + "_test")
-	CMPQ(ofs, length)
-	JB(LabelRef(label))
+		Label(name + "move_8through16")
+		MOVQ(Mem{Base: src}, AX)
+		MOVQ(Mem{Base: src, Disp: -8, Index: length, Scale: 1}, CX)
+		MOVQ(AX, Mem{Base: dst})
+		MOVQ(CX, Mem{Base: dst, Disp: -8, Index: length, Scale: 1})
+		ADDQ(length, src)
+		ADDQ(length, dst)
+		JMP(end)
+	}
+	Label("copy_" + suffix + "_end")
 }
 
 // copyOverlappedMemory will copy one byte at the time from src to dst.

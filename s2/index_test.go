@@ -2,11 +2,13 @@ package s2_test
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"math/rand"
 	"sync"
+	"testing"
 
 	"github.com/klauspost/compress/s2"
 )
@@ -98,4 +100,138 @@ func ExampleIndex_Load() {
 	//Successfully skipped forward to 3888885
 	//Successfully skipped forward to 4444440
 	//Successfully skipped forward to 4999995
+}
+
+func TestSeeking(t *testing.T) {
+	compressed := bytes.Buffer{}
+
+	// Use small blocks so there are plenty of them.
+	enc := s2.NewWriter(&compressed, s2.WriterBlockSize(16<<10))
+	var nElems = 1_000_000
+	var testSizes = []int{100, 1_000, 10_000, 20_000, 100_000, 200_000, 400_000}
+	if testing.Short() {
+		nElems = 100_000
+		testSizes = []int{100, 1_000, 10_000, 20_000}
+	}
+	testSizes = append(testSizes, nElems-1)
+	//24 bytes per item plus \n = 25 bytes per record
+	for i := 0; i < nElems; i++ {
+		fmt.Fprintf(enc, "Item %019d\n", i)
+	}
+
+	index, err := enc.CloseIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Test trimming
+	slim := s2.RemoveIndexHeaders(index)
+	if slim == nil {
+		t.Error("Removing headers failed")
+	}
+	restored := s2.RestoreIndexHeaders(slim)
+	if !bytes.Equal(restored, index) {
+		t.Errorf("want %s, got %s", hex.EncodeToString(index), hex.EncodeToString(restored))
+	}
+	t.Logf("Saved %d bytes", len(index)-len(slim))
+
+	for _, skip := range testSizes {
+		t.Run(fmt.Sprintf("noSeekSkip=%d", skip), func(t *testing.T) {
+			dec := s2.NewReader(io.NopCloser(bytes.NewReader(compressed.Bytes())))
+			seeker, err := dec.ReadSeeker(false, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			buf := make([]byte, 25)
+			for rec := 0; rec < nElems; rec += skip {
+				offset := int64(rec * 25)
+				//t.Logf("Reading record %d", rec)
+				_, err := seeker.Seek(offset, io.SeekStart)
+				if err != nil {
+					t.Fatalf("Failed to seek: %v", err)
+				}
+				_, err = io.ReadFull(dec, buf)
+				if err != nil {
+					t.Fatalf("Failed to seek: %v", err)
+				}
+				expected := fmt.Sprintf("Item %019d\n", rec)
+				if string(buf) != expected {
+					t.Fatalf("Expected %q, got %q", expected, buf)
+				}
+			}
+		})
+		t.Run(fmt.Sprintf("seekSkip=%d", skip), func(t *testing.T) {
+			dec := s2.NewReader(io.ReadSeeker(bytes.NewReader(compressed.Bytes())))
+			seeker, err := dec.ReadSeeker(false, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			buf := make([]byte, 25)
+			for rec := 0; rec < nElems; rec += skip {
+				offset := int64(rec * 25)
+				//t.Logf("Reading record %d", rec)
+				_, err := seeker.Seek(offset, io.SeekStart)
+				if err != nil {
+					t.Fatalf("Failed to seek: %v", err)
+				}
+				_, err = io.ReadFull(dec, buf)
+				if err != nil {
+					t.Fatalf("Failed to seek: %v", err)
+				}
+				expected := fmt.Sprintf("Item %019d\n", rec)
+				if string(buf) != expected {
+					t.Fatalf("Expected %q, got %q", expected, buf)
+				}
+			}
+		})
+		t.Run(fmt.Sprintf("noSeekIndexSkip=%d", skip), func(t *testing.T) {
+			dec := s2.NewReader(io.NopCloser(bytes.NewReader(compressed.Bytes())))
+			seeker, err := dec.ReadSeeker(false, index)
+			if err != nil {
+				t.Fatal(err)
+			}
+			buf := make([]byte, 25)
+			for rec := 0; rec < nElems; rec += skip {
+				offset := int64(rec * 25)
+				//t.Logf("Reading record %d", rec)
+				_, err := seeker.Seek(offset, io.SeekStart)
+				if err != nil {
+					t.Fatalf("Failed to seek: %v", err)
+				}
+				_, err = io.ReadFull(dec, buf)
+				if err != nil {
+					t.Fatalf("Failed to seek: %v", err)
+				}
+				expected := fmt.Sprintf("Item %019d\n", rec)
+				if string(buf) != expected {
+					t.Fatalf("Expected %q, got %q", expected, buf)
+				}
+			}
+		})
+		t.Run(fmt.Sprintf("seekIndexSkip=%d", skip), func(t *testing.T) {
+			dec := s2.NewReader(io.ReadSeeker(bytes.NewReader(compressed.Bytes())))
+
+			seeker, err := dec.ReadSeeker(false, index)
+			if err != nil {
+				t.Fatal(err)
+			}
+			buf := make([]byte, 25)
+			for rec := 0; rec < nElems; rec += skip {
+				offset := int64(rec * 25)
+				//t.Logf("Reading record %d", rec)
+				_, err := seeker.Seek(offset, io.SeekStart)
+				if err != nil {
+					t.Fatalf("Failed to seek: %v", err)
+				}
+				_, err = io.ReadFull(dec, buf)
+				if err != nil {
+					t.Fatalf("Failed to seek: %v", err)
+				}
+				expected := fmt.Sprintf("Item %019d\n", rec)
+				if string(buf) != expected {
+					t.Fatalf("Expected %q, got %q", expected, buf)
+				}
+			}
+		})
+	}
 }

@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"hash"
 	"io"
-	"io/ioutil"
 	"runtime"
 	"sort"
 	"strings"
@@ -597,7 +596,7 @@ func testZip64(t testing.TB, size int64) *rleBuffer {
 	}
 
 	// read back zip file and check that we get to the end of it
-	r, err := NewReader(buf, buf.Size())
+	r, err := NewReader(buf, int64(buf.Size()))
 	if err != nil {
 		t.Fatal("reader:", err)
 	}
@@ -619,7 +618,7 @@ func testZip64(t testing.TB, size int64) *rleBuffer {
 			t.Fatal("read:", err)
 		}
 	}
-	gotEnd, err := ioutil.ReadAll(rc)
+	gotEnd, err := io.ReadAll(rc)
 	if err != nil {
 		t.Fatal("read end:", err)
 	}

@@ -196,12 +196,13 @@ func (w *GzipResponseWriter) startGzip() error {
 
 // startPlain writes to sent bytes and buffer the underlying ResponseWriter without gzip.
 func (w *GzipResponseWriter) startPlain() error {
+	w.Header().Del(HeaderNoCompression)
 	if w.code != 0 {
 		w.ResponseWriter.WriteHeader(w.code)
 		// Ensure that no other WriteHeader's happen
 		w.code = 0
 	}
-	delete(w.Header(), HeaderNoCompression)
+
 	w.ignore = true
 	// If Write was never called then don't call Write on the underlying ResponseWriter.
 	if len(w.buf) == 0 {
