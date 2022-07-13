@@ -91,7 +91,7 @@ Options:`)
 		flag.PrintDefaults()
 		os.Exit(0)
 	}
-	opts := []s2.WriterOption{s2.WriterBlockSize(int(sz)), s2.WriterConcurrency(*cpu), s2.WriterPadding(int(pad))}
+	opts := []s2.WriterOption{s2.WriterBlockSize(sz), s2.WriterConcurrency(*cpu), s2.WriterPadding(pad)}
 	if *index {
 		opts = append(opts, s2.WriterAddIndex())
 	}
@@ -123,7 +123,7 @@ Options:`)
 			dstFile, err := os.OpenFile(*out, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.ModePerm)
 			exitErr(err)
 			defer dstFile.Close()
-			bw := bufio.NewWriterSize(dstFile, int(sz)*2)
+			bw := bufio.NewWriterSize(dstFile, sz*2)
 			defer bw.Flush()
 			wr.Reset(bw)
 		}
@@ -612,7 +612,7 @@ func exitErr(err error) {
 }
 
 // toSize converts a size indication to bytes.
-func toSize(size string) (uint64, error) {
+func toSize(size string) (int, error) {
 	size = strings.ToUpper(strings.TrimSpace(size))
 	firstLetter := strings.IndexFunc(size, unicode.IsLetter)
 	if firstLetter == -1 {
@@ -620,18 +620,18 @@ func toSize(size string) (uint64, error) {
 	}
 
 	bytesString, multiple := size[:firstLetter], size[firstLetter:]
-	bytes, err := strconv.ParseUint(bytesString, 10, 64)
+	sz, err := strconv.Atoi(bytesString)
 	if err != nil {
 		return 0, fmt.Errorf("unable to parse size: %v", err)
 	}
 
 	switch multiple {
 	case "M", "MB", "MIB":
-		return bytes * 1 << 20, nil
+		return sz * 1 << 20, nil
 	case "K", "KB", "KIB":
-		return bytes * 1 << 10, nil
+		return sz * 1 << 10, nil
 	case "B", "":
-		return bytes, nil
+		return sz, nil
 	default:
 		return 0, fmt.Errorf("unknown size suffix: %v", multiple)
 	}
