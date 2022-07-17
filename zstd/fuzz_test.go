@@ -12,6 +12,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	rdebug "runtime/debug"
 	"strconv"
 	"testing"
 
@@ -36,7 +37,7 @@ func FuzzDecodeAll(f *testing.F) {
 		// Just test if we crash...
 		defer func() {
 			if r := recover(); r != nil {
-				t.Log(r)
+				rdebug.PrintStack()
 				t.Fatal(r)
 			}
 		}()
@@ -73,7 +74,7 @@ func FuzzDecoder(f *testing.F) {
 		// Just test if we crash...
 		defer func() {
 			if r := recover(); r != nil {
-				t.Log(r)
+				rdebug.PrintStack()
 				t.Fatal(r)
 			}
 		}()
@@ -160,6 +161,13 @@ func FuzzEncoding(f *testing.F) {
 	var dst bytes.Buffer
 
 	f.Fuzz(func(t *testing.T, data []byte) {
+		// Just test if we crash...
+		defer func() {
+			if r := recover(); r != nil {
+				rdebug.PrintStack()
+				t.Fatal(r)
+			}
+		}()
 		if len(data) > maxSize {
 			return
 		}
