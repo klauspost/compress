@@ -231,20 +231,27 @@ func (d *frameDec) reset(br byteBuffer) error {
 		d.crc.Reset()
 	}
 
+	if d.WindowSize > d.o.maxWindowSize {
+		if debugDecoder {
+			printf("window size %d > max %d\n", d.WindowSize, d.o.maxWindowSize)
+		}
+		return ErrWindowSizeExceeded
+	}
+
 	if d.WindowSize == 0 && d.SingleSegment {
 		// We may not need window in this case.
 		d.WindowSize = d.FrameContentSize
 		if d.WindowSize < MinWindowSize {
 			d.WindowSize = MinWindowSize
 		}
+		if d.WindowSize > d.o.maxDecodedSize {
+			if debugDecoder {
+				printf("window size %d > max %d\n", d.WindowSize, d.o.maxWindowSize)
+			}
+			return ErrDecoderSizeExceeded
+		}
 	}
 
-	if d.WindowSize > uint64(d.o.maxWindowSize) {
-		if debugDecoder {
-			printf("window size %d > max %d\n", d.WindowSize, d.o.maxWindowSize)
-		}
-		return ErrWindowSizeExceeded
-	}
 	// The minimum Window_Size is 1 KB.
 	if d.WindowSize < MinWindowSize {
 		if debugDecoder {
