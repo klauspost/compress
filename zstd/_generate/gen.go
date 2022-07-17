@@ -17,7 +17,7 @@ import (
 )
 
 // insert extra checks here and there.
-const debug = false
+const debug = true
 
 // error reported when mo == 0 && ml > 0
 const errorMatchLenOfsMismatch = 1
@@ -338,11 +338,14 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 	Comment("Adjust offset")
 
 	var offset reg.GPVirtual
+	end := LabelRef(name + "_after_adjust")
 	if o.useSeqs {
-		offset = o.adjustOffset(name+"_adjust", moP, llP, R14, &offsets)
+		offset = o.adjustOffset(name+"_adjust", moP, llP, R14, &offsets, end)
 	} else {
-		offset = o.adjustOffsetInMemory(name+"_adjust", moP, llP, R14)
+		offset = o.adjustOffsetInMemory(name+"_adjust", moP, llP, R14, end)
 	}
+	Label(name + "_after_adjust")
+
 	MOVQ(offset, moP) // Store offset
 
 	Comment("Check values")
@@ -717,7 +720,7 @@ func (o options) getBits(nBits, brValue, brBitsRead reg.GPVirtual) reg.GPVirtual
 	return BX
 }
 
-func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual, offsets *[3]reg.GPVirtual) (offset reg.GPVirtual) {
+func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual, offsets *[3]reg.GPVirtual, end LabelRef) (offset reg.GPVirtual) {
 	offset = GP64()
 	MOVQ(moP, offset)
 	{
@@ -733,7 +736,7 @@ func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual, 
 		MOVQ(offsets[1], offsets[2]) //  s.prevOffset[2] = s.prevOffset[1]
 		MOVQ(offsets[0], offsets[1]) // s.prevOffset[1] = s.prevOffset[0]
 		MOVQ(offset, offsets[0])     // s.prevOffset[0] = offset
-		JMP(LabelRef(name + "_end"))
+		JMP(end)
 	}
 
 	Label(name + "_offsetB_1_or_0")
@@ -762,7 +765,7 @@ func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual, 
 			TESTQ(offset, offset)
 			JNZ(LabelRef(name + "_offset_nonzero"))
 			MOVQ(offsets[0], offset)
-			JMP(LabelRef(name + "_end"))
+			JMP(end)
 		}
 	}
 	Label(name + "_offset_nonzero")
@@ -821,13 +824,13 @@ func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual, 
 		MOVQ(temp, offsets[0])
 		MOVQ(temp, offset) // return temp
 	}
-	Label(name + "_end")
+	JMP(end)
 	return offset
 }
 
 // adjustOffsetInMemory is an adjustOffset version that does not cache prevOffset values in registers.
 // It fetches and stores values directly into the fields of `sequenceDecs` structure.
-func (o options) adjustOffsetInMemory(name string, moP, llP Mem, offsetB reg.GPVirtual) (offset reg.GPVirtual) {
+func (o options) adjustOffsetInMemory(name string, moP, llP Mem, offsetB reg.GPVirtual, end LabelRef) (offset reg.GPVirtual) {
 	s := Dereference(Param("s"))
 
 	po0, _ := s.Field("prevOffset").Index(0).Resolve()
@@ -849,7 +852,7 @@ func (o options) adjustOffsetInMemory(name string, moP, llP Mem, offsetB reg.GPV
 		MOVUPS(po0.Addr, tmp)  // tmp = (s.prevOffset[0], s.prevOffset[1])
 		MOVQ(offset, po0.Addr) // s.prevOffset[0] = offset
 		MOVUPS(tmp, po1.Addr)  // s.prevOffset[1], s.prevOffset[2] = s.prevOffset[0], s.prevOffset[1]
-		JMP(LabelRef(name + "_end"))
+		JMP(end)
 	}
 
 	Label(name + "_offsetB_1_or_0")
@@ -878,7 +881,7 @@ func (o options) adjustOffsetInMemory(name string, moP, llP Mem, offsetB reg.GPV
 			TESTQ(offset, offset)
 			JNZ(LabelRef(name + "_offset_nonzero"))
 			MOVQ(po0.Addr, offset)
-			JMP(LabelRef(name + "_end"))
+			JMP(end)
 		}
 	}
 	Label(name + "_offset_nonzero")
@@ -906,9 +909,23 @@ func (o options) adjustOffsetInMemory(name string, moP, llP Mem, offsetB reg.GPV
 		CMPQ(offset, U8(3))
 		CMOVQEQ(DX, CX)
 		CMOVQEQ(R15, DX)
-		prevOffset := GP64()
-		LEAQ(po0.Addr, prevOffset) // &prevOffset[0]
-		ADDQ(Mem{Base: prevOffset, Index: CX, Scale: 8}, DX)
+		assert(func(ok LabelRef) {
+			CMPQ(CX, U32(0))
+			JAE(ok)
+		})
+		assert(func(ok LabelRef) {
+			CMPQ(CX, U32(3))
+			JB(ok)
+		})
+		if po0.Addr.Index != nil {
+			// Use temporary (not currently needed)
+			prevOffset := GP64()
+			LEAQ(po0.Addr, prevOffset) // &prevOffset[0]
+			ADDQ(Mem{Base: prevOffset, Index: CX, Scale: 8}, DX)
+		} else {
+			ADDQ(Mem{Base: po0.Addr.Base, Disp: po0.Addr.Disp, Index: CX, Scale: 8}, DX)
+		}
+
 		temp := DX
 		// if temp == 0 {
 		//     temp = 1
@@ -935,7 +952,7 @@ func (o options) adjustOffsetInMemory(name string, moP, llP Mem, offsetB reg.GPV
 		MOVQ(temp, po0.Addr) // s.prevOffset[0] = temp
 		MOVQ(temp, offset)   // return temp
 	}
-	Label(name + "_end")
+	JMP(end)
 	return offset
 }
 
