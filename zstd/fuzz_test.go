@@ -16,10 +16,12 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/klauspost/compress/internal/cpuinfo"
 	"github.com/klauspost/compress/zip"
 )
 
 func FuzzDecodeAll(f *testing.F) {
+	defer cpuinfo.DisableBMI2()()
 	addBytesFromZip(f, "testdata/fuzz/decode-corpus-raw.zip", true)
 	addBytesFromZip(f, "testdata/fuzz/decode-corpus-encoded.zip", false)
 	decLow, err := NewReader(nil, WithDecoderLowmem(true), WithDecoderConcurrency(2), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true))

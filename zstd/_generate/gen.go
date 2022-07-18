@@ -183,6 +183,11 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			ec.moPtr = moP
 			ec.mlPtr = mlP
 			ec.llPtr = llP
+			zero := GP64()
+			XORQ(zero, zero)
+			MOVQ(zero, moP)
+			MOVQ(zero, mlP)
+			MOVQ(zero, llP)
 
 			ec.outBase = GP64()
 			ec.outEndPtr = AllocLocal(8)
@@ -598,16 +603,6 @@ func (o options) updateLength(name string, brValue, brBitsRead, state reg.GPVirt
 		TESTQ(CX.As64(), CX.As64())
 		CMOVQEQ(CX.As64(), BX) // BX is zero if n is zero
 
-		// Check if AX is reasonable
-		assert(func(ok LabelRef) {
-			CMPQ(AX, U32(1<<28))
-			JB(ok)
-		})
-		// Check if BX is reasonable
-		assert(func(ok LabelRef) {
-			CMPQ(BX, U32(1<<28))
-			JB(ok)
-		})
 		ADDQ(BX, AX)  // AX - mo + br.getBits(moB)
 		MOVQ(AX, out) // Store result
 	}
@@ -859,19 +854,12 @@ func (o options) adjustOffsetInMemory(name string, moP, llP Mem, offsetB reg.GPV
 	// if litLen == 0 {
 	//     offset++
 	// }
+
 	{
-		if true {
-			CMPQ(llP, U32(0))
-			JNE(LabelRef(name + "_offset_maybezero"))
-			INCQ(offset)
-			JMP(LabelRef(name + "_offset_nonzero"))
-		} else {
-			// No idea why this doesn't work:
-			tmp := GP64()
-			LEAQ(Mem{Base: offset, Disp: 1}, tmp)
-			CMPQ(llP, U32(0))
-			CMOVQEQ(tmp, offset)
-		}
+		CMPQ(llP, U32(0))
+		JNE(LabelRef(name + "_offset_maybezero"))
+		INCQ(offset)
+		JMP(LabelRef(name + "_offset_nonzero"))
 
 		// if offset == 0 {
 		//     return s.prevOffset[0]
@@ -886,6 +874,22 @@ func (o options) adjustOffsetInMemory(name string, moP, llP Mem, offsetB reg.GPV
 	}
 	Label(name + "_offset_nonzero")
 	{
+		// Offset must be 1 -> 3
+		assert(func(ok LabelRef) {
+			// Test is above or equal (shouldn't be equal)
+			CMPQ(offset, U32(0))
+			JAE(ok)
+		})
+		assert(func(ok LabelRef) {
+			// Check if Above 0.
+			CMPQ(offset, U32(0))
+			JA(ok)
+		})
+		assert(func(ok LabelRef) {
+			// Check if Below or Equal to 3.
+			CMPQ(offset, U32(3))
+			JBE(ok)
+		})
 		// if offset == 3 {
 		//     temp = s.prevOffset[0] - 1
 		// } else {
