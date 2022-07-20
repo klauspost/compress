@@ -21,7 +21,6 @@ import (
 )
 
 func FuzzDecodeAll(f *testing.F) {
-	defer cpuinfo.DisableBMI2()()
 	addBytesFromZip(f, "testdata/fuzz/decode-corpus-raw.zip", true)
 	addBytesFromZip(f, "testdata/fuzz/decode-corpus-encoded.zip", false)
 	decLow, err := NewReader(nil, WithDecoderLowmem(true), WithDecoderConcurrency(2), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true))
@@ -55,6 +54,15 @@ func FuzzDecodeAll(f *testing.F) {
 			t.Fatalf("Output mismatch, low: %v, hi: %v", err1, err2)
 		}
 	})
+}
+
+func FuzzDecodeAllNoBMI2(f *testing.F) {
+	if !cpuinfo.HasBMI2() {
+		f.Skip("No BMI, so already tested")
+		return
+	}
+	defer cpuinfo.DisableBMI2()()
+	FuzzDecodeAll(f)
 }
 
 func FuzzDecoder(f *testing.F) {

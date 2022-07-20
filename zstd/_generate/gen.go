@@ -594,16 +594,25 @@ func (o options) updateLength(name string, brValue, brBitsRead, state reg.GPVirt
 		MOVQ(state, AX.As64()) // So we can grab high bytes.
 		MOVQ(brBitsRead, CX.As64())
 		MOVQ(brValue, BX)
-		SHLQ(CX, BX)                // BX = br.value << br.bitsRead (part of getBits)
-		MOVB(AX.As8H(), CX.As8L())  // CX = moB  (ofState.addBits(), that is byte #1 of moState)
-		ADDQ(CX.As64(), brBitsRead) // br.bitsRead += n (part of getBits)
-		NEGL(CX.As32())             // CX = 64 - n
-		SHRQ(CX, BX)                // BX = (br.value << br.bitsRead) >> (64 - n) -- getBits() result
-		SHRQ(U8(32), AX)            // AX = mo (ofState.baselineInt(), that's the higher dword of moState)
+		SHLQ(CX, BX)               // BX = br.value << br.bitsRead (part of getBits)
+		MOVB(AX.As8H(), CX.As8L()) // CX = moB  (ofState.addBits(), that is byte #1 of moState)
+		SHRQ(U8(32), AX)           // AX = mo (ofState.baselineInt(), that's the higher dword of moState)
+		// If addBits == 0, skip
 		TESTQ(CX.As64(), CX.As64())
-		CMOVQEQ(CX.As64(), BX) // BX is zero if n is zero
+		JZ(LabelRef(name + "_zero"))
 
-		ADDQ(BX, AX)  // AX - mo + br.getBits(moB)
+		ADDQ(CX.As64(), brBitsRead) // br.bitsRead += n (part of getBits)
+		// If overread, skip
+		CMPQ(brBitsRead, U8(64))
+		JA(LabelRef(name + "_zero"))
+		CMPQ(CX.As64(), U8(64))
+		JAE(LabelRef(name + "_zero"))
+
+		NEGQ(CX.As64()) // CX = 64 - n
+		SHRQ(CX, BX)    // BX = (br.value << br.bitsRead) >> (64 - n) -- getBits() result
+		ADDQ(BX, AX)    // AX - mo + br.getBits(moB)
+
+		Label(name + "_zero")
 		MOVQ(AX, out) // Store result
 	}
 }
