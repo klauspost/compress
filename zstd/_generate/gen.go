@@ -17,7 +17,7 @@ import (
 )
 
 // insert extra checks here and there.
-const debug = true
+const debug = false
 
 // error reported when mo == 0 && ml > 0
 const errorMatchLenOfsMismatch = 1

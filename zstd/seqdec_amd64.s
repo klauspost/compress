@@ -150,12 +150,6 @@ sequenceDecs_decode_amd64_ll_update_zero:
 
 	// Update Literal Length State
 	MOVBQZX DI, R14
-	CMPQ    R14, $0x09
-	JBE     assert_check_0_ok_srcline_625
-	INT     $0x03
-	INT     $0x03
-
-assert_check_0_ok_srcline_625:
 	SHRQ    $0x10, DI
 	MOVWQZX DI, DI
 	LEAQ    (BX)(R14*1), CX
@@ -167,33 +161,15 @@ assert_check_0_ok_srcline_625:
 	SHLL    CL, BP
 	DECL    BP
 	ANDQ    BP, R15
-	CMPQ    R15, $0x00000200
-	JB      assert_check_1_ok_srcline_644
-	INT     $0x03
-	INT     $0x03
-
-assert_check_1_ok_srcline_644:
-	ADDQ R15, DI
+	ADDQ    R15, DI
 
 	// Load ctx.llTable
 	MOVQ ctx+16(FP), CX
 	MOVQ (CX), CX
-	CMPQ DI, $0x00000200
-	JB   assert_check_2_ok_srcline_662
-	INT  $0x03
-	INT  $0x03
-
-assert_check_2_ok_srcline_662:
 	MOVQ (CX)(DI*8), DI
 
 	// Update Match Length State
 	MOVBQZX R8, R14
-	CMPQ    R14, $0x09
-	JBE     assert_check_3_ok_srcline_625
-	INT     $0x03
-	INT     $0x03
-
-assert_check_3_ok_srcline_625:
 	SHRQ    $0x10, R8
 	MOVWQZX R8, R8
 	LEAQ    (BX)(R14*1), CX
@@ -205,33 +181,15 @@ assert_check_3_ok_srcline_625:
 	SHLL    CL, BP
 	DECL    BP
 	ANDQ    BP, R15
-	CMPQ    R15, $0x00000200
-	JB      assert_check_4_ok_srcline_644
-	INT     $0x03
-	INT     $0x03
-
-assert_check_4_ok_srcline_644:
-	ADDQ R15, R8
+	ADDQ    R15, R8
 
 	// Load ctx.mlTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 24(CX), CX
-	CMPQ R8, $0x00000200
-	JB   assert_check_5_ok_srcline_662
-	INT  $0x03
-	INT  $0x03
-
-assert_check_5_ok_srcline_662:
 	MOVQ (CX)(R8*8), R8
 
 	// Update Offset State
 	MOVBQZX R9, R14
-	CMPQ    R14, $0x09
-	JBE     assert_check_6_ok_srcline_625
-	INT     $0x03
-	INT     $0x03
-
-assert_check_6_ok_srcline_625:
 	SHRQ    $0x10, R9
 	MOVWQZX R9, R9
 	LEAQ    (BX)(R14*1), CX
@@ -243,23 +201,11 @@ assert_check_6_ok_srcline_625:
 	SHLL    CL, BP
 	DECL    BP
 	ANDQ    BP, R15
-	CMPQ    R15, $0x00000200
-	JB      assert_check_7_ok_srcline_644
-	INT     $0x03
-	INT     $0x03
-
-assert_check_7_ok_srcline_644:
-	ADDQ R15, R9
+	ADDQ    R15, R9
 
 	// Load ctx.ofTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 48(CX), CX
-	CMPQ R9, $0x00000200
-	JB   assert_check_8_ok_srcline_662
-	INT  $0x03
-	INT  $0x03
-
-assert_check_8_ok_srcline_662:
 	MOVQ (CX)(R9*8), R9
 
 sequenceDecs_decode_amd64_skip_update:
@@ -501,12 +447,6 @@ sequenceDecs_decode_56_amd64_ll_update_zero:
 
 	// Update Literal Length State
 	MOVBQZX DI, R14
-	CMPQ    R14, $0x09
-	JBE     assert_check_9_ok_srcline_625
-	INT     $0x03
-	INT     $0x03
-
-assert_check_9_ok_srcline_625:
 	SHRQ    $0x10, DI
 	MOVWQZX DI, DI
 	LEAQ    (BX)(R14*1), CX
@@ -518,33 +458,15 @@ assert_check_9_ok_srcline_625:
 	SHLL    CL, BP
 	DECL    BP
 	ANDQ    BP, R15
-	CMPQ    R15, $0x00000200
-	JB      assert_check_10_ok_srcline_644
-	INT     $0x03
-	INT     $0x03
-
-assert_check_10_ok_srcline_644:
-	ADDQ R15, DI
+	ADDQ    R15, DI
 
 	// Load ctx.llTable
 	MOVQ ctx+16(FP), CX
 	MOVQ (CX), CX
-	CMPQ DI, $0x00000200
-	JB   assert_check_11_ok_srcline_662
-	INT  $0x03
-	INT  $0x03
-
-assert_check_11_ok_srcline_662:
 	MOVQ (CX)(DI*8), DI
 
 	// Update Match Length State
 	MOVBQZX R8, R14
-	CMPQ    R14, $0x09
-	JBE     assert_check_12_ok_srcline_625
-	INT     $0x03
-	INT     $0x03
-
-assert_check_12_ok_srcline_625:
 	SHRQ    $0x10, R8
 	MOVWQZX R8, R8
 	LEAQ    (BX)(R14*1), CX
@@ -556,33 +478,15 @@ assert_check_12_ok_srcline_625:
 	SHLL    CL, BP
 	DECL    BP
 	ANDQ    BP, R15
-	CMPQ    R15, $0x00000200
-	JB      assert_check_13_ok_srcline_644
-	INT     $0x03
-	INT     $0x03
-
-assert_check_13_ok_srcline_644:
-	ADDQ R15, R8
+	ADDQ    R15, R8
 
 	// Load ctx.mlTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 24(CX), CX
-	CMPQ R8, $0x00000200
-	JB   assert_check_14_ok_srcline_662
-	INT  $0x03
-	INT  $0x03
-
-assert_check_14_ok_srcline_662:
 	MOVQ (CX)(R8*8), R8
 
 	// Update Offset State
 	MOVBQZX R9, R14
-	CMPQ    R14, $0x09
-	JBE     assert_check_15_ok_srcline_625
-	INT     $0x03
-	INT     $0x03
-
-assert_check_15_ok_srcline_625:
 	SHRQ    $0x10, R9
 	MOVWQZX R9, R9
 	LEAQ    (BX)(R14*1), CX
@@ -594,23 +498,11 @@ assert_check_15_ok_srcline_625:
 	SHLL    CL, BP
 	DECL    BP
 	ANDQ    BP, R15
-	CMPQ    R15, $0x00000200
-	JB      assert_check_16_ok_srcline_644
-	INT     $0x03
-	INT     $0x03
-
-assert_check_16_ok_srcline_644:
-	ADDQ R15, R9
+	ADDQ    R15, R9
 
 	// Load ctx.ofTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 48(CX), CX
-	CMPQ R9, $0x00000200
-	JB   assert_check_17_ok_srcline_662
-	INT  $0x03
-	INT  $0x03
-
-assert_check_17_ok_srcline_662:
 	MOVQ (CX)(R9*8), R9
 
 sequenceDecs_decode_56_amd64_skip_update:
@@ -868,12 +760,6 @@ sequenceDecs_decode_bmi2_fill_2_end:
 	// Load ctx.ofTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 48(CX), CX
-	CMPQ R8, $0x00000200
-	JB   assert_check_18_ok_srcline_695
-	INT  $0x03
-	INT  $0x03
-
-assert_check_18_ok_srcline_695:
 	MOVQ (CX)(R8*8), R8
 
 	// Update Match Length State
@@ -886,12 +772,6 @@ assert_check_18_ok_srcline_695:
 	// Load ctx.mlTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 24(CX), CX
-	CMPQ DI, $0x00000200
-	JB   assert_check_19_ok_srcline_695
-	INT  $0x03
-	INT  $0x03
-
-assert_check_19_ok_srcline_695:
 	MOVQ (CX)(DI*8), DI
 
 	// Update Literal Length State
@@ -903,12 +783,6 @@ assert_check_19_ok_srcline_695:
 	// Load ctx.llTable
 	MOVQ ctx+16(FP), CX
 	MOVQ (CX), CX
-	CMPQ SI, $0x00000200
-	JB   assert_check_20_ok_srcline_695
-	INT  $0x03
-	INT  $0x03
-
-assert_check_20_ok_srcline_695:
 	MOVQ (CX)(SI*8), SI
 
 sequenceDecs_decode_bmi2_skip_update:
@@ -1141,12 +1015,6 @@ sequenceDecs_decode_56_bmi2_fill_end:
 	// Load ctx.ofTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 48(CX), CX
-	CMPQ R8, $0x00000200
-	JB   assert_check_21_ok_srcline_695
-	INT  $0x03
-	INT  $0x03
-
-assert_check_21_ok_srcline_695:
 	MOVQ (CX)(R8*8), R8
 
 	// Update Match Length State
@@ -1159,12 +1027,6 @@ assert_check_21_ok_srcline_695:
 	// Load ctx.mlTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 24(CX), CX
-	CMPQ DI, $0x00000200
-	JB   assert_check_22_ok_srcline_695
-	INT  $0x03
-	INT  $0x03
-
-assert_check_22_ok_srcline_695:
 	MOVQ (CX)(DI*8), DI
 
 	// Update Literal Length State
@@ -1176,12 +1038,6 @@ assert_check_22_ok_srcline_695:
 	// Load ctx.llTable
 	MOVQ ctx+16(FP), CX
 	MOVQ (CX), CX
-	CMPQ SI, $0x00000200
-	JB   assert_check_23_ok_srcline_695
-	INT  $0x03
-	INT  $0x03
-
-assert_check_23_ok_srcline_695:
 	MOVQ (CX)(SI*8), SI
 
 sequenceDecs_decode_56_bmi2_skip_update:
@@ -1355,25 +1211,13 @@ check_offset:
 	JG   error_match_off_too_big
 
 	// Copy match from history
-	MOVQ  R12, R11
-	SUBQ  DI, R11
-	JLS   copy_match
-	TESTQ R10, R10
-	JNZ   assert_check_24_ok_srcline_1180
-	INT   $0x03
-	INT   $0x03
-
-assert_check_24_ok_srcline_1180:
+	MOVQ R12, R11
+	SUBQ DI, R11
+	JLS  copy_match
 	MOVQ R9, R14
 	SUBQ R11, R14
 	CMPQ R13, R11
 	JG   copy_all_from_history
-	CMPQ R13, $0x03
-	JAE  assert_check_25_ok_srcline_1315
-	INT  $0x03
-	INT  $0x03
-
-assert_check_25_ok_srcline_1315:
 	MOVQ R13, R11
 	SUBQ $0x10, R11
 	JB   copy_4_small
@@ -1433,12 +1277,6 @@ copy_4_end:
 	JMP  loop_finished
 
 copy_all_from_history:
-	CMPQ R11, $0x01
-	JAE  assert_check_26_ok_srcline_1315
-	INT  $0x03
-	INT  $0x03
-
-assert_check_26_ok_srcline_1315:
 	MOVQ R11, R15
 	SUBQ $0x10, R15
 	JB   copy_5_small
@@ -1608,15 +1446,9 @@ main_loop:
 	// Copy literals
 	TESTQ R11, R11
 	JZ    check_offset
-	CMPQ  R11, $0x01
-	JAE   assert_check_27_ok_srcline_1315
-	INT   $0x03
-	INT   $0x03
-
-assert_check_27_ok_srcline_1315:
-	MOVQ R11, R14
-	SUBQ $0x10, R14
-	JB   copy_1_small
+	MOVQ  R11, R14
+	SUBQ  $0x10, R14
+	JB    copy_1_small
 
 copy_1_loop:
 	MOVUPS (SI), X0
@@ -1686,25 +1518,13 @@ check_offset:
 	JG   error_match_off_too_big
 
 	// Copy match from history
-	MOVQ  R12, R11
-	SUBQ  DI, R11
-	JLS   copy_match
-	TESTQ R10, R10
-	JNZ   assert_check_28_ok_srcline_1180
-	INT   $0x03
-	INT   $0x03
-
-assert_check_28_ok_srcline_1180:
+	MOVQ R12, R11
+	SUBQ DI, R11
+	JLS  copy_match
 	MOVQ R9, R14
 	SUBQ R11, R14
 	CMPQ R13, R11
 	JG   copy_all_from_history
-	CMPQ R13, $0x03
-	JAE  assert_check_29_ok_srcline_1315
-	INT  $0x03
-	INT  $0x03
-
-assert_check_29_ok_srcline_1315:
 	MOVQ R13, R11
 	SUBQ $0x10, R11
 	JB   copy_4_small
@@ -1764,12 +1584,6 @@ copy_4_end:
 	JMP  loop_finished
 
 copy_all_from_history:
-	CMPQ R11, $0x01
-	JAE  assert_check_30_ok_srcline_1315
-	INT  $0x03
-	INT  $0x03
-
-assert_check_30_ok_srcline_1315:
 	MOVQ R11, R15
 	SUBQ $0x10, R15
 	JB   copy_5_small
@@ -1845,12 +1659,6 @@ copy_match:
 
 	// Copy non-overlapping match
 	ADDQ R13, DI
-	CMPQ R13, $0x01
-	JAE  assert_check_31_ok_srcline_1315
-	INT  $0x03
-	INT  $0x03
-
-assert_check_31_ok_srcline_1315:
 	MOVQ R13, R12
 	SUBQ $0x10, R12
 	JB   copy_2_small
@@ -2128,12 +1936,6 @@ sequenceDecs_decodeSync_amd64_ll_update_zero:
 
 	// Update Literal Length State
 	MOVBQZX DI, R13
-	CMPQ    R13, $0x09
-	JBE     assert_check_32_ok_srcline_625
-	INT     $0x03
-	INT     $0x03
-
-assert_check_32_ok_srcline_625:
 	SHRQ    $0x10, DI
 	MOVWQZX DI, DI
 	LEAQ    (BX)(R13*1), CX
@@ -2145,33 +1947,15 @@ assert_check_32_ok_srcline_625:
 	SHLL    CL, R15
 	DECL    R15
 	ANDQ    R15, R14
-	CMPQ    R14, $0x00000200
-	JB      assert_check_33_ok_srcline_644
-	INT     $0x03
-	INT     $0x03
-
-assert_check_33_ok_srcline_644:
-	ADDQ R14, DI
+	ADDQ    R14, DI
 
 	// Load ctx.llTable
 	MOVQ ctx+16(FP), CX
 	MOVQ (CX), CX
-	CMPQ DI, $0x00000200
-	JB   assert_check_34_ok_srcline_662
-	INT  $0x03
-	INT  $0x03
-
-assert_check_34_ok_srcline_662:
 	MOVQ (CX)(DI*8), DI
 
 	// Update Match Length State
 	MOVBQZX R8, R13
-	CMPQ    R13, $0x09
-	JBE     assert_check_35_ok_srcline_625
-	INT     $0x03
-	INT     $0x03
-
-assert_check_35_ok_srcline_625:
 	SHRQ    $0x10, R8
 	MOVWQZX R8, R8
 	LEAQ    (BX)(R13*1), CX
@@ -2183,33 +1967,15 @@ assert_check_35_ok_srcline_625:
 	SHLL    CL, R15
 	DECL    R15
 	ANDQ    R15, R14
-	CMPQ    R14, $0x00000200
-	JB      assert_check_36_ok_srcline_644
-	INT     $0x03
-	INT     $0x03
-
-assert_check_36_ok_srcline_644:
-	ADDQ R14, R8
+	ADDQ    R14, R8
 
 	// Load ctx.mlTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 24(CX), CX
-	CMPQ R8, $0x00000200
-	JB   assert_check_37_ok_srcline_662
-	INT  $0x03
-	INT  $0x03
-
-assert_check_37_ok_srcline_662:
 	MOVQ (CX)(R8*8), R8
 
 	// Update Offset State
 	MOVBQZX R9, R13
-	CMPQ    R13, $0x09
-	JBE     assert_check_38_ok_srcline_625
-	INT     $0x03
-	INT     $0x03
-
-assert_check_38_ok_srcline_625:
 	SHRQ    $0x10, R9
 	MOVWQZX R9, R9
 	LEAQ    (BX)(R13*1), CX
@@ -2221,23 +1987,11 @@ assert_check_38_ok_srcline_625:
 	SHLL    CL, R15
 	DECL    R15
 	ANDQ    R15, R14
-	CMPQ    R14, $0x00000200
-	JB      assert_check_39_ok_srcline_644
-	INT     $0x03
-	INT     $0x03
-
-assert_check_39_ok_srcline_644:
-	ADDQ R14, R9
+	ADDQ    R14, R9
 
 	// Load ctx.ofTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 48(CX), CX
-	CMPQ R9, $0x00000200
-	JB   assert_check_40_ok_srcline_662
-	INT  $0x03
-	INT  $0x03
-
-assert_check_40_ok_srcline_662:
 	MOVQ (CX)(R9*8), R9
 
 sequenceDecs_decodeSync_amd64_skip_update:
@@ -2264,45 +2018,15 @@ sequenceDecs_decodeSync_amd64_adjust_offset_maybezero:
 	JMP   sequenceDecs_decodeSync_amd64_after_adjust
 
 sequenceDecs_decodeSync_amd64_adjust_offset_nonzero:
-	CMPQ R13, $0x00000000
-	JAE  assert_check_41_ok_srcline_887
-	INT  $0x03
-	INT  $0x03
-
-assert_check_41_ok_srcline_887:
-	CMPQ R13, $0x00000000
-	JA   assert_check_42_ok_srcline_892
-	INT  $0x03
-	INT  $0x03
-
-assert_check_42_ok_srcline_892:
-	CMPQ R13, $0x00000003
-	JBE  assert_check_43_ok_srcline_897
-	INT  $0x03
-	INT  $0x03
-
-assert_check_43_ok_srcline_897:
 	MOVQ    R13, AX
 	XORQ    R14, R14
 	MOVQ    $-1, R15
 	CMPQ    R13, $0x03
 	CMOVQEQ R14, AX
 	CMOVQEQ R15, R14
-	CMPQ    AX, $0x00000000
-	JAE     assert_check_44_ok_srcline_925
-	INT     $0x03
-	INT     $0x03
-
-assert_check_44_ok_srcline_925:
-	CMPQ AX, $0x00000003
-	JB   assert_check_45_ok_srcline_929
-	INT  $0x03
-	INT  $0x03
-
-assert_check_45_ok_srcline_929:
-	ADDQ 144(CX)(AX*8), R14
-	JNZ  sequenceDecs_decodeSync_amd64_adjust_temp_valid
-	MOVQ $0x00000001, R14
+	ADDQ    144(CX)(AX*8), R14
+	JNZ     sequenceDecs_decodeSync_amd64_adjust_temp_valid
+	MOVQ    $0x00000001, R14
 
 sequenceDecs_decodeSync_amd64_adjust_temp_valid:
 	CMPQ R13, $0x01
@@ -2371,26 +2095,13 @@ check_offset:
 	JG   error_match_off_too_big
 
 	// Copy match from history
-	MOVQ  CX, AX
-	SUBQ  R12, AX
-	JLS   copy_match
-	MOVQ  40(SP), R14
-	TESTQ R14, R14
-	JNZ   assert_check_46_ok_srcline_1180
-	INT   $0x03
-	INT   $0x03
-
-assert_check_46_ok_srcline_1180:
+	MOVQ CX, AX
+	SUBQ R12, AX
+	JLS  copy_match
 	MOVQ 48(SP), R14
 	SUBQ AX, R14
 	CMPQ R13, AX
 	JG   copy_all_from_history
-	CMPQ R13, $0x03
-	JAE  assert_check_47_ok_srcline_1315
-	INT  $0x03
-	INT  $0x03
-
-assert_check_47_ok_srcline_1315:
 	MOVQ R13, AX
 	SUBQ $0x10, AX
 	JB   copy_4_small
@@ -2447,12 +2158,6 @@ copy_4_end:
 	JMP loop_finished
 
 copy_all_from_history:
-	CMPQ AX, $0x01
-	JAE  assert_check_48_ok_srcline_1315
-	INT  $0x03
-	INT  $0x03
-
-assert_check_48_ok_srcline_1315:
 	MOVQ AX, R15
 	SUBQ $0x10, R15
 	JB   copy_5_small
@@ -2774,12 +2479,6 @@ sequenceDecs_decodeSync_bmi2_fill_2_end:
 	// Load ctx.ofTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 48(CX), CX
-	CMPQ R8, $0x00000200
-	JB   assert_check_49_ok_srcline_695
-	INT  $0x03
-	INT  $0x03
-
-assert_check_49_ok_srcline_695:
 	MOVQ (CX)(R8*8), R8
 
 	// Update Match Length State
@@ -2792,12 +2491,6 @@ assert_check_49_ok_srcline_695:
 	// Load ctx.mlTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 24(CX), CX
-	CMPQ DI, $0x00000200
-	JB   assert_check_50_ok_srcline_695
-	INT  $0x03
-	INT  $0x03
-
-assert_check_50_ok_srcline_695:
 	MOVQ (CX)(DI*8), DI
 
 	// Update Literal Length State
@@ -2809,12 +2502,6 @@ assert_check_50_ok_srcline_695:
 	// Load ctx.llTable
 	MOVQ ctx+16(FP), CX
 	MOVQ (CX), CX
-	CMPQ SI, $0x00000200
-	JB   assert_check_51_ok_srcline_695
-	INT  $0x03
-	INT  $0x03
-
-assert_check_51_ok_srcline_695:
 	MOVQ (CX)(SI*8), SI
 
 sequenceDecs_decodeSync_bmi2_skip_update:
@@ -2841,45 +2528,15 @@ sequenceDecs_decodeSync_bmi2_adjust_offset_maybezero:
 	JMP   sequenceDecs_decodeSync_bmi2_after_adjust
 
 sequenceDecs_decodeSync_bmi2_adjust_offset_nonzero:
-	CMPQ R13, $0x00000000
-	JAE  assert_check_52_ok_srcline_887
-	INT  $0x03
-	INT  $0x03
-
-assert_check_52_ok_srcline_887:
-	CMPQ R13, $0x00000000
-	JA   assert_check_53_ok_srcline_892
-	INT  $0x03
-	INT  $0x03
-
-assert_check_53_ok_srcline_892:
-	CMPQ R13, $0x00000003
-	JBE  assert_check_54_ok_srcline_897
-	INT  $0x03
-	INT  $0x03
-
-assert_check_54_ok_srcline_897:
 	MOVQ    R13, R12
 	XORQ    R14, R14
 	MOVQ    $-1, R15
 	CMPQ    R13, $0x03
 	CMOVQEQ R14, R12
 	CMOVQEQ R15, R14
-	CMPQ    R12, $0x00000000
-	JAE     assert_check_55_ok_srcline_925
-	INT     $0x03
-	INT     $0x03
-
-assert_check_55_ok_srcline_925:
-	CMPQ R12, $0x00000003
-	JB   assert_check_56_ok_srcline_929
-	INT  $0x03
-	INT  $0x03
-
-assert_check_56_ok_srcline_929:
-	ADDQ 144(CX)(R12*8), R14
-	JNZ  sequenceDecs_decodeSync_bmi2_adjust_temp_valid
-	MOVQ $0x00000001, R14
+	ADDQ    144(CX)(R12*8), R14
+	JNZ     sequenceDecs_decodeSync_bmi2_adjust_temp_valid
+	MOVQ    $0x00000001, R14
 
 sequenceDecs_decodeSync_bmi2_adjust_temp_valid:
 	CMPQ R13, $0x01
@@ -2948,26 +2605,13 @@ check_offset:
 	JG   error_match_off_too_big
 
 	// Copy match from history
-	MOVQ  R12, CX
-	SUBQ  R11, CX
-	JLS   copy_match
-	MOVQ  40(SP), R14
-	TESTQ R14, R14
-	JNZ   assert_check_57_ok_srcline_1180
-	INT   $0x03
-	INT   $0x03
-
-assert_check_57_ok_srcline_1180:
+	MOVQ R12, CX
+	SUBQ R11, CX
+	JLS  copy_match
 	MOVQ 48(SP), R14
 	SUBQ CX, R14
 	CMPQ R13, CX
 	JG   copy_all_from_history
-	CMPQ R13, $0x03
-	JAE  assert_check_58_ok_srcline_1315
-	INT  $0x03
-	INT  $0x03
-
-assert_check_58_ok_srcline_1315:
 	MOVQ R13, CX
 	SUBQ $0x10, CX
 	JB   copy_4_small
@@ -3024,12 +2668,6 @@ copy_4_end:
 	JMP loop_finished
 
 copy_all_from_history:
-	CMPQ CX, $0x01
-	JAE  assert_check_59_ok_srcline_1315
-	INT  $0x03
-	INT  $0x03
-
-assert_check_59_ok_srcline_1315:
 	MOVQ CX, R15
 	SUBQ $0x10, R15
 	JB   copy_5_small
@@ -3360,12 +2998,6 @@ sequenceDecs_decodeSync_safe_amd64_ll_update_zero:
 
 	// Update Literal Length State
 	MOVBQZX DI, R13
-	CMPQ    R13, $0x09
-	JBE     assert_check_60_ok_srcline_625
-	INT     $0x03
-	INT     $0x03
-
-assert_check_60_ok_srcline_625:
 	SHRQ    $0x10, DI
 	MOVWQZX DI, DI
 	LEAQ    (BX)(R13*1), CX
@@ -3377,33 +3009,15 @@ assert_check_60_ok_srcline_625:
 	SHLL    CL, R15
 	DECL    R15
 	ANDQ    R15, R14
-	CMPQ    R14, $0x00000200
-	JB      assert_check_61_ok_srcline_644
-	INT     $0x03
-	INT     $0x03
-
-assert_check_61_ok_srcline_644:
-	ADDQ R14, DI
+	ADDQ    R14, DI
 
 	// Load ctx.llTable
 	MOVQ ctx+16(FP), CX
 	MOVQ (CX), CX
-	CMPQ DI, $0x00000200
-	JB   assert_check_62_ok_srcline_662
-	INT  $0x03
-	INT  $0x03
-
-assert_check_62_ok_srcline_662:
 	MOVQ (CX)(DI*8), DI
 
 	// Update Match Length State
 	MOVBQZX R8, R13
-	CMPQ    R13, $0x09
-	JBE     assert_check_63_ok_srcline_625
-	INT     $0x03
-	INT     $0x03
-
-assert_check_63_ok_srcline_625:
 	SHRQ    $0x10, R8
 	MOVWQZX R8, R8
 	LEAQ    (BX)(R13*1), CX
@@ -3415,33 +3029,15 @@ assert_check_63_ok_srcline_625:
 	SHLL    CL, R15
 	DECL    R15
 	ANDQ    R15, R14
-	CMPQ    R14, $0x00000200
-	JB      assert_check_64_ok_srcline_644
-	INT     $0x03
-	INT     $0x03
-
-assert_check_64_ok_srcline_644:
-	ADDQ R14, R8
+	ADDQ    R14, R8
 
 	// Load ctx.mlTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 24(CX), CX
-	CMPQ R8, $0x00000200
-	JB   assert_check_65_ok_srcline_662
-	INT  $0x03
-	INT  $0x03
-
-assert_check_65_ok_srcline_662:
 	MOVQ (CX)(R8*8), R8
 
 	// Update Offset State
 	MOVBQZX R9, R13
-	CMPQ    R13, $0x09
-	JBE     assert_check_66_ok_srcline_625
-	INT     $0x03
-	INT     $0x03
-
-assert_check_66_ok_srcline_625:
 	SHRQ    $0x10, R9
 	MOVWQZX R9, R9
 	LEAQ    (BX)(R13*1), CX
@@ -3453,23 +3049,11 @@ assert_check_66_ok_srcline_625:
 	SHLL    CL, R15
 	DECL    R15
 	ANDQ    R15, R14
-	CMPQ    R14, $0x00000200
-	JB      assert_check_67_ok_srcline_644
-	INT     $0x03
-	INT     $0x03
-
-assert_check_67_ok_srcline_644:
-	ADDQ R14, R9
+	ADDQ    R14, R9
 
 	// Load ctx.ofTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 48(CX), CX
-	CMPQ R9, $0x00000200
-	JB   assert_check_68_ok_srcline_662
-	INT  $0x03
-	INT  $0x03
-
-assert_check_68_ok_srcline_662:
 	MOVQ (CX)(R9*8), R9
 
 sequenceDecs_decodeSync_safe_amd64_skip_update:
@@ -3496,45 +3080,15 @@ sequenceDecs_decodeSync_safe_amd64_adjust_offset_maybezero:
 	JMP   sequenceDecs_decodeSync_safe_amd64_after_adjust
 
 sequenceDecs_decodeSync_safe_amd64_adjust_offset_nonzero:
-	CMPQ R13, $0x00000000
-	JAE  assert_check_69_ok_srcline_887
-	INT  $0x03
-	INT  $0x03
-
-assert_check_69_ok_srcline_887:
-	CMPQ R13, $0x00000000
-	JA   assert_check_70_ok_srcline_892
-	INT  $0x03
-	INT  $0x03
-
-assert_check_70_ok_srcline_892:
-	CMPQ R13, $0x00000003
-	JBE  assert_check_71_ok_srcline_897
-	INT  $0x03
-	INT  $0x03
-
-assert_check_71_ok_srcline_897:
 	MOVQ    R13, AX
 	XORQ    R14, R14
 	MOVQ    $-1, R15
 	CMPQ    R13, $0x03
 	CMOVQEQ R14, AX
 	CMOVQEQ R15, R14
-	CMPQ    AX, $0x00000000
-	JAE     assert_check_72_ok_srcline_925
-	INT     $0x03
-	INT     $0x03
-
-assert_check_72_ok_srcline_925:
-	CMPQ AX, $0x00000003
-	JB   assert_check_73_ok_srcline_929
-	INT  $0x03
-	INT  $0x03
-
-assert_check_73_ok_srcline_929:
-	ADDQ 144(CX)(AX*8), R14
-	JNZ  sequenceDecs_decodeSync_safe_amd64_adjust_temp_valid
-	MOVQ $0x00000001, R14
+	ADDQ    144(CX)(AX*8), R14
+	JNZ     sequenceDecs_decodeSync_safe_amd64_adjust_temp_valid
+	MOVQ    $0x00000001, R14
 
 sequenceDecs_decodeSync_safe_amd64_adjust_temp_valid:
 	CMPQ R13, $0x01
@@ -3581,15 +3135,9 @@ sequenceDecs_decodeSync_safe_amd64_match_len_ofs_ok:
 	// Copy literals
 	TESTQ AX, AX
 	JZ    check_offset
-	CMPQ  AX, $0x01
-	JAE   assert_check_74_ok_srcline_1315
-	INT   $0x03
-	INT   $0x03
-
-assert_check_74_ok_srcline_1315:
-	MOVQ AX, R14
-	SUBQ $0x10, R14
-	JB   copy_1_small
+	MOVQ  AX, R14
+	SUBQ  $0x10, R14
+	JB    copy_1_small
 
 copy_1_loop:
 	MOVUPS (R11), X0
@@ -3660,26 +3208,13 @@ check_offset:
 	JG   error_match_off_too_big
 
 	// Copy match from history
-	MOVQ  CX, AX
-	SUBQ  R12, AX
-	JLS   copy_match
-	MOVQ  40(SP), R14
-	TESTQ R14, R14
-	JNZ   assert_check_75_ok_srcline_1180
-	INT   $0x03
-	INT   $0x03
-
-assert_check_75_ok_srcline_1180:
+	MOVQ CX, AX
+	SUBQ R12, AX
+	JLS  copy_match
 	MOVQ 48(SP), R14
 	SUBQ AX, R14
 	CMPQ R13, AX
 	JG   copy_all_from_history
-	CMPQ R13, $0x03
-	JAE  assert_check_76_ok_srcline_1315
-	INT  $0x03
-	INT  $0x03
-
-assert_check_76_ok_srcline_1315:
 	MOVQ R13, AX
 	SUBQ $0x10, AX
 	JB   copy_4_small
@@ -3736,12 +3271,6 @@ copy_4_end:
 	JMP loop_finished
 
 copy_all_from_history:
-	CMPQ AX, $0x01
-	JAE  assert_check_77_ok_srcline_1315
-	INT  $0x03
-	INT  $0x03
-
-assert_check_77_ok_srcline_1315:
 	MOVQ AX, R15
 	SUBQ $0x10, R15
 	JB   copy_5_small
@@ -3817,12 +3346,6 @@ copy_match:
 
 	// Copy non-overlapping match
 	ADDQ R13, R12
-	CMPQ R13, $0x01
-	JAE  assert_check_78_ok_srcline_1315
-	INT  $0x03
-	INT  $0x03
-
-assert_check_78_ok_srcline_1315:
 	MOVQ R13, CX
 	SUBQ $0x10, CX
 	JB   copy_2_small
@@ -4120,12 +3643,6 @@ sequenceDecs_decodeSync_safe_bmi2_fill_2_end:
 	// Load ctx.ofTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 48(CX), CX
-	CMPQ R8, $0x00000200
-	JB   assert_check_79_ok_srcline_695
-	INT  $0x03
-	INT  $0x03
-
-assert_check_79_ok_srcline_695:
 	MOVQ (CX)(R8*8), R8
 
 	// Update Match Length State
@@ -4138,12 +3655,6 @@ assert_check_79_ok_srcline_695:
 	// Load ctx.mlTable
 	MOVQ ctx+16(FP), CX
 	MOVQ 24(CX), CX
-	CMPQ DI, $0x00000200
-	JB   assert_check_80_ok_srcline_695
-	INT  $0x03
-	INT  $0x03
-
-assert_check_80_ok_srcline_695:
 	MOVQ (CX)(DI*8), DI
 
 	// Update Literal Length State
@@ -4155,12 +3666,6 @@ assert_check_80_ok_srcline_695:
 	// Load ctx.llTable
 	MOVQ ctx+16(FP), CX
 	MOVQ (CX), CX
-	CMPQ SI, $0x00000200
-	JB   assert_check_81_ok_srcline_695
-	INT  $0x03
-	INT  $0x03
-
-assert_check_81_ok_srcline_695:
 	MOVQ (CX)(SI*8), SI
 
 sequenceDecs_decodeSync_safe_bmi2_skip_update:
@@ -4187,45 +3692,15 @@ sequenceDecs_decodeSync_safe_bmi2_adjust_offset_maybezero:
 	JMP   sequenceDecs_decodeSync_safe_bmi2_after_adjust
 
 sequenceDecs_decodeSync_safe_bmi2_adjust_offset_nonzero:
-	CMPQ R13, $0x00000000
-	JAE  assert_check_82_ok_srcline_887
-	INT  $0x03
-	INT  $0x03
-
-assert_check_82_ok_srcline_887:
-	CMPQ R13, $0x00000000
-	JA   assert_check_83_ok_srcline_892
-	INT  $0x03
-	INT  $0x03
-
-assert_check_83_ok_srcline_892:
-	CMPQ R13, $0x00000003
-	JBE  assert_check_84_ok_srcline_897
-	INT  $0x03
-	INT  $0x03
-
-assert_check_84_ok_srcline_897:
 	MOVQ    R13, R12
 	XORQ    R14, R14
 	MOVQ    $-1, R15
 	CMPQ    R13, $0x03
 	CMOVQEQ R14, R12
 	CMOVQEQ R15, R14
-	CMPQ    R12, $0x00000000
-	JAE     assert_check_85_ok_srcline_925
-	INT     $0x03
-	INT     $0x03
-
-assert_check_85_ok_srcline_925:
-	CMPQ R12, $0x00000003
-	JB   assert_check_86_ok_srcline_929
-	INT  $0x03
-	INT  $0x03
-
-assert_check_86_ok_srcline_929:
-	ADDQ 144(CX)(R12*8), R14
-	JNZ  sequenceDecs_decodeSync_safe_bmi2_adjust_temp_valid
-	MOVQ $0x00000001, R14
+	ADDQ    144(CX)(R12*8), R14
+	JNZ     sequenceDecs_decodeSync_safe_bmi2_adjust_temp_valid
+	MOVQ    $0x00000001, R14
 
 sequenceDecs_decodeSync_safe_bmi2_adjust_temp_valid:
 	CMPQ R13, $0x01
@@ -4272,15 +3747,9 @@ sequenceDecs_decodeSync_safe_bmi2_match_len_ofs_ok:
 	// Copy literals
 	TESTQ CX, CX
 	JZ    check_offset
-	CMPQ  CX, $0x01
-	JAE   assert_check_87_ok_srcline_1315
-	INT   $0x03
-	INT   $0x03
-
-assert_check_87_ok_srcline_1315:
-	MOVQ CX, R14
-	SUBQ $0x10, R14
-	JB   copy_1_small
+	MOVQ  CX, R14
+	SUBQ  $0x10, R14
+	JB    copy_1_small
 
 copy_1_loop:
 	MOVUPS (R10), X0
@@ -4351,26 +3820,13 @@ check_offset:
 	JG   error_match_off_too_big
 
 	// Copy match from history
-	MOVQ  R12, CX
-	SUBQ  R11, CX
-	JLS   copy_match
-	MOVQ  40(SP), R14
-	TESTQ R14, R14
-	JNZ   assert_check_88_ok_srcline_1180
-	INT   $0x03
-	INT   $0x03
-
-assert_check_88_ok_srcline_1180:
+	MOVQ R12, CX
+	SUBQ R11, CX
+	JLS  copy_match
 	MOVQ 48(SP), R14
 	SUBQ CX, R14
 	CMPQ R13, CX
 	JG   copy_all_from_history
-	CMPQ R13, $0x03
-	JAE  assert_check_89_ok_srcline_1315
-	INT  $0x03
-	INT  $0x03
-
-assert_check_89_ok_srcline_1315:
 	MOVQ R13, CX
 	SUBQ $0x10, CX
 	JB   copy_4_small
@@ -4427,12 +3883,6 @@ copy_4_end:
 	JMP loop_finished
 
 copy_all_from_history:
-	CMPQ CX, $0x01
-	JAE  assert_check_90_ok_srcline_1315
-	INT  $0x03
-	INT  $0x03
-
-assert_check_90_ok_srcline_1315:
 	MOVQ CX, R15
 	SUBQ $0x10, R15
 	JB   copy_5_small
@@ -4508,12 +3958,6 @@ copy_match:
 
 	// Copy non-overlapping match
 	ADDQ R13, R11
-	CMPQ R13, $0x01
-	JAE  assert_check_91_ok_srcline_1315
-	INT  $0x03
-	INT  $0x03
-
-assert_check_91_ok_srcline_1315:
 	MOVQ R13, R12
 	SUBQ $0x10, R12
 	JB   copy_2_small
