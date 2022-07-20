@@ -279,7 +279,10 @@ func addBytesFromZip(f *testing.F, filename string, raw bool) {
 	if err != nil {
 		f.Fatal(err)
 	}
-	for _, file := range zr.File {
+	for i, file := range zr.File {
+		if testing.Short() && i%10 != 0 {
+			continue
+		}
 		rc, err := file.Open()
 		if err != nil {
 			f.Fatal(err)
