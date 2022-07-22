@@ -951,10 +951,11 @@ The length is specified by reading the 3-bit length specified in the tag and dec
 | 7      | 65540 + read 3 bytes |
 
 This allows any repeat offset + length to be represented by 2 to 5 bytes.
+It also allows to emit matches longer than 64 bytes with one copy + one repeat instead of several 64 byte copies.
 
 Lengths are stored as little endian values.
 
-The first copy of a block cannot be a repeat offset and the offset is not carried across blocks in streams.
+The first copy of a block cannot be a repeat offset and the offset is reset on every block in streams.
 
 Default streaming block size is 1MB.
 
