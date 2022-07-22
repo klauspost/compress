@@ -28,6 +28,9 @@ func s2Decode(dst, src []byte) int {
 
 	// As long as we can read at least 5 bytes...
 	for s < len(src)-5 {
+		// Removing bounds checks is SLOWER, when if doing
+		// in := src[s:s+5]
+		// Checked on Go 1.18
 		switch src[s] & 0x03 {
 		case tagLiteral:
 			x := uint32(src[s] >> 2)
@@ -67,8 +70,8 @@ func s2Decode(dst, src []byte) int {
 
 		case tagCopy1:
 			s += 2
-			length = int(src[s-2]) >> 2 & 0x7
 			toffset := int(uint32(src[s-2])&0xe0<<3 | uint32(src[s-1]))
+			length = int(src[s-2]) >> 2 & 0x7
 			if toffset == 0 {
 				if debug {
 					fmt.Print("(repeat) ")
@@ -76,7 +79,7 @@ func s2Decode(dst, src []byte) int {
 				// keep last offset
 				switch length {
 				case 5:
-					length = int(uint32(src[s])) + 4
+					length = int(src[s]) + 4
 					s += 1
 				case 6:
 					in := src[s : s+2]
@@ -94,14 +97,14 @@ func s2Decode(dst, src []byte) int {
 			length += 4
 		case tagCopy2:
 			in := src[s : s+3]
-			length = 1 + int(in[0])>>2
 			offset = int(uint32(in[1]) | uint32(in[2])<<8)
+			length = 1 + int(in[0])>>2
 			s += 3
 
 		case tagCopy4:
 			in := src[s : s+5]
-			length = 1 + int(in[0])>>2
 			offset = int(uint32(in[1]) | uint32(in[2])<<8 | uint32(in[3])<<16 | uint32(in[4])<<24)
+			length = 1 + int(in[0])>>2
 			s += 5
 		}
 
