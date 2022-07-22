@@ -835,6 +835,13 @@ This is done using the regular "Skip" function:
 
 This will ensure that we are at exactly the offset we want, and reading from `dec` will start at the requested offset.
 
+# Compact storage
+
+For compact storage [RemoveIndexHeaders](https://pkg.go.dev/github.com/klauspost/compress/s2#RemoveIndexHeaders) can be used to remove any redundant info from 
+a serialized index. If you remove the header it must be restored before [Loading](https://pkg.go.dev/github.com/klauspost/compress/s2#Index.Load).
+
+This is expected to save 20 bytes. These can be restored using [RestoreIndexHeaders](https://pkg.go.dev/github.com/klauspost/compress/s2#RestoreIndexHeaders). This removes a layer of security, but is the most compact representation. Returns nil if headers contains errors.
+
 ## Index Format:
 
 Each block is structured as a snappy skippable block, with the chunk ID 0x99.
@@ -928,6 +935,7 @@ To decode from any given uncompressed offset `(wantOffset)`:
 * Discard `entry[n-1].UncompressedOffset - wantOffset` bytes from the decoded stream.
 
 See [using indexes](https://github.com/klauspost/compress/tree/master/s2#using-indexes) for functions that perform the operations with a simpler interface.
+
 
 # Format Extensions
 
