@@ -502,22 +502,6 @@ func (d *Decoder) nextBlockSync() (ok bool) {
 				d.current.err = ErrDecoderSizeExceeded
 				return false
 			}
-			if d.frame.FrameContentSize != fcsUnknown {
-				if !d.o.limitToCap && d.frame.FrameContentSize > d.o.maxDecodedSize {
-					if debugDecoder {
-						println("decoder size exceeded, fcs:", d.frame.FrameContentSize, "> mds", d.o.maxDecodedSize)
-					}
-					d.current.err = ErrDecoderSizeExceeded
-					return false
-				}
-				if d.o.limitToCap && d.frame.FrameContentSize > uint64(cap(d.frame.history.b)-len(d.frame.history.b)) {
-					if debugDecoder {
-						println("decoder size exceeded, fcs:", d.frame.FrameContentSize, "> cap", cap(d.frame.history.b)-len(d.frame.history.b))
-					}
-					d.current.err = ErrDecoderSizeExceeded
-					return false
-				}
-			}
 
 			d.syncStream.decodedFrame = 0
 			d.syncStream.inFrame = true
