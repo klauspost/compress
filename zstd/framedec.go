@@ -389,11 +389,13 @@ func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {
 		if err != nil {
 			break
 		}
-		if uint64(len(d.history.b)) > d.o.maxDecodedSize {
+		if uint64(len(d.history.b)-crcStart) > d.o.maxDecodedSize {
+			println("runDecoder: maxDecodedSize exceeded", uint64(len(d.history.b)-crcStart), ">", d.o.maxDecodedSize)
 			err = ErrDecoderSizeExceeded
 			break
 		}
 		if d.o.limitToCap && len(d.history.b) > cap(dst) {
+			println("runDecoder: cap exceeded", uint64(len(d.history.b)), ">", cap(dst))
 			err = ErrDecoderSizeExceeded
 			break
 		}
