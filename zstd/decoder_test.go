@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -1898,5 +1899,36 @@ func timeout(after time.Duration) (cancel func()) {
 	}()
 	return func() {
 		close(cc)
+	}
+}
+
+func TestWithDecodeAllCapLimit(t *testing.T) {
+	enc, _ := NewWriter(nil, WithZeroFrames(true), WithWindowSize(4<<10))
+	dec, _ := NewReader(nil, WithDecodeAllCapLimit(true))
+	for sz := 0; sz < 1<<20; sz = (sz + 1) * 2 {
+		sz := sz
+		t.Run(strconv.Itoa(sz), func(t *testing.T) {
+			encoded := enc.EncodeAll(make([]byte, sz), nil)
+			for i := sz - 1; i < sz+1; i++ {
+				if i < 0 {
+					continue
+				}
+				const existinglen = 5
+				got, err := dec.DecodeAll(encoded, make([]byte, existinglen, i+existinglen))
+				if i < sz {
+					if err != ErrDecoderSizeExceeded {
+						t.Errorf("cap: %d, want %v, got %v", i, ErrDecoderSizeExceeded, err)
+					}
+				} else {
+					if err != nil {
+						t.Errorf("cap: %d, want %v, got %v", i, nil, err)
+						continue
+					}
+					if len(got) != existinglen+i {
+						t.Errorf("cap: %d, want output size %d, got %d", i, existinglen+i, len(got))
+					}
+				}
+			}
+		})
 	}
 }

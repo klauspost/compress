@@ -355,6 +355,15 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 		}
 		if frame.FrameContentSize != fcsUnknown {
 			if frame.FrameContentSize > d.o.maxDecodedSize-uint64(len(dst)) {
+				if debugDecoder {
+					println("decoder size exceeded:", frame.FrameContentSize, ">", d.o.maxDecodedSize-uint64(len(dst)))
+				}
+				return dst, ErrDecoderSizeExceeded
+			}
+			if d.o.limitToCap && frame.FrameContentSize > uint64(cap(dst)-len(dst)) {
+				if debugDecoder {
+					println("decoder size exceeded:", frame.FrameContentSize, ">", cap(dst)-len(dst))
+				}
 				return dst, ErrDecoderSizeExceeded
 			}
 			if cap(dst)-len(dst) < int(frame.FrameContentSize) {
@@ -364,7 +373,7 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 			}
 		}
 
-		if cap(dst) == 0 {
+		if cap(dst) == 0 && !d.o.limitToCap {
 			// Allocate len(input) * 2 by default if nothing is provided
 			// and we didn't get frame content size.
 			size := len(input) * 2
@@ -492,6 +501,22 @@ func (d *Decoder) nextBlockSync() (ok bool) {
 			if d.frame.WindowSize > d.o.maxDecodedSize || d.frame.WindowSize > d.o.maxWindowSize {
 				d.current.err = ErrDecoderSizeExceeded
 				return false
+			}
+			if d.frame.FrameContentSize != fcsUnknown {
+				if !d.o.limitToCap && d.frame.FrameContentSize > d.o.maxDecodedSize {
+					if debugDecoder {
+						println("decoder size exceeded, fcs:", d.frame.FrameContentSize, "> mds", d.o.maxDecodedSize)
+					}
+					d.current.err = ErrDecoderSizeExceeded
+					return false
+				}
+				if d.o.limitToCap && d.frame.FrameContentSize > uint64(cap(d.frame.history.b)-len(d.frame.history.b)) {
+					if debugDecoder {
+						println("decoder size exceeded, fcs:", d.frame.FrameContentSize, "> cap", cap(d.frame.history.b)-len(d.frame.history.b))
+					}
+					d.current.err = ErrDecoderSizeExceeded
+					return false
+				}
 			}
 
 			d.syncStream.decodedFrame = 0
@@ -852,6 +877,10 @@ decodeStream:
 			}
 		}
 		if err == nil && d.frame.WindowSize > d.o.maxWindowSize {
+			if debugDecoder {
+				println("decoder size exceeded, fws:", d.frame.WindowSize, "> mws:", d.o.maxWindowSize)
+			}
+
 			err = ErrDecoderSizeExceeded
 		}
 		if err != nil {
