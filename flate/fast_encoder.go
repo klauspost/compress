@@ -27,7 +27,7 @@ func newFastEnc(level int) fastEnc {
 	case 4:
 		return &fastEncL4{fastGen: fastGen{cur: maxStoreBlockSize}}
 	case 5:
-		return &fastEncL5{fastGen: fastGen{cur: maxStoreBlockSize}}
+		return &fastEncL5ND{fastGen: fastGen{cur: maxStoreBlockSize}}
 	case 6:
 		return &fastEncL6{fastGen: fastGen{cur: maxStoreBlockSize}}
 	default:
