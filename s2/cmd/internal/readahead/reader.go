@@ -10,7 +10,6 @@
 // is likely to speed up copies.
 //
 // Package home: https://github.com/klauspost/readahead
-//
 package readahead
 
 import (

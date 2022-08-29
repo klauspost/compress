@@ -1,7 +1,6 @@
 package main
 
 //go:generate go run gen.go -out ../seqdec_amd64.s -pkg=zstd
-//go:generate gofmt -w ../encodeblock_amd64.go
 
 import (
 	"flag"
