@@ -1,6 +1,7 @@
 package main
 
 //go:generate go run gen.go -out ../decompress_amd64.s -pkg=huff0
+//go:generate gofmt -w ../decompress_amd64.go
 
 import (
 	"flag"
@@ -104,7 +105,8 @@ func (d decompress4x) generateProcedure(name string) {
 }
 
 // TODO [wmu]: I believe it's doable in avo, but can't figure out how to deal
-//             with arbitrary pointers to a given type
+//
+//	with arbitrary pointers to a given type
 const bitReader_in = 0
 const bitReader_off = bitReader_in + 3*8 // {ptr, len, cap}
 const bitReader_value = bitReader_off + 8
