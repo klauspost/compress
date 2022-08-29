@@ -10,7 +10,6 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
-	"io/ioutil"
 	"os"
 	rdebug "runtime/debug"
 	"strconv"
@@ -96,8 +95,8 @@ func FuzzDecoder(f *testing.F) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		b1, err1 := ioutil.ReadAll(decLow)
-		b2, err2 := ioutil.ReadAll(decHi)
+		b1, err1 := io.ReadAll(decLow)
+		b2, err2 := io.ReadAll(decHi)
 		if err1 != err2 {
 			t.Log(err1, err2)
 		}

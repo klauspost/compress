@@ -7,9 +7,9 @@ package gzhttp
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"runtime"
 	"testing"
 
@@ -18,7 +18,7 @@ import (
 )
 
 func TestTransport(t *testing.T) {
-	bin, err := ioutil.ReadFile("testdata/benchmark.json")
+	bin, err := os.ReadFile("testdata/benchmark.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +30,7 @@ func TestTransport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := ioutil.ReadAll(resp.Body)
+	got, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestTransport(t *testing.T) {
 }
 
 func TestTransportForced(t *testing.T) {
-	raw, err := ioutil.ReadFile("testdata/benchmark.json")
+	raw, err := os.ReadFile("testdata/benchmark.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestTransportForced(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := ioutil.ReadAll(resp.Body)
+	got, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestTransportForced(t *testing.T) {
 }
 
 func TestTransportForcedDisabled(t *testing.T) {
-	raw, err := ioutil.ReadFile("testdata/benchmark.json")
+	raw, err := os.ReadFile("testdata/benchmark.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestTransportForcedDisabled(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := ioutil.ReadAll(resp.Body)
+	got, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestTransportForcedDisabled(t *testing.T) {
 }
 
 func TestTransportZstd(t *testing.T) {
-	bin, err := ioutil.ReadFile("testdata/benchmark.json")
+	bin, err := os.ReadFile("testdata/benchmark.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestTransportZstd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := ioutil.ReadAll(resp.Body)
+	got, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestTransportZstd(t *testing.T) {
 }
 
 func TestTransportInvalid(t *testing.T) {
-	bin, err := ioutil.ReadFile("testdata/benchmark.json")
+	bin, err := os.ReadFile("testdata/benchmark.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,14 +132,14 @@ func TestTransportInvalid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = ioutil.ReadAll(resp.Body)
+	_, err = io.ReadAll(resp.Body)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
 }
 
 func TestTransportZstdDisabled(t *testing.T) {
-	raw, err := ioutil.ReadFile("testdata/benchmark.json")
+	raw, err := os.ReadFile("testdata/benchmark.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +154,7 @@ func TestTransportZstdDisabled(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := ioutil.ReadAll(resp.Body)
+	got, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +164,7 @@ func TestTransportZstdDisabled(t *testing.T) {
 }
 
 func TestTransportZstdInvalid(t *testing.T) {
-	bin, err := ioutil.ReadFile("testdata/benchmark.json")
+	bin, err := os.ReadFile("testdata/benchmark.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +176,7 @@ func TestTransportZstdInvalid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = ioutil.ReadAll(resp.Body)
+	_, err = io.ReadAll(resp.Body)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -184,7 +184,7 @@ func TestTransportZstdInvalid(t *testing.T) {
 }
 
 func TestDefaultTransport(t *testing.T) {
-	bin, err := ioutil.ReadFile("testdata/benchmark.json")
+	bin, err := os.ReadFile("testdata/benchmark.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +197,7 @@ func TestDefaultTransport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := ioutil.ReadAll(resp.Body)
+	got, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestDefaultTransport(t *testing.T) {
 }
 
 func BenchmarkTransport(b *testing.B) {
-	raw, err := ioutil.ReadFile("testdata/benchmark.json")
+	raw, err := os.ReadFile("testdata/benchmark.json")
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -243,7 +243,7 @@ func BenchmarkTransport(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			n, err := io.Copy(ioutil.Discard, resp.Body)
+			n, err := io.Copy(io.Discard, resp.Body)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -264,7 +264,7 @@ func BenchmarkTransport(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			n, err := io.Copy(ioutil.Discard, resp.Body)
+			n, err := io.Copy(io.Discard, resp.Body)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -286,7 +286,7 @@ func BenchmarkTransport(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			n, err := io.Copy(ioutil.Discard, resp.Body)
+			n, err := io.Copy(io.Discard, resp.Body)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -314,7 +314,7 @@ func BenchmarkTransport(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				n, err := io.Copy(ioutil.Discard, resp.Body)
+				n, err := io.Copy(io.Discard, resp.Body)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -340,7 +340,7 @@ func BenchmarkTransport(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				n, err := io.Copy(ioutil.Discard, resp.Body)
+				n, err := io.Copy(io.Discard, resp.Body)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -369,7 +369,7 @@ func BenchmarkTransport(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				n, err := io.Copy(ioutil.Discard, resp.Body)
+				n, err := io.Copy(io.Discard, resp.Body)
 				if err != nil {
 					b.Fatal(err)
 				}

@@ -7,7 +7,7 @@ package flate
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
+	"os"
 	"runtime"
 	"strings"
 	"testing"
@@ -16,7 +16,7 @@ import (
 func TestNlitOutOfRange(t *testing.T) {
 	// Trying to decode this bogus flate data, which has a Huffman table
 	// with nlit=288, should not panic.
-	io.Copy(ioutil.Discard, NewReader(strings.NewReader(
+	io.Copy(io.Discard, NewReader(strings.NewReader(
 		"\xfc\xfe\x36\xe7\x5e\x1c\xef\xb3\x55\x58\x77\xb6\x56\xb5\x43\xf4"+
 			"\x6f\xf2\xd2\xe6\x3d\x99\xa0\x85\x8c\x48\xeb\xf8\xda\x83\x04\x2a"+
 			"\x75\xc4\xf8\x0f\x12\x11\xb9\xb4\x4b\x09\xa0\xbe\x8b\x91\x4c")))
@@ -43,7 +43,7 @@ func benchmarkDecode(b *testing.B, testfile, level, n int) {
 	b.ReportAllocs()
 	b.StopTimer()
 	b.SetBytes(int64(n))
-	buf0, err := ioutil.ReadFile(testfiles[testfile])
+	buf0, err := os.ReadFile(testfiles[testfile])
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func benchmarkDecode(b *testing.B, testfile, level, n int) {
 	res := r.(Resetter)
 	for i := 0; i < b.N; i++ {
 		res.Reset(bytes.NewReader(buf1), nil)
-		io.Copy(ioutil.Discard, r)
+		io.Copy(io.Discard, r)
 	}
 }
 

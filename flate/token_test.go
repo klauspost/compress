@@ -2,7 +2,7 @@ package flate
 
 import (
 	"bytes"
-	"io/ioutil"
+	"os"
 	"testing"
 )
 
@@ -13,7 +13,7 @@ type testFatal interface {
 // loadTestTokens will load test tokens.
 // First block from enwik9, varint encoded.
 func loadTestTokens(t testFatal) *tokens {
-	b, err := ioutil.ReadFile("testdata/tokens.bin")
+	b, err := os.ReadFile("testdata/tokens.bin")
 	if err != nil {
 		t.Fatal(err)
 	}
