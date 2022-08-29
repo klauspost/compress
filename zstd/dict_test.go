@@ -13,24 +13,7 @@ import (
 func TestDecoder_SmallDict(t *testing.T) {
 	// All files have CRC
 	zr := testCreateZipReader("testdata/dict-tests-small.zip", t)
-	var dicts [][]byte
-	for _, tt := range zr.File {
-		if !strings.HasSuffix(tt.Name, ".dict") {
-			continue
-		}
-		func() {
-			r, err := tt.Open()
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer r.Close()
-			in, err := ioutil.ReadAll(r)
-			if err != nil {
-				t.Fatal(err)
-			}
-			dicts = append(dicts, in)
-		}()
-	}
+	dicts := readDicts(t, zr)
 	dec, err := NewReader(nil, WithDecoderConcurrency(1), WithDecoderDicts(dicts...))
 	if err != nil {
 		t.Fatal(err)
@@ -452,4 +435,26 @@ func TestDecoder_MoreDicts2(t *testing.T) {
 			}
 		})
 	}
+}
+
+func readDicts(tb testing.TB, zr *zip.Reader) [][]byte {
+	var dicts [][]byte
+	for _, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, ".dict") {
+			continue
+		}
+		func() {
+			r, err := tt.Open()
+			if err != nil {
+				tb.Fatal(err)
+			}
+			defer r.Close()
+			in, err := ioutil.ReadAll(r)
+			if err != nil {
+				tb.Fatal(err)
+			}
+			dicts = append(dicts, in)
+		}()
+	}
+	return dicts
 }

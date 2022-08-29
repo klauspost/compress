@@ -183,6 +183,11 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			ec.moPtr = moP
 			ec.mlPtr = mlP
 			ec.llPtr = llP
+			zero := GP64()
+			XORQ(zero, zero)
+			MOVQ(zero, moP)
+			MOVQ(zero, mlP)
+			MOVQ(zero, llP)
 
 			ec.outBase = GP64()
 			ec.outEndPtr = AllocLocal(8)
@@ -298,7 +303,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			MOVBQZX(total.As8(), total) // total = llState.As8() + mlState.As8() + ofState.As8()
 
 			// Read `total` bits
-			bits := o.getBitsValue(name+"_getBits", total, brValue, brBitsRead)
+			bits := o.getBits(total, brValue, brBitsRead)
 
 			// Update states
 			Comment("Update Offset State")
@@ -338,11 +343,14 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 	Comment("Adjust offset")
 
 	var offset reg.GPVirtual
+	end := LabelRef(name + "_after_adjust")
 	if o.useSeqs {
-		offset = o.adjustOffset(name+"_adjust", moP, llP, R14, &offsets)
+		offset = o.adjustOffset(name+"_adjust", moP, llP, R14, &offsets, end)
 	} else {
-		offset = o.adjustOffsetInMemory(name+"_adjust", moP, llP, R14)
+		offset = o.adjustOffsetInMemory(name+"_adjust", moP, llP, R14, end)
 	}
+	Label(name + "_after_adjust")
+
 	MOVQ(offset, moP) // Store offset
 
 	Comment("Check values")
@@ -586,26 +594,25 @@ func (o options) updateLength(name string, brValue, brBitsRead, state reg.GPVirt
 		MOVQ(state, AX.As64()) // So we can grab high bytes.
 		MOVQ(brBitsRead, CX.As64())
 		MOVQ(brValue, BX)
-		SHLQ(CX, BX)                // BX = br.value << br.bitsRead (part of getBits)
-		MOVB(AX.As8H(), CX.As8L())  // CX = moB  (ofState.addBits(), that is byte #1 of moState)
-		ADDQ(CX.As64(), brBitsRead) // br.bitsRead += n (part of getBits)
-		NEGL(CX.As32())             // CX = 64 - n
-		SHRQ(CX, BX)                // BX = (br.value << br.bitsRead) >> (64 - n) -- getBits() result
-		SHRQ(U8(32), AX)            // AX = mo (ofState.baselineInt(), that's the higher dword of moState)
+		SHLQ(CX, BX)               // BX = br.value << br.bitsRead (part of getBits)
+		MOVB(AX.As8H(), CX.As8L()) // CX = moB  (ofState.addBits(), that is byte #1 of moState)
+		SHRQ(U8(32), AX)           // AX = mo (ofState.baselineInt(), that's the higher dword of moState)
+		// If addBits == 0, skip
 		TESTQ(CX.As64(), CX.As64())
-		CMOVQEQ(CX.As64(), BX) // BX is zero if n is zero
+		JZ(LabelRef(name + "_zero"))
 
-		// Check if AX is reasonable
-		assert(func(ok LabelRef) {
-			CMPQ(AX, U32(1<<28))
-			JB(ok)
-		})
-		// Check if BX is reasonable
-		assert(func(ok LabelRef) {
-			CMPQ(BX, U32(1<<28))
-			JB(ok)
-		})
-		ADDQ(BX, AX)  // AX - mo + br.getBits(moB)
+		ADDQ(CX.As64(), brBitsRead) // br.bitsRead += n (part of getBits)
+		// If overread, skip
+		CMPQ(brBitsRead, U8(64))
+		JA(LabelRef(name + "_zero"))
+		CMPQ(CX.As64(), U8(64))
+		JAE(LabelRef(name + "_zero"))
+
+		NEGQ(CX.As64()) // CX = 64 - n
+		SHRQ(CX, BX)    // BX = (br.value << br.bitsRead) >> (64 - n) -- getBits() result
+		ADDQ(BX, AX)    // AX - mo + br.getBits(moB)
+
+		Label(name + "_zero")
 		MOVQ(AX, out) // Store result
 	}
 }
@@ -632,14 +639,13 @@ func (o options) updateState(name string, state, brValue, brBitsRead reg.GPVirtu
 	}
 
 	{
-		lowBits := o.getBits(name+"_getBits", AX, brValue, brBitsRead, LabelRef(name+"_skip_zero"))
+		lowBits := o.getBits(AX, brValue, brBitsRead)
 		// Check if below tablelog
 		assert(func(ok LabelRef) {
 			CMPQ(lowBits, U32(512))
 			JB(ok)
 		})
 		ADDQ(lowBits, DX)
-		Label(name + "_skip_zero")
 	}
 
 	// Load table pointer
@@ -695,58 +701,30 @@ func (o options) nextState(name string, state, lowBits reg.GPVirtual, table stri
 }
 
 // getBits will return nbits bits from brValue.
-// If nbits == 0 it *may* jump to jmpZero, otherwise 0 is returned.
-func (o options) getBits(name string, nBits, brValue, brBitsRead reg.GPVirtual, jmpZero LabelRef) reg.GPVirtual {
+func (o options) getBits(nBits, brValue, brBitsRead reg.GPVirtual) reg.GPVirtual {
 	BX := GP64()
 	CX := reg.CL
+
+	LEAQ(Mem{Base: brBitsRead, Index: nBits, Scale: 1}, CX.As64())
+	MOVQ(brValue, BX)
+	MOVQ(CX.As64(), brBitsRead)
+	ROLQ(CX, BX)
+
+	// BX &= (1<<nBits) - 1
 	if o.bmi2 {
-		LEAQ(Mem{Base: brBitsRead, Index: nBits, Scale: 1}, CX.As64())
-		MOVQ(brValue, BX)
-		MOVQ(CX.As64(), brBitsRead)
-		ROLQ(CX, BX)
 		BZHIQ(nBits, BX, BX)
 	} else {
-		CMPQ(nBits, U8(0))
-		JZ(jmpZero)
-		MOVQ(brBitsRead, CX.As64())
-		ADDQ(nBits, brBitsRead)
-		MOVQ(brValue, BX)
-		SHLQ(CX, BX)
-		MOVQ(nBits, CX.As64())
-		NEGQ(CX.As64())
-		SHRQ(CX, BX)
+		mask := GP32()
+		MOVL(U32(1), mask)
+		MOVB(nBits.As8(), CX)
+		SHLL(CX, mask)
+		DECL(mask)
+		ANDQ(mask.As64(), BX)
 	}
 	return BX
 }
 
-// getBits will return nbits bits from brValue.
-// If nbits == 0 then 0 is returned.
-func (o options) getBitsValue(name string, nBits, brValue, brBitsRead reg.GPVirtual) reg.GPVirtual {
-	BX := GP64()
-	CX := reg.CL
-	if o.bmi2 {
-		LEAQ(Mem{Base: brBitsRead, Index: nBits, Scale: 1}, CX.As64())
-		MOVQ(brValue, BX)
-		MOVQ(CX.As64(), brBitsRead)
-		ROLQ(CX, BX)
-		BZHIQ(nBits, BX, BX)
-	} else {
-		XORQ(BX, BX)
-		CMPQ(nBits, U8(0))
-		JZ(LabelRef(name + "_get_bits_value_zero"))
-		MOVQ(brBitsRead, CX.As64())
-		ADDQ(nBits, brBitsRead)
-		MOVQ(brValue, BX)
-		SHLQ(CX, BX)
-		MOVQ(nBits, CX.As64())
-		NEGQ(CX.As64())
-		SHRQ(CX, BX)
-		Label(name + "_get_bits_value_zero")
-	}
-	return BX
-}
-
-func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual, offsets *[3]reg.GPVirtual) (offset reg.GPVirtual) {
+func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual, offsets *[3]reg.GPVirtual, end LabelRef) (offset reg.GPVirtual) {
 	offset = GP64()
 	MOVQ(moP, offset)
 	{
@@ -762,7 +740,7 @@ func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual, 
 		MOVQ(offsets[1], offsets[2]) //  s.prevOffset[2] = s.prevOffset[1]
 		MOVQ(offsets[0], offsets[1]) // s.prevOffset[1] = s.prevOffset[0]
 		MOVQ(offset, offsets[0])     // s.prevOffset[0] = offset
-		JMP(LabelRef(name + "_end"))
+		JMP(end)
 	}
 
 	Label(name + "_offsetB_1_or_0")
@@ -791,7 +769,7 @@ func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual, 
 			TESTQ(offset, offset)
 			JNZ(LabelRef(name + "_offset_nonzero"))
 			MOVQ(offsets[0], offset)
-			JMP(LabelRef(name + "_end"))
+			JMP(end)
 		}
 	}
 	Label(name + "_offset_nonzero")
@@ -850,13 +828,13 @@ func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual, 
 		MOVQ(temp, offsets[0])
 		MOVQ(temp, offset) // return temp
 	}
-	Label(name + "_end")
+	JMP(end)
 	return offset
 }
 
 // adjustOffsetInMemory is an adjustOffset version that does not cache prevOffset values in registers.
 // It fetches and stores values directly into the fields of `sequenceDecs` structure.
-func (o options) adjustOffsetInMemory(name string, moP, llP Mem, offsetB reg.GPVirtual) (offset reg.GPVirtual) {
+func (o options) adjustOffsetInMemory(name string, moP, llP Mem, offsetB reg.GPVirtual, end LabelRef) (offset reg.GPVirtual) {
 	s := Dereference(Param("s"))
 
 	po0, _ := s.Field("prevOffset").Index(0).Resolve()
@@ -878,26 +856,19 @@ func (o options) adjustOffsetInMemory(name string, moP, llP Mem, offsetB reg.GPV
 		MOVUPS(po0.Addr, tmp)  // tmp = (s.prevOffset[0], s.prevOffset[1])
 		MOVQ(offset, po0.Addr) // s.prevOffset[0] = offset
 		MOVUPS(tmp, po1.Addr)  // s.prevOffset[1], s.prevOffset[2] = s.prevOffset[0], s.prevOffset[1]
-		JMP(LabelRef(name + "_end"))
+		JMP(end)
 	}
 
 	Label(name + "_offsetB_1_or_0")
 	// if litLen == 0 {
 	//     offset++
 	// }
+
 	{
-		if true {
-			CMPQ(llP, U32(0))
-			JNE(LabelRef(name + "_offset_maybezero"))
-			INCQ(offset)
-			JMP(LabelRef(name + "_offset_nonzero"))
-		} else {
-			// No idea why this doesn't work:
-			tmp := GP64()
-			LEAQ(Mem{Base: offset, Disp: 1}, tmp)
-			CMPQ(llP, U32(0))
-			CMOVQEQ(tmp, offset)
-		}
+		CMPQ(llP, U32(0))
+		JNE(LabelRef(name + "_offset_maybezero"))
+		INCQ(offset)
+		JMP(LabelRef(name + "_offset_nonzero"))
 
 		// if offset == 0 {
 		//     return s.prevOffset[0]
@@ -907,11 +878,27 @@ func (o options) adjustOffsetInMemory(name string, moP, llP Mem, offsetB reg.GPV
 			TESTQ(offset, offset)
 			JNZ(LabelRef(name + "_offset_nonzero"))
 			MOVQ(po0.Addr, offset)
-			JMP(LabelRef(name + "_end"))
+			JMP(end)
 		}
 	}
 	Label(name + "_offset_nonzero")
 	{
+		// Offset must be 1 -> 3
+		assert(func(ok LabelRef) {
+			// Test is above or equal (shouldn't be equal)
+			CMPQ(offset, U32(0))
+			JAE(ok)
+		})
+		assert(func(ok LabelRef) {
+			// Check if Above 0.
+			CMPQ(offset, U32(0))
+			JA(ok)
+		})
+		assert(func(ok LabelRef) {
+			// Check if Below or Equal to 3.
+			CMPQ(offset, U32(3))
+			JBE(ok)
+		})
 		// if offset == 3 {
 		//     temp = s.prevOffset[0] - 1
 		// } else {
@@ -935,9 +922,23 @@ func (o options) adjustOffsetInMemory(name string, moP, llP Mem, offsetB reg.GPV
 		CMPQ(offset, U8(3))
 		CMOVQEQ(DX, CX)
 		CMOVQEQ(R15, DX)
-		prevOffset := GP64()
-		LEAQ(po0.Addr, prevOffset) // &prevOffset[0]
-		ADDQ(Mem{Base: prevOffset, Index: CX, Scale: 8}, DX)
+		assert(func(ok LabelRef) {
+			CMPQ(CX, U32(0))
+			JAE(ok)
+		})
+		assert(func(ok LabelRef) {
+			CMPQ(CX, U32(3))
+			JB(ok)
+		})
+		if po0.Addr.Index != nil {
+			// Use temporary (not currently needed)
+			prevOffset := GP64()
+			LEAQ(po0.Addr, prevOffset) // &prevOffset[0]
+			ADDQ(Mem{Base: prevOffset, Index: CX, Scale: 8}, DX)
+		} else {
+			ADDQ(Mem{Base: po0.Addr.Base, Disp: po0.Addr.Disp, Index: CX, Scale: 8}, DX)
+		}
+
 		temp := DX
 		// if temp == 0 {
 		//     temp = 1
@@ -964,7 +965,7 @@ func (o options) adjustOffsetInMemory(name string, moP, llP Mem, offsetB reg.GPV
 		MOVQ(temp, po0.Addr) // s.prevOffset[0] = temp
 		MOVQ(temp, offset)   // return temp
 	}
-	Label(name + "_end")
+	JMP(end)
 	return offset
 }
 

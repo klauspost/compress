@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -1898,5 +1899,58 @@ func timeout(after time.Duration) (cancel func()) {
 	}()
 	return func() {
 		close(cc)
+	}
+}
+
+func TestWithDecodeAllCapLimit(t *testing.T) {
+	var encs []*Encoder
+	var decs []*Decoder
+	addEnc := func(e *Encoder, _ error) {
+		encs = append(encs, e)
+	}
+	addDec := func(d *Decoder, _ error) {
+		decs = append(decs, d)
+	}
+	addEnc(NewWriter(nil, WithZeroFrames(true), WithWindowSize(4<<10)))
+	addEnc(NewWriter(nil, WithEncoderConcurrency(1), WithWindowSize(4<<10)))
+	addEnc(NewWriter(nil, WithZeroFrames(false), WithWindowSize(4<<10)))
+	addEnc(NewWriter(nil, WithWindowSize(128<<10)))
+	addDec(NewReader(nil, WithDecodeAllCapLimit(true)))
+	addDec(NewReader(nil, WithDecodeAllCapLimit(true), WithDecoderConcurrency(1)))
+	addDec(NewReader(nil, WithDecodeAllCapLimit(true), WithDecoderLowmem(true)))
+	addDec(NewReader(nil, WithDecodeAllCapLimit(true), WithDecoderMaxWindow(128<<10)))
+	addDec(NewReader(nil, WithDecodeAllCapLimit(true), WithDecoderMaxMemory(1<<20)))
+	for sz := 0; sz < 1<<20; sz = (sz + 1) * 2 {
+		sz := sz
+		t.Run(strconv.Itoa(sz), func(t *testing.T) {
+			t.Parallel()
+			for ei, enc := range encs {
+				for di, dec := range decs {
+					t.Run(fmt.Sprintf("e%d:d%d", ei, di), func(t *testing.T) {
+						encoded := enc.EncodeAll(make([]byte, sz), nil)
+						for i := sz - 1; i < sz+1; i++ {
+							if i < 0 {
+								continue
+							}
+							const existinglen = 5
+							got, err := dec.DecodeAll(encoded, make([]byte, existinglen, i+existinglen))
+							if i < sz {
+								if err != ErrDecoderSizeExceeded {
+									t.Errorf("cap: %d, want %v, got %v", i, ErrDecoderSizeExceeded, err)
+								}
+							} else {
+								if err != nil {
+									t.Errorf("cap: %d, want %v, got %v", i, nil, err)
+									continue
+								}
+								if len(got) != existinglen+i {
+									t.Errorf("cap: %d, want output size %d, got %d", i, existinglen+i, len(got))
+								}
+							}
+						}
+					})
+				}
+			}
+		})
 	}
 }
