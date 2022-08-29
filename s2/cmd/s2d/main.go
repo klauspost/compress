@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"runtime"
@@ -82,7 +81,7 @@ Options:`)
 	if len(args) == 1 && args[0] == "-" {
 		r.Reset(os.Stdin)
 		if *verify {
-			_, err := io.Copy(ioutil.Discard, r)
+			_, err := io.Copy(io.Discard, r)
 			exitErr(err)
 			return
 		}
@@ -169,9 +168,9 @@ Options:`)
 					} else {
 						r.Reset(bytes.NewBuffer(b))
 						if *cpu > 1 {
-							output, err = r.DecodeConcurrent(ioutil.Discard, *cpu)
+							output, err = r.DecodeConcurrent(io.Discard, *cpu)
 						} else {
-							output, err = io.Copy(ioutil.Discard, r)
+							output, err = io.Copy(io.Discard, r)
 						}
 						exitErr(err)
 					}
@@ -264,7 +263,7 @@ Options:`)
 			var out io.Writer
 			switch {
 			case *verify:
-				out = ioutil.Discard
+				out = io.Discard
 			case *stdout:
 				out = os.Stdout
 			default:
@@ -281,7 +280,7 @@ Options:`)
 			var decoded io.Reader
 			start := time.Now()
 			if block {
-				all, err := ioutil.ReadAll(src)
+				all, err := io.ReadAll(src)
 				exitErr(err)
 				b, err := s2.Decode(nil, all)
 				exitErr(err)

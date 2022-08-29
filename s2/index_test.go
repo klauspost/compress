@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"sync"
 	"testing"
@@ -80,7 +79,7 @@ func ExampleIndex_Load() {
 		fatalErr(err)
 
 		// Read the rest of the stream...
-		got, err := ioutil.ReadAll(dec)
+		got, err := io.ReadAll(dec)
 		fatalErr(err)
 		if bytes.Equal(got, want) {
 			fmt.Println("Successfully skipped forward to", wantOffset)

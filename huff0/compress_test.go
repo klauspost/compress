@@ -3,8 +3,9 @@ package huff0
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -25,29 +26,29 @@ var testfiles = []struct {
 	// Digits is the digits of the irrational number e. Its decimal representation
 	// does not repeat, but there are only 10 possible digits, so it should be
 	// reasonably compressible.
-	{name: "digits", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/e.txt") }},
+	{name: "digits", fn: func() ([]byte, error) { return os.ReadFile("../testdata/e.txt") }},
 	// gettysburg.txt is a small plain text.
-	{name: "gettysburg", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/gettysburg.txt") }},
+	{name: "gettysburg", fn: func() ([]byte, error) { return os.ReadFile("../testdata/gettysburg.txt") }},
 	// Twain is Project Gutenberg's edition of Mark Twain's classic English novel.
-	{name: "twain", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/Mark.Twain-Tom.Sawyer.txt") }},
+	{name: "twain", fn: func() ([]byte, error) { return os.ReadFile("../testdata/Mark.Twain-Tom.Sawyer.txt") }},
 	// Random bytes
-	{name: "random", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/sharnd.out") }, err1X: ErrIncompressible, err4X: ErrIncompressible},
+	{name: "random", fn: func() ([]byte, error) { return os.ReadFile("../testdata/sharnd.out") }, err1X: ErrIncompressible, err4X: ErrIncompressible},
 	// Low entropy
 	{name: "low-ent.10k", fn: func() ([]byte, error) { return []byte(strings.Repeat("1221", 10000)), nil }},
 	// Super Low entropy
 	{name: "superlow-ent-10k", fn: func() ([]byte, error) { return []byte(strings.Repeat("1", 10000) + strings.Repeat("2", 500)), nil }},
 	// Zero bytes
 	{name: "zeroes", fn: func() ([]byte, error) { return make([]byte, 10000), nil }, err1X: ErrUseRLE, err4X: ErrUseRLE},
-	{name: "crash1", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/crash1.bin") }, err1X: ErrIncompressible, err4X: ErrIncompressible},
-	{name: "crash2", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/crash2.bin") }, err4X: ErrIncompressible},
-	{name: "crash3", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/crash3.bin") }, err1X: ErrIncompressible, err4X: ErrIncompressible},
-	{name: "endzerobits", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/endzerobits.bin") }, err1X: nil, err4X: ErrIncompressible},
-	{name: "endnonzero", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/endnonzero.bin") }, err4X: ErrIncompressible},
-	{name: "case1", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/case1.bin") }, err1X: nil},
-	{name: "case2", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/case2.bin") }, err1X: nil},
-	{name: "case3", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/case3.bin") }, err1X: nil},
-	{name: "pngdata.001", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/pngdata.bin") }, err1X: nil},
-	{name: "normcount2", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/normcount2.bin") }, err1X: nil},
+	{name: "crash1", fn: func() ([]byte, error) { return os.ReadFile("../testdata/crash1.bin") }, err1X: ErrIncompressible, err4X: ErrIncompressible},
+	{name: "crash2", fn: func() ([]byte, error) { return os.ReadFile("../testdata/crash2.bin") }, err4X: ErrIncompressible},
+	{name: "crash3", fn: func() ([]byte, error) { return os.ReadFile("../testdata/crash3.bin") }, err1X: ErrIncompressible, err4X: ErrIncompressible},
+	{name: "endzerobits", fn: func() ([]byte, error) { return os.ReadFile("../testdata/endzerobits.bin") }, err1X: nil, err4X: ErrIncompressible},
+	{name: "endnonzero", fn: func() ([]byte, error) { return os.ReadFile("../testdata/endnonzero.bin") }, err4X: ErrIncompressible},
+	{name: "case1", fn: func() ([]byte, error) { return os.ReadFile("../testdata/case1.bin") }, err1X: nil},
+	{name: "case2", fn: func() ([]byte, error) { return os.ReadFile("../testdata/case2.bin") }, err1X: nil},
+	{name: "case3", fn: func() ([]byte, error) { return os.ReadFile("../testdata/case3.bin") }, err1X: nil},
+	{name: "pngdata.001", fn: func() ([]byte, error) { return os.ReadFile("../testdata/pngdata.bin") }, err1X: nil},
+	{name: "normcount2", fn: func() ([]byte, error) { return os.ReadFile("../testdata/normcount2.bin") }, err1X: nil},
 }
 
 type fuzzInput struct {
@@ -60,7 +61,7 @@ type fuzzInput struct {
 var testfilesExtended []fuzzInput
 
 func init() {
-	data, err := ioutil.ReadFile("testdata/regression.zip")
+	data, err := os.ReadFile("testdata/regression.zip")
 	if err != nil {
 		panic(err)
 	}
@@ -76,7 +77,7 @@ func init() {
 		if err != nil {
 			panic(err)
 		}
-		b, err := ioutil.ReadAll(rc)
+		b, err := io.ReadAll(rc)
 		if err != nil {
 			panic(err)
 		}
@@ -522,7 +523,7 @@ func BenchmarkDeflate(b *testing.B) {
 			continue
 		}
 		b.Run(test.name, func(b *testing.B) {
-			dec, err := flate.NewWriter(ioutil.Discard, flate.HuffmanOnly)
+			dec, err := flate.NewWriter(io.Discard, flate.HuffmanOnly)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -540,7 +541,7 @@ func BenchmarkDeflate(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(buf0)))
 			for i := 0; i < b.N; i++ {
-				dec.Reset(ioutil.Discard)
+				dec.Reset(io.Discard)
 				n, err := dec.Write(buf0)
 				if err != nil {
 					b.Fatal(err)

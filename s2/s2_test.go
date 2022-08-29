@@ -11,7 +11,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"net/http"
@@ -589,7 +588,7 @@ const (
 
 func TestDecodeGoldenInput(t *testing.T) {
 	tDir := filepath.FromSlash(*testdataDir)
-	src, err := ioutil.ReadFile(filepath.Join(tDir, goldenCompressed))
+	src, err := os.ReadFile(filepath.Join(tDir, goldenCompressed))
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)
 	}
@@ -597,7 +596,7 @@ func TestDecodeGoldenInput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
-	want, err := ioutil.ReadFile(filepath.Join(tDir, goldenText))
+	want, err := os.ReadFile(filepath.Join(tDir, goldenText))
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)
 	}
@@ -691,7 +690,7 @@ func TestEncoderSkip(t *testing.T) {
 					want := src[i:]
 					dec.Reset(bytes.NewBuffer(compressed))
 					// Read some of it first
-					read, err := io.CopyN(ioutil.Discard, dec, int64(len(want)/10))
+					read, err := io.CopyN(io.Discard, dec, int64(len(want)/10))
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -701,7 +700,7 @@ func TestEncoderSkip(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					got, err := ioutil.ReadAll(dec)
+					got, err := io.ReadAll(dec)
 					if err != nil {
 						t.Errorf("Skipping %d returned error: %v", i, err)
 						return
@@ -770,7 +769,7 @@ func TestFramingFormat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dst, err := ioutil.ReadAll(NewReader(buf))
+	dst, err := io.ReadAll(NewReader(buf))
 	if err != nil {
 		t.Fatalf("ReadAll: decoding: %v", err)
 	}
@@ -806,7 +805,7 @@ func TestFramingFormatBetter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dst, err := ioutil.ReadAll(NewReader(buf))
+	dst, err := io.ReadAll(NewReader(buf))
 	if err != nil {
 		t.Fatalf("ReadAll: decoding: %v", err)
 	}
@@ -963,7 +962,7 @@ loop:
 			t.Errorf("i=%#02x: Close: %v", i, err)
 			continue
 		}
-		got, err := ioutil.ReadAll(NewReader(buf))
+		got, err := io.ReadAll(NewReader(buf))
 		if err != nil {
 			t.Errorf("i=%#02x: ReadAll: %v", i, err)
 			continue
@@ -999,7 +998,7 @@ func TestReaderUncompressedDataOK(t *testing.T) {
 		"\x68\x10\xe6\xb6" + // Checksum.
 		"\x61\x62\x63\x64", // Uncompressed payload: "abcd".
 	))
-	g, err := ioutil.ReadAll(r)
+	g, err := io.ReadAll(r)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1013,7 +1012,7 @@ func TestReaderUncompressedDataNoPayload(t *testing.T) {
 		"\x01\x04\x00\x00" + // Uncompressed chunk, 4 bytes long.
 		"", // No payload; corrupt input.
 	))
-	if _, err := ioutil.ReadAll(r); err != ErrCorrupt {
+	if _, err := io.ReadAll(r); err != ErrCorrupt {
 		t.Fatalf("got %v, want %v", err, ErrCorrupt)
 	}
 }
@@ -1028,7 +1027,7 @@ func TestReaderUncompressedDataTooLong(t *testing.T) {
 		strings.Repeat("\x00", n),
 	))
 	// CRC is not set, so we should expect that error.
-	if _, err := ioutil.ReadAll(r); err != ErrCRC {
+	if _, err := io.ReadAll(r); err != ErrCRC {
 		t.Fatalf("got %v, want %v", err, ErrCRC)
 	}
 
@@ -1040,7 +1039,7 @@ func TestReaderUncompressedDataTooLong(t *testing.T) {
 		string([]byte{chunkTypeUncompressedData, uint8(n32), uint8(n32 >> 8), uint8(n32 >> 16)}) +
 		strings.Repeat("\x00", n),
 	))
-	if _, err := ioutil.ReadAll(r); err != ErrCorrupt {
+	if _, err := io.ReadAll(r); err != ErrCorrupt {
 		t.Fatalf("got %v, want %v", err, ErrCorrupt)
 	}
 }
@@ -1070,7 +1069,7 @@ func TestReaderReset(t *testing.T) {
 			continue
 		}
 		r.Reset(strings.NewReader(s))
-		got, err := ioutil.ReadAll(r)
+		got, err := io.ReadAll(r)
 		switch s {
 		case encoded:
 			if err != nil {
@@ -1110,7 +1109,7 @@ func TestWriterReset(t *testing.T) {
 		if err := w.Flush(); err != nil {
 			t.Errorf("#%d: Flush: %v", i, err)
 			failed = true
-			got, err := ioutil.ReadAll(NewReader(buf))
+			got, err := io.ReadAll(NewReader(buf))
 			if err != nil {
 				t.Errorf("#%d: ReadAll: %v", i, err)
 				failed = true
@@ -1145,7 +1144,7 @@ func TestWriterResetWithoutFlush(t *testing.T) {
 	if err := w.Flush(); err != nil {
 		t.Fatalf("Flush: %v", err)
 	}
-	got, err := ioutil.ReadAll(NewReader(buf1))
+	got, err := io.ReadAll(NewReader(buf1))
 	if err != nil {
 		t.Fatalf("ReadAll: %v", err)
 	}
@@ -1231,7 +1230,7 @@ func testWriterRoundtrip(t *testing.T, src []byte, opts ...WriterOption) {
 
 	t.Logf("encoded to %d -> %d bytes", len(src), buf.Len())
 	dec := NewReader(&buf)
-	decoded, err := ioutil.ReadAll(dec)
+	decoded, err := io.ReadAll(dec)
 	if err != nil {
 		t.Error(err)
 		return
@@ -1370,7 +1369,7 @@ func testSnappyDecode(t *testing.T, src []byte) {
 	enc.Close()
 	t.Logf("encoded to %d -> %d bytes", len(src), buf.Len())
 	dec := NewReader(&buf)
-	decoded, err := ioutil.ReadAll(dec)
+	decoded, err := io.ReadAll(dec)
 	if err != nil {
 		t.Error(err)
 		return
@@ -1510,7 +1509,7 @@ func testOrBenchmark(b testing.TB) string {
 }
 
 func readFile(b testing.TB, filename string) []byte {
-	src, err := ioutil.ReadFile(filename)
+	src, err := os.ReadFile(filename)
 	if err != nil {
 		b.Skipf("skipping %s: %v", testOrBenchmark(b), err)
 	}
@@ -2065,12 +2064,12 @@ func TestDataRoundtrips(t *testing.T) {
 		test(t, data)
 	})
 	t.Run("4f9e1a0", func(t *testing.T) {
-		comp, _ := ioutil.ReadFile("testdata/4f9e1a0da7915a3d69632f5613ed78bc998a8a23.zst")
+		comp, _ := os.ReadFile("testdata/4f9e1a0da7915a3d69632f5613ed78bc998a8a23.zst")
 		dec, _ := zstd.NewReader(bytes.NewBuffer(comp))
-		data, _ := ioutil.ReadAll(dec)
+		data, _ := io.ReadAll(dec)
 		test(t, data)
 	})
-	data, err := ioutil.ReadFile("testdata/enc_regressions.zip")
+	data, err := os.ReadFile("testdata/enc_regressions.zip")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2088,7 +2087,7 @@ func TestDataRoundtrips(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			b, err := ioutil.ReadAll(r)
+			b, err := io.ReadAll(r)
 			if err != nil {
 				t.Error(err)
 				return

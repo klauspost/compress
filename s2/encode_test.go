@@ -8,8 +8,8 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
+	"os"
 	"runtime"
 	"strings"
 	"testing"
@@ -74,7 +74,7 @@ func (zeroReader) Read(p []byte) (int, error) {
 }
 
 func TestEncoderRegression(t *testing.T) {
-	data, err := ioutil.ReadFile("testdata/enc_regressions.zip")
+	data, err := os.ReadFile("testdata/enc_regressions.zip")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,10 +151,10 @@ func TestEncoderRegression(t *testing.T) {
 				var got []byte
 				if !strings.Contains(name, "-snappy") {
 					dec.Reset(&buf)
-					got, err = ioutil.ReadAll(dec)
+					got, err = io.ReadAll(dec)
 				} else {
 					sdec := snapref.NewReader(&buf)
-					got, err = ioutil.ReadAll(sdec)
+					got, err = io.ReadAll(sdec)
 				}
 				if err != nil {
 					t.Error(err)
@@ -188,10 +188,10 @@ func TestEncoderRegression(t *testing.T) {
 				}
 				if !strings.Contains(name, "-snappy") {
 					dec.Reset(&buf)
-					got, err = ioutil.ReadAll(dec)
+					got, err = io.ReadAll(dec)
 				} else {
 					sdec := snapref.NewReader(&buf)
-					got, err = ioutil.ReadAll(sdec)
+					got, err = io.ReadAll(sdec)
 				}
 				if err != nil {
 					t.Error(err)
@@ -214,7 +214,7 @@ func TestEncoderRegression(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			b, err := ioutil.ReadAll(r)
+			b, err := io.ReadAll(r)
 			if err != nil {
 				t.Error(err)
 				return
@@ -307,7 +307,7 @@ func TestIndex(t *testing.T) {
 			fatalErr(t, err)
 
 			// Read the rest of the stream...
-			got, err := ioutil.ReadAll(dec)
+			got, err := io.ReadAll(dec)
 			fatalErr(t, err)
 			if !bytes.Equal(got, want) {
 				t.Error("Result mismatch", wantOffset)
@@ -340,7 +340,7 @@ func TestIndex(t *testing.T) {
 						t.Errorf("got offset %d, want %d", gotOffset, wantOffset)
 					}
 					// Read the rest of the stream...
-					got, err := ioutil.ReadAll(dec)
+					got, err := io.ReadAll(dec)
 					fatalErr(t, err)
 					if !bytes.Equal(got, want) {
 						t.Error("Result mismatch", wantOffset)
@@ -482,7 +482,7 @@ func TestBigRegularWrites(t *testing.T) {
 	}
 
 	dec := NewReader(dst)
-	_, err = io.Copy(ioutil.Discard, dec)
+	_, err = io.Copy(io.Discard, dec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -522,7 +522,7 @@ func TestBigEncodeBuffer(t *testing.T) {
 	}
 
 	dec := NewReader(dst)
-	n, err := io.Copy(ioutil.Discard, dec)
+	n, err := io.Copy(io.Discard, dec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -555,7 +555,7 @@ func TestBigEncodeBufferSync(t *testing.T) {
 	}
 
 	dec := NewReader(dst)
-	n, err := io.Copy(ioutil.Discard, dec)
+	n, err := io.Copy(io.Discard, dec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -571,7 +571,7 @@ func BenchmarkWriterRandom(b *testing.B) {
 	}
 
 	for name, opts := range testOptions(b) {
-		w := NewWriter(ioutil.Discard, opts...)
+		w := NewWriter(io.Discard, opts...)
 		b.Run(name, func(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()

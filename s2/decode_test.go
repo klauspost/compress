@@ -7,7 +7,8 @@ package s2
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
+	"os"
 	"runtime"
 	"strings"
 	"testing"
@@ -16,7 +17,7 @@ import (
 )
 
 func TestDecodeRegression(t *testing.T) {
-	data, err := ioutil.ReadFile("testdata/dec-block-regressions.zip")
+	data, err := os.ReadFile("testdata/dec-block-regressions.zip")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +35,7 @@ func TestDecodeRegression(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			in, err := ioutil.ReadAll(r)
+			in, err := io.ReadAll(r)
 			if err != nil {
 				t.Error(err)
 			}
@@ -45,7 +46,7 @@ func TestDecodeRegression(t *testing.T) {
 }
 
 func TestDecoderMaxBlockSize(t *testing.T) {
-	data, err := ioutil.ReadFile("testdata/enc_regressions.zip")
+	data, err := os.ReadFile("testdata/enc_regressions.zip")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +85,7 @@ func TestDecoderMaxBlockSize(t *testing.T) {
 				}
 
 				dec.Reset(&buf)
-				got, err := ioutil.ReadAll(dec)
+				got, err := io.ReadAll(dec)
 				if err != nil {
 					t.Error(err)
 					return
@@ -130,7 +131,7 @@ func TestDecoderMaxBlockSize(t *testing.T) {
 				dec.Reset(&buf)
 				// Skip first...
 				dec.Skip(int64(len(data)))
-				got, err = ioutil.ReadAll(dec)
+				got, err = io.ReadAll(dec)
 				if err != nil {
 					t.Error(err)
 					return
@@ -175,7 +176,7 @@ func TestDecoderMaxBlockSize(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			b, err := ioutil.ReadAll(r)
+			b, err := io.ReadAll(r)
 			if err != nil {
 				t.Error(err)
 				return

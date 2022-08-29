@@ -8,7 +8,7 @@ package fse
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -22,31 +22,31 @@ var testfiles = []struct {
 	err  error
 }{
 	// gettysburg.txt is a small plain text.
-	{name: "gettysburg", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/gettysburg.txt") }},
+	{name: "gettysburg", fn: func() ([]byte, error) { return os.ReadFile("../testdata/gettysburg.txt") }},
 	// Digits is the digits of the irrational number e. Its decimal representation
 	// does not repeat, but there are only 10 possible digits, so it should be
 	// reasonably compressible.
-	{name: "digits", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/e.txt") }},
+	{name: "digits", fn: func() ([]byte, error) { return os.ReadFile("../testdata/e.txt") }},
 	// Twain is Project Gutenberg's edition of Mark Twain's classic English novel.
-	{name: "twain", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/Mark.Twain-Tom.Sawyer.txt") }},
+	{name: "twain", fn: func() ([]byte, error) { return os.ReadFile("../testdata/Mark.Twain-Tom.Sawyer.txt") }},
 	// Random bytes
-	{name: "random", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/sharnd.out") }, err: ErrIncompressible},
+	{name: "random", fn: func() ([]byte, error) { return os.ReadFile("../testdata/sharnd.out") }, err: ErrIncompressible},
 	// Low entropy
 	{name: "low-ent", fn: func() ([]byte, error) { return []byte(strings.Repeat("1221", 10000)), nil }},
 	// Super Low entropy
 	{name: "superlow-ent", fn: func() ([]byte, error) { return []byte(strings.Repeat("1", 10000) + strings.Repeat("2", 500)), nil }},
 	// Zero bytes
 	{name: "zeroes", fn: func() ([]byte, error) { return make([]byte, 10000), nil }, err: ErrUseRLE},
-	{name: "crash1", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/crash1.bin") }, err: ErrIncompressible},
-	{name: "crash2", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/crash2.bin") }, err: ErrIncompressible},
-	{name: "crash3", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/crash3.bin") }, err: ErrIncompressible},
-	{name: "endzerobits", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/endzerobits.bin") }, err: nil},
-	{name: "endnonzero", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/endnonzero.bin") }, err: ErrIncompressible},
-	{name: "case1", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/case1.bin") }, err: ErrIncompressible},
-	{name: "case2", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/case2.bin") }, err: ErrIncompressible},
-	{name: "case3", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/case3.bin") }, err: ErrIncompressible},
-	{name: "pngdata.001", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/pngdata.bin") }, err: nil},
-	{name: "normcount2", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/normcount2.bin") }, err: nil},
+	{name: "crash1", fn: func() ([]byte, error) { return os.ReadFile("../testdata/crash1.bin") }, err: ErrIncompressible},
+	{name: "crash2", fn: func() ([]byte, error) { return os.ReadFile("../testdata/crash2.bin") }, err: ErrIncompressible},
+	{name: "crash3", fn: func() ([]byte, error) { return os.ReadFile("../testdata/crash3.bin") }, err: ErrIncompressible},
+	{name: "endzerobits", fn: func() ([]byte, error) { return os.ReadFile("../testdata/endzerobits.bin") }, err: nil},
+	{name: "endnonzero", fn: func() ([]byte, error) { return os.ReadFile("../testdata/endnonzero.bin") }, err: ErrIncompressible},
+	{name: "case1", fn: func() ([]byte, error) { return os.ReadFile("../testdata/case1.bin") }, err: ErrIncompressible},
+	{name: "case2", fn: func() ([]byte, error) { return os.ReadFile("../testdata/case2.bin") }, err: ErrIncompressible},
+	{name: "case3", fn: func() ([]byte, error) { return os.ReadFile("../testdata/case3.bin") }, err: ErrIncompressible},
+	{name: "pngdata.001", fn: func() ([]byte, error) { return os.ReadFile("../testdata/pngdata.bin") }, err: nil},
+	{name: "normcount2", fn: func() ([]byte, error) { return os.ReadFile("../testdata/normcount2.bin") }, err: nil},
 }
 
 var decTestfiles = []struct {
@@ -55,14 +55,14 @@ var decTestfiles = []struct {
 	err  string
 }{
 	// gettysburg.txt is a small plain text.
-	{name: "hang1", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/dec-hang1.bin") }, err: "corruption detected (bitCount 252 > 32)"},
-	{name: "hang2", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/dec-hang2.bin") }, err: "newState (0) == oldState (0) and no bits"},
-	{name: "hang3", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/dec-hang3.bin") }, err: "maxSymbolValue too small"},
-	{name: "symlen1", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/dec-symlen1.bin") }, err: "symbolLen (257) too big"},
-	{name: "crash4", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/crash4.bin") }, err: "symbolLen (1) too small"},
-	{name: "crash5", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/crash5.bin") }, err: "symbolLen (1) too small"},
-	{name: "crash6", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/dec-crash6.bin") }, err: "newState (32768) outside table size (32768)"},
-	{name: "something", fn: func() ([]byte, error) { return ioutil.ReadFile("../testdata/fse-artifact3.bin") }, err: "output size (1048576) > DecompressLimit (1048576)"},
+	{name: "hang1", fn: func() ([]byte, error) { return os.ReadFile("../testdata/dec-hang1.bin") }, err: "corruption detected (bitCount 252 > 32)"},
+	{name: "hang2", fn: func() ([]byte, error) { return os.ReadFile("../testdata/dec-hang2.bin") }, err: "newState (0) == oldState (0) and no bits"},
+	{name: "hang3", fn: func() ([]byte, error) { return os.ReadFile("../testdata/dec-hang3.bin") }, err: "maxSymbolValue too small"},
+	{name: "symlen1", fn: func() ([]byte, error) { return os.ReadFile("../testdata/dec-symlen1.bin") }, err: "symbolLen (257) too big"},
+	{name: "crash4", fn: func() ([]byte, error) { return os.ReadFile("../testdata/crash4.bin") }, err: "symbolLen (1) too small"},
+	{name: "crash5", fn: func() ([]byte, error) { return os.ReadFile("../testdata/crash5.bin") }, err: "symbolLen (1) too small"},
+	{name: "crash6", fn: func() ([]byte, error) { return os.ReadFile("../testdata/dec-crash6.bin") }, err: "newState (32768) outside table size (32768)"},
+	{name: "something", fn: func() ([]byte, error) { return os.ReadFile("../testdata/fse-artifact3.bin") }, err: "output size (1048576) > DecompressLimit (1048576)"},
 }
 
 func TestCompress(t *testing.T) {
@@ -88,7 +88,7 @@ func TestCompress(t *testing.T) {
 
 func ExampleCompress() {
 	// Read data
-	data, err := ioutil.ReadFile("../testdata/e.txt")
+	data, err := os.ReadFile("../testdata/e.txt")
 	if err != nil {
 		panic(err)
 	}
@@ -131,7 +131,7 @@ func TestDecompress(t *testing.T) {
 
 func ExampleDecompress() {
 	// Read data
-	data, err := ioutil.ReadFile("../testdata/e.txt")
+	data, err := os.ReadFile("../testdata/e.txt")
 	if err != nil {
 		panic(err)
 	}

@@ -15,8 +15,9 @@ import (
 // been written.
 //
 // It also assumes that:
+//
 //	len(dst) >= MaxEncodedLen(len(src)) &&
-// 	minNonLiteralBlockSize <= len(src) && len(src) <= maxBlockSize
+//	minNonLiteralBlockSize <= len(src) && len(src) <= maxBlockSize
 func encodeBlockBest(dst, src []byte) (d int) {
 	// Initialize the hash tables.
 	const (
@@ -288,8 +289,9 @@ emitRemainder:
 // been written.
 //
 // It also assumes that:
+//
 //	len(dst) >= MaxEncodedLen(len(src)) &&
-// 	minNonLiteralBlockSize <= len(src) && len(src) <= maxBlockSize
+//	minNonLiteralBlockSize <= len(src) && len(src) <= maxBlockSize
 func encodeBlockBestSnappy(dst, src []byte) (d int) {
 	// Initialize the hash tables.
 	const (
@@ -546,6 +548,7 @@ emitRemainder:
 // emitCopySize returns the size to encode the offset+length
 //
 // It assumes that:
+//
 //	1 <= offset && offset <= math.MaxUint32
 //	4 <= length && length <= 1 << 24
 func emitCopySize(offset, length int) int {
@@ -584,6 +587,7 @@ func emitCopySize(offset, length int) int {
 // emitCopyNoRepeatSize returns the size to encode the offset+length
 //
 // It assumes that:
+//
 //	1 <= offset && offset <= math.MaxUint32
 //	4 <= length && length <= 1 << 24
 func emitCopyNoRepeatSize(offset, length int) int {

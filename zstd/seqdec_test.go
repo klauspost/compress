@@ -5,7 +5,6 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"reflect"
 	"strconv"
@@ -252,7 +251,7 @@ func Test_seqdec_decoder(t *testing.T) {
 			return
 		}
 
-		seqData, err := ioutil.ReadAll(r)
+		seqData, err := io.ReadAll(r)
 		if err != nil {
 			tb.Error(err)
 			return
@@ -298,7 +297,7 @@ func Test_seqdec_decoder(t *testing.T) {
 	}
 	if writeWant {
 		zw.Close()
-		ioutil.WriteFile("testdata/seqs-want.zip", buf.Bytes(), os.ModePerm)
+		os.WriteFile("testdata/seqs-want.zip", buf.Bytes(), os.ModePerm)
 	}
 }
 
@@ -316,7 +315,7 @@ func Test_seqdec_execute(t *testing.T) {
 			return
 		}
 
-		seqData, err := ioutil.ReadAll(r)
+		seqData, err := io.ReadAll(r)
 		if err != nil {
 			tb.Error(err)
 			return
@@ -369,7 +368,7 @@ func Test_seqdec_decodeSync(t *testing.T) {
 			return
 		}
 
-		seqData, err := ioutil.ReadAll(r)
+		seqData, err := io.ReadAll(r)
 		if err != nil {
 			tb.Error(err)
 			return
@@ -419,7 +418,7 @@ func benchmark_seqdec_decode(b *testing.B) {
 			return
 		}
 
-		seqData, err := ioutil.ReadAll(r)
+		seqData, err := io.ReadAll(r)
 		if err != nil {
 			tb.Error(err)
 			return
@@ -471,7 +470,7 @@ func Benchmark_seqdec_execute(b *testing.B) {
 			return
 		}
 
-		seqData, err := ioutil.ReadAll(r)
+		seqData, err := io.ReadAll(r)
 		if err != nil {
 			tb.Error(err)
 			return
@@ -527,7 +526,7 @@ func Benchmark_seqdec_decodeSync(b *testing.B) {
 			return
 		}
 
-		seqData, err := ioutil.ReadAll(r)
+		seqData, err := io.ReadAll(r)
 		if err != nil {
 			tb.Error(err)
 			return
@@ -576,7 +575,7 @@ func testCreateZipReader(path string, tb testing.TB) *zip.Reader {
 		}
 	}
 
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path)
 	failOnError(err)
 
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
