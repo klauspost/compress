@@ -122,6 +122,11 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 				d.bufs.Put(buf)
 				return nil, errors.New("corruption detected: stream overrun 1")
 			}
+			// There must at least be 3 buffers left.
+			if len(out)-bufoff < dstEvery*3 {
+				d.bufs.Put(buf)
+				return nil, errors.New("corruption detected: stream overrun 2")
+			}
 			//copy(out, buf[0][:])
 			//copy(out[dstEvery:], buf[1][:])
 			//copy(out[dstEvery*2:], buf[2][:])
@@ -132,11 +137,6 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 			*(*[bufoff]byte)(out[dstEvery*3:]) = buf[3]
 			out = out[bufoff:]
 			decoded += bufoff * 4
-			// There must at least be 3 buffers left.
-			if len(out) < dstEvery*3 {
-				d.bufs.Put(buf)
-				return nil, errors.New("corruption detected: stream overrun 2")
-			}
 		}
 	}
 	if off > 0 {
