@@ -117,7 +117,7 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 			// regressions significantly.
 			const wantRepeatBytes = 6
 			const repeatMask = ((1 << (wantRepeatBytes * 8)) - 1) << (8 * checkRep)
-			if true && repeat > 0 && cv&repeatMask == load64(src, s-repeat)&repeatMask {
+			if false && repeat > 0 && cv&repeatMask == load64(src, s-repeat)&repeatMask {
 				base := s + checkRep
 				// Extend back
 				for i := base - repeat; base > nextEmit && i > 0 && src[i-1] == src[base-1]; {
@@ -258,19 +258,25 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 			return 0
 		}
 
-		// Index in-between
+		// Index short & long
 		index0 := base + 1
 		index1 := s - 2
 
-		cv = load64(src, s)
-		for index0 < index1 {
-			cv0 := load64(src, index0)
-			cv1 := load64(src, index1)
-			lTable[hash7(cv0, lTableBits)] = uint32(index0)
-			sTable[hash4(cv0>>8, sTableBits)] = uint32(index0 + 1)
+		cv0 := load64(src, index0)
+		cv1 := load64(src, index1)
+		lTable[hash7(cv0, lTableBits)] = uint32(index0)
+		sTable[hash4(cv0>>8, sTableBits)] = uint32(index0 + 1)
 
-			lTable[hash7(cv1, lTableBits)] = uint32(index1)
-			sTable[hash4(cv1>>8, sTableBits)] = uint32(index1 + 1)
+		lTable[hash7(cv1, lTableBits)] = uint32(index1)
+		sTable[hash4(cv1>>8, sTableBits)] = uint32(index1 + 1)
+		index0 += 1
+		index1 -= 1
+		cv = load64(src, s)
+
+		// index every second long in between.
+		for index0 < index1 {
+			lTable[hash7(load64(src, index0), lTableBits)] = uint32(index0)
+			lTable[hash7(load64(src, index1), lTableBits)] = uint32(index1)
 			index0 += 2
 			index1 -= 2
 		}
@@ -435,21 +441,29 @@ func encodeBlockBetterSnappyGo(dst, src []byte) (d int) {
 			// Do we have space for more, if not bail.
 			return 0
 		}
-		// Index match start+1 (long) and start+2 (short)
+
+		// Index short & long
 		index0 := base + 1
-		// Index match end-2 (long) and end-1 (short)
 		index1 := s - 2
 
 		cv0 := load64(src, index0)
 		cv1 := load64(src, index1)
-		cv = load64(src, s)
 		lTable[hash7(cv0, lTableBits)] = uint32(index0)
-		lTable[hash7(cv0>>8, lTableBits)] = uint32(index0 + 1)
-		lTable[hash7(cv1, lTableBits)] = uint32(index1)
-		lTable[hash7(cv1>>8, lTableBits)] = uint32(index1 + 1)
 		sTable[hash4(cv0>>8, sTableBits)] = uint32(index0 + 1)
-		sTable[hash4(cv0>>16, sTableBits)] = uint32(index0 + 2)
+
+		lTable[hash7(cv1, lTableBits)] = uint32(index1)
 		sTable[hash4(cv1>>8, sTableBits)] = uint32(index1 + 1)
+		index0 += 1
+		index1 -= 1
+		cv = load64(src, s)
+
+		// index every second long in between.
+		for index0 < index1 {
+			lTable[hash7(load64(src, index0), lTableBits)] = uint32(index0)
+			lTable[hash7(load64(src, index1), lTableBits)] = uint32(index1)
+			index0 += 2
+			index1 -= 2
+		}
 	}
 
 emitRemainder:

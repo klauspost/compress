@@ -1354,8 +1354,54 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, sTableBits, sk
 		}
 	}
 	Label("match_nolit_dst_ok_" + name)
-	// cv must be set to value at base+1 before arriving here
 	if true {
+		lHasher := hashN(lHashBytes, lTableBits)
+		sHasher := hashN(sHashBytes, sTableBits)
+
+		index0, index1 := GP64(), GP64()
+		// index0 := base + 1
+		LEAQ(Mem{Base: base, Disp: 1}, index0)
+		// index1 := s - 2
+		LEAQ(Mem{Base: s, Disp: -2}, index1)
+		hash0l, hash0s, hash1l, hash1s := GP64(), GP64(), GP64(), GP64()
+		MOVQ(Mem{Base: src, Index: index0, Scale: 1, Disp: 0}, hash0l)
+		MOVQ(Mem{Base: src, Index: index0, Scale: 1, Disp: 1}, hash0s)
+		MOVQ(Mem{Base: src, Index: index1, Scale: 1, Disp: 0}, hash1l)
+		MOVQ(Mem{Base: src, Index: index1, Scale: 1, Disp: 1}, hash1s)
+
+		lHasher.hash(hash0l)
+		sHasher.hash(hash0s)
+		lHasher.hash(hash1l)
+		sHasher.hash(hash1s)
+
+		plusone0, plusone1 := GP64(), GP64()
+		LEAQ(Mem{Base: index0, Disp: 1}, plusone0)
+		LEAQ(Mem{Base: index1, Disp: 1}, plusone1)
+		MOVL(index0.As32(), lTab.Idx(hash0l, 4))
+		MOVL(index1.As32(), lTab.Idx(hash1l, 4))
+		MOVL(plusone0.As32(), sTab.Idx(hash0s, 4))
+		MOVL(plusone1.As32(), sTab.Idx(hash1s, 4))
+
+		ADDQ(U8(1), index0)
+		SUBQ(U8(1), index1)
+
+		Label("index_loop_" + name)
+		CMPQ(index0, index1)
+		JAE(LabelRef("search_loop_" + name))
+		hash0l, hash1l = GP64(), GP64()
+		MOVQ(Mem{Base: src, Index: index0, Scale: 1, Disp: 0}, hash0l)
+		MOVQ(Mem{Base: src, Index: index1, Scale: 1, Disp: 0}, hash1l)
+
+		lHasher.hash(hash0l)
+		lHasher.hash(hash1l)
+
+		MOVL(index0.As32(), lTab.Idx(hash0l, 4))
+		MOVL(index1.As32(), lTab.Idx(hash1l, 4))
+
+		ADDQ(U8(2), index0)
+		SUBQ(U8(2), index1)
+		JMP(LabelRef("index_loop_" + name))
+	} else {
 		lHasher := hashN(lHashBytes, lTableBits)
 		sHasher := hashN(sHashBytes, sTableBits)
 
@@ -1428,8 +1474,8 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, sTableBits, sk
 		MOVL(sm2, lTab.Idx(hash0, 4))
 		MOVL(sm1, sTab.Idx(hash1, 4))
 		MOVL(sm1, lTab.Idx(hash3, 4))
+		JMP(LabelRef("search_loop_" + name))
 	}
-	JMP(LabelRef("search_loop_" + name))
 
 	Label("emit_remainder_" + name)
 	// Bail if we exceed the maximum size.
