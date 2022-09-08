@@ -3,7 +3,6 @@ package zstd
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -11,7 +10,7 @@ import (
 )
 
 func TestSnappy_ConvertSimple(t *testing.T) {
-	in, err := ioutil.ReadFile("testdata/z000028")
+	in, err := os.ReadFile("testdata/z000028")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +47,7 @@ func TestSnappy_ConvertSimple(t *testing.T) {
 		t.Error(err, len(decoded))
 	}
 	if !bytes.Equal(decoded, in) {
-		ioutil.WriteFile("testdata/z000028.got", decoded, os.ModePerm)
+		os.WriteFile("testdata/z000028.got", decoded, os.ModePerm)
 		t.Fatal("Decoded does not match")
 	}
 	t.Log("Encoded content matched")
@@ -64,7 +63,7 @@ func TestSnappy_ConvertXML(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer dec.Close()
-	in, err := ioutil.ReadAll(dec)
+	in, err := io.ReadAll(dec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +94,7 @@ func TestSnappy_ConvertXML(t *testing.T) {
 		t.Error(err, len(decoded))
 	}
 	if !bytes.Equal(decoded, in) {
-		ioutil.WriteFile("testdata/xml.got", decoded, os.ModePerm)
+		os.WriteFile("testdata/xml.got", decoded, os.ModePerm)
 		t.Fatal("Decoded does not match")
 	}
 	t.Log("Encoded content matched")
@@ -105,7 +104,7 @@ func TestSnappy_ConvertSilesia(t *testing.T) {
 	if testing.Short() {
 		t.SkipNow()
 	}
-	in, err := ioutil.ReadFile("testdata/silesia.tar")
+	in, err := os.ReadFile("testdata/silesia.tar")
 	if err != nil {
 		if os.IsNotExist(err) {
 			t.Skip("Missing testdata/silesia.tar")
@@ -146,7 +145,7 @@ func TestSnappy_ConvertSilesia(t *testing.T) {
 		t.Error(err, len(decoded))
 	}
 	if !bytes.Equal(decoded, in) {
-		ioutil.WriteFile("testdata/silesia.tar.got", decoded, os.ModePerm)
+		os.WriteFile("testdata/silesia.tar.got", decoded, os.ModePerm)
 		t.Fatal("Decoded does not match")
 	}
 	t.Log("Encoded content matched")
@@ -169,7 +168,7 @@ func TestSnappy_ConvertEnwik9(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer dec.Close()
-	in, err := ioutil.ReadAll(dec)
+	in, err := io.ReadAll(dec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +200,7 @@ func TestSnappy_ConvertEnwik9(t *testing.T) {
 		t.Error(err, len(decoded))
 	}
 	if !bytes.Equal(decoded, in) {
-		ioutil.WriteFile("testdata/enwik9.got", decoded, os.ModePerm)
+		os.WriteFile("testdata/enwik9.got", decoded, os.ModePerm)
 		t.Fatal("Decoded does not match")
 	}
 	t.Log("Encoded content matched")
@@ -217,7 +216,7 @@ func BenchmarkSnappy_ConvertXML(b *testing.B) {
 		b.Fatal(err)
 	}
 	defer dec.Close()
-	in, err := ioutil.ReadAll(dec)
+	in, err := io.ReadAll(dec)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -234,7 +233,7 @@ func BenchmarkSnappy_ConvertXML(b *testing.B) {
 	}
 	s := SnappyConverter{}
 	compBytes := comp.Bytes()
-	_, err = s.Convert(&comp, ioutil.Discard)
+	_, err = s.Convert(&comp, io.Discard)
 	if err != io.EOF {
 		b.Fatal(err)
 	}
@@ -242,7 +241,7 @@ func BenchmarkSnappy_ConvertXML(b *testing.B) {
 	b.ReportAllocs()
 	b.SetBytes(int64(len(in)))
 	for i := 0; i < b.N; i++ {
-		_, err := s.Convert(bytes.NewBuffer(compBytes), ioutil.Discard)
+		_, err := s.Convert(bytes.NewBuffer(compBytes), io.Discard)
 		if err != io.EOF {
 			b.Fatal(err)
 		}
@@ -260,7 +259,7 @@ func BenchmarkSnappy_Enwik9(b *testing.B) {
 		b.Fatal(err)
 	}
 	defer dec.Close()
-	in, err := ioutil.ReadAll(dec)
+	in, err := io.ReadAll(dec)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -278,7 +277,7 @@ func BenchmarkSnappy_Enwik9(b *testing.B) {
 	}
 	s := SnappyConverter{}
 	compBytes := comp.Bytes()
-	_, err = s.Convert(&comp, ioutil.Discard)
+	_, err = s.Convert(&comp, io.Discard)
 	if err != io.EOF {
 		b.Fatal(err)
 	}
@@ -286,7 +285,7 @@ func BenchmarkSnappy_Enwik9(b *testing.B) {
 	b.ReportAllocs()
 	b.SetBytes(int64(len(in)))
 	for i := 0; i < b.N; i++ {
-		_, err := s.Convert(bytes.NewBuffer(compBytes), ioutil.Discard)
+		_, err := s.Convert(bytes.NewBuffer(compBytes), io.Discard)
 		if err != io.EOF {
 			b.Fatal(err)
 		}
@@ -294,7 +293,7 @@ func BenchmarkSnappy_Enwik9(b *testing.B) {
 }
 
 func BenchmarkSnappy_ConvertSilesia(b *testing.B) {
-	in, err := ioutil.ReadFile("testdata/silesia.tar")
+	in, err := os.ReadFile("testdata/silesia.tar")
 	if err != nil {
 		if os.IsNotExist(err) {
 			b.Skip("Missing testdata/silesia.tar")
@@ -315,7 +314,7 @@ func BenchmarkSnappy_ConvertSilesia(b *testing.B) {
 	}
 	s := SnappyConverter{}
 	compBytes := comp.Bytes()
-	_, err = s.Convert(&comp, ioutil.Discard)
+	_, err = s.Convert(&comp, io.Discard)
 	if err != io.EOF {
 		b.Fatal(err)
 	}
@@ -323,7 +322,7 @@ func BenchmarkSnappy_ConvertSilesia(b *testing.B) {
 	b.ReportAllocs()
 	b.SetBytes(int64(len(in)))
 	for i := 0; i < b.N; i++ {
-		_, err := s.Convert(bytes.NewBuffer(compBytes), ioutil.Discard)
+		_, err := s.Convert(bytes.NewBuffer(compBytes), io.Discard)
 		if err != io.EOF {
 			b.Fatal(err)
 		}

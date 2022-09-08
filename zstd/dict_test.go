@@ -3,7 +3,8 @@ package zstd
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -13,24 +14,7 @@ import (
 func TestDecoder_SmallDict(t *testing.T) {
 	// All files have CRC
 	zr := testCreateZipReader("testdata/dict-tests-small.zip", t)
-	var dicts [][]byte
-	for _, tt := range zr.File {
-		if !strings.HasSuffix(tt.Name, ".dict") {
-			continue
-		}
-		func() {
-			r, err := tt.Open()
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer r.Close()
-			in, err := ioutil.ReadAll(r)
-			if err != nil {
-				t.Fatal(err)
-			}
-			dicts = append(dicts, in)
-		}()
-	}
+	dicts := readDicts(t, zr)
 	dec, err := NewReader(nil, WithDecoderConcurrency(1), WithDecoderDicts(dicts...))
 	if err != nil {
 		t.Fatal(err)
@@ -47,7 +31,7 @@ func TestDecoder_SmallDict(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer r.Close()
-			in, err := ioutil.ReadAll(r)
+			in, err := io.ReadAll(r)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -81,7 +65,7 @@ func TestEncoder_SmallDict(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer r.Close()
-			in, err := ioutil.ReadAll(r)
+			in, err := io.ReadAll(r)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -123,7 +107,7 @@ func TestEncoder_SmallDict(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer r.Close()
-		in, err := ioutil.ReadAll(r)
+		in, err := io.ReadAll(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -223,7 +207,7 @@ func benchmarkEncodeAllLimitedBySize(b *testing.B, lowerLimit int, upperLimit in
 				t.Fatal(err)
 			}
 			defer r.Close()
-			in, err := ioutil.ReadAll(r)
+			in, err := io.ReadAll(r)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -256,7 +240,7 @@ func benchmarkEncodeAllLimitedBySize(b *testing.B, lowerLimit int, upperLimit in
 			t.Fatal(err)
 		}
 		defer r.Close()
-		in, err := ioutil.ReadAll(r)
+		in, err := io.ReadAll(r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -326,7 +310,7 @@ func TestDecoder_MoreDicts(t *testing.T) {
 	// All files have CRC
 	// https://files.klauspost.com/compress/zstd-dict-tests.zip
 	fn := "testdata/zstd-dict-tests.zip"
-	data, err := ioutil.ReadFile(fn)
+	data, err := os.ReadFile(fn)
 	if err != nil {
 		t.Skip("extended dict test not found.")
 	}
@@ -346,7 +330,7 @@ func TestDecoder_MoreDicts(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer r.Close()
-			in, err := ioutil.ReadAll(r)
+			in, err := io.ReadAll(r)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -372,7 +356,7 @@ func TestDecoder_MoreDicts(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer r.Close()
-			in, err := ioutil.ReadAll(r)
+			in, err := io.ReadAll(r)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -392,7 +376,7 @@ func TestDecoder_MoreDicts2(t *testing.T) {
 	// All files have CRC
 	// https://files.klauspost.com/compress/zstd-dict-tests.zip
 	fn := "testdata/zstd-dict-tests.zip"
-	data, err := ioutil.ReadFile(fn)
+	data, err := os.ReadFile(fn)
 	if err != nil {
 		t.Skip("extended dict test not found.")
 	}
@@ -412,7 +396,7 @@ func TestDecoder_MoreDicts2(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer r.Close()
-			in, err := ioutil.ReadAll(r)
+			in, err := io.ReadAll(r)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -438,7 +422,7 @@ func TestDecoder_MoreDicts2(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer r.Close()
-			in, err := ioutil.ReadAll(r)
+			in, err := io.ReadAll(r)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -452,4 +436,26 @@ func TestDecoder_MoreDicts2(t *testing.T) {
 			}
 		})
 	}
+}
+
+func readDicts(tb testing.TB, zr *zip.Reader) [][]byte {
+	var dicts [][]byte
+	for _, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, ".dict") {
+			continue
+		}
+		func() {
+			r, err := tt.Open()
+			if err != nil {
+				tb.Fatal(err)
+			}
+			defer r.Close()
+			in, err := io.ReadAll(r)
+			if err != nil {
+				tb.Fatal(err)
+			}
+			dicts = append(dicts, in)
+		}()
+	}
+	return dicts
 }

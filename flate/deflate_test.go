@@ -9,7 +9,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
+	"os"
 	"reflect"
 	"strings"
 	"sync"
@@ -296,7 +296,7 @@ func testSync(t *testing.T, level int, input []byte, name string) {
 
 	// stream should work for ordinary reader too
 	r = NewReader(buf1)
-	out, err = ioutil.ReadAll(r)
+	out, err = io.ReadAll(r)
 	if err != nil {
 		t.Errorf("testSync: read: %s", err)
 		return
@@ -324,7 +324,7 @@ func testToFromWithLevelAndLimit(t *testing.T, level int, input []byte, name str
 		t.Logf("level: %d - Size:%.2f%%, %d b\n", level, float64(buffer.Len()*100)/float64(limit), buffer.Len())
 	}
 	r := NewReader(&buffer)
-	out, err := ioutil.ReadAll(r)
+	out, err := io.ReadAll(r)
 	if err != nil {
 		t.Errorf("read: %s", err)
 		return
@@ -380,7 +380,7 @@ var deflateInflateStringTests = []deflateInflateStringTest{
 
 func TestDeflateInflateString(t *testing.T) {
 	for _, test := range deflateInflateStringTests {
-		gold, err := ioutil.ReadFile(test.filename)
+		gold, err := os.ReadFile(test.filename)
 		if err != nil {
 			t.Error(err)
 		}
@@ -417,7 +417,7 @@ func TestReaderDict(t *testing.T) {
 	w.Close()
 
 	r := NewReaderDict(&b, []byte(dict))
-	data, err := ioutil.ReadAll(r)
+	data, err := io.ReadAll(r)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -463,7 +463,7 @@ func TestRegression2508(t *testing.T) {
 		t.Logf("test disabled with -short")
 		return
 	}
-	w, err := NewWriter(ioutil.Discard, 1)
+	w, err := NewWriter(io.Discard, 1)
 	if err != nil {
 		t.Fatalf("NewWriter: %v", err)
 	}
@@ -484,7 +484,7 @@ func TestWriterReset(t *testing.T) {
 		if testing.Short() && level > 1 {
 			break
 		}
-		w, err := NewWriter(ioutil.Discard, level)
+		w, err := NewWriter(io.Discard, level)
 		if err != nil {
 			t.Fatalf("NewWriter: %v", err)
 		}
@@ -492,9 +492,9 @@ func TestWriterReset(t *testing.T) {
 		for i := 0; i < 1024; i++ {
 			w.Write(buf)
 		}
-		w.Reset(ioutil.Discard)
+		w.Reset(io.Discard)
 
-		wref, err := NewWriter(ioutil.Discard, level)
+		wref, err := NewWriter(io.Discard, level)
 		if err != nil {
 			t.Fatalf("NewWriter: %v", err)
 		}
@@ -646,7 +646,7 @@ func TestBestSpeed(t *testing.T) {
 				}
 
 				r := NewReader(buf)
-				got, err := ioutil.ReadAll(r)
+				got, err := io.ReadAll(r)
 				if err != nil {
 					t.Errorf("i=%d, firstN=%d, flush=%t: ReadAll: %v", i, firstN, flush, err)
 					continue

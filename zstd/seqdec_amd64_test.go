@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"encoding/csv"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"reflect"
 	"strconv"
@@ -42,7 +42,7 @@ func Test_sequenceDecs_decodeNoBMI(t *testing.T) {
 	var wantOffsets = map[string][3]int{}
 	if !writeWant {
 		fn := "testdata/seqs-want.zip"
-		data, err := ioutil.ReadFile(fn)
+		data, err := os.ReadFile(fn)
 		tb := t
 		if err != nil {
 			tb.Fatal(err)
@@ -84,7 +84,7 @@ func Test_sequenceDecs_decodeNoBMI(t *testing.T) {
 		}
 	}
 	fn := "testdata/seqs.zip"
-	data, err := ioutil.ReadFile(fn)
+	data, err := os.ReadFile(fn)
 	tb := t
 	if err != nil {
 		tb.Fatal(err)
@@ -104,7 +104,7 @@ func Test_sequenceDecs_decodeNoBMI(t *testing.T) {
 			return
 		}
 
-		seqData, err := ioutil.ReadAll(r)
+		seqData, err := io.ReadAll(r)
 		if err != nil {
 			tb.Error(err)
 			return
@@ -150,6 +150,6 @@ func Test_sequenceDecs_decodeNoBMI(t *testing.T) {
 	}
 	if writeWant {
 		zw.Close()
-		ioutil.WriteFile("testdata/seqs-want.zip", buf.Bytes(), os.ModePerm)
+		os.WriteFile("testdata/seqs-want.zip", buf.Bytes(), os.ModePerm)
 	}
 }

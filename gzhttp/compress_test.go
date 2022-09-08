@@ -3,11 +3,12 @@ package gzhttp
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strconv"
 	"testing"
 
@@ -149,7 +150,7 @@ func TestGzipHandlerAcceptRange(t *testing.T) {
 	assertEqual(t, "", res.Header.Get("Accept-Ranges"))
 	zr, err := gzip.NewReader(resp.Body)
 	assertNil(t, err)
-	got, err := ioutil.ReadAll(zr)
+	got, err := io.ReadAll(zr)
 	assertNil(t, err)
 	assertEqual(t, testBody, got)
 }
@@ -174,7 +175,7 @@ func TestGzipHandlerKeepAcceptRange(t *testing.T) {
 	assertEqual(t, "bytes", res.Header.Get("Accept-Ranges"))
 	zr, err := gzip.NewReader(resp.Body)
 	assertNil(t, err)
-	got, err := ioutil.ReadAll(zr)
+	got, err := io.ReadAll(zr)
 	assertNil(t, err)
 	assertEqual(t, testBody, got)
 }
@@ -256,7 +257,7 @@ func TestGzipHandlerNoBody(t *testing.T) {
 			req.Header.Set("Accept-Encoding", "gzip")
 			handler.ServeHTTP(rec, req)
 
-			body, err := ioutil.ReadAll(rec.Body)
+			body, err := io.ReadAll(rec.Body)
 			if err != nil {
 				t.Fatalf("Unexpected error reading response body: %v", err)
 			}
@@ -327,7 +328,7 @@ func TestGzipHandlerContentLength(t *testing.T) {
 			}
 			defer res.Body.Close()
 
-			body, err := ioutil.ReadAll(res.Body)
+			body, err := io.ReadAll(res.Body)
 			if err != nil {
 				t.Fatalf("Unexpected error reading response body in test iteration %d: %v", num, err)
 			}
@@ -431,7 +432,7 @@ func TestGzipHandlerDoubleWriteHeader(t *testing.T) {
 	}
 	req.Header.Set("Accept-Encoding", "gzip")
 	wrapper.ServeHTTP(rec, req)
-	body, err := ioutil.ReadAll(rec.Body)
+	body, err := io.ReadAll(rec.Body)
 	if err != nil {
 		t.Fatalf("Unexpected error reading response body: %v", err)
 	}
@@ -493,7 +494,7 @@ func TestFlushAfterWrite(t *testing.T) {
 	assertEqual(t, "gzip", res.Header.Get("Content-Encoding"))
 	gr, err := gzip.NewReader(w.Body)
 	assertNil(t, err)
-	got, err := ioutil.ReadAll(gr)
+	got, err := io.ReadAll(gr)
 	assertNil(t, err)
 	assertEqual(t, b, got)
 }
@@ -516,7 +517,7 @@ func TestFlushAfterWrite2(t *testing.T) {
 	assertEqual(t, "gzip", res.Header.Get("Content-Encoding"))
 	gr, err := gzip.NewReader(w.Body)
 	assertNil(t, err)
-	got, err := ioutil.ReadAll(gr)
+	got, err := io.ReadAll(gr)
 	assertNil(t, err)
 	assertEqual(t, b, got)
 }
@@ -807,13 +808,13 @@ func TestFlush(t *testing.T) {
 				assertEqual(t, "gzip", res.Header.Get("Content-Encoding"))
 				zr, err := gzip.NewReader(resp.Body)
 				assertNil(t, err)
-				got, err := ioutil.ReadAll(zr)
+				got, err := io.ReadAll(zr)
 				assertNil(t, err)
 				assertEqual(t, testBody, got)
 
 			} else {
 				assertNotEqual(t, "gzip", res.Header.Get("Content-Encoding"))
-				got, err := ioutil.ReadAll(resp.Body)
+				got, err := io.ReadAll(resp.Body)
 				assertNil(t, err)
 				assertEqual(t, testBody, got)
 			}
@@ -1091,7 +1092,7 @@ func gzipStrLevel(s []byte, lvl int) []byte {
 }
 
 func benchmark(b *testing.B, parallel bool, size, level int) {
-	bin, err := ioutil.ReadFile("testdata/benchmark.json")
+	bin, err := os.ReadFile("testdata/benchmark.json")
 	if err != nil {
 		b.Fatal(err)
 	}

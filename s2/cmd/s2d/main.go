@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"runtime"
@@ -82,7 +81,7 @@ Options:`)
 	if len(args) == 1 && args[0] == "-" {
 		r.Reset(os.Stdin)
 		if *verify {
-			_, err := io.Copy(ioutil.Discard, r)
+			_, err := io.Copy(io.Discard, r)
 			exitErr(err)
 			return
 		}
@@ -169,9 +168,9 @@ Options:`)
 					} else {
 						r.Reset(bytes.NewBuffer(b))
 						if *cpu > 1 {
-							output, err = r.DecodeConcurrent(ioutil.Discard, *cpu)
+							output, err = r.DecodeConcurrent(io.Discard, *cpu)
 						} else {
-							output, err = io.Copy(ioutil.Discard, r)
+							output, err = io.Copy(io.Discard, r)
 						}
 						exitErr(err)
 					}
@@ -264,7 +263,7 @@ Options:`)
 			var out io.Writer
 			switch {
 			case *verify:
-				out = ioutil.Discard
+				out = io.Discard
 			case *stdout:
 				out = os.Stdout
 			default:
@@ -281,7 +280,7 @@ Options:`)
 			var decoded io.Reader
 			start := time.Now()
 			if block {
-				all, err := ioutil.ReadAll(src)
+				all, err := io.ReadAll(src)
 				exitErr(err)
 				b, err := s2.Decode(nil, all)
 				exitErr(err)
@@ -292,9 +291,9 @@ Options:`)
 					rs, err := r.ReadSeeker(tailBytes > 0, nil)
 					exitErr(err)
 					if tailBytes > 0 {
-						_, err = rs.Seek(-int64(tailBytes), io.SeekEnd)
+						_, err = rs.Seek(-tailBytes, io.SeekEnd)
 					} else {
-						_, err = rs.Seek(int64(offset), io.SeekStart)
+						_, err = rs.Seek(offset, io.SeekStart)
 					}
 					exitErr(err)
 				}
@@ -408,7 +407,7 @@ func (w *rCountSeeker) BytesRead() int64 {
 }
 
 // toSize converts a size indication to bytes.
-func toSize(size string) (uint64, error) {
+func toSize(size string) (int64, error) {
 	if len(size) == 0 {
 		return 0, nil
 	}
@@ -419,22 +418,25 @@ func toSize(size string) (uint64, error) {
 	}
 
 	bytesString, multiple := size[:firstLetter], size[firstLetter:]
-	bytes, err := strconv.ParseUint(bytesString, 10, 64)
+	sz, err := strconv.ParseInt(bytesString, 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("unable to parse size: %v", err)
 	}
 
+	if sz < 0 {
+		return 0, errors.New("negative size given")
+	}
 	switch multiple {
 	case "T", "TB", "TIB":
-		return bytes * 1 << 40, nil
+		return sz * 1 << 40, nil
 	case "G", "GB", "GIB":
-		return bytes * 1 << 30, nil
+		return sz * 1 << 30, nil
 	case "M", "MB", "MIB":
-		return bytes * 1 << 20, nil
+		return sz * 1 << 20, nil
 	case "K", "KB", "KIB":
-		return bytes * 1 << 10, nil
+		return sz * 1 << 10, nil
 	case "B", "":
-		return bytes, nil
+		return sz, nil
 	default:
 		return 0, fmt.Errorf("unknown size suffix: %v", multiple)
 	}

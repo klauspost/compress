@@ -14,7 +14,8 @@ import (
 	"compress/flate"
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
+	"io"
+	"os"
 	"testing"
 )
 
@@ -71,7 +72,7 @@ func TestInvalidEncoding(t *testing.T) {
 
 func TestRegressions(t *testing.T) {
 	// Test fuzzer regressions
-	data, err := ioutil.ReadFile("testdata/regression.zip")
+	data, err := os.ReadFile("testdata/regression.zip")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +85,7 @@ func TestRegressions(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		data1, err := ioutil.ReadAll(data)
+		data1, err := io.ReadAll(data)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -111,7 +112,7 @@ func TestRegressions(t *testing.T) {
 						t.Error(err)
 					}
 					fr1 := NewReader(buf)
-					data2, err := ioutil.ReadAll(fr1)
+					data2, err := io.ReadAll(fr1)
 					if err != nil {
 						t.Error(err)
 					}
@@ -133,7 +134,7 @@ func TestRegressions(t *testing.T) {
 						t.Error(err)
 					}
 					fr1 = flate.NewReader(buf)
-					data2, err = ioutil.ReadAll(fr1)
+					data2, err = io.ReadAll(fr1)
 					if err != nil {
 						t.Error(err)
 					}
@@ -158,7 +159,7 @@ func TestRegressions(t *testing.T) {
 				}
 				t.Log(buf.Len())
 				fr1 := NewReader(buf)
-				data2, err := ioutil.ReadAll(fr1)
+				data2, err := io.ReadAll(fr1)
 				if err != nil {
 					t.Error(err)
 				}
@@ -346,7 +347,7 @@ func TestStreams(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		data, err = ioutil.ReadAll(NewReader(bytes.NewReader(data)))
+		data, err = io.ReadAll(NewReader(bytes.NewReader(data)))
 		if tc.want == "fail" {
 			if err == nil {
 				t.Errorf("#%d (%s): got nil error, want non-nil", i, tc.desc)
