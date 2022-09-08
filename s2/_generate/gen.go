@@ -59,12 +59,12 @@ func main() {
 
 	o.outputMargin = 6
 	o.maxSkip = 100 // Blocks can be long, limit max skipping.
-	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm", 16, 7, 7, limit14B)
-	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm4MB", 16, 7, 7, 4<<20)
+	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm", 17, 14, 7, 7, limit14B)
+	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm4MB", 17, 14, 7, 7, 4<<20)
 	o.maxSkip = 0
-	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm12B", 14, 6, 6, limit12B)
-	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm10B", 12, 5, 6, limit10B)
-	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm8B", 10, 4, 6, limit8B)
+	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm12B", 14, 12, 6, 6, limit12B)
+	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm10B", 12, 10, 5, 6, limit10B)
+	o.genEncodeBetterBlockAsm("encodeBetterBlockAsm8B", 10, 8, 4, 6, limit8B)
 
 	// Snappy compatible
 	o.snappy = true
@@ -76,12 +76,12 @@ func main() {
 	o.genEncodeBlockAsm("encodeSnappyBlockAsm8B", 8, 4, 4, limit8B)
 
 	o.maxSkip = 100
-	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm", 16, 7, 7, limit14B)
+	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm", 17, 14, 7, 7, limit14B)
 	o.maxSkip = 0
-	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm64K", 16, 7, 7, 64<<10-1)
-	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm12B", 14, 6, 6, limit12B)
-	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm10B", 12, 5, 6, limit10B)
-	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm8B", 10, 4, 6, limit8B)
+	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm64K", 16, 14, 7, 7, 64<<10-1)
+	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm12B", 14, 12, 6, 6, limit12B)
+	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm10B", 12, 10, 5, 6, limit10B)
+	o.genEncodeBetterBlockAsm("encodeSnappyBetterBlockAsm8B", 10, 8, 4, 6, limit8B)
 
 	o.snappy = false
 	o.outputMargin = 0
@@ -785,7 +785,7 @@ func maxLitOverheadFor(n int) int {
 	return 5
 }
 
-func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHashBytes, maxLen int) {
+func (o options) genEncodeBetterBlockAsm(name string, lTableBits, sTableBits, skipLog, lHashBytes, maxLen int) {
 	TEXT(name, 0, "func(dst, src []byte) int")
 	Doc(name+" encodes a non-empty src to a guaranteed-large-enough dst.",
 		fmt.Sprintf("Maximum input %d bytes.", maxLen),
@@ -797,7 +797,6 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 	}
 	var literalMaxOverhead = maxLitOverheadFor(maxLen)
 
-	var sTableBits = lTableBits - 2
 	const sHashBytes = 4
 	o.maxLen = maxLen
 
@@ -998,10 +997,34 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 			MOVL(s, sTab.Idx(hash1, 4))
 		}
 
+		longVal := GP64()
+		shortVal := GP64()
+		MOVQ(Mem{Base: src, Index: candidate, Scale: 1}, longVal)
+		MOVQ(Mem{Base: src, Index: candidateS, Scale: 1}, shortVal)
+
+		// If we have at least 8 bytes match, choose that first.
+		CMPQ(longVal, cv.As64())
+		JEQ(LabelRef("candidate_match_" + name))
+
+		CMPQ(shortVal, cv.As64())
+		JNE(LabelRef("no_short_found_" + name))
+		MOVL(candidateS.As32(), candidate.As32())
+		JMP(LabelRef("candidate_match_" + name))
+
+		Label("no_short_found_" + name)
+		MOVL(longVal.As32(), longVal.As32())
+
 		// En/disable repeat matching.
+		// Too small improvement
 		if false {
+			{
+				CMPL(repeatL, U8(0))
+				JEQ(LabelRef("no_repeat_found_" + name))
+			}
 			// Check repeat at offset checkRep
 			const checkRep = 1
+			const wantRepeatBytes = 6
+			const repeatMask = ((1 << (wantRepeatBytes * 8)) - 1) << (8 * checkRep)
 			{
 				// rep = s - repeat
 				rep := GP32()
@@ -1010,10 +1033,13 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 
 				// if uint32(cv>>(checkRep*8)) == load32(src, s-repeat+checkRep) {
 				left, right := GP64(), GP64()
-				MOVL(Mem{Base: src, Index: rep, Disp: checkRep, Scale: 1}, right.As32())
+				MOVQ(Mem{Base: src, Index: rep, Disp: 0, Scale: 1}, right.As64())
 				MOVQ(cv, left)
-				SHRQ(U8(checkRep*8), left)
-				CMPL(left.As32(), right.As32())
+				tmp := GP64()
+				MOVQ(U64(repeatMask), tmp)
+				ANDQ(tmp, left)
+				ANDQ(tmp, right)
+				CMPQ(left.As64(), right.As64())
 				// BAIL, no repeat.
 				JNE(LabelRef("no_repeat_found_" + name))
 			}
@@ -1057,7 +1083,7 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 			// Extend forward
 			{
 				// s += 4 + checkRep
-				ADDL(U8(4+checkRep), s)
+				ADDL(U8(wantRepeatBytes+checkRep), s)
 
 				if true {
 					// candidate := s - repeat + 4 + checkRep
@@ -1097,18 +1123,8 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 				offsetVal := GP32()
 				MOVL(repeatL, offsetVal)
 
-				if !o.snappy {
-					// if nextEmit == 0 {do copy instead...}
-					TESTL(nextEmit, nextEmit)
-					JZ(LabelRef("repeat_as_copy_" + name))
-
-					// Emit as repeat...
-					o.emitRepeat("match_repeat_"+name, length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name), false)
-
-					// Emit as copy instead...
-					Label("repeat_as_copy_" + name)
-				}
-				o.emitCopy("repeat_as_copy_"+name, length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name))
+				// Emit as repeat...
+				o.emitRepeat("match_repeat_"+name, length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name), false)
 
 				Label("repeat_end_emit_" + name)
 				// Store new dst and nextEmit
@@ -1145,11 +1161,11 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 				JG(ok)
 			})
 
-			CMPL(Mem{Base: src, Index: candidate, Scale: 1}, cv.As32())
+			CMPL(longVal.As32(), cv.As32())
 			JEQ(LabelRef("candidate_match_" + name))
 
 			//if uint32(cv) == load32(src, candidateS)
-			CMPL(Mem{Base: src, Index: candidateS, Scale: 1}, cv.As32())
+			CMPL(shortVal.As32(), cv.As32())
 			JEQ(LabelRef("candidateS_match_" + name))
 
 			// No match found, next loop
@@ -1338,8 +1354,54 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 		}
 	}
 	Label("match_nolit_dst_ok_" + name)
-	// cv must be set to value at base+1 before arriving here
 	if true {
+		lHasher := hashN(lHashBytes, lTableBits)
+		sHasher := hashN(sHashBytes, sTableBits)
+
+		index0, index1 := GP64(), GP64()
+		// index0 := base + 1
+		LEAQ(Mem{Base: base, Disp: 1}, index0)
+		// index1 := s - 2
+		LEAQ(Mem{Base: s, Disp: -2}, index1)
+		hash0l, hash0s, hash1l, hash1s := GP64(), GP64(), GP64(), GP64()
+		MOVQ(Mem{Base: src, Index: index0, Scale: 1, Disp: 0}, hash0l)
+		MOVQ(Mem{Base: src, Index: index0, Scale: 1, Disp: 1}, hash0s)
+		MOVQ(Mem{Base: src, Index: index1, Scale: 1, Disp: 0}, hash1l)
+		MOVQ(Mem{Base: src, Index: index1, Scale: 1, Disp: 1}, hash1s)
+
+		lHasher.hash(hash0l)
+		sHasher.hash(hash0s)
+		lHasher.hash(hash1l)
+		sHasher.hash(hash1s)
+
+		plusone0, plusone1 := GP64(), GP64()
+		LEAQ(Mem{Base: index0, Disp: 1}, plusone0)
+		LEAQ(Mem{Base: index1, Disp: 1}, plusone1)
+		MOVL(index0.As32(), lTab.Idx(hash0l, 4))
+		MOVL(index1.As32(), lTab.Idx(hash1l, 4))
+		MOVL(plusone0.As32(), sTab.Idx(hash0s, 4))
+		MOVL(plusone1.As32(), sTab.Idx(hash1s, 4))
+
+		ADDQ(U8(1), index0)
+		SUBQ(U8(1), index1)
+
+		Label("index_loop_" + name)
+		CMPQ(index0, index1)
+		JAE(LabelRef("search_loop_" + name))
+		hash0l, hash1l = GP64(), GP64()
+		MOVQ(Mem{Base: src, Index: index0, Scale: 1, Disp: 0}, hash0l)
+		MOVQ(Mem{Base: src, Index: index1, Scale: 1, Disp: 0}, hash1l)
+
+		lHasher.hash(hash0l)
+		lHasher.hash(hash1l)
+
+		MOVL(index0.As32(), lTab.Idx(hash0l, 4))
+		MOVL(index1.As32(), lTab.Idx(hash1l, 4))
+
+		ADDQ(U8(2), index0)
+		SUBQ(U8(2), index1)
+		JMP(LabelRef("index_loop_" + name))
+	} else {
 		lHasher := hashN(lHashBytes, lTableBits)
 		sHasher := hashN(sHashBytes, sTableBits)
 
@@ -1412,8 +1474,8 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, skipLog, lHash
 		MOVL(sm2, lTab.Idx(hash0, 4))
 		MOVL(sm1, sTab.Idx(hash1, 4))
 		MOVL(sm1, lTab.Idx(hash3, 4))
+		JMP(LabelRef("search_loop_" + name))
 	}
-	JMP(LabelRef("search_loop_" + name))
 
 	Label("emit_remainder_" + name)
 	// Bail if we exceed the maximum size.
