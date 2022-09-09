@@ -790,9 +790,11 @@ func (w *huffmanBitWriter) fillTokens() {
 // and offsetEncoding.
 // The number of literal and offset tokens is returned.
 func (w *huffmanBitWriter) indexTokens(t *tokens, filled bool) (numLiterals, numOffsets int) {
-	copy(w.literalFreq[:], t.litHist[:])
-	copy(w.literalFreq[256:], t.extraHist[:])
-	copy(w.offsetFreq[:], t.offHist[:offsetCodeCount])
+	//copy(w.literalFreq[:], t.litHist[:])
+	*(*[256]uint16)(w.literalFreq[:]) = t.litHist
+	//copy(w.literalFreq[256:], t.extraHist[:])
+	*(*[32]uint16)(w.literalFreq[256:]) = t.extraHist
+	w.offsetFreq = t.offHist
 
 	if t.n == 0 {
 		return
