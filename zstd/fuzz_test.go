@@ -6,22 +6,17 @@ package zstd
 import (
 	"bytes"
 	"fmt"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"io"
-	"os"
 	rdebug "runtime/debug"
-	"strconv"
 	"testing"
 
 	"github.com/klauspost/compress/internal/cpuinfo"
-	"github.com/klauspost/compress/zip"
+	"github.com/klauspost/compress/internal/fuzz"
 )
 
 func FuzzDecodeAll(f *testing.F) {
-	addBytesFromZip(f, "testdata/fuzz/decode-corpus-raw.zip", true)
-	addBytesFromZip(f, "testdata/fuzz/decode-corpus-encoded.zip", false)
+	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-raw.zip", true, testing.Short())
+	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-encoded.zip", false, testing.Short())
 	decLow, err := NewReader(nil, WithDecoderLowmem(true), WithDecoderConcurrency(2), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true))
 	if err != nil {
 		f.Fatal(err)
@@ -65,8 +60,8 @@ func FuzzDecodeAllNoBMI2(f *testing.F) {
 }
 
 func FuzzDecoder(f *testing.F) {
-	addBytesFromZip(f, "testdata/fuzz/decode-corpus-raw.zip", true)
-	addBytesFromZip(f, "testdata/fuzz/decode-corpus-encoded.zip", false)
+	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-raw.zip", true, testing.Short())
+	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-encoded.zip", false, testing.Short())
 	decLow, err := NewReader(nil, WithDecoderLowmem(true), WithDecoderConcurrency(2), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true))
 	if err != nil {
 		f.Fatal(err)
@@ -110,14 +105,14 @@ func FuzzDecoder(f *testing.F) {
 }
 
 func FuzzEncoding(f *testing.F) {
-	addBytesFromZip(f, "testdata/fuzz/encode-corpus-raw.zip", true)
-	addBytesFromZip(f, "testdata/comp-crashers.zip", true)
-	addBytesFromZip(f, "testdata/fuzz/encode-corpus-encoded.zip", false)
+	fuzz.AddFromZip(f, "testdata/fuzz/encode-corpus-raw.zip", true, testing.Short())
+	fuzz.AddFromZip(f, "testdata/comp-crashers.zip", true, false)
+	fuzz.AddFromZip(f, "testdata/fuzz/encode-corpus-encoded.zip", false, testing.Short())
 	// Fuzzing tweaks:
 	const (
 		// Test a subset of encoders.
 		startFuzz = SpeedFastest
-		endFuzz   = SpeedBestCompression
+		endFuzz   = SpeedBetterCompression
 
 		// Also tests with dictionaries...
 		testDicts = true
@@ -263,110 +258,4 @@ func FuzzEncoding(f *testing.F) {
 			}
 		}
 	})
-}
-
-func addBytesFromZip(f *testing.F, filename string, raw bool) {
-	file, err := os.Open(filename)
-	if err != nil {
-		f.Fatal(err)
-	}
-	fi, err := file.Stat()
-	if err != nil {
-		f.Fatal(err)
-	}
-	zr, err := zip.NewReader(file, fi.Size())
-	if err != nil {
-		f.Fatal(err)
-	}
-	for i, file := range zr.File {
-		if testing.Short() && i%10 != 0 {
-			continue
-		}
-		rc, err := file.Open()
-		if err != nil {
-			f.Fatal(err)
-		}
-
-		b, err := io.ReadAll(rc)
-		if err != nil {
-			f.Fatal(err)
-		}
-		rc.Close()
-		raw := raw
-		if bytes.HasPrefix(b, []byte("go test fuzz")) {
-			raw = false
-		}
-		if raw {
-			f.Add(b)
-			continue
-		}
-		vals, err := unmarshalCorpusFile(b)
-		if err != nil {
-			f.Fatal(err)
-		}
-		for _, v := range vals {
-			f.Add(v)
-		}
-	}
-}
-
-// unmarshalCorpusFile decodes corpus bytes into their respective values.
-func unmarshalCorpusFile(b []byte) ([][]byte, error) {
-	if len(b) == 0 {
-		return nil, fmt.Errorf("cannot unmarshal empty string")
-	}
-	lines := bytes.Split(b, []byte("\n"))
-	if len(lines) < 2 {
-		return nil, fmt.Errorf("must include version and at least one value")
-	}
-	var vals = make([][]byte, 0, len(lines)-1)
-	for _, line := range lines[1:] {
-		line = bytes.TrimSpace(line)
-		if len(line) == 0 {
-			continue
-		}
-		v, err := parseCorpusValue(line)
-		if err != nil {
-			return nil, fmt.Errorf("malformed line %q: %v", line, err)
-		}
-		vals = append(vals, v)
-	}
-	return vals, nil
-}
-
-// parseCorpusValue
-func parseCorpusValue(line []byte) ([]byte, error) {
-	fs := token.NewFileSet()
-	expr, err := parser.ParseExprFrom(fs, "(test)", line, 0)
-	if err != nil {
-		return nil, err
-	}
-	call, ok := expr.(*ast.CallExpr)
-	if !ok {
-		return nil, fmt.Errorf("expected call expression")
-	}
-	if len(call.Args) != 1 {
-		return nil, fmt.Errorf("expected call expression with 1 argument; got %d", len(call.Args))
-	}
-	arg := call.Args[0]
-
-	if arrayType, ok := call.Fun.(*ast.ArrayType); ok {
-		if arrayType.Len != nil {
-			return nil, fmt.Errorf("expected []byte or primitive type")
-		}
-		elt, ok := arrayType.Elt.(*ast.Ident)
-		if !ok || elt.Name != "byte" {
-			return nil, fmt.Errorf("expected []byte")
-		}
-		lit, ok := arg.(*ast.BasicLit)
-		if !ok || lit.Kind != token.STRING {
-			return nil, fmt.Errorf("string literal required for type []byte")
-		}
-		s, err := strconv.Unquote(lit.Value)
-		if err != nil {
-			return nil, err
-		}
-		return []byte(s), nil
-	}
-	return nil, fmt.Errorf("expected []byte")
 }
