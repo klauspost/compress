@@ -87,39 +87,58 @@ func TestEncoderRegression(t *testing.T) {
 		if testing.Short() && len(data) > 10000 {
 			t.SkipNow()
 		}
+		var blocksTested bool
 		for name, opts := range testOptions(t) {
 			t.Run(name, func(t *testing.T) {
 				var buf bytes.Buffer
 				dec := NewReader(nil)
 				enc := NewWriter(&buf, opts...)
 
-				comp := Encode(make([]byte, MaxEncodedLen(len(data))), data)
-				decoded, err := Decode(nil, comp)
-				if err != nil {
-					t.Error(err)
-					return
-				}
-				if !bytes.Equal(data, decoded) {
-					t.Error("block decoder mismatch")
-					return
-				}
-				if mel := MaxEncodedLen(len(data)); len(comp) > mel {
-					t.Error(fmt.Errorf("MaxEncodedLen Exceed: input: %d, mel: %d, got %d", len(data), mel, len(comp)))
-					return
-				}
-				comp = EncodeBetter(make([]byte, MaxEncodedLen(len(data))), data)
-				decoded, err = Decode(nil, comp)
-				if err != nil {
-					t.Error(err)
-					return
-				}
-				if !bytes.Equal(data, decoded) {
-					t.Error("block decoder mismatch")
-					return
-				}
-				if mel := MaxEncodedLen(len(data)); len(comp) > mel {
-					t.Error(fmt.Errorf("MaxEncodedLen Exceed: input: %d, mel: %d, got %d", len(data), mel, len(comp)))
-					return
+				if !blocksTested {
+					comp := Encode(make([]byte, MaxEncodedLen(len(data))), data)
+					decoded, err := Decode(nil, comp)
+					if err != nil {
+						t.Error(err)
+						return
+					}
+					if !bytes.Equal(data, decoded) {
+						t.Error("block decoder mismatch")
+						return
+					}
+					if mel := MaxEncodedLen(len(data)); len(comp) > mel {
+						t.Error(fmt.Errorf("MaxEncodedLen Exceed: input: %d, mel: %d, got %d", len(data), mel, len(comp)))
+						return
+					}
+					comp = EncodeBetter(make([]byte, MaxEncodedLen(len(data))), data)
+					decoded, err = Decode(nil, comp)
+					if err != nil {
+						t.Error(err)
+						return
+					}
+					if !bytes.Equal(data, decoded) {
+						t.Error("block decoder mismatch")
+						return
+					}
+					if mel := MaxEncodedLen(len(data)); len(comp) > mel {
+						t.Error(fmt.Errorf("MaxEncodedLen Exceed: input: %d, mel: %d, got %d", len(data), mel, len(comp)))
+						return
+					}
+
+					comp = EncodeBest(make([]byte, MaxEncodedLen(len(data))), data)
+					decoded, err = Decode(nil, comp)
+					if err != nil {
+						t.Error(err)
+						return
+					}
+					if !bytes.Equal(data, decoded) {
+						t.Error("block decoder mismatch")
+						return
+					}
+					if mel := MaxEncodedLen(len(data)); len(comp) > mel {
+						t.Error(fmt.Errorf("MaxEncodedLen Exceed: input: %d, mel: %d, got %d", len(data), mel, len(comp)))
+						return
+					}
+					blocksTested = true
 				}
 
 				// Test writer.
@@ -143,7 +162,7 @@ func TestEncoderRegression(t *testing.T) {
 					t.Error(err)
 					return
 				}
-				comp = buf.Bytes()
+				comp := buf.Bytes()
 				if enc.pad > 0 && len(comp)%enc.pad != 0 {
 					t.Error(fmt.Errorf("wanted size to be mutiple of %d, got size %d with remainder %d", enc.pad, len(comp), len(comp)%enc.pad))
 					return
