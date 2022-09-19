@@ -1385,6 +1385,13 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, sTableBits, sk
 		ADDQ(U8(1), index0)
 		SUBQ(U8(1), index1)
 
+		// forward := bits.Len(uint(index1 - index0))
+		forward := GP64()
+		MOVQ(index1, forward)
+		SUBQ(index0, forward)
+		BSRQ(forward, forward)
+		ADDQ(U8(1), forward)
+
 		Label("index_loop_" + name)
 		CMPQ(index0, index1)
 		JAE(LabelRef("search_loop_" + name))
@@ -1398,8 +1405,8 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, sTableBits, sk
 		MOVL(index0.As32(), lTab.Idx(hash0l, 4))
 		MOVL(index1.As32(), lTab.Idx(hash1l, 4))
 
-		ADDQ(U8(2), index0)
-		SUBQ(U8(2), index1)
+		ADDQ(forward, index0)
+		SUBQ(forward, index1)
 		JMP(LabelRef("index_loop_" + name))
 	} else {
 		lHasher := hashN(lHashBytes, lTableBits)

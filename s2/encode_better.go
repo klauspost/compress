@@ -273,12 +273,15 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 		index1 -= 1
 		cv = load64(src, s)
 
-		// index every second long in between.
+		// Add less for longer matches.
+		// Will only be 0 when equal (thus failing loop)
+		forward := bits.Len(uint(index1 - index0))
+
 		for index0 < index1 {
 			lTable[hash7(load64(src, index0), lTableBits)] = uint32(index0)
 			lTable[hash7(load64(src, index1), lTableBits)] = uint32(index1)
-			index0 += 2
-			index1 -= 2
+			index0 += forward
+			index1 -= forward
 		}
 	}
 
@@ -457,12 +460,15 @@ func encodeBlockBetterSnappyGo(dst, src []byte) (d int) {
 		index1 -= 1
 		cv = load64(src, s)
 
-		// index every second long in between.
+		// Add less for longer matches.
+		// Will only be 0 when equal (thus failing loop)
+		forward := bits.Len(uint(index1 - index0))
+
 		for index0 < index1 {
 			lTable[hash7(load64(src, index0), lTableBits)] = uint32(index0)
 			lTable[hash7(load64(src, index1), lTableBits)] = uint32(index1)
-			index0 += 2
-			index1 -= 2
+			index0 += forward
+			index1 -= forward
 		}
 	}
 

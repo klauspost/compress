@@ -6625,22 +6625,26 @@ match_nolit_dst_ok_encodeBetterBlockAsm:
 	MOVL  R14, 524312(SP)(R13*4)
 	ADDQ  $0x01, DI
 	SUBQ  $0x01, R9
+	MOVQ  R9, R8
+	SUBQ  DI, R8
+	BSRQ  R8, R8
+	ADDQ  $0x01, R8
 
 index_loop_encodeBetterBlockAsm:
 	CMPQ  DI, R9
 	JAE   search_loop_encodeBetterBlockAsm
-	MOVQ  (DX)(DI*1), R8
-	MOVQ  (DX)(R9*1), R10
-	SHLQ  $0x08, R8
-	IMULQ SI, R8
-	SHRQ  $0x2f, R8
+	MOVQ  (DX)(DI*1), R10
+	MOVQ  (DX)(R9*1), R11
 	SHLQ  $0x08, R10
 	IMULQ SI, R10
 	SHRQ  $0x2f, R10
-	MOVL  DI, 24(SP)(R8*4)
-	MOVL  R9, 24(SP)(R10*4)
-	ADDQ  $0x02, DI
-	SUBQ  $0x02, R9
+	SHLQ  $0x08, R11
+	IMULQ SI, R11
+	SHRQ  $0x2f, R11
+	MOVL  DI, 24(SP)(R10*4)
+	MOVL  R9, 24(SP)(R11*4)
+	ADDQ  R8, DI
+	SUBQ  R8, R9
 	JMP   index_loop_encodeBetterBlockAsm
 
 emit_remainder_encodeBetterBlockAsm:
@@ -7642,22 +7646,26 @@ match_nolit_dst_ok_encodeBetterBlockAsm4MB:
 	MOVL  R14, 524312(SP)(R13*4)
 	ADDQ  $0x01, DI
 	SUBQ  $0x01, R9
+	MOVQ  R9, R8
+	SUBQ  DI, R8
+	BSRQ  R8, R8
+	ADDQ  $0x01, R8
 
 index_loop_encodeBetterBlockAsm4MB:
 	CMPQ  DI, R9
 	JAE   search_loop_encodeBetterBlockAsm4MB
-	MOVQ  (DX)(DI*1), R8
-	MOVQ  (DX)(R9*1), R10
-	SHLQ  $0x08, R8
-	IMULQ SI, R8
-	SHRQ  $0x2f, R8
+	MOVQ  (DX)(DI*1), R10
+	MOVQ  (DX)(R9*1), R11
 	SHLQ  $0x08, R10
 	IMULQ SI, R10
 	SHRQ  $0x2f, R10
-	MOVL  DI, 24(SP)(R8*4)
-	MOVL  R9, 24(SP)(R10*4)
-	ADDQ  $0x02, DI
-	SUBQ  $0x02, R9
+	SHLQ  $0x08, R11
+	IMULQ SI, R11
+	SHRQ  $0x2f, R11
+	MOVL  DI, 24(SP)(R10*4)
+	MOVL  R9, 24(SP)(R11*4)
+	ADDQ  R8, DI
+	SUBQ  R8, R9
 	JMP   index_loop_encodeBetterBlockAsm4MB
 
 emit_remainder_encodeBetterBlockAsm4MB:
@@ -8496,22 +8504,26 @@ match_nolit_dst_ok_encodeBetterBlockAsm12B:
 	MOVL  R14, 65560(SP)(R13*4)
 	ADDQ  $0x01, DI
 	SUBQ  $0x01, R9
+	MOVQ  R9, R8
+	SUBQ  DI, R8
+	BSRQ  R8, R8
+	ADDQ  $0x01, R8
 
 index_loop_encodeBetterBlockAsm12B:
 	CMPQ  DI, R9
 	JAE   search_loop_encodeBetterBlockAsm12B
-	MOVQ  (DX)(DI*1), R8
-	MOVQ  (DX)(R9*1), R10
-	SHLQ  $0x10, R8
-	IMULQ SI, R8
-	SHRQ  $0x32, R8
+	MOVQ  (DX)(DI*1), R10
+	MOVQ  (DX)(R9*1), R11
 	SHLQ  $0x10, R10
 	IMULQ SI, R10
 	SHRQ  $0x32, R10
-	MOVL  DI, 24(SP)(R8*4)
-	MOVL  R9, 24(SP)(R10*4)
-	ADDQ  $0x02, DI
-	SUBQ  $0x02, R9
+	SHLQ  $0x10, R11
+	IMULQ SI, R11
+	SHRQ  $0x32, R11
+	MOVL  DI, 24(SP)(R10*4)
+	MOVL  R9, 24(SP)(R11*4)
+	ADDQ  R8, DI
+	SUBQ  R8, R9
 	JMP   index_loop_encodeBetterBlockAsm12B
 
 emit_remainder_encodeBetterBlockAsm12B:
@@ -9339,22 +9351,26 @@ match_nolit_dst_ok_encodeBetterBlockAsm10B:
 	MOVL  R14, 16408(SP)(R13*4)
 	ADDQ  $0x01, DI
 	SUBQ  $0x01, R9
+	MOVQ  R9, R8
+	SUBQ  DI, R8
+	BSRQ  R8, R8
+	ADDQ  $0x01, R8
 
 index_loop_encodeBetterBlockAsm10B:
 	CMPQ  DI, R9
 	JAE   search_loop_encodeBetterBlockAsm10B
-	MOVQ  (DX)(DI*1), R8
-	MOVQ  (DX)(R9*1), R10
-	SHLQ  $0x10, R8
-	IMULQ SI, R8
-	SHRQ  $0x34, R8
+	MOVQ  (DX)(DI*1), R10
+	MOVQ  (DX)(R9*1), R11
 	SHLQ  $0x10, R10
 	IMULQ SI, R10
 	SHRQ  $0x34, R10
-	MOVL  DI, 24(SP)(R8*4)
-	MOVL  R9, 24(SP)(R10*4)
-	ADDQ  $0x02, DI
-	SUBQ  $0x02, R9
+	SHLQ  $0x10, R11
+	IMULQ SI, R11
+	SHRQ  $0x34, R11
+	MOVL  DI, 24(SP)(R10*4)
+	MOVL  R9, 24(SP)(R11*4)
+	ADDQ  R8, DI
+	SUBQ  R8, R9
 	JMP   index_loop_encodeBetterBlockAsm10B
 
 emit_remainder_encodeBetterBlockAsm10B:
@@ -10168,22 +10184,26 @@ match_nolit_dst_ok_encodeBetterBlockAsm8B:
 	MOVL  R14, 4120(SP)(R13*4)
 	ADDQ  $0x01, DI
 	SUBQ  $0x01, R9
+	MOVQ  R9, R8
+	SUBQ  DI, R8
+	BSRQ  R8, R8
+	ADDQ  $0x01, R8
 
 index_loop_encodeBetterBlockAsm8B:
 	CMPQ  DI, R9
 	JAE   search_loop_encodeBetterBlockAsm8B
-	MOVQ  (DX)(DI*1), R8
-	MOVQ  (DX)(R9*1), R10
-	SHLQ  $0x10, R8
-	IMULQ SI, R8
-	SHRQ  $0x36, R8
+	MOVQ  (DX)(DI*1), R10
+	MOVQ  (DX)(R9*1), R11
 	SHLQ  $0x10, R10
 	IMULQ SI, R10
 	SHRQ  $0x36, R10
-	MOVL  DI, 24(SP)(R8*4)
-	MOVL  R9, 24(SP)(R10*4)
-	ADDQ  $0x02, DI
-	SUBQ  $0x02, R9
+	SHLQ  $0x10, R11
+	IMULQ SI, R11
+	SHRQ  $0x36, R11
+	MOVL  DI, 24(SP)(R10*4)
+	MOVL  R9, 24(SP)(R11*4)
+	ADDQ  R8, DI
+	SUBQ  R8, R9
 	JMP   index_loop_encodeBetterBlockAsm8B
 
 emit_remainder_encodeBetterBlockAsm8B:
@@ -14755,22 +14775,26 @@ match_nolit_dst_ok_encodeSnappyBetterBlockAsm:
 	MOVL  R14, 524312(SP)(R13*4)
 	ADDQ  $0x01, DI
 	SUBQ  $0x01, R9
+	MOVQ  R9, R8
+	SUBQ  DI, R8
+	BSRQ  R8, R8
+	ADDQ  $0x01, R8
 
 index_loop_encodeSnappyBetterBlockAsm:
 	CMPQ  DI, R9
 	JAE   search_loop_encodeSnappyBetterBlockAsm
-	MOVQ  (DX)(DI*1), R8
-	MOVQ  (DX)(R9*1), R10
-	SHLQ  $0x08, R8
-	IMULQ SI, R8
-	SHRQ  $0x2f, R8
+	MOVQ  (DX)(DI*1), R10
+	MOVQ  (DX)(R9*1), R11
 	SHLQ  $0x08, R10
 	IMULQ SI, R10
 	SHRQ  $0x2f, R10
-	MOVL  DI, 24(SP)(R8*4)
-	MOVL  R9, 24(SP)(R10*4)
-	ADDQ  $0x02, DI
-	SUBQ  $0x02, R9
+	SHLQ  $0x08, R11
+	IMULQ SI, R11
+	SHRQ  $0x2f, R11
+	MOVL  DI, 24(SP)(R10*4)
+	MOVL  R9, 24(SP)(R11*4)
+	ADDQ  R8, DI
+	SUBQ  R8, R9
 	JMP   index_loop_encodeSnappyBetterBlockAsm
 
 emit_remainder_encodeSnappyBetterBlockAsm:
@@ -15325,22 +15349,26 @@ match_nolit_dst_ok_encodeSnappyBetterBlockAsm64K:
 	MOVL  R14, 262168(SP)(R13*4)
 	ADDQ  $0x01, DI
 	SUBQ  $0x01, R9
+	MOVQ  R9, R8
+	SUBQ  DI, R8
+	BSRQ  R8, R8
+	ADDQ  $0x01, R8
 
 index_loop_encodeSnappyBetterBlockAsm64K:
 	CMPQ  DI, R9
 	JAE   search_loop_encodeSnappyBetterBlockAsm64K
-	MOVQ  (DX)(DI*1), R8
-	MOVQ  (DX)(R9*1), R10
-	SHLQ  $0x08, R8
-	IMULQ SI, R8
-	SHRQ  $0x30, R8
+	MOVQ  (DX)(DI*1), R10
+	MOVQ  (DX)(R9*1), R11
 	SHLQ  $0x08, R10
 	IMULQ SI, R10
 	SHRQ  $0x30, R10
-	MOVL  DI, 24(SP)(R8*4)
-	MOVL  R9, 24(SP)(R10*4)
-	ADDQ  $0x02, DI
-	SUBQ  $0x02, R9
+	SHLQ  $0x08, R11
+	IMULQ SI, R11
+	SHRQ  $0x30, R11
+	MOVL  DI, 24(SP)(R10*4)
+	MOVL  R9, 24(SP)(R11*4)
+	ADDQ  R8, DI
+	SUBQ  R8, R9
 	JMP   index_loop_encodeSnappyBetterBlockAsm64K
 
 emit_remainder_encodeSnappyBetterBlockAsm64K:
@@ -15876,22 +15904,26 @@ match_nolit_dst_ok_encodeSnappyBetterBlockAsm12B:
 	MOVL  R14, 65560(SP)(R13*4)
 	ADDQ  $0x01, DI
 	SUBQ  $0x01, R9
+	MOVQ  R9, R8
+	SUBQ  DI, R8
+	BSRQ  R8, R8
+	ADDQ  $0x01, R8
 
 index_loop_encodeSnappyBetterBlockAsm12B:
 	CMPQ  DI, R9
 	JAE   search_loop_encodeSnappyBetterBlockAsm12B
-	MOVQ  (DX)(DI*1), R8
-	MOVQ  (DX)(R9*1), R10
-	SHLQ  $0x10, R8
-	IMULQ SI, R8
-	SHRQ  $0x32, R8
+	MOVQ  (DX)(DI*1), R10
+	MOVQ  (DX)(R9*1), R11
 	SHLQ  $0x10, R10
 	IMULQ SI, R10
 	SHRQ  $0x32, R10
-	MOVL  DI, 24(SP)(R8*4)
-	MOVL  R9, 24(SP)(R10*4)
-	ADDQ  $0x02, DI
-	SUBQ  $0x02, R9
+	SHLQ  $0x10, R11
+	IMULQ SI, R11
+	SHRQ  $0x32, R11
+	MOVL  DI, 24(SP)(R10*4)
+	MOVL  R9, 24(SP)(R11*4)
+	ADDQ  R8, DI
+	SUBQ  R8, R9
 	JMP   index_loop_encodeSnappyBetterBlockAsm12B
 
 emit_remainder_encodeSnappyBetterBlockAsm12B:
@@ -16427,22 +16459,26 @@ match_nolit_dst_ok_encodeSnappyBetterBlockAsm10B:
 	MOVL  R14, 16408(SP)(R13*4)
 	ADDQ  $0x01, DI
 	SUBQ  $0x01, R9
+	MOVQ  R9, R8
+	SUBQ  DI, R8
+	BSRQ  R8, R8
+	ADDQ  $0x01, R8
 
 index_loop_encodeSnappyBetterBlockAsm10B:
 	CMPQ  DI, R9
 	JAE   search_loop_encodeSnappyBetterBlockAsm10B
-	MOVQ  (DX)(DI*1), R8
-	MOVQ  (DX)(R9*1), R10
-	SHLQ  $0x10, R8
-	IMULQ SI, R8
-	SHRQ  $0x34, R8
+	MOVQ  (DX)(DI*1), R10
+	MOVQ  (DX)(R9*1), R11
 	SHLQ  $0x10, R10
 	IMULQ SI, R10
 	SHRQ  $0x34, R10
-	MOVL  DI, 24(SP)(R8*4)
-	MOVL  R9, 24(SP)(R10*4)
-	ADDQ  $0x02, DI
-	SUBQ  $0x02, R9
+	SHLQ  $0x10, R11
+	IMULQ SI, R11
+	SHRQ  $0x34, R11
+	MOVL  DI, 24(SP)(R10*4)
+	MOVL  R9, 24(SP)(R11*4)
+	ADDQ  R8, DI
+	SUBQ  R8, R9
 	JMP   index_loop_encodeSnappyBetterBlockAsm10B
 
 emit_remainder_encodeSnappyBetterBlockAsm10B:
@@ -16976,22 +17012,26 @@ match_nolit_dst_ok_encodeSnappyBetterBlockAsm8B:
 	MOVL  R14, 4120(SP)(R13*4)
 	ADDQ  $0x01, DI
 	SUBQ  $0x01, R9
+	MOVQ  R9, R8
+	SUBQ  DI, R8
+	BSRQ  R8, R8
+	ADDQ  $0x01, R8
 
 index_loop_encodeSnappyBetterBlockAsm8B:
 	CMPQ  DI, R9
 	JAE   search_loop_encodeSnappyBetterBlockAsm8B
-	MOVQ  (DX)(DI*1), R8
-	MOVQ  (DX)(R9*1), R10
-	SHLQ  $0x10, R8
-	IMULQ SI, R8
-	SHRQ  $0x36, R8
+	MOVQ  (DX)(DI*1), R10
+	MOVQ  (DX)(R9*1), R11
 	SHLQ  $0x10, R10
 	IMULQ SI, R10
 	SHRQ  $0x36, R10
-	MOVL  DI, 24(SP)(R8*4)
-	MOVL  R9, 24(SP)(R10*4)
-	ADDQ  $0x02, DI
-	SUBQ  $0x02, R9
+	SHLQ  $0x10, R11
+	IMULQ SI, R11
+	SHRQ  $0x36, R11
+	MOVL  DI, 24(SP)(R10*4)
+	MOVL  R9, 24(SP)(R11*4)
+	ADDQ  R8, DI
+	SUBQ  R8, R9
 	JMP   index_loop_encodeSnappyBetterBlockAsm8B
 
 emit_remainder_encodeSnappyBetterBlockAsm8B:
