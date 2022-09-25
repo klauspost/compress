@@ -1676,8 +1676,6 @@ func benchFile(b *testing.B, i int, decode bool) {
 					}
 				}
 			})
-			b.ReportMetric(100*float64(len(Encode(nil, data)))/float64(len(data)), "pct")
-
 		} else {
 			b.SetBytes(int64(len(data)))
 			b.ReportAllocs()
@@ -1700,6 +1698,7 @@ func benchFile(b *testing.B, i int, decode bool) {
 			})
 		}
 		b.ReportMetric(100*float64(len(Encode(nil, data)))/float64(len(data)), "pct")
+		b.ReportMetric(float64(len(Encode(nil, data))), "B")
 	})
 	b.Run("block-better", func(b *testing.B) {
 		if decode {
@@ -1717,7 +1716,6 @@ func benchFile(b *testing.B, i int, decode bool) {
 					}
 				}
 			})
-			b.ReportMetric(100*float64(len(EncodeBetter(nil, data)))/float64(len(data)), "pct")
 		} else {
 			b.SetBytes(int64(len(data)))
 			b.ReportAllocs()
@@ -1738,8 +1736,9 @@ func benchFile(b *testing.B, i int, decode bool) {
 					}
 				}
 			})
-			b.ReportMetric(100*float64(len(EncodeBetter(nil, data)))/float64(len(data)), "pct")
 		}
+		b.ReportMetric(100*float64(len(EncodeBetter(nil, data)))/float64(len(data)), "pct")
+		b.ReportMetric(float64(len(EncodeBetter(nil, data))), "B")
 	})
 
 	b.Run("block-best", func(b *testing.B) {
@@ -1781,6 +1780,7 @@ func benchFile(b *testing.B, i int, decode bool) {
 			})
 			b.ReportMetric(100*float64(len(EncodeBest(nil, data)))/float64(len(data)), "pct")
 		}
+		b.ReportMetric(float64(len(EncodeBest(nil, data))), "B")
 	})
 }
 
@@ -1827,6 +1827,7 @@ func benchFileSnappy(b *testing.B, i int, decode bool) {
 			})
 			b.ReportMetric(100*float64(len(EncodeSnappy(nil, data)))/float64(len(data)), "pct")
 		}
+		b.ReportMetric(float64(len(EncodeSnappy(nil, data))), "B")
 	})
 
 	b.Run("s2-snappy-better", func(b *testing.B) {
@@ -1870,6 +1871,7 @@ func benchFileSnappy(b *testing.B, i int, decode bool) {
 			})
 			b.ReportMetric(100*float64(len(EncodeSnappyBetter(nil, data)))/float64(len(data)), "pct")
 		}
+		b.ReportMetric(float64(len(EncodeSnappyBetter(nil, data))), "B")
 	})
 
 	b.Run("s2-snappy-best", func(b *testing.B) {
@@ -1911,6 +1913,7 @@ func benchFileSnappy(b *testing.B, i int, decode bool) {
 			})
 			b.ReportMetric(100*float64(len(EncodeSnappyBest(nil, data)))/float64(len(data)), "pct")
 		}
+		b.ReportMetric(float64(len(EncodeSnappyBest(nil, data))), "B")
 	})
 	b.Run("snappy-noasm", func(b *testing.B) {
 		if decode {
