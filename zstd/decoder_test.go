@@ -1157,12 +1157,18 @@ func testDecoderFileBad(t *testing.T, fn string, newDec func() (*Decoder, error)
 
 func BenchmarkDecoder_DecoderSmall(b *testing.B) {
 	zr := testCreateZipReader("testdata/benchdecoder.zip", b)
-	dec, err := NewReader(nil)
+	dec, err := NewReader(nil, WithDecodeBuffersBelow(1<<30))
 	if err != nil {
 		b.Fatal(err)
 		return
 	}
 	defer dec.Close()
+	dec2, err := NewReader(nil, WithDecodeBuffersBelow(0))
+	if err != nil {
+		b.Fatal(err)
+		return
+	}
+	defer dec2.Close()
 	for _, tt := range zr.File {
 		if !strings.HasSuffix(tt.Name, ".zst") {
 			continue
@@ -1183,6 +1189,7 @@ func BenchmarkDecoder_DecoderSmall(b *testing.B) {
 			in = append(in, in...)
 			// 8x
 			in = append(in, in...)
+
 			err = dec.Reset(bytes.NewBuffer(in))
 			if err != nil {
 				b.Fatal(err)
@@ -1191,19 +1198,43 @@ func BenchmarkDecoder_DecoderSmall(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			b.SetBytes(int64(len(got)))
-			b.ReportAllocs()
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				err = dec.Reset(bytes.NewBuffer(in))
-				if err != nil {
-					b.Fatal(err)
+			b.Run("buffered", func(b *testing.B) {
+				b.SetBytes(int64(len(got)))
+				b.ReportAllocs()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					err = dec.Reset(bytes.NewBuffer(in))
+					if err != nil {
+						b.Fatal(err)
+					}
+					n, err := io.Copy(io.Discard, dec)
+					if err != nil {
+						b.Fatal(err)
+					}
+					if int(n) != len(got) {
+						b.Fatalf("want %d, got %d", len(got), n)
+					}
+
 				}
-				_, err := io.Copy(io.Discard, dec)
-				if err != nil {
-					b.Fatal(err)
+			})
+			b.Run("unbuffered", func(b *testing.B) {
+				b.SetBytes(int64(len(got)))
+				b.ReportAllocs()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					err = dec2.Reset(bytes.NewBuffer(in))
+					if err != nil {
+						b.Fatal(err)
+					}
+					n, err := io.Copy(io.Discard, dec2)
+					if err != nil {
+						b.Fatal(err)
+					}
+					if int(n) != len(got) {
+						b.Fatalf("want %d, got %d", len(got), n)
+					}
 				}
-			}
+			})
 		})
 	}
 }
