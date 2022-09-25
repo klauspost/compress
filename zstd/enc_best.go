@@ -32,6 +32,7 @@ type match struct {
 	length int32
 	rep    int32
 	est    int32
+	_      [12]byte
 }
 
 const highScore = 25000
