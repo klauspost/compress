@@ -1239,6 +1239,139 @@ func BenchmarkDecoder_DecoderSmall(b *testing.B) {
 	}
 }
 
+func BenchmarkDecoder_DecoderReset(b *testing.B) {
+	zr := testCreateZipReader("testdata/benchdecoder.zip", b)
+	dec, err := NewReader(nil, WithDecodeBuffersBelow(0))
+	if err != nil {
+		b.Fatal(err)
+		return
+	}
+	defer dec.Close()
+	bench := func(name string, b *testing.B, opts []DOption, in, want []byte) {
+		b.Helper()
+		buf := &bytesReader{Reader: bytes.NewReader(in), buf: in}
+		dec, err := NewReader(nil, opts...)
+		if err != nil {
+			b.Fatal(err)
+			return
+		}
+		defer dec.Close()
+		b.Run(name, func(b *testing.B) {
+			b.SetBytes(1)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				buf.Reset(in)
+				err = dec.Reset(buf)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+	for _, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, ".zst") {
+			continue
+		}
+		b.Run(tt.Name, func(b *testing.B) {
+			r, err := tt.Open()
+			if err != nil {
+				b.Fatal(err)
+			}
+			defer r.Close()
+			in, err := io.ReadAll(r)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			got, err := dec.DecodeAll(in, nil)
+			if err != nil {
+				b.Fatal(err)
+			}
+			// Disable buffers:
+			bench("stream", b, []DOption{WithDecodeBuffersBelow(0)}, in, got)
+			bench("stream-single", b, []DOption{WithDecodeBuffersBelow(0), WithDecoderConcurrency(1)}, in, got)
+			// Force buffers:
+			bench("buffer", b, []DOption{WithDecodeBuffersBelow(1 << 30)}, in, got)
+			bench("buffer-single", b, []DOption{WithDecodeBuffersBelow(1 << 30), WithDecoderConcurrency(1)}, in, got)
+		})
+	}
+}
+
+type bytesReader struct {
+	*bytes.Reader
+	buf []byte
+}
+
+func (b *bytesReader) Bytes() []byte {
+	n := b.Reader.Len()
+	if n > len(b.buf) {
+		panic("buffer mismatch")
+	}
+	return b.buf[len(b.buf)-n:]
+}
+
+func (b *bytesReader) Reset(data []byte) {
+	b.buf = data
+	b.Reader.Reset(data)
+}
+
+func BenchmarkDecoder_DecoderNewNoRead(b *testing.B) {
+	zr := testCreateZipReader("testdata/benchdecoder.zip", b)
+	dec, err := NewReader(nil)
+	if err != nil {
+		b.Fatal(err)
+		return
+	}
+	defer dec.Close()
+
+	bench := func(name string, b *testing.B, opts []DOption, in, want []byte) {
+		b.Helper()
+		b.Run(name, func(b *testing.B) {
+			buf := &bytesReader{Reader: bytes.NewReader(in), buf: in}
+			b.SetBytes(1)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				buf.Reset(in)
+				dec, err := NewReader(buf, opts...)
+				if err != nil {
+					b.Fatal(err)
+					return
+				}
+				dec.Close()
+			}
+		})
+	}
+	for _, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, ".zst") {
+			continue
+		}
+		b.Run(tt.Name, func(b *testing.B) {
+			r, err := tt.Open()
+			if err != nil {
+				b.Fatal(err)
+			}
+			defer r.Close()
+			in, err := io.ReadAll(r)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			got, err := dec.DecodeAll(in, nil)
+			if err != nil {
+				b.Fatal(err)
+			}
+			// Disable buffers:
+			bench("stream", b, []DOption{WithDecodeBuffersBelow(0)}, in, got)
+			bench("stream-single", b, []DOption{WithDecodeBuffersBelow(0), WithDecoderConcurrency(1)}, in, got)
+			// Force buffers:
+			bench("buffer", b, []DOption{WithDecodeBuffersBelow(1 << 30)}, in, got)
+			bench("buffer-single", b, []DOption{WithDecodeBuffersBelow(1 << 30), WithDecoderConcurrency(1)}, in, got)
+		})
+	}
+}
+
 func BenchmarkDecoder_DecodeAll(b *testing.B) {
 	zr := testCreateZipReader("testdata/benchdecoder.zip", b)
 	dec, err := NewReader(nil, WithDecoderConcurrency(1))
