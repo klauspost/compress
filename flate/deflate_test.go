@@ -316,13 +316,13 @@ func testToFromWithLevelAndLimit(t *testing.T, level int, input []byte, name str
 	}
 	w.Write(input)
 	w.Close()
-	if limit > 0 && buffer.Len() > limit {
-		t.Errorf("level: %d, len(compress(data)) = %d > limit = %d", level, buffer.Len(), limit)
-		return
-	}
 	if limit > 0 {
 		t.Logf("level: %d - Size:%.2f%%, %d b\n", level, float64(buffer.Len()*100)/float64(limit), buffer.Len())
 	}
+	if limit > 0 && buffer.Len() > limit {
+		t.Errorf("level: %d, len(compress(data)) = %d > limit = %d", level, buffer.Len(), limit)
+	}
+
 	r := NewReader(&buffer)
 	out, err := io.ReadAll(r)
 	if err != nil {
