@@ -81,11 +81,10 @@ readLiteral:
 					fnb += 8
 				}
 				chunk := f.hl.chunks[fb&(huffmanNumChunks-1)]
-				n = uint(chunk & huffmanCountMask)
-				if n > huffmanChunkBits {
-					chunk = f.hl.links[chunk>>huffmanValueShift][(fb>>huffmanChunkBits)&f.hl.linkMask]
-					n = uint(chunk & huffmanCountMask)
+				if chunk >= (huffmanChunkBits+1)<<huffmanCountShift {
+					chunk = f.hl.links[chunk&huffmanLinkMask][(fb>>huffmanChunkBits)&f.hl.linkMask]
 				}
+				n = uint(chunk >> huffmanCountShift)
 				if n <= fnb {
 					if n == 0 {
 						f.b, f.nb = fb, fnb
@@ -97,7 +96,7 @@ readLiteral:
 					}
 					fb = fb >> (n & regSizeMaskUint32)
 					fnb = fnb - n
-					v = int(chunk >> huffmanValueShift)
+					v = int(chunk & huffmanValueMask)
 					break
 				}
 			}
@@ -181,6 +180,8 @@ readLiteral:
 			// but is smart enough to keep local variables in registers, so use nb and b,
 			// inline call to moreBits and reassign b,nb back to f on return.
 			for {
+				// f.hd.maxRead is usually much smaller than f.hl.maxRead
+				// this makes this branch very predictable.
 				for fnb < n {
 					c, err := fr.ReadByte()
 					if err != nil {
@@ -193,11 +194,10 @@ readLiteral:
 					fnb += 8
 				}
 				chunk := f.hd.chunks[fb&(huffmanNumChunks-1)]
-				n = uint(chunk & huffmanCountMask)
-				if n > huffmanChunkBits {
-					chunk = f.hd.links[chunk>>huffmanValueShift][(fb>>huffmanChunkBits)&f.hd.linkMask]
-					n = uint(chunk & huffmanCountMask)
+				if chunk >= (huffmanChunkBits+1)<<huffmanCountShift {
+					chunk = f.hd.links[chunk&huffmanLinkMask][(fb>>huffmanChunkBits)&f.hd.linkMask]
 				}
+				n = uint(chunk >> huffmanCountShift)
 				if n <= fnb {
 					if n == 0 {
 						f.b, f.nb = fb, fnb
@@ -209,7 +209,7 @@ readLiteral:
 					}
 					fb = fb >> (n & regSizeMaskUint32)
 					fnb = fnb - n
-					dist = uint32(chunk >> huffmanValueShift)
+					dist = uint32(chunk & huffmanValueMask)
 					break
 				}
 			}

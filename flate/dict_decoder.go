@@ -25,29 +25,24 @@ package flate
 // checks about the arguments. As such, the invariants documented for each
 // method call must be respected.
 type dictDecoder struct {
-	hist []byte // Sliding window history
-
 	// Invariant: 0 <= rdPos <= wrPos <= len(hist)
-	wrPos int  // Current output position in buffer
-	rdPos int  // Have emitted hist[:rdPos] already
-	full  bool // Has a full window length been written yet?
+	wrPos int                  // Current output position in buffer
+	rdPos int                  // Have emitted hist[:rdPos] already
+	hist  [maxMatchOffset]byte // Sliding window history
+
+	full bool // Has a full window length been written yet?
 }
 
 // init initializes dictDecoder to have a sliding window dictionary of the given
 // size. If a preset dict is provided, it will initialize the dictionary with
 // the contents of dict.
-func (dd *dictDecoder) init(size int, dict []byte) {
+func (dd *dictDecoder) init(dict []byte) {
 	*dd = dictDecoder{hist: dd.hist}
-
-	if cap(dd.hist) < size {
-		dd.hist = make([]byte, size)
-	}
-	dd.hist = dd.hist[:size]
 
 	if len(dict) > len(dd.hist) {
 		dict = dict[len(dict)-len(dd.hist):]
 	}
-	dd.wrPos = copy(dd.hist, dict)
+	dd.wrPos = copy(dd.hist[:], dict)
 	if dd.wrPos == len(dd.hist) {
 		dd.wrPos = 0
 		dd.full = true

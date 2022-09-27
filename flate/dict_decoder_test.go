@@ -70,7 +70,7 @@ func TestDictDecoder(t *testing.T) {
 
 	var got, want bytes.Buffer
 	var dd dictDecoder
-	dd.init(1<<11, nil)
+	dd.init(nil)
 
 	var writeCopy = func(dist, length int) {
 		for length > 0 {
@@ -129,8 +129,8 @@ func TestDictDecoder(t *testing.T) {
 	writeCopy(len(poem), 7*len(poem))
 	want.WriteString(strings.Repeat(strings.ToUpper(poem), 8))
 
-	writeCopy(dd.histSize(), 10)
-	want.Write(want.Bytes()[want.Len()-dd.histSize():][:10])
+	//writeCopy(dd.histSize(), 10)
+	//want.Write(want.Bytes()[want.Len()-dd.histSize():][:10])
 
 	got.Write(dd.readFlush())
 	if got.String() != want.String() {

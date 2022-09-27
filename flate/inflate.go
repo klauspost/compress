@@ -91,20 +91,23 @@ type Resetter interface {
 // See the following:
 //	http://www.gzip.org/algorithm.txt
 
-// chunk & 15 is number of bits
-// chunk >> 4 is value, including table link
+// chunk >> 12 is number of bits
+// chunk & 511 is value, including table link
 
 const (
 	huffmanChunkBits  = 9
 	huffmanNumChunks  = 1 << huffmanChunkBits
-	huffmanCountMask  = 15
-	huffmanValueShift = 4
+	huffmanLinkBits   = 16 - huffmanChunkBits
+	huffmanNumLinks   = 1 << huffmanLinkBits
+	huffmanLinkMask   = huffmanNumLinks - 1
+	huffmanValueMask  = 511
+	huffmanCountShift = 16 - 4
 )
 
 type huffmanDecoder struct {
 	maxRead  int                       // the maximum number of bits we can read and not overread
 	chunks   *[huffmanNumChunks]uint16 // chunks as described above
-	links    [][]uint16                // overflow links
+	links    [huffmanNumLinks][]uint16 // overflow links
 	linkMask uint32                    // mask the width of the link table
 }
 
@@ -186,11 +189,6 @@ func (h *huffmanDecoder) init(lengths []int) bool {
 
 		// create link tables
 		link := nextcode[huffmanChunkBits+1] >> 1
-		if cap(h.links) < huffmanNumChunks-link {
-			h.links = make([][]uint16, huffmanNumChunks-link)
-		} else {
-			h.links = h.links[:huffmanNumChunks-link]
-		}
 		for j := uint(link); j < huffmanNumChunks; j++ {
 			reverse := int(bits.Reverse16(uint16(j)))
 			reverse >>= uint(16 - huffmanChunkBits)
@@ -198,7 +196,7 @@ func (h *huffmanDecoder) init(lengths []int) bool {
 			if sanity && h.chunks[reverse] != 0 {
 				panic("impossible: overwriting existing chunk")
 			}
-			h.chunks[reverse] = uint16(off<<huffmanValueShift | (huffmanChunkBits + 1))
+			h.chunks[reverse] = uint16(off | ((huffmanChunkBits + 1) << huffmanCountShift))
 			if cap(h.links[off]) < numLinks {
 				h.links[off] = make([]uint16, numLinks)
 			} else {
@@ -206,8 +204,6 @@ func (h *huffmanDecoder) init(lengths []int) bool {
 				h.links[off] = links[:numLinks]
 			}
 		}
-	} else {
-		h.links = h.links[:0]
 	}
 
 	for i, n := range lengths {
@@ -216,7 +212,7 @@ func (h *huffmanDecoder) init(lengths []int) bool {
 		}
 		code := nextcode[n]
 		nextcode[n]++
-		chunk := uint16(i<<huffmanValueShift | n)
+		chunk := uint16(i | (n << huffmanCountShift))
 		reverse := int(bits.Reverse16(uint16(code)))
 		reverse >>= uint(16 - n)
 		if n <= huffmanChunkBits {
@@ -233,12 +229,7 @@ func (h *huffmanDecoder) init(lengths []int) bool {
 			}
 		} else {
 			j := reverse & (huffmanNumChunks - 1)
-			if sanity && h.chunks[j]&huffmanCountMask != huffmanChunkBits+1 {
-				// Longer codes should have been
-				// associated with a link table above.
-				panic("impossible: not an indirect chunk")
-			}
-			value := h.chunks[j] >> huffmanValueShift
+			value := h.chunks[j] & huffmanLinkMask
 			linktab := h.links[value]
 			reverse >>= huffmanChunkBits
 			for off := reverse; off < len(linktab); off += 1 << uint(n-huffmanChunkBits) {
@@ -690,11 +681,10 @@ func (f *decompressor) huffSym(h *huffmanDecoder) (int, error) {
 			nb += 8
 		}
 		chunk := h.chunks[b&(huffmanNumChunks-1)]
-		n = uint(chunk & huffmanCountMask)
-		if n > huffmanChunkBits {
-			chunk = h.links[chunk>>huffmanValueShift][(b>>huffmanChunkBits)&h.linkMask]
-			n = uint(chunk & huffmanCountMask)
+		if chunk >= (huffmanChunkBits+1)<<huffmanCountShift {
+			chunk = h.links[chunk&huffmanLinkMask][b&h.linkMask]
 		}
+		n = uint(chunk >> huffmanCountShift)
 		if n <= nb {
 			if n == 0 {
 				f.b = b
@@ -707,7 +697,7 @@ func (f *decompressor) huffSym(h *huffmanDecoder) (int, error) {
 			}
 			f.b = b >> (n & regSizeMaskUint32)
 			f.nb = nb - n
-			return int(chunk >> huffmanValueShift), nil
+			return int(chunk & huffmanValueMask), nil
 		}
 	}
 }
@@ -749,7 +739,7 @@ func (f *decompressor) Reset(r io.Reader, dict []byte) error {
 		dict:     f.dict,
 		step:     (*decompressor).nextBlock,
 	}
-	f.dict.init(maxMatchOffset, dict)
+	f.dict.init(dict)
 	return nil
 }
 
@@ -769,7 +759,7 @@ func NewReader(r io.Reader) io.ReadCloser {
 	f.bits = new([maxNumLit + maxNumDist]int)
 	f.codebits = new([numCodes]int)
 	f.step = (*decompressor).nextBlock
-	f.dict.init(maxMatchOffset, nil)
+	f.dict.init(nil)
 	return &f
 }
 
@@ -788,6 +778,6 @@ func NewReaderDict(r io.Reader, dict []byte) io.ReadCloser {
 	f.bits = new([maxNumLit + maxNumDist]int)
 	f.codebits = new([numCodes]int)
 	f.step = (*decompressor).nextBlock
-	f.dict.init(maxMatchOffset, dict)
+	f.dict.init(dict)
 	return &f
 }
