@@ -57,10 +57,11 @@ readLiteral:
 					fnb += 8
 				}
 				chunk := f.hl.chunks[fb&(huffmanNumChunks-1)]
+				n = uint(chunk >> huffmanCountShift)
 				if chunk >= (huffmanChunkBits+1)<<huffmanCountShift {
 					chunk = f.hl.links[chunk&huffmanLinkMask][(fb>>huffmanChunkBits)&f.hl.linkMask]
+					n = uint(chunk >> huffmanCountShift)
 				}
-				n = uint(chunk >> huffmanCountShift)
 				if n <= fnb {
 					if n == 0 {
 						f.b, f.nb = fb, fnb
@@ -170,10 +171,11 @@ readLiteral:
 					fnb += 8
 				}
 				chunk := f.hd.chunks[fb&(huffmanNumChunks-1)]
+				n = uint(chunk >> huffmanCountShift)
 				if chunk >= (huffmanChunkBits+1)<<huffmanCountShift {
 					chunk = f.hd.links[chunk&huffmanLinkMask][(fb>>huffmanChunkBits)&f.hd.linkMask]
+					n = uint(chunk >> huffmanCountShift)
 				}
-				n = uint(chunk >> huffmanCountShift)
 				if n <= fnb {
 					if n == 0 {
 						f.b, f.nb = fb, fnb
@@ -308,10 +310,11 @@ readLiteral:
 					fnb += 8
 				}
 				chunk := f.hl.chunks[fb&(huffmanNumChunks-1)]
+				n = uint(chunk >> huffmanCountShift)
 				if chunk >= (huffmanChunkBits+1)<<huffmanCountShift {
 					chunk = f.hl.links[chunk&huffmanLinkMask][(fb>>huffmanChunkBits)&f.hl.linkMask]
+					n = uint(chunk >> huffmanCountShift)
 				}
-				n = uint(chunk >> huffmanCountShift)
 				if n <= fnb {
 					if n == 0 {
 						f.b, f.nb = fb, fnb
@@ -421,10 +424,11 @@ readLiteral:
 					fnb += 8
 				}
 				chunk := f.hd.chunks[fb&(huffmanNumChunks-1)]
+				n = uint(chunk >> huffmanCountShift)
 				if chunk >= (huffmanChunkBits+1)<<huffmanCountShift {
 					chunk = f.hd.links[chunk&huffmanLinkMask][(fb>>huffmanChunkBits)&f.hd.linkMask]
+					n = uint(chunk >> huffmanCountShift)
 				}
-				n = uint(chunk >> huffmanCountShift)
 				if n <= fnb {
 					if n == 0 {
 						f.b, f.nb = fb, fnb
@@ -559,10 +563,11 @@ readLiteral:
 					fnb += 8
 				}
 				chunk := f.hl.chunks[fb&(huffmanNumChunks-1)]
+				n = uint(chunk >> huffmanCountShift)
 				if chunk >= (huffmanChunkBits+1)<<huffmanCountShift {
 					chunk = f.hl.links[chunk&huffmanLinkMask][(fb>>huffmanChunkBits)&f.hl.linkMask]
+					n = uint(chunk >> huffmanCountShift)
 				}
-				n = uint(chunk >> huffmanCountShift)
 				if n <= fnb {
 					if n == 0 {
 						f.b, f.nb = fb, fnb
@@ -672,10 +677,11 @@ readLiteral:
 					fnb += 8
 				}
 				chunk := f.hd.chunks[fb&(huffmanNumChunks-1)]
+				n = uint(chunk >> huffmanCountShift)
 				if chunk >= (huffmanChunkBits+1)<<huffmanCountShift {
 					chunk = f.hd.links[chunk&huffmanLinkMask][(fb>>huffmanChunkBits)&f.hd.linkMask]
+					n = uint(chunk >> huffmanCountShift)
 				}
-				n = uint(chunk >> huffmanCountShift)
 				if n <= fnb {
 					if n == 0 {
 						f.b, f.nb = fb, fnb
@@ -810,10 +816,11 @@ readLiteral:
 					fnb += 8
 				}
 				chunk := f.hl.chunks[fb&(huffmanNumChunks-1)]
+				n = uint(chunk >> huffmanCountShift)
 				if chunk >= (huffmanChunkBits+1)<<huffmanCountShift {
 					chunk = f.hl.links[chunk&huffmanLinkMask][(fb>>huffmanChunkBits)&f.hl.linkMask]
+					n = uint(chunk >> huffmanCountShift)
 				}
-				n = uint(chunk >> huffmanCountShift)
 				if n <= fnb {
 					if n == 0 {
 						f.b, f.nb = fb, fnb
@@ -923,10 +930,11 @@ readLiteral:
 					fnb += 8
 				}
 				chunk := f.hd.chunks[fb&(huffmanNumChunks-1)]
+				n = uint(chunk >> huffmanCountShift)
 				if chunk >= (huffmanChunkBits+1)<<huffmanCountShift {
 					chunk = f.hd.links[chunk&huffmanLinkMask][(fb>>huffmanChunkBits)&f.hd.linkMask]
+					n = uint(chunk >> huffmanCountShift)
 				}
-				n = uint(chunk >> huffmanCountShift)
 				if n <= fnb {
 					if n == 0 {
 						f.b, f.nb = fb, fnb
@@ -1061,10 +1069,11 @@ readLiteral:
 					fnb += 8
 				}
 				chunk := f.hl.chunks[fb&(huffmanNumChunks-1)]
+				n = uint(chunk >> huffmanCountShift)
 				if chunk >= (huffmanChunkBits+1)<<huffmanCountShift {
 					chunk = f.hl.links[chunk&huffmanLinkMask][(fb>>huffmanChunkBits)&f.hl.linkMask]
+					n = uint(chunk >> huffmanCountShift)
 				}
-				n = uint(chunk >> huffmanCountShift)
 				if n <= fnb {
 					if n == 0 {
 						f.b, f.nb = fb, fnb
@@ -1174,10 +1183,11 @@ readLiteral:
 					fnb += 8
 				}
 				chunk := f.hd.chunks[fb&(huffmanNumChunks-1)]
+				n = uint(chunk >> huffmanCountShift)
 				if chunk >= (huffmanChunkBits+1)<<huffmanCountShift {
 					chunk = f.hd.links[chunk&huffmanLinkMask][(fb>>huffmanChunkBits)&f.hd.linkMask]
+					n = uint(chunk >> huffmanCountShift)
 				}
-				n = uint(chunk >> huffmanCountShift)
 				if n <= fnb {
 					if n == 0 {
 						f.b, f.nb = fb, fnb
