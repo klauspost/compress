@@ -1249,7 +1249,7 @@ func BenchmarkDecoder_DecoderReset(b *testing.B) {
 	defer dec.Close()
 	bench := func(name string, b *testing.B, opts []DOption, in, want []byte) {
 		b.Helper()
-		buf := &bytesReader{Reader: bytes.NewReader(in), buf: in}
+		buf := newBytesReader(in)
 		dec, err := NewReader(nil, opts...)
 		if err != nil {
 			b.Fatal(err)
@@ -1298,6 +1298,11 @@ func BenchmarkDecoder_DecoderReset(b *testing.B) {
 	}
 }
 
+// newBytesReader returns a *bytes.Reader that also supports Bytes() []byte
+func newBytesReader(b []byte) *bytesReader {
+	return &bytesReader{Reader: bytes.NewReader(b), buf: b}
+}
+
 type bytesReader struct {
 	*bytes.Reader
 	buf []byte
@@ -1328,7 +1333,7 @@ func BenchmarkDecoder_DecoderNewNoRead(b *testing.B) {
 	bench := func(name string, b *testing.B, opts []DOption, in, want []byte) {
 		b.Helper()
 		b.Run(name, func(b *testing.B) {
-			buf := &bytesReader{Reader: bytes.NewReader(in), buf: in}
+			buf := newBytesReader(in)
 			b.SetBytes(1)
 			b.ReportAllocs()
 			b.ResetTimer()
@@ -1368,6 +1373,60 @@ func BenchmarkDecoder_DecoderNewNoRead(b *testing.B) {
 			// Force buffers:
 			bench("buffer", b, []DOption{WithDecodeBuffersBelow(1 << 30)}, in, got)
 			bench("buffer-single", b, []DOption{WithDecodeBuffersBelow(1 << 30), WithDecoderConcurrency(1)}, in, got)
+		})
+	}
+}
+
+func BenchmarkDecoder_DecoderNewSomeRead(b *testing.B) {
+	var buf [1 << 20]byte
+	bench := func(name string, b *testing.B, opts []DOption, in *os.File) {
+		b.Helper()
+		b.Run(name, func(b *testing.B) {
+			//b.ReportAllocs()
+			b.ResetTimer()
+			var heapTotal int64
+			var m runtime.MemStats
+			for i := 0; i < b.N; i++ {
+				runtime.GC()
+				runtime.ReadMemStats(&m)
+				heapTotal -= int64(m.HeapInuse)
+				_, err := in.Seek(io.SeekStart, 0)
+				if err != nil {
+					b.Fatal(err)
+				}
+
+				dec, err := NewReader(in, opts...)
+				if err != nil {
+					b.Fatal(err)
+				}
+				// Read 16 MB
+				_, err = io.CopyBuffer(io.Discard, io.LimitReader(dec, 16<<20), buf[:])
+				if err != nil {
+					b.Fatal(err)
+				}
+				runtime.GC()
+				runtime.ReadMemStats(&m)
+				heapTotal += int64(m.HeapInuse)
+
+				dec.Close()
+			}
+			b.ReportMetric(float64(heapTotal)/float64(b.N), "b/op")
+		})
+	}
+	files := []string{"testdata/000002.map.win32K.zst", "testdata/000002.map.win1MB.zst", "testdata/000002.map.win8MB.zst"}
+	for _, file := range files {
+		if !strings.HasSuffix(file, ".zst") {
+			continue
+		}
+		r, err := os.Open(file)
+		if err != nil {
+			b.Fatal(err)
+		}
+		defer r.Close()
+
+		b.Run(file, func(b *testing.B) {
+			bench("stream-single", b, []DOption{WithDecodeBuffersBelow(0), WithDecoderConcurrency(1)}, r)
+			bench("stream-single-himem", b, []DOption{WithDecodeBuffersBelow(0), WithDecoderConcurrency(1), WithDecoderLowmem(false)}, r)
 		})
 	}
 }
