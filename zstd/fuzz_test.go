@@ -50,7 +50,7 @@ func FuzzDecodeAll(f *testing.F) {
 	})
 }
 
-func FuzzDecodeAllNoBMI2(f *testing.F) {
+func FuzzDecAllNoBMI2(f *testing.F) {
 	if !cpuinfo.HasBMI2() {
 		f.Skip("No BMI, so already tested")
 		return
@@ -62,18 +62,20 @@ func FuzzDecodeAllNoBMI2(f *testing.F) {
 func FuzzDecoder(f *testing.F) {
 	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-raw.zip", true, testing.Short())
 	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-encoded.zip", false, testing.Short())
-	decLow, err := NewReader(nil, WithDecoderLowmem(true), WithDecoderConcurrency(2), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true))
+	decLow, err := NewReader(nil, WithDecoderLowmem(true), WithDecoderConcurrency(2), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true), WithDecodeBuffersBelow(8<<10))
 	if err != nil {
 		f.Fatal(err)
 	}
 	defer decLow.Close()
 	// Test with high memory, but sync decoding
-	decHi, err := NewReader(nil, WithDecoderLowmem(false), WithDecoderConcurrency(1), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true))
+	decHi, err := NewReader(nil, WithDecoderLowmem(false), WithDecoderConcurrency(1), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true), WithDecodeBuffersBelow(8<<10))
 	if err != nil {
 		f.Fatal(err)
 	}
 	defer decHi.Close()
 
+	brLow := newBytesReader(nil)
+	brHi := newBytesReader(nil)
 	f.Fuzz(func(t *testing.T, b []byte) {
 		// Just test if we crash...
 		defer func() {
@@ -82,11 +84,13 @@ func FuzzDecoder(f *testing.F) {
 				t.Fatal(r)
 			}
 		}()
-		err := decLow.Reset(io.NopCloser(bytes.NewReader(b)))
+		brLow.Reset(b)
+		brHi.Reset(b)
+		err := decLow.Reset(brLow)
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = decHi.Reset(io.NopCloser(bytes.NewReader(b)))
+		err = decHi.Reset(brHi)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -102,6 +106,15 @@ func FuzzDecoder(f *testing.F) {
 			t.Fatalf("Output mismatch, low: %v, hi: %v", err1, err2)
 		}
 	})
+}
+
+func FuzzNoBMI2Dec(f *testing.F) {
+	if !cpuinfo.HasBMI2() {
+		f.Skip("No BMI, so already tested")
+		return
+	}
+	defer cpuinfo.DisableBMI2()()
+	FuzzDecoder(f)
 }
 
 func FuzzEncoding(f *testing.F) {
