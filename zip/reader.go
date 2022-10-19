@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"hash"
 	"hash/crc32"
 	"io"
@@ -58,6 +59,16 @@ type File struct {
 	zipr         io.ReaderAt
 	headerOffset int64 // includes overall ZIP archive baseOffset
 	zip64        bool  // zip64 extended information extra field presence
+}
+
+// ELH:
+func (f *File) HeaderOffset() int64 {
+	return f.headerOffset
+}
+
+// ELH:
+func (f *File) FindBodyOffset() (int64, error) {
+	return f.findBodyOffset()
 }
 
 // OpenReader will open the Zip file specified by name and return a ReadCloser.
@@ -566,6 +577,11 @@ func readDirectoryEnd(r io.ReaderAt, size int64) (dir *directoryEnd, baseOffset 
 	}
 
 	baseOffset = directoryEndOffset - int64(d.directorySize) - int64(d.directoryOffset)
+
+	fmt.Println("ELH: directoryEndOffset", directoryEndOffset)
+	fmt.Println("ELH: int64(d.directorySize)", int64(d.directorySize))
+	fmt.Println("ELH: int64(d.directoryOffset)", int64(d.directoryOffset))
+	fmt.Println("ELH: baseOffset", baseOffset)
 
 	// Make sure directoryOffset points to somewhere in our file.
 	if o := baseOffset + int64(d.directoryOffset); o < 0 || o >= size {
