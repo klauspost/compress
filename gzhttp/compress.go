@@ -750,7 +750,7 @@ func atoi(s string) (int, bool) {
 // cleans up compression artifacts.
 // Depending on whether http.Hijacker is supported the returned will as well.
 func newNoCompressResponseWriter(w http.ResponseWriter) http.ResponseWriter {
-	n := noCompressResponseWriter{w}
+	n := &noCompressResponseWriter{hw: w}
 	if hj, ok := w.(http.Hijacker); ok {
 		x := struct {
 			http.ResponseWriter
@@ -769,31 +769,43 @@ func newNoCompressResponseWriter(w http.ResponseWriter) http.ResponseWriter {
 
 // noCompressResponseWriter filters out HeaderNoCompression.
 type noCompressResponseWriter struct {
-	hw http.ResponseWriter
+	hw         http.ResponseWriter
+	hdrCleaned bool
 }
 
-func (n noCompressResponseWriter) CloseNotify() <-chan bool {
+func (n *noCompressResponseWriter) CloseNotify() <-chan bool {
 	if cn, ok := n.hw.(http.CloseNotifier); ok {
 		return cn.CloseNotify()
 	}
 	return nil
 }
 
-func (n noCompressResponseWriter) Flush() {
+func (n *noCompressResponseWriter) Flush() {
+	if !n.hdrCleaned {
+		n.hw.Header().Del(HeaderNoCompression)
+		n.hdrCleaned = true
+	}
 	if f, ok := n.hw.(http.Flusher); ok {
 		f.Flush()
 	}
 }
 
-func (n noCompressResponseWriter) Header() http.Header {
+func (n *noCompressResponseWriter) Header() http.Header {
 	return n.hw.Header()
 }
 
-func (n noCompressResponseWriter) Write(bytes []byte) (int, error) {
+func (n *noCompressResponseWriter) Write(bytes []byte) (int, error) {
+	if !n.hdrCleaned {
+		n.hw.Header().Del(HeaderNoCompression)
+		n.hdrCleaned = true
+	}
 	return n.hw.Write(bytes)
 }
 
-func (n noCompressResponseWriter) WriteHeader(statusCode int) {
-	n.hw.Header().Del(HeaderNoCompression)
+func (n *noCompressResponseWriter) WriteHeader(statusCode int) {
+	if !n.hdrCleaned {
+		n.hw.Header().Del(HeaderNoCompression)
+		n.hdrCleaned = true
+	}
 	n.hw.WriteHeader(statusCode)
 }
