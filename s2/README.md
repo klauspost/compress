@@ -929,6 +929,57 @@ The first copy of a block cannot be a repeat offset and the offset is reset on e
 
 Default streaming block size is 1MB.
 
+# Dictionary Encoding
+
+Adding dictionaries allow providing a custom dictionary that will serve as lookup in the beginning of blocks.
+
+A dictionary provides an initial repeat value that can be used to point to a common header.
+
+Other than that the dictionary contains values that can be used as back-references.
+
+Often used data should be placed at the *end* of the dictionary since offsets will by smaller
+
+## Format
+
+Dictionary *content* must be less than 64KiB (65536 bytes). 
+
+Encoding: `[repeat value (uvarint)][dictionary content...]`
+
+Before the dictionary content, an unsigned base-128 (uvarint) encoded value specifying the initial repeat offset.
+This value is an offset into the dictionary content and not a back-reference offset, 
+so setting this to 0 will make the repeat value point to the first value of the dictionary. 
+
+The value must be less than the dictionary length.
+
+## Encoding
+
+From the decoder point of view the dictionary content is seen as preceding the encoded content.
+
+`[dictionary content][decoded output]`
+
+Backreferences to the dictionary are encoded as ordinary backreferences that have an offset before the start of the decoded block.
+
+Matches copying from the dictionary are **not** allowed to cross from the dictionary into the decoded data.
+However, if a copy ends at the end of the dictionary the next repeat will point to the start of the decoded buffer, which is allowed.
+
+The first match can be a repeat value, which will use the repeat offset stored in the dictionary.
+
+When 64KB (65536 bytes) has been en/decoded it is no longer allowed to reference the dictionary, 
+neither by a copy nor repeat operations. 
+If the boundary is crossed while copying from the dictionary, the operation should complete, 
+but the next instruction is not allowed to reference the dictionary.
+
+Valid blocks encoded *without* a dictionary can be decoded with any dictionary. 
+There are no checks whether the supplied dictionary is the correct for a block.
+Because of this there is no overhead by using a dictionary.
+
+## Streams
+
+For streams each block can use the dictionary.
+
+The dictionary is not provided on the stream.
+
+
 # LICENSE
 
 This code is based on the [Snappy-Go](https://github.com/golang/snappy) implementation.
