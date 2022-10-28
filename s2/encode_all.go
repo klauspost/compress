@@ -8,6 +8,7 @@ package s2
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"math/bits"
 )
 
@@ -480,158 +481,180 @@ func encodeBlockDictGo(dst, src []byte, dict *Dict) (d int) {
 	// lets us use a fast path for emitLiteral in the main loop, while we are
 	// looking for copies.
 	sLimit := len(src) - inputMargin
+	if sLimit > 65535 {
+		sLimit = 65535
+	}
 
 	// Bail if we can't compress to at least this.
 	dstLimit := len(src) - len(src)>>5 - 5
 
 	// nextEmit is where in src the next emitLiteral should start from.
-	nextEmit := len(src)
+	nextEmit := 0
 
-	// The encoded form must start with a literal, as there are no previous
-	// bytes to copy, so we start looking for hash matches at s == len(dict).
+	// The encoded form can start with a dict entry (copy or repeat).
 	s := 0
-	repeat := 0
+
+	// Convert dict repeat to offset
+	repeat := len(dict.dict) - dict.repeat
 	cv := load64(src, 0)
 
 	// While in dict
-	for s < 65536 {
-		candidate := 0
-		candidateDict := 0
-		for {
+searchDict:
+	for {
+		// Next src position to check
+		nextS := s + (s-nextEmit)>>6 + 4
+		hash0 := hash6(cv, tableBits)
+		hash1 := hash6(cv>>8, tableBits)
+		if nextS > sLimit {
+			fmt.Println("slimit reached", s, nextS)
+			break searchDict
+		}
+		candidateDict := int(dict.fastTable[hash0])
+		candidateDict2 := int(dict.fastTable[hash0])
+		candidate2 := int(table[hash1])
+		candidate := int(table[hash0])
+		table[hash0] = uint32(s)
+		table[hash1] = uint32(s + 1)
+		hash2 := hash6(cv>>16, tableBits)
 
-			// Next src position to check
-			nextS := s + (s-nextEmit)>>6 + 4
-			if nextS > sLimit {
-				goto emitRemainder
-			}
-			hash0 := hash6(cv, tableBits)
-			hash1 := hash6(cv>>8, tableBits)
-			candidateDict = int(dict.fastTable[hash0])
-			candidateDict2 := int(dict.fastTable[hash0])
-			candidate2 := int(table[hash1])
-			candidate = int(table[hash0])
-			table[hash0] = uint32(s)
-			table[hash1] = uint32(s + 1)
-			hash2 := hash6(cv>>16, tableBits)
+		// Check repeat at offset checkRep.
+		const checkRep = 1
 
-			// Check repeat at offset checkRep.
-			const checkRep = 1
-
-			if repeat > s {
-				if uint32(cv) == load32(dict.dict, dict.repeat) {
-					// Extend back
-					base := s
-					candidate = dict.repeat
-					for i := candidate; base > nextEmit && i > 0 && dict.dict[i-1] == src[base-1]; {
-						i--
-						base--
-					}
-					d += emitLiteral(dst[d:], src[nextEmit:s])
-					s += 4
-					candidate += 4
-					for candidate < len(dict.dict)-8 {
-						if diff := load64(src, s) ^ load64(dict.dict, candidate); diff != 0 {
-							s += bits.TrailingZeros64(diff) >> 3
-							break
-						}
-						s += 8
-						candidate += 8
-					}
-					d += emitRepeat(dst[d:], len(dict.dict)-dict.repeat, s-base)
-				}
-				continue
-			} else if uint32(cv>>(checkRep*8)) == load32(src, s-repeat+checkRep) {
-				base := s + checkRep
+		if repeat > s {
+			candidate := len(dict.dict) - repeat + s
+			if repeat-s >= 4 && uint32(cv) == load32(dict.dict, candidate) {
 				// Extend back
-				for i := base - repeat; base > nextEmit && i > 0 && src[i-1] == src[base-1]; {
+				base := s
+				for i := candidate; base > nextEmit && i > 0 && dict.dict[i-1] == src[base-1]; {
 					i--
 					base--
 				}
-				d += emitLiteral(dst[d:], src[nextEmit:base])
-
-				// Extend forward
-				candidate := s - repeat + 4 + checkRep
-				s += 4 + checkRep
-				for s <= sLimit {
-					if diff := load64(src, s) ^ load64(src, candidate); diff != 0 {
+				d += emitLiteral(dst[d:], src[nextEmit:s])
+				s += 4
+				candidate += 4
+				for candidate < len(dict.dict)-8 {
+					if diff := load64(src, s) ^ load64(dict.dict, candidate); diff != 0 {
 						s += bits.TrailingZeros64(diff) >> 3
 						break
 					}
 					s += 8
 					candidate += 8
 				}
-				if debug {
-					// Validate match.
-					if s <= candidate {
-						panic("s <= candidate")
-					}
-					a := src[base:s]
-					b := src[base-repeat : base-repeat+(s-base)]
-					if !bytes.Equal(a, b) {
-						panic("mismatch")
-					}
-				}
-				if nextEmit > 0 {
-					// same as `add := emitCopy(dst[d:], repeat, s-base)` but skips storing offset.
-					d += emitRepeat(dst[d:], repeat, s-base)
-				} else {
-					// First match, cannot be repeat.
-					d += emitCopy(dst[d:], repeat, s-base)
-				}
-				nextEmit = s
-				if s >= sLimit {
-					goto emitRemainder
-				}
-
+				d += emitRepeat(dst[d:], repeat, s-base)
+				fmt.Println("emitted dict repeat", s-base, repeat)
 				cv = load64(src, s)
+				nextEmit = s
 				continue
 			}
+		} else if uint32(cv>>(checkRep*8)) == load32(src, s-repeat+checkRep) {
+			base := s + checkRep
+			// Extend back
+			for i := base - repeat; base > nextEmit && i > 0 && src[i-1] == src[base-1]; {
+				i--
+				base--
+			}
+			d += emitLiteral(dst[d:], src[nextEmit:base])
 
-			// Start with table. These matches will always be closer.
-			if uint32(cv) == load32(src, candidate) {
-				goto emitMatch
+			// Extend forward
+			candidate := s - repeat + 4 + checkRep
+			s += 4 + checkRep
+			for s <= sLimit {
+				if diff := load64(src, s) ^ load64(src, candidate); diff != 0 {
+					s += bits.TrailingZeros64(diff) >> 3
+					break
+				}
+				s += 8
+				candidate += 8
 			}
-			candidate = int(table[hash2])
-			if uint32(cv>>8) == load32(src, candidate2) {
-				table[hash2] = uint32(s + 2)
-				candidate = candidate2
-				s++
-				goto emitMatch
+			if debug {
+				// Validate match.
+				if s <= candidate {
+					panic("s <= candidate")
+				}
+				a := src[base:s]
+				b := src[base-repeat : base-repeat+(s-base)]
+				if !bytes.Equal(a, b) {
+					panic("mismatch")
+				}
 			}
+			if nextEmit > 0 {
+				// same as `add := emitCopy(dst[d:], repeat, s-base)` but skips storing offset.
+				d += emitRepeat(dst[d:], repeat, s-base)
+			} else {
+				// First match, cannot be repeat.
+				d += emitCopy(dst[d:], repeat, s-base)
+			}
+			nextEmit = s
+			if s >= sLimit {
+				break searchDict
+			}
+			fmt.Println("emitted reg repeat", s-base)
 
-			// Check dict...
-			if uint32(cv) == load32(dict.dict, candidateDict) {
-				table[hash2] = uint32(s + 2)
-				goto emitDict
-			}
-			candidateDict = int(dict.fastTable[hash2])
-			if uint32(cv>>8) == load32(dict.dict, candidateDict2) {
-				table[hash2] = uint32(s + 2)
-				candidateDict = candidateDict2
-				s++
-				goto emitDict
-			}
-
-			table[hash2] = uint32(s + 2)
-			if uint32(cv>>16) == load32(src, candidate) {
-				s += 2
-				goto emitMatch
-			}
-			if uint32(cv>>16) == load32(dict.dict, candidateDict) {
-				s += 2
-				goto emitDict
-			}
-
+			cv = load64(src, s)
+			continue searchDict
+		}
+		if s == 0 {
 			cv = load64(src, nextS)
 			s = nextS
 		}
+		// Start with table. These matches will always be closer.
+		if uint32(cv) == load32(src, candidate) {
+			goto emitMatch
+		}
+		candidate = int(table[hash2])
+		if uint32(cv>>8) == load32(src, candidate2) {
+			table[hash2] = uint32(s + 2)
+			candidate = candidate2
+			s++
+			goto emitMatch
+		}
+
+		// Check dict...
+		if uint32(cv) == load32(dict.dict, candidateDict) {
+			if debug {
+				fmt.Println("dict s0")
+			}
+			table[hash2] = uint32(s + 2)
+			goto emitDict
+		}
+		candidateDict = int(dict.fastTable[hash2])
+		if uint32(cv>>8) == load32(dict.dict, candidateDict2) {
+			if debug {
+				fmt.Println("dict s1")
+			}
+			table[hash2] = uint32(s + 2)
+			candidateDict = candidateDict2
+			s++
+			goto emitDict
+		}
+
+		table[hash2] = uint32(s + 2)
+		if uint32(cv>>16) == load32(src, candidate) {
+			s += 2
+			goto emitMatch
+		}
+		if uint32(cv>>16) == load32(dict.dict, candidateDict) {
+			if debug {
+				fmt.Println("dict s1")
+			}
+			s += 2
+			goto emitDict
+		}
+
+		cv = load64(src, nextS)
+		s = nextS
+		continue searchDict
 
 	emitDict:
 		{
-			// TODO: MODIFY....
+			if debug {
+				if load32(dict.dict, candidateDict) != load32(src, s) {
+					panic("dict emit mismatch")
+				}
+			}
 			// Extend backwards.
 			// The top bytes will be rechecked to get the full match.
-			for candidateDict > 0 && s > nextEmit && src[candidateDict-1] == src[s-1] {
+			for candidateDict > 0 && s > nextEmit && dict.dict[candidateDict-1] == src[s-1] {
 				candidateDict--
 				s--
 			}
@@ -647,30 +670,22 @@ func encodeBlockDictGo(dst, src []byte, dict *Dict) (d int) {
 
 			d += emitLiteral(dst[d:], src[nextEmit:s])
 
-			// Call emitCopy, and then see if another emitCopy could be our next
-			// move. Repeat until we find no match for the input immediately after
-			// what was consumed by the last emitCopy call.
-			//
-			// If we exit this loop normally then we need to call emitLiteral next,
-			// though we don't yet know how big the literal will be. We handle that
-			// by proceeding to the next iteration of the main loop. We also can
-			// exit this loop via goto if we get close to exhausting the input.
-			for {
+			{
 				// Invariant: we have a 4-byte match at s, and no need to emit any
 				// literal bytes prior to s.
 				base := s
-				repeat = base - candidate
+				repeat = s + (len(dict.dict)) - candidateDict
 
 				// Extend the 4-byte match as long as possible.
 				s += 4
-				candidate += 4
-				for s <= len(src)-8 {
-					if diff := load64(src, s) ^ load64(src, candidate); diff != 0 {
+				candidateDict += 4
+				for s <= len(src)-8 && len(dict.dict)-candidateDict >= 8 {
+					if diff := load64(src, s) ^ load64(dict.dict, candidateDict); diff != 0 {
 						s += bits.TrailingZeros64(diff) >> 3
 						break
 					}
 					s += 8
-					candidate += 8
+					candidateDict += 8
 				}
 
 				d += emitCopy(dst[d:], repeat, s-base)
@@ -685,31 +700,26 @@ func encodeBlockDictGo(dst, src []byte, dict *Dict) (d int) {
 						panic("mismatch")
 					}
 				}
+				fmt.Println("emitted dict copy", s-base)
 
 				nextEmit = s
 				if s >= sLimit {
-					goto emitRemainder
+					break searchDict
 				}
 
 				if d > dstLimit {
 					// Do we have space for more, if not bail.
 					return 0
 				}
-				// Check for an immediate match, otherwise start search at s+1
+
+				// Index and continue loop to try new candidate.
 				x := load64(src, s-2)
 				m2Hash := hash6(x, tableBits)
-				currHash := hash6(x>>16, tableBits)
+				currHash := hash6(x>>8, tableBits)
 				candidate = int(table[currHash])
 				table[m2Hash] = uint32(s - 2)
-				table[currHash] = uint32(s)
-				if debug && s == candidate {
-					panic("s == candidate")
-				}
-				if uint32(x>>16) != load32(src, candidate) {
-					cv = load64(src, s+1)
-					s++
-					break
-				}
+				table[currHash] = uint32(s - 1)
+				cv = load64(src, s)
 			}
 			continue
 		}
@@ -771,10 +781,11 @@ func encodeBlockDictGo(dst, src []byte, dict *Dict) (d int) {
 					panic("mismatch")
 				}
 			}
+			fmt.Println("emitted src copy", s-base)
 
 			nextEmit = s
 			if s >= sLimit {
-				goto emitRemainder
+				break searchDict
 			}
 
 			if d > dstLimit {
@@ -799,8 +810,15 @@ func encodeBlockDictGo(dst, src []byte, dict *Dict) (d int) {
 		}
 	}
 
+	// Search without dict:
+	if repeat > s {
+		repeat = 0
+	}
+
 	// No more dict
-	for s < sLimit {
+	sLimit = len(src) - inputMargin
+	fmt.Println("now", s, "->", sLimit, "out:", d, "left:", len(src)-s, "nextemit:", nextEmit, "dstLimit:", dstLimit)
+	for {
 		candidate := 0
 		for {
 			// Next src position to check
@@ -818,7 +836,7 @@ func encodeBlockDictGo(dst, src []byte, dict *Dict) (d int) {
 
 			// Check repeat at offset checkRep.
 			const checkRep = 1
-			if uint32(cv>>(checkRep*8)) == load32(src, s-repeat+checkRep) {
+			if repeat > 0 && uint32(cv>>(checkRep*8)) == load32(src, s-repeat+checkRep) {
 				base := s + checkRep
 				// Extend back
 				for i := base - repeat; base > nextEmit && i > 0 && src[i-1] == src[base-1]; {
@@ -856,6 +874,7 @@ func encodeBlockDictGo(dst, src []byte, dict *Dict) (d int) {
 					// First match, cannot be repeat.
 					d += emitCopy(dst[d:], repeat, s-base)
 				}
+				fmt.Println("emitted src repeat", s-base, repeat)
 				nextEmit = s
 				if s >= sLimit {
 					goto emitRemainder
@@ -941,6 +960,7 @@ func encodeBlockDictGo(dst, src []byte, dict *Dict) (d int) {
 					panic("mismatch")
 				}
 			}
+			fmt.Println("emitted src copy", s-base)
 
 			nextEmit = s
 			if s >= sLimit {

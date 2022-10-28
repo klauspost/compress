@@ -607,3 +607,20 @@ func BenchmarkWriterRandom(b *testing.B) {
 		w.Close()
 	}
 }
+
+func TestDict(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	data := make([]byte, 256<<10)
+	for i := range data {
+		data[i] = uint8(rng.Intn(256))
+	}
+
+	d := NewDict(append([]byte{0}, data[:65536]...))
+	res := encodeBlockDictGo(make([]byte, MaxEncodedLen(len(data))), data, d)
+	t.Log(res)
+
+	t.Log("new encode")
+	d = NewDict(append([]byte{0}, data[5000:65536+5000]...))
+	res = encodeBlockDictGo(make([]byte, MaxEncodedLen(len(data))), data, d)
+	t.Log(res)
+}
