@@ -941,7 +941,7 @@ Often used data should be placed at the *end* of the dictionary since offsets wi
 
 ## Format
 
-Dictionary *content* must be less than 64KiB (65536 bytes). 
+Dictionary *content* must be less or equal to 64KiB (65536 bytes). 
 
 Encoding: `[repeat value (uvarint)][dictionary content...]`
 
@@ -977,7 +977,7 @@ Because of this there is no overhead by using a dictionary.
 
 For streams each block can use the dictionary.
 
-The dictionary is not provided on the stream.
+The dictionary is not currently provided on the stream.
 
 
 # LICENSE

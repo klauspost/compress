@@ -481,8 +481,8 @@ func encodeBlockDictGo(dst, src []byte, dict *Dict) (d int) {
 	// lets us use a fast path for emitLiteral in the main loop, while we are
 	// looking for copies.
 	sLimit := len(src) - inputMargin
-	if sLimit > 65535 {
-		sLimit = 65535
+	if sLimit > MaxDictSrcOffset {
+		sLimit = MaxDictSrcOffset
 	}
 
 	// Bail if we can't compress to at least this.
@@ -506,7 +506,9 @@ searchDict:
 		hash0 := hash6(cv, tableBits)
 		hash1 := hash6(cv>>8, tableBits)
 		if nextS > sLimit {
-			fmt.Println("slimit reached", s, nextS)
+			if debug {
+				fmt.Println("slimit reached", s, nextS)
+			}
 			break searchDict
 		}
 		candidateDict := int(dict.fastTable[hash0])
@@ -541,9 +543,15 @@ searchDict:
 					candidate += 8
 				}
 				d += emitRepeat(dst[d:], repeat, s-base)
-				fmt.Println("emitted dict repeat", s-base, repeat)
+				if debug {
+					fmt.Println("emitted dict repeat length", s-base, "offset:", repeat)
+				}
+				if s >= sLimit {
+					break searchDict
+				}
 				cv = load64(src, s)
 				nextEmit = s
+
 				continue
 			}
 		} else if uint32(cv>>(checkRep*8)) == load32(src, s-repeat+checkRep) {
@@ -588,8 +596,9 @@ searchDict:
 			if s >= sLimit {
 				break searchDict
 			}
-			fmt.Println("emitted reg repeat", s-base)
-
+			if debug {
+				fmt.Println("emitted reg repeat", s-base)
+			}
 			cv = load64(src, s)
 			continue searchDict
 		}
@@ -609,19 +618,15 @@ searchDict:
 			goto emitMatch
 		}
 
-		// Check dict...
-		if uint32(cv) == load32(dict.dict, candidateDict) {
-			if debug {
-				fmt.Println("dict s0")
-			}
+		// Check dict. Dicts have longer offsets, so we want longer matches.
+		if cv == load64(dict.dict, candidateDict) {
 			table[hash2] = uint32(s + 2)
 			goto emitDict
 		}
+
 		candidateDict = int(dict.fastTable[hash2])
-		if uint32(cv>>8) == load32(dict.dict, candidateDict2) {
-			if debug {
-				fmt.Println("dict s1")
-			}
+		// Check if upper 7 bytes match
+		if cv^load64(dict.dict, candidateDict2) < (1 << 8) {
 			table[hash2] = uint32(s + 2)
 			candidateDict = candidateDict2
 			s++
@@ -633,10 +638,8 @@ searchDict:
 			s += 2
 			goto emitMatch
 		}
-		if uint32(cv>>16) == load32(dict.dict, candidateDict) {
-			if debug {
-				fmt.Println("dict s1")
-			}
+		// Check if upper 6 bytes match
+		if cv^load64(dict.dict, candidateDict) < (1 << 16) {
 			s += 2
 			goto emitDict
 		}
@@ -689,19 +692,20 @@ searchDict:
 				}
 
 				d += emitCopy(dst[d:], repeat, s-base)
-				if debug {
+				if false {
 					// Validate match.
 					if s <= candidate {
 						panic("s <= candidate")
 					}
 					a := src[base:s]
-					b := src[base-repeat : base-repeat+(s-base)]
+					b := dict.dict[base-repeat : base-repeat+(s-base)]
 					if !bytes.Equal(a, b) {
 						panic("mismatch")
 					}
 				}
-				fmt.Println("emitted dict copy", s-base)
-
+				if debug {
+					fmt.Println("emitted dict copy, length", s-base, "offset:", repeat)
+				}
 				nextEmit = s
 				if s >= sLimit {
 					break searchDict
@@ -781,8 +785,9 @@ searchDict:
 					panic("mismatch")
 				}
 			}
-			fmt.Println("emitted src copy", s-base)
-
+			if debug {
+				fmt.Println("emitted src copy, length", s-base, "offset:", repeat)
+			}
 			nextEmit = s
 			if s >= sLimit {
 				break searchDict
@@ -817,7 +822,13 @@ searchDict:
 
 	// No more dict
 	sLimit = len(src) - inputMargin
-	fmt.Println("now", s, "->", sLimit, "out:", d, "left:", len(src)-s, "nextemit:", nextEmit, "dstLimit:", dstLimit)
+	if s >= sLimit {
+		goto emitRemainder
+	}
+	cv = load64(src, s)
+	if debug {
+		fmt.Println("now", s, "->", sLimit, "out:", d, "left:", len(src)-s, "nextemit:", nextEmit, "dstLimit:", dstLimit)
+	}
 	for {
 		candidate := 0
 		for {
@@ -874,7 +885,9 @@ searchDict:
 					// First match, cannot be repeat.
 					d += emitCopy(dst[d:], repeat, s-base)
 				}
-				fmt.Println("emitted src repeat", s-base, repeat)
+				if debug {
+					fmt.Println("emitted src repeat length", s-base, "offset:", repeat)
+				}
 				nextEmit = s
 				if s >= sLimit {
 					goto emitRemainder
@@ -960,8 +973,9 @@ searchDict:
 					panic("mismatch")
 				}
 			}
-			fmt.Println("emitted src copy", s-base)
-
+			if debug {
+				fmt.Println("emitted src copy, length", s-base, "offset:", repeat)
+			}
 			nextEmit = s
 			if s >= sLimit {
 				goto emitRemainder

@@ -610,17 +610,87 @@ func BenchmarkWriterRandom(b *testing.B) {
 
 func TestDict(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
-	data := make([]byte, 256<<10)
+	data := make([]byte, 128<<10)
 	for i := range data {
 		data[i] = uint8(rng.Intn(256))
 	}
 
+	// Should match the first 64K
 	d := NewDict(append([]byte{0}, data[:65536]...))
 	res := encodeBlockDictGo(make([]byte, MaxEncodedLen(len(data))), data, d)
-	t.Log(res)
+	if res == 0 || res > len(data)-65500 {
+		t.Errorf("did no get expected dict saving. Saved %d bytes", len(data)-res)
+	}
+	encoded := make([]byte, MaxEncodedLen(len(data)))
+	res = encodeBlockDictGo(encoded, data, d)
+	if res == 0 || res > len(data)-65500 {
+		t.Errorf("did no get expected dict saving. Saved %d bytes", len(data)-res)
+	}
+	encoded = encoded[:res]
+	t.Log("saved", len(data)-res, "bytes")
+	decoded := make([]byte, len(data))
+	res = s2DecodeDict(decoded, encoded, d)
+	if res != 0 {
+		t.Fatalf("got result: %d", res)
+	}
+	if !bytes.Equal(decoded, data) {
+		//os.WriteFile("decoded.bin", decoded, os.ModePerm)
+		//os.WriteFile("original.bin", data, os.ModePerm)
+		t.Fatal("decoded mismatch")
+	}
 
-	t.Log("new encode")
+	// Add dict that will produce a full match 5000 chars into the input.
 	d = NewDict(append([]byte{0}, data[5000:65536+5000]...))
-	res = encodeBlockDictGo(make([]byte, MaxEncodedLen(len(data))), data, d)
-	t.Log(res)
+	encoded = make([]byte, MaxEncodedLen(len(data)))
+	res = encodeBlockDictGo(encoded, data, d)
+	if res == 0 || res > len(data)-65500 {
+		t.Errorf("did no get expected dict saving. Saved %d bytes", len(data)-res)
+	}
+	encoded = encoded[:res]
+	t.Log("saved", len(data)-res, "bytes")
+	decoded = make([]byte, len(data))
+	res = s2DecodeDict(decoded, encoded, d)
+	if res != 0 {
+		t.Fatalf("got result: %d", res)
+	}
+	if !bytes.Equal(decoded, data) {
+		//os.WriteFile("decoded.bin", decoded, os.ModePerm)
+		//os.WriteFile("original.bin", data, os.ModePerm)
+		t.Fatal("decoded mismatch")
+	}
+
+	// generate copies
+	for i := 1; i < len(data); {
+		n := rng.Intn(32) + 4
+		off := rng.Intn(len(data) - n)
+		copy(data[i:], data[off:off+n])
+		i += n
+	}
+
+	dict := make([]byte, 65536)
+	for i := 1; i < len(dict); {
+		n := rng.Intn(32) + 4
+		off := rng.Intn(65536 - n)
+		copy(dict[i:], data[off:off+n])
+		i += n
+	}
+	d = NewDict(dict)
+	encoded = make([]byte, MaxEncodedLen(len(data)))
+	res = encodeBlockDictGo(encoded, data, d)
+	if res == 0 || res > len(data)-20000 {
+		t.Errorf("did no get expected dict saving. Saved %d bytes", len(data)-res)
+	}
+	encoded = encoded[:res]
+	t.Log("saved", len(data)-res, "bytes")
+	decoded = make([]byte, len(data))
+	res = s2DecodeDict(decoded, encoded, d)
+	if res != 0 {
+		t.Fatalf("got result: %d", res)
+	}
+	if !bytes.Equal(decoded, data) {
+		os.WriteFile("decoded.bin", decoded, os.ModePerm)
+		os.WriteFile("original.bin", data, os.ModePerm)
+		t.Fatal("decoded mismatch")
+	}
+
 }
