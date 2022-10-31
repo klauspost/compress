@@ -1089,11 +1089,14 @@ func s2DecodeDict(dst, src []byte, dict *Dict) int {
 				s += 5
 			}
 			length = int(x) + 1
-			if length > len(dst)-d || length > len(src)-s || (strconv.IntSize == 32 && length <= 0) {
-				return decodeErrCodeCorrupt
-			}
 			if debug {
 				fmt.Println("literals, length:", length, "d-after:", d+length)
+			}
+			if length > len(dst)-d || length > len(src)-s || (strconv.IntSize == 32 && length <= 0) {
+				if debug {
+					fmt.Println("corrupt literal: length:", length, "d-left:", len(dst)-d, "src-left:", len(src)-s)
+				}
+				return decodeErrCodeCorrupt
 			}
 
 			copy(dst[d:], src[s:s+length])
@@ -1142,6 +1145,9 @@ func s2DecodeDict(dst, src []byte, dict *Dict) int {
 		}
 
 		if offset <= 0 || length > len(dst)-d {
+			if debug {
+				fmt.Println("match error; offset:", offset, "length:", length, "dst-left:", len(dst)-d)
+			}
 			return decodeErrCodeCorrupt
 		}
 

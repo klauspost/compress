@@ -531,10 +531,13 @@ searchDict:
 					i--
 					base--
 				}
-				d += emitLiteral(dst[d:], src[nextEmit:s])
+				d += emitLiteral(dst[d:], src[nextEmit:base])
+				if debug && nextEmit != base {
+					fmt.Println("emitted ", base-nextEmit, "literals")
+				}
 				s += 4
 				candidate += 4
-				for candidate < len(dict.dict)-8 {
+				for candidate < len(dict.dict)-8 && s <= sLimit {
 					if diff := load64(src, s) ^ load64(dict.dict, candidate); diff != 0 {
 						s += bits.TrailingZeros64(diff) >> 3
 						break
@@ -544,13 +547,13 @@ searchDict:
 				}
 				d += emitRepeat(dst[d:], repeat, s-base)
 				if debug {
-					fmt.Println("emitted dict repeat length", s-base, "offset:", repeat)
+					fmt.Println("emitted dict repeat length", s-base, "offset:", repeat, "s:", s)
 				}
+				nextEmit = s
 				if s >= sLimit {
 					break searchDict
 				}
 				cv = load64(src, s)
-				nextEmit = s
 
 				continue
 			}
@@ -562,6 +565,9 @@ searchDict:
 				base--
 			}
 			d += emitLiteral(dst[d:], src[nextEmit:base])
+			if debug && nextEmit != base {
+				fmt.Println("emitted ", base-nextEmit, "literals")
+			}
 
 			// Extend forward
 			candidate := s - repeat + 4 + checkRep
@@ -597,7 +603,7 @@ searchDict:
 				break searchDict
 			}
 			if debug {
-				fmt.Println("emitted reg repeat", s-base)
+				fmt.Println("emitted reg repeat", s-base, "s:", s)
 			}
 			cv = load64(src, s)
 			continue searchDict
@@ -672,7 +678,9 @@ searchDict:
 			// them as literal bytes.
 
 			d += emitLiteral(dst[d:], src[nextEmit:s])
-
+			if debug && nextEmit != s {
+				fmt.Println("emitted ", s-nextEmit, "literals")
+			}
 			{
 				// Invariant: we have a 4-byte match at s, and no need to emit any
 				// literal bytes prior to s.
@@ -704,7 +712,7 @@ searchDict:
 					}
 				}
 				if debug {
-					fmt.Println("emitted dict copy, length", s-base, "offset:", repeat)
+					fmt.Println("emitted dict copy, length", s-base, "offset:", repeat, "s:", s)
 				}
 				nextEmit = s
 				if s >= sLimit {
@@ -746,7 +754,9 @@ searchDict:
 		// them as literal bytes.
 
 		d += emitLiteral(dst[d:], src[nextEmit:s])
-
+		if debug && nextEmit != s {
+			fmt.Println("emitted ", s-nextEmit, "literals")
+		}
 		// Call emitCopy, and then see if another emitCopy could be our next
 		// move. Repeat until we find no match for the input immediately after
 		// what was consumed by the last emitCopy call.
@@ -786,7 +796,7 @@ searchDict:
 				}
 			}
 			if debug {
-				fmt.Println("emitted src copy, length", s-base, "offset:", repeat)
+				fmt.Println("emitted src copy, length", s-base, "offset:", repeat, "s:", s)
 			}
 			nextEmit = s
 			if s >= sLimit {
@@ -827,7 +837,7 @@ searchDict:
 	}
 	cv = load64(src, s)
 	if debug {
-		fmt.Println("now", s, "->", sLimit, "out:", d, "left:", len(src)-s, "nextemit:", nextEmit, "dstLimit:", dstLimit)
+		fmt.Println("now", s, "->", sLimit, "out:", d, "left:", len(src)-s, "nextemit:", nextEmit, "dstLimit:", dstLimit, "s:", s)
 	}
 	for {
 		candidate := 0
@@ -855,7 +865,9 @@ searchDict:
 					base--
 				}
 				d += emitLiteral(dst[d:], src[nextEmit:base])
-
+				if debug && nextEmit != base {
+					fmt.Println("emitted ", base-nextEmit, "literals")
+				}
 				// Extend forward
 				candidate := s - repeat + 4 + checkRep
 				s += 4 + checkRep
@@ -886,7 +898,7 @@ searchDict:
 					d += emitCopy(dst[d:], repeat, s-base)
 				}
 				if debug {
-					fmt.Println("emitted src repeat length", s-base, "offset:", repeat)
+					fmt.Println("emitted src repeat length", s-base, "offset:", repeat, "s:", s)
 				}
 				nextEmit = s
 				if s >= sLimit {
@@ -934,7 +946,9 @@ searchDict:
 		// them as literal bytes.
 
 		d += emitLiteral(dst[d:], src[nextEmit:s])
-
+		if debug && nextEmit != s {
+			fmt.Println("emitted ", s-nextEmit, "literals")
+		}
 		// Call emitCopy, and then see if another emitCopy could be our next
 		// move. Repeat until we find no match for the input immediately after
 		// what was consumed by the last emitCopy call.
@@ -974,7 +988,7 @@ searchDict:
 				}
 			}
 			if debug {
-				fmt.Println("emitted src copy, length", s-base, "offset:", repeat)
+				fmt.Println("emitted src copy, length", s-base, "offset:", repeat, "s:", s)
 			}
 			nextEmit = s
 			if s >= sLimit {
@@ -1010,6 +1024,9 @@ emitRemainder:
 			return 0
 		}
 		d += emitLiteral(dst[d:], src[nextEmit:])
+		if debug && nextEmit != s {
+			fmt.Println("emitted ", len(src)-nextEmit, "literals")
+		}
 	}
 	return d
 }
