@@ -28,8 +28,8 @@ type Dict struct {
 	betterTableShort *[1 << 14]uint16
 	betterTableLong  *[1 << 17]uint16
 
-	bestTableShort *[1 << 19]uint16
-	bestTableLong  *[1 << 16]uint16
+	bestTableShort *[1 << 16]uint32
+	bestTableLong  *[1 << 19]uint32
 }
 
 // NewDict will read a dictionary.
@@ -75,5 +75,35 @@ func (d *Dict) initFast() {
 			table[h2] = uint16(i + 2)
 		}
 		d.fastTable = &table
+	})
+}
+
+func (d *Dict) initBest() {
+	d.best.Do(func() {
+		const (
+			// Long hash matches.
+			lTableBits    = 19
+			maxLTableSize = 1 << lTableBits
+
+			// Short hash matches.
+			sTableBits    = 16
+			maxSTableSize = 1 << sTableBits
+		)
+
+		var lTable [maxLTableSize]uint32
+		var sTable [maxSTableSize]uint32
+
+		// We stop so any entry of length 8 can always be read.
+		for i := 0; i < len(d.dict)-8; i++ {
+			cv := load64(d.dict, i)
+			hashL := hash8(cv, lTableBits)
+			hashS := hash4(cv, sTableBits)
+			candidateL := lTable[hashL]
+			candidateS := sTable[hashS]
+			lTable[hashL] = uint32(i) | candidateL<<16
+			sTable[hashS] = uint32(i) | candidateS<<16
+		}
+		d.bestTableShort = &sTable
+		d.bestTableLong = &lTable
 	})
 }

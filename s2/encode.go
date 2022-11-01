@@ -132,7 +132,7 @@ func EncodeBest(dst, src []byte) []byte {
 		d += emitLiteral(dst[d:], src)
 		return dst[:d]
 	}
-	n := encodeBlockBest(dst[d:], src)
+	n := encodeBlockBest(dst[d:], src, nil)
 	if n > 0 {
 		d += n
 		return dst[:d]
@@ -790,7 +790,7 @@ func (w *Writer) encodeBlock(obuf, uncompressed []byte) int {
 	case levelBetter:
 		return encodeBlockBetter(obuf, uncompressed)
 	case levelBest:
-		return encodeBlockBest(obuf, uncompressed)
+		return encodeBlockBest(obuf, uncompressed, nil)
 	}
 	return 0
 }
