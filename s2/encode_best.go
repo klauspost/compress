@@ -746,7 +746,6 @@ func emitRepeatSize(offset, length int) int {
 	left := 0
 	if length > maxRepeat {
 		left = length - maxRepeat + 4
-		length = maxRepeat - 4
 	}
 	if left > 0 {
 		return 5 + emitRepeatSize(offset, left)

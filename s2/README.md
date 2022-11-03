@@ -941,7 +941,7 @@ Often used data should be placed at the *end* of the dictionary since offsets wi
 
 ## Format
 
-Dictionary *content* must be less or equal to 64KiB (65536 bytes). 
+Dictionary *content* must be more than 8 bytes and less or equal to 64KiB (65536 bytes). 
 
 Encoding: `[repeat value (uvarint)][dictionary content...]`
 

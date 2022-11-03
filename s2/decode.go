@@ -1052,6 +1052,9 @@ func (r *Reader) SkippableCB(id uint8, fn func(r io.Reader) error) error {
 //
 // It returns 0 on success or a decodeErrCodeXxx error code on failure.
 func s2DecodeDict(dst, src []byte, dict *Dict) int {
+	if dict == nil {
+		return s2Decode(dst, src)
+	}
 	const debug = false
 	if debug {
 		fmt.Println("Starting decode, dst len:", len(dst))
