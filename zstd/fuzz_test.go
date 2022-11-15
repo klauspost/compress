@@ -210,6 +210,10 @@ func FuzzEncoding(f *testing.F) {
 			}
 
 			encoded := enc.EncodeAll(data, make([]byte, 0, bufSize))
+			if len(encoded) > enc.MaxEncodedSize(len(data)) {
+				t.Errorf("max encoded size for %v: got: %d, want max: %d", len(data), len(encoded), enc.MaxEncodedSize(len(data)))
+			}
+
 			got, err := dec.DecodeAll(encoded, make([]byte, 0, bufSize))
 			if err != nil {
 				t.Fatal(fmt.Sprintln("Level", level, "DecodeAll error:", err, "\norg:", len(data), "\nencoded", len(encoded)))
@@ -223,6 +227,9 @@ func FuzzEncoding(f *testing.F) {
 				t.Fatal(fmt.Sprintln("Level", level, "Close (buffer) error:", err))
 			}
 			encoded2 := dst.Bytes()
+			if len(encoded2) > enc.MaxEncodedSize(len(data)) {
+				t.Errorf("max encoded size for %v: got: %d, want max: %d", len(data), len(encoded2), enc.MaxEncodedSize(len(data)))
+			}
 			if !bytes.Equal(encoded, encoded2) {
 				got, err = dec.DecodeAll(encoded2, got[:0])
 				if err != nil {
@@ -247,6 +254,9 @@ func FuzzEncoding(f *testing.F) {
 			}
 
 			encoded = enc.EncodeAll(data, encoded[:0])
+			if len(encoded) > enc.MaxEncodedSize(len(data)) {
+				t.Errorf("max encoded size for %v: got: %d, want max: %d", len(data), len(encoded), enc.MaxEncodedSize(len(data)))
+			}
 			got, err = dec.DecodeAll(encoded, got[:0])
 			if err != nil {
 				t.Fatal(fmt.Sprintln("Dict Level", level, "DecodeAll error:", err, "\norg:", len(data), "\nencoded", len(encoded)))
@@ -260,6 +270,9 @@ func FuzzEncoding(f *testing.F) {
 				t.Fatal(fmt.Sprintln("Dict Level", level, "Close (buffer) error:", err))
 			}
 			encoded2 = dst.Bytes()
+			if len(encoded2) > enc.MaxEncodedSize(len(data)) {
+				t.Errorf("max encoded size for %v: got: %d, want max: %d", len(data), len(encoded2), enc.MaxEncodedSize(len(data)))
+			}
 			if !bytes.Equal(encoded, encoded2) {
 				got, err = dec.DecodeAll(encoded2, got[:0])
 				if err != nil {
