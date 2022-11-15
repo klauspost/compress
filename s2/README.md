@@ -973,6 +973,21 @@ Valid blocks encoded *without* a dictionary can be decoded with any dictionary.
 There are no checks whether the supplied dictionary is the correct for a block.
 Because of this there is no overhead by using a dictionary.
 
+## Example
+
+This is the dictionary content. Elements are separated by `[]`.
+
+Dictionary: `[0x0a][Yesterday 25 bananas were added to Benjamins brown bag]`.
+
+Initial repeat offset is set at 10, which is the letter `2`.
+
+Encoded `[LIT "10"][REPEAT len=10][LIT "hich"][MATCH off=50 len=6][MATCH off=31 len=6][MATCH off=61 len=10]`
+
+Decoded: `[10][ bananas w][hich][ were ][brown ][were added]`
+
+Output: `10 bananas which were brown were added`
+
+
 ## Streams
 
 For streams each block can use the dictionary.
