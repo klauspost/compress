@@ -454,6 +454,28 @@ func (s *Scratch) optimalTableLog() {
 	s.actualTableLog = tableLog
 }
 
+// optimalTableLog calculates and sets the optimal tableLog in s.actualTableLog
+func (s *Scratch) forceTableLog() error {
+	if s.TableLog < minTablelog || s.TableLog > tableLogMax {
+		return ErrIncompressible
+	}
+	cardinality := uint32(0)
+	for _, v := range s.count[:s.symbolLen] {
+		if v != 0 {
+			cardinality++
+		}
+	}
+	if cardinality <= 1 {
+		return ErrUseRLE
+	}
+	minBitsSymbols := highBit32(cardinality) + 1
+	if uint8(minBitsSymbols) > s.TableLog {
+		return ErrIncompressible
+	}
+	s.actualTableLog = s.TableLog
+	return nil
+}
+
 type cTableEntry struct {
 	val   uint16
 	nBits uint8
@@ -463,7 +485,13 @@ type cTableEntry struct {
 const huffNodesMask = huffNodesLen - 1
 
 func (s *Scratch) buildCTable() error {
-	s.optimalTableLog()
+	if s.ForceTableLog {
+		if err := s.forceTableLog(); err != nil {
+			return err
+		}
+	} else {
+		s.optimalTableLog()
+	}
 	s.huffSort()
 	if cap(s.cTable) < maxSymbolValue+1 {
 		s.cTable = make([]cTableEntry, s.symbolLen, maxSymbolValue+1)

@@ -97,6 +97,9 @@ type Scratch struct {
 	// Must be <= 11 and >= 5.
 	TableLog uint8
 
+	// ForceTableLog will force the TableLog, even if it may be suboptimal.
+	ForceTableLog bool
+
 	// Reuse will specify the reuse policy
 	Reuse ReusePolicy
 

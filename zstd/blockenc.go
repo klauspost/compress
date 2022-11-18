@@ -27,8 +27,9 @@ type blockEnc struct {
 	recentOffsets     [3]uint32
 	prevRecentOffsets [3]uint32
 
-	last   bool
-	lowMem bool
+	last       bool
+	lowMem     bool
+	bruteForce bool
 }
 
 // init should be used once the block has been created.
@@ -332,27 +333,7 @@ func (b *blockEnc) encodeRawTo(dst, src []byte) []byte {
 }
 
 // encodeLits can be used if the block is only litLen.
-func (b *blockEnc) encodeLits(lits []byte, raw bool) error {
-	var bh blockHeader
-	bh.setLast(b.last)
-	bh.setSize(uint32(len(lits)))
-
-	// Don't compress extremely small blocks
-	if len(lits) < 8 || (len(lits) < 32 && b.dictLitEnc == nil) || raw {
-		if debugEncoder {
-			println("Adding RAW block, length", len(lits), "last:", b.last)
-		}
-		bh.setType(blockTypeRaw)
-		b.output = bh.appendTo(b.output)
-		b.output = append(b.output, lits...)
-		return nil
-	}
-
-	var (
-		out            []byte
-		reUsed, single bool
-		err            error
-	)
+func (b *blockEnc) encodeLitsBlock(lits []byte) (out []byte, reUsed, single bool, err error) {
 	if b.dictLitEnc != nil {
 		b.litEnc.TransferCTable(b.dictLitEnc)
 		b.litEnc.Reuse = huff0.ReusePolicyAllow
@@ -368,6 +349,69 @@ func (b *blockEnc) encodeLits(lits []byte, raw bool) error {
 	} else {
 		err = huff0.ErrIncompressible
 	}
+
+	// Try to brute force other table logs.
+	// Extremely small improvement, so no way to enable for now.
+	if err == nil && b.bruteForce {
+		tmp := huff0.Scratch{Reuse: huff0.ReusePolicyNone, ForceTableLog: true}
+		for i := uint8(11); i >= 5; i-- {
+			tmp.TableLog = i
+			tmp.Reuse = huff0.ReusePolicyNone
+			var out2 []byte
+			var err2 error
+			if len(lits) < 1024 {
+				out2, _, err2 = huff0.Compress1X(lits, &tmp)
+				// Prefer the smaller tablelog if equal
+				if err2 == nil && len(out2) <= len(out) {
+					//fmt.Println("better (1x):", i, "size:", len(out2), "<=", len(out))
+					tmp.Out = out[:0]
+					reUsed = false
+					out = out2
+					err = nil
+					single = true
+					b.litEnc.TransferCTable(&tmp)
+					b.litEnc.Out = out
+				} else if err == huff0.ErrIncompressible {
+					break
+				}
+				tmp.TableLog = i
+				tmp.Reuse = huff0.ReusePolicyNone
+			}
+			out2, _, err2 = huff0.Compress4X(lits, &tmp)
+			// Prefer the smaller tablelog if equal
+			if err2 == nil && len(out2) <= len(out) {
+				//fmt.Println("better (4x):", i, "size:", len(out2), "<=", len(out))
+				tmp.Out = out[:0]
+				reUsed = false
+				out = out2
+				err = nil
+				single = false
+				b.litEnc.TransferCTable(&tmp)
+			} else if err == huff0.ErrIncompressible {
+				break
+			}
+		}
+	}
+	return
+}
+
+// encodeLits can be used if the block is only litLen.
+func (b *blockEnc) encodeLits(lits []byte, raw bool) error {
+	var bh blockHeader
+	bh.setLast(b.last)
+	bh.setSize(uint32(len(lits)))
+
+	// Don't compress extremely small blocks
+	if len(lits) < 8 || (len(lits) < 32 && b.dictLitEnc == nil && !b.bruteForce) || raw {
+		if debugEncoder {
+			println("Adding RAW block, length", len(lits), "last:", b.last)
+		}
+		bh.setType(blockTypeRaw)
+		b.output = bh.appendTo(b.output)
+		b.output = append(b.output, lits...)
+		return nil
+	}
+	out, reUsed, single, err := b.encodeLitsBlock(lits)
 
 	switch err {
 	case huff0.ErrIncompressible:
@@ -490,26 +534,7 @@ func (b *blockEnc) encode(org []byte, raw, rawAllLits bool) error {
 	bhOffset := len(b.output)
 	b.output = bh.appendTo(b.output)
 
-	var (
-		out            []byte
-		reUsed, single bool
-		err            error
-	)
-	if b.dictLitEnc != nil {
-		b.litEnc.TransferCTable(b.dictLitEnc)
-		b.litEnc.Reuse = huff0.ReusePolicyAllow
-		b.dictLitEnc = nil
-	}
-	if len(b.literals) >= 1024 && !raw {
-		// Use 4 Streams.
-		out, reUsed, err = huff0.Compress4X(b.literals, b.litEnc)
-	} else if len(b.literals) > 32 && !raw {
-		// Use 1 stream
-		single = true
-		out, reUsed, err = huff0.Compress1X(b.literals, b.litEnc)
-	} else {
-		err = huff0.ErrIncompressible
-	}
+	out, reUsed, single, err := b.encodeLitsBlock(b.literals)
 
 	switch err {
 	case huff0.ErrIncompressible:

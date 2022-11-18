@@ -221,9 +221,11 @@ func TestEncoderRegression(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	defer dec.Close()
+	t.Cleanup(dec.Close)
 	for _, opts := range getEncOpts(2) {
+		opts := opts
 		t.Run(opts.name, func(t *testing.T) {
+			t.Parallel()
 			zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 			if err != nil {
 				t.Fatal(err)
