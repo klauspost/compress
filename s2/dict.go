@@ -46,6 +46,9 @@ func NewDict(dict []byte) *Dict {
 	}
 	dict = dict[n:]
 	d.dict = dict
+	if cap(d.dict) < len(d.dict)+16 {
+		d.dict = append(make([]byte, 0, len(d.dict)+16), d.dict...)
+	}
 	if len(dict) == 0 || len(dict) > MaxDictSize {
 		return nil
 	}

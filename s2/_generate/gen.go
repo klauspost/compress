@@ -1032,14 +1032,12 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, sTableBits, sk
 				SUBL(repeatL, rep) // rep = s - repeat
 
 				// if uint32(cv>>(checkRep*8)) == load32(src, s-repeat+checkRep) {
-				left, right := GP64(), GP64()
-				MOVQ(Mem{Base: src, Index: rep, Disp: 0, Scale: 1}, right.As64())
-				MOVQ(cv, left)
 				tmp := GP64()
-				MOVQ(U64(repeatMask), tmp)
-				ANDQ(tmp, left)
-				ANDQ(tmp, right)
-				CMPQ(left.As64(), right.As64())
+				mask := GP64()
+				MOVQ(Mem{Base: src, Index: rep, Disp: 0, Scale: 1}, tmp.As64())
+				MOVQ(U64(repeatMask), mask)
+				XORQ(cv.As64(), tmp.As64())
+				TESTQ(mask.As64(), tmp.As64())
 				// BAIL, no repeat.
 				JNE(LabelRef("no_repeat_found_" + name))
 			}
