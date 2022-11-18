@@ -278,10 +278,13 @@ encodeLoop:
 			if sAt := best.s + best.length; sAt < sLimit {
 				nextHashL := hashLen(load6432(src, sAt), bestLongTableBits, bestLongLen)
 				candidateEnd := e.longTable[nextHashL]
-				if pos := candidateEnd.offset - e.cur - best.length; pos >= 0 {
-					bestEnd := bestOf(best, matchAt(pos, best.s, load3232(src, best.s), -1))
-					if pos := candidateEnd.prev - e.cur - best.length; pos >= 0 {
-						bestEnd = bestOf(bestEnd, matchAt(pos, best.s, load3232(src, best.s), -1))
+				// Start check at a fixed offset to allow for a few mismatches.
+				// For this compression level 2 yields the best results.
+				const skipBeginning = 2
+				if pos := candidateEnd.offset - e.cur - best.length + skipBeginning; pos >= 0 {
+					bestEnd := bestOf(best, matchAt(pos, best.s+skipBeginning, load3232(src, best.s+skipBeginning), -1))
+					if pos := candidateEnd.prev - e.cur - best.length + skipBeginning; pos >= 0 {
+						bestEnd = bestOf(bestEnd, matchAt(pos, best.s+skipBeginning, load3232(src, best.s+skipBeginning), -1))
 					}
 					best = bestEnd
 				}
