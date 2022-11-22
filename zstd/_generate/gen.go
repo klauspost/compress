@@ -1321,35 +1321,35 @@ func (e executeSimple) copyMemoryPrecise(suffix string, src, dst, length reg.GPV
 		TESTQ(length, length)
 		JZ(LabelRef("copy_" + suffix + "_end"))
 	}
-	n := GP64()
-	MOVQ(length, n)
-	SUBQ(U8(16), n)
+	CMPQ(length, U8(16))
 	JB(LabelRef("copy_" + suffix + "_small"))
 
 	// If length >= 16, copy blocks of 16 bytes and handle any remainder
 	// by a block copy that overlaps with the last full block.
 	{
+		offset := GP64()
+		XORQ(offset, offset)
+
 		t := XMM()
 
 		loop := "copy_" + suffix + "_loop"
 		Label(loop)
 		{
-			MOVUPS(Mem{Base: src}, t)
-			MOVUPS(t, Mem{Base: dst})
-			ADDQ(U8(16), src)
-			ADDQ(U8(16), dst)
-			SUBQ(U8(16), n)
-			JAE(LabelRef(loop))
-		}
+			s := Mem{Base: src, Index: offset, Scale: 1}
+			d := Mem{Base: dst, Index: offset, Scale: 1}
+			MOVUPS(s, t)
+			MOVUPS(t, d)
 
-		// n is now the range [-16,-1].
-		// -16 means we copy the entire last block again.
-		// That should happen about 1/16th of the time,
-		// so we don't bother to check for it.
-		LEAQ(Mem{Base: src, Index: n, Disp: 16, Scale: 1}, src)
-		LEAQ(Mem{Base: dst, Index: n, Disp: 16, Scale: 1}, dst)
-		MOVUPS(Mem{Base: src, Disp: -16}, t)
-		MOVUPS(t, Mem{Base: dst, Disp: -16})
+			ADDQ(U8(16), offset)
+			CMPQ(offset, length)
+			JB(LabelRef(loop))
+		}
+		JE(LabelRef("copy_" + suffix + "_end"))
+
+		// We could jump to move_8through16 here for more compact code,
+		// but this is faster on the benchmarks.
+		MOVUPS(Mem{Base: src, Index: length, Disp: -16, Scale: 1}, t)
+		MOVUPS(t, Mem{Base: dst, Index: length, Disp: -16, Scale: 1})
 
 		JMP(LabelRef("copy_" + suffix + "_end"))
 	}
@@ -1374,8 +1374,6 @@ func (e executeSimple) copyMemoryPrecise(suffix string, src, dst, length reg.GPV
 			MOVB(Mem{Base: src, Disp: -1, Index: length, Scale: 1}, CX.As8())
 			MOVB(AX.As8(), Mem{Base: dst})
 			MOVB(CX.As8(), Mem{Base: dst, Disp: -1, Index: length, Scale: 1})
-			ADDQ(length, src)
-			ADDQ(length, dst)
 			JMP(end)
 		}
 
@@ -1384,8 +1382,6 @@ func (e executeSimple) copyMemoryPrecise(suffix string, src, dst, length reg.GPV
 		MOVB(Mem{Base: src, Disp: 2}, CX.As8())
 		MOVW(AX.As16(), Mem{Base: dst})
 		MOVB(CX.As8(), Mem{Base: dst, Disp: 2})
-		ADDQ(length, src)
-		ADDQ(length, dst)
 		JMP(end)
 
 		Label(name + "move_4through7")
@@ -1393,8 +1389,6 @@ func (e executeSimple) copyMemoryPrecise(suffix string, src, dst, length reg.GPV
 		MOVL(Mem{Base: src, Disp: -4, Index: length, Scale: 1}, CX.As32())
 		MOVL(AX.As32(), Mem{Base: dst})
 		MOVL(CX.As32(), Mem{Base: dst, Disp: -4, Index: length, Scale: 1})
-		ADDQ(length, src)
-		ADDQ(length, dst)
 		JMP(end)
 
 		Label(name + "move_8through16")
@@ -1402,11 +1396,11 @@ func (e executeSimple) copyMemoryPrecise(suffix string, src, dst, length reg.GPV
 		MOVQ(Mem{Base: src, Disp: -8, Index: length, Scale: 1}, CX)
 		MOVQ(AX, Mem{Base: dst})
 		MOVQ(CX, Mem{Base: dst, Disp: -8, Index: length, Scale: 1})
-		ADDQ(length, src)
-		ADDQ(length, dst)
-		JMP(end)
 	}
+
 	Label("copy_" + suffix + "_end")
+	ADDQ(length, src)
+	ADDQ(length, dst)
 }
 
 // copyOverlappedMemory will copy one byte at the time from src to dst.
