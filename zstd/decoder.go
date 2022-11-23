@@ -459,7 +459,11 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 		println("got", len(d.current.b), "bytes, error:", d.current.err, "data crc:", tmp)
 	}
 
-	if !d.o.ignoreChecksum && len(next.b) > 0 {
+	if d.o.ignoreChecksum {
+		return true
+	}
+
+	if len(next.b) > 0 {
 		n, err := d.current.crc.Write(next.b)
 		if err == nil {
 			if n != len(next.b) {
@@ -471,7 +475,7 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 		got := d.current.crc.Sum64()
 		var tmp [4]byte
 		binary.LittleEndian.PutUint32(tmp[:], uint32(got))
-		if !d.o.ignoreChecksum && !bytes.Equal(tmp[:], next.d.checkCRC) {
+		if !bytes.Equal(tmp[:], next.d.checkCRC) {
 			if debugDecoder {
 				println("CRC Check Failed:", tmp[:], " (got) !=", next.d.checkCRC, "(on stream)")
 			}
