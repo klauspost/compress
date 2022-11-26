@@ -38,29 +38,27 @@ type match struct {
 const highScore = 25000
 
 // estBits will estimate output bits from predefined tables.
-func (m *match) estBits(bitsPerByte int32, ofc, mlc uint8) {
+func (m *match) estBits(bitsPerByte int32) {
+	mlc := mlCode(uint32(m.length - zstdMinMatch))
+	var ofc uint8
+	if m.rep < 0 {
+		ofc = ofCode(uint32(m.s-m.offset) + 3)
+	} else {
+		ofc = ofCode(uint32(m.rep))
+	}
 	// Cost, excluding
 	ofTT, mlTT := fsePredefEnc[tableOffsets].ct.symbolTT[ofc], fsePredefEnc[tableMatchLengths].ct.symbolTT[mlc]
 
 	// Add cost of match encoding...
-	est := int32(ofTT.outBits + mlTT.outBits)
-	est += int32(ofTT.deltaNbBits>>16 + mlTT.deltaNbBits>>16)
+	m.est = int32(ofTT.outBits + mlTT.outBits)
+	m.est += int32(ofTT.deltaNbBits>>16 + mlTT.deltaNbBits>>16)
 	// Subtract savings compared to literal encoding...
-	length := m.length
-	est -= (length * bitsPerByte) >> 10
-	if est > 0 {
+	m.est -= (m.length * bitsPerByte) >> 10
+	if m.est > 0 {
 		// Unlikely gain..
-		est, length = highScore, 0
+		m.length = 0
+		m.est = highScore
 	}
-	m.est, m.length = est, length
-}
-
-func (m *match) ofCode() uint8 {
-	offset := uint32(m.rep)
-	if offset < 0 {
-		offset = uint32(m.s-m.offset) + 3
-	}
-	return ofCode(offset)
 }
 
 // bestFastEncoder uses 2 tables, one for short matches (5 bytes) and one for long matches.
@@ -218,7 +216,7 @@ encodeLoop:
 				}
 			}
 			m := match{offset: offset, s: s, length: 4 + e.matchlen(s+4, offset+4, src), rep: rep}
-			m.estBits(bitsPerByte, m.ofCode(), mlCode(uint32(m.length-zstdMinMatch)))
+			m.estBits(bitsPerByte)
 			return m
 		}
 
