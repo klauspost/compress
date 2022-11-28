@@ -557,9 +557,7 @@ func (e *fastEncoderDict) Encode(blk *blockEnc, src []byte) {
 	// Protect against e.cur wraparound.
 	for e.cur >= bufferReset {
 		if len(e.hist) == 0 {
-			for i := range e.table[:] {
-				e.table[i] = tableEntry{}
-			}
+			e.table = [tableSize]tableEntry{}
 			e.cur = e.maxMatchOff
 			break
 		}

@@ -87,12 +87,8 @@ func (e *bestFastEncoder) Encode(blk *blockEnc, src []byte) {
 	// Protect against e.cur wraparound.
 	for e.cur >= bufferReset {
 		if len(e.hist) == 0 {
-			for i := range e.table[:] {
-				e.table[i] = prevEntry{}
-			}
-			for i := range e.longTable[:] {
-				e.longTable[i] = prevEntry{}
-			}
+			e.table = [bestShortTableSize]prevEntry{}
+			e.longTable = [bestLongTableSize]prevEntry{}
 			e.cur = e.maxMatchOff
 			break
 		}
