@@ -36,9 +36,6 @@ const forcePreDef = false
 // zstdMinMatch is the minimum zstd match length.
 const zstdMinMatch = 3
 
-// Reset the buffer offset when reaching this.
-const bufferReset = math.MaxInt32 - MaxWindowSize
-
 // fcsUnknown is used for unknown frame content size.
 const fcsUnknown = math.MaxUint64
 

@@ -181,8 +181,8 @@ func FuzzEncoding(f *testing.F) {
 		// Just test if we crash...
 		defer func() {
 			if r := recover(); r != nil {
-				rdebug.PrintStack()
-				t.Fatal(r)
+				stack := rdebug.Stack()
+				t.Fatalf("%v:\n%v", r, string(stack))
 			}
 		}()
 		if len(data) > maxSize {
