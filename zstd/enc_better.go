@@ -62,7 +62,7 @@ func (e *betterFastEncoder) Encode(blk *blockEnc, src []byte) {
 	)
 
 	// Protect against e.cur wraparound.
-	for e.cur >= bufferReset {
+	for e.cur >= e.bufferReset {
 		if len(e.hist) == 0 {
 			e.table = [betterShortTableSize]tableEntry{}
 			e.longTable = [betterLongTableSize]prevEntry{}
@@ -583,7 +583,7 @@ func (e *betterFastEncoderDict) Encode(blk *blockEnc, src []byte) {
 	)
 
 	// Protect against e.cur wraparound.
-	for e.cur >= bufferReset {
+	for e.cur >= e.bufferReset {
 		if len(e.hist) == 0 {
 			for i := range e.table[:] {
 				e.table[i] = tableEntry{}
