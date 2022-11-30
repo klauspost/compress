@@ -31,3 +31,24 @@ func TestMain(m *testing.M) {
 	}
 	os.Exit(ec)
 }
+
+func TestMatchLen(t *testing.T) {
+	a := make([]byte, 130)
+	for i := range a {
+		a[i] = byte(i)
+	}
+	b := append([]byte{}, a...)
+
+	check := func(x, y []byte, l int) {
+		if m := matchLen(x, y); m != l {
+			t.Error("expected", l, "got", m)
+		}
+	}
+
+	for l := range a {
+		a[l] = ^a[l]
+		check(a, b, l)
+		check(a[:l], b, l)
+		a[l] = ^a[l]
+	}
+}
