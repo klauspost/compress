@@ -190,7 +190,7 @@ encodeLoop:
 		}
 
 		bestOf := func(a, b match) match {
-			if a.est+(a.s-b.s)*bitsPerByte>>10 < b.est+(b.s-a.s)*bitsPerByte>>10 {
+			if a.est-b.est+(a.s-b.s)*bitsPerByte>>10 < 0 {
 				return a
 			}
 			return b
