@@ -216,22 +216,26 @@ encodeLoop:
 			return m
 		}
 
-		best := bestOf(matchAt(candidateL.offset-e.cur, s, uint32(cv), -1), matchAt(candidateL.prev-e.cur, s, uint32(cv), -1))
-		best = bestOf(best, matchAt(candidateS.offset-e.cur, s, uint32(cv), -1))
-		best = bestOf(best, matchAt(candidateS.prev-e.cur, s, uint32(cv), -1))
+		m1 := matchAt(candidateL.offset-e.cur, s, uint32(cv), -1)
+		m2 := matchAt(candidateL.prev-e.cur, s, uint32(cv), -1)
+		m3 := matchAt(candidateS.offset-e.cur, s, uint32(cv), -1)
+		m4 := matchAt(candidateS.prev-e.cur, s, uint32(cv), -1)
+		best := bestOf(bestOf(m1, m2), bestOf(m3, m4))
 
 		if canRepeat && best.length < goodEnough {
 			cv32 := uint32(cv >> 8)
 			spp := s + 1
-			best = bestOf(best, matchAt(spp-offset1, spp, cv32, 1))
-			best = bestOf(best, matchAt(spp-offset2, spp, cv32, 2))
-			best = bestOf(best, matchAt(spp-offset3, spp, cv32, 3))
+			m1 := matchAt(spp-offset1, spp, cv32, 1)
+			m2 := matchAt(spp-offset2, spp, cv32, 2)
+			m3 := matchAt(spp-offset3, spp, cv32, 3)
+			best = bestOf(bestOf(best, m1), bestOf(m2, m3))
 			if best.length > 0 {
 				cv32 = uint32(cv >> 24)
 				spp += 2
-				best = bestOf(best, matchAt(spp-offset1, spp, cv32, 1))
-				best = bestOf(best, matchAt(spp-offset2, spp, cv32, 2))
-				best = bestOf(best, matchAt(spp-offset3, spp, cv32, 3))
+				m1 := matchAt(spp-offset1, spp, cv32, 1)
+				m2 := matchAt(spp-offset2, spp, cv32, 2)
+				m3 := matchAt(spp-offset3, spp, cv32, 3)
+				best = bestOf(bestOf(best, m1), bestOf(m2, m3))
 			}
 		}
 		// Load next and check...
@@ -258,12 +262,13 @@ encodeLoop:
 			candidateL2 := e.longTable[hashLen(cv2, bestLongTableBits, bestLongLen)]
 
 			// Short at s+1
-			best = bestOf(best, matchAt(candidateS.offset-e.cur, s, uint32(cv), -1))
+			m1 := matchAt(candidateS.offset-e.cur, s, uint32(cv), -1)
 			// Long at s+1, s+2
-			best = bestOf(best, matchAt(candidateL.offset-e.cur, s, uint32(cv), -1))
-			best = bestOf(best, matchAt(candidateL.prev-e.cur, s, uint32(cv), -1))
-			best = bestOf(best, matchAt(candidateL2.offset-e.cur, s+1, uint32(cv2), -1))
-			best = bestOf(best, matchAt(candidateL2.prev-e.cur, s+1, uint32(cv2), -1))
+			m2 := matchAt(candidateL.offset-e.cur, s, uint32(cv), -1)
+			m3 := matchAt(candidateL.prev-e.cur, s, uint32(cv), -1)
+			m4 := matchAt(candidateL2.offset-e.cur, s+1, uint32(cv2), -1)
+			m5 := matchAt(candidateL2.prev-e.cur, s+1, uint32(cv2), -1)
+			best = bestOf(bestOf(bestOf(best, m1), m2), bestOf(bestOf(m3, m4), m5))
 			if false {
 				// Short at s+3.
 				// Too often worse...
