@@ -189,7 +189,7 @@ encodeLoop:
 			panic("offset0 was 0")
 		}
 
-		bestOf := func(a, b match) match {
+		bestOf := func(a, b *match) *match {
 			if a.est-b.est+(a.s-b.s)*bitsPerByte>>10 < 0 {
 				return a
 			}
@@ -220,7 +220,7 @@ encodeLoop:
 		m2 := matchAt(candidateL.prev-e.cur, s, uint32(cv), -1)
 		m3 := matchAt(candidateS.offset-e.cur, s, uint32(cv), -1)
 		m4 := matchAt(candidateS.prev-e.cur, s, uint32(cv), -1)
-		best := bestOf(bestOf(m1, m2), bestOf(m3, m4))
+		best := bestOf(bestOf(&m1, &m2), bestOf(&m3, &m4))
 
 		if canRepeat && best.length < goodEnough {
 			cv32 := uint32(cv >> 8)
@@ -228,14 +228,14 @@ encodeLoop:
 			m1 := matchAt(spp-offset1, spp, cv32, 1)
 			m2 := matchAt(spp-offset2, spp, cv32, 2)
 			m3 := matchAt(spp-offset3, spp, cv32, 3)
-			best = bestOf(bestOf(best, m1), bestOf(m2, m3))
+			best = bestOf(bestOf(best, &m1), bestOf(&m2, &m3))
 			if best.length > 0 {
 				cv32 = uint32(cv >> 24)
 				spp += 2
 				m1 := matchAt(spp-offset1, spp, cv32, 1)
 				m2 := matchAt(spp-offset2, spp, cv32, 2)
 				m3 := matchAt(spp-offset3, spp, cv32, 3)
-				best = bestOf(bestOf(best, m1), bestOf(m2, m3))
+				best = bestOf(bestOf(best, &m1), bestOf(&m2, &m3))
 			}
 		}
 		// Load next and check...
@@ -268,11 +268,12 @@ encodeLoop:
 			m3 := matchAt(candidateL.prev-e.cur, s, uint32(cv), -1)
 			m4 := matchAt(candidateL2.offset-e.cur, s+1, uint32(cv2), -1)
 			m5 := matchAt(candidateL2.prev-e.cur, s+1, uint32(cv2), -1)
-			best = bestOf(bestOf(bestOf(best, m1), m2), bestOf(bestOf(m3, m4), m5))
+			best = bestOf(bestOf(bestOf(best, &m1), &m2), bestOf(bestOf(&m3, &m4), &m5))
 			if false {
 				// Short at s+3.
 				// Too often worse...
-				best = bestOf(best, matchAt(e.table[hashLen(cv2>>8, bestShortTableBits, bestShortLen)].offset-e.cur, s+2, uint32(cv2>>8), -1))
+				m := matchAt(e.table[hashLen(cv2>>8, bestShortTableBits, bestShortLen)].offset-e.cur, s+2, uint32(cv2>>8), -1)
+				best = bestOf(best, &m)
 			}
 			// See if we can find a better match by checking where the current best ends.
 			// Use that offset to see if we can find a better full match.
@@ -283,9 +284,11 @@ encodeLoop:
 				// For this compression level 2 yields the best results.
 				const skipBeginning = 2
 				if pos := candidateEnd.offset - e.cur - best.length + skipBeginning; pos >= 0 {
-					bestEnd := bestOf(best, matchAt(pos, best.s+skipBeginning, load3232(src, best.s+skipBeginning), -1))
+					m := matchAt(pos, best.s+skipBeginning, load3232(src, best.s+skipBeginning), -1)
+					bestEnd := bestOf(best, &m)
 					if pos := candidateEnd.prev - e.cur - best.length + skipBeginning; pos >= 0 {
-						bestEnd = bestOf(bestEnd, matchAt(pos, best.s+skipBeginning, load3232(src, best.s+skipBeginning), -1))
+						m := matchAt(pos, best.s+skipBeginning, load3232(src, best.s+skipBeginning), -1)
+						bestEnd = bestOf(bestEnd, &m)
 					}
 					best = bestEnd
 				}
