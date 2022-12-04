@@ -47,9 +47,9 @@
 	round(v1, x1)            \
 	LDP     -16(p), (x3, x4) \
 	round(v2, x2)            \
-	SUB     $1, nblocks      \
 	round(v3, x3)            \
 	round(v4, x4)            \
+	SUB     $1, nblocks      \
 	CBNZ    nblocks, loop    \
 
 // The primes are repeated here to ensure that they're stored
@@ -70,8 +70,8 @@ TEXT ·Sum64(SB), NOFRAME+NOSPLIT, $0-32
 	MOVD primes<>+32(SB), prime5
 
 	CMP  $32, len
-	CSEL LO, prime5, ZR, h // if len < 32 { h = prime5 } else { h = 0 }
-	BLO  afterLoop
+	CSEL LT, prime5, ZR, h // if len < 32 { h = prime5 } else { h = 0 }
+	BLT  afterLoop
 
 	ADD  prime1, prime2, v1
 	MOVD prime2, v2
