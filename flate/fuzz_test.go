@@ -22,14 +22,19 @@ func FuzzEncoding(f *testing.F) {
 		startFuzz = HuffmanOnly
 		endFuzz   = BestCompression
 
-		// Also tests with dictionaries...
-		testDicts = true
-
 		// Max input size:
 		maxSize = 1 << 20
 	)
 	decoder := NewReader(nil)
 	buf := new(bytes.Buffer)
+	encs := make([]*Writer, endFuzz-startFuzz+1)
+	for i := range encs {
+		var err error
+		encs[i], err = NewWriter(nil, i+startFuzz)
+		if err != nil {
+			f.Fatal(err.Error())
+		}
+	}
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > maxSize {
@@ -38,10 +43,8 @@ func FuzzEncoding(f *testing.F) {
 		for level := startFuzz; level <= endFuzz; level++ {
 			msg := "level " + strconv.Itoa(level) + ":"
 			buf.Reset()
-			fw, err := NewWriter(buf, level)
-			if err != nil {
-				t.Fatal(msg + err.Error())
-			}
+			fw := encs[level-startFuzz]
+			fw.Reset(buf)
 			n, err := fw.Write(data)
 			if n != len(data) {
 				t.Fatal(msg + "short write")
