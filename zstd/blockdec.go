@@ -192,23 +192,27 @@ func (b *blockDec) reset(br byteBuffer, windowSize uint64) error {
 	}
 
 	// Read block data.
-	if cap(b.dataStorage) < cSize {
-		if b.lowMem || cSize > maxCompressedBlockSize {
-			b.dataStorage = make([]byte, 0, cSize+compressedBlockOverAlloc)
-		} else {
-			b.dataStorage = make([]byte, 0, maxCompressedBlockSizeAlloc)
+	if bb, ok := br.(*byteBuf); ok {
+		b.data, err = bb.readBig(cSize, nil)
+	} else {
+		if cap(b.dataStorage) < cSize {
+			if b.lowMem || cSize > maxCompressedBlockSize {
+				b.dataStorage = make([]byte, 0, cSize+compressedBlockOverAlloc)
+			} else {
+				b.dataStorage = make([]byte, 0, maxCompressedBlockSizeAlloc)
+			}
 		}
+		b.data, err = br.readBig(cSize, b.dataStorage)
 	}
-	if cap(b.dst) <= maxSize {
-		b.dst = make([]byte, 0, maxSize+1)
-	}
-	b.data, err = br.readBig(cSize, b.dataStorage)
 	if err != nil {
 		if debugDecoder {
 			println("Reading block:", err, "(", cSize, ")", len(b.data))
 			printf("%T", br)
 		}
 		return err
+	}
+	if cap(b.dst) <= maxSize {
+		b.dst = make([]byte, 0, maxSize+1)
 	}
 	return nil
 }
