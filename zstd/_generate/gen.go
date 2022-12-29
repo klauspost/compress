@@ -502,10 +502,10 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 		o.returnWithCode(errorNotEnoughLiterals)
 	}
 
-	Comment("Return with not enough output space error")
-	{
+	if !o.useSeqs {
+		Comment("Return with not enough output space error")
 		Label("error_not_enough_space")
-		if !o.useSeqs {
+		{
 			ctx := Dereference(Param("ctx"))
 			tmp := GP64()
 			MOVQ(llP, tmp)
@@ -513,9 +513,9 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			MOVQ(mlP, tmp)
 			Store(tmp, ctx.Field("ml"))
 			Store(ec.outPosition, ctx.Field("outPosition"))
-		}
 
-		o.returnWithCode(errorNotEnoughSpace)
+			o.returnWithCode(errorNotEnoughSpace)
+		}
 	}
 }
 
@@ -1062,10 +1062,9 @@ func (e executeSimple) generateProcedure(name string) {
 		Store(seqIndex, ctx.Field("seqIndex"))
 		Store(outPosition, ctx.Field("outPosition"))
 
-		// compute litPosition
-		tmp := GP64()
-		Load(ctx.Field("literals").Base(), tmp)
-		SUBQ(tmp, literals) // litPosition := current - initial literals pointer
+		// litPosition := current - initial literals pointer
+		litField, _ := ctx.Field("literals").Base().Resolve()
+		SUBQ(litField.Addr, literals)
 		Store(literals, ctx.Field("litPosition"))
 	}
 	Label("loop_finished")
