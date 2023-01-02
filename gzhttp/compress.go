@@ -389,7 +389,7 @@ func NewWrapper(opts ...option) (func(http.Handler) http.HandlerFunc, error) {
 					h.ServeHTTP(gw, r)
 				}
 			} else {
-				h.ServeHTTP(newNoCompressResponseWriter(w), r)
+				h.ServeHTTP(newNoGzipResponseWriter(w), r)
 				w.Header().Del(HeaderNoCompression)
 			}
 		}
@@ -746,11 +746,11 @@ func atoi(s string) (int, bool) {
 	return int(i64), err == nil
 }
 
-// newNoCompressResponseWriter will return a response writer that
+// newNoGzipResponseWriter will return a response writer that
 // cleans up compression artifacts.
 // Depending on whether http.Hijacker is supported the returned will as well.
-func newNoCompressResponseWriter(w http.ResponseWriter) http.ResponseWriter {
-	n := &noCompressResponseWriter{hw: w}
+func newNoGzipResponseWriter(w http.ResponseWriter) http.ResponseWriter {
+	n := &NoGzipResponseWriter{ResponseWriter: w}
 	if hj, ok := w.(http.Hijacker); ok {
 		x := struct {
 			http.ResponseWriter
@@ -767,45 +767,45 @@ func newNoCompressResponseWriter(w http.ResponseWriter) http.ResponseWriter {
 	return n
 }
 
-// noCompressResponseWriter filters out HeaderNoCompression.
-type noCompressResponseWriter struct {
-	hw         http.ResponseWriter
+// NoGzipResponseWriter filters out HeaderNoCompression.
+type NoGzipResponseWriter struct {
+	http.ResponseWriter
 	hdrCleaned bool
 }
 
-func (n *noCompressResponseWriter) CloseNotify() <-chan bool {
-	if cn, ok := n.hw.(http.CloseNotifier); ok {
+func (n *NoGzipResponseWriter) CloseNotify() <-chan bool {
+	if cn, ok := n.ResponseWriter.(http.CloseNotifier); ok {
 		return cn.CloseNotify()
 	}
 	return nil
 }
 
-func (n *noCompressResponseWriter) Flush() {
+func (n *NoGzipResponseWriter) Flush() {
 	if !n.hdrCleaned {
-		n.hw.Header().Del(HeaderNoCompression)
+		n.ResponseWriter.Header().Del(HeaderNoCompression)
 		n.hdrCleaned = true
 	}
-	if f, ok := n.hw.(http.Flusher); ok {
+	if f, ok := n.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
 }
 
-func (n *noCompressResponseWriter) Header() http.Header {
-	return n.hw.Header()
+func (n *NoGzipResponseWriter) Header() http.Header {
+	return n.ResponseWriter.Header()
 }
 
-func (n *noCompressResponseWriter) Write(bytes []byte) (int, error) {
+func (n *NoGzipResponseWriter) Write(bytes []byte) (int, error) {
 	if !n.hdrCleaned {
-		n.hw.Header().Del(HeaderNoCompression)
+		n.ResponseWriter.Header().Del(HeaderNoCompression)
 		n.hdrCleaned = true
 	}
-	return n.hw.Write(bytes)
+	return n.ResponseWriter.Write(bytes)
 }
 
-func (n *noCompressResponseWriter) WriteHeader(statusCode int) {
+func (n *NoGzipResponseWriter) WriteHeader(statusCode int) {
 	if !n.hdrCleaned {
-		n.hw.Header().Del(HeaderNoCompression)
+		n.ResponseWriter.Header().Del(HeaderNoCompression)
 		n.hdrCleaned = true
 	}
-	n.hw.WriteHeader(statusCode)
+	n.ResponseWriter.WriteHeader(statusCode)
 }
