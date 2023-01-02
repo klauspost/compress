@@ -95,6 +95,13 @@ func (e *fastEncoder) Encode(blk *blockEnc, src []byte) {
 	offset1 := int32(blk.recentOffsets[0])
 	offset2 := int32(blk.recentOffsets[1])
 
+	if debugAsserts && offset1 == 0 {
+		panic(offset1)
+	}
+	if debugAsserts && offset2 == 0 {
+		panic(offset2)
+	}
+
 	addLiterals := func(s *seq, until int32) {
 		if until == nextEmit {
 			return
@@ -112,12 +119,8 @@ encodeLoop:
 		// When existing the search loop, we have already checked 4 bytes.
 		var t int32
 
-		// We will not use repeat offsets across blocks.
-		// By not using them for the first 3 matches
-		canRepeat := len(blk.sequences) > 2
-
 		for {
-			if debugAsserts && canRepeat && offset1 == 0 {
+			if debugAsserts && len(blk.sequences) > 1 && offset1 == 0 {
 				panic("offset0 was 0")
 			}
 
@@ -130,7 +133,10 @@ encodeLoop:
 			e.table[nextHash] = tableEntry{offset: s + e.cur, val: uint32(cv)}
 			e.table[nextHash2] = tableEntry{offset: s + e.cur + 1, val: uint32(cv >> 8)}
 
-			if canRepeat && repIndex >= 0 && load3232(src, repIndex) == uint32(cv>>16) {
+			if repIndex >= 0 && load3232(src, repIndex) == uint32(cv>>16) {
+				if debugAsserts && repIndex == s+2 {
+					panic(offset1)
+				}
 				// Consider history as well.
 				var seq seq
 				var length int32
@@ -216,7 +222,7 @@ encodeLoop:
 			panic(fmt.Sprintf("s (%d) <= t (%d)", s, t))
 		}
 
-		if debugAsserts && canRepeat && int(offset1) > len(src) {
+		if debugAsserts && len(blk.sequences) > 1 && int(offset1) > len(src) {
 			panic("invalid offset")
 		}
 
@@ -255,7 +261,7 @@ encodeLoop:
 		cv = load6432(src, s)
 
 		// Check offset 2
-		if o2 := s - offset2; canRepeat && load3232(src, o2) == uint32(cv) {
+		if o2 := s - offset2; o2 >= 0 && load3232(src, o2) == uint32(cv) {
 			// We have at least 4 byte match.
 			// No need to check backwards. We come straight from a match
 			l := 4 + e.matchlen(s+4, o2+4, src)
@@ -344,6 +350,13 @@ func (e *fastEncoder) EncodeNoHist(blk *blockEnc, src []byte) {
 	offset1 := int32(blk.recentOffsets[0])
 	offset2 := int32(blk.recentOffsets[1])
 
+	if offset1 == 0 {
+		panic(offset1)
+	}
+	if offset2 == 0 {
+		panic(offset2)
+	}
+
 	addLiterals := func(s *seq, until int32) {
 		if until == nextEmit {
 			return
@@ -374,7 +387,7 @@ encodeLoop:
 			e.table[nextHash] = tableEntry{offset: s + e.cur, val: uint32(cv)}
 			e.table[nextHash2] = tableEntry{offset: s + e.cur + 1, val: uint32(cv >> 8)}
 
-			if len(blk.sequences) > 2 && load3232(src, repIndex) == uint32(cv>>16) {
+			if repIndex >= 0 && load3232(src, repIndex) == uint32(cv>>16) {
 				// Consider history as well.
 				var seq seq
 				length := 4 + e.matchlen(s+6, repIndex+4, src)
@@ -501,7 +514,7 @@ encodeLoop:
 		cv = load6432(src, s)
 
 		// Check offset 2
-		if o2 := s - offset2; len(blk.sequences) > 2 && load3232(src, o2) == uint32(cv) {
+		if o2 := s - offset2; o2 >= 0 && load3232(src, o2) == uint32(cv) {
 			// We have at least 4 byte match.
 			// No need to check backwards. We come straight from a match
 			l := 4 + e.matchlen(s+4, o2+4, src)
@@ -622,12 +635,8 @@ encodeLoop:
 		// When existing the search loop, we have already checked 4 bytes.
 		var t int32
 
-		// We will not use repeat offsets across blocks.
-		// By not using them for the first 3 matches
-		canRepeat := len(blk.sequences) > 2
-
 		for {
-			if debugAsserts && canRepeat && offset1 == 0 {
+			if debugAsserts && len(blk.sequences) > 0 && offset1 == 0 {
 				panic("offset0 was 0")
 			}
 
@@ -642,7 +651,7 @@ encodeLoop:
 			e.table[nextHash2] = tableEntry{offset: s + e.cur + 1, val: uint32(cv >> 8)}
 			e.markShardDirty(nextHash2)
 
-			if canRepeat && repIndex >= 0 && load3232(src, repIndex) == uint32(cv>>16) {
+			if repIndex >= 0 && load3232(src, repIndex) == uint32(cv>>16) {
 				// Consider history as well.
 				var seq seq
 				var length int32
@@ -729,7 +738,7 @@ encodeLoop:
 			panic(fmt.Sprintf("s (%d) <= t (%d)", s, t))
 		}
 
-		if debugAsserts && canRepeat && int(offset1) > len(src) {
+		if debugAsserts && len(blk.sequences) > 0 && int(offset1) > len(src) {
 			panic("invalid offset")
 		}
 
@@ -768,7 +777,7 @@ encodeLoop:
 		cv = load6432(src, s)
 
 		// Check offset 2
-		if o2 := s - offset2; canRepeat && load3232(src, o2) == uint32(cv) {
+		if o2 := s - offset2; o2 >= 0 && load3232(src, o2) == uint32(cv) {
 			// We have at least 4 byte match.
 			// No need to check backwards. We come straight from a match
 			l := 4 + e.matchlen(s+4, o2+4, src)

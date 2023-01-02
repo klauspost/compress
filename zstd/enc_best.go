@@ -182,10 +182,7 @@ func (e *bestFastEncoder) Encode(blk *blockEnc, src []byte) {
 
 encodeLoop:
 	for {
-		// We allow the encoder to optionally turn off repeat offsets across blocks
-		canRepeat := len(blk.sequences) > 2
-
-		if debugAsserts && canRepeat && offset1 == 0 {
+		if debugAsserts && offset1 == 0 {
 			panic("offset0 was 0")
 		}
 
@@ -216,25 +213,40 @@ encodeLoop:
 			return m
 		}
 
+		// matchAtSafe will also check for invalid offsets
+		matchAtSafe := func(offset int32, s int32, first uint32, rep int32) match {
+			if offset < 0 || s-offset >= e.maxMatchOff || load3232(src, offset) != first {
+				return match{s: s, est: highScore}
+			}
+			if debugAsserts {
+				if !bytes.Equal(src[s:s+4], src[offset:offset+4]) {
+					panic(fmt.Sprintf("first match mismatch: %v != %v, first: %08x", src[s:s+4], src[offset:offset+4], first))
+				}
+			}
+			m := match{offset: offset, s: s, length: 4 + e.matchlen(s+4, offset+4, src), rep: rep}
+			m.estBits(bitsPerByte)
+			return m
+		}
+
 		m1 := matchAt(candidateL.offset-e.cur, s, uint32(cv), -1)
 		m2 := matchAt(candidateL.prev-e.cur, s, uint32(cv), -1)
 		m3 := matchAt(candidateS.offset-e.cur, s, uint32(cv), -1)
 		m4 := matchAt(candidateS.prev-e.cur, s, uint32(cv), -1)
 		best := bestOf(bestOf(&m1, &m2), bestOf(&m3, &m4))
 
-		if canRepeat && best.length < goodEnough {
+		if best.length < goodEnough {
 			cv32 := uint32(cv >> 8)
 			spp := s + 1
-			m1 := matchAt(spp-offset1, spp, cv32, 1)
-			m2 := matchAt(spp-offset2, spp, cv32, 2)
-			m3 := matchAt(spp-offset3, spp, cv32, 3)
+			m1 := matchAtSafe(spp-offset1, spp, cv32, 1)
+			m2 := matchAtSafe(spp-offset2, spp, cv32, 2)
+			m3 := matchAtSafe(spp-offset3, spp, cv32, 3)
 			best = bestOf(bestOf(best, &m1), bestOf(&m2, &m3))
 			if best.length > 0 {
 				cv32 = uint32(cv >> 24)
 				spp += 2
-				m1 := matchAt(spp-offset1, spp, cv32, 1)
-				m2 := matchAt(spp-offset2, spp, cv32, 2)
-				m3 := matchAt(spp-offset3, spp, cv32, 3)
+				m1 := matchAtSafe(spp-offset1, spp, cv32, 1)
+				m2 := matchAtSafe(spp-offset2, spp, cv32, 2)
+				m3 := matchAtSafe(spp-offset3, spp, cv32, 3)
 				best = bestOf(bestOf(best, &m1), bestOf(&m2, &m3))
 			}
 		}
@@ -426,14 +438,11 @@ encodeLoop:
 		}
 
 		cv = load6432(src, s)
-		if !canRepeat {
-			continue
-		}
 
 		// Check offset 2
 		for {
 			o2 := s - offset2
-			if load3232(src, o2) != uint32(cv) {
+			if o2 < 0 || load3232(src, o2) != uint32(cv) {
 				// Do regular search
 				break
 			}

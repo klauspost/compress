@@ -304,6 +304,7 @@ func (e *Encoder) nextBlock(final bool) error {
 	// Move blocks forward.
 	s.filling, s.current, s.previous = s.previous[:0], s.filling, s.current
 	s.nInput += int64(len(s.current))
+
 	s.wg.Add(1)
 	go func(src []byte) {
 		if debugEncoder {
@@ -332,7 +333,9 @@ func (e *Encoder) nextBlock(final bool) error {
 		// Transfer encoders from previous write block.
 		blk.swapEncoders(s.writing)
 		// Transfer recent offsets to next.
+		s.writing.recentOffsets = blk.recentOffsets
 		enc.UseBlock(s.writing)
+
 		s.writing = blk
 		s.wWg.Add(1)
 		go func() {
@@ -559,6 +562,7 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 			_, _ = enc.CRC().Write(src)
 		}
 		blk := enc.Block()
+		blk.initNewEncode()
 		blk.last = true
 		if e.o.dict == nil {
 			enc.EncodeNoHist(blk, src)
@@ -591,6 +595,7 @@ func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 	} else {
 		enc.Reset(e.o.dict, false)
 		blk := enc.Block()
+		blk.initNewEncode()
 		for len(src) > 0 {
 			todo := src
 			if len(todo) > e.o.blockSize {
