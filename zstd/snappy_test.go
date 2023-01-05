@@ -58,6 +58,8 @@ func TestSnappy_ConvertXML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer f.Close()
+
 	dec, err := NewReader(f)
 	if err != nil {
 		t.Fatal(err)
@@ -163,6 +165,8 @@ func TestSnappy_ConvertEnwik9(t *testing.T) {
 				"compress it with 'zstd -15 -T0 enwik9' and place it in " + file)
 		}
 	}
+	defer f.Close()
+
 	dec, err := NewReader(f)
 	if err != nil {
 		t.Fatal(err)
@@ -211,6 +215,8 @@ func BenchmarkSnappy_ConvertXML(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	defer f.Close()
+
 	dec, err := NewReader(f)
 	if err != nil {
 		b.Fatal(err)
@@ -254,6 +260,8 @@ func BenchmarkSnappy_Enwik9(b *testing.B) {
 		b.Skip(err)
 		return
 	}
+	defer f.Close()
+
 	dec, err := NewReader(f)
 	if err != nil {
 		b.Fatal(err)
