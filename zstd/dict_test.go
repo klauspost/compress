@@ -459,3 +459,38 @@ func readDicts(tb testing.TB, zr *zip.Reader) [][]byte {
 	}
 	return dicts
 }
+
+// Test decoding of zstd --patch-from output.
+func TestDecoderRawDict(t *testing.T) {
+	t.Parallel()
+
+	dict, err := os.ReadFile("testdata/delta/source.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	delta, err := os.Open("testdata/delta/target.txt.zst")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer delta.Close()
+
+	dec, err := NewReader(delta, WithDecoderDictRaw(0, dict))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := io.ReadAll(dec)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ref, err := os.ReadFile("testdata/delta/target.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(out, ref) {
+		t.Errorf("mismatch: got %q, wanted %q", out, ref)
+	}
+}

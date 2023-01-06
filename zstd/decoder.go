@@ -341,15 +341,8 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 			}
 			return dst, err
 		}
-		if frame.DictionaryID != nil {
-			dict, ok := d.dicts[*frame.DictionaryID]
-			if !ok {
-				return nil, ErrUnknownDictionary
-			}
-			if debugDecoder {
-				println("setting dict", frame.DictionaryID)
-			}
-			frame.history.setDict(&dict)
+		if err = d.setDict(frame); err != nil {
+			return nil, err
 		}
 		if frame.WindowSize > d.o.maxWindowSize {
 			if debugDecoder {
@@ -495,17 +488,11 @@ func (d *Decoder) nextBlockSync() (ok bool) {
 		if !d.syncStream.inFrame {
 			d.frame.history.reset()
 			d.current.err = d.frame.reset(&d.syncStream.br)
+			if d.current.err == nil {
+				d.current.err = d.setDict(d.frame)
+			}
 			if d.current.err != nil {
 				return false
-			}
-			if d.frame.DictionaryID != nil {
-				dict, ok := d.dicts[*d.frame.DictionaryID]
-				if !ok {
-					d.current.err = ErrUnknownDictionary
-					return false
-				} else {
-					d.frame.history.setDict(&dict)
-				}
 			}
 			if d.frame.WindowSize > d.o.maxDecodedSize || d.frame.WindowSize > d.o.maxWindowSize {
 				d.current.err = ErrDecoderSizeExceeded
@@ -865,13 +852,8 @@ decodeStream:
 		if debugDecoder && err != nil {
 			println("Frame decoder returned", err)
 		}
-		if err == nil && frame.DictionaryID != nil {
-			dict, ok := d.dicts[*frame.DictionaryID]
-			if !ok {
-				err = ErrUnknownDictionary
-			} else {
-				frame.history.setDict(&dict)
-			}
+		if err == nil {
+			err = d.setDict(frame)
 		}
 		if err == nil && d.frame.WindowSize > d.o.maxWindowSize {
 			if debugDecoder {
@@ -952,4 +934,21 @@ decodeStream:
 	wg.Wait()
 	hist.reset()
 	d.frame.history.b = frameHistCache
+}
+
+func (d *Decoder) setDict(frame *frameDec) (err error) {
+	dict, ok := d.dicts[frame.DictionaryID]
+	if ok {
+		if debugDecoder {
+			println("setting dict", frame.DictionaryID)
+		}
+		frame.history.setDict(&dict)
+	} else if frame.DictionaryID != 0 {
+		// A zero or missing dictionary id is ambiguous:
+		// either dictionary zero, or no dictionary. In particular,
+		// zstd --patch-from uses this id for the source file,
+		// so only return an error if the dictionary id is not zero.
+		err = ErrUnknownDictionary
+	}
+	return err
 }
