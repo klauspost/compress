@@ -163,6 +163,8 @@ func TestEncoder_EncodeAllEncodeXML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer f.Close()
+
 	dec, err := NewReader(f)
 	if err != nil {
 		t.Fatal(err)
@@ -873,6 +875,8 @@ func TestEncoder_EncodeAllEnwik9(t *testing.T) {
 				"compress it with 'zstd -15 -T0 enwik9' and place it in " + file)
 		}
 	}
+	defer f.Close()
+
 	dec, err := NewReader(f)
 	if err != nil {
 		t.Fatal(err)
@@ -915,6 +919,8 @@ func TestEncoder_EncoderStreamEnwik9(t *testing.T) {
 				"compress it with 'zstd -15 -T0 enwik9' and place it in " + file)
 		}
 	}
+	defer f.Close()
+
 	dec, err := NewReader(f)
 	if err != nil {
 		t.Fatal(err)
@@ -957,6 +963,8 @@ func BenchmarkEncoder_EncodeAllXML(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	defer f.Close()
+
 	dec, err := NewReader(f)
 	if err != nil {
 		b.Fatal(err)
@@ -983,11 +991,7 @@ func BenchmarkEncoder_EncodeAllXML(b *testing.B) {
 }
 
 func BenchmarkEncoder_EncodeAllSimple(b *testing.B) {
-	f, err := os.Open("testdata/z000028")
-	if err != nil {
-		b.Fatal(err)
-	}
-	in, err := io.ReadAll(f)
+	in, err := os.ReadFile("testdata/z000028")
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -1015,11 +1019,7 @@ func BenchmarkEncoder_EncodeAllSimple(b *testing.B) {
 }
 
 func BenchmarkEncoder_EncodeAllSimple4K(b *testing.B) {
-	f, err := os.Open("testdata/z000028")
-	if err != nil {
-		b.Fatal(err)
-	}
-	in, err := io.ReadAll(f)
+	in, err := os.ReadFile("testdata/z000028")
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -1048,11 +1048,7 @@ func BenchmarkEncoder_EncodeAllSimple4K(b *testing.B) {
 }
 
 func BenchmarkEncoder_EncodeAllHTML(b *testing.B) {
-	f, err := os.Open("../testdata/html.txt")
-	if err != nil {
-		b.Fatal(err)
-	}
-	in, err := io.ReadAll(f)
+	in, err := os.ReadFile("../testdata/html.txt")
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -1072,11 +1068,7 @@ func BenchmarkEncoder_EncodeAllHTML(b *testing.B) {
 }
 
 func BenchmarkEncoder_EncodeAllTwain(b *testing.B) {
-	f, err := os.Open("../testdata/Mark.Twain-Tom.Sawyer.txt")
-	if err != nil {
-		b.Fatal(err)
-	}
-	in, err := io.ReadAll(f)
+	in, err := os.ReadFile("../testdata/Mark.Twain-Tom.Sawyer.txt")
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -1096,11 +1088,7 @@ func BenchmarkEncoder_EncodeAllTwain(b *testing.B) {
 }
 
 func BenchmarkEncoder_EncodeAllPi(b *testing.B) {
-	f, err := os.Open("../testdata/pi.txt")
-	if err != nil {
-		b.Fatal(err)
-	}
-	in, err := io.ReadAll(f)
+	in, err := os.ReadFile("../testdata/pi.txt")
 	if err != nil {
 		b.Fatal(err)
 	}
