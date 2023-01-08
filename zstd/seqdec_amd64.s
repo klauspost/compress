@@ -218,13 +218,10 @@ sequenceDecs_decode_amd64_skip_update:
 	JMP  sequenceDecs_decode_amd64_after_adjust
 
 sequenceDecs_decode_amd64_adjust_offsetB_1_or_0:
-	CMPQ (R10), $0x00000000
-	JNE  sequenceDecs_decode_amd64_adjust_offset_maybezero
-	INCQ CX
-	JMP  sequenceDecs_decode_amd64_adjust_offset_nonzero
-
-sequenceDecs_decode_amd64_adjust_offset_maybezero:
-	TESTQ CX, CX
+	XORL  AX, AX
+	CMPQ  (R10), $0x00000000
+	SETEQ AL
+	ADDQ  AX, CX
 	JNZ   sequenceDecs_decode_amd64_adjust_offset_nonzero
 	MOVQ  R11, CX
 	JMP   sequenceDecs_decode_amd64_after_adjust
@@ -511,13 +508,10 @@ sequenceDecs_decode_56_amd64_skip_update:
 	JMP  sequenceDecs_decode_56_amd64_after_adjust
 
 sequenceDecs_decode_56_amd64_adjust_offsetB_1_or_0:
-	CMPQ (R10), $0x00000000
-	JNE  sequenceDecs_decode_56_amd64_adjust_offset_maybezero
-	INCQ CX
-	JMP  sequenceDecs_decode_56_amd64_adjust_offset_nonzero
-
-sequenceDecs_decode_56_amd64_adjust_offset_maybezero:
-	TESTQ CX, CX
+	XORL  AX, AX
+	CMPQ  (R10), $0x00000000
+	SETEQ AL
+	ADDQ  AX, CX
 	JNZ   sequenceDecs_decode_56_amd64_adjust_offset_nonzero
 	MOVQ  R11, CX
 	JMP   sequenceDecs_decode_56_amd64_after_adjust
@@ -787,13 +781,10 @@ sequenceDecs_decode_bmi2_skip_update:
 	JMP  sequenceDecs_decode_bmi2_after_adjust
 
 sequenceDecs_decode_bmi2_adjust_offsetB_1_or_0:
-	CMPQ (R9), $0x00000000
-	JNE  sequenceDecs_decode_bmi2_adjust_offset_maybezero
-	INCQ CX
-	JMP  sequenceDecs_decode_bmi2_adjust_offset_nonzero
-
-sequenceDecs_decode_bmi2_adjust_offset_maybezero:
-	TESTQ CX, CX
+	XORL  R13, R13
+	CMPQ  (R9), $0x00000000
+	SETEQ R13
+	ADDQ  R13, CX
 	JNZ   sequenceDecs_decode_bmi2_adjust_offset_nonzero
 	MOVQ  R10, CX
 	JMP   sequenceDecs_decode_bmi2_after_adjust
@@ -1038,13 +1029,10 @@ sequenceDecs_decode_56_bmi2_skip_update:
 	JMP  sequenceDecs_decode_56_bmi2_after_adjust
 
 sequenceDecs_decode_56_bmi2_adjust_offsetB_1_or_0:
-	CMPQ (R9), $0x00000000
-	JNE  sequenceDecs_decode_56_bmi2_adjust_offset_maybezero
-	INCQ CX
-	JMP  sequenceDecs_decode_56_bmi2_adjust_offset_nonzero
-
-sequenceDecs_decode_56_bmi2_adjust_offset_maybezero:
-	TESTQ CX, CX
+	XORL  R13, R13
+	CMPQ  (R9), $0x00000000
+	SETEQ R13
+	ADDQ  R13, CX
 	JNZ   sequenceDecs_decode_56_bmi2_adjust_offset_nonzero
 	MOVQ  R10, CX
 	JMP   sequenceDecs_decode_56_bmi2_after_adjust
@@ -1985,13 +1973,10 @@ sequenceDecs_decodeSync_amd64_skip_update:
 	JMP    sequenceDecs_decodeSync_amd64_after_adjust
 
 sequenceDecs_decodeSync_amd64_adjust_offsetB_1_or_0:
-	CMPQ 24(SP), $0x00000000
-	JNE  sequenceDecs_decodeSync_amd64_adjust_offset_maybezero
-	INCQ R13
-	JMP  sequenceDecs_decodeSync_amd64_adjust_offset_nonzero
-
-sequenceDecs_decodeSync_amd64_adjust_offset_maybezero:
-	TESTQ R13, R13
+	XORL  AX, AX
+	CMPQ  24(SP), $0x00000000
+	SETEQ AL
+	ADDQ  AX, R13
 	JNZ   sequenceDecs_decodeSync_amd64_adjust_offset_nonzero
 	MOVQ  144(CX), R13
 	JMP   sequenceDecs_decodeSync_amd64_after_adjust
@@ -2495,13 +2480,10 @@ sequenceDecs_decodeSync_bmi2_skip_update:
 	JMP    sequenceDecs_decodeSync_bmi2_after_adjust
 
 sequenceDecs_decodeSync_bmi2_adjust_offsetB_1_or_0:
-	CMPQ 24(SP), $0x00000000
-	JNE  sequenceDecs_decodeSync_bmi2_adjust_offset_maybezero
-	INCQ R13
-	JMP  sequenceDecs_decodeSync_bmi2_adjust_offset_nonzero
-
-sequenceDecs_decodeSync_bmi2_adjust_offset_maybezero:
-	TESTQ R13, R13
+	XORL  R12, R12
+	CMPQ  24(SP), $0x00000000
+	SETEQ R12
+	ADDQ  R12, R13
 	JNZ   sequenceDecs_decodeSync_bmi2_adjust_offset_nonzero
 	MOVQ  144(CX), R13
 	JMP   sequenceDecs_decodeSync_bmi2_after_adjust
@@ -3047,13 +3029,10 @@ sequenceDecs_decodeSync_safe_amd64_skip_update:
 	JMP    sequenceDecs_decodeSync_safe_amd64_after_adjust
 
 sequenceDecs_decodeSync_safe_amd64_adjust_offsetB_1_or_0:
-	CMPQ 24(SP), $0x00000000
-	JNE  sequenceDecs_decodeSync_safe_amd64_adjust_offset_maybezero
-	INCQ R13
-	JMP  sequenceDecs_decodeSync_safe_amd64_adjust_offset_nonzero
-
-sequenceDecs_decodeSync_safe_amd64_adjust_offset_maybezero:
-	TESTQ R13, R13
+	XORL  AX, AX
+	CMPQ  24(SP), $0x00000000
+	SETEQ AL
+	ADDQ  AX, R13
 	JNZ   sequenceDecs_decodeSync_safe_amd64_adjust_offset_nonzero
 	MOVQ  144(CX), R13
 	JMP   sequenceDecs_decodeSync_safe_amd64_after_adjust
@@ -3659,13 +3638,10 @@ sequenceDecs_decodeSync_safe_bmi2_skip_update:
 	JMP    sequenceDecs_decodeSync_safe_bmi2_after_adjust
 
 sequenceDecs_decodeSync_safe_bmi2_adjust_offsetB_1_or_0:
-	CMPQ 24(SP), $0x00000000
-	JNE  sequenceDecs_decodeSync_safe_bmi2_adjust_offset_maybezero
-	INCQ R13
-	JMP  sequenceDecs_decodeSync_safe_bmi2_adjust_offset_nonzero
-
-sequenceDecs_decodeSync_safe_bmi2_adjust_offset_maybezero:
-	TESTQ R13, R13
+	XORL  R12, R12
+	CMPQ  24(SP), $0x00000000
+	SETEQ R12
+	ADDQ  R12, R13
 	JNZ   sequenceDecs_decodeSync_safe_bmi2_adjust_offset_nonzero
 	MOVQ  144(CX), R13
 	JMP   sequenceDecs_decodeSync_safe_bmi2_after_adjust

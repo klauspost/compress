@@ -744,33 +744,22 @@ func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual, 
 	}
 
 	Label(name + "_offsetB_1_or_0")
-	// if litLen == 0 {
-	//     offset++
-	// }
 	{
-		if true {
-			CMPQ(llP, U32(0))
-			JNE(LabelRef(name + "_offset_maybezero"))
-			INCQ(offset)
-			JMP(LabelRef(name + "_offset_nonzero"))
-		} else {
-			// No idea why this doesn't work:
-			tmp := GP64()
-			LEAQ(Mem{Base: offset, Disp: 1}, tmp)
-			CMPQ(llP, U32(0))
-			CMOVQEQ(tmp, offset)
-		}
+		// if litLen == 0 {
+		//     offset++
+		// }
+		ll0 := GP32()
+		XORL(ll0, ll0)
+		CMPQ(llP, U32(0))
+		SETEQ(ll0.As8())
+		ADDQ(ll0.As64(), offset)
 
 		// if offset == 0 {
 		//     return s.prevOffset[0]
 		// }
-		{
-			Label(name + "_offset_maybezero")
-			TESTQ(offset, offset)
-			JNZ(LabelRef(name + "_offset_nonzero"))
-			MOVQ(offsets[0], offset)
-			JMP(end)
-		}
+		JNZ(LabelRef(name + "_offset_nonzero"))
+		MOVQ(offsets[0], offset)
+		JMP(end)
 	}
 	Label(name + "_offset_nonzero")
 	{
@@ -860,26 +849,22 @@ func (o options) adjustOffsetInMemory(name string, moP, llP Mem, offsetB reg.GPV
 	}
 
 	Label(name + "_offsetB_1_or_0")
-	// if litLen == 0 {
-	//     offset++
-	// }
-
 	{
+		// if litLen == 0 {
+		//     offset++
+		// }
+		ll0 := GP32()
+		XORL(ll0, ll0)
 		CMPQ(llP, U32(0))
-		JNE(LabelRef(name + "_offset_maybezero"))
-		INCQ(offset)
-		JMP(LabelRef(name + "_offset_nonzero"))
+		SETEQ(ll0.As8())
+		ADDQ(ll0.As64(), offset)
 
 		// if offset == 0 {
 		//     return s.prevOffset[0]
 		// }
-		{
-			Label(name + "_offset_maybezero")
-			TESTQ(offset, offset)
-			JNZ(LabelRef(name + "_offset_nonzero"))
-			MOVQ(po0.Addr, offset)
-			JMP(end)
-		}
+		JNZ(LabelRef(name + "_offset_nonzero"))
+		MOVQ(po0.Addr, offset)
+		JMP(end)
 	}
 	Label(name + "_offset_nonzero")
 	{
