@@ -336,7 +336,7 @@ func (d *compressor) findMatch(pos int, prevHead int, lookahead int) (length, of
 				// Calculate gain. Estimate
 				newGain := d.h.bitLengthRaw(wPos[:n]) - int(offsetExtraBits[offsetCode(uint32(pos-i))]) - baseCost - int(lengthExtraBits[lengthCodes[(n-3)&255]])
 
-				// fmt.Println("gain:", newGain, "prev:", cGain, "raw:", d.h.bitLengthRaw(wPos[:n]), "this-len:", n, "prev-len:", length)
+				//fmt.Println("gain:", newGain, "prev:", cGain, "raw:", d.h.bitLengthRaw(wPos[:n]), "this-len:", n, "prev-len:", length)
 				if newGain > cGain {
 					length = n
 					offset = pos - i
@@ -493,15 +493,14 @@ func (d *compressor) deflateLazy() {
 		}
 
 		if prevLength >= minMatchLength && s.length <= prevLength {
-			// Check for better match at end...
+			// No better match, but check for better match at end...
 			//
 			// Skip forward a number of bytes.
-			// Offset of 2 seems to yield best results.
+			// Offset of 2 seems to yield best results. 3 is sometimes better.
 			const checkOff = 2
 
 			// Check all, except full length
-			// Can be changed to d.nice to make 7+8 faster.
-			if prevLength < maxMatchLength-checkOff {
+			if prevLength < d.nice-checkOff {
 				prevIndex := s.index - 1
 				if prevIndex+prevLength < s.maxInsertIndex {
 					end := lookahead
