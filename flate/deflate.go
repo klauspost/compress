@@ -500,7 +500,7 @@ func (d *compressor) deflateLazy() {
 			const checkOff = 2
 
 			// Check all, except full length
-			if prevLength < d.nice-checkOff {
+			if prevLength < maxMatchLength-checkOff {
 				prevIndex := s.index - 1
 				if prevIndex+prevLength < s.maxInsertIndex {
 					end := lookahead
@@ -544,6 +544,49 @@ func (d *compressor) deflateLazy() {
 									break
 								} else {
 									prevLength++
+								}
+							}
+						} else if false {
+							// Check one further ahead.
+							// Only rarely better, disabled for now.
+							prevIndex++
+							h := hash4(d.window[prevIndex+prevLength:])
+							ch2 := int(s.hashHead[h]) - s.hashOffset - prevLength
+							if prevIndex-ch2 != prevOffset && ch2 > minIndex+checkOff {
+								length := matchLen(d.window[prevIndex+checkOff:end], d.window[ch2+checkOff:])
+								// It seems like a pure length metric is best.
+								if length > prevLength+checkOff {
+									prevLength = length
+									prevOffset = prevIndex - ch2
+									prevIndex--
+
+									// Extend back...
+									for i := checkOff; i >= 0; i-- {
+										if prevLength >= maxMatchLength || d.window[prevIndex+i] != d.window[ch2+i-1] {
+											// Emit tokens we "owe"
+											for j := 0; j <= i; j++ {
+												d.tokens.AddLiteral(d.window[prevIndex+j])
+												if d.tokens.n == maxFlateBlockTokens {
+													// The block includes the current character
+													if d.err = d.writeBlock(&d.tokens, s.index, false); d.err != nil {
+														return
+													}
+													d.tokens.Reset()
+												}
+												s.index++
+												if s.index < s.maxInsertIndex {
+													h := hash4(d.window[s.index:])
+													ch := s.hashHead[h]
+													s.chainHead = int(ch)
+													s.hashPrev[s.index&windowMask] = ch
+													s.hashHead[h] = uint32(s.index + s.hashOffset)
+												}
+											}
+											break
+										} else {
+											prevLength++
+										}
+									}
 								}
 							}
 						}
