@@ -5,26 +5,36 @@ package flate
 
 import (
 	"bytes"
+	"flag"
 	"io"
+	"os"
 	"strconv"
 	"testing"
 
 	"github.com/klauspost/compress/internal/fuzz"
 )
 
+// Fuzzing tweaks:
+var fuzzStartF = flag.Int("start", HuffmanOnly, "Start fuzzing at this level")
+var fuzzEndF = flag.Int("end", BestCompression, "End fuzzing at this level (inclusive)")
+var fuzzMaxF = flag.Int("max", 1<<20, "Maximum input size")
+var fuzzSLF = flag.Bool("sl", true, "Include stateless encodes")
+
+func TestMain(m *testing.M) {
+	flag.Parse()
+	os.Exit(m.Run())
+}
+
 func FuzzEncoding(f *testing.F) {
 	fuzz.AddFromZip(f, "testdata/regression.zip", true, false)
 	fuzz.AddFromZip(f, "testdata/fuzz/encode-raw-corpus.zip", true, testing.Short())
 	fuzz.AddFromZip(f, "testdata/fuzz/FuzzEncoding.zip", false, testing.Short())
-	// Fuzzing tweaks:
-	const (
-		// Test a subset of encoders.
-		startFuzz = HuffmanOnly
-		endFuzz   = BestCompression
 
-		// Max input size:
-		maxSize = 1 << 20
-	)
+	startFuzz := *fuzzStartF
+	endFuzz := *fuzzEndF
+	maxSize := *fuzzMaxF
+	stateless := *fuzzSLF
+
 	decoder := NewReader(nil)
 	buf := new(bytes.Buffer)
 	encs := make([]*Writer, endFuzz-startFuzz+1)
@@ -88,7 +98,9 @@ func FuzzEncoding(f *testing.F) {
 				t.Fatal(msg + "not equal")
 			}
 		}
-
+		if !stateless {
+			return
+		}
 		// Split into two and use history...
 		buf.Reset()
 		err := StatelessDeflate(buf, data[:len(data)/2], false, nil)
