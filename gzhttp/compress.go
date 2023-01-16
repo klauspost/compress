@@ -29,6 +29,7 @@ const (
 	acceptRanges    = "Accept-Ranges"
 	contentType     = "Content-Type"
 	contentLength   = "Content-Length"
+	eTag            = "ETag"
 )
 
 type codings map[string]float64
@@ -64,6 +65,8 @@ type GzipResponseWriter struct {
 	ignore           bool   // If true, then we immediately passthru writes to the underlying ResponseWriter.
 	keepAcceptRanges bool   // Keep "Accept-Ranges" header.
 	setContentType   bool   // Add content type, if missing and detected.
+	suffixETag       string // Suffix to add to ETag header if response is compressed.
+	dropETag         bool   // Drop ETag header if response is compressed (supersedes suffixETag).
 
 	contentTypeFilter func(ct string) bool // Only compress if the response is one of these content-types. All are accepted if empty.
 }
@@ -166,6 +169,21 @@ func (w *GzipResponseWriter) startGzip() error {
 	// Delete Accept-Ranges.
 	if !w.keepAcceptRanges {
 		w.Header().Del(acceptRanges)
+	}
+
+	// Suffix ETag.
+	if w.suffixETag != "" && !w.dropETag && w.Header().Get(eTag) != "" {
+		orig := w.Header().Get(eTag)
+		insertPoint := strings.LastIndex(orig, `"`)
+		if insertPoint == -1 {
+			insertPoint = len(orig)
+		}
+		w.Header().Set(eTag, orig[:insertPoint]+w.suffixETag+orig[insertPoint:])
+	}
+
+	// Delete ETag.
+	if w.dropETag {
+		w.Header().Del(eTag)
 	}
 
 	// Write the header to gzip response.
@@ -370,6 +388,8 @@ func NewWrapper(opts ...option) (func(http.Handler) http.HandlerFunc, error) {
 					minSize:           c.minSize,
 					contentTypeFilter: c.contentTypes,
 					keepAcceptRanges:  c.keepAcceptRanges,
+					dropETag:          c.dropETag,
+					suffixETag:        c.suffixETag,
 					buf:               gw.buf,
 					setContentType:    c.setContentType,
 				}
@@ -433,6 +453,8 @@ type config struct {
 	contentTypes     func(ct string) bool
 	keepAcceptRanges bool
 	setContentType   bool
+	suffixETag       string
+	dropETag         bool
 }
 
 func (c *config) validate() error {
@@ -571,6 +593,35 @@ func KeepAcceptRanges() option {
 func ContentTypeFilter(compress func(ct string) bool) option {
 	return func(c *config) {
 		c.contentTypes = compress
+	}
+}
+
+// SuffixETag adds the specified suffix to the ETag header (if it exists) of
+// responses which are compressed.
+//
+// Per [RFC 7232 Section 2.3.3](https://www.rfc-editor.org/rfc/rfc7232#section-2.3.3),
+// the ETag of a compressed response must differ from it's uncompressed version.
+//
+// A suffix such as "-gzip" is sometimes used as a workaround for generating a
+// unique new ETag (see https://bz.apache.org/bugzilla/show_bug.cgi?id=39727).
+func SuffixETag(suffix string) option {
+	return func(c *config) {
+		c.suffixETag = suffix
+	}
+}
+
+// DropETag removes the ETag of responses which are compressed. If DropETag is
+// specified in conjunction with SuffixETag, this option will take precedence
+// and the ETag will be dropped.
+//
+// Per [RFC 7232 Section 2.3.3](https://www.rfc-editor.org/rfc/rfc7232#section-2.3.3),
+// the ETag of a compressed response must differ from it's uncompressed version.
+//
+// This workaround eliminates ETag conflicts between the compressed and
+// uncompressed versions by removing the ETag from the compressed version.
+func DropETag() option {
+	return func(c *config) {
+		c.dropETag = true
 	}
 }
 
