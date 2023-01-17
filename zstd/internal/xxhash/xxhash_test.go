@@ -26,7 +26,11 @@ func TestAll(t *testing.T) {
 			0x02a2e85470d6fd96,
 		},
 	} {
-		for chunkSize := 1; chunkSize <= len(tt.input); chunkSize++ {
+		lastChunkSize := len(tt.input)
+		if lastChunkSize == 0 {
+			lastChunkSize = 1
+		}
+		for chunkSize := 1; chunkSize <= lastChunkSize; chunkSize++ {
 			name := fmt.Sprintf("%s,chunkSize=%d", tt.name, chunkSize)
 			t.Run(name, func(t *testing.T) {
 				testDigest(t, tt.input, chunkSize, tt.want)

@@ -180,6 +180,96 @@ func TestGzipHandlerKeepAcceptRange(t *testing.T) {
 	assertEqual(t, testBody, got)
 }
 
+func TestGzipHandlerSuffixETag(t *testing.T) {
+	wrapper, err := NewWrapper(SuffixETag("-gzip"))
+	assertNil(t, err)
+
+	handlerWithETag := wrapper(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("ETag", `W/"1234"`)
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(testBody))
+		}))
+	handlerWithoutETag := wrapper(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(testBody))
+		}))
+
+	req, _ := http.NewRequest("GET", "/gzipped", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+
+	respWithEtag := httptest.NewRecorder()
+	respWithoutEtag := httptest.NewRecorder()
+	handlerWithETag.ServeHTTP(respWithEtag, req)
+	handlerWithoutETag.ServeHTTP(respWithoutEtag, req)
+
+	resWithEtag := respWithEtag.Result()
+	assertEqual(t, 200, resWithEtag.StatusCode)
+	assertEqual(t, "gzip", resWithEtag.Header.Get("Content-Encoding"))
+	assertEqual(t, `W/"1234-gzip"`, resWithEtag.Header.Get("ETag"))
+	zr, err := gzip.NewReader(resWithEtag.Body)
+	assertNil(t, err)
+	got, err := io.ReadAll(zr)
+	assertNil(t, err)
+	assertEqual(t, testBody, got)
+
+	resWithoutEtag := respWithoutEtag.Result()
+	assertEqual(t, 200, resWithoutEtag.StatusCode)
+	assertEqual(t, "gzip", resWithoutEtag.Header.Get("Content-Encoding"))
+	assertEqual(t, "", resWithoutEtag.Header.Get("ETag"))
+	zr, err = gzip.NewReader(resWithoutEtag.Body)
+	assertNil(t, err)
+	got, err = io.ReadAll(zr)
+	assertNil(t, err)
+	assertEqual(t, testBody, got)
+}
+
+func TestGzipHandlerDropETag(t *testing.T) {
+	wrapper, err := NewWrapper(DropETag())
+	assertNil(t, err)
+
+	handlerCompressed := wrapper(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("ETag", `W/"1234"`)
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(testBody))
+		}))
+	handlerUncompressed := wrapper(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("ETag", `W/"1234"`)
+			w.Header().Set(HeaderNoCompression, "true")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(testBody))
+		}))
+
+	req, _ := http.NewRequest("GET", "/gzipped", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+
+	respCompressed := httptest.NewRecorder()
+	respUncompressed := httptest.NewRecorder()
+	handlerCompressed.ServeHTTP(respCompressed, req)
+	handlerUncompressed.ServeHTTP(respUncompressed, req)
+
+	resCompressed := respCompressed.Result()
+	assertEqual(t, 200, resCompressed.StatusCode)
+	assertEqual(t, "gzip", resCompressed.Header.Get("Content-Encoding"))
+	assertEqual(t, "", resCompressed.Header.Get("ETag"))
+	zr, err := gzip.NewReader(resCompressed.Body)
+	assertNil(t, err)
+	got, err := io.ReadAll(zr)
+	assertNil(t, err)
+	assertEqual(t, testBody, got)
+
+	resUncompressed := respUncompressed.Result()
+	assertEqual(t, 200, resUncompressed.StatusCode)
+	assertEqual(t, "", resUncompressed.Header.Get("Content-Encoding"))
+	assertEqual(t, `W/"1234"`, resUncompressed.Header.Get("ETag"))
+	got, err = io.ReadAll(resUncompressed.Body)
+	assertNil(t, err)
+	assertEqual(t, testBody, got)
+}
+
 func TestNewGzipLevelHandler(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

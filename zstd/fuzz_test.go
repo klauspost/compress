@@ -146,14 +146,14 @@ func FuzzEncoding(f *testing.F) {
 
 	initEnc := func() func() {
 		var err error
-		dec, err = NewReader(nil, WithDecoderConcurrency(2), WithDecoderDicts(dicts...), WithDecoderMaxWindow(128<<10), WithDecoderMaxMemory(maxSize))
+		dec, err = NewReader(nil, WithDecoderConcurrency(2), WithDecoderDicts(dicts...), WithDecoderMaxWindow(64<<10), WithDecoderMaxMemory(maxSize))
 		if err != nil {
 			panic(err)
 		}
 		for level := startFuzz; level <= endFuzz; level++ {
-			encs[level], err = NewWriter(nil, WithEncoderCRC(true), WithEncoderLevel(level), WithEncoderConcurrency(2), WithWindowSize(128<<10), WithZeroFrames(true), WithLowerEncoderMem(true))
+			encs[level], err = NewWriter(nil, WithEncoderCRC(true), WithEncoderLevel(level), WithEncoderConcurrency(2), WithWindowSize(64<<10), WithZeroFrames(true), WithLowerEncoderMem(true))
 			if testDicts {
-				encsD[level], err = NewWriter(nil, WithEncoderCRC(true), WithEncoderLevel(level), WithEncoderConcurrency(2), WithWindowSize(128<<10), WithZeroFrames(true), WithEncoderDict(dicts[0]), WithLowerEncoderMem(true), WithLowerEncoderMem(true))
+				encsD[level], err = NewWriter(nil, WithEncoderCRC(true), WithEncoderLevel(level), WithEncoderConcurrency(2), WithWindowSize(64<<10), WithZeroFrames(true), WithEncoderDict(dicts[level]), WithLowerEncoderMem(true), WithLowerEncoderMem(true))
 			}
 		}
 		return func() {
@@ -181,8 +181,8 @@ func FuzzEncoding(f *testing.F) {
 		// Just test if we crash...
 		defer func() {
 			if r := recover(); r != nil {
-				rdebug.PrintStack()
-				t.Fatal(r)
+				stack := rdebug.Stack()
+				t.Fatalf("%v:\n%v", r, string(stack))
 			}
 		}()
 		if len(data) > maxSize {
