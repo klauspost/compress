@@ -40,8 +40,7 @@ type Decoder struct {
 	frame *frameDec
 
 	// Custom dictionaries.
-	// Always uses copies.
-	dicts map[uint32]dict
+	dicts map[uint32]*dict
 
 	// streamWg is the waitgroup for all streams
 	streamWg sync.WaitGroup
@@ -103,7 +102,7 @@ func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
 	}
 
 	// Transfer option dicts.
-	d.dicts = make(map[uint32]dict, len(d.o.dicts))
+	d.dicts = make(map[uint32]*dict, len(d.o.dicts))
 	for _, dc := range d.o.dicts {
 		d.dicts[dc.id] = dc
 	}
@@ -942,7 +941,7 @@ func (d *Decoder) setDict(frame *frameDec) (err error) {
 		if debugDecoder {
 			println("setting dict", frame.DictionaryID)
 		}
-		frame.history.setDict(&dict)
+		frame.history.setDict(dict)
 	} else if frame.DictionaryID != 0 {
 		// A zero or missing dictionary id is ambiguous:
 		// either dictionary zero, or no dictionary. In particular,

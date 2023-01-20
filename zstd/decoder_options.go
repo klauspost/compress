@@ -20,7 +20,7 @@ type decoderOptions struct {
 	concurrent      int
 	maxDecodedSize  uint64
 	maxWindowSize   uint64
-	dicts           []dict
+	dicts           []*dict
 	ignoreChecksum  bool
 	limitToCap      bool
 	decodeBufsBelow int
@@ -101,7 +101,7 @@ func WithDecoderDicts(dicts ...[]byte) DOption {
 			if err != nil {
 				return err
 			}
-			o.dicts = append(o.dicts, *d)
+			o.dicts = append(o.dicts, d)
 		}
 		return nil
 	}
@@ -114,7 +114,7 @@ func WithDecoderDictRaw(id uint32, content []byte) DOption {
 		if bits.UintSize > 32 && uint(len(content)) > dictMaxLength {
 			return fmt.Errorf("dictionary of size %d > 2GiB too large", len(content))
 		}
-		o.dicts = append(o.dicts, dict{id: id, content: content, offsets: [3]int{1, 4, 8}})
+		o.dicts = append(o.dicts, &dict{id: id, content: content, offsets: [3]int{1, 4, 8}})
 		return nil
 	}
 }
