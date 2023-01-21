@@ -459,15 +459,17 @@ func (s *Scratch) countSimple(in []byte) (max int) {
 	for _, v := range in {
 		s.count[v]++
 	}
-	m := uint32(0)
+	m, symlen := uint32(0), s.symbolLen
 	for i, v := range s.count[:] {
+		if v == 0 {
+			continue
+		}
 		if v > m {
 			m = v
 		}
-		if v > 0 {
-			s.symbolLen = uint16(i) + 1
-		}
+		symlen = uint16(i) + 1
 	}
+	s.symbolLen = symlen
 	return int(m)
 }
 
