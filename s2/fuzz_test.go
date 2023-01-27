@@ -6,6 +6,7 @@ package s2
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"testing"
 
 	"github.com/klauspost/compress/internal/fuzz"
@@ -126,5 +127,31 @@ func FuzzEncodingBlocks(f *testing.F) {
 			t.Error(fmt.Errorf("MaxEncodedLen Exceed: input: %d, mel: %d, got %d", len(data), mel, len(comp)))
 			return
 		}
+	})
+}
+
+func FuzzDecodingBlocks(f *testing.F) {
+	fuzz.AddFromZip(f, "testdata/fuzz/block-corpus-dec-raw.zip", true, testing.Short())
+
+	// Fuzzing tweaks:
+	const (
+		// Max input size:
+		maxSize = 1 << 20
+
+		// Max size 10MB
+		maxDstSize = 10 << 20
+	)
+	dec := NewReader(nil)
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) > maxSize {
+			return
+		}
+		if l, err := DecodedLen(data); err == nil && l < maxDstSize {
+			Decode(nil, data)
+		}
+
+		dec.Reset(bytes.NewReader(data))
+		io.Copy(io.Discard, dec)
 	})
 }
