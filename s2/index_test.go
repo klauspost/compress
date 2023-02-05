@@ -234,6 +234,66 @@ func TestSeeking(t *testing.T) {
 			}
 		})
 	}
+	// Test seek current
+	t.Run(fmt.Sprintf("seekCurrent"), func(t *testing.T) {
+		dec := s2.NewReader(io.ReadSeeker(bytes.NewReader(compressed.Bytes())))
+
+		seeker, err := dec.ReadSeeker(true, index)
+		if err != nil {
+			t.Fatal(err)
+		}
+		buf := make([]byte, 25)
+		rng := rand.New(rand.NewSource(0))
+		var currentOff int64
+		for i := 0; i < nElems/10; i++ {
+			rec := rng.Intn(nElems)
+			offset := int64(rec * 25)
+			//t.Logf("Reading record %d", rec)
+			absOff, err := seeker.Seek(offset-currentOff, io.SeekCurrent)
+			if err != nil {
+				t.Fatalf("Failed to seek: %v", err)
+			}
+			if absOff != offset {
+				t.Fatalf("Unexpected seek offset: want %v, got %v", offset, absOff)
+			}
+			_, err = io.ReadFull(dec, buf)
+			if err != nil {
+				t.Fatalf("Failed to seek: %v", err)
+			}
+			expected := fmt.Sprintf("Item %019d\n", rec)
+			if string(buf) != expected {
+				t.Fatalf("Expected %q, got %q", expected, buf)
+			}
+			// Adjust offset
+			currentOff = offset + int64(len(buf))
+		}
+	})
+	// Test ReadAt
+	t.Run(fmt.Sprintf("ReadAt"), func(t *testing.T) {
+		dec := s2.NewReader(io.ReadSeeker(bytes.NewReader(compressed.Bytes())))
+
+		seeker, err := dec.ReadSeeker(true, index)
+		if err != nil {
+			t.Fatal(err)
+		}
+		buf := make([]byte, 25)
+		rng := rand.New(rand.NewSource(0))
+		for i := 0; i < nElems/10; i++ {
+			rec := rng.Intn(nElems)
+			offset := int64(rec * 25)
+			n, err := seeker.ReadAt(buf, offset)
+			if err != nil {
+				t.Fatalf("Failed to seek: %v", err)
+			}
+			if n != len(buf) {
+				t.Fatalf("Unexpected read length: want %v, got %v", len(buf), n)
+			}
+			expected := fmt.Sprintf("Item %019d\n", rec)
+			if string(buf) != expected {
+				t.Fatalf("Expected %q, got %q", expected, buf)
+			}
+		}
+	})
 }
 
 // ExampleIndexStream shows an example of indexing a stream
