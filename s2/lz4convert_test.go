@@ -59,13 +59,19 @@ func TestLZ4Converter_ConvertBlock(t *testing.T) {
 				t.Errorf("output mismatch")
 			}
 
-			out2 := EncodeBetter(s2Dst[:0], data)
+			out2 := Encode(s2Dst[:0], data)
 			sz2 := len(out2) - hdr
-			t.Log("s2 (better) size:", sz2)
+			t.Log("s2 (default) size:", sz2)
+
+			out2 = EncodeBetter(s2Dst[:0], data)
+			sz3 := len(out2) - hdr
+			t.Log("s2 (better) size:", sz3)
 
 			t.Log("lz4 -> s2 bytes saved:", len(lz4Data)-sz)
-			t.Log("data -> s2 (better) bytes saved:", len(lz4Data)-sz2)
-			t.Log("direct data -> s2 better compared to converted from lz4:", sz-sz2)
+			t.Log("data -> s2 (default) bytes saved:", len(lz4Data)-sz2)
+			t.Log("data -> s2 (better) bytes saved:", len(lz4Data)-sz3)
+			t.Log("direct data -> s2 (default) compared to converted from lz4:", sz-sz2)
+			t.Log("direct data -> s2 (better) compared to converted from lz4:", sz-sz3)
 		})
 	}
 }
@@ -110,7 +116,7 @@ func BenchmarkLZ4Converter_ConvertBlock(b *testing.B) {
 }
 
 func BenchmarkCompressBlockReference(b *testing.B) {
-	//b.Skip("Only reference for BenchmarkLZ4Converter_ConvertBlock")
+	b.Skip("Only reference for BenchmarkLZ4Converter_ConvertBlock")
 	for _, tf := range testFiles {
 		b.Run(tf.label, func(b *testing.B) {
 			if err := downloadBenchmarkFiles(b, tf.filename); err != nil {
