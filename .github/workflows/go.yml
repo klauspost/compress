@@ -11,7 +11,7 @@ jobs:
   build:
     strategy:
       matrix:
-        go-version: [1.17.x, 1.18.x, 1.19.x]
+        go-version: [1.18.x, 1.19.x, 1.20.x]
         os: [ubuntu-latest, macos-latest, windows-latest]
     env:
       CGO_ENABLED: 0
@@ -48,7 +48,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v2
       with:
-        go-version: 1.19.x
+        go-version: 1.20.x
 
     - name: Checkout code
       uses: actions/checkout@v2
@@ -70,7 +70,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v2
       with:
-        go-version: 1.19.x
+        go-version: 1.20.x
 
     - name: Checkout code
       uses: actions/checkout@v2
@@ -85,7 +85,7 @@ jobs:
       run: go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d&&./s2c -verify s2c &&./s2d s2c.s2&&rm ./s2c&&rm s2d&&rm s2c.s2
 
     - name: install garble
-      run: go install mvdan.cc/garble@v0.7.2
+      run: go install mvdan.cc/garble@v0.9.1
 
     - name: goreleaser deprecation
       run: curl -sfL https://git.io/goreleaser | VERSION=v1.9.2 sh -s -- check
