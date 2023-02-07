@@ -2099,9 +2099,9 @@ func (o options) emitCopy(name string, length, offset, retval, dstBase reg.GPVir
 		//	dst[i+3] = uint8(offset >> 16)
 		//	dst[i+4] = uint8(offset >> 24)
 		tmp := GP64()
-		MOVB(U8(tagCopy4), tmp.As8())
+		XORL(tmp.As32(), tmp.As32())
 		// Use displacement to subtract 1 from upshifted length.
-		LEAL(Mem{Base: tmp, Disp: -(1 << 2), Index: length, Scale: 4}, length.As32())
+		LEAL(Mem{Base: tmp, Disp: -(1 << 2) | tagCopy4, Index: length, Scale: 4}, length.As32())
 		MOVB(length.As8(), Mem{Base: dstBase})
 		MOVL(offset.As32(), Mem{Base: dstBase, Disp: 1})
 		//	return i + 5
@@ -2172,6 +2172,12 @@ func (o options) emitCopy(name string, length, offset, retval, dstBase reg.GPVir
 	JMP(LabelRef("two_byte_offset_" + name))
 
 	Label("two_byte_offset_short_" + name)
+
+	// Create a length * 4 as early as possible.
+	length4 := GP32()
+	MOVL(length.As32(), length4)
+	SHLL(U8(2), length4)
+
 	//if length >= 12 || offset >= 2048 {
 	CMPL(length.As32(), U8(12))
 	JGE(LabelRef("emit_copy_three_" + name))
@@ -2182,15 +2188,13 @@ func (o options) emitCopy(name string, length, offset, retval, dstBase reg.GPVir
 	// Emit the remaining copy, encoded as 2 bytes.
 	// dst[1] = uint8(offset)
 	// dst[0] = uint8(offset>>8)<<5 | uint8(length-4)<<2 | tagCopy1
-	tmp := GP64()
-	MOVB(U8(tagCopy1), tmp.As8())
 	// Use scale and displacement to shift and subtract values from length.
-	LEAL(Mem{Base: tmp, Index: length, Scale: 4, Disp: -(4 << 2)}, length.As32())
+	LEAL(Mem{Base: length4, Disp: -(4 << 2) | tagCopy1}, length4.As32())
 	MOVB(offset.As8(), Mem{Base: dstBase, Disp: 1}) // Store offset lower byte
 	SHRL(U8(8), offset.As32())                      // Remove lower
 	SHLL(U8(5), offset.As32())                      // Shift back up
-	ORL(offset.As32(), length.As32())               // OR result
-	MOVB(length.As8(), Mem{Base: dstBase, Disp: 0})
+	ORL(offset.As32(), length4.As32())              // OR result
+	MOVB(length4.As8(), Mem{Base: dstBase, Disp: 0})
 	if retval != nil {
 		ADDQ(U8(2), retval) // i += 2
 	}
@@ -2203,10 +2207,9 @@ func (o options) emitCopy(name string, length, offset, retval, dstBase reg.GPVir
 	//	dst[2] = uint8(offset >> 8)
 	//	dst[1] = uint8(offset)
 	//	dst[0] = uint8(length-1)<<2 | tagCopy2
-	tmp = GP64()
-	MOVB(U8(tagCopy2), tmp.As8())
-	LEAL(Mem{Base: tmp, Disp: -(1 << 2), Index: length, Scale: 4}, length.As32())
-	MOVB(length.As8(), Mem{Base: dstBase})
+
+	LEAL(Mem{Base: length4, Disp: -(1 << 2) | tagCopy2}, length4.As32())
+	MOVB(length4.As8(), Mem{Base: dstBase})
 	MOVW(offset.As16(), Mem{Base: dstBase, Disp: 1})
 	//	return 3
 	if retval != nil {
