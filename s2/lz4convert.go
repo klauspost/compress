@@ -38,7 +38,10 @@ func (l *LZ4Converter) ConvertBlock(dst, src []byte) ([]byte, int, error) {
 		fmt.Printf("convert block start: len(src): %d, len(dst):%d \n", len(src), len(dst))
 	}
 
-	for s < len(src) {
+	for {
+		if s >= len(src) {
+			return dst[:d], 0, ErrCorrupt
+		}
 		// Read literal info
 		token := src[s]
 		ll := int(token >> 4)
