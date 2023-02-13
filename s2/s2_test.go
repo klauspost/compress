@@ -1657,6 +1657,26 @@ func benchFile(b *testing.B, i int, decode bool) {
 	}
 	bDir := filepath.FromSlash(*benchdataDir)
 	data := readFile(b, filepath.Join(bDir, testFiles[i].filename))
+	if !decode {
+		b.Run("est-size", func(b *testing.B) {
+			if n := testFiles[i].sizeLimit; 0 < n && n < len(data) {
+				data = data[:n]
+			}
+			b.SetBytes(int64(len(data)))
+			b.ReportAllocs()
+			b.ResetTimer()
+			b.RunParallel(func(pb *testing.PB) {
+				for pb.Next() {
+					_ = EstimateBlockSize(data)
+				}
+			})
+			sz := float64(EstimateBlockSize(data))
+			if sz > 0 {
+				b.ReportMetric(100*sz/float64(len(data)), "pct")
+				b.ReportMetric(sz, "B")
+			}
+		})
+	}
 	b.Run("block", func(b *testing.B) {
 		if n := testFiles[i].sizeLimit; 0 < n && n < len(data) {
 			data = data[:n]
