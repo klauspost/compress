@@ -33,6 +33,28 @@ func (l *LZ4Converter) ConvertBlock(dst, src []byte) ([]byte, int, error) {
 
 	s, d := 0, len(dst)
 	dst = dst[:cap(dst)]
+	if !debug && hasAmd64Asm {
+		res, sz := cvtLZ4BlockAsm(dst[d:], src)
+		if res < 0 {
+			const (
+				errCorrupt     = -1
+				errDstTooSmall = -2
+			)
+			switch res {
+			case errCorrupt:
+				return dst[:d], 0, ErrCorrupt
+			case errDstTooSmall:
+				return dst[:d], 0, ErrDstTooSmall
+			default:
+				return dst[:d], 0, fmt.Errorf("unexpected result: %d", res)
+			}
+		}
+		if d+sz > len(dst) {
+			return dst[:0], 0, ErrDstTooSmall
+		}
+		return dst[:d+sz], res, nil
+	}
+
 	dLimit := len(dst) - 8
 	var lastOffset uint16
 	var uncompressed int
@@ -84,10 +106,6 @@ func (l *LZ4Converter) ConvertBlock(dst, src []byte) ([]byte, int, error) {
 			d += emitLiteralGo(dst[d:], src[s:s+ll])
 			s += ll
 			uncompressed += ll
-
-			if d > dLimit {
-				return dst[:d], 0, ErrDstTooSmall
-			}
 		}
 
 		// Check if we are done...

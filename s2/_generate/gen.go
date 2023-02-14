@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"math"
+	"math/rand"
 	"runtime"
 
 	. "github.com/mmcloughlin/avo/build"
@@ -93,6 +94,8 @@ func main() {
 	o.genEmitCopyNoRepeat()
 	o.snappy = false
 	o.genMatchLen()
+	o.cvtLZ4BlockAsm()
+
 	Generate()
 }
 
@@ -1679,7 +1682,7 @@ func (o options) genEmitLiteral() {
 // stack must have at least 32 bytes.
 // retval will contain emitted bytes, but can be nil if this is not interesting.
 // dstBase and litBase are updated.
-// Uses 2 GP registers. With AVX 4 registers.
+// Uses 2 GP registers.
 // If updateDst is true dstBase will have the updated end pointer and an additional register will be used.
 func (o options) emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, end LabelRef, updateDst bool) {
 	n := GP32()
@@ -2168,8 +2171,9 @@ func (o options) emitCopy(name string, length, offset, retval, dstBase reg.GPVir
 	// Inline call to emitRepeat. Will jump to end
 	if !o.snappy {
 		o.emitRepeat(name+"_emit_copy_short", length, offset, retval, dstBase, end, false)
+	} else {
+		JMP(LabelRef("two_byte_offset_" + name))
 	}
-	JMP(LabelRef("two_byte_offset_" + name))
 
 	Label("two_byte_offset_short_" + name)
 
@@ -2770,4 +2774,206 @@ func (o options) matchLenAlt(name string, a, b, len reg.GPVirtual, end LabelRef)
 	}
 	JMP(end)
 	return matched
+}
+
+func (o options) cvtLZ4BlockAsm() {
+	TEXT("cvtLZ4BlockAsm", NOSPLIT, "func(dst, src []byte) (uncompressed int, dstUsed int)")
+	Doc("cvtLZ4BlockAsm converts an LZ4 block to S2", "")
+	Pragma("noescape")
+	o.outputMargin = 8
+
+	const (
+		errCorrupt     = -1
+		errDstTooSmall = -2
+	)
+	dst, dstLen, src, srcLen, retval := GP64(), GP64(), GP64(), GP64(), GP64()
+
+	// retval = 0
+	XORQ(retval, retval)
+
+	Load(Param("dst").Base(), dst)
+	Load(Param("dst").Len(), dstLen)
+	Load(Param("src").Base(), src)
+	Load(Param("src").Len(), srcLen)
+	srcEnd, dstEnd := GP64(), GP64()
+	LEAQ(Mem{Base: src, Index: srcLen, Scale: 1, Disp: 0}, srcEnd)
+	LEAQ(Mem{Base: dst, Index: dstLen, Scale: 1, Disp: -o.outputMargin}, dstEnd)
+	lastOffset := GP64()
+	XORQ(lastOffset, lastOffset)
+
+	checkSrc := func(reg reg.GPVirtual) {
+		if debug {
+			name := fmt.Sprintf("lz4_s2_ok_%d", rand.Int31())
+
+			CMPQ(reg, srcEnd)
+			JB(LabelRef(name))
+			JMP(LabelRef("lz4_s2_corrupt"))
+			Label(name)
+		} else {
+			CMPQ(reg, srcEnd)
+			JAE(LabelRef("lz4_s2_corrupt"))
+		}
+	}
+	checkDst := func(reg reg.GPVirtual) {
+		CMPQ(reg, dstEnd)
+		JAE(LabelRef("lz4_s2_dstfull"))
+	}
+
+	const lz4MinMatch = 4
+
+	Label("lz4_s2_loop")
+	checkSrc(src)
+	checkDst(dst)
+	token := GP64()
+	MOVBQZX(Mem{Base: src}, token)
+	ll, ml := GP64(), GP64()
+	MOVQ(token, ll)
+	MOVQ(token, ml)
+	SHRQ(U8(4), ll)
+	ANDQ(U8(0xf), ml)
+
+	// If upper nibble is 15, literal length is extended
+	{
+		CMPQ(token, U8(0xf0))
+		JB(LabelRef("lz4_s2_ll_end"))
+		Label("lz4_s2_ll_loop")
+		INCQ(src) // s++
+		checkSrc(src)
+		val := GP64()
+		MOVBQZX(Mem{Base: src}, val)
+		ADDQ(val, ll)
+		CMPQ(val, U8(255))
+		JEQ(LabelRef("lz4_s2_ll_loop"))
+		Label("lz4_s2_ll_end")
+	}
+
+	// if s+ll >= len(src)
+	endLits := GP64()
+	LEAQ(Mem{Base: src, Index: ll, Scale: 1}, endLits)
+	ADDQ(U8(lz4MinMatch), ml)
+	checkSrc(endLits)
+	INCQ(src) // s++
+	INCQ(endLits)
+	TESTQ(ll, ll)
+	JZ(LabelRef("lz4_s2_lits_done"))
+	{
+		dstEnd := GP64()
+		LEAQ(Mem{Base: dst, Index: ll, Scale: 1}, dstEnd)
+		checkDst(dstEnd)
+		o.outputMargin++
+		ADDQ(ll, retval)
+		o.emitLiteral("lz4_s2", ll, nil, dst, src, LabelRef("lz4_s2_lits_emit_done"), true)
+		o.outputMargin--
+		Label("lz4_s2_lits_emit_done")
+		MOVQ(endLits, src)
+	}
+	Label("lz4_s2_lits_done")
+	// if s == len(src) && ml == lz4MinMatch
+	CMPQ(src, srcEnd)
+	JNE(LabelRef("lz4_s2_match"))
+	CMPQ(ml, U8(lz4MinMatch))
+	JEQ(LabelRef("lz4_s2_done"))
+	JMP(LabelRef("lz4_s2_corrupt"))
+
+	Label("lz4_s2_match")
+	// if s >= len(src)-2 {
+	end := GP64()
+	LEAQ(Mem{Base: src, Disp: 2}, end)
+	checkSrc(end)
+	offset := GP64()
+	MOVWQZX(Mem{Base: src}, offset)
+	MOVQ(end, src) // s = s + 2
+
+	if debug {
+		// if offset == 0 {
+		TESTQ(offset, offset)
+		JNZ(LabelRef("lz4_s2_c1"))
+		JMP(LabelRef("lz4_s2_corrupt"))
+
+		Label("lz4_s2_c1")
+
+		// if int(offset) > uncompressed {
+		CMPQ(offset, retval)
+		JB(LabelRef("lz4_s2_c2"))
+		JMP(LabelRef("lz4_s2_corrupt"))
+
+		Label("lz4_s2_c2")
+
+	} else {
+		// if offset == 0 {
+		TESTQ(offset, offset)
+		JZ(LabelRef("lz4_s2_corrupt"))
+
+		// if int(offset) > uncompressed {
+		CMPQ(offset, retval)
+		JA(LabelRef("lz4_s2_corrupt"))
+	}
+
+	// if ml == lz4MinMatch+15 {
+	{
+		CMPQ(ml, U8(lz4MinMatch+15))
+		JNE(LabelRef("lz4_s2_ml_done"))
+
+		Label("lz4_s2_ml_loop")
+		val := GP64()
+		MOVBQZX(Mem{Base: src}, val)
+		INCQ(src)     // s++
+		ADDQ(val, ml) // ml += val
+		checkSrc(src)
+		CMPQ(val, U8(255))
+		JEQ(LabelRef("lz4_s2_ml_loop"))
+	}
+	Label("lz4_s2_ml_done")
+
+	// uncompressed += ml
+	ADDQ(ml, retval)
+	CMPQ(offset, lastOffset)
+	JNE(LabelRef("lz4_s2_docopy"))
+	// Offsets can only be 16 bits
+	maxLength := o.maxLen
+	o.maxLen = 65535
+	{
+		// emitRepeat16(dst[d:], offset, ml)
+		o.emitRepeat("lz4_s2", ml, offset, nil, dst, LabelRef("lz4_s2_loop"), false)
+	}
+	Label("lz4_s2_docopy")
+	{
+		// emitCopy16(dst[d:], offset, ml)
+		MOVQ(offset, lastOffset)
+		o.emitCopy("lz4_s2", ml, offset, nil, dst, LabelRef("lz4_s2_loop"))
+	}
+	o.maxLen = maxLength
+
+	Label("lz4_s2_done")
+	{
+		tmp := GP64()
+		Load(Param("dst").Base(), tmp)
+		SUBQ(tmp, dst)
+		Store(retval, ReturnIndex(0))
+		Store(dst, ReturnIndex(1))
+		RET()
+	}
+	Label("lz4_s2_corrupt")
+	{
+		tmp := GP64()
+		if debug {
+			tmp := GP64()
+			Load(Param("dst").Base(), tmp)
+			SUBQ(tmp, dst)
+			Store(dst, ReturnIndex(1))
+		}
+		XORQ(tmp, tmp)
+		LEAQ(Mem{Base: tmp, Disp: errCorrupt}, retval)
+		Store(retval, ReturnIndex(0))
+		RET()
+	}
+
+	Label("lz4_s2_dstfull")
+	{
+		tmp := GP64()
+		XORQ(tmp, tmp)
+		LEAQ(Mem{Base: tmp, Disp: errDstTooSmall}, retval)
+		Store(retval, ReturnIndex(0))
+		RET()
+	}
 }
