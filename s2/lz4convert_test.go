@@ -16,12 +16,16 @@ import (
 func TestLZ4Converter_ConvertBlock(t *testing.T) {
 	for _, tf := range testFiles {
 		t.Run(tf.label, func(t *testing.T) {
-
 			if err := downloadBenchmarkFiles(t, tf.filename); err != nil {
 				t.Fatalf("failed to download testdata: %s", err)
 			}
+
 			bDir := filepath.FromSlash(*benchdataDir)
 			data := readFile(t, filepath.Join(bDir, tf.filename))
+			if n := tf.sizeLimit; 0 < n && n < len(data) {
+				data = data[:n]
+			}
+
 			lz4Data := make([]byte, lz4ref.CompressBlockBound(len(data)))
 			n, err := lz4ref.CompressBlock(data, lz4Data)
 			if err != nil {
@@ -82,8 +86,13 @@ func BenchmarkLZ4Converter_ConvertBlock(b *testing.B) {
 			if err := downloadBenchmarkFiles(b, tf.filename); err != nil {
 				b.Fatalf("failed to download testdata: %s", err)
 			}
+
 			bDir := filepath.FromSlash(*benchdataDir)
 			data := readFile(b, filepath.Join(bDir, tf.filename))
+			if n := tf.sizeLimit; 0 < n && n < len(data) {
+				data = data[:n]
+			}
+
 			lz4Data := make([]byte, lz4ref.CompressBlockBound(len(data)))
 			n, err := lz4ref.CompressBlock(data, lz4Data)
 			if err != nil {
@@ -116,7 +125,7 @@ func BenchmarkLZ4Converter_ConvertBlock(b *testing.B) {
 }
 
 func BenchmarkCompressBlockReference(b *testing.B) {
-	b.Skip("Only reference for BenchmarkLZ4Converter_ConvertBlock")
+	//b.Skip("Only reference for BenchmarkLZ4Converter_ConvertBlock")
 	for _, tf := range testFiles {
 		b.Run(tf.label, func(b *testing.B) {
 			if err := downloadBenchmarkFiles(b, tf.filename); err != nil {
@@ -124,6 +133,10 @@ func BenchmarkCompressBlockReference(b *testing.B) {
 			}
 			bDir := filepath.FromSlash(*benchdataDir)
 			data := readFile(b, filepath.Join(bDir, tf.filename))
+			if n := tf.sizeLimit; 0 < n && n < len(data) {
+				data = data[:n]
+			}
+
 			lz4Data := make([]byte, lz4ref.CompressBlockBound(len(data)))
 			n, err := lz4ref.CompressBlock(data, lz4Data)
 			if err != nil {
