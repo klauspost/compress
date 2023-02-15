@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"path/filepath"
+	"sort"
 	"testing"
 
 	"github.com/klauspost/compress/internal/lz4ref"
@@ -124,6 +125,48 @@ func BenchmarkLZ4Converter_ConvertBlock(b *testing.B) {
 	}
 }
 
+func BenchmarkLZ4Converter_ConvertBlockParallel(b *testing.B) {
+	sort.Slice(testFiles, func(i, j int) bool {
+		return testFiles[i].filename < testFiles[j].filename
+	})
+	for _, tf := range testFiles {
+		b.Run(tf.filename, func(b *testing.B) {
+			if err := downloadBenchmarkFiles(b, tf.filename); err != nil {
+				b.Fatalf("failed to download testdata: %s", err)
+			}
+
+			bDir := filepath.FromSlash(*benchdataDir)
+			data := readFile(b, filepath.Join(bDir, tf.filename))
+
+			lz4Data := make([]byte, lz4ref.CompressBlockBound(len(data)))
+			n, err := lz4ref.CompressBlock(data, lz4Data)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if n == 0 {
+				b.Skip("incompressible")
+				return
+			}
+			lz4Data = lz4Data[:n]
+			conv := LZ4Converter{}
+			b.ReportAllocs()
+			b.ResetTimer()
+			b.SetBytes(int64(len(data)))
+			b.RunParallel(func(pb *testing.PB) {
+				s2Dst := make([]byte, MaxEncodedLen(len(data)))
+				for pb.Next() {
+					_, n, err := conv.ConvertBlock(s2Dst[:0], lz4Data)
+					if err != nil {
+						b.Fatal(err)
+					}
+					if n != len(data) {
+						b.Fatalf("length mismatch: want %d, got %d", len(data), n)
+					}
+				}
+			})
+		})
+	}
+}
 func BenchmarkCompressBlockReference(b *testing.B) {
 	//b.Skip("Only reference for BenchmarkLZ4Converter_ConvertBlock")
 	for _, tf := range testFiles {

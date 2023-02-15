@@ -314,3 +314,7 @@ func matchLen(a []byte, b []byte) int {
 	}
 	return len(a) + checked
 }
+
+func cvtLZ4BlockAsm(dst []byte, src []byte) (uncompressed int, dstUsed int) {
+	panic("cvtLZ4BlockAsm should be unreachable")
+}
