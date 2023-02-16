@@ -87,6 +87,7 @@ func main() {
 	o.snappy = false
 	o.outputMargin = 0
 	o.maxLen = math.MaxUint32
+	o.maxOffset = math.MaxUint32 - 1
 	o.genEmitLiteral()
 	o.genEmitRepeat()
 	o.genEmitCopy()
@@ -136,6 +137,7 @@ type options struct {
 	bmi1         bool
 	bmi2         bool
 	maxLen       int
+	maxOffset    int
 	outputMargin int // Should be at least 5.
 	maxSkip      int
 }
@@ -148,6 +150,7 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes, m
 	Pragma("noescape")
 
 	o.maxLen = maxLen
+	o.maxOffset = maxLen - 1
 	var literalMaxOverhead = maxLitOverheadFor(maxLen)
 
 	var tableSize = 4 * (1 << tableBits)
@@ -802,6 +805,7 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, sTableBits, sk
 
 	const sHashBytes = 4
 	o.maxLen = maxLen
+	o.maxOffset = maxLen - 1
 
 	var lTableSize = 4 * (1 << lTableBits)
 	var sTableSize = 4 * (1 << sTableBits)
@@ -1298,7 +1302,7 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, sTableBits, sk
 			// NOT REPEAT
 			{
 				// Check if match is better..
-				if o.maxLen > 65535 {
+				if o.maxOffset > 65535 {
 					CMPL(length.As32(), U8(1))
 					JG(LabelRef("match_length_ok_" + name))
 					CMPL(offset32, U32(65535))
@@ -2050,7 +2054,7 @@ const (
 func (o options) emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end LabelRef) {
 	Comment("emitCopy")
 
-	if o.maxLen >= 65536 {
+	if o.maxOffset >= 65536 {
 		//if offset >= 65536 {
 		CMPL(offset.As32(), U32(65536))
 		JL(LabelRef("two_byte_offset_" + name))
@@ -2781,6 +2785,7 @@ func (o options) cvtLZ4BlockAsm() {
 	Doc("cvtLZ4BlockAsm converts an LZ4 block to S2", "")
 	Pragma("noescape")
 	o.outputMargin = 8
+	o.maxOffset = math.MaxUint16
 
 	const (
 		errCorrupt     = -1
@@ -2930,8 +2935,6 @@ func (o options) cvtLZ4BlockAsm() {
 	CMPQ(offset, lastOffset)
 	JNE(LabelRef("lz4_s2_docopy"))
 	// Offsets can only be 16 bits
-	maxLength := o.maxLen
-	o.maxLen = 65535
 	{
 		// emitRepeat16(dst[d:], offset, ml)
 		o.emitRepeat("lz4_s2", ml, offset, nil, dst, LabelRef("lz4_s2_loop"), false)
@@ -2942,7 +2945,6 @@ func (o options) cvtLZ4BlockAsm() {
 		MOVQ(offset, lastOffset)
 		o.emitCopy("lz4_s2", ml, offset, nil, dst, LabelRef("lz4_s2_loop"))
 	}
-	o.maxLen = maxLength
 
 	Label("lz4_s2_done")
 	{

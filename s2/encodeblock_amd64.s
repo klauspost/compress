@@ -18038,6 +18038,7 @@ lz4_s2_ml_done:
 	JNE  lz4_s2_docopy
 
 	// emitRepeat
+emit_repeat_again_lz4_s2:
 	MOVL R10, R8
 	LEAL -4(R10), R10
 	CMPL R8, $0x08
@@ -18050,6 +18051,28 @@ lz4_s2_ml_done:
 cant_repeat_two_offset_lz4_s2:
 	CMPL R10, $0x00000104
 	JLT  repeat_three_lz4_s2
+	CMPL R10, $0x00010100
+	JLT  repeat_four_lz4_s2
+	CMPL R10, $0x0100ffff
+	JLT  repeat_five_lz4_s2
+	LEAL -16842747(R10), R10
+	MOVW $0x001d, (AX)
+	MOVW $0xfffb, 2(AX)
+	MOVB $0xff, 4(AX)
+	ADDQ $0x05, AX
+	JMP  emit_repeat_again_lz4_s2
+
+repeat_five_lz4_s2:
+	LEAL -65536(R10), R10
+	MOVL R10, R9
+	MOVW $0x001d, (AX)
+	MOVW R10, 2(AX)
+	SARL $0x10, R9
+	MOVB R9, 4(AX)
+	ADDQ $0x05, AX
+	JMP  lz4_s2_loop
+
+repeat_four_lz4_s2:
 	LEAL -256(R10), R10
 	MOVW $0x0019, (AX)
 	MOVW R10, 2(AX)
@@ -18092,9 +18115,10 @@ lz4_s2_docopy:
 	MOVL $0x00000001, R8
 	LEAL 16(R8), R8
 	MOVB R9, 1(AX)
-	SHRL $0x08, R9
-	SHLL $0x05, R9
-	ORL  R9, R8
+	MOVL R9, R11
+	SHRL $0x08, R11
+	SHLL $0x05, R11
+	ORL  R11, R8
 	MOVB R8, (AX)
 	ADDQ $0x02, AX
 	SUBL $0x08, R10
@@ -18102,6 +18126,8 @@ lz4_s2_docopy:
 	// emitRepeat
 	LEAL -4(R10), R10
 	JMP  cant_repeat_two_offset_lz4_s2_emit_copy_short_2b
+
+emit_repeat_again_lz4_s2_emit_copy_short_2b:
 	MOVL R10, R8
 	LEAL -4(R10), R10
 	CMPL R8, $0x08
@@ -18114,6 +18140,28 @@ lz4_s2_docopy:
 cant_repeat_two_offset_lz4_s2_emit_copy_short_2b:
 	CMPL R10, $0x00000104
 	JLT  repeat_three_lz4_s2_emit_copy_short_2b
+	CMPL R10, $0x00010100
+	JLT  repeat_four_lz4_s2_emit_copy_short_2b
+	CMPL R10, $0x0100ffff
+	JLT  repeat_five_lz4_s2_emit_copy_short_2b
+	LEAL -16842747(R10), R10
+	MOVW $0x001d, (AX)
+	MOVW $0xfffb, 2(AX)
+	MOVB $0xff, 4(AX)
+	ADDQ $0x05, AX
+	JMP  emit_repeat_again_lz4_s2_emit_copy_short_2b
+
+repeat_five_lz4_s2_emit_copy_short_2b:
+	LEAL -65536(R10), R10
+	MOVL R10, R9
+	MOVW $0x001d, (AX)
+	MOVW R10, 2(AX)
+	SARL $0x10, R9
+	MOVB R9, 4(AX)
+	ADDQ $0x05, AX
+	JMP  lz4_s2_loop
+
+repeat_four_lz4_s2_emit_copy_short_2b:
 	LEAL -256(R10), R10
 	MOVW $0x0019, (AX)
 	MOVW R10, 2(AX)
@@ -18152,6 +18200,7 @@ long_offset_short_lz4_s2:
 	ADDQ $0x03, AX
 
 	// emitRepeat
+emit_repeat_again_lz4_s2_emit_copy_short:
 	MOVL R10, R8
 	LEAL -4(R10), R10
 	CMPL R8, $0x08
@@ -18164,6 +18213,28 @@ long_offset_short_lz4_s2:
 cant_repeat_two_offset_lz4_s2_emit_copy_short:
 	CMPL R10, $0x00000104
 	JLT  repeat_three_lz4_s2_emit_copy_short
+	CMPL R10, $0x00010100
+	JLT  repeat_four_lz4_s2_emit_copy_short
+	CMPL R10, $0x0100ffff
+	JLT  repeat_five_lz4_s2_emit_copy_short
+	LEAL -16842747(R10), R10
+	MOVW $0x001d, (AX)
+	MOVW $0xfffb, 2(AX)
+	MOVB $0xff, 4(AX)
+	ADDQ $0x05, AX
+	JMP  emit_repeat_again_lz4_s2_emit_copy_short
+
+repeat_five_lz4_s2_emit_copy_short:
+	LEAL -65536(R10), R10
+	MOVL R10, R9
+	MOVW $0x001d, (AX)
+	MOVW R10, 2(AX)
+	SARL $0x10, R9
+	MOVB R9, 4(AX)
+	ADDQ $0x05, AX
+	JMP  lz4_s2_loop
+
+repeat_four_lz4_s2_emit_copy_short:
 	LEAL -256(R10), R10
 	MOVW $0x0019, (AX)
 	MOVW R10, 2(AX)

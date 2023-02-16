@@ -114,6 +114,9 @@ func (l *LZ4Converter) ConvertBlock(dst, src []byte) ([]byte, int, error) {
 		}
 		// 2 byte offset
 		if s >= len(src)-2 {
+			if debug {
+				fmt.Printf("s (%d) >= len(src)-2 (%d)", s, len(src)-2)
+			}
 			return dst[:d], 0, ErrCorrupt
 		}
 		offset := binary.LittleEndian.Uint16(src[s:])
