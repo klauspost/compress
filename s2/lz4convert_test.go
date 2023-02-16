@@ -168,7 +168,7 @@ func BenchmarkLZ4Converter_ConvertBlockParallel(b *testing.B) {
 	}
 }
 func BenchmarkCompressBlockReference(b *testing.B) {
-	//b.Skip("Only reference for BenchmarkLZ4Converter_ConvertBlock")
+	b.Skip("Only reference for BenchmarkLZ4Converter_ConvertBlock")
 	for _, tf := range testFiles {
 		b.Run(tf.label, func(b *testing.B) {
 			if err := downloadBenchmarkFiles(b, tf.filename); err != nil {

@@ -17857,8 +17857,8 @@ lz4_s2_ll_loop:
 	JEQ     lz4_s2_ll_loop
 
 lz4_s2_ll_end:
-	ADDQ  $0x04, R10
 	LEAQ  (DX)(R9*1), R8
+	ADDQ  $0x04, R10
 	CMPQ  R8, BX
 	JAE   lz4_s2_corrupt
 	INCQ  DX
