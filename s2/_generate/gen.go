@@ -1898,8 +1898,7 @@ func (o options) emitRepeat(name string, length reg.GPVirtual, offset reg.GPVirt
 		// We have have more than 24 bits
 		// Emit so we have at least 4 bytes left.
 		LEAL(Mem{Base: length, Disp: -(maxRepeat - 4)}, length.As32()) // length -= (maxRepeat - 4)
-		MOVW(U16(7<<2|tagCopy1), Mem{Base: dstBase})                   // dst[0] = 7<<2 | tagCopy1, dst[1] = 0
-		MOVW(U16(65531), Mem{Base: dstBase, Disp: 2})                  // 0xfffb
+		MOVL(U32(7<<2|tagCopy1|(65531<<16)), Mem{Base: dstBase})       // dst[0] = 7<<2 | tagCopy1, dst[1] = 0 dst[2+3] = 65531
 		MOVB(U8(255), Mem{Base: dstBase, Disp: 4})
 		ADDQ(U8(5), dstBase)
 		if retval != nil {
