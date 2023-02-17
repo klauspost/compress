@@ -54,7 +54,7 @@ func (l *LZ4Converter) ConvertBlock(dst, src []byte) ([]byte, int, error) {
 		return dst[:d+sz], res, nil
 	}
 
-	dLimit := len(dst) - 8
+	dLimit := len(dst) - 10
 	var lastOffset uint16
 	var uncompressed int
 	if debug {
@@ -287,8 +287,8 @@ func (l *LZ4Converter) ConvertBlockSnappy(dst, src []byte) ([]byte, int, error) 
 
 	s, d := 0, len(dst)
 	dst = dst[:cap(dst)]
-	// Disabled for now, since we have potential problems overwriting on long matches.
-	if false && !debug && hasAmd64Asm {
+	// Use assembly when possible
+	if !debug && hasAmd64Asm {
 		res, sz := cvtLZ4BlockSnappyAsm(dst[d:], src)
 		if res < 0 {
 			const (
@@ -310,7 +310,7 @@ func (l *LZ4Converter) ConvertBlockSnappy(dst, src []byte) ([]byte, int, error) 
 		return dst[:d+sz], res, nil
 	}
 
-	dLimit := len(dst) - 8
+	dLimit := len(dst) - 10
 	var uncompressed int
 	if debug {
 		fmt.Printf("convert block start: len(src): %d, len(dst):%d \n", len(src), len(dst))

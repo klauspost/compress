@@ -380,8 +380,6 @@ repeat_as_copy_encodeBlockAsm:
 	// emitCopy
 	CMPL SI, $0x00010000
 	JL   two_byte_offset_repeat_as_copy_encodeBlockAsm
-
-four_bytes_loop_back_repeat_as_copy_encodeBlockAsm:
 	CMPL BX, $0x40
 	JLE  four_bytes_remain_repeat_as_copy_encodeBlockAsm
 	MOVB $0xff, (AX)
@@ -456,7 +454,6 @@ repeat_two_offset_repeat_as_copy_encodeBlockAsm_emit_copy:
 	MOVB BL, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm
-	JMP four_bytes_loop_back_repeat_as_copy_encodeBlockAsm
 
 four_bytes_remain_repeat_as_copy_encodeBlockAsm:
 	TESTL BX, BX
@@ -917,8 +914,6 @@ match_nolit_end_encodeBlockAsm:
 	// emitCopy
 	CMPL BX, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeBlockAsm
-
-four_bytes_loop_back_match_nolit_encodeBlockAsm:
 	CMPL R9, $0x40
 	JLE  four_bytes_remain_match_nolit_encodeBlockAsm
 	MOVB $0xff, (AX)
@@ -993,7 +988,6 @@ repeat_two_offset_match_nolit_encodeBlockAsm_emit_copy:
 	MOVB R9, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm
-	JMP four_bytes_loop_back_match_nolit_encodeBlockAsm
 
 four_bytes_remain_match_nolit_encodeBlockAsm:
 	TESTL R9, R9
@@ -1739,8 +1733,6 @@ repeat_as_copy_encodeBlockAsm4MB:
 	// emitCopy
 	CMPL SI, $0x00010000
 	JL   two_byte_offset_repeat_as_copy_encodeBlockAsm4MB
-
-four_bytes_loop_back_repeat_as_copy_encodeBlockAsm4MB:
 	CMPL BX, $0x40
 	JLE  four_bytes_remain_repeat_as_copy_encodeBlockAsm4MB
 	MOVB $0xff, (AX)
@@ -1805,7 +1797,6 @@ repeat_two_offset_repeat_as_copy_encodeBlockAsm4MB_emit_copy:
 	MOVB BL, (AX)
 	ADDQ $0x02, AX
 	JMP  repeat_end_emit_encodeBlockAsm4MB
-	JMP four_bytes_loop_back_repeat_as_copy_encodeBlockAsm4MB
 
 four_bytes_remain_repeat_as_copy_encodeBlockAsm4MB:
 	TESTL BX, BX
@@ -2236,8 +2227,6 @@ match_nolit_end_encodeBlockAsm4MB:
 	// emitCopy
 	CMPL BX, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeBlockAsm4MB
-
-four_bytes_loop_back_match_nolit_encodeBlockAsm4MB:
 	CMPL R9, $0x40
 	JLE  four_bytes_remain_match_nolit_encodeBlockAsm4MB
 	MOVB $0xff, (AX)
@@ -2302,7 +2291,6 @@ repeat_two_offset_match_nolit_encodeBlockAsm4MB_emit_copy:
 	MOVB R9, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBlockAsm4MB
-	JMP four_bytes_loop_back_match_nolit_encodeBlockAsm4MB
 
 four_bytes_remain_match_nolit_encodeBlockAsm4MB:
 	TESTL R9, R9
@@ -6074,8 +6062,6 @@ emit_literal_done_match_emit_encodeBetterBlockAsm:
 	// emitCopy
 	CMPL DI, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeBetterBlockAsm
-
-four_bytes_loop_back_match_nolit_encodeBetterBlockAsm:
 	CMPL R11, $0x40
 	JLE  four_bytes_remain_match_nolit_encodeBetterBlockAsm
 	MOVB $0xff, (AX)
@@ -6150,7 +6136,6 @@ repeat_two_offset_match_nolit_encodeBetterBlockAsm_emit_copy:
 	MOVB R11, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBetterBlockAsm
-	JMP four_bytes_loop_back_match_nolit_encodeBetterBlockAsm
 
 four_bytes_remain_match_nolit_encodeBetterBlockAsm:
 	TESTL R11, R11
@@ -7140,8 +7125,6 @@ emit_literal_done_match_emit_encodeBetterBlockAsm4MB:
 	// emitCopy
 	CMPL DI, $0x00010000
 	JL   two_byte_offset_match_nolit_encodeBetterBlockAsm4MB
-
-four_bytes_loop_back_match_nolit_encodeBetterBlockAsm4MB:
 	CMPL R11, $0x40
 	JLE  four_bytes_remain_match_nolit_encodeBetterBlockAsm4MB
 	MOVB $0xff, (AX)
@@ -7206,7 +7189,6 @@ repeat_two_offset_match_nolit_encodeBetterBlockAsm4MB_emit_copy:
 	MOVB R11, (AX)
 	ADDQ $0x02, AX
 	JMP  match_nolit_emitcopy_end_encodeBetterBlockAsm4MB
-	JMP four_bytes_loop_back_match_nolit_encodeBetterBlockAsm4MB
 
 four_bytes_remain_match_nolit_encodeBetterBlockAsm4MB:
 	TESTL R11, R11
@@ -17374,8 +17356,6 @@ TEXT ·emitCopy(SB), NOSPLIT, $0-48
 	// emitCopy
 	CMPL CX, $0x00010000
 	JL   two_byte_offset_standalone
-
-four_bytes_loop_back_standalone:
 	CMPL DX, $0x40
 	JLE  four_bytes_remain_standalone
 	MOVB $0xff, (AX)
@@ -17457,7 +17437,6 @@ repeat_two_offset_standalone_emit_copy:
 	ADDQ $0x02, BX
 	ADDQ $0x02, AX
 	JMP  gen_emit_copy_end
-	JMP four_bytes_loop_back_standalone
 
 four_bytes_remain_standalone:
 	TESTL DX, DX
@@ -17816,7 +17795,7 @@ TEXT ·cvtLZ4BlockAsm(SB), NOSPLIT, $0-64
 	MOVQ src_base+24(FP), DX
 	MOVQ src_len+32(FP), BX
 	LEAQ (DX)(BX*1), BX
-	LEAQ -8(AX)(CX*1), CX
+	LEAQ -10(AX)(CX*1), CX
 	XORQ DI, DI
 
 lz4_s2_loop:
@@ -18299,7 +18278,7 @@ TEXT ·cvtLZ4BlockSnappyAsm(SB), NOSPLIT, $0-64
 	MOVQ src_base+24(FP), DX
 	MOVQ src_len+32(FP), BX
 	LEAQ (DX)(BX*1), BX
-	LEAQ -8(AX)(CX*1), CX
+	LEAQ -10(AX)(CX*1), CX
 
 lz4_snappy_loop:
 	CMPQ    DX, BX
@@ -18510,6 +18489,8 @@ two_byte_offset_lz4_s2:
 	MOVW R8, 1(AX)
 	LEAL -60(R9), R9
 	ADDQ $0x03, AX
+	CMPQ AX, CX
+	JAE  lz4_snappy_loop
 	JMP  two_byte_offset_lz4_s2
 
 two_byte_offset_short_lz4_s2:

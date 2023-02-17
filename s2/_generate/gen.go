@@ -455,7 +455,7 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes, m
 					// Emit as copy instead...
 					Label("repeat_as_copy_" + name)
 				}
-				o.emitCopy("repeat_as_copy_"+name, length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name))
+				o.emitCopy("repeat_as_copy_"+name, length, offsetVal, nil, dst, nil, LabelRef("repeat_end_emit_"+name))
 
 				Label("repeat_end_emit_" + name)
 				// Store new dst and nextEmit
@@ -657,7 +657,7 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes, m
 			// length += 4
 			ADDL(U8(4), length.As32())
 			MOVL(s, nextEmitL) // nextEmit = s
-			o.emitCopy("match_nolit_"+name, length, offset, nil, dst, LabelRef("match_nolit_emitcopy_end_"+name))
+			o.emitCopy("match_nolit_"+name, length, offset, nil, dst, nil, LabelRef("match_nolit_emitcopy_end_"+name))
 			Label("match_nolit_emitcopy_end_" + name)
 
 			// if s >= sLimit { end }
@@ -1326,7 +1326,7 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, sTableBits, sk
 				// length += 4
 				ADDL(U8(4), length.As32())
 				MOVL(s, nextEmitL) // nextEmit = s
-				o.emitCopy("match_nolit_"+name, length, offset, nil, dst, LabelRef("match_nolit_emitcopy_end_"+name))
+				o.emitCopy("match_nolit_"+name, length, offset, nil, dst, nil, LabelRef("match_nolit_emitcopy_end_"+name))
 				// Jumps at end
 			}
 			// REPEAT
@@ -2004,7 +2004,7 @@ func (o options) genEmitCopy() {
 	Load(Param("dst").Base(), dstBase)
 	Load(Param("offset"), offset)
 	Load(Param("length"), length)
-	o.emitCopy("standalone", length, offset, retval, dstBase, LabelRef("gen_emit_copy_end"))
+	o.emitCopy("standalone", length, offset, retval, dstBase, nil, LabelRef("gen_emit_copy_end"))
 	Label("gen_emit_copy_end")
 	Store(retval, ReturnIndex(0))
 	RET()
@@ -2035,7 +2035,7 @@ func (o options) genEmitCopyNoRepeat() {
 	Load(Param("dst").Base(), dstBase)
 	Load(Param("offset"), offset)
 	Load(Param("length"), length)
-	o.emitCopy("standalone_snappy", length, offset, retval, dstBase, "gen_emit_copy_end_snappy")
+	o.emitCopy("standalone_snappy", length, offset, retval, dstBase, nil, "gen_emit_copy_end_snappy")
 	Label("gen_emit_copy_end_snappy")
 	Store(retval, ReturnIndex(0))
 	RET()
@@ -2053,8 +2053,17 @@ const (
 // retval can be nil.
 // Will jump to end label when finished.
 // Uses 2 GP registers.
-func (o options) emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end LabelRef) {
+// dstLimit is optional. If set each iteration will check if dstLimit is reached.
+// If so, it will jump to "end" without emitting everything.
+func (o options) emitCopy(name string, length, offset, retval, dstBase, dstLimit reg.GPVirtual, end LabelRef) {
 	Comment("emitCopy")
+
+	checkDst := func(reg reg.GPVirtual) {
+		if dstLimit != nil {
+			CMPQ(reg, dstLimit)
+			JAE(end)
+		}
+	}
 
 	if o.maxOffset >= 65536 {
 		//if offset >= 65536 {
@@ -2091,8 +2100,10 @@ func (o options) emitCopy(name string, length, offset, retval, dstBase reg.GPVir
 		// Inline call to emitRepeat. Will jump to end
 		if !o.snappy {
 			o.emitRepeat(name+"_emit_copy", length, offset, retval, dstBase, end, false)
+		} else {
+			checkDst(dstBase)
+			JMP(LabelRef("four_bytes_loop_back_" + name))
 		}
-		JMP(LabelRef("four_bytes_loop_back_" + name))
 
 		Label("four_bytes_remain_" + name)
 		//	if length == 0 {
@@ -2178,6 +2189,7 @@ func (o options) emitCopy(name string, length, offset, retval, dstBase reg.GPVir
 	if !o.snappy {
 		o.emitRepeat(name+"_emit_copy_short", length, offset, retval, dstBase, end, false)
 	} else {
+		checkDst(dstBase)
 		JMP(LabelRef("two_byte_offset_" + name))
 	}
 
@@ -2191,7 +2203,7 @@ func (o options) emitCopy(name string, length, offset, retval, dstBase reg.GPVir
 	//if length >= 12 || offset >= 2048 {
 	CMPL(length.As32(), U8(12))
 	JGE(LabelRef("emit_copy_three_" + name))
-	if o.maxLen >= 2048 {
+	if o.maxOffset >= 2048 {
 		CMPL(offset.As32(), U32(2048))
 		JGE(LabelRef("emit_copy_three_" + name))
 	}
@@ -2792,7 +2804,7 @@ func (o options) cvtLZ4BlockAsm() {
 	TEXT("cvtLZ4Block"+snap, NOSPLIT, "func(dst, src []byte) (uncompressed int, dstUsed int)")
 	Doc("cvtLZ4Block converts an LZ4 block to S2", "")
 	Pragma("noescape")
-	o.outputMargin = 8
+	o.outputMargin = 10
 	o.maxOffset = math.MaxUint16
 
 	const (
@@ -2957,7 +2969,7 @@ func (o options) cvtLZ4BlockAsm() {
 		if !o.snappy {
 			MOVQ(offset, lastOffset)
 		}
-		o.emitCopy("lz4_s2", ml, offset, nil, dst, LabelRef(name+"loop"))
+		o.emitCopy("lz4_s2", ml, offset, nil, dst, dstEnd, LabelRef(name+"loop"))
 	}
 
 	Label(name + "done")
