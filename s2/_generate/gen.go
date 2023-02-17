@@ -8,7 +8,9 @@ import (
 	"flag"
 	"fmt"
 	"math"
+	"math/rand"
 	"runtime"
+	"strings"
 
 	. "github.com/mmcloughlin/avo/build"
 	"github.com/mmcloughlin/avo/buildtags"
@@ -94,6 +96,7 @@ func main() {
 	o.snappy = false
 	o.outputMargin = 0
 	o.maxLen = math.MaxUint32
+	o.maxOffset = math.MaxUint32 - 1
 	o.genEmitLiteral()
 	o.genEmitRepeat()
 	o.genEmitCopy()
@@ -101,6 +104,10 @@ func main() {
 	o.genEmitCopyNoRepeat()
 	o.snappy = false
 	o.genMatchLen()
+	o.cvtLZ4BlockAsm()
+	o.snappy = true
+	o.cvtLZ4BlockAsm()
+
 	Generate()
 }
 
@@ -142,6 +149,7 @@ type options struct {
 	bmi2         bool
 	skipOutput   bool
 	maxLen       int
+	maxOffset    int
 	outputMargin int // Should be at least 5.
 	maxSkip      int
 }
@@ -158,6 +166,7 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes, m
 	Pragma("noescape")
 
 	o.maxLen = maxLen
+	o.maxOffset = maxLen - 1
 	var literalMaxOverhead = maxLitOverheadFor(maxLen)
 
 	var tableSize = 4 * (1 << tableBits)
@@ -465,7 +474,7 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes, m
 					// Emit as copy instead...
 					Label("repeat_as_copy_" + name)
 				}
-				o.emitCopy("repeat_as_copy_"+name, length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name))
+				o.emitCopy("repeat_as_copy_"+name, length, offsetVal, nil, dst, nil, LabelRef("repeat_end_emit_"+name))
 
 				Label("repeat_end_emit_" + name)
 				// Store new dst and nextEmit
@@ -667,7 +676,7 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes, m
 			// length += 4
 			ADDL(U8(4), length.As32())
 			MOVL(s, nextEmitL) // nextEmit = s
-			o.emitCopy("match_nolit_"+name, length, offset, nil, dst, LabelRef("match_nolit_emitcopy_end_"+name))
+			o.emitCopy("match_nolit_"+name, length, offset, nil, dst, nil, LabelRef("match_nolit_emitcopy_end_"+name))
 			Label("match_nolit_emitcopy_end_" + name)
 
 			// if s >= sLimit { end }
@@ -824,6 +833,7 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, sTableBits, sk
 
 	const sHashBytes = 4
 	o.maxLen = maxLen
+	o.maxOffset = maxLen - 1
 
 	var lTableSize = 4 * (1 << lTableBits)
 	var sTableSize = 4 * (1 << sTableBits)
@@ -1320,7 +1330,7 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, sTableBits, sk
 			// NOT REPEAT
 			{
 				// Check if match is better..
-				if o.maxLen > 65535 {
+				if o.maxOffset > 65535 {
 					CMPL(length.As32(), U8(1))
 					JG(LabelRef("match_length_ok_" + name))
 					CMPL(offset32, U32(65535))
@@ -1341,7 +1351,7 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, sTableBits, sk
 				// length += 4
 				ADDL(U8(4), length.As32())
 				MOVL(s, nextEmitL) // nextEmit = s
-				o.emitCopy("match_nolit_"+name, length, offset, nil, dst, LabelRef("match_nolit_emitcopy_end_"+name))
+				o.emitCopy("match_nolit_"+name, length, offset, nil, dst, nil, LabelRef("match_nolit_emitcopy_end_"+name))
 				// Jumps at end
 			}
 			// REPEAT
@@ -1704,7 +1714,7 @@ func (o options) genEmitLiteral() {
 // stack must have at least 32 bytes.
 // retval will contain emitted bytes, but can be nil if this is not interesting.
 // dstBase and litBase are updated.
-// Uses 2 GP registers. With AVX 4 registers.
+// Uses 2 GP registers.
 // If updateDst is true dstBase will have the updated end pointer and an additional register will be used.
 func (o options) emitLiteral(name string, litLen, retval, dstBase, litBase reg.GPVirtual, end LabelRef, updateDst bool) {
 	n := GP32()
@@ -1930,11 +1940,10 @@ func (o options) emitRepeat(name string, length reg.GPVirtual, offset reg.GPVirt
 			// We have have more than 24 bits
 			// Emit so we have at least 4 bytes left.
 			LEAL(Mem{Base: length, Disp: -(maxRepeat - 4)}, length.As32()) // length -= (maxRepeat - 4)
-			MOVW(U16(7<<2|tagCopy1), Mem{Base: dstBase})                   // dst[0] = 7<<2 | tagCopy1, dst[1] = 0
-			MOVW(U16(65531), Mem{Base: dstBase, Disp: 2})                  // 0xfffb
+			MOVL(U32(7<<2|tagCopy1|(65531<<16)), Mem{Base: dstBase})       // dst[0] = 7<<2 | tagCopy1, dst[1] = 0 dst[2+3] = 65531
 			MOVB(U8(255), Mem{Base: dstBase, Disp: 4})
+			ADDQ(U8(5), dstBase)
 		}
-		ADDQ(U8(5), dstBase)
 		if retval != nil {
 			ADDQ(U8(5), retval)
 		}
@@ -2045,7 +2054,7 @@ func (o options) genEmitCopy() {
 	Load(Param("dst").Base(), dstBase)
 	Load(Param("offset"), offset)
 	Load(Param("length"), length)
-	o.emitCopy("standalone", length, offset, retval, dstBase, LabelRef("gen_emit_copy_end"))
+	o.emitCopy("standalone", length, offset, retval, dstBase, nil, LabelRef("gen_emit_copy_end"))
 	Label("gen_emit_copy_end")
 	Store(retval, ReturnIndex(0))
 	RET()
@@ -2076,7 +2085,7 @@ func (o options) genEmitCopyNoRepeat() {
 	Load(Param("dst").Base(), dstBase)
 	Load(Param("offset"), offset)
 	Load(Param("length"), length)
-	o.emitCopy("standalone_snappy", length, offset, retval, dstBase, "gen_emit_copy_end_snappy")
+	o.emitCopy("standalone_snappy", length, offset, retval, dstBase, nil, "gen_emit_copy_end_snappy")
 	Label("gen_emit_copy_end_snappy")
 	Store(retval, ReturnIndex(0))
 	RET()
@@ -2094,10 +2103,19 @@ const (
 // retval can be nil.
 // Will jump to end label when finished.
 // Uses 2 GP registers.
-func (o options) emitCopy(name string, length, offset, retval, dstBase reg.GPVirtual, end LabelRef) {
+// dstLimit is optional. If set each iteration will check if dstLimit is reached.
+// If so, it will jump to "end" without emitting everything.
+func (o options) emitCopy(name string, length, offset, retval, dstBase, dstLimit reg.GPVirtual, end LabelRef) {
 	Comment("emitCopy")
 
-	if o.maxLen >= 65536 {
+	checkDst := func(reg reg.GPVirtual) {
+		if dstLimit != nil {
+			CMPQ(reg, dstLimit)
+			JAE(end)
+		}
+	}
+
+	if o.maxOffset >= 65536 {
 		//if offset >= 65536 {
 		CMPL(offset.As32(), U32(65536))
 		JL(LabelRef("two_byte_offset_" + name))
@@ -2134,8 +2152,10 @@ func (o options) emitCopy(name string, length, offset, retval, dstBase reg.GPVir
 		// Inline call to emitRepeat. Will jump to end
 		if !o.snappy {
 			o.emitRepeat(name+"_emit_copy", length, offset, retval, dstBase, end, false)
+		} else {
+			checkDst(dstBase)
+			JMP(LabelRef("four_bytes_loop_back_" + name))
 		}
-		JMP(LabelRef("four_bytes_loop_back_" + name))
 
 		Label("four_bytes_remain_" + name)
 		//	if length == 0 {
@@ -2151,10 +2171,10 @@ func (o options) emitCopy(name string, length, offset, retval, dstBase reg.GPVir
 		//	dst[i+3] = uint8(offset >> 16)
 		//	dst[i+4] = uint8(offset >> 24)
 		tmp := GP64()
-		MOVB(U8(tagCopy4), tmp.As8())
+		XORL(tmp.As32(), tmp.As32())
 		// Use displacement to subtract 1 from upshifted length.
 		if !o.skipOutput {
-			LEAL(Mem{Base: tmp, Disp: -(1 << 2), Index: length, Scale: 4}, length.As32())
+			LEAL(Mem{Base: tmp, Disp: -(1 << 2) | tagCopy4, Index: length, Scale: 4}, length.As32())
 			MOVB(length.As8(), Mem{Base: dstBase})
 			MOVL(offset.As32(), Mem{Base: dstBase, Disp: 1})
 		}
@@ -2226,30 +2246,36 @@ func (o options) emitCopy(name string, length, offset, retval, dstBase reg.GPVir
 	// Inline call to emitRepeat. Will jump to end
 	if !o.snappy {
 		o.emitRepeat(name+"_emit_copy_short", length, offset, retval, dstBase, end, false)
+	} else {
+		checkDst(dstBase)
+		JMP(LabelRef("two_byte_offset_" + name))
 	}
-	JMP(LabelRef("two_byte_offset_" + name))
 
 	Label("two_byte_offset_short_" + name)
+
+	// Create a length * 4 as early as possible.
+	length4 := GP32()
+	MOVL(length.As32(), length4)
+	SHLL(U8(2), length4)
+
 	//if length >= 12 || offset >= 2048 {
 	CMPL(length.As32(), U8(12))
 	JGE(LabelRef("emit_copy_three_" + name))
-	if o.maxLen >= 2048 {
+	if o.maxOffset >= 2048 {
 		CMPL(offset.As32(), U32(2048))
 		JGE(LabelRef("emit_copy_three_" + name))
 	}
 	// Emit the remaining copy, encoded as 2 bytes.
 	// dst[1] = uint8(offset)
 	// dst[0] = uint8(offset>>8)<<5 | uint8(length-4)<<2 | tagCopy1
+	// Use scale and displacement to shift and subtract values from length.
 	if !o.skipOutput {
-		tmp := GP64()
-		MOVB(U8(tagCopy1), tmp.As8())
-		// Use scale and displacement to shift and subtract values from length.
-		LEAL(Mem{Base: tmp, Index: length, Scale: 4, Disp: -(4 << 2)}, length.As32())
+		LEAL(Mem{Base: length4, Disp: -(4 << 2) | tagCopy1}, length4.As32())
 		MOVB(offset.As8(), Mem{Base: dstBase, Disp: 1}) // Store offset lower byte
 		SHRL(U8(8), offset.As32())                      // Remove lower
 		SHLL(U8(5), offset.As32())                      // Shift back up
-		ORL(offset.As32(), length.As32())               // OR result
-		MOVB(length.As8(), Mem{Base: dstBase, Disp: 0})
+		ORL(offset.As32(), length4.As32())              // OR result
+		MOVB(length4.As8(), Mem{Base: dstBase, Disp: 0})
 	}
 	if retval != nil {
 		ADDQ(U8(2), retval) // i += 2
@@ -2263,11 +2289,10 @@ func (o options) emitCopy(name string, length, offset, retval, dstBase reg.GPVir
 	//	dst[2] = uint8(offset >> 8)
 	//	dst[1] = uint8(offset)
 	//	dst[0] = uint8(length-1)<<2 | tagCopy2
+
 	if !o.skipOutput {
-		tmp := GP64()
-		MOVB(U8(tagCopy2), tmp.As8())
-		LEAL(Mem{Base: tmp, Disp: -(1 << 2), Index: length, Scale: 4}, length.As32())
-		MOVB(length.As8(), Mem{Base: dstBase})
+		LEAL(Mem{Base: length4, Disp: -(1 << 2) | tagCopy2}, length4.As32())
+		MOVB(length4.As8(), Mem{Base: dstBase})
 		MOVW(offset.As16(), Mem{Base: dstBase, Disp: 1})
 	}
 	//	return 3
@@ -2837,4 +2862,216 @@ func (o options) matchLenAlt(name string, a, b, len reg.GPVirtual, end LabelRef)
 	}
 	JMP(end)
 	return matched
+}
+
+func (o options) cvtLZ4BlockAsm() {
+	snap := "Asm"
+	name := "lz4_s2_"
+	if o.snappy {
+		snap = "SnappyAsm"
+		name = "lz4_snappy_"
+	}
+	TEXT("cvtLZ4Block"+snap, NOSPLIT, "func(dst, src []byte) (uncompressed int, dstUsed int)")
+	Doc("cvtLZ4Block converts an LZ4 block to S2", "")
+	Pragma("noescape")
+	o.outputMargin = 10
+	o.maxOffset = math.MaxUint16
+
+	const (
+		errCorrupt     = -1
+		errDstTooSmall = -2
+	)
+	dst, dstLen, src, srcLen, retval := GP64(), GP64(), GP64(), GP64(), GP64()
+
+	// retval = 0
+	XORQ(retval, retval)
+
+	Load(Param("dst").Base(), dst)
+	Load(Param("dst").Len(), dstLen)
+	Load(Param("src").Base(), src)
+	Load(Param("src").Len(), srcLen)
+	srcEnd, dstEnd := GP64(), GP64()
+	LEAQ(Mem{Base: src, Index: srcLen, Scale: 1, Disp: 0}, srcEnd)
+	LEAQ(Mem{Base: dst, Index: dstLen, Scale: 1, Disp: -o.outputMargin}, dstEnd)
+	lastOffset := GP64()
+	if !o.snappy {
+		XORQ(lastOffset, lastOffset)
+	}
+
+	checkSrc := func(reg reg.GPVirtual) {
+		if debug {
+			name := fmt.Sprintf(name+"ok_%d", rand.Int31())
+
+			CMPQ(reg, srcEnd)
+			JB(LabelRef(name))
+			JMP(LabelRef(name + "corrupt"))
+			Label(name)
+		} else {
+			CMPQ(reg, srcEnd)
+			JAE(LabelRef(name + "corrupt"))
+		}
+	}
+	checkDst := func(reg reg.GPVirtual) {
+		CMPQ(reg, dstEnd)
+		JAE(LabelRef(name + "dstfull"))
+	}
+
+	const lz4MinMatch = 4
+
+	Label(name + "loop")
+	checkSrc(src)
+	checkDst(dst)
+	token := GP64()
+	MOVBQZX(Mem{Base: src}, token)
+	ll, ml := GP64(), GP64()
+	MOVQ(token, ll)
+	MOVQ(token, ml)
+	SHRQ(U8(4), ll)
+	ANDQ(U8(0xf), ml)
+
+	// If upper nibble is 15, literal length is extended
+	{
+		CMPQ(token, U8(0xf0))
+		JB(LabelRef(name + "ll_end"))
+		Label(name + "ll_loop")
+		INCQ(src) // s++
+		checkSrc(src)
+		val := GP64()
+		MOVBQZX(Mem{Base: src}, val)
+		ADDQ(val, ll)
+		CMPQ(val, U8(255))
+		JEQ(LabelRef(name + "ll_loop"))
+		Label(name + "ll_end")
+	}
+
+	// if s+ll >= len(src)
+	endLits := GP64()
+	LEAQ(Mem{Base: src, Index: ll, Scale: 1}, endLits)
+	ADDQ(U8(lz4MinMatch), ml)
+	checkSrc(endLits)
+	INCQ(src) // s++
+	INCQ(endLits)
+	TESTQ(ll, ll)
+	JZ(LabelRef(name + "lits_done"))
+	{
+		dstEnd := GP64()
+		LEAQ(Mem{Base: dst, Index: ll, Scale: 1}, dstEnd)
+		checkDst(dstEnd)
+		o.outputMargin++
+		ADDQ(ll, retval)
+		o.emitLiteral(strings.TrimRight(name, "_"), ll, nil, dst, src, LabelRef(name+"lits_emit_done"), true)
+		o.outputMargin--
+		Label(name + "lits_emit_done")
+		MOVQ(endLits, src)
+	}
+	Label(name + "lits_done")
+	// if s == len(src) && ml == lz4MinMatch
+	CMPQ(src, srcEnd)
+	JNE(LabelRef(name + "match"))
+	CMPQ(ml, U8(lz4MinMatch))
+	JEQ(LabelRef(name + "done"))
+	JMP(LabelRef(name + "corrupt"))
+
+	Label(name + "match")
+	// if s >= len(src)-2 {
+	end := GP64()
+	LEAQ(Mem{Base: src, Disp: 2}, end)
+	checkSrc(end)
+	offset := GP64()
+	MOVWQZX(Mem{Base: src}, offset)
+	MOVQ(end, src) // s = s + 2
+
+	if debug {
+		// if offset == 0 {
+		TESTQ(offset, offset)
+		JNZ(LabelRef(name + "c1"))
+		JMP(LabelRef(name + "corrupt"))
+
+		Label(name + "c1")
+
+		// if int(offset) > uncompressed {
+		CMPQ(offset, retval)
+		JB(LabelRef(name + "c2"))
+		JMP(LabelRef(name + "corrupt"))
+
+		Label(name + "c2")
+
+	} else {
+		// if offset == 0 {
+		TESTQ(offset, offset)
+		JZ(LabelRef(name + "corrupt"))
+
+		// if int(offset) > uncompressed {
+		CMPQ(offset, retval)
+		JA(LabelRef(name + "corrupt"))
+	}
+
+	// if ml == lz4MinMatch+15 {
+	{
+		CMPQ(ml, U8(lz4MinMatch+15))
+		JNE(LabelRef(name + "ml_done"))
+
+		Label(name + "ml_loop")
+		val := GP64()
+		MOVBQZX(Mem{Base: src}, val)
+		INCQ(src)     // s++
+		ADDQ(val, ml) // ml += val
+		checkSrc(src)
+		CMPQ(val, U8(255))
+		JEQ(LabelRef(name + "ml_loop"))
+	}
+	Label(name + "ml_done")
+
+	// uncompressed += ml
+	ADDQ(ml, retval)
+	if !o.snappy {
+		CMPQ(offset, lastOffset)
+		JNE(LabelRef(name + "docopy"))
+		// Offsets can only be 16 bits
+		{
+			// emitRepeat16(dst[d:], offset, ml)
+			o.emitRepeat("lz4_s2", ml, offset, nil, dst, LabelRef(name+"loop"), false)
+		}
+	}
+	Label(name + "docopy")
+	{
+		// emitCopy16(dst[d:], offset, ml)
+		if !o.snappy {
+			MOVQ(offset, lastOffset)
+		}
+		o.emitCopy("lz4_s2", ml, offset, nil, dst, dstEnd, LabelRef(name+"loop"))
+	}
+
+	Label(name + "done")
+	{
+		tmp := GP64()
+		Load(Param("dst").Base(), tmp)
+		SUBQ(tmp, dst)
+		Store(retval, ReturnIndex(0))
+		Store(dst, ReturnIndex(1))
+		RET()
+	}
+	Label(name + "corrupt")
+	{
+		tmp := GP64()
+		if debug {
+			tmp := GP64()
+			Load(Param("dst").Base(), tmp)
+			SUBQ(tmp, dst)
+			Store(dst, ReturnIndex(1))
+		}
+		XORQ(tmp, tmp)
+		LEAQ(Mem{Base: tmp, Disp: errCorrupt}, retval)
+		Store(retval, ReturnIndex(0))
+		RET()
+	}
+
+	Label(name + "dstfull")
+	{
+		tmp := GP64()
+		XORQ(tmp, tmp)
+		LEAQ(Mem{Base: tmp, Disp: errDstTooSmall}, retval)
+		Store(retval, ReturnIndex(0))
+		RET()
+	}
 }
