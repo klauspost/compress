@@ -7,6 +7,8 @@ import (
 	"math/bits"
 )
 
+const hasAmd64Asm = false
+
 // encodeBlock encodes a non-empty src to a guaranteed-large-enough dst. It
 // assumes that the varint-encoded length of the decompressed bytes has already
 // been written.
@@ -311,4 +313,12 @@ func matchLen(a []byte, b []byte) int {
 		}
 	}
 	return len(a) + checked
+}
+
+func cvtLZ4BlockAsm(dst []byte, src []byte) (uncompressed int, dstUsed int) {
+	panic("cvtLZ4BlockAsm should be unreachable")
+}
+
+func cvtLZ4BlockSnappyAsm(dst []byte, src []byte) (uncompressed int, dstUsed int) {
+	panic("cvtLZ4BlockSnappyAsm should be unreachable")
 }
