@@ -193,7 +193,12 @@ func emitCopyNoRepeat(dst []byte, offset int, length int) int
 //go:noescape
 func matchLen(a []byte, b []byte) int
 
-// cvtLZ4BlockAsm converts an LZ4 block to S2
+// cvtLZ4Block converts an LZ4 block to S2
 //
 //go:noescape
 func cvtLZ4BlockAsm(dst []byte, src []byte) (uncompressed int, dstUsed int)
+
+// cvtLZ4Block converts an LZ4 block to S2
+//
+//go:noescape
+func cvtLZ4BlockSnappyAsm(dst []byte, src []byte) (uncompressed int, dstUsed int)

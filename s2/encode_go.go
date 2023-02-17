@@ -318,3 +318,7 @@ func matchLen(a []byte, b []byte) int {
 func cvtLZ4BlockAsm(dst []byte, src []byte) (uncompressed int, dstUsed int) {
 	panic("cvtLZ4BlockAsm should be unreachable")
 }
+
+func cvtLZ4BlockSnappyAsm(dst []byte, src []byte) (uncompressed int, dstUsed int) {
+	panic("cvtLZ4BlockSnappyAsm should be unreachable")
+}

@@ -14,6 +14,7 @@ import (
 
 	"github.com/klauspost/compress/internal/fuzz"
 	"github.com/klauspost/compress/internal/lz4ref"
+	"github.com/klauspost/compress/internal/snapref"
 )
 
 func TestLZ4Converter_ConvertBlock(t *testing.T) {
@@ -47,8 +48,27 @@ func TestLZ4Converter_ConvertBlock(t *testing.T) {
 
 			conv := LZ4Converter{}
 
+			szS := 0
+			out, n, err := conv.ConvertBlockSnappy(s2Dst, lz4Data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if n != len(data) {
+				t.Fatalf("length mismatch: want %d, got %d", len(data), n)
+			}
+			szS = len(out) - hdr
+			t.Log("lz4->snappy size:", szS)
+
+			decom, err := snapref.Decode(nil, out)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(decom, data) {
+				t.Errorf("output mismatch")
+			}
+
 			sz := 0
-			out, n, err := conv.ConvertBlock(s2Dst, lz4Data)
+			out, n, err = conv.ConvertBlock(s2Dst, lz4Data)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -58,7 +78,7 @@ func TestLZ4Converter_ConvertBlock(t *testing.T) {
 			sz = len(out) - hdr
 			t.Log("lz4->s2 size:", sz)
 
-			decom, err := Decode(nil, out)
+			decom, err = Decode(nil, out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -75,6 +95,7 @@ func TestLZ4Converter_ConvertBlock(t *testing.T) {
 			t.Log("s2 (better) size:", sz3)
 
 			t.Log("lz4 -> s2 bytes saved:", len(lz4Data)-sz)
+			t.Log("lz4 -> snappy bytes saved:", len(lz4Data)-szS)
 			t.Log("data -> s2 (default) bytes saved:", len(lz4Data)-sz2)
 			t.Log("data -> s2 (better) bytes saved:", len(lz4Data)-sz3)
 			t.Log("direct data -> s2 (default) compared to converted from lz4:", sz-sz2)
@@ -84,6 +105,7 @@ func TestLZ4Converter_ConvertBlock(t *testing.T) {
 }
 
 func TestLZ4Converter_ConvertBlockSingle(t *testing.T) {
+	// Mainly for analyzing fuzz failures.
 	lz4Data := []byte{0x6f, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x1, 0x0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x30, 0xf, 0x30, 0x30, 0xe4, 0x1f, 0x30, 0x30, 0x30, 0xff, 0xff, 0x30, 0x2f, 0x30, 0x30, 0x30, 0x30, 0xcf, 0x7f, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0xaf, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0xff, 0xff, 0x30, 0xf, 0x30, 0x30, 0x30, 0x1f, 0x30, 0x30, 0x30, 0xff, 0xff, 0x30, 0x30, 0x30, 0x30, 0x30}
 	lz4Decoded := make([]byte, 4<<20)
 	lzN := lz4ref.UncompressBlock(lz4Decoded, lz4Data)
@@ -101,8 +123,27 @@ func TestLZ4Converter_ConvertBlockSingle(t *testing.T) {
 
 	conv := LZ4Converter{}
 
+	szS := 0
+	out, n, err := conv.ConvertBlockSnappy(s2Dst, lz4Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != len(data) {
+		t.Fatalf("length mismatch: want %d, got %d", len(data), n)
+	}
+	szS = len(out) - hdr
+	t.Log("lz4->snappy size:", szS)
+
+	decom, err := snapref.Decode(nil, out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(decom, data) {
+		t.Errorf("output mismatch")
+	}
+
 	sz := 0
-	out, n, err := conv.ConvertBlock(s2Dst, lz4Data)
+	out, n, err = conv.ConvertBlock(s2Dst, lz4Data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +153,7 @@ func TestLZ4Converter_ConvertBlockSingle(t *testing.T) {
 	sz = len(out) - hdr
 	t.Log("lz4->s2 size:", sz)
 
-	decom, err := Decode(nil, out)
+	decom, err = Decode(nil, out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,6 +170,7 @@ func TestLZ4Converter_ConvertBlockSingle(t *testing.T) {
 	t.Log("s2 (better) size:", sz3)
 
 	t.Log("lz4 -> s2 bytes saved:", len(lz4Data)-sz)
+	t.Log("lz4 -> snappy bytes saved:", len(lz4Data)-szS)
 	t.Log("data -> s2 (default) bytes saved:", len(lz4Data)-sz2)
 	t.Log("data -> s2 (better) bytes saved:", len(lz4Data)-sz3)
 	t.Log("direct data -> s2 (default) compared to converted from lz4:", sz-sz2)
@@ -166,6 +208,50 @@ func BenchmarkLZ4Converter_ConvertBlock(b *testing.B) {
 			sz := 0
 			for i := 0; i < b.N; i++ {
 				out, n, err := conv.ConvertBlock(s2Dst[:0], lz4Data)
+				if err != nil {
+					b.Fatal(err)
+				}
+				if n != len(data) {
+					b.Fatalf("length mismatch: want %d, got %d", len(data), n)
+				}
+				sz = len(out)
+			}
+			b.ReportMetric(float64(len(lz4Data)-sz), "b_saved")
+		})
+	}
+}
+
+func BenchmarkLZ4Converter_ConvertBlockSnappy(b *testing.B) {
+	for _, tf := range testFiles {
+		b.Run(tf.label, func(b *testing.B) {
+			if err := downloadBenchmarkFiles(b, tf.filename); err != nil {
+				b.Fatalf("failed to download testdata: %s", err)
+			}
+
+			bDir := filepath.FromSlash(*benchdataDir)
+			data := readFile(b, filepath.Join(bDir, tf.filename))
+			if n := tf.sizeLimit; 0 < n && n < len(data) {
+				data = data[:n]
+			}
+
+			lz4Data := make([]byte, lz4ref.CompressBlockBound(len(data)))
+			n, err := lz4ref.CompressBlock(data, lz4Data)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if n == 0 {
+				b.Skip("incompressible")
+				return
+			}
+			lz4Data = lz4Data[:n]
+			s2Dst := make([]byte, MaxEncodedLen(len(data)))
+			conv := LZ4Converter{}
+			b.ReportAllocs()
+			b.ResetTimer()
+			b.SetBytes(int64(len(data)))
+			sz := 0
+			for i := 0; i < b.N; i++ {
+				out, n, err := conv.ConvertBlockSnappy(s2Dst[:0], lz4Data)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -332,6 +418,31 @@ func FuzzLZ4Block(f *testing.F) {
 			if !bytes.Equal(lz4Decoded, s2Dec) {
 				panic("output mismatch")
 			}
+		}
+		// Snappy....
+		hdr = binary.PutUvarint(converted, uint64(lzN))
+		cV, cN, cErr = conv.ConvertBlockSnappy(converted[:hdr], data)
+		if lzN >= 0 && cErr == nil {
+			if cN != lzN {
+				panic(fmt.Sprintf("uncompressed lz4 size: %d, s2 size: %d", lzN, cN))
+			}
+			lz4Decoded = lz4Decoded[:lzN]
+			// Both success
+			s2Dec, err := snapref.Decode(nil, cV)
+			if err != nil {
+				panic(fmt.Sprintf("block: %#v: %v", cV, err))
+			}
+			if !bytes.Equal(lz4Decoded, s2Dec) {
+				panic("output mismatch")
+			}
+			return
+		}
+		// Snappy can expand a lot due to 64 byte match length limit
+		if lzN >= 0 && cErr != ErrDstTooSmall {
+			panic(fmt.Sprintf("lz4 returned %d, conversion returned %v\n lz4 block: %#v", lzN, cErr, data))
+		}
+		if lzN < 0 && cErr == nil {
+			panic(fmt.Sprintf("lz4 returned %d, conversion returned %v, input: %#v", lzN, cErr, data))
 		}
 	})
 }
