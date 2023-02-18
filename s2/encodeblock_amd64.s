@@ -17098,6 +17098,1008 @@ emit_literal_done_emit_remainder_encodeSnappyBetterBlockAsm8B:
 	MOVQ AX, ret+48(FP)
 	RET
 
+// func calcBlockSize(src []byte) int
+// Requires: BMI, SSE2
+TEXT ·calcBlockSize(SB), $32792-32
+	XORQ AX, AX
+	MOVQ $0x00000100, CX
+	LEAQ 24(SP), DX
+	PXOR X0, X0
+
+zero_loop_calcBlockSize:
+	MOVOU X0, (DX)
+	MOVOU X0, 16(DX)
+	MOVOU X0, 32(DX)
+	MOVOU X0, 48(DX)
+	MOVOU X0, 64(DX)
+	MOVOU X0, 80(DX)
+	MOVOU X0, 96(DX)
+	MOVOU X0, 112(DX)
+	ADDQ  $0x80, DX
+	DECQ  CX
+	JNZ   zero_loop_calcBlockSize
+	MOVL  $0x00000000, 12(SP)
+	MOVQ  src_len+8(FP), CX
+	LEAQ  -9(CX), DX
+	LEAQ  -8(CX), BX
+	MOVL  BX, 8(SP)
+	SHRQ  $0x05, CX
+	SUBL  CX, DX
+	LEAQ  (AX)(DX*1), DX
+	MOVQ  DX, (SP)
+	MOVL  $0x00000001, CX
+	MOVL  CX, 16(SP)
+	MOVQ  src_base+0(FP), DX
+
+search_loop_calcBlockSize:
+	MOVL  CX, BX
+	SUBL  12(SP), BX
+	SHRL  $0x05, BX
+	LEAL  4(CX)(BX*1), BX
+	CMPL  BX, 8(SP)
+	JGE   emit_remainder_calcBlockSize
+	MOVQ  (DX)(CX*1), SI
+	MOVL  BX, 20(SP)
+	MOVQ  $0x0000cf1bbcdcbf9b, R8
+	MOVQ  SI, R9
+	MOVQ  SI, R10
+	SHRQ  $0x08, R10
+	SHLQ  $0x10, R9
+	IMULQ R8, R9
+	SHRQ  $0x33, R9
+	SHLQ  $0x10, R10
+	IMULQ R8, R10
+	SHRQ  $0x33, R10
+	MOVL  24(SP)(R9*4), BX
+	MOVL  24(SP)(R10*4), DI
+	MOVL  CX, 24(SP)(R9*4)
+	LEAL  1(CX), R9
+	MOVL  R9, 24(SP)(R10*4)
+	MOVQ  SI, R9
+	SHRQ  $0x10, R9
+	SHLQ  $0x10, R9
+	IMULQ R8, R9
+	SHRQ  $0x33, R9
+	MOVL  CX, R8
+	SUBL  16(SP), R8
+	MOVL  1(DX)(R8*1), R10
+	MOVQ  SI, R8
+	SHRQ  $0x08, R8
+	CMPL  R8, R10
+	JNE   no_repeat_found_calcBlockSize
+	LEAL  1(CX), SI
+	MOVL  12(SP), BX
+	MOVL  SI, DI
+	SUBL  16(SP), DI
+	JZ    repeat_extend_back_end_calcBlockSize
+
+repeat_extend_back_loop_calcBlockSize:
+	CMPL SI, BX
+	JLE  repeat_extend_back_end_calcBlockSize
+	MOVB -1(DX)(DI*1), R8
+	MOVB -1(DX)(SI*1), R9
+	CMPB R8, R9
+	JNE  repeat_extend_back_end_calcBlockSize
+	LEAL -1(SI), SI
+	DECL DI
+	JNZ  repeat_extend_back_loop_calcBlockSize
+
+repeat_extend_back_end_calcBlockSize:
+	MOVL 12(SP), BX
+	CMPL BX, SI
+	JEQ  emit_literal_done_repeat_emit_calcBlockSize
+	MOVL SI, DI
+	MOVL SI, 12(SP)
+	LEAQ (DX)(BX*1), R8
+	SUBL BX, DI
+	LEAL -1(DI), BX
+	CMPL BX, $0x3c
+	JLT  one_byte_repeat_emit_calcBlockSize
+	CMPL BX, $0x00000100
+	JLT  two_bytes_repeat_emit_calcBlockSize
+	CMPL BX, $0x00010000
+	JLT  three_bytes_repeat_emit_calcBlockSize
+	CMPL BX, $0x01000000
+	JLT  four_bytes_repeat_emit_calcBlockSize
+	ADDQ $0x05, AX
+	JMP  memmove_long_repeat_emit_calcBlockSize
+
+four_bytes_repeat_emit_calcBlockSize:
+	ADDQ $0x04, AX
+	JMP  memmove_long_repeat_emit_calcBlockSize
+
+three_bytes_repeat_emit_calcBlockSize:
+	ADDQ $0x03, AX
+	JMP  memmove_long_repeat_emit_calcBlockSize
+
+two_bytes_repeat_emit_calcBlockSize:
+	ADDQ $0x02, AX
+	CMPL BX, $0x40
+	JL   memmove_repeat_emit_calcBlockSize
+	JMP  memmove_long_repeat_emit_calcBlockSize
+
+one_byte_repeat_emit_calcBlockSize:
+	ADDQ $0x01, AX
+
+memmove_repeat_emit_calcBlockSize:
+	LEAQ (AX)(DI*1), AX
+	JMP  emit_literal_done_repeat_emit_calcBlockSize
+
+memmove_long_repeat_emit_calcBlockSize:
+	LEAQ (AX)(DI*1), AX
+
+emit_literal_done_repeat_emit_calcBlockSize:
+	ADDL $0x05, CX
+	MOVL CX, BX
+	SUBL 16(SP), BX
+	MOVQ src_len+8(FP), DI
+	SUBL CX, DI
+	LEAQ (DX)(CX*1), R8
+	LEAQ (DX)(BX*1), BX
+
+	// matchLen
+	XORL R10, R10
+	CMPL DI, $0x08
+	JL   matchlen_match4_repeat_extend_calcBlockSize
+
+matchlen_loopback_repeat_extend_calcBlockSize:
+	MOVQ  (R8)(R10*1), R9
+	XORQ  (BX)(R10*1), R9
+	TESTQ R9, R9
+	JZ    matchlen_loop_repeat_extend_calcBlockSize
+
+#ifdef GOAMD64_v3
+	TZCNTQ R9, R9
+
+#else
+	BSFQ R9, R9
+
+#endif
+	SARQ $0x03, R9
+	LEAL (R10)(R9*1), R10
+	JMP  repeat_extend_forward_end_calcBlockSize
+
+matchlen_loop_repeat_extend_calcBlockSize:
+	LEAL -8(DI), DI
+	LEAL 8(R10), R10
+	CMPL DI, $0x08
+	JGE  matchlen_loopback_repeat_extend_calcBlockSize
+	JZ   repeat_extend_forward_end_calcBlockSize
+
+matchlen_match4_repeat_extend_calcBlockSize:
+	CMPL DI, $0x04
+	JL   matchlen_match2_repeat_extend_calcBlockSize
+	MOVL (R8)(R10*1), R9
+	CMPL (BX)(R10*1), R9
+	JNE  matchlen_match2_repeat_extend_calcBlockSize
+	SUBL $0x04, DI
+	LEAL 4(R10), R10
+
+matchlen_match2_repeat_extend_calcBlockSize:
+	CMPL DI, $0x02
+	JL   matchlen_match1_repeat_extend_calcBlockSize
+	MOVW (R8)(R10*1), R9
+	CMPW (BX)(R10*1), R9
+	JNE  matchlen_match1_repeat_extend_calcBlockSize
+	SUBL $0x02, DI
+	LEAL 2(R10), R10
+
+matchlen_match1_repeat_extend_calcBlockSize:
+	CMPL DI, $0x01
+	JL   repeat_extend_forward_end_calcBlockSize
+	MOVB (R8)(R10*1), R9
+	CMPB (BX)(R10*1), R9
+	JNE  repeat_extend_forward_end_calcBlockSize
+	LEAL 1(R10), R10
+
+repeat_extend_forward_end_calcBlockSize:
+	ADDL R10, CX
+	MOVL CX, BX
+	SUBL SI, BX
+	MOVL 16(SP), SI
+
+	// emitCopy
+	CMPL SI, $0x00010000
+	JL   two_byte_offset_repeat_as_copy_calcBlockSize
+
+four_bytes_loop_back_repeat_as_copy_calcBlockSize:
+	CMPL BX, $0x40
+	JLE  four_bytes_remain_repeat_as_copy_calcBlockSize
+	LEAL -64(BX), BX
+	ADDQ $0x05, AX
+	CMPL BX, $0x04
+	JL   four_bytes_remain_repeat_as_copy_calcBlockSize
+	JMP  four_bytes_loop_back_repeat_as_copy_calcBlockSize
+
+four_bytes_remain_repeat_as_copy_calcBlockSize:
+	TESTL BX, BX
+	JZ    repeat_end_emit_calcBlockSize
+	XORL  BX, BX
+	ADDQ  $0x05, AX
+	JMP   repeat_end_emit_calcBlockSize
+
+two_byte_offset_repeat_as_copy_calcBlockSize:
+	CMPL BX, $0x40
+	JLE  two_byte_offset_short_repeat_as_copy_calcBlockSize
+	LEAL -60(BX), BX
+	ADDQ $0x03, AX
+	JMP  two_byte_offset_repeat_as_copy_calcBlockSize
+
+two_byte_offset_short_repeat_as_copy_calcBlockSize:
+	MOVL BX, DI
+	SHLL $0x02, DI
+	CMPL BX, $0x0c
+	JGE  emit_copy_three_repeat_as_copy_calcBlockSize
+	CMPL SI, $0x00000800
+	JGE  emit_copy_three_repeat_as_copy_calcBlockSize
+	ADDQ $0x02, AX
+	JMP  repeat_end_emit_calcBlockSize
+
+emit_copy_three_repeat_as_copy_calcBlockSize:
+	ADDQ $0x03, AX
+
+repeat_end_emit_calcBlockSize:
+	MOVL CX, 12(SP)
+	JMP  search_loop_calcBlockSize
+
+no_repeat_found_calcBlockSize:
+	CMPL (DX)(BX*1), SI
+	JEQ  candidate_match_calcBlockSize
+	SHRQ $0x08, SI
+	MOVL 24(SP)(R9*4), BX
+	LEAL 2(CX), R8
+	CMPL (DX)(DI*1), SI
+	JEQ  candidate2_match_calcBlockSize
+	MOVL R8, 24(SP)(R9*4)
+	SHRQ $0x08, SI
+	CMPL (DX)(BX*1), SI
+	JEQ  candidate3_match_calcBlockSize
+	MOVL 20(SP), CX
+	JMP  search_loop_calcBlockSize
+
+candidate3_match_calcBlockSize:
+	ADDL $0x02, CX
+	JMP  candidate_match_calcBlockSize
+
+candidate2_match_calcBlockSize:
+	MOVL R8, 24(SP)(R9*4)
+	INCL CX
+	MOVL DI, BX
+
+candidate_match_calcBlockSize:
+	MOVL  12(SP), SI
+	TESTL BX, BX
+	JZ    match_extend_back_end_calcBlockSize
+
+match_extend_back_loop_calcBlockSize:
+	CMPL CX, SI
+	JLE  match_extend_back_end_calcBlockSize
+	MOVB -1(DX)(BX*1), DI
+	MOVB -1(DX)(CX*1), R8
+	CMPB DI, R8
+	JNE  match_extend_back_end_calcBlockSize
+	LEAL -1(CX), CX
+	DECL BX
+	JZ   match_extend_back_end_calcBlockSize
+	JMP  match_extend_back_loop_calcBlockSize
+
+match_extend_back_end_calcBlockSize:
+	MOVL CX, SI
+	SUBL 12(SP), SI
+	LEAQ 5(AX)(SI*1), SI
+	CMPQ SI, (SP)
+	JL   match_dst_size_check_calcBlockSize
+	MOVQ $0x00000000, ret+24(FP)
+	RET
+
+match_dst_size_check_calcBlockSize:
+	MOVL CX, SI
+	MOVL 12(SP), DI
+	CMPL DI, SI
+	JEQ  emit_literal_done_match_emit_calcBlockSize
+	MOVL SI, R8
+	MOVL SI, 12(SP)
+	LEAQ (DX)(DI*1), SI
+	SUBL DI, R8
+	LEAL -1(R8), SI
+	CMPL SI, $0x3c
+	JLT  one_byte_match_emit_calcBlockSize
+	CMPL SI, $0x00000100
+	JLT  two_bytes_match_emit_calcBlockSize
+	CMPL SI, $0x00010000
+	JLT  three_bytes_match_emit_calcBlockSize
+	CMPL SI, $0x01000000
+	JLT  four_bytes_match_emit_calcBlockSize
+	ADDQ $0x05, AX
+	JMP  memmove_long_match_emit_calcBlockSize
+
+four_bytes_match_emit_calcBlockSize:
+	ADDQ $0x04, AX
+	JMP  memmove_long_match_emit_calcBlockSize
+
+three_bytes_match_emit_calcBlockSize:
+	ADDQ $0x03, AX
+	JMP  memmove_long_match_emit_calcBlockSize
+
+two_bytes_match_emit_calcBlockSize:
+	ADDQ $0x02, AX
+	CMPL SI, $0x40
+	JL   memmove_match_emit_calcBlockSize
+	JMP  memmove_long_match_emit_calcBlockSize
+
+one_byte_match_emit_calcBlockSize:
+	ADDQ $0x01, AX
+
+memmove_match_emit_calcBlockSize:
+	LEAQ (AX)(R8*1), AX
+	JMP  emit_literal_done_match_emit_calcBlockSize
+
+memmove_long_match_emit_calcBlockSize:
+	LEAQ (AX)(R8*1), AX
+
+emit_literal_done_match_emit_calcBlockSize:
+match_nolit_loop_calcBlockSize:
+	MOVL CX, SI
+	SUBL BX, SI
+	MOVL SI, 16(SP)
+	ADDL $0x04, CX
+	ADDL $0x04, BX
+	MOVQ src_len+8(FP), SI
+	SUBL CX, SI
+	LEAQ (DX)(CX*1), DI
+	LEAQ (DX)(BX*1), BX
+
+	// matchLen
+	XORL R9, R9
+	CMPL SI, $0x08
+	JL   matchlen_match4_match_nolit_calcBlockSize
+
+matchlen_loopback_match_nolit_calcBlockSize:
+	MOVQ  (DI)(R9*1), R8
+	XORQ  (BX)(R9*1), R8
+	TESTQ R8, R8
+	JZ    matchlen_loop_match_nolit_calcBlockSize
+
+#ifdef GOAMD64_v3
+	TZCNTQ R8, R8
+
+#else
+	BSFQ R8, R8
+
+#endif
+	SARQ $0x03, R8
+	LEAL (R9)(R8*1), R9
+	JMP  match_nolit_end_calcBlockSize
+
+matchlen_loop_match_nolit_calcBlockSize:
+	LEAL -8(SI), SI
+	LEAL 8(R9), R9
+	CMPL SI, $0x08
+	JGE  matchlen_loopback_match_nolit_calcBlockSize
+	JZ   match_nolit_end_calcBlockSize
+
+matchlen_match4_match_nolit_calcBlockSize:
+	CMPL SI, $0x04
+	JL   matchlen_match2_match_nolit_calcBlockSize
+	MOVL (DI)(R9*1), R8
+	CMPL (BX)(R9*1), R8
+	JNE  matchlen_match2_match_nolit_calcBlockSize
+	SUBL $0x04, SI
+	LEAL 4(R9), R9
+
+matchlen_match2_match_nolit_calcBlockSize:
+	CMPL SI, $0x02
+	JL   matchlen_match1_match_nolit_calcBlockSize
+	MOVW (DI)(R9*1), R8
+	CMPW (BX)(R9*1), R8
+	JNE  matchlen_match1_match_nolit_calcBlockSize
+	SUBL $0x02, SI
+	LEAL 2(R9), R9
+
+matchlen_match1_match_nolit_calcBlockSize:
+	CMPL SI, $0x01
+	JL   match_nolit_end_calcBlockSize
+	MOVB (DI)(R9*1), R8
+	CMPB (BX)(R9*1), R8
+	JNE  match_nolit_end_calcBlockSize
+	LEAL 1(R9), R9
+
+match_nolit_end_calcBlockSize:
+	ADDL R9, CX
+	MOVL 16(SP), BX
+	ADDL $0x04, R9
+	MOVL CX, 12(SP)
+
+	// emitCopy
+	CMPL BX, $0x00010000
+	JL   two_byte_offset_match_nolit_calcBlockSize
+
+four_bytes_loop_back_match_nolit_calcBlockSize:
+	CMPL R9, $0x40
+	JLE  four_bytes_remain_match_nolit_calcBlockSize
+	LEAL -64(R9), R9
+	ADDQ $0x05, AX
+	CMPL R9, $0x04
+	JL   four_bytes_remain_match_nolit_calcBlockSize
+	JMP  four_bytes_loop_back_match_nolit_calcBlockSize
+
+four_bytes_remain_match_nolit_calcBlockSize:
+	TESTL R9, R9
+	JZ    match_nolit_emitcopy_end_calcBlockSize
+	XORL  BX, BX
+	ADDQ  $0x05, AX
+	JMP   match_nolit_emitcopy_end_calcBlockSize
+
+two_byte_offset_match_nolit_calcBlockSize:
+	CMPL R9, $0x40
+	JLE  two_byte_offset_short_match_nolit_calcBlockSize
+	LEAL -60(R9), R9
+	ADDQ $0x03, AX
+	JMP  two_byte_offset_match_nolit_calcBlockSize
+
+two_byte_offset_short_match_nolit_calcBlockSize:
+	MOVL R9, SI
+	SHLL $0x02, SI
+	CMPL R9, $0x0c
+	JGE  emit_copy_three_match_nolit_calcBlockSize
+	CMPL BX, $0x00000800
+	JGE  emit_copy_three_match_nolit_calcBlockSize
+	ADDQ $0x02, AX
+	JMP  match_nolit_emitcopy_end_calcBlockSize
+
+emit_copy_three_match_nolit_calcBlockSize:
+	ADDQ $0x03, AX
+
+match_nolit_emitcopy_end_calcBlockSize:
+	CMPL CX, 8(SP)
+	JGE  emit_remainder_calcBlockSize
+	MOVQ -2(DX)(CX*1), SI
+	CMPQ AX, (SP)
+	JL   match_nolit_dst_ok_calcBlockSize
+	MOVQ $0x00000000, ret+24(FP)
+	RET
+
+match_nolit_dst_ok_calcBlockSize:
+	MOVQ  $0x0000cf1bbcdcbf9b, R8
+	MOVQ  SI, DI
+	SHRQ  $0x10, SI
+	MOVQ  SI, BX
+	SHLQ  $0x10, DI
+	IMULQ R8, DI
+	SHRQ  $0x33, DI
+	SHLQ  $0x10, BX
+	IMULQ R8, BX
+	SHRQ  $0x33, BX
+	LEAL  -2(CX), R8
+	LEAQ  24(SP)(BX*4), R9
+	MOVL  (R9), BX
+	MOVL  R8, 24(SP)(DI*4)
+	MOVL  CX, (R9)
+	CMPL  (DX)(BX*1), SI
+	JEQ   match_nolit_loop_calcBlockSize
+	INCL  CX
+	JMP   search_loop_calcBlockSize
+
+emit_remainder_calcBlockSize:
+	MOVQ src_len+8(FP), CX
+	SUBL 12(SP), CX
+	LEAQ 5(AX)(CX*1), CX
+	CMPQ CX, (SP)
+	JL   emit_remainder_ok_calcBlockSize
+	MOVQ $0x00000000, ret+24(FP)
+	RET
+
+emit_remainder_ok_calcBlockSize:
+	MOVQ src_len+8(FP), CX
+	MOVL 12(SP), BX
+	CMPL BX, CX
+	JEQ  emit_literal_done_emit_remainder_calcBlockSize
+	MOVL CX, SI
+	MOVL CX, 12(SP)
+	LEAQ (DX)(BX*1), CX
+	SUBL BX, SI
+	LEAL -1(SI), CX
+	CMPL CX, $0x3c
+	JLT  one_byte_emit_remainder_calcBlockSize
+	CMPL CX, $0x00000100
+	JLT  two_bytes_emit_remainder_calcBlockSize
+	CMPL CX, $0x00010000
+	JLT  three_bytes_emit_remainder_calcBlockSize
+	CMPL CX, $0x01000000
+	JLT  four_bytes_emit_remainder_calcBlockSize
+	ADDQ $0x05, AX
+	JMP  memmove_long_emit_remainder_calcBlockSize
+
+four_bytes_emit_remainder_calcBlockSize:
+	ADDQ $0x04, AX
+	JMP  memmove_long_emit_remainder_calcBlockSize
+
+three_bytes_emit_remainder_calcBlockSize:
+	ADDQ $0x03, AX
+	JMP  memmove_long_emit_remainder_calcBlockSize
+
+two_bytes_emit_remainder_calcBlockSize:
+	ADDQ $0x02, AX
+	CMPL CX, $0x40
+	JL   memmove_emit_remainder_calcBlockSize
+	JMP  memmove_long_emit_remainder_calcBlockSize
+
+one_byte_emit_remainder_calcBlockSize:
+	ADDQ $0x01, AX
+
+memmove_emit_remainder_calcBlockSize:
+	LEAQ (AX)(SI*1), AX
+	JMP  emit_literal_done_emit_remainder_calcBlockSize
+
+memmove_long_emit_remainder_calcBlockSize:
+	LEAQ (AX)(SI*1), AX
+
+emit_literal_done_emit_remainder_calcBlockSize:
+	MOVQ AX, ret+24(FP)
+	RET
+
+// func calcBlockSizeSmall(src []byte) int
+// Requires: BMI, SSE2
+TEXT ·calcBlockSizeSmall(SB), $2072-32
+	XORQ AX, AX
+	MOVQ $0x00000010, CX
+	LEAQ 24(SP), DX
+	PXOR X0, X0
+
+zero_loop_calcBlockSizeSmall:
+	MOVOU X0, (DX)
+	MOVOU X0, 16(DX)
+	MOVOU X0, 32(DX)
+	MOVOU X0, 48(DX)
+	MOVOU X0, 64(DX)
+	MOVOU X0, 80(DX)
+	MOVOU X0, 96(DX)
+	MOVOU X0, 112(DX)
+	ADDQ  $0x80, DX
+	DECQ  CX
+	JNZ   zero_loop_calcBlockSizeSmall
+	MOVL  $0x00000000, 12(SP)
+	MOVQ  src_len+8(FP), CX
+	LEAQ  -9(CX), DX
+	LEAQ  -8(CX), BX
+	MOVL  BX, 8(SP)
+	SHRQ  $0x05, CX
+	SUBL  CX, DX
+	LEAQ  (AX)(DX*1), DX
+	MOVQ  DX, (SP)
+	MOVL  $0x00000001, CX
+	MOVL  CX, 16(SP)
+	MOVQ  src_base+0(FP), DX
+
+search_loop_calcBlockSizeSmall:
+	MOVL  CX, BX
+	SUBL  12(SP), BX
+	SHRL  $0x04, BX
+	LEAL  4(CX)(BX*1), BX
+	CMPL  BX, 8(SP)
+	JGE   emit_remainder_calcBlockSizeSmall
+	MOVQ  (DX)(CX*1), SI
+	MOVL  BX, 20(SP)
+	MOVQ  $0x9e3779b1, R8
+	MOVQ  SI, R9
+	MOVQ  SI, R10
+	SHRQ  $0x08, R10
+	SHLQ  $0x20, R9
+	IMULQ R8, R9
+	SHRQ  $0x37, R9
+	SHLQ  $0x20, R10
+	IMULQ R8, R10
+	SHRQ  $0x37, R10
+	MOVL  24(SP)(R9*4), BX
+	MOVL  24(SP)(R10*4), DI
+	MOVL  CX, 24(SP)(R9*4)
+	LEAL  1(CX), R9
+	MOVL  R9, 24(SP)(R10*4)
+	MOVQ  SI, R9
+	SHRQ  $0x10, R9
+	SHLQ  $0x20, R9
+	IMULQ R8, R9
+	SHRQ  $0x37, R9
+	MOVL  CX, R8
+	SUBL  16(SP), R8
+	MOVL  1(DX)(R8*1), R10
+	MOVQ  SI, R8
+	SHRQ  $0x08, R8
+	CMPL  R8, R10
+	JNE   no_repeat_found_calcBlockSizeSmall
+	LEAL  1(CX), SI
+	MOVL  12(SP), BX
+	MOVL  SI, DI
+	SUBL  16(SP), DI
+	JZ    repeat_extend_back_end_calcBlockSizeSmall
+
+repeat_extend_back_loop_calcBlockSizeSmall:
+	CMPL SI, BX
+	JLE  repeat_extend_back_end_calcBlockSizeSmall
+	MOVB -1(DX)(DI*1), R8
+	MOVB -1(DX)(SI*1), R9
+	CMPB R8, R9
+	JNE  repeat_extend_back_end_calcBlockSizeSmall
+	LEAL -1(SI), SI
+	DECL DI
+	JNZ  repeat_extend_back_loop_calcBlockSizeSmall
+
+repeat_extend_back_end_calcBlockSizeSmall:
+	MOVL 12(SP), BX
+	CMPL BX, SI
+	JEQ  emit_literal_done_repeat_emit_calcBlockSizeSmall
+	MOVL SI, DI
+	MOVL SI, 12(SP)
+	LEAQ (DX)(BX*1), R8
+	SUBL BX, DI
+	LEAL -1(DI), BX
+	CMPL BX, $0x3c
+	JLT  one_byte_repeat_emit_calcBlockSizeSmall
+	CMPL BX, $0x00000100
+	JLT  two_bytes_repeat_emit_calcBlockSizeSmall
+	ADDQ $0x03, AX
+	JMP  memmove_long_repeat_emit_calcBlockSizeSmall
+
+two_bytes_repeat_emit_calcBlockSizeSmall:
+	ADDQ $0x02, AX
+	CMPL BX, $0x40
+	JL   memmove_repeat_emit_calcBlockSizeSmall
+	JMP  memmove_long_repeat_emit_calcBlockSizeSmall
+
+one_byte_repeat_emit_calcBlockSizeSmall:
+	ADDQ $0x01, AX
+
+memmove_repeat_emit_calcBlockSizeSmall:
+	LEAQ (AX)(DI*1), AX
+	JMP  emit_literal_done_repeat_emit_calcBlockSizeSmall
+
+memmove_long_repeat_emit_calcBlockSizeSmall:
+	LEAQ (AX)(DI*1), AX
+
+emit_literal_done_repeat_emit_calcBlockSizeSmall:
+	ADDL $0x05, CX
+	MOVL CX, BX
+	SUBL 16(SP), BX
+	MOVQ src_len+8(FP), DI
+	SUBL CX, DI
+	LEAQ (DX)(CX*1), R8
+	LEAQ (DX)(BX*1), BX
+
+	// matchLen
+	XORL R10, R10
+	CMPL DI, $0x08
+	JL   matchlen_match4_repeat_extend_calcBlockSizeSmall
+
+matchlen_loopback_repeat_extend_calcBlockSizeSmall:
+	MOVQ  (R8)(R10*1), R9
+	XORQ  (BX)(R10*1), R9
+	TESTQ R9, R9
+	JZ    matchlen_loop_repeat_extend_calcBlockSizeSmall
+
+#ifdef GOAMD64_v3
+	TZCNTQ R9, R9
+
+#else
+	BSFQ R9, R9
+
+#endif
+	SARQ $0x03, R9
+	LEAL (R10)(R9*1), R10
+	JMP  repeat_extend_forward_end_calcBlockSizeSmall
+
+matchlen_loop_repeat_extend_calcBlockSizeSmall:
+	LEAL -8(DI), DI
+	LEAL 8(R10), R10
+	CMPL DI, $0x08
+	JGE  matchlen_loopback_repeat_extend_calcBlockSizeSmall
+	JZ   repeat_extend_forward_end_calcBlockSizeSmall
+
+matchlen_match4_repeat_extend_calcBlockSizeSmall:
+	CMPL DI, $0x04
+	JL   matchlen_match2_repeat_extend_calcBlockSizeSmall
+	MOVL (R8)(R10*1), R9
+	CMPL (BX)(R10*1), R9
+	JNE  matchlen_match2_repeat_extend_calcBlockSizeSmall
+	SUBL $0x04, DI
+	LEAL 4(R10), R10
+
+matchlen_match2_repeat_extend_calcBlockSizeSmall:
+	CMPL DI, $0x02
+	JL   matchlen_match1_repeat_extend_calcBlockSizeSmall
+	MOVW (R8)(R10*1), R9
+	CMPW (BX)(R10*1), R9
+	JNE  matchlen_match1_repeat_extend_calcBlockSizeSmall
+	SUBL $0x02, DI
+	LEAL 2(R10), R10
+
+matchlen_match1_repeat_extend_calcBlockSizeSmall:
+	CMPL DI, $0x01
+	JL   repeat_extend_forward_end_calcBlockSizeSmall
+	MOVB (R8)(R10*1), R9
+	CMPB (BX)(R10*1), R9
+	JNE  repeat_extend_forward_end_calcBlockSizeSmall
+	LEAL 1(R10), R10
+
+repeat_extend_forward_end_calcBlockSizeSmall:
+	ADDL R10, CX
+	MOVL CX, BX
+	SUBL SI, BX
+	MOVL 16(SP), SI
+
+	// emitCopy
+two_byte_offset_repeat_as_copy_calcBlockSizeSmall:
+	CMPL BX, $0x40
+	JLE  two_byte_offset_short_repeat_as_copy_calcBlockSizeSmall
+	LEAL -60(BX), BX
+	ADDQ $0x03, AX
+	JMP  two_byte_offset_repeat_as_copy_calcBlockSizeSmall
+
+two_byte_offset_short_repeat_as_copy_calcBlockSizeSmall:
+	MOVL BX, SI
+	SHLL $0x02, SI
+	CMPL BX, $0x0c
+	JGE  emit_copy_three_repeat_as_copy_calcBlockSizeSmall
+	ADDQ $0x02, AX
+	JMP  repeat_end_emit_calcBlockSizeSmall
+
+emit_copy_three_repeat_as_copy_calcBlockSizeSmall:
+	ADDQ $0x03, AX
+
+repeat_end_emit_calcBlockSizeSmall:
+	MOVL CX, 12(SP)
+	JMP  search_loop_calcBlockSizeSmall
+
+no_repeat_found_calcBlockSizeSmall:
+	CMPL (DX)(BX*1), SI
+	JEQ  candidate_match_calcBlockSizeSmall
+	SHRQ $0x08, SI
+	MOVL 24(SP)(R9*4), BX
+	LEAL 2(CX), R8
+	CMPL (DX)(DI*1), SI
+	JEQ  candidate2_match_calcBlockSizeSmall
+	MOVL R8, 24(SP)(R9*4)
+	SHRQ $0x08, SI
+	CMPL (DX)(BX*1), SI
+	JEQ  candidate3_match_calcBlockSizeSmall
+	MOVL 20(SP), CX
+	JMP  search_loop_calcBlockSizeSmall
+
+candidate3_match_calcBlockSizeSmall:
+	ADDL $0x02, CX
+	JMP  candidate_match_calcBlockSizeSmall
+
+candidate2_match_calcBlockSizeSmall:
+	MOVL R8, 24(SP)(R9*4)
+	INCL CX
+	MOVL DI, BX
+
+candidate_match_calcBlockSizeSmall:
+	MOVL  12(SP), SI
+	TESTL BX, BX
+	JZ    match_extend_back_end_calcBlockSizeSmall
+
+match_extend_back_loop_calcBlockSizeSmall:
+	CMPL CX, SI
+	JLE  match_extend_back_end_calcBlockSizeSmall
+	MOVB -1(DX)(BX*1), DI
+	MOVB -1(DX)(CX*1), R8
+	CMPB DI, R8
+	JNE  match_extend_back_end_calcBlockSizeSmall
+	LEAL -1(CX), CX
+	DECL BX
+	JZ   match_extend_back_end_calcBlockSizeSmall
+	JMP  match_extend_back_loop_calcBlockSizeSmall
+
+match_extend_back_end_calcBlockSizeSmall:
+	MOVL CX, SI
+	SUBL 12(SP), SI
+	LEAQ 3(AX)(SI*1), SI
+	CMPQ SI, (SP)
+	JL   match_dst_size_check_calcBlockSizeSmall
+	MOVQ $0x00000000, ret+24(FP)
+	RET
+
+match_dst_size_check_calcBlockSizeSmall:
+	MOVL CX, SI
+	MOVL 12(SP), DI
+	CMPL DI, SI
+	JEQ  emit_literal_done_match_emit_calcBlockSizeSmall
+	MOVL SI, R8
+	MOVL SI, 12(SP)
+	LEAQ (DX)(DI*1), SI
+	SUBL DI, R8
+	LEAL -1(R8), SI
+	CMPL SI, $0x3c
+	JLT  one_byte_match_emit_calcBlockSizeSmall
+	CMPL SI, $0x00000100
+	JLT  two_bytes_match_emit_calcBlockSizeSmall
+	ADDQ $0x03, AX
+	JMP  memmove_long_match_emit_calcBlockSizeSmall
+
+two_bytes_match_emit_calcBlockSizeSmall:
+	ADDQ $0x02, AX
+	CMPL SI, $0x40
+	JL   memmove_match_emit_calcBlockSizeSmall
+	JMP  memmove_long_match_emit_calcBlockSizeSmall
+
+one_byte_match_emit_calcBlockSizeSmall:
+	ADDQ $0x01, AX
+
+memmove_match_emit_calcBlockSizeSmall:
+	LEAQ (AX)(R8*1), AX
+	JMP  emit_literal_done_match_emit_calcBlockSizeSmall
+
+memmove_long_match_emit_calcBlockSizeSmall:
+	LEAQ (AX)(R8*1), AX
+
+emit_literal_done_match_emit_calcBlockSizeSmall:
+match_nolit_loop_calcBlockSizeSmall:
+	MOVL CX, SI
+	SUBL BX, SI
+	MOVL SI, 16(SP)
+	ADDL $0x04, CX
+	ADDL $0x04, BX
+	MOVQ src_len+8(FP), SI
+	SUBL CX, SI
+	LEAQ (DX)(CX*1), DI
+	LEAQ (DX)(BX*1), BX
+
+	// matchLen
+	XORL R9, R9
+	CMPL SI, $0x08
+	JL   matchlen_match4_match_nolit_calcBlockSizeSmall
+
+matchlen_loopback_match_nolit_calcBlockSizeSmall:
+	MOVQ  (DI)(R9*1), R8
+	XORQ  (BX)(R9*1), R8
+	TESTQ R8, R8
+	JZ    matchlen_loop_match_nolit_calcBlockSizeSmall
+
+#ifdef GOAMD64_v3
+	TZCNTQ R8, R8
+
+#else
+	BSFQ R8, R8
+
+#endif
+	SARQ $0x03, R8
+	LEAL (R9)(R8*1), R9
+	JMP  match_nolit_end_calcBlockSizeSmall
+
+matchlen_loop_match_nolit_calcBlockSizeSmall:
+	LEAL -8(SI), SI
+	LEAL 8(R9), R9
+	CMPL SI, $0x08
+	JGE  matchlen_loopback_match_nolit_calcBlockSizeSmall
+	JZ   match_nolit_end_calcBlockSizeSmall
+
+matchlen_match4_match_nolit_calcBlockSizeSmall:
+	CMPL SI, $0x04
+	JL   matchlen_match2_match_nolit_calcBlockSizeSmall
+	MOVL (DI)(R9*1), R8
+	CMPL (BX)(R9*1), R8
+	JNE  matchlen_match2_match_nolit_calcBlockSizeSmall
+	SUBL $0x04, SI
+	LEAL 4(R9), R9
+
+matchlen_match2_match_nolit_calcBlockSizeSmall:
+	CMPL SI, $0x02
+	JL   matchlen_match1_match_nolit_calcBlockSizeSmall
+	MOVW (DI)(R9*1), R8
+	CMPW (BX)(R9*1), R8
+	JNE  matchlen_match1_match_nolit_calcBlockSizeSmall
+	SUBL $0x02, SI
+	LEAL 2(R9), R9
+
+matchlen_match1_match_nolit_calcBlockSizeSmall:
+	CMPL SI, $0x01
+	JL   match_nolit_end_calcBlockSizeSmall
+	MOVB (DI)(R9*1), R8
+	CMPB (BX)(R9*1), R8
+	JNE  match_nolit_end_calcBlockSizeSmall
+	LEAL 1(R9), R9
+
+match_nolit_end_calcBlockSizeSmall:
+	ADDL R9, CX
+	MOVL 16(SP), BX
+	ADDL $0x04, R9
+	MOVL CX, 12(SP)
+
+	// emitCopy
+two_byte_offset_match_nolit_calcBlockSizeSmall:
+	CMPL R9, $0x40
+	JLE  two_byte_offset_short_match_nolit_calcBlockSizeSmall
+	LEAL -60(R9), R9
+	ADDQ $0x03, AX
+	JMP  two_byte_offset_match_nolit_calcBlockSizeSmall
+
+two_byte_offset_short_match_nolit_calcBlockSizeSmall:
+	MOVL R9, BX
+	SHLL $0x02, BX
+	CMPL R9, $0x0c
+	JGE  emit_copy_three_match_nolit_calcBlockSizeSmall
+	ADDQ $0x02, AX
+	JMP  match_nolit_emitcopy_end_calcBlockSizeSmall
+
+emit_copy_three_match_nolit_calcBlockSizeSmall:
+	ADDQ $0x03, AX
+
+match_nolit_emitcopy_end_calcBlockSizeSmall:
+	CMPL CX, 8(SP)
+	JGE  emit_remainder_calcBlockSizeSmall
+	MOVQ -2(DX)(CX*1), SI
+	CMPQ AX, (SP)
+	JL   match_nolit_dst_ok_calcBlockSizeSmall
+	MOVQ $0x00000000, ret+24(FP)
+	RET
+
+match_nolit_dst_ok_calcBlockSizeSmall:
+	MOVQ  $0x9e3779b1, R8
+	MOVQ  SI, DI
+	SHRQ  $0x10, SI
+	MOVQ  SI, BX
+	SHLQ  $0x20, DI
+	IMULQ R8, DI
+	SHRQ  $0x37, DI
+	SHLQ  $0x20, BX
+	IMULQ R8, BX
+	SHRQ  $0x37, BX
+	LEAL  -2(CX), R8
+	LEAQ  24(SP)(BX*4), R9
+	MOVL  (R9), BX
+	MOVL  R8, 24(SP)(DI*4)
+	MOVL  CX, (R9)
+	CMPL  (DX)(BX*1), SI
+	JEQ   match_nolit_loop_calcBlockSizeSmall
+	INCL  CX
+	JMP   search_loop_calcBlockSizeSmall
+
+emit_remainder_calcBlockSizeSmall:
+	MOVQ src_len+8(FP), CX
+	SUBL 12(SP), CX
+	LEAQ 3(AX)(CX*1), CX
+	CMPQ CX, (SP)
+	JL   emit_remainder_ok_calcBlockSizeSmall
+	MOVQ $0x00000000, ret+24(FP)
+	RET
+
+emit_remainder_ok_calcBlockSizeSmall:
+	MOVQ src_len+8(FP), CX
+	MOVL 12(SP), BX
+	CMPL BX, CX
+	JEQ  emit_literal_done_emit_remainder_calcBlockSizeSmall
+	MOVL CX, SI
+	MOVL CX, 12(SP)
+	LEAQ (DX)(BX*1), CX
+	SUBL BX, SI
+	LEAL -1(SI), CX
+	CMPL CX, $0x3c
+	JLT  one_byte_emit_remainder_calcBlockSizeSmall
+	CMPL CX, $0x00000100
+	JLT  two_bytes_emit_remainder_calcBlockSizeSmall
+	ADDQ $0x03, AX
+	JMP  memmove_long_emit_remainder_calcBlockSizeSmall
+
+two_bytes_emit_remainder_calcBlockSizeSmall:
+	ADDQ $0x02, AX
+	CMPL CX, $0x40
+	JL   memmove_emit_remainder_calcBlockSizeSmall
+	JMP  memmove_long_emit_remainder_calcBlockSizeSmall
+
+one_byte_emit_remainder_calcBlockSizeSmall:
+	ADDQ $0x01, AX
+
+memmove_emit_remainder_calcBlockSizeSmall:
+	LEAQ (AX)(SI*1), AX
+	JMP  emit_literal_done_emit_remainder_calcBlockSizeSmall
+
+memmove_long_emit_remainder_calcBlockSizeSmall:
+	LEAQ (AX)(SI*1), AX
+
+emit_literal_done_emit_remainder_calcBlockSizeSmall:
+	MOVQ AX, ret+24(FP)
+	RET
+
 // func emitLiteral(dst []byte, lit []byte) int
 // Requires: SSE2
 TEXT ·emitLiteral(SB), NOSPLIT, $0-56
