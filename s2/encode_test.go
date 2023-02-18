@@ -370,6 +370,37 @@ func TestIndex(t *testing.T) {
 					}
 				})
 			}
+			t.Run(fmt.Sprintf("ReadAt"), func(t *testing.T) {
+				// Read it from a seekable stream
+				dec = NewReader(bytes.NewReader(compressed))
+
+				rs, err := dec.ReadSeeker(true, nil)
+				fatalErr(t, err)
+
+				// Read a little...
+				var tmp = make([]byte, len(input)/2)
+				_, err = io.ReadFull(rs, tmp[:])
+				fatalErr(t, err)
+				wantLen := len(tmp)
+				if wantLen+int(wantOffset) > len(input) {
+					wantLen = len(input) - int(wantOffset)
+				}
+				// Read from wantOffset
+				n, err := rs.ReadAt(tmp, wantOffset)
+				if n != wantLen {
+					t.Errorf("got length %d, want %d", n, wantLen)
+				}
+				if err != io.EOF {
+					fatalErr(t, err)
+				}
+				want := want[:n]
+				got := tmp[:n]
+
+				// Read the rest of the stream...
+				if !bytes.Equal(got, want) {
+					t.Error("Result mismatch", wantOffset)
+				}
+			})
 		})
 	}
 }

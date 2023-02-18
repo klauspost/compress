@@ -58,6 +58,32 @@ func Encode(dst, src []byte) []byte {
 	return dst[:d]
 }
 
+// EstimateBlockSize will perform a very fast compression
+// without outputting the result and return the compressed output size.
+// The function returns -1 if no improvement could be achieved.
+// Using actual compression will most often produce better compression than the estimate.
+func EstimateBlockSize(src []byte) (d int) {
+	if len(src) < 6 || int64(len(src)) > 0xffffffff {
+		return -1
+	}
+	if len(src) <= 1024 {
+		d = calcBlockSizeSmall(src)
+	} else {
+		d = calcBlockSize(src)
+	}
+
+	if d == 0 {
+		return -1
+	}
+	// Size of the varint encoded block size.
+	d += (bits.Len64(uint64(len(src))) + 7) / 7
+
+	if d >= len(src) {
+		return -1
+	}
+	return d
+}
+
 // EncodeBetter returns the encoded form of src. The returned slice may be a sub-
 // slice of dst if dst was large enough to hold the entire encoded block.
 // Otherwise, a newly allocated slice will be returned.

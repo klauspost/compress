@@ -306,7 +306,7 @@ Options:`)
 						}
 						start := time.Now()
 						dec.Reset(buf)
-						n, err := io.Copy(io.Discard, dec)
+						n, err := dec.DecodeConcurrent(io.Discard, *cpu)
 						exitErr(err)
 						if int(n) != len(b) {
 							exitErr(fmt.Errorf("unexpected size, want %d, got %d", len(b), n))
@@ -478,7 +478,12 @@ Options:`)
 			}
 			if *recomp {
 				dec := s2.NewReader(src)
-				src = io.NopCloser(dec)
+				pr, pw := io.Pipe()
+				go func() {
+					_, err := dec.DecodeConcurrent(pw, *cpu)
+					pw.CloseWithError(err)
+				}()
+				src = pr
 			}
 
 			var out io.Writer
@@ -582,7 +587,7 @@ func verifyTo(w io.Writer) (io.Writer, func() error) {
 	go func() {
 		defer wg.Done()
 		r := s2.NewReader(pr)
-		_, err = io.Copy(io.Discard, r)
+		_, err = r.DecodeConcurrent(io.Discard, *cpu)
 		pr.CloseWithError(fmt.Errorf("verify: %w", err))
 	}()
 	return writer, func() error {

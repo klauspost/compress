@@ -96,7 +96,7 @@ func main() {
 			defer f.Close()
 			out = f
 		}
-		_, err = io.Copy(out, dec)
+		_, err = dec.DecodeConcurrent(out, 0)
 		exitErr(err)
 
 	case opUnTar:
