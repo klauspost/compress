@@ -10,6 +10,9 @@ import (
 )
 
 const (
+	// MinDictSize is the minimum dictionary size when repeat has been read.
+	MinDictSize = 16
+
 	// MaxDictSize is the maximum dictionary size when repeat has been read.
 	MaxDictSize = 65536
 
@@ -49,11 +52,11 @@ func NewDict(dict []byte) *Dict {
 	if cap(d.dict) < len(d.dict)+16 {
 		d.dict = append(make([]byte, 0, len(d.dict)+16), d.dict...)
 	}
-	if len(dict) == 0 || len(dict) > MaxDictSize {
+	if len(dict) < MinDictSize || len(dict) > MaxDictSize {
 		return nil
 	}
 	d.repeat = int(r)
-	if d.repeat >= len(dict) {
+	if d.repeat > len(dict) {
 		return nil
 	}
 	return &d
@@ -78,6 +81,32 @@ func (d *Dict) initFast() {
 			table[h2] = uint16(i + 2)
 		}
 		d.fastTable = &table
+	})
+}
+
+func (d *Dict) initBetter() {
+	d.best.Do(func() {
+		const (
+			// Long hash matches.
+			lTableBits    = 17
+			maxLTableSize = 1 << lTableBits
+
+			// Short hash matches.
+			sTableBits    = 14
+			maxSTableSize = 1 << sTableBits
+		)
+
+		var lTable [maxLTableSize]uint16
+		var sTable [maxSTableSize]uint16
+
+		// We stop so any entry of length 8 can always be read.
+		for i := 0; i < len(d.dict)-8; i++ {
+			cv := load64(d.dict, i)
+			lTable[hash7(cv, lTableBits)] = uint16(i)
+			sTable[hash4(cv, sTableBits)] = uint16(i)
+		}
+		d.betterTableShort = &sTable
+		d.betterTableLong = &lTable
 	})
 }
 

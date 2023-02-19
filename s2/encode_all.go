@@ -512,7 +512,7 @@ searchDict:
 			break searchDict
 		}
 		candidateDict := int(dict.fastTable[hash0])
-		candidateDict2 := int(dict.fastTable[hash0])
+		candidateDict2 := int(dict.fastTable[hash1])
 		candidate2 := int(table[hash1])
 		candidate := int(table[hash0])
 		table[hash0] = uint32(s)
@@ -611,6 +611,7 @@ searchDict:
 		if s == 0 {
 			cv = load64(src, nextS)
 			s = nextS
+			continue searchDict
 		}
 		// Start with table. These matches will always be closer.
 		if uint32(cv) == load32(src, candidate) {
@@ -632,11 +633,13 @@ searchDict:
 
 		candidateDict = int(dict.fastTable[hash2])
 		// Check if upper 7 bytes match
-		if cv^load64(dict.dict, candidateDict2) < (1 << 8) {
-			table[hash2] = uint32(s + 2)
-			candidateDict = candidateDict2
-			s++
-			goto emitDict
+		if candidateDict2 >= 1 {
+			if cv^load64(dict.dict, candidateDict2-1) < (1 << 8) {
+				table[hash2] = uint32(s + 2)
+				candidateDict = candidateDict2
+				s++
+				goto emitDict
+			}
 		}
 
 		table[hash2] = uint32(s + 2)
@@ -644,10 +647,12 @@ searchDict:
 			s += 2
 			goto emitMatch
 		}
-		// Check if upper 6 bytes match
-		if cv^load64(dict.dict, candidateDict) < (1 << 16) {
-			s += 2
-			goto emitDict
+		if candidateDict >= 2 {
+			// Check if upper 6 bytes match
+			if cv^load64(dict.dict, candidateDict-2) < (1 << 16) {
+				s += 2
+				goto emitDict
+			}
 		}
 
 		cv = load64(src, nextS)

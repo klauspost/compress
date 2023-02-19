@@ -1384,14 +1384,23 @@ func s2DecodeDict(dst, src []byte, dict *Dict) int {
 				}
 				return decodeErrCodeCorrupt
 			}
-			rOff := offset - d
+			rOff := len(dict.dict) - (offset - d)
+			if debug {
+				fmt.Println("starting dict entry from dict offset", len(dict.dict)-rOff)
+			}
 			if rOff+length > len(dict.dict) {
 				if debug {
-					fmt.Println("offset bigger than dict")
+					fmt.Println("err: END offset", rOff+length, "bigger than dict", len(dict.dict), "dict offset:", rOff, "length:", length)
 				}
 				return decodeErrCodeCorrupt
 			}
-			copy(dst[d:d+length], dict.dict[len(dict.dict)-rOff:])
+			if rOff < 0 {
+				if debug {
+					fmt.Println("err: START offset", rOff, "less than 0", len(dict.dict), "dict offset:", rOff, "length:", length)
+				}
+				return decodeErrCodeCorrupt
+			}
+			copy(dst[d:d+length], dict.dict[rOff:])
 			d += length
 			continue
 		}

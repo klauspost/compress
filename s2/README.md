@@ -937,19 +937,19 @@ A dictionary provides an initial repeat value that can be used to point to a com
 
 Other than that the dictionary contains values that can be used as back-references.
 
-Often used data should be placed at the *end* of the dictionary since offsets will by smaller
+Often used data should be placed at the *end* of the dictionary since offsets < 2048 bytes will be smaller.
 
 ## Format
 
-Dictionary *content* must be more than 8 bytes and less or equal to 64KiB (65536 bytes). 
+Dictionary *content* must at least 16 bytes and less or equal to 64KiB (65536 bytes).
 
 Encoding: `[repeat value (uvarint)][dictionary content...]`
 
 Before the dictionary content, an unsigned base-128 (uvarint) encoded value specifying the initial repeat offset.
-This value is an offset into the dictionary content and not a back-reference offset, 
-so setting this to 0 will make the repeat value point to the first value of the dictionary. 
+This value is an offset into the dictionary content and not a back-reference offset,
+so setting this to 0 will make the repeat value point to the first value of the dictionary.
 
-The value must be less than the dictionary length.
+The value must be less than the dictionary length-8
 
 ## Encoding
 
@@ -992,7 +992,7 @@ Output: `10 bananas which were brown were added`
 
 For streams each block can use the dictionary.
 
-The dictionary is not currently provided on the stream.
+The dictionary cannot not currently be provided on the stream.
 
 
 # LICENSE
