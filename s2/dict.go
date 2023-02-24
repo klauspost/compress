@@ -5,6 +5,7 @@
 package s2
 
 import (
+	"bytes"
 	"encoding/binary"
 	"sync"
 )
@@ -59,6 +60,45 @@ func NewDict(dict []byte) *Dict {
 	if d.repeat > len(dict) {
 		return nil
 	}
+	return &d
+}
+
+// Bytes will return a serialized version of the dictionary.
+// The output can be sent to NewDict.
+func (d *Dict) Bytes() []byte {
+	dst := make([]byte, binary.MaxVarintLen16+len(d.dict))
+	return append(dst[:binary.PutUvarint(dst, uint64(d.repeat))], d.dict...)
+}
+
+// MakeDict will create a dictionary.
+// 'data' must be between MinDictSize and MaxDictSize (inclusive).
+// If searchStart is set the start repeat value will be set to the last
+// match of this content.
+// If no matches are found, it will attempt to find shorter matches.
+// This content should match the typical start of a block.
+// If at least 4 bytes cannot be matched, repeat is set to start of block.
+func MakeDict(data []byte, searchStart []byte) *Dict {
+	if len(data) == 0 {
+		return nil
+	}
+	var d Dict
+	dict := data
+	d.dict = dict
+	if cap(d.dict) < len(d.dict)+16 {
+		d.dict = append(make([]byte, 0, len(d.dict)+16), d.dict...)
+	}
+	if len(dict) < MinDictSize || len(dict) > MaxDictSize {
+		return nil
+	}
+
+	// Find the longest match possible, last entry if multiple.
+	for s := len(searchStart); s > 4; s-- {
+		if idx := bytes.LastIndex(data, searchStart[:s]); idx >= 0 && idx <= len(data)-8 {
+			d.repeat = idx
+			break
+		}
+	}
+
 	return &d
 }
 

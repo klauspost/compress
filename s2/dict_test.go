@@ -309,8 +309,9 @@ func TestDictBest2(t *testing.T) {
 func TestDictSize(t *testing.T) {
 	//f, err := os.Open("testdata/xlmeta.tar.s2")
 	//f, err := os.Open("testdata/broken.tar.s2")
-	f, err := os.Open("testdata/github_users_sample_set.tar.s2")
+	//f, err := os.Open("testdata/github_users_sample_set.tar.s2")
 	//f, err := os.Open("testdata/gofiles2.tar.s2")
+	f, err := os.Open("testdata/gosrc.tar.s2")
 	if err != nil {
 		t.Skip(err)
 	}
@@ -318,7 +319,8 @@ func TestDictSize(t *testing.T) {
 	in := tar.NewReader(stream)
 	//rawDict, err := os.ReadFile("testdata/godict.dictator")
 	//rawDict, err := os.ReadFile("testdata/gofiles.dict")
-	rawDict, err := os.ReadFile("testdata/users.dict")
+	rawDict, err := os.ReadFile("testdata/gosrc2.dict")
+	//rawDict, err := os.ReadFile("testdata/users.dict")
 	//rawDict, err := os.ReadFile("testdata/xlmeta.dict")
 	if err != nil {
 		t.Fatal(err)
@@ -378,8 +380,8 @@ func TestDictSize(t *testing.T) {
 			totalIn += len(data)
 			totalCount++
 			//res := encodeBlockBest(encoded, data, nil)
-			//res := encodeBlockBest(encoded, data, d)
-			res := encodeBlockBetterDict(encoded, data, d)
+			res := encodeBlockBest(encoded, data, d)
+			//res := encodeBlockBetterDict(encoded, data, d)
 			//res := encodeBlockBetterGo(encoded, data)
 			//res := encodeBlockDictGo(encoded, data, d)
 			//res := encodeBlockGo(encoded, data)
@@ -389,7 +391,7 @@ func TestDictSize(t *testing.T) {
 			}
 			totalOut += res
 			encoded = encoded[:res]
-			t.Log("encoded", len(data), "->", res, "saved", len(data)-res, "bytes")
+			//t.Log("encoded", len(data), "->", res, "saved", len(data)-res, "bytes")
 			decoded := make([]byte, len(data))
 			res = s2DecodeDict(decoded, encoded, d)
 			if res != 0 {

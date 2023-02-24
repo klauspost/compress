@@ -20,11 +20,12 @@ This is important, so you don't have to worry about spending CPU cycles on alrea
 * Concurrent stream compression
 * Faster decompression, even for Snappy compatible content
 * Concurrent Snappy/S2 stream decompression
-* Ability to quickly skip forward in compressed stream
+* Skip forward in compressed stream
 * Random seeking with indexes
 * Compatible with reading Snappy compressed content
 * Smaller block size overhead on incompressible blocks
 * Block concatenation
+* Block Dictionary support
 * Uncompressed stream mode
 * Automatic stream size padding
 * Snappy compatible block compression
