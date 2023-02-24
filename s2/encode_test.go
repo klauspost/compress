@@ -59,6 +59,7 @@ func testOptions(t testing.TB) map[string][]WriterOption {
 	for name, opt := range testOptions {
 		x[name] = opt
 		x[name+"-snappy"] = cloneAdd(opt, WriterSnappyCompat())
+		x[name+"-custom"] = cloneAdd(opt, WriterCustomEncoder(snapref.EncodeBlockInto))
 	}
 	testOptions = x
 	return testOptions
