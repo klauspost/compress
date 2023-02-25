@@ -71,7 +71,8 @@ func (d *Dict) Bytes() []byte {
 }
 
 // MakeDict will create a dictionary.
-// 'data' must be between MinDictSize and MaxDictSize (inclusive).
+// 'data' must be at least MinDictSize.
+// If data is longer than MaxDictSize only the last MaxDictSize bytes will be used.
 // If searchStart is set the start repeat value will be set to the last
 // match of this content.
 // If no matches are found, it will attempt to find shorter matches.
@@ -81,13 +82,16 @@ func MakeDict(data []byte, searchStart []byte) *Dict {
 	if len(data) == 0 {
 		return nil
 	}
+	if len(data) > MaxDictSize {
+		data = data[len(data)-MaxDictSize:]
+	}
 	var d Dict
 	dict := data
 	d.dict = dict
 	if cap(d.dict) < len(d.dict)+16 {
 		d.dict = append(make([]byte, 0, len(d.dict)+16), d.dict...)
 	}
-	if len(dict) < MinDictSize || len(dict) > MaxDictSize {
+	if len(dict) < MinDictSize {
 		return nil
 	}
 
@@ -100,6 +104,152 @@ func MakeDict(data []byte, searchStart []byte) *Dict {
 	}
 
 	return &d
+}
+
+// Encode returns the encoded form of src. The returned slice may be a sub-
+// slice of dst if dst was large enough to hold the entire encoded block.
+// Otherwise, a newly allocated slice will be returned.
+//
+// The dst and src must not overlap. It is valid to pass a nil dst.
+//
+// The blocks will require the same amount of memory to decode as encoding,
+// and does not make for concurrent decoding.
+// Also note that blocks do not contain CRC information, so corruption may be undetected.
+//
+// If you need to encode larger amounts of data, consider using
+// the streaming interface which gives all of these features.
+func (d *Dict) Encode(dst, src []byte) []byte {
+	if n := MaxEncodedLen(len(src)); n < 0 {
+		panic(ErrTooLarge)
+	} else if cap(dst) < n {
+		dst = make([]byte, n)
+	} else {
+		dst = dst[:n]
+	}
+
+	// The block starts with the varint-encoded length of the decompressed bytes.
+	dstP := binary.PutUvarint(dst, uint64(len(src)))
+
+	if len(src) == 0 {
+		return dst[:dstP]
+	}
+	if len(src) < minNonLiteralBlockSize {
+		dstP += emitLiteral(dst[dstP:], src)
+		return dst[:dstP]
+	}
+	n := encodeBlockDictGo(dst[dstP:], src, d)
+	if n > 0 {
+		dstP += n
+		return dst[:dstP]
+	}
+	// Not compressible
+	dstP += emitLiteral(dst[dstP:], src)
+	return dst[:dstP]
+}
+
+// EncodeBetter returns the encoded form of src. The returned slice may be a sub-
+// slice of dst if dst was large enough to hold the entire encoded block.
+// Otherwise, a newly allocated slice will be returned.
+//
+// EncodeBetter compresses better than Encode but typically with a
+// 10-40% speed decrease on both compression and decompression.
+//
+// The dst and src must not overlap. It is valid to pass a nil dst.
+//
+// The blocks will require the same amount of memory to decode as encoding,
+// and does not make for concurrent decoding.
+// Also note that blocks do not contain CRC information, so corruption may be undetected.
+//
+// If you need to encode larger amounts of data, consider using
+// the streaming interface which gives all of these features.
+func (d *Dict) EncodeBetter(dst, src []byte) []byte {
+	if n := MaxEncodedLen(len(src)); n < 0 {
+		panic(ErrTooLarge)
+	} else if len(dst) < n {
+		dst = make([]byte, n)
+	}
+
+	// The block starts with the varint-encoded length of the decompressed bytes.
+	dstP := binary.PutUvarint(dst, uint64(len(src)))
+
+	if len(src) == 0 {
+		return dst[:dstP]
+	}
+	if len(src) < minNonLiteralBlockSize {
+		dstP += emitLiteral(dst[dstP:], src)
+		return dst[:dstP]
+	}
+	n := encodeBlockBetterDict(dst[dstP:], src, d)
+	if n > 0 {
+		dstP += n
+		return dst[:dstP]
+	}
+	// Not compressible
+	dstP += emitLiteral(dst[dstP:], src)
+	return dst[:dstP]
+}
+
+// EncodeBest returns the encoded form of src. The returned slice may be a sub-
+// slice of dst if dst was large enough to hold the entire encoded block.
+// Otherwise, a newly allocated slice will be returned.
+//
+// EncodeBest compresses as good as reasonably possible but with a
+// big speed decrease.
+//
+// The dst and src must not overlap. It is valid to pass a nil dst.
+//
+// The blocks will require the same amount of memory to decode as encoding,
+// and does not make for concurrent decoding.
+// Also note that blocks do not contain CRC information, so corruption may be undetected.
+//
+// If you need to encode larger amounts of data, consider using
+// the streaming interface which gives all of these features.
+func (d *Dict) EncodeBest(dst, src []byte) []byte {
+	if n := MaxEncodedLen(len(src)); n < 0 {
+		panic(ErrTooLarge)
+	} else if len(dst) < n {
+		dst = make([]byte, n)
+	}
+
+	// The block starts with the varint-encoded length of the decompressed bytes.
+	dstP := binary.PutUvarint(dst, uint64(len(src)))
+
+	if len(src) == 0 {
+		return dst[:dstP]
+	}
+	if len(src) < minNonLiteralBlockSize {
+		dstP += emitLiteral(dst[dstP:], src)
+		return dst[:dstP]
+	}
+	n := encodeBlockBest(dst[dstP:], src, d)
+	if n > 0 {
+		dstP += n
+		return dst[:dstP]
+	}
+	// Not compressible
+	dstP += emitLiteral(dst[dstP:], src)
+	return dst[:dstP]
+}
+
+// Decode returns the decoded form of src. The returned slice may be a sub-
+// slice of dst if dst was large enough to hold the entire decoded block.
+// Otherwise, a newly allocated slice will be returned.
+//
+// The dst and src must not overlap. It is valid to pass a nil dst.
+func (d *Dict) Decode(dst, src []byte) ([]byte, error) {
+	dLen, s, err := decodedLen(src)
+	if err != nil {
+		return nil, err
+	}
+	if dLen <= cap(dst) {
+		dst = dst[:dLen]
+	} else {
+		dst = make([]byte, dLen)
+	}
+	if s2DecodeDict(dst, src[s:], d) != 0 {
+		return nil, ErrCorrupt
+	}
+	return dst, nil
 }
 
 func (d *Dict) initFast() {
@@ -125,7 +275,7 @@ func (d *Dict) initFast() {
 }
 
 func (d *Dict) initBetter() {
-	d.best.Do(func() {
+	d.better.Do(func() {
 		const (
 			// Long hash matches.
 			lTableBits    = 17

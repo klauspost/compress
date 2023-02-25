@@ -1123,6 +1123,8 @@ func s2DecodeDict(dst, src []byte, dict *Dict) int {
 		return s2Decode(dst, src)
 	}
 	const debug = false
+	const debugErrs = debug
+
 	if debug {
 		fmt.Println("Starting decode, dst len:", len(dst))
 	}
@@ -1163,7 +1165,7 @@ func s2DecodeDict(dst, src []byte, dict *Dict) int {
 				fmt.Println("literals, length:", length, "d-after:", d+length)
 			}
 			if length > len(dst)-d || length > len(src)-s || (strconv.IntSize == 32 && length <= 0) {
-				if debug {
+				if debugErrs {
 					fmt.Println("corrupt literal: length:", length, "d-left:", len(dst)-d, "src-left:", len(src)-s)
 				}
 				return decodeErrCodeCorrupt
@@ -1215,7 +1217,7 @@ func s2DecodeDict(dst, src []byte, dict *Dict) int {
 		}
 
 		if offset <= 0 || length > len(dst)-d {
-			if debug {
+			if debugErrs {
 				fmt.Println("match error; offset:", offset, "length:", length, "dst-left:", len(dst)-d)
 			}
 			return decodeErrCodeCorrupt
@@ -1224,14 +1226,14 @@ func s2DecodeDict(dst, src []byte, dict *Dict) int {
 		// copy from dict
 		if d < offset {
 			if d > MaxDictSrcOffset {
-				if debug {
-					fmt.Println("dict after 65536")
+				if debugErrs {
+					fmt.Println("dict after", MaxDictSrcOffset, "d:", d, "offset:", offset, "length:", length)
 				}
 				return decodeErrCodeCorrupt
 			}
 			startOff := len(dict.dict) - offset + d
 			if startOff < 0 || startOff+length > len(dict.dict) {
-				if debug {
+				if debugErrs {
 					fmt.Printf("offset (%d) + length (%d) bigger than dict (%d)\n", offset, length, len(dict.dict))
 				}
 				return decodeErrCodeCorrupt
@@ -1283,30 +1285,45 @@ func s2DecodeDict(dst, src []byte, dict *Dict) int {
 			case x == 60:
 				s += 2
 				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+					if debugErrs {
+						fmt.Println("src went oob")
+					}
 					return decodeErrCodeCorrupt
 				}
 				x = uint32(src[s-1])
 			case x == 61:
 				s += 3
 				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+					if debugErrs {
+						fmt.Println("src went oob")
+					}
 					return decodeErrCodeCorrupt
 				}
 				x = uint32(src[s-2]) | uint32(src[s-1])<<8
 			case x == 62:
 				s += 4
 				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+					if debugErrs {
+						fmt.Println("src went oob")
+					}
 					return decodeErrCodeCorrupt
 				}
 				x = uint32(src[s-3]) | uint32(src[s-2])<<8 | uint32(src[s-1])<<16
 			case x == 63:
 				s += 5
 				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+					if debugErrs {
+						fmt.Println("src went oob")
+					}
 					return decodeErrCodeCorrupt
 				}
 				x = uint32(src[s-4]) | uint32(src[s-3])<<8 | uint32(src[s-2])<<16 | uint32(src[s-1])<<24
 			}
 			length = int(x) + 1
 			if length > len(dst)-d || length > len(src)-s || (strconv.IntSize == 32 && length <= 0) {
+				if debugErrs {
+					fmt.Println("corrupt literal: length:", length, "d-left:", len(dst)-d, "src-left:", len(src)-s)
+				}
 				return decodeErrCodeCorrupt
 			}
 			if debug {
@@ -1321,6 +1338,9 @@ func s2DecodeDict(dst, src []byte, dict *Dict) int {
 		case tagCopy1:
 			s += 2
 			if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+				if debugErrs {
+					fmt.Println("src went oob")
+				}
 				return decodeErrCodeCorrupt
 			}
 			length = int(src[s-2]) >> 2 & 0x7
@@ -1334,18 +1354,27 @@ func s2DecodeDict(dst, src []byte, dict *Dict) int {
 				case 5:
 					s += 1
 					if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+						if debugErrs {
+							fmt.Println("src went oob")
+						}
 						return decodeErrCodeCorrupt
 					}
 					length = int(uint32(src[s-1])) + 4
 				case 6:
 					s += 2
 					if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+						if debugErrs {
+							fmt.Println("src went oob")
+						}
 						return decodeErrCodeCorrupt
 					}
 					length = int(uint32(src[s-2])|(uint32(src[s-1])<<8)) + (1 << 8)
 				case 7:
 					s += 3
 					if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+						if debugErrs {
+							fmt.Println("src went oob")
+						}
 						return decodeErrCodeCorrupt
 					}
 					length = int(uint32(src[s-3])|(uint32(src[s-2])<<8)|(uint32(src[s-1])<<16)) + (1 << 16)
@@ -1358,6 +1387,9 @@ func s2DecodeDict(dst, src []byte, dict *Dict) int {
 		case tagCopy2:
 			s += 3
 			if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+				if debugErrs {
+					fmt.Println("src went oob")
+				}
 				return decodeErrCodeCorrupt
 			}
 			length = 1 + int(src[s-3])>>2
@@ -1366,6 +1398,9 @@ func s2DecodeDict(dst, src []byte, dict *Dict) int {
 		case tagCopy4:
 			s += 5
 			if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+				if debugErrs {
+					fmt.Println("src went oob")
+				}
 				return decodeErrCodeCorrupt
 			}
 			length = 1 + int(src[s-5])>>2
@@ -1373,14 +1408,17 @@ func s2DecodeDict(dst, src []byte, dict *Dict) int {
 		}
 
 		if offset <= 0 || length > len(dst)-d {
+			if debugErrs {
+				fmt.Println("match error; offset:", offset, "length:", length, "dst-left:", len(dst)-d)
+			}
 			return decodeErrCodeCorrupt
 		}
 
 		// copy from dict
 		if d < offset {
-			if d >= 65536 {
-				if debug {
-					fmt.Println("dict after 65536")
+			if d > MaxDictSrcOffset {
+				if debugErrs {
+					fmt.Println("dict after", MaxDictSrcOffset, "d:", d, "offset:", offset, "length:", length)
 				}
 				return decodeErrCodeCorrupt
 			}
@@ -1389,13 +1427,13 @@ func s2DecodeDict(dst, src []byte, dict *Dict) int {
 				fmt.Println("starting dict entry from dict offset", len(dict.dict)-rOff)
 			}
 			if rOff+length > len(dict.dict) {
-				if debug {
+				if debugErrs {
 					fmt.Println("err: END offset", rOff+length, "bigger than dict", len(dict.dict), "dict offset:", rOff, "length:", length)
 				}
 				return decodeErrCodeCorrupt
 			}
 			if rOff < 0 {
-				if debug {
+				if debugErrs {
 					fmt.Println("err: START offset", rOff, "less than 0", len(dict.dict), "dict offset:", rOff, "length:", length)
 				}
 				return decodeErrCodeCorrupt
@@ -1434,6 +1472,9 @@ func s2DecodeDict(dst, src []byte, dict *Dict) int {
 	}
 
 	if d != len(dst) {
+		if debugErrs {
+			fmt.Println("wanted length", len(dst), "got", d)
+		}
 		return decodeErrCodeCorrupt
 	}
 	return 0

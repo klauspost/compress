@@ -470,6 +470,7 @@ func encodeBlockDictGo(dst, src []byte, dict *Dict) (d int) {
 	const (
 		tableBits    = 14
 		maxTableSize = 1 << tableBits
+		maxAhead     = 8 // maximum bytes ahead without checking sLimit
 
 		debug = false
 	)
@@ -481,8 +482,8 @@ func encodeBlockDictGo(dst, src []byte, dict *Dict) (d int) {
 	// lets us use a fast path for emitLiteral in the main loop, while we are
 	// looking for copies.
 	sLimit := len(src) - inputMargin
-	if sLimit > MaxDictSrcOffset {
-		sLimit = MaxDictSrcOffset
+	if sLimit > MaxDictSrcOffset-maxAhead {
+		sLimit = MaxDictSrcOffset - maxAhead
 	}
 
 	// Bail if we can't compress to at least this.
@@ -554,7 +555,6 @@ searchDict:
 					break searchDict
 				}
 				cv = load64(src, s)
-
 				continue
 			}
 		} else if uint32(cv>>(checkRep*8)) == load32(src, s-repeat+checkRep) {
@@ -591,13 +591,9 @@ searchDict:
 					panic("mismatch")
 				}
 			}
-			if nextEmit > 0 {
-				// same as `add := emitCopy(dst[d:], repeat, s-base)` but skips storing offset.
-				d += emitRepeat(dst[d:], repeat, s-base)
-			} else {
-				// First match, cannot be repeat.
-				d += emitCopy(dst[d:], repeat, s-base)
-			}
+			// same as `add := emitCopy(dst[d:], repeat, s-base)` but skips storing offset.
+			d += emitRepeat(dst[d:], repeat, s-base)
+
 			nextEmit = s
 			if s >= sLimit {
 				break searchDict
@@ -695,7 +691,7 @@ searchDict:
 				// Extend the 4-byte match as long as possible.
 				s += 4
 				candidateDict += 4
-				for s <= len(src)-8 && len(dict.dict)-candidateDict >= 8 {
+				for s <= sLimit && len(dict.dict)-candidateDict >= 8 {
 					if diff := load64(src, s) ^ load64(dict.dict, candidateDict); diff != 0 {
 						s += bits.TrailingZeros64(diff) >> 3
 						break
@@ -839,6 +835,9 @@ searchDict:
 	sLimit = len(src) - inputMargin
 	if s >= sLimit {
 		goto emitRemainder
+	}
+	if debug {
+		fmt.Println("non-dict matching at", s, "repeat:", repeat)
 	}
 	cv = load64(src, s)
 	if debug {

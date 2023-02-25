@@ -491,16 +491,6 @@ func encodeBlockBetterDict(dst, src []byte, dict *Dict) (d int) {
 	// sLimit is when to stop looking for offset/length copies. The inputMargin
 	// lets us use a fast path for emitLiteral in the main loop, while we are
 	// looking for copies.
-	sLimit := len(src) - inputMargin
-	if sLimit > MaxDictSrcOffset {
-		sLimit = MaxDictSrcOffset
-	}
-	if len(src) < minNonLiteralBlockSize {
-		return 0
-	}
-
-	dict.initBetter()
-
 	// Initialize the hash tables.
 	const (
 		// Long hash matches.
@@ -511,8 +501,20 @@ func encodeBlockBetterDict(dst, src []byte, dict *Dict) (d int) {
 		sTableBits    = 14
 		maxSTableSize = 1 << sTableBits
 
+		maxAhead = 8 // maximum bytes ahead without checking sLimit
+
 		debug = false
 	)
+
+	sLimit := len(src) - inputMargin
+	if sLimit > MaxDictSrcOffset-maxAhead {
+		sLimit = MaxDictSrcOffset - maxAhead
+	}
+	if len(src) < minNonLiteralBlockSize {
+		return 0
+	}
+
+	dict.initBetter()
 
 	var lTable [maxLTableSize]uint32
 	var sTable [maxSTableSize]uint32
@@ -700,7 +702,7 @@ searchDict:
 				// Extend the 4-byte match as long as possible.
 				s += 4
 				candidateL += 4
-				for s <= len(src)-8 && len(dict.dict)-candidateL >= 8 {
+				for s <= sLimit && len(dict.dict)-candidateL >= 8 {
 					if diff := load64(src, s) ^ load64(dict.dict, candidateL); diff != 0 {
 						s += bits.TrailingZeros64(diff) >> 3
 						break

@@ -7,14 +7,14 @@ package s2
 import (
 	"archive/tar"
 	"bytes"
-	"encoding/binary"
-	"encoding/hex"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"math/rand"
 	"os"
 	"testing"
 
+	"github.com/klauspost/compress/internal/fuzz"
 	"github.com/klauspost/compress/zstd"
 )
 
@@ -319,7 +319,8 @@ func TestDictSize(t *testing.T) {
 	in := tar.NewReader(stream)
 	//rawDict, err := os.ReadFile("testdata/godict.dictator")
 	//rawDict, err := os.ReadFile("testdata/gofiles.dict")
-	rawDict, err := os.ReadFile("testdata/gosrc2.dict")
+	//rawDict, err := os.ReadFile("testdata/gosrc2.dict")
+	rawDict, err := os.ReadFile("testdata/td.dict")
 	//rawDict, err := os.ReadFile("testdata/users.dict")
 	//rawDict, err := os.ReadFile("testdata/xlmeta.dict")
 	if err != nil {
@@ -335,21 +336,13 @@ func TestDictSize(t *testing.T) {
 		return
 	}
 
+	searchFor := ""
 	if true {
 		lidx = bytes.LastIndex(rawDict, []byte("// Copyright 20"))
 		//lidx = bytes.LastIndex(rawDict, []byte("{\"login\":\"a"))
 		//lidx = bytes.LastIndex(rawDict, []byte{'X', 'L', '2', ' '})
 	}
-	if lidx < 0 {
-		lidx = 0
-	}
-	dictInput := make([]byte, len(rawDict)+binary.MaxVarintLen16)
-	fmt.Println("idx:", lidx)
-	var tmp [4]byte
-	binary.LittleEndian.PutUint32(tmp[:], uint32(len(rawDict)-lidx))
-	fmt.Printf("repeat: %d: 0x%s\n", len(rawDict)-lidx, hex.EncodeToString(tmp[:]))
-	n := binary.PutUvarint(dictInput, uint64(lidx))
-	d := NewDict(append(dictInput[:n], rawDict...))
+	d := MakeDict(rawDict, []byte(searchFor))
 	if d == nil {
 		t.Fatal("no dict", lidx)
 	}
@@ -405,4 +398,93 @@ func TestDictSize(t *testing.T) {
 		})
 	}
 	fmt.Printf("%d files, %d -> %d (%.2f%%) - %.02f bytes saved/file\n", totalCount, totalIn, totalOut, float64(totalOut*100)/float64(totalIn), float64(totalIn-totalOut)/float64(totalCount))
+}
+
+func FuzzDictBlocks(f *testing.F) {
+	fuzz.AddFromZip(f, "testdata/enc_regressions.zip", true, false)
+	fuzz.AddFromZip(f, "testdata/fuzz/block-corpus-raw.zip", true, testing.Short())
+	fuzz.AddFromZip(f, "testdata/fuzz/block-corpus-enc.zip", false, testing.Short())
+
+	// Fuzzing tweaks:
+	const (
+		// Max input size:
+		maxSize = 8 << 20
+	)
+	file, err := os.Open("testdata/s2-dict.bin.gz")
+	if err != nil {
+		f.Fatal(err)
+	}
+	gzr, err := gzip.NewReader(file)
+	if err != nil {
+		f.Fatal(err)
+	}
+	dictBytes, err := io.ReadAll(gzr)
+	if err != nil {
+		f.Fatal(err)
+	}
+	dict := NewDict(dictBytes)
+	if dict == nil {
+		f.Fatal("invalid dict")
+	}
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) > maxSize {
+			return
+		}
+
+		writeDst := make([]byte, MaxEncodedLen(len(data)), MaxEncodedLen(len(data))+4)
+		writeDst = append(writeDst, 1, 2, 3, 4)
+		defer func() {
+			got := writeDst[MaxEncodedLen(len(data)):]
+			want := []byte{1, 2, 3, 4}
+			if !bytes.Equal(got, want) {
+				t.Fatalf("want %v, got %v - dest modified outside cap", want, got)
+			}
+		}()
+		compDst := writeDst[:MaxEncodedLen(len(data)):MaxEncodedLen(len(data))] // Hard cap
+		decDst := make([]byte, len(data))
+		comp := dict.Encode(compDst, data)
+		decoded, err := dict.Decode(decDst, comp)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if !bytes.Equal(data, decoded) {
+			t.Error("block decoder mismatch")
+			return
+		}
+		if mel := MaxEncodedLen(len(data)); len(comp) > mel {
+			t.Error(fmt.Errorf("MaxEncodedLen Exceed: input: %d, mel: %d, got %d", len(data), mel, len(comp)))
+			return
+		}
+		comp = dict.EncodeBetter(compDst, data)
+		decoded, err = dict.Decode(decDst, comp)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if !bytes.Equal(data, decoded) {
+			t.Error("block decoder mismatch")
+			return
+		}
+		if mel := MaxEncodedLen(len(data)); len(comp) > mel {
+			t.Error(fmt.Errorf("MaxEncodedLen Exceed: input: %d, mel: %d, got %d", len(data), mel, len(comp)))
+			return
+		}
+
+		comp = dict.EncodeBest(compDst, data)
+		decoded, err = dict.Decode(decDst, comp)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if !bytes.Equal(data, decoded) {
+			t.Error("block decoder mismatch")
+			return
+		}
+		if mel := MaxEncodedLen(len(data)); len(comp) > mel {
+			t.Error(fmt.Errorf("MaxEncodedLen Exceed: input: %d, mel: %d, got %d", len(data), mel, len(comp)))
+			return
+		}
+	})
 }
