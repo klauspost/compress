@@ -169,21 +169,40 @@ func encodeBlockBest(dst, src []byte, dict *Dict) (d int) {
 				}
 				m := match{offset: offset, s: s, length: 4 + candidate, rep: rep, dict: true}
 				s += 4
-				for s <= sLimitDict && m.length < len(dict.dict) {
-					if len(src)-s < 8 || len(dict.dict)-m.length < 8 {
-						if src[s] == dict.dict[m.length] {
-							m.length++
-							s++
-							continue
+				if !rep {
+					for s < sLimitDict && m.length < len(dict.dict) {
+						if len(src)-s < 8 || len(dict.dict)-m.length < 8 {
+							if src[s] == dict.dict[m.length] {
+								m.length++
+								s++
+								continue
+							}
+							break
 						}
-						break
+						if diff := load64(src, s) ^ load64(dict.dict, m.length); diff != 0 {
+							m.length += bits.TrailingZeros64(diff) >> 3
+							break
+						}
+						s += 8
+						m.length += 8
 					}
-					if diff := load64(src, s) ^ load64(dict.dict, m.length); diff != 0 {
-						m.length += bits.TrailingZeros64(diff) >> 3
-						break
+				} else {
+					for s < len(src) && m.length < len(dict.dict) {
+						if len(src)-s < 8 || len(dict.dict)-m.length < 8 {
+							if src[s] == dict.dict[m.length] {
+								m.length++
+								s++
+								continue
+							}
+							break
+						}
+						if diff := load64(src, s) ^ load64(dict.dict, m.length); diff != 0 {
+							m.length += bits.TrailingZeros64(diff) >> 3
+							break
+						}
+						s += 8
+						m.length += 8
 					}
-					s += 8
-					m.length += 8
 				}
 				m.length -= candidate
 				m.score = score(m)

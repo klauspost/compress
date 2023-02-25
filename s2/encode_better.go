@@ -583,7 +583,7 @@ searchDict:
 					}
 					s += 4
 					candidate += 4
-					for candidate < len(dict.dict)-8 && s <= sLimit {
+					for candidate < len(dict.dict)-8 && s <= len(src)-8 {
 						if diff := load64(src, s) ^ load64(dict.dict, candidate); diff != 0 {
 							s += bits.TrailingZeros64(diff) >> 3
 							break
@@ -702,7 +702,7 @@ searchDict:
 				// Extend the 4-byte match as long as possible.
 				s += 4
 				candidateL += 4
-				for s <= sLimit && len(dict.dict)-candidateL >= 8 {
+				for s <= len(src)-8 && len(dict.dict)-candidateL >= 8 {
 					if diff := load64(src, s) ^ load64(dict.dict, candidateL); diff != 0 {
 						s += bits.TrailingZeros64(diff) >> 3
 						break
@@ -720,7 +720,14 @@ searchDict:
 					if debug {
 						fmt.Println("emitted dict copy, length", s-base, "offset:", offset, "s:", s, "dict offset:", candidateL)
 					}
-					d += emitCopy(dst[d:], offset, s-base)
+					// Matches longer than 64 are split.
+					if s <= sLimit || s-base < 8 {
+						d += emitCopy(dst[d:], offset, s-base)
+					} else {
+						// Split to ensure we don't start a copy within next block.
+						d += emitCopy(dst[d:], offset, 4)
+						d += emitRepeat(dst[d:], offset, s-base-4)
+					}
 					repeat = offset
 				}
 				if false {
