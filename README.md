@@ -16,7 +16,7 @@ This package provides various compression algorithms.
 
 # changelog
 * Feb 26, 2023 (v1.16.0)
-	* s2: Add Dictionary support.  https://github.com/klauspost/compress/pull/685
+	* s2: Add [https://github.com/klauspost/compress/tree/master/s2#dictionaries](Dictionary) support.  https://github.com/klauspost/compress/pull/685
 	* s2: Add Compression Size Estimate.  https://github.com/klauspost/compress/pull/752
 	* s2: Add support for custom stream encoder. https://github.com/klauspost/compress/pull/755
 	* s2: Add LZ4 block converter. https://github.com/klauspost/compress/pull/748
