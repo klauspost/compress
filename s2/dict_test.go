@@ -309,18 +309,18 @@ func TestDictBest2(t *testing.T) {
 func TestDictSize(t *testing.T) {
 	//f, err := os.Open("testdata/xlmeta.tar.s2")
 	//f, err := os.Open("testdata/broken.tar.s2")
-	//f, err := os.Open("testdata/github_users_sample_set.tar.s2")
+	f, err := os.Open("testdata/github_users_sample_set.tar.s2")
 	//f, err := os.Open("testdata/gofiles2.tar.s2")
-	f, err := os.Open("testdata/gosrc.tar.s2")
+	//f, err := os.Open("testdata/gosrc.tar.s2")
 	if err != nil {
 		t.Skip(err)
 	}
 	stream := NewReader(f)
 	in := tar.NewReader(stream)
 	//rawDict, err := os.ReadFile("testdata/godict.dictator")
-	//rawDict, err := os.ReadFile("testdata/gofiles.dict")
+	rawDict, err := os.ReadFile("testdata/gofiles.dict")
 	//rawDict, err := os.ReadFile("testdata/gosrc2.dict")
-	rawDict, err := os.ReadFile("testdata/td.dict")
+	//rawDict, err := os.ReadFile("testdata/td.dict")
 	//rawDict, err := os.ReadFile("testdata/users.dict")
 	//rawDict, err := os.ReadFile("testdata/xlmeta.dict")
 	if err != nil {
@@ -337,15 +337,14 @@ func TestDictSize(t *testing.T) {
 	}
 
 	searchFor := ""
-	if true {
-		lidx = bytes.LastIndex(rawDict, []byte("// Copyright 20"))
-		//lidx = bytes.LastIndex(rawDict, []byte("{\"login\":\"a"))
-		//lidx = bytes.LastIndex(rawDict, []byte{'X', 'L', '2', ' '})
+	if false {
+		searchFor = "// Copyright 2022"
 	}
 	d := MakeDict(rawDict, []byte(searchFor))
 	if d == nil {
 		t.Fatal("no dict", lidx)
 	}
+
 	var totalIn int
 	var totalOut int
 	var totalCount int
@@ -368,6 +367,10 @@ func TestDictSize(t *testing.T) {
 			if err != nil {
 				t.Skip()
 			}
+			if d == nil {
+				// Use first file as dict
+				d = MakeDict(data, nil)
+			}
 			// encode
 			encoded := make([]byte, MaxEncodedLen(len(data)))
 			totalIn += len(data)
@@ -377,7 +380,7 @@ func TestDictSize(t *testing.T) {
 			//res := encodeBlockBetterDict(encoded, data, d)
 			//res := encodeBlockBetterGo(encoded, data)
 			//res := encodeBlockDictGo(encoded, data, d)
-			//res := encodeBlockGo(encoded, data)
+			//			res := encodeBlockGo(encoded, data)
 			if res == 0 {
 				totalOut += len(data)
 				return
