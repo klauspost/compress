@@ -214,7 +214,7 @@ func (w *GzipResponseWriter) startGzip(remain []byte) error {
 		// Set random jitter based on CRC of current buffer
 		// Before first write.
 		if len(w.randomJitter) > 0 {
-			var jitRNG int
+			var jitRNG uint32
 			if w.jitterBuffer > 0 {
 				crc := crc32.New(crc32.MakeTable(crc32.Castagnoli))
 				crc.Write(w.buf)
@@ -226,7 +226,7 @@ func (w *GzipResponseWriter) startGzip(remain []byte) error {
 					}
 					crc.Write(remain)
 				}
-				jitRNG = int(crc.Sum32())
+				jitRNG = crc.Sum32()
 			} else {
 				// Get from rand.Reader
 				var tmp [4]byte
@@ -234,9 +234,9 @@ func (w *GzipResponseWriter) startGzip(remain []byte) error {
 				if err != nil {
 					return err
 				}
-				jitRNG = int(binary.LittleEndian.Uint32(tmp[:]))
+				jitRNG = binary.LittleEndian.Uint32(tmp[:])
 			}
-			jit := string(w.randomJitter[:1+jitRNG%(len(w.randomJitter)-1)])
+			jit := string(w.randomJitter[:1+jitRNG%uint32(len(w.randomJitter)-1)])
 			//fmt.Println("w.buf:", len(w.buf), "remain:", len(remain), "jitter:", len(jit))
 			w.gw.(writer.GzipWriterExt).SetHeader(writer.Header{Comment: &jit})
 		}
