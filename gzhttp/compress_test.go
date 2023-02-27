@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -973,6 +974,222 @@ func TestFlush(t *testing.T) {
 				assertEqual(t, testBody, got)
 			}
 		})
+	}
+}
+
+func TestRandomJitter(t *testing.T) {
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Set("Accept-Encoding", "gzip")
+
+	// 4KB input, incompressible to avoid compression variations.
+	rng := rand.New(rand.NewSource(0))
+	payload := make([]byte, 4096)
+	_, err := io.ReadFull(rng, payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wrapper, err := NewWrapper(RandomJitter(256, 1024), MinSize(10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writePayload := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(payload)
+	})
+	referenceHandler := GzipHandler(writePayload)
+	w := httptest.NewRecorder()
+	referenceHandler.ServeHTTP(w, r)
+	result := w.Result()
+	refBody, err := io.ReadAll(result.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("Unmodified length: %d", len(refBody))
+
+	handler := wrapper(writePayload)
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+
+	result = w.Result()
+	b, err := io.ReadAll(result.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(refBody) == len(b) {
+		t.Fatal("padding was not applied")
+	}
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := false
+	for i := 0; i < 10; i++ {
+		w = httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		result = w.Result()
+		b2, err := io.ReadAll(result.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		changed = changed || len(b2) != len(b)
+		t.Logf("attempt %d length: %d. padding: %d.", i, len(b2), len(b2)-len(refBody))
+		if len(b2) <= len(refBody) {
+			t.Errorf("no padding applied,")
+		}
+		if i == 0 && changed {
+			t.Error("length changed without payload change", len(b), "->", len(b2))
+		}
+		// Mutate...
+		payload[0]++
+		b = b2
+	}
+	if !changed {
+		t.Errorf("no change after 9 attempts")
+	}
+
+	// Write one byte at the time to test buffer flushing.
+	handler = wrapper(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for i := range payload {
+			w.Write([]byte{payload[i]})
+		}
+	}))
+
+	for i := 0; i < 10; i++ {
+		w = httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		result = w.Result()
+		b2, err := io.ReadAll(result.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Logf("attempt %d length: %d. padding: %d.", i, len(b2), len(b2)-len(refBody))
+		if len(b2) <= len(refBody) {
+			t.Errorf("no padding applied,")
+		}
+		if i > 0 && len(b2) != len(b) {
+			t.Error("length changed without payload change", len(b), "->", len(b2))
+		}
+		// Mutate, buf after the buffer...
+		payload[2048]++
+		b = b2
+	}
+
+	// Write less than buffer
+	handler = wrapper(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(payload[:512])
+	}))
+	changed = false
+	for i := 0; i < 10; i++ {
+		w = httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		result = w.Result()
+		b2, err := io.ReadAll(result.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i > 0 {
+			changed = changed || len(b2) != len(b)
+		}
+		t.Logf("attempt %d length: %d. padding: %d.", i, len(b2), len(b2)-512)
+		if len(b2) <= 512 {
+			t.Errorf("no padding applied,")
+		}
+		// Mutate...
+		payload[500]++
+		b = b2
+	}
+	if !changed {
+		t.Errorf("no change after 9 attempts")
+	}
+
+	// Write less than buffer, with flush in between.
+	// Checksum should be of all before flush.
+	handler = wrapper(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(payload[:256])
+		w.(http.Flusher).Flush()
+		w.Write(payload[256:512])
+	}))
+
+	changed = false
+	for i := 0; i < 10; i++ {
+		w = httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		result = w.Result()
+		b2, err := io.ReadAll(result.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i > 0 {
+			changed = changed || len(b2) != len(b)
+		}
+		t.Logf("attempt %d length: %d. padding: %d.", i, len(b2), len(b2)-512)
+		if len(b2) <= 512 {
+			t.Errorf("no padding applied,")
+		}
+		// Mutate...
+		payload[200]++
+		b = b2
+	}
+	if !changed {
+		t.Errorf("no change after 9 attempts")
+	}
+
+	// Mutate *after* the flush.
+	// Should no longer affect length.
+	for i := 0; i < 10; i++ {
+		w = httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		result = w.Result()
+		b2, err := io.ReadAll(result.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i > 0 {
+			changed = len(b2) != len(b)
+			if changed {
+				t.Errorf("mutating after flush seems to have affected output")
+			}
+		}
+		t.Logf("attempt %d length: %d. padding: %d.", i, len(b2), len(b2)-512)
+		if len(b2) <= 512 {
+			t.Errorf("no padding applied,")
+		}
+		// Mutate...
+		payload[400]++
+		b = b2
+	}
+
+	// Test non-content aware jitter
+	wrapper, err = NewWrapper(RandomJitter(256, -1), MinSize(10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler = wrapper(writePayload)
+	changed = false
+	for i := 0; i < 10; i++ {
+		w = httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		result = w.Result()
+		b2, err := io.ReadAll(result.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i > 0 {
+			changed = changed || len(b2) != len(b)
+		}
+		t.Logf("attempt %d length: %d. padding: %d.", i, len(b2), len(b2)-len(refBody))
+		if len(b2) <= len(refBody) {
+			t.Errorf("no padding applied,")
+		}
+
+		// Do not mutate...
+		// Update last payload.
+		b = b2
+	}
+	if !changed {
+		t.Errorf("no change after 9 attempts")
 	}
 }
 
