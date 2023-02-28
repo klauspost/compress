@@ -247,6 +247,10 @@ A good option would be to apply 32 random bytes, with default 64KB buffer: `gzht
 
 Note that flushing the data forces the padding to be applied, which means that only data before the flush is considered for content aware padding.
 
+The *padding* in the comment is the text `Padding-Padding-Padding-Padding-Pad....`
+
+The *length* is `1 + sha256(payload) MOD n`, or just random from `crypto/rand` if buffer < 0.
+
 ### Examples
 
 Adding the option `gzhttp.RandomJitter(32, 50000)` will apply from 1 up to 32 bytes of random data to the output.
