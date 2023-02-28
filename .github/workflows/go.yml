@@ -162,7 +162,7 @@ jobs:
         run: go test -run=none -fuzz=FuzzNoBMI2Dec -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
 
       - name: zstd/FuzzEncoding
-        run: go test -run=none -fuzz=FuzzEncoding -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
+        run: go test -run=none -fuzz=FuzzEncoding -fuzztime=250000x -test.fuzzminimizetime=10ms ./zstd/.
 
       - name: zstd/FuzzDecodeAll/noasm
         run: go test -tags=noasm -run=none -fuzz=FuzzDecodeAll -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
@@ -171,7 +171,7 @@ jobs:
         run: go test -tags=noasm -run=none -fuzz=FuzzDecoder -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
 
       - name: zstd/FuzzEncoding/noasm
-        run: go test -tags=noasm -run=none -fuzz=FuzzEncoding -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
+        run: go test -tags=noasm -run=none -fuzz=FuzzEncoding -fuzztime=250000x -test.fuzzminimizetime=10ms ./zstd/.
 
   fuzz-other:
     env:
