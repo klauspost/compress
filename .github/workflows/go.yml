@@ -119,22 +119,22 @@ jobs:
         uses: actions/checkout@v2
 
       - name: S2/FuzzDictBlocks
-        run: go test -run=none -fuzz=FuzzDictBlocks -fuzztime=500000x ./s2/.
+        run: go test -run=none -fuzz=FuzzDictBlocks -fuzztime=500000x -test.fuzzminimizetime=10ms ./s2/.
 
       - name: S2/FuzzEncodingBlocks
-        run: go test -run=none -fuzz=FuzzEncodingBlocks -fuzztime=500000x ./s2/.
+        run: go test -run=none -fuzz=FuzzEncodingBlocks -fuzztime=500000x -test.fuzzminimizetime=10ms ./s2/.
 
       - name: S2/FuzzLZ4Block
-        run: go test -run=none -fuzz=FuzzLZ4Block -fuzztime=500000x ./s2/.
+        run: go test -run=none -fuzz=FuzzLZ4Block -fuzztime=500000x -test.fuzzminimizetime=10ms ./s2/.
 
       - name: S2/FuzzDictBlocks/noasm
-        run: go test -tags=noasm -run=none -fuzz=FuzzDictBlocks -fuzztime=500000x ./s2/.
+        run: go test -tags=noasm -run=none -fuzz=FuzzDictBlocks -fuzztime=500000x -test.fuzzminimizetime=10ms ./s2/.
 
       - name: S2/FuzzEncodingBlocks/noasm
-        run: go test -tags=noasm -run=none -fuzz=FuzzEncodingBlocks -fuzztime=500000x ./s2/.
+        run: go test -tags=noasm -run=none -fuzz=FuzzEncodingBlocks -fuzztime=500000x -test.fuzzminimizetime=10ms ./s2/.
 
       - name: S2/FuzzLZ4Block
-        run: go test -tags=noasm -run=none -fuzz=FuzzLZ4Block -fuzztime=500000x ./s2/.
+        run: go test -tags=noasm -run=none -fuzz=FuzzLZ4Block -fuzztime=500000x -test.fuzzminimizetime=10ms ./s2/.
 
   fuzz-zstd:
     env:
@@ -150,34 +150,28 @@ jobs:
         uses: actions/checkout@v2
 
       - name: zstd/FuzzDecodeAll
-        run: go test -run=none -fuzz=FuzzDecodeAll -fuzztime=500000x ./zstd/.
+        run: go test -run=none -fuzz=FuzzDecodeAll -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
 
       - name: zstd/FuzzDecAllNoBMI2
-        run: go test -run=none -fuzz=FuzzDecAllNoBMI2 -fuzztime=500000x ./zstd/.
+        run: go test -run=none -fuzz=FuzzDecAllNoBMI2 -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
 
       - name: zstd/FuzzDecoder
-        run: go test -run=none -fuzz=FuzzDecoder -fuzztime=500000x ./zstd/.
+        run: go test -run=none -fuzz=FuzzDecoder -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
 
       - name: zstd/FuzzNoBMI2Dec
-        run: go test -run=none -fuzz=FuzzNoBMI2Dec -fuzztime=500000x ./zstd/.
+        run: go test -run=none -fuzz=FuzzNoBMI2Dec -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
 
       - name: zstd/FuzzEncoding/noasm
-        run: go test -tags=noasm -run=none -fuzz=FuzzNoBMI2Dec -fuzztime=500000x ./zstd/.
+        run: go test -tags=noasm -run=none -fuzz=FuzzNoBMI2Dec -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
 
       - name: zstd/FuzzDecodeAll/noasm
-        run: go test -tags=noasm -run=none -fuzz=FuzzDecodeAll -fuzztime=500000x ./zstd/.
-
-      - name: zstd/FuzzDecAllNoBMI2/noasm
-        run: go test -tags=noasm -run=none -fuzz=FuzzDecAllNoBMI2 -fuzztime=500000x ./zstd/.
+        run: go test -tags=noasm -run=none -fuzz=FuzzDecodeAll -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
 
       - name: zstd/FuzzDecoder/noasm
-        run: go test -tags=noasm -run=none -fuzz=FuzzDecoder -fuzztime=500000x ./zstd/.
-
-      - name: zstd/FuzzNoBMI2Dec/noasm
-        run: go test -tags=noasm -run=none -fuzz=FuzzNoBMI2Dec -fuzztime=500000x ./zstd/.
+        run: go test -tags=noasm -run=none -fuzz=FuzzDecoder -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
 
       - name: zstd/FuzzEncoding/noasm
-        run: go test -tags=noasm -run=none -fuzz=FuzzNoBMI2Dec -fuzztime=500000x ./zstd/.
+        run: go test -tags=noasm -run=none -fuzz=FuzzNoBMI2Dec -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
 
   fuzz-other:
     env:
@@ -193,8 +187,8 @@ jobs:
         uses: actions/checkout@v2
 
       - name: flate/FuzzEncoding
-        run: go test -run=none -fuzz=FuzzEncoding -fuzztime=100000x ./flate/.
+        run: go test -run=none -fuzz=FuzzEncoding -fuzztime=100000x -test.fuzzminimizetime=10ms ./flate/.
 
       - name: zip/FuzzReader
-        run: go test -run=none -fuzz=FuzzReader -fuzztime=500000x ./zip/.
+        run: go test -run=none -fuzz=FuzzReader -fuzztime=500000x -test.fuzzminimizetime=10ms ./zip/.
 
