@@ -4,10 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"hash/crc32"
 	"io"
 	"math"
 	"mime"
@@ -216,17 +216,17 @@ func (w *GzipResponseWriter) startGzip(remain []byte) error {
 		if len(w.randomJitter) > 0 {
 			var jitRNG uint32
 			if w.jitterBuffer > 0 {
-				crc := crc32.New(crc32.MakeTable(crc32.Castagnoli))
-				crc.Write(w.buf)
+				h := sha256.New()
+				h.Write(w.buf)
 				// Use only up to "w.jitterBuffer", otherwise the output depends on write sizes.
 				if len(remain) > 0 && len(w.buf) < w.jitterBuffer {
 					remain := remain
 					if len(remain)+len(w.buf) > w.jitterBuffer {
 						remain = remain[:w.jitterBuffer-len(w.buf)]
 					}
-					crc.Write(remain)
+					h.Write(remain)
 				}
-				jitRNG = crc.Sum32()
+				jitRNG = binary.LittleEndian.Uint32(h.Sum(nil))
 			} else {
 				// Get from rand.Reader
 				var tmp [4]byte
