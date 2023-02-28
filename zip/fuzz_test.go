@@ -1,6 +1,3 @@
-//go:build go1.18
-// +build go1.18
-
 // Copyright 2021 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
@@ -12,7 +9,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/klauspost/compress/internal/fuzz"
 )
 
 func FuzzReader(f *testing.F) {
@@ -30,6 +30,8 @@ func FuzzReader(f *testing.F) {
 		}
 		f.Add(b)
 	}
+	fuzz.AddFromZip(f, "testdata/FuzzReader-raw.zip", true, testing.Short())
+	fuzz.AddFromZip(f, "testdata/FuzzReader-enc.zip", false, testing.Short())
 
 	f.Fuzz(func(t *testing.T, b []byte) {
 		r, err := NewReader(bytes.NewReader(b), int64(len(b)))
@@ -41,17 +43,23 @@ func FuzzReader(f *testing.F) {
 			header  *FileHeader
 			content []byte
 		}
-		files := []file{}
+		files := make([]file, 0, len(r.File))
 
-		for _, f := range r.File {
+		for i, f := range r.File {
 			fr, err := f.Open()
 			if err != nil {
 				continue
 			}
-			content, err := io.ReadAll(fr)
+			// No more than 1MiB per file
+			limit := int64(1 << 20)
+			if i < 100 {
+				limit = 10
+			}
+			content, err := io.ReadAll(io.LimitReader(fr, limit))
 			if err != nil {
 				continue
 			}
+
 			files = append(files, file{header: &f.FileHeader, content: content})
 			if _, err := r.Open(f.Name); err != nil {
 				continue
@@ -70,8 +78,10 @@ func FuzzReader(f *testing.F) {
 			if err != nil {
 				t.Fatalf("unable to write previously parsed header: %s", err)
 			}
-			if _, err := ww.Write(f.content); err != nil {
-				t.Fatalf("unable to write previously parsed content: %s", err)
+			if !strings.HasSuffix(f.header.Name, "/") {
+				if _, err := ww.Write(f.content); err != nil {
+					t.Fatalf("unable to write previously parsed content: %s", err)
+				}
 			}
 		}
 
