@@ -104,9 +104,11 @@ func main() {
 	o.genEmitCopyNoRepeat()
 	o.snappy = false
 	o.genMatchLen()
-	o.cvtLZ4BlockAsm()
+	o.cvtLZ4BlockAsm(false)
+	o.cvtLZ4BlockAsm(true)
 	o.snappy = true
-	o.cvtLZ4BlockAsm()
+	o.cvtLZ4BlockAsm(false)
+	o.cvtLZ4BlockAsm(true)
 
 	Generate()
 }
@@ -2862,15 +2864,22 @@ func (o options) matchLenAlt(name string, a, b, len reg.GPVirtual, end LabelRef)
 	return matched
 }
 
-func (o options) cvtLZ4BlockAsm() {
+func (o options) cvtLZ4BlockAsm(lz4s bool) {
 	snap := "Asm"
 	name := "lz4_s2_"
+	srcAlgo := "LZ4"
+	dstAlgo := "S2"
 	if o.snappy {
 		snap = "SnappyAsm"
 		name = "lz4_snappy_"
+		dstAlgo = "Snappy"
 	}
-	TEXT("cvtLZ4Block"+snap, NOSPLIT, "func(dst, src []byte) (uncompressed int, dstUsed int)")
-	Doc("cvtLZ4Block converts an LZ4 block to S2", "")
+	if lz4s {
+		name = strings.ReplaceAll(name, "lz4", "lz4s")
+		srcAlgo = "LZ4s"
+	}
+	TEXT("cvt"+srcAlgo+"Block"+snap, NOSPLIT, "func(dst, src []byte) (uncompressed int, dstUsed int)")
+	Doc("cvt"+srcAlgo+"Block converts an "+srcAlgo+" block to "+dstAlgo, "")
 	Pragma("noescape")
 	o.outputMargin = 10
 	o.maxOffset = math.MaxUint16
@@ -2914,7 +2923,10 @@ func (o options) cvtLZ4BlockAsm() {
 		JAE(LabelRef(name + "dstfull"))
 	}
 
-	const lz4MinMatch = 4
+	var lz4MinMatch = 4
+	if lz4s {
+		lz4MinMatch = 3
+	}
 
 	Label(name + "loop")
 	checkSrc(src)
@@ -2971,6 +2983,10 @@ func (o options) cvtLZ4BlockAsm() {
 	JMP(LabelRef(name + "corrupt"))
 
 	Label(name + "match")
+	if lz4s {
+		CMPQ(ml, U8(lz4MinMatch))
+		JEQ(LabelRef(name + "loop"))
+	}
 	// if s >= len(src)-2 {
 	end := GP64()
 	LEAQ(Mem{Base: src, Disp: 2}, end)

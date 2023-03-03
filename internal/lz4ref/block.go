@@ -86,11 +86,223 @@ func CompressBlock(src, dst []byte) (int, error) {
 	return n, err
 }
 
+func CompressBlockLZ4s(src, dst []byte) (int, error) {
+	c := compressorPool.Get().(*Compressor)
+	n, err := c.CompressBlockLZ4s(src, dst)
+	compressorPool.Put(c)
+	return n, err
+}
+
 func (c *Compressor) CompressBlock(src, dst []byte) (int, error) {
 	// Zero out reused table to avoid non-deterministic output (issue #65).
 	c.reset()
 
 	const debug = false
+
+	if debug {
+		fmt.Printf("lz4 block start: len(src): %d, len(dst):%d \n", len(src), len(dst))
+	}
+
+	// Return 0, nil only if the destination buffer size is < CompressBlockBound.
+	isNotCompressible := len(dst) < CompressBlockBound(len(src))
+
+	// adaptSkipLog sets how quickly the compressor begins skipping blocks when data is incompressible.
+	// This significantly speeds up incompressible data and usually has very small impact on compression.
+	// bytes to skip =  1 + (bytes since last match >> adaptSkipLog)
+	const adaptSkipLog = 7
+
+	// si: Current position of the search.
+	// anchor: Position of the current literals.
+	var si, di, anchor int
+	sn := len(src) - mfLimit
+	if sn <= 0 {
+		goto lastLiterals
+	}
+
+	// Fast scan strategy: the hash table only stores the last five-byte sequences.
+	for si < sn {
+		// Hash the next five bytes (sequence)...
+		match := binary.LittleEndian.Uint64(src[si:])
+		h := blockHash(match)
+		h2 := blockHash(match >> 8)
+
+		// We check a match at s, s+1 and s+2 and pick the first one we get.
+		// Checking 3 only requires us to load the source one.
+		ref := c.get(h, si)
+		ref2 := c.get(h2, si+1)
+		c.put(h, si)
+		c.put(h2, si+1)
+
+		offset := si - ref
+
+		if offset <= 0 || offset >= winSize || uint32(match) != binary.LittleEndian.Uint32(src[ref:]) {
+			// No match. Start calculating another hash.
+			// The processor can usually do this out-of-order.
+			h = blockHash(match >> 16)
+			ref3 := c.get(h, si+2)
+
+			// Check the second match at si+1
+			si += 1
+			offset = si - ref2
+
+			if offset <= 0 || offset >= winSize || uint32(match>>8) != binary.LittleEndian.Uint32(src[ref2:]) {
+				// No match. Check the third match at si+2
+				si += 1
+				offset = si - ref3
+				c.put(h, si)
+
+				if offset <= 0 || offset >= winSize || uint32(match>>16) != binary.LittleEndian.Uint32(src[ref3:]) {
+					// Skip one extra byte (at si+3) before we check 3 matches again.
+					si += 2 + (si-anchor)>>adaptSkipLog
+					continue
+				}
+			}
+		}
+
+		// Match found.
+		lLen := si - anchor // Literal length.
+		// We already matched 4 bytes.
+		mLen := 4
+
+		// Extend backwards if we can, reducing literals.
+		tOff := si - offset - 1
+		for lLen > 0 && tOff >= 0 && src[si-1] == src[tOff] {
+			si--
+			tOff--
+			lLen--
+			mLen++
+		}
+
+		// Add the match length, so we continue search at the end.
+		// Use mLen to store the offset base.
+		si, mLen = si+mLen, si+minMatch
+
+		// Find the longest match by looking by batches of 8 bytes.
+		for si+8 <= sn {
+			x := binary.LittleEndian.Uint64(src[si:]) ^ binary.LittleEndian.Uint64(src[si-offset:])
+			if x == 0 {
+				si += 8
+			} else {
+				// Stop is first non-zero byte.
+				si += bits.TrailingZeros64(x) >> 3
+				break
+			}
+		}
+
+		mLen = si - mLen
+		if di >= len(dst) {
+			return 0, ErrInvalidSourceShortBuffer
+		}
+		if mLen < 0xF {
+			dst[di] = byte(mLen)
+		} else {
+			dst[di] = 0xF
+		}
+
+		// Encode literals length.
+		if debug {
+			fmt.Printf("emit %d literals\n", lLen)
+		}
+		if lLen < 0xF {
+			dst[di] |= byte(lLen << 4)
+		} else {
+			dst[di] |= 0xF0
+			di++
+			l := lLen - 0xF
+			for ; l >= 0xFF && di < len(dst); l -= 0xFF {
+				dst[di] = 0xFF
+				di++
+			}
+			if di >= len(dst) {
+				return 0, ErrInvalidSourceShortBuffer
+			}
+			dst[di] = byte(l)
+		}
+		di++
+
+		// Literals.
+		if di+lLen > len(dst) {
+			return 0, ErrInvalidSourceShortBuffer
+		}
+		copy(dst[di:di+lLen], src[anchor:anchor+lLen])
+		di += lLen + 2
+		anchor = si
+
+		// Encode offset.
+		if debug {
+			fmt.Printf("emit copy, length: %d, offset: %d\n", mLen+minMatch, offset)
+		}
+		if di > len(dst) {
+			return 0, ErrInvalidSourceShortBuffer
+		}
+		dst[di-2], dst[di-1] = byte(offset), byte(offset>>8)
+
+		// Encode match length part 2.
+		if mLen >= 0xF {
+			for mLen -= 0xF; mLen >= 0xFF && di < len(dst); mLen -= 0xFF {
+				dst[di] = 0xFF
+				di++
+			}
+			if di >= len(dst) {
+				return 0, ErrInvalidSourceShortBuffer
+			}
+			dst[di] = byte(mLen)
+			di++
+		}
+		// Check if we can load next values.
+		if si >= sn {
+			break
+		}
+		// Hash match end-2
+		h = blockHash(binary.LittleEndian.Uint64(src[si-2:]))
+		c.put(h, si-2)
+	}
+
+lastLiterals:
+	if isNotCompressible && anchor == 0 {
+		// Incompressible.
+		return 0, nil
+	}
+
+	// Last literals.
+	if di >= len(dst) {
+		return 0, ErrInvalidSourceShortBuffer
+	}
+	lLen := len(src) - anchor
+	if lLen < 0xF {
+		dst[di] = byte(lLen << 4)
+	} else {
+		dst[di] = 0xF0
+		di++
+		for lLen -= 0xF; lLen >= 0xFF && di < len(dst); lLen -= 0xFF {
+			dst[di] = 0xFF
+			di++
+		}
+		if di >= len(dst) {
+			return 0, ErrInvalidSourceShortBuffer
+		}
+		dst[di] = byte(lLen)
+	}
+	di++
+
+	// Write the last literals.
+	if isNotCompressible && di >= anchor {
+		// Incompressible.
+		return 0, nil
+	}
+	if di+len(src)-anchor > len(dst) {
+		return 0, ErrInvalidSourceShortBuffer
+	}
+	di += copy(dst[di:di+len(src)-anchor], src[anchor:])
+	return di, nil
+}
+
+func (c *Compressor) CompressBlockLZ4s(src, dst []byte) (int, error) {
+	// Zero out reused table to avoid non-deterministic output (issue #65).
+	c.reset()
+
+	const debug = false
+	const minMatch = 3
 
 	if debug {
 		fmt.Printf("lz4 block start: len(src): %d, len(dst):%d \n", len(src), len(dst))
