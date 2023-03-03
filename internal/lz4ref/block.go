@@ -303,6 +303,7 @@ func (c *Compressor) CompressBlockLZ4s(src, dst []byte) (int, error) {
 
 	const debug = false
 	const minMatch = 3
+	const addExtraLits = 32 // Suboptimal, but test emitting literals without matches. Set to 0 to disable.
 
 	if debug {
 		fmt.Printf("lz4 block start: len(src): %d, len(dst):%d \n", len(src), len(dst))
@@ -393,7 +394,18 @@ func (c *Compressor) CompressBlockLZ4s(src, dst []byte) (int, error) {
 				break
 			}
 		}
-
+		if addExtraLits > 15 {
+			// Add X lits.
+			if lLen > addExtraLits {
+				dst[di] = 0xf0
+				dst[di+1] = byte(int(addExtraLits-15) & 0xff) // hack to compile
+				di += 2
+				copy(dst[di:di+addExtraLits], src[anchor:anchor+lLen])
+				di += addExtraLits
+				lLen -= addExtraLits
+				anchor += addExtraLits
+			}
+		}
 		mLen = si - mLen
 		if di >= len(dst) {
 			return 0, ErrInvalidSourceShortBuffer
