@@ -231,9 +231,9 @@ func (w *GzipResponseWriter) startGzip(remain []byte) error {
 			} else {
 				// Get from rand.Reader
 				var tmp [4]byte
-				_, err := rand.Reader.Read(tmp[:])
+				_, err := rand.Read(tmp[:])
 				if err != nil {
-					return err
+					return fmt.Errorf("gzhttp: %w", err)
 				}
 				jitRNG = binary.LittleEndian.Uint32(tmp[:])
 			}
