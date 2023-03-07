@@ -8,8 +8,10 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"math"
+	"math/bits"
 	"mime"
 	"net"
 	"net/http"
@@ -73,6 +75,7 @@ type GzipResponseWriter struct {
 	setContentType   bool   // Add content type, if missing and detected.
 	suffixETag       string // Suffix to add to ETag header if response is compressed.
 	dropETag         bool   // Drop ETag header if response is compressed (supersedes suffixETag).
+	sha256Jitter     bool   // Use sha256 for jitter.
 	randomJitter     []byte // Add random bytes to output as header field.
 	jitterBuffer     int    // Maximum buffer to accumulate before doing jitter.
 
@@ -167,6 +170,8 @@ func (w *GzipResponseWriter) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
+var castagnoliTable = crc32.MakeTable(crc32.Castagnoli)
+
 // startGzip initializes a GZIP writer and writes the buffer.
 func (w *GzipResponseWriter) startGzip(remain []byte) error {
 	// Set the GZIP header.
@@ -216,18 +221,32 @@ func (w *GzipResponseWriter) startGzip(remain []byte) error {
 		if len(w.randomJitter) > 0 {
 			var jitRNG uint32
 			if w.jitterBuffer > 0 {
-				h := sha256.New()
-				h.Write(w.buf)
-				// Use only up to "w.jitterBuffer", otherwise the output depends on write sizes.
-				if len(remain) > 0 && len(w.buf) < w.jitterBuffer {
-					remain := remain
-					if len(remain)+len(w.buf) > w.jitterBuffer {
-						remain = remain[:w.jitterBuffer-len(w.buf)]
+				if w.sha256Jitter {
+					h := sha256.New()
+					h.Write(w.buf)
+					// Use only up to "w.jitterBuffer", otherwise the output depends on write sizes.
+					if len(remain) > 0 && len(w.buf) < w.jitterBuffer {
+						remain := remain
+						if len(remain)+len(w.buf) > w.jitterBuffer {
+							remain = remain[:w.jitterBuffer-len(w.buf)]
+						}
+						h.Write(remain)
 					}
-					h.Write(remain)
+					var tmp [sha256.BlockSize]byte
+					jitRNG = binary.LittleEndian.Uint32(h.Sum(tmp[:0]))
+				} else {
+					h := crc32.New(castagnoliTable)
+					h.Write(w.buf)
+					// Use only up to "w.jitterBuffer", otherwise the output depends on write sizes.
+					if len(remain) > 0 && len(w.buf) < w.jitterBuffer {
+						remain := remain
+						if len(remain)+len(w.buf) > w.jitterBuffer {
+							remain = remain[:w.jitterBuffer-len(w.buf)]
+						}
+						h.Write(remain)
+					}
+					jitRNG = bits.RotateLeft32(h.Sum32(), 19) ^ 0xab0755de
 				}
-				var tmp [sha256.BlockSize]byte
-				jitRNG = binary.LittleEndian.Uint32(h.Sum(tmp[:0]))
 			} else {
 				// Get from rand.Reader
 				var tmp [4]byte
@@ -441,6 +460,7 @@ func NewWrapper(opts ...option) (func(http.Handler) http.HandlerFunc, error) {
 					setContentType:    c.setContentType,
 					randomJitter:      c.randomJitter,
 					jitterBuffer:      c.jitterBuffer,
+					sha256Jitter:      c.sha256Jitter,
 				}
 				if len(gw.buf) > 0 {
 					gw.buf = gw.buf[:0]
@@ -507,6 +527,7 @@ type config struct {
 	dropETag         bool
 	jitterBuffer     int
 	randomJitter     []byte
+	sha256Jitter     bool
 }
 
 func (c *config) validate() error {
@@ -692,11 +713,14 @@ func DropETag() option {
 // This should cover the sensitive part of your response.
 // This can be used to obfuscate the exact compressed size.
 // Specifying 0 will use a buffer size of 64KB.
+// 'paranoid' will use a slower hashing function, that MAY provide more safety.
+// See README.md for more information.
 // If a negative buffer is given, the amount of jitter will not be content dependent.
 // This provides *less* security than applying content based jitter.
-func RandomJitter(n, buffer int) option {
+func RandomJitter(n, buffer int, paranoid bool) option {
 	return func(c *config) {
 		if n > 0 {
+			c.sha256Jitter = paranoid
 			c.randomJitter = bytes.Repeat([]byte("Padding-"), 1+(n/8))
 			c.randomJitter = c.randomJitter[:(n + 1)]
 			c.jitterBuffer = buffer
