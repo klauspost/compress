@@ -23,10 +23,10 @@ type GzipWriterExt interface {
 
 // Header provides nillable header fields.
 type Header struct {
-	Comment *string    // comment
+	Comment []byte     // comment, converted to string if set.
 	Extra   *[]byte    // "extra data"
 	ModTime *time.Time // modification time
-	Name    *string    // file name
+	Name    []byte     // file name, converted to string if set.
 	OS      *byte      // operating system type
 }
 

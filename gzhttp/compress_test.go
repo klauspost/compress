@@ -1438,19 +1438,50 @@ func TestContentTypeDetect(t *testing.T) {
 
 // --------------------------------------------------------------------
 
-func BenchmarkGzipHandler_S2k(b *testing.B)   { benchmark(b, false, 2048, gzip.DefaultCompression) }
-func BenchmarkGzipHandler_S20k(b *testing.B)  { benchmark(b, false, 20480, gzip.DefaultCompression) }
-func BenchmarkGzipHandler_S100k(b *testing.B) { benchmark(b, false, 102400, gzip.DefaultCompression) }
-func BenchmarkGzipHandler_P2k(b *testing.B)   { benchmark(b, true, 2048, gzip.DefaultCompression) }
-func BenchmarkGzipHandler_P20k(b *testing.B)  { benchmark(b, true, 20480, gzip.DefaultCompression) }
-func BenchmarkGzipHandler_P100k(b *testing.B) { benchmark(b, true, 102400, gzip.DefaultCompression) }
+func BenchmarkGzipHandler_S2k(b *testing.B) {
+	benchmark(b, false, 2048, CompressionLevel(gzip.DefaultCompression))
+}
+func BenchmarkGzipHandler_S20k(b *testing.B) {
+	benchmark(b, false, 20480, CompressionLevel(gzip.DefaultCompression))
+}
+func BenchmarkGzipHandler_S100k(b *testing.B) {
+	benchmark(b, false, 102400, CompressionLevel(gzip.DefaultCompression))
+}
+func BenchmarkGzipHandler_P2k(b *testing.B) {
+	benchmark(b, true, 2048, CompressionLevel(gzip.DefaultCompression))
+}
+func BenchmarkGzipHandler_P20k(b *testing.B) {
+	benchmark(b, true, 20480, CompressionLevel(gzip.DefaultCompression))
+}
+func BenchmarkGzipHandler_P100k(b *testing.B) {
+	benchmark(b, true, 102400, CompressionLevel(gzip.DefaultCompression))
+}
 
-func BenchmarkGzipBestSpeedHandler_S2k(b *testing.B)   { benchmark(b, false, 2048, gzip.BestSpeed) }
-func BenchmarkGzipBestSpeedHandler_S20k(b *testing.B)  { benchmark(b, false, 20480, gzip.BestSpeed) }
-func BenchmarkGzipBestSpeedHandler_S100k(b *testing.B) { benchmark(b, false, 102400, gzip.BestSpeed) }
-func BenchmarkGzipBestSpeedHandler_P2k(b *testing.B)   { benchmark(b, true, 2048, gzip.BestSpeed) }
-func BenchmarkGzipBestSpeedHandler_P20k(b *testing.B)  { benchmark(b, true, 20480, gzip.BestSpeed) }
-func BenchmarkGzipBestSpeedHandler_P100k(b *testing.B) { benchmark(b, true, 102400, gzip.BestSpeed) }
+func BenchmarkGzipBestSpeedHandler_S2k(b *testing.B) {
+	benchmark(b, false, 2048, CompressionLevel(gzip.BestSpeed))
+}
+func BenchmarkGzipBestSpeedHandler_S20k(b *testing.B) {
+	benchmark(b, false, 20480, CompressionLevel(gzip.BestSpeed))
+}
+func BenchmarkGzipBestSpeedHandler_S100k(b *testing.B) {
+	benchmark(b, false, 102400, CompressionLevel(gzip.BestSpeed))
+}
+func BenchmarkGzipBestSpeedHandler_P2k(b *testing.B) {
+	benchmark(b, true, 2048, CompressionLevel(gzip.BestSpeed))
+}
+func BenchmarkGzipBestSpeedHandler_P20k(b *testing.B) {
+	benchmark(b, true, 20480, CompressionLevel(gzip.BestSpeed))
+}
+func BenchmarkGzipBestSpeedHandler_P100k(b *testing.B) {
+	benchmark(b, true, 102400, CompressionLevel(gzip.BestSpeed))
+}
+
+func Benchmark2kJitter(b *testing.B) {
+	benchmark(b, false, 2048, CompressionLevel(gzip.BestSpeed), RandomJitter(32, 0))
+}
+func Benchmark2kJitterRNG(b *testing.B) {
+	benchmark(b, false, 2048, CompressionLevel(gzip.BestSpeed), RandomJitter(32, -1))
+}
 
 // --------------------------------------------------------------------
 
@@ -1462,7 +1493,7 @@ func gzipStrLevel(s []byte, lvl int) []byte {
 	return b.Bytes()
 }
 
-func benchmark(b *testing.B, parallel bool, size, level int) {
+func benchmark(b *testing.B, parallel bool, size int, opts ...option) {
 	bin, err := os.ReadFile("testdata/benchmark.json")
 	if err != nil {
 		b.Fatal(err)
@@ -1470,7 +1501,7 @@ func benchmark(b *testing.B, parallel bool, size, level int) {
 
 	req, _ := http.NewRequest("GET", "/whatever", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
-	handler := newTestHandlerLevel(bin[:size], level)
+	handler := newTestHandlerLevel(bin[:size], opts...)
 
 	b.ReportAllocs()
 	b.SetBytes(int64(size))
@@ -1514,8 +1545,8 @@ func newTestHandler(body []byte) http.Handler {
 	}))
 }
 
-func newTestHandlerLevel(body []byte, level int) http.Handler {
-	wrapper, err := NewWrapper(CompressionLevel(level))
+func newTestHandlerLevel(body []byte, opts ...option) http.Handler {
+	wrapper, err := NewWrapper(opts...)
 	if err != nil {
 		panic(err)
 	}

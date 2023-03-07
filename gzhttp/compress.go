@@ -226,7 +226,8 @@ func (w *GzipResponseWriter) startGzip(remain []byte) error {
 					}
 					h.Write(remain)
 				}
-				jitRNG = binary.LittleEndian.Uint32(h.Sum(nil))
+				var tmp [sha256.BlockSize]byte
+				jitRNG = binary.LittleEndian.Uint32(h.Sum(tmp[:0]))
 			} else {
 				// Get from rand.Reader
 				var tmp [4]byte
@@ -236,9 +237,8 @@ func (w *GzipResponseWriter) startGzip(remain []byte) error {
 				}
 				jitRNG = binary.LittleEndian.Uint32(tmp[:])
 			}
-			jit := string(w.randomJitter[:1+jitRNG%uint32(len(w.randomJitter)-1)])
-			//fmt.Println("w.buf:", len(w.buf), "remain:", len(remain), "jitter:", len(jit))
-			w.gw.(writer.GzipWriterExt).SetHeader(writer.Header{Comment: &jit})
+			jit := w.randomJitter[:1+jitRNG%uint32(len(w.randomJitter)-1)]
+			w.gw.(writer.GzipWriterExt).SetHeader(writer.Header{Comment: jit})
 		}
 		n, err := w.gw.Write(w.buf)
 
@@ -457,6 +457,7 @@ func NewWrapper(opts ...option) (func(http.Handler) http.HandlerFunc, error) {
 				} else {
 					h.ServeHTTP(gw, r)
 				}
+				w.Header().Del(HeaderNoCompression)
 			} else {
 				h.ServeHTTP(newNoGzipResponseWriter(w), r)
 				w.Header().Del(HeaderNoCompression)
@@ -786,10 +787,23 @@ func parseEncodings(s string) (codings, error) {
 	return c, nil
 }
 
+var errEmptyEncoding = errors.New("empty content-coding")
+
 // parseCoding parses a single coding (content-coding with an optional qvalue),
 // as might appear in an Accept-Encoding header. It attempts to forgive minor
 // formatting errors.
 func parseCoding(s string) (coding string, qvalue float64, err error) {
+	// Avoid splitting if we can...
+	if len(s) == 0 {
+		return "", 0, errEmptyEncoding
+	}
+	if !strings.ContainsRune(s, ';') {
+		coding = strings.ToLower(strings.TrimSpace(s))
+		if coding == "" {
+			err = errEmptyEncoding
+		}
+		return coding, DefaultQValue, err
+	}
 	for n, part := range strings.Split(s, ";") {
 		part = strings.TrimSpace(part)
 		qvalue = DefaultQValue
@@ -808,7 +822,7 @@ func parseCoding(s string) (coding string, qvalue float64, err error) {
 	}
 
 	if coding == "" {
-		err = fmt.Errorf("empty content-coding")
+		err = errEmptyEncoding
 	}
 
 	return
@@ -850,6 +864,9 @@ const intSize = 32 << (^uint(0) >> 63)
 
 // atoi is equivalent to ParseInt(s, 10, 0), converted to type int.
 func atoi(s string) (int, bool) {
+	if len(s) == 0 {
+		return 0, false
+	}
 	sLen := len(s)
 	if intSize == 32 && (0 < sLen && sLen < 10) ||
 		intSize == 64 && (0 < sLen && sLen < 19) {

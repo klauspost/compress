@@ -64,13 +64,13 @@ func NewWriter(w io.Writer, level int) writer.GzipWriter {
 // SetHeader will override header with any non-nil values.
 func (pw *pooledWriter) SetHeader(h writer.Header) {
 	if h.Name != nil {
-		pw.Name = *h.Name
+		pw.Name = string(h.Name)
 	}
 	if h.Extra != nil {
 		pw.Extra = *h.Extra
 	}
 	if h.Comment != nil {
-		pw.Comment = *h.Comment
+		pw.Comment = string(h.Comment)
 	}
 	if h.ModTime != nil {
 		pw.ModTime = *h.ModTime
