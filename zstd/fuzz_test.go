@@ -62,17 +62,6 @@ func FuzzDecAllNoBMI2(f *testing.F) {
 func FuzzDecoder(f *testing.F) {
 	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-raw.zip", true, testing.Short())
 	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-encoded.zip", false, testing.Short())
-	decLow, err := NewReader(nil, WithDecoderLowmem(true), WithDecoderConcurrency(2), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true), WithDecodeBuffersBelow(8<<10))
-	if err != nil {
-		f.Fatal(err)
-	}
-	defer decLow.Close()
-	// Test with high memory, but sync decoding
-	decHi, err := NewReader(nil, WithDecoderLowmem(false), WithDecoderConcurrency(1), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true), WithDecodeBuffersBelow(8<<10))
-	if err != nil {
-		f.Fatal(err)
-	}
-	defer decHi.Close()
 
 	brLow := newBytesReader(nil)
 	brHi := newBytesReader(nil)
@@ -86,14 +75,19 @@ func FuzzDecoder(f *testing.F) {
 		}()
 		brLow.Reset(b)
 		brHi.Reset(b)
-		err := decLow.Reset(brLow)
+		decLow, err := NewReader(brLow, WithDecoderLowmem(true), WithDecoderConcurrency(2), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true), WithDecodeBuffersBelow(8<<10))
 		if err != nil {
-			t.Fatal(err)
+			f.Fatal(err)
 		}
-		err = decHi.Reset(brHi)
+		defer decLow.Close()
+
+		// Test with high memory, but sync decoding
+		decHi, err := NewReader(brHi, WithDecoderLowmem(false), WithDecoderConcurrency(1), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true), WithDecodeBuffersBelow(8<<10))
 		if err != nil {
-			t.Fatal(err)
+			f.Fatal(err)
 		}
+		defer decHi.Close()
+
 		b1, err1 := io.ReadAll(decLow)
 		b2, err2 := io.ReadAll(decHi)
 		if err1 != err2 {
