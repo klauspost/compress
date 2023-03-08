@@ -2,7 +2,6 @@ package gzhttp
 
 import (
 	"bufio"
-	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
@@ -76,7 +75,7 @@ type GzipResponseWriter struct {
 	suffixETag       string // Suffix to add to ETag header if response is compressed.
 	dropETag         bool   // Drop ETag header if response is compressed (supersedes suffixETag).
 	sha256Jitter     bool   // Use sha256 for jitter.
-	randomJitter     []byte // Add random bytes to output as header field.
+	randomJitter     string // Add random bytes to output as header field.
 	jitterBuffer     int    // Maximum buffer to accumulate before doing jitter.
 
 	contentTypeFilter func(ct string) bool // Only compress if the response is one of these content-types. All are accepted if empty.
@@ -216,7 +215,7 @@ func (w *GzipResponseWriter) startGzip(remain []byte) error {
 		// Initialize the GZIP response.
 		w.init()
 
-		// Set random jitter based on CRC of current buffer
+		// Set random jitter based on CRC or SHA-256 of current buffer.
 		// Before first write.
 		if len(w.randomJitter) > 0 {
 			var jitRNG uint32
@@ -232,7 +231,7 @@ func (w *GzipResponseWriter) startGzip(remain []byte) error {
 						}
 						h.Write(remain)
 					}
-					var tmp [sha256.BlockSize]byte
+					var tmp [sha256.Size]byte
 					jitRNG = binary.LittleEndian.Uint32(h.Sum(tmp[:0]))
 				} else {
 					h := crc32.New(castagnoliTable)
@@ -526,7 +525,7 @@ type config struct {
 	suffixETag       string
 	dropETag         bool
 	jitterBuffer     int
-	randomJitter     []byte
+	randomJitter     string
 	sha256Jitter     bool
 }
 
@@ -721,14 +720,13 @@ func RandomJitter(n, buffer int, paranoid bool) option {
 	return func(c *config) {
 		if n > 0 {
 			c.sha256Jitter = paranoid
-			c.randomJitter = bytes.Repeat([]byte("Padding-"), 1+(n/8))
-			c.randomJitter = c.randomJitter[:(n + 1)]
+			c.randomJitter = strings.Repeat("Padding-", 1+(n/8))[:n+1]
 			c.jitterBuffer = buffer
 			if c.jitterBuffer == 0 {
 				c.jitterBuffer = 64 << 10
 			}
 		} else {
-			c.randomJitter = nil
+			c.randomJitter = ""
 			c.jitterBuffer = 0
 		}
 	}
