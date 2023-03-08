@@ -234,17 +234,16 @@ func (w *GzipResponseWriter) startGzip(remain []byte) error {
 					var tmp [sha256.Size]byte
 					jitRNG = binary.LittleEndian.Uint32(h.Sum(tmp[:0]))
 				} else {
-					h := crc32.New(castagnoliTable)
-					h.Write(w.buf)
+					h := crc32.Update(0, castagnoliTable, w.buf)
 					// Use only up to "w.jitterBuffer", otherwise the output depends on write sizes.
 					if len(remain) > 0 && len(w.buf) < w.jitterBuffer {
 						remain := remain
 						if len(remain)+len(w.buf) > w.jitterBuffer {
 							remain = remain[:w.jitterBuffer-len(w.buf)]
 						}
-						h.Write(remain)
+						h = crc32.Update(h, castagnoliTable, remain)
 					}
-					jitRNG = bits.RotateLeft32(h.Sum32(), 19) ^ 0xab0755de
+					jitRNG = bits.RotateLeft32(h, 19) ^ 0xab0755de
 				}
 			} else {
 				// Get from rand.Reader
