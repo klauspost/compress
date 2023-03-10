@@ -21,13 +21,13 @@ type GzipWriterExt interface {
 	SetHeader(h Header)
 }
 
-// Header provides nillable header fields.
+// Header is a gzip header.
 type Header struct {
-	Comment []byte     // comment, converted to string if set.
-	Extra   *[]byte    // "extra data"
-	ModTime *time.Time // modification time
-	Name    []byte     // file name, converted to string if set.
-	OS      *byte      // operating system type
+	Comment string    // comment
+	Extra   []byte    // "extra data"
+	ModTime time.Time // modification time
+	Name    string    // file name
+	OS      byte      // operating system type
 }
 
 // GzipWriterFactory contains the information needed for custom gzip implementations.
