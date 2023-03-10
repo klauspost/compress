@@ -235,21 +235,35 @@ but if you do, or you are in doubt, you can apply mitigations.
 // This should cover the sensitive part of your response.
 // This can be used to obfuscate the exact compressed size.
 // Specifying 0 will use a buffer size of 64KB.
+// 'paranoid' will use a slower hashing function, that MAY provide more safety. 
 // If a negative buffer is given, the amount of jitter will not be content dependent.
 // This provides *less* security than applying content based jitter.
-func RandomJitter(n, buffer int) option {
+func RandomJitter(n, buffer int, paranoid bool) option
 ...	
 ```
 
 The jitter is added as a "Comment" field. This field has a 1 byte overhead, so actual extra size will be 2 -> n+1 (inclusive).
 
-A good option would be to apply 32 random bytes, with default 64KB buffer: `gzhttp.RandomJitter(32, 0)`.
+A good option would be to apply 32 random bytes, with default 64KB buffer: `gzhttp.RandomJitter(32, 0, false)`.
 
 Note that flushing the data forces the padding to be applied, which means that only data before the flush is considered for content aware padding.
 
 The *padding* in the comment is the text `Padding-Padding-Padding-Padding-Pad....`
 
-The *length* is `1 + sha256(payload) MOD n`, or just random from `crypto/rand` if buffer < 0.
+The *length* is `1 + crc32c(payload) MOD n` or `1 + sha256(payload) MOD n` (paranoid), or just random from `crypto/rand` if buffer < 0.
+
+### Paranoid?
+
+The padding size is determined by the remainder of a CRC32 of the content. 
+
+Since the payload contains elements unknown to the attacker, there is no reason to believe they can derive any information
+from this remainder, or predict it.
+
+However, for those that feel uncomfortable with a CRC32 being used for this can enable "paranoid" mode which will use SHA256 for determining the padding.
+
+The hashing itself is about 2 orders of magnitude slower, but in overall terms will maybe only reduce speed by 10%.
+
+Paranoid mode has no effect if buffer is < 0 (non-content aware padding).
 
 ### Examples
 

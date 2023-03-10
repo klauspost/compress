@@ -15,18 +15,9 @@ import (
 )
 
 func FuzzDecodeAll(f *testing.F) {
-	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-raw.zip", true, testing.Short())
-	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-encoded.zip", false, testing.Short())
-	decLow, err := NewReader(nil, WithDecoderLowmem(true), WithDecoderConcurrency(2), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true))
-	if err != nil {
-		f.Fatal(err)
-	}
-	defer decLow.Close()
-	decHi, err := NewReader(nil, WithDecoderLowmem(false), WithDecoderConcurrency(2), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true))
-	if err != nil {
-		f.Fatal(err)
-	}
-	defer decHi.Close()
+	fuzz.AddFromZip(f, "testdata/decode-regression.zip", fuzz.TypeRaw, false)
+	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-raw.zip", fuzz.TypeRaw, testing.Short())
+	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-encoded.zip", fuzz.TypeGoFuzz, testing.Short())
 
 	f.Fuzz(func(t *testing.T, b []byte) {
 		// Just test if we crash...
@@ -36,10 +27,23 @@ func FuzzDecodeAll(f *testing.F) {
 				t.Fatal(r)
 			}
 		}()
-		b1, err1 := decLow.DecodeAll(b, nil)
-		b2, err2 := decHi.DecodeAll(b, nil)
+
+		decLow, err := NewReader(nil, WithDecoderLowmem(true), WithDecoderConcurrency(2), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true))
+		if err != nil {
+			f.Fatal(err)
+		}
+		defer decLow.Close()
+		decHi, err := NewReader(nil, WithDecoderLowmem(false), WithDecoderConcurrency(2), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true))
+		if err != nil {
+			f.Fatal(err)
+		}
+		defer decHi.Close()
+		b1, err1 := decLow.DecodeAll(b, make([]byte, 0, len(b)))
+		b2, err2 := decHi.DecodeAll(b, make([]byte, 0, len(b)))
 		if err1 != err2 {
-			t.Log(err1, err2)
+			if (err1 == nil) != (err2 == nil) {
+				t.Errorf("err low: %v, hi: %v", err1, err2)
+			}
 		}
 		if err1 != nil {
 			b1, b2 = b1[:0], b2[:0]
@@ -60,19 +64,8 @@ func FuzzDecAllNoBMI2(f *testing.F) {
 }
 
 func FuzzDecoder(f *testing.F) {
-	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-raw.zip", true, testing.Short())
-	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-encoded.zip", false, testing.Short())
-	decLow, err := NewReader(nil, WithDecoderLowmem(true), WithDecoderConcurrency(2), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true), WithDecodeBuffersBelow(8<<10))
-	if err != nil {
-		f.Fatal(err)
-	}
-	defer decLow.Close()
-	// Test with high memory, but sync decoding
-	decHi, err := NewReader(nil, WithDecoderLowmem(false), WithDecoderConcurrency(1), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true), WithDecodeBuffersBelow(8<<10))
-	if err != nil {
-		f.Fatal(err)
-	}
-	defer decHi.Close()
+	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-raw.zip", fuzz.TypeRaw, testing.Short())
+	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-encoded.zip", fuzz.TypeGoFuzz, testing.Short())
 
 	brLow := newBytesReader(nil)
 	brHi := newBytesReader(nil)
@@ -86,14 +79,19 @@ func FuzzDecoder(f *testing.F) {
 		}()
 		brLow.Reset(b)
 		brHi.Reset(b)
-		err := decLow.Reset(brLow)
+		decLow, err := NewReader(brLow, WithDecoderLowmem(true), WithDecoderConcurrency(2), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true), WithDecodeBuffersBelow(8<<10))
 		if err != nil {
-			t.Fatal(err)
+			f.Fatal(err)
 		}
-		err = decHi.Reset(brHi)
+		defer decLow.Close()
+
+		// Test with high memory, but sync decoding
+		decHi, err := NewReader(brHi, WithDecoderLowmem(false), WithDecoderConcurrency(1), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true), WithDecodeBuffersBelow(8<<10))
 		if err != nil {
-			t.Fatal(err)
+			f.Fatal(err)
 		}
+		defer decHi.Close()
+
 		b1, err1 := io.ReadAll(decLow)
 		b2, err2 := io.ReadAll(decHi)
 		if err1 != err2 {
@@ -118,9 +116,9 @@ func FuzzNoBMI2Dec(f *testing.F) {
 }
 
 func FuzzEncoding(f *testing.F) {
-	fuzz.AddFromZip(f, "testdata/fuzz/encode-corpus-raw.zip", true, testing.Short())
-	fuzz.AddFromZip(f, "testdata/comp-crashers.zip", true, false)
-	fuzz.AddFromZip(f, "testdata/fuzz/encode-corpus-encoded.zip", false, testing.Short())
+	fuzz.AddFromZip(f, "testdata/fuzz/encode-corpus-raw.zip", fuzz.TypeRaw, testing.Short())
+	fuzz.AddFromZip(f, "testdata/comp-crashers.zip", fuzz.TypeRaw, false)
+	fuzz.AddFromZip(f, "testdata/fuzz/encode-corpus-encoded.zip", fuzz.TypeGoFuzz, testing.Short())
 	// Fuzzing tweaks:
 	const (
 		// Test a subset of encoders.
