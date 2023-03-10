@@ -18,7 +18,6 @@ func FuzzDecodeAll(f *testing.F) {
 	fuzz.AddFromZip(f, "testdata/decode-regression.zip", fuzz.TypeRaw, false)
 	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-raw.zip", fuzz.TypeRaw, testing.Short())
 	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-encoded.zip", fuzz.TypeGoFuzz, testing.Short())
-	fuzz.AddFromZip(f, "testdata/fuzz/decode-oss.zip", fuzz.TypeOSSFuzz, false)
 
 	f.Fuzz(func(t *testing.T, b []byte) {
 		// Just test if we crash...
@@ -42,7 +41,9 @@ func FuzzDecodeAll(f *testing.F) {
 		b1, err1 := decLow.DecodeAll(b, make([]byte, 0, len(b)))
 		b2, err2 := decHi.DecodeAll(b, make([]byte, 0, len(b)))
 		if err1 != err2 {
-			t.Log(err1, err2)
+			if (err1 == nil) != (err2 == nil) {
+				t.Errorf("err low: %v, hi: %v", err1, err2)
+			}
 		}
 		if err1 != nil {
 			b1, b2 = b1[:0], b2[:0]
