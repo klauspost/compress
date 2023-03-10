@@ -378,12 +378,14 @@ func (s *ngSizer) emitRepeat(offset, length uint) {
 	case delta == 0:
 		v := (length - 1) << 2
 		s.addValue(v)
-	case delta == 1:
-		v := (length - 2) << 2
+	case delta <= 2 && delta >= -2:
+		delta += deltaTabBase
+		v := (length - 4) << (2 + 2)
+		v |= uint(deltaTab[delta]) << 2
 		v |= 1
 		s.addValue(v)
 	case delta >= math.MinInt8 && delta <= math.MaxInt8:
-		v := (length - 3) << 2
+		v := (length - 4) << 2
 		v |= 2
 		s.addValue(v)
 		s.sz += 1
@@ -494,19 +496,32 @@ func (s *ngSizer) emitLitsS(n uint) int {
 	return sz
 }
 
+const deltaTabBase = 2
+
+var deltaTab = [5]byte{
+	1 + deltaTabBase:  0,
+	-1 + deltaTabBase: 1,
+	-2 + deltaTabBase: 2,
+	2 + deltaTabBase:  3,
+}
+
 func (s *ngSizer) emitRepeatS(lastoffset, offset, length uint) int {
 	delta := int(offset) - int(lastoffset)
-	s.lastoffset = offset
 	switch {
 	case delta == 0:
 		v := (length - 1) << 2
 		return s.addValueS(v)
-	case delta == 1:
-		v := (length - 2) << 2
+	case delta <= 2 && delta >= -2:
+		// Quite rare to be useful, but we may save a byte
+		// here and there compared to writing a byte.
+		// Excluding this will on most cases make sense.
+		delta += deltaTabBase
+		v := (length - 4) << (2 + 2)
+		v |= uint(deltaTab[delta]) << 2
 		v |= 1
 		return s.addValueS(v)
 	case delta >= math.MinInt8 && delta <= math.MaxInt8:
-		v := (length - 3) << 2
+		v := (length - 4) << 2
 		v |= 2
 		return s.addValueS(v) + 1
 	case delta >= math.MinInt16 && delta <= math.MaxInt16:
@@ -528,7 +543,7 @@ func (s *ngSizer) emitLitCopyS(e entry) int {
 	if e.Offset > litCopyMaxOffset {
 		panic(e.Offset)
 	}
-	sz := s.addValueS(v) // 23989940
+	sz := s.addValueS(v)
 	sz += 2 + int(e.LitLen)
 	if remain > 0 {
 		return sz + s.emitRepeatS(e.Offset, e.Offset, remain)
