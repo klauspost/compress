@@ -1479,3 +1479,201 @@ func s2DecodeDict(dst, src []byte, dict *Dict) int {
 	}
 	return 0
 }
+
+type entries []entry
+
+type entry struct {
+	LitLen   uint
+	MatchLen uint
+	Offset   uint
+}
+
+// merge literal emits and repeat match copies.
+func (e entries) merge() entries {
+	if len(e) == 0 {
+		return e
+	}
+	res := make(entries, 0, len(e))
+	current := e[0]
+	for i, entry := range e[1:] {
+		if i == len(e)-1 {
+			continue
+		}
+		// Combine literals.
+		if current.LitLen > 0 && entry.LitLen > 0 {
+			current.LitLen += entry.LitLen
+			continue
+		}
+		// Merge matches.
+		if current.Offset > 0 && current.Offset == entry.Offset {
+			current.MatchLen += entry.MatchLen
+			continue
+		}
+		// If previous was literals and this is a match, combine.
+		if current.MatchLen == 0 && entry.MatchLen != 0 {
+			current.MatchLen = entry.MatchLen
+			current.Offset = entry.Offset
+			continue
+		}
+		// Not mergable...
+		res = append(res, current)
+		current = entry
+	}
+	return append(res, current)
+}
+
+func (e entries) s2size() int {
+	lastoffset := uint(0)
+	sz := 0
+	for _, entry := range e {
+		if entry.LitLen > 0 {
+			sz += int(literalExtraSize(int64(entry.LitLen))) + int(entry.LitLen)
+		}
+		if entry.MatchLen > 0 {
+			if entry.Offset == lastoffset {
+				sz += emitRepeatSize(int(entry.Offset), int(entry.MatchLen))
+			} else {
+				sz += emitCopySize(int(entry.Offset), int(entry.MatchLen))
+				lastoffset = entry.Offset
+			}
+		}
+	}
+	return sz
+}
+
+func s2DecodeSequences(dst []struct{}, src []byte) entries {
+	const debug = false
+	if debug {
+		fmt.Println("Starting decode, dst len:", len(dst))
+	}
+	var res []entry
+
+	var d, s, length int
+	offset := 0
+
+	// Remaining with extra checks...
+	for s < len(src) {
+		switch src[s] & 0x03 {
+		case tagLiteral:
+			x := uint32(src[s] >> 2)
+			switch {
+			case x < 60:
+				s++
+			case x == 60:
+				s += 2
+				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+					return nil
+				}
+				x = uint32(src[s-1])
+			case x == 61:
+				s += 3
+				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+					return nil
+				}
+				x = uint32(src[s-2]) | uint32(src[s-1])<<8
+			case x == 62:
+				s += 4
+				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+					return nil
+				}
+				x = uint32(src[s-3]) | uint32(src[s-2])<<8 | uint32(src[s-1])<<16
+			case x == 63:
+				s += 5
+				if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+					return nil
+				}
+				x = uint32(src[s-4]) | uint32(src[s-3])<<8 | uint32(src[s-2])<<16 | uint32(src[s-1])<<24
+			}
+			length = int(x) + 1
+			if length > len(dst)-d || length > len(src)-s || (strconv.IntSize == 32 && length <= 0) {
+				if debug {
+					fmt.Println("corrupt: lit size", length)
+				}
+				return nil
+			}
+			if debug {
+				fmt.Println("literals, length:", length, "d-after:", d+length)
+			}
+
+			res = append(res, entry{LitLen: uint(length)})
+			d += length
+			s += length
+			continue
+
+		case tagCopy1:
+			s += 2
+			if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+				return nil
+			}
+			length = int(src[s-2]) >> 2 & 0x7
+			toffset := int(uint32(src[s-2])&0xe0<<3 | uint32(src[s-1]))
+			if toffset == 0 {
+				if debug {
+					fmt.Print("(repeat) ")
+				}
+				// keep last offset
+				switch length {
+				case 5:
+					s += 1
+					if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+						return nil
+					}
+					length = int(uint32(src[s-1])) + 4
+				case 6:
+					s += 2
+					if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+						return nil
+					}
+					length = int(uint32(src[s-2])|(uint32(src[s-1])<<8)) + (1 << 8)
+				case 7:
+					s += 3
+					if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+						return nil
+					}
+					length = int(uint32(src[s-3])|(uint32(src[s-2])<<8)|(uint32(src[s-1])<<16)) + (1 << 16)
+				default: // 0-> 4
+				}
+			} else {
+				offset = toffset
+			}
+			length += 4
+		case tagCopy2:
+			s += 3
+			if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+				return nil
+			}
+			length = 1 + int(src[s-3])>>2
+			offset = int(uint32(src[s-2]) | uint32(src[s-1])<<8)
+
+		case tagCopy4:
+			s += 5
+			if uint(s) > uint(len(src)) { // The uint conversions catch overflow from the previous line.
+				return nil
+			}
+			length = 1 + int(src[s-5])>>2
+			offset = int(uint32(src[s-4]) | uint32(src[s-3])<<8 | uint32(src[s-2])<<16 | uint32(src[s-1])<<24)
+		}
+
+		if offset <= 0 || d < offset || length > len(dst)-d {
+			if debug {
+				fmt.Println("corrupt: match, length", length, "offset:", offset, "dst avail:", len(dst)-d, "dst pos:", d)
+			}
+			return nil
+		}
+
+		if debug {
+			fmt.Println("copy, length:", length, "offset:", offset, "d-after:", d+length)
+		}
+
+		res = append(res, entry{MatchLen: uint(length), Offset: uint(offset)})
+
+		// Copy from an earlier sub-slice of dst to a later sub-slice.
+		// If no overlap, use the built-in copy:
+		d += length
+	}
+
+	if d != len(dst) {
+		return nil
+	}
+	return res
+}

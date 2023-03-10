@@ -6,15 +6,19 @@
 package s2
 
 import (
+	"bufio"
 	"crypto/rand"
 	"encoding/binary"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"io"
 	"math"
 	"math/bits"
+	"os"
 	"runtime"
 	"sync"
+	"time"
 )
 
 // Encode returns the encoded form of src. The returned slice may be a sub-
@@ -456,6 +460,9 @@ type result struct {
 	b []byte
 	// Uncompressed start offset
 	startOffset int64
+
+	compBlock        []byte
+	uncompressedSize int
 }
 
 // err returns the previously set error.
@@ -503,10 +510,19 @@ func (w *Writer) Reset(writer io.Writer) {
 	toWrite := make(chan chan result, w.concurrency)
 	w.output = toWrite
 	w.writerWg.Add(1)
+	f, err := os.Create(fmt.Sprintf("output-%d.gob", time.Now().Unix()))
+	if err != nil {
+		panic(err)
+	}
+	bw := bufio.NewWriterSize(f, 1<<20)
+	gobber := gob.NewEncoder(bw)
+	//gobber := json.NewEncoder(bw)
 
 	// Start a writer goroutine that will write all output in order.
 	go func() {
 		defer w.writerWg.Done()
+		defer f.Close()
+		defer bw.Flush()
 
 		// Get a queued write.
 		for write := range toWrite {
@@ -525,6 +541,15 @@ func (w *Writer) Reset(writer io.Writer) {
 					_ = w.err(err)
 					w.err(w.index.add(w.written, input.startOffset))
 					w.written += int64(n)
+					if len(input.compBlock) > 0 && gobber != nil {
+						e := s2DecodeSequences(make([]struct{}, input.uncompressedSize), input.compBlock)
+						if len(e) > 0 {
+							e = e.merge()
+							for _, entry := range e {
+								gobber.Encode(entry)
+							}
+						}
+					}
 				}
 			}
 			if cap(in) >= w.obufLen {
@@ -776,6 +801,8 @@ func (w *Writer) EncodeBuffer(buf []byte) (err error) {
 				chunkType = uint8(chunkTypeCompressedData)
 				chunkLen = 4 + n + n2
 				obuf = obuf[:obufHeaderLen+n+n2]
+				res.compBlock = obuf[obufHeaderLen+n:]
+				res.uncompressedSize = len(uncompressed)
 			} else {
 				// copy uncompressed
 				copy(obuf[obufHeaderLen:], uncompressed)
@@ -884,6 +911,8 @@ func (w *Writer) write(p []byte) (nRet int, errRet error) {
 				chunkType = uint8(chunkTypeCompressedData)
 				chunkLen = 4 + n + n2
 				obuf = obuf[:obufHeaderLen+n+n2]
+				res.compBlock = obuf[obufHeaderLen+n:]
+				res.uncompressedSize = len(uncompressed)
 			} else {
 				// Use input as output.
 				obuf, inbuf = inbuf, obuf
@@ -965,6 +994,8 @@ func (w *Writer) writeFull(inbuf []byte) (errRet error) {
 			chunkType = uint8(chunkTypeCompressedData)
 			chunkLen = 4 + n + n2
 			obuf = obuf[:obufHeaderLen+n+n2]
+			res.compBlock = obuf[obufHeaderLen+n:]
+			res.uncompressedSize = len(uncompressed)
 		} else {
 			// Use input as output.
 			obuf, inbuf = inbuf, obuf
