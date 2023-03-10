@@ -352,8 +352,8 @@ func BenchmarkCompressBlockReference(b *testing.B) {
 }
 
 func FuzzLZ4Block(f *testing.F) {
-	fuzz.AddFromZip(f, "testdata/fuzz/lz4-convert-corpus-raw.zip", true, false)
-	fuzz.AddFromZip(f, "testdata/fuzz/FuzzLZ4Block.zip", false, false)
+	fuzz.AddFromZip(f, "testdata/fuzz/lz4-convert-corpus-raw.zip", fuzz.TypeRaw, false)
+	fuzz.AddFromZip(f, "testdata/fuzz/FuzzLZ4Block.zip", fuzz.TypeGoFuzz, false)
 	// Fuzzing tweaks:
 	const (
 		// Max input size:
