@@ -62,7 +62,7 @@ var decTestfiles = []struct {
 	{name: "crash4", fn: func() ([]byte, error) { return os.ReadFile("../testdata/crash4.bin") }, err: "symbolLen (1) too small"},
 	{name: "crash5", fn: func() ([]byte, error) { return os.ReadFile("../testdata/crash5.bin") }, err: "symbolLen (1) too small"},
 	{name: "crash6", fn: func() ([]byte, error) { return os.ReadFile("../testdata/dec-crash6.bin") }, err: "newState (32768) outside table size (32768)"},
-	{name: "something", fn: func() ([]byte, error) { return os.ReadFile("../testdata/fse-artifact3.bin") }, err: "output size (1048576) > DecompressLimit (1048576)"},
+	{name: "something", fn: func() ([]byte, error) { return os.ReadFile("../testdata/fse-artifact3.bin") }, err: "corrupt stream, did not find end of stream"},
 }
 
 func TestCompress(t *testing.T) {
