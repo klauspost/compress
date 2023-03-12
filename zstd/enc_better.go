@@ -144,11 +144,10 @@ encodeLoop:
 	for {
 		var t int32
 		// We allow the encoder to optionally turn off repeat offsets across blocks
-		canRepeat := len(blk.sequences) > 2
 		var matched int32
 
 		for {
-			if debugAsserts && canRepeat && offset1 == 0 {
+			if debugAsserts && offset1 == 0 {
 				panic("offset0 was 0")
 			}
 
@@ -163,7 +162,7 @@ encodeLoop:
 			e.longTable[nextHashL] = prevEntry{offset: off, prev: candidateL.offset}
 			e.table[nextHashS] = tableEntry{offset: off, val: uint32(cv)}
 
-			if canRepeat {
+			if true {
 				if repIndex >= 0 && load3232(src, repIndex) == uint32(cv>>(repOff*8)) {
 					// Consider history as well.
 					var seq seq
@@ -461,7 +460,7 @@ encodeLoop:
 			panic(fmt.Sprintf("s (%d) <= t (%d)", s, t))
 		}
 
-		if debugAsserts && canRepeat && int(offset1) > len(src) {
+		if debugAsserts && int(offset1) > len(src) {
 			panic("invalid offset")
 		}
 
@@ -510,14 +509,11 @@ encodeLoop:
 		}
 
 		cv = load6432(src, s)
-		if !canRepeat {
-			continue
-		}
 
 		// Check offset 2
 		for {
 			o2 := s - offset2
-			if load3232(src, o2) != uint32(cv) {
+			if o2 < 0 || load3232(src, o2) != uint32(cv) {
 				// Do regular search
 				break
 			}
@@ -671,11 +667,10 @@ encodeLoop:
 	for {
 		var t int32
 		// We allow the encoder to optionally turn off repeat offsets across blocks
-		canRepeat := len(blk.sequences) > 2
 		var matched int32
 
 		for {
-			if debugAsserts && canRepeat && offset1 == 0 {
+			if debugAsserts && offset1 == 0 {
 				panic("offset0 was 0")
 			}
 
@@ -692,7 +687,7 @@ encodeLoop:
 			e.table[nextHashS] = tableEntry{offset: off, val: uint32(cv)}
 			e.markShortShardDirty(nextHashS)
 
-			if canRepeat {
+			if true {
 				if repIndex >= 0 && load3232(src, repIndex) == uint32(cv>>(repOff*8)) {
 					// Consider history as well.
 					var seq seq
@@ -987,7 +982,7 @@ encodeLoop:
 			panic(fmt.Sprintf("s (%d) <= t (%d)", s, t))
 		}
 
-		if debugAsserts && canRepeat && int(offset1) > len(src) {
+		if debugAsserts && int(offset1) > len(src) {
 			panic("invalid offset")
 		}
 
@@ -1039,13 +1034,13 @@ encodeLoop:
 		}
 
 		cv = load6432(src, s)
-		if !canRepeat {
-			continue
-		}
 
 		// Check offset 2
 		for {
 			o2 := s - offset2
+			if o2 < 0 {
+				break
+			}
 			if load3232(src, o2) != uint32(cv) {
 				// Do regular search
 				break

@@ -69,6 +69,7 @@ func (b *blockEnc) init() {
 		b.coders.llPrev = &fseEncoder{}
 	}
 	b.litEnc = &huff0.Scratch{WantLogLess: 4}
+	b.recentOffsets = [3]uint32{1, 4, 8}
 	b.reset(nil)
 }
 
@@ -90,14 +91,11 @@ func (b *blockEnc) reset(prev *blockEnc) {
 	b.output = b.output[:0]
 	b.last = false
 	if prev != nil {
-		b.recentOffsets = prev.prevRecentOffsets
+		b.recentOffsets = prev.recentOffsets
 	}
 	b.dictLitEnc = nil
 }
 
-// reset will reset the block for a new encode, but in the same stream,
-// meaning that state will be carried over, but the block content is reset.
-// If a previous block is provided, the recent offsets are carried over.
 func (b *blockEnc) swapEncoders(prev *blockEnc) {
 	b.coders.swap(&prev.coders)
 	b.litEnc, prev.litEnc = prev.litEnc, b.litEnc
