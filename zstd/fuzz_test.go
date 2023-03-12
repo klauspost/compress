@@ -95,7 +95,9 @@ func FuzzDecoder(f *testing.F) {
 		b1, err1 := io.ReadAll(decLow)
 		b2, err2 := io.ReadAll(decHi)
 		if err1 != err2 {
-			t.Log(err1, err2)
+			if (err1 == nil) != (err2 == nil) {
+				t.Errorf("err low: %v, hi: %v", err1, err2)
+			}
 		}
 		if err1 != nil {
 			b1, b2 = b1[:0], b2[:0]
