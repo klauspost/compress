@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 permissions:
-  content: write # for goreleaser/goreleaser-action to create a GitHub release
+  contents: write # for goreleaser/goreleaser-action to create a GitHub release
 
 jobs:
   goreleaser:
