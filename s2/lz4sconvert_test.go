@@ -7,6 +7,7 @@ package s2
 import (
 	"bytes"
 	"encoding/binary"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -98,5 +99,58 @@ func TestLZ4sConverter_ConvertBlock(t *testing.T) {
 			t.Log("direct data -> s2 (default) compared to converted from lz4:", sz-sz2)
 			t.Log("direct data -> s2 (better) compared to converted from lz4:", sz-sz3)
 		})
+	}
+}
+
+func TestLZ4sConverter_ConvertBlock2(t *testing.T) {
+	lz4sData, err := os.ReadFile("testdata/broken.block.lz4s")
+	if err != nil {
+		t.Skip(err)
+	}
+	src, err := os.ReadFile("testdata/broken.input.bin")
+	if err != nil {
+		t.Skip(err)
+	}
+
+	conv := LZ4sConverter{}
+	const wantSize = 1 << 20
+	s2Dst := make([]byte, binary.MaxVarintLen32, MaxEncodedLen(wantSize))
+	s2Dst = s2Dst[:binary.PutUvarint(s2Dst, uint64(wantSize))]
+	var gotSz int
+	for len(lz4sData) >= 4 {
+		// Read block size:
+		compressedSz := binary.LittleEndian.Uint32(lz4sData)
+		lz4sData = lz4sData[4:]
+		if uint32(len(lz4sData)) < compressedSz {
+			t.Fatal("incorrect size", compressedSz, ">", len(lz4sData))
+		}
+		decomped := make([]byte, wantSize)
+		ret := lz4ref.UncompressBlockLZ4s(decomped, lz4sData[:compressedSz])
+		if ret < 0 {
+			t.Fatal(ret)
+		}
+		wantDecomp, gotDecomp := src[:ret], decomped[:ret]
+		if !bytes.Equal(wantDecomp, gotDecomp) {
+			os.WriteFile("got-from-lz4s.bin", gotDecomp, os.ModePerm)
+			os.WriteFile("want-from-lz4s.bin", wantDecomp, os.ModePerm)
+			t.Fatal("mismatch")
+		}
+		src = src[ret:]
+
+		var unSz int
+		s2Dst, unSz, err = conv.ConvertBlock(s2Dst, lz4sData[:compressedSz])
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Log("block", compressedSz, "unSz", unSz, "ret", ret)
+		gotSz += unSz
+		lz4sData = lz4sData[compressedSz:]
+	}
+	if gotSz != wantSize {
+		t.Error("got:", gotSz, "want:", wantSize)
+	}
+	_, err = Decode(nil, s2Dst)
+	if err != nil {
+		t.Fatal(err)
 	}
 }

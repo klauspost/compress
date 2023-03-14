@@ -654,4 +654,121 @@ func UncompressBlock(dst, src []byte) (ret int) {
 	return int(di)
 }
 
+func UncompressBlockLZ4s(dst, src []byte) (ret int) {
+	// Restrict capacities so we don't read or write out of bounds.
+	dst = dst[:len(dst):len(dst)]
+	src = src[:len(src):len(src)]
+
+	const debug = true
+	const minMatch = 3
+	const hasError = -2
+
+	if len(src) == 0 {
+		return hasError
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			if debug {
+				fmt.Println("recover:", r)
+			}
+			ret = hasError
+		}
+	}()
+
+	var si, di uint
+	for {
+		if debug {
+			fmt.Printf("\ndst: 0x%x src: 0x%x [%02x]; ", di, si, src[si])
+		}
+		if si >= uint(len(src)) {
+			return hasError
+		}
+		// Literals and match lengths (token).
+		b := uint(src[si])
+		si++
+
+		// Literals.
+		if lLen := b >> 4; lLen > 0 {
+			switch {
+			case lLen == 0xF:
+				for {
+					x := uint(src[si])
+					if lLen += x; int(lLen) < 0 {
+						if debug {
+							fmt.Println("int(lLen) < 0")
+						}
+						return hasError
+					}
+					si++
+					if x != 0xFF {
+						break
+					}
+				}
+				fallthrough
+			default:
+				copy(dst[di:di+lLen], src[si:si+lLen])
+				si += lLen
+				di += lLen
+				if debug {
+					fmt.Printf("ll: %d ", lLen)
+				}
+			}
+		}
+
+		mLen := b & 0xF
+		if si == uint(len(src)) && mLen == 0 {
+			break
+		} else if si >= uint(len(src))-2 {
+			return hasError
+		}
+		if mLen == 0 {
+			continue
+		}
+
+		offset := u16(src[si:])
+		if offset == 0 {
+			return hasError
+		}
+		si += 2
+
+		// Match.
+		mLen += minMatch
+		if mLen == minMatch+0xF {
+			for {
+				x := uint(src[si])
+				if mLen += x; int(mLen) < 0 {
+					return hasError
+				}
+				si++
+				if x != 0xFF {
+					break
+				}
+			}
+		}
+		if debug {
+			fmt.Printf("ml:%d, offset: %d ", mLen, offset)
+		}
+
+		// Copy the match.
+		if di < offset {
+			return hasError
+		}
+
+		expanded := dst[di-offset:]
+		if mLen > offset {
+			// Efficiently copy the match dst[di-offset:di] into the dst slice.
+			bytesToCopy := offset * (mLen / offset)
+			for n := offset; n <= bytesToCopy+offset; n *= 2 {
+				copy(expanded[n:], expanded[:n])
+			}
+			di += bytesToCopy
+			mLen -= bytesToCopy
+		}
+		di += uint(copy(dst[di:di+mLen], expanded[:mLen]))
+	}
+	fmt.Println("\nDone. Size:", di)
+	return int(di)
+}
+
 func u16(p []byte) uint { return uint(binary.LittleEndian.Uint16(p)) }
