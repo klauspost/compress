@@ -355,9 +355,12 @@ const inputMargin = 8
 // will be accepted by the encoder.
 const minNonLiteralBlockSize = 32
 
+const intReduction = 2 - (1 << (^uint(0) >> 63)) // 1 (32 bits) or 0 (64 bits)
+
 // MaxBlockSize is the maximum value where MaxEncodedLen will return a valid block size.
 // Blocks this big are highly discouraged, though.
-const MaxBlockSize = math.MaxUint32 - binary.MaxVarintLen32 - 5
+// Half the size on 32 bit systems.
+const MaxBlockSize = (1<<(32-intReduction) - 1) - binary.MaxVarintLen32 - 5
 
 // MaxEncodedLen returns the maximum length of a snappy block, given its
 // uncompressed length.
@@ -366,7 +369,14 @@ const MaxBlockSize = math.MaxUint32 - binary.MaxVarintLen32 - 5
 // 32 bit platforms will have lower thresholds for rejecting big content.
 func MaxEncodedLen(srcLen int) int {
 	n := uint64(srcLen)
-	if n > 0xffffffff {
+	if intReduction == 1 {
+		// 32 bits
+		if n > math.MaxInt32 {
+			// Also includes negative.
+			return -1
+		}
+	} else if n > 0xffffffff {
+		// 64 bits
 		// Also includes negative.
 		return -1
 	}
@@ -375,7 +385,14 @@ func MaxEncodedLen(srcLen int) int {
 
 	// Add maximum size of encoding block as literals.
 	n += uint64(literalExtraSize(int64(srcLen)))
-	if n > 0xffffffff {
+	if intReduction == 1 {
+		// 32 bits
+		if n > math.MaxInt32 {
+			return -1
+		}
+	} else if n > 0xffffffff {
+		// 64 bits
+		// Also includes negative.
 		return -1
 	}
 	return int(n)
