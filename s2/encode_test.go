@@ -453,7 +453,10 @@ func TestEncodeHuge(t *testing.T) {
 		}
 	}
 	test(t, make([]byte, math.MaxInt32))
-	test(t, make([]byte, math.MaxInt32+math.MaxUint16))
+	if math.MaxInt > math.MaxInt32 {
+		x := int64(math.MaxInt32 + math.MaxUint16)
+		test(t, make([]byte, x))
+	}
 	test(t, make([]byte, MaxBlockSize))
 }
 
