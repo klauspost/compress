@@ -659,7 +659,7 @@ func UncompressBlockLZ4s(dst, src []byte) (ret int) {
 	dst = dst[:len(dst):len(dst)]
 	src = src[:len(src):len(src)]
 
-	const debug = true
+	const debug = false
 	const minMatch = 3
 	const hasError = -2
 
@@ -767,7 +767,9 @@ func UncompressBlockLZ4s(dst, src []byte) (ret int) {
 		}
 		di += uint(copy(dst[di:di+mLen], expanded[:mLen]))
 	}
-	fmt.Println("\nDone. Size:", di)
+	if debug {
+		fmt.Println("\nDone. Size:", di)
+	}
 	return int(di)
 }
 
