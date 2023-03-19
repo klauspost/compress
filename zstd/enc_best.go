@@ -205,7 +205,22 @@ encodeLoop:
 					panic(fmt.Sprintf("first match mismatch: %v != %v, first: %08x", src[s:s+4], src[offset:offset+4], first))
 				}
 			}
-			cand := match{offset: offset, s: s, length: 4 + e.matchlen(s+4, offset+4, src), rep: rep}
+
+			l := 4 + e.matchlen(s+4, offset+4, src)
+			if rep < 0 {
+				// Extend candidate match backwards as far as possible.
+				tMin := s - e.maxMatchOff
+				if tMin < 0 {
+					tMin = 0
+				}
+				for offset > tMin && s > nextEmit && src[offset-1] == src[s-1] && l < maxMatchLength {
+					s--
+					offset--
+					l++
+				}
+			}
+
+			cand := match{offset: offset, s: s, length: l, rep: rep}
 			cand.estBits(bitsPerByte)
 			if m.est >= highScore || cand.est-m.est+(cand.s-m.s)*bitsPerByte>>10 < 0 {
 				*m = cand
@@ -295,25 +310,10 @@ encodeLoop:
 			s = best.s
 			var seq seq
 			seq.matchLen = uint32(best.length - zstdMinMatch)
-
-			// We might be able to match backwards.
-			// Extend as long as we can.
-			start := best.s
-			// We end the search early, so we don't risk 0 literals
-			// and have to do special offset treatment.
-			startLimit := nextEmit + 1
-
-			tMin := s - e.maxMatchOff
-			if tMin < 0 {
-				tMin = 0
+			if debugAsserts && s <= nextEmit {
+				panic("s <= nextEmit")
 			}
-			repIndex := best.offset
-			for repIndex > tMin && start > startLimit && src[repIndex-1] == src[start-1] && seq.matchLen < maxMatchLength-zstdMinMatch-1 {
-				repIndex--
-				start--
-				seq.matchLen++
-			}
-			addLiterals(&seq, start)
+			addLiterals(&seq, s)
 
 			// rep 0
 			seq.offset = uint32(best.rep)
@@ -369,22 +369,9 @@ encodeLoop:
 			panic("invalid offset")
 		}
 
-		// Extend the n-byte match as long as possible.
-		l := best.length
-
-		// Extend backwards
-		tMin := s - e.maxMatchOff
-		if tMin < 0 {
-			tMin = 0
-		}
-		for t > tMin && s > nextEmit && src[t-1] == src[s-1] && l < maxMatchLength {
-			s--
-			t--
-			l++
-		}
-
 		// Write our sequence
 		var seq seq
+		l := best.length
 		seq.litLen = uint32(s - nextEmit)
 		seq.matchLen = uint32(l - zstdMinMatch)
 		if seq.litLen > 0 {
