@@ -205,7 +205,22 @@ encodeLoop:
 					panic(fmt.Sprintf("first match mismatch: %v != %v, first: %08x", src[s:s+4], src[offset:offset+4], first))
 				}
 			}
-
+			// Try to quick reject if we already have a long match.
+			if m.length > 16 {
+				left := len(src) - int(m.s+m.length)
+				// If we are too close to the end, keep as is.
+				if left <= 0 {
+					return
+				}
+				if left > 2 {
+					// Check 4 bytes, 4 bytes from the end of the current match.
+					a := load3232(src, offset+m.length-8)
+					b := load3232(src, s+m.length-8)
+					if a != b {
+						return
+					}
+				}
+			}
 			l := 4 + e.matchlen(s+4, offset+4, src)
 			if rep < 0 {
 				// Extend candidate match backwards as far as possible.
