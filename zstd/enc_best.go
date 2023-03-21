@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	bestLongTableBits = 22                     // Bits used in the long match table
+	bestLongTableBits = 23                     // Bits used in the long match table
 	bestLongTableSize = 1 << bestLongTableBits // Size of the table
 	bestLongLen       = 8                      // Bytes used for table hash
 
@@ -188,7 +188,7 @@ encodeLoop:
 			panic("offset0 was 0")
 		}
 
-		const goodEnough = 100
+		const goodEnough = 250
 
 		nextHashL := hashLen(cv, bestLongTableBits, bestLongLen)
 		nextHashS := hashLen(cv, bestShortTableBits, bestShortLen)
@@ -234,17 +234,29 @@ encodeLoop:
 		improve(&best, candidateS.prev-e.cur, s, uint32(cv), -1)
 
 		if canRepeat && best.length < goodEnough {
-			cv32 := uint32(cv >> 8)
-			spp := s + 1
-			improve(&best, spp-offset1, spp, cv32, 1)
-			improve(&best, spp-offset2, spp, cv32, 2)
-			improve(&best, spp-offset3, spp, cv32, 3)
-			if best.length > 0 {
-				cv32 = uint32(cv >> 24)
-				spp += 2
+			if s == nextEmit {
+				// Check repeats straight after a match.
+				improve(&best, s-offset2, s, uint32(cv), 1|4)
+				improve(&best, s-offset3, s, uint32(cv), 2|4)
+				if offset1 > 1 {
+					improve(&best, s-(offset1-1), s, uint32(cv), 3|4)
+				}
+			}
+
+			// If either no match or a non-repeat match, check at + 1
+			if best.rep <= 0 {
+				cv32 := uint32(cv >> 8)
+				spp := s + 1
 				improve(&best, spp-offset1, spp, cv32, 1)
 				improve(&best, spp-offset2, spp, cv32, 2)
 				improve(&best, spp-offset3, spp, cv32, 3)
+				if best.rep < 0 {
+					cv32 = uint32(cv >> 24)
+					spp += 2
+					improve(&best, spp-offset1, spp, cv32, 1)
+					improve(&best, spp-offset2, spp, cv32, 2)
+					improve(&best, spp-offset3, spp, cv32, 3)
+				}
 			}
 		}
 		// Load next and check...
@@ -263,7 +275,7 @@ encodeLoop:
 				continue
 			}
 
-			s++
+			s := s + 1
 			candidateS = e.table[hashLen(cv>>8, bestShortTableBits, bestShortLen)]
 			cv = load6432(src, s)
 			cv2 := load6432(src, s+1)
@@ -307,23 +319,22 @@ encodeLoop:
 
 		// We have a match, we can store the forward value
 		if best.rep > 0 {
-			s = best.s
 			var seq seq
 			seq.matchLen = uint32(best.length - zstdMinMatch)
 			if debugAsserts && s <= nextEmit {
 				panic("s <= nextEmit")
 			}
-			addLiterals(&seq, s)
+			addLiterals(&seq, best.s)
 
-			// rep 0
-			seq.offset = uint32(best.rep)
+			// Repeat. If bit 4 is set, this is a non-lit repeat.
+			seq.offset = uint32(best.rep & 3)
 			if debugSequences {
 				println("repeat sequence", seq, "next s:", s)
 			}
 			blk.sequences = append(blk.sequences, seq)
 
-			// Index match start+1 (long) -> s - 1
-			index0 := s
+			// Index old s + 1 -> s - 1
+			index0 := s + 1
 			s = best.s + best.length
 
 			nextEmit = s
@@ -336,7 +347,7 @@ encodeLoop:
 			}
 			// Index skipped...
 			off := index0 + e.cur
-			for index0 < s-1 {
+			for index0 < s {
 				cv0 := load6432(src, index0)
 				h0 := hashLen(cv0, bestLongTableBits, bestLongLen)
 				h1 := hashLen(cv0, bestShortTableBits, bestShortLen)
@@ -346,10 +357,12 @@ encodeLoop:
 				index0++
 			}
 			switch best.rep {
-			case 2:
+			case 2, 4 | 1:
 				offset1, offset2 = offset2, offset1
-			case 3:
+			case 3, 4 | 2:
 				offset1, offset2, offset3 = offset3, offset1, offset2
+			case 4 | 3:
+				offset1, offset2, offset3 = offset1-1, offset1, offset2
 			}
 			cv = load6432(src, s)
 			continue
@@ -357,6 +370,7 @@ encodeLoop:
 
 		// A 4-byte match has been found. Update recent offsets.
 		// We'll later see if more than 4 bytes.
+		index0 := s + 1
 		s = best.s
 		t := best.offset
 		offset1, offset2, offset3 = s-t, offset1, offset2
@@ -388,10 +402,8 @@ encodeLoop:
 			break encodeLoop
 		}
 
-		// Index match start+1 (long) -> s - 1
-		index0 := s - l + 1
-		// every entry
-		for index0 < s-1 {
+		// Index old s + 1 -> s - 1
+		for index0 < s {
 			cv0 := load6432(src, index0)
 			h0 := hashLen(cv0, bestLongTableBits, bestLongLen)
 			h1 := hashLen(cv0, bestShortTableBits, bestShortLen)
@@ -400,50 +412,7 @@ encodeLoop:
 			e.table[h1] = prevEntry{offset: off, prev: e.table[h1].offset}
 			index0++
 		}
-
 		cv = load6432(src, s)
-		if !canRepeat {
-			continue
-		}
-
-		// Check offset 2
-		for {
-			o2 := s - offset2
-			if load3232(src, o2) != uint32(cv) {
-				// Do regular search
-				break
-			}
-
-			// Store this, since we have it.
-			nextHashS := hashLen(cv, bestShortTableBits, bestShortLen)
-			nextHashL := hashLen(cv, bestLongTableBits, bestLongLen)
-
-			// We have at least 4 byte match.
-			// No need to check backwards. We come straight from a match
-			l := 4 + e.matchlen(s+4, o2+4, src)
-
-			e.longTable[nextHashL] = prevEntry{offset: s + e.cur, prev: e.longTable[nextHashL].offset}
-			e.table[nextHashS] = prevEntry{offset: s + e.cur, prev: e.table[nextHashS].offset}
-			seq.matchLen = uint32(l) - zstdMinMatch
-			seq.litLen = 0
-
-			// Since litlen is always 0, this is offset 1.
-			seq.offset = 1
-			s += l
-			nextEmit = s
-			if debugSequences {
-				println("sequence", seq, "next s:", s)
-			}
-			blk.sequences = append(blk.sequences, seq)
-
-			// Swap offset 1 and 2.
-			offset1, offset2 = offset2, offset1
-			if s >= sLimit {
-				// Finished
-				break encodeLoop
-			}
-			cv = load6432(src, s)
-		}
 	}
 
 	if int(nextEmit) < len(src) {
