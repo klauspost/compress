@@ -62,8 +62,8 @@ func AddFromZip(f *testing.F, filename string, t InputType, short bool) {
 			t = TypeRaw // Fallback
 			if len(b) >= 4 {
 				sz := binary.BigEndian.Uint32(b)
-				if sz == uint32(len(b))-4 {
-					f.Add(b[4:])
+				if sz <= uint32(len(b))-4 {
+					f.Add(b[4 : 4+sz])
 					continue
 				}
 			}

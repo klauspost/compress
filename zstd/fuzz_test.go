@@ -66,6 +66,7 @@ func FuzzDecAllNoBMI2(f *testing.F) {
 func FuzzDecoder(f *testing.F) {
 	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-raw.zip", fuzz.TypeRaw, testing.Short())
 	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-encoded.zip", fuzz.TypeGoFuzz, testing.Short())
+	//fuzz.AddFromZip(f, "testdata/fuzz/decode-oss.zip", fuzz.TypeOSSFuzz, false)
 
 	brLow := newBytesReader(nil)
 	brHi := newBytesReader(nil)
@@ -92,18 +93,25 @@ func FuzzDecoder(f *testing.F) {
 		}
 		defer decHi.Close()
 
+		if debugDecoder {
+			fmt.Println("LOW CONCURRENT")
+		}
 		b1, err1 := io.ReadAll(decLow)
+
+		if debugDecoder {
+			fmt.Println("HI NOT CONCURRENT")
+		}
 		b2, err2 := io.ReadAll(decHi)
 		if err1 != err2 {
 			if (err1 == nil) != (err2 == nil) {
-				t.Errorf("err low: %v, hi: %v", err1, err2)
+				t.Errorf("err low concurrent: %v, hi: %v", err1, err2)
 			}
 		}
 		if err1 != nil {
 			b1, b2 = b1[:0], b2[:0]
 		}
 		if !bytes.Equal(b1, b2) {
-			t.Fatalf("Output mismatch, low: %v, hi: %v", err1, err2)
+			t.Fatalf("Output mismatch, low concurrent: %v, hi: %v", err1, err2)
 		}
 	})
 }
