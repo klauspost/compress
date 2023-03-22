@@ -135,6 +135,9 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 		return true, fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available",
 			ctx.ll, ctx.litRemain+ctx.ll)
 
+	case errorOverread:
+		return true, io.ErrUnexpectedEOF
+
 	case errorNotEnoughSpace:
 		size := ctx.outPosition + ctx.ll + ctx.ml
 		if debugDecoder {
