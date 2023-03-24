@@ -133,7 +133,7 @@ func FuzzEncoding(f *testing.F) {
 	const (
 		// Test a subset of encoders.
 		startFuzz = SpeedFastest
-		endFuzz   = SpeedBetterCompression
+		endFuzz   = SpeedBestCompression
 
 		// Also tests with dictionaries...
 		testDicts = true
