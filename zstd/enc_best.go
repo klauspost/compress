@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	bestLongTableBits = 23                     // Bits used in the long match table
+	bestLongTableBits = 22                     // Bits used in the long match table
 	bestLongTableSize = 1 << bestLongTableBits // Size of the table
 	bestLongLen       = 8                      // Bytes used for table hash
 
