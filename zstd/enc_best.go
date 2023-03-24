@@ -212,10 +212,11 @@ encodeLoop:
 				if left <= 0 {
 					return
 				}
-				if left > 2 {
+				checkLen := m.length - (s - m.s) - 8
+				if left > 2 && checkLen > 4 {
 					// Check 4 bytes, 4 bytes from the end of the current match.
-					a := load3232(src, offset+m.length-8)
-					b := load3232(src, s+m.length-8)
+					a := load3232(src, offset+checkLen)
+					b := load3232(src, s+checkLen)
 					if a != b {
 						return
 					}
