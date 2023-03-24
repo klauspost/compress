@@ -35,10 +35,15 @@ jobs:
     - name: Test Noasm
       run: go test -tags=noasm ./...
 
-    - name: Test Race
+    - name: Test Race 1 CPU
       env:
         CGO_ENABLED: 1
-      run: go test -cpu="1,4" -short -race -v ./...
+      run: go test -cpu=1 -short -race -v ./...
+
+    - name: Test Race 4 CPU
+      env:
+        CGO_ENABLED: 1
+      run: go test -cpu=4 -short -race -v ./...
 
   generate:
     strategy:
@@ -163,7 +168,7 @@ jobs:
         run: go test -run=none -fuzz=FuzzNoBMI2Dec -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
 
       - name: zstd/FuzzEncoding
-        run: go test -run=none -fuzz=FuzzEncoding -fuzztime=250000x -test.fuzzminimizetime=10ms ./zstd/.
+        run: cd zstd&&go test -run=none -fuzz=FuzzEncoding -fuzztime=250000x -test.fuzzminimizetime=10ms -fuzz-end=3&&cd ..
 
       - name: zstd/FuzzDecodeAll/noasm
         run: go test -tags=noasm -run=none -fuzz=FuzzDecodeAll -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
@@ -172,7 +177,10 @@ jobs:
         run: go test -tags=noasm -run=none -fuzz=FuzzDecoder -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
 
       - name: zstd/FuzzEncoding/noasm
-        run: go test -tags=noasm -run=none -fuzz=FuzzEncoding -fuzztime=250000x -test.fuzzminimizetime=10ms ./zstd/.
+        run: cd zstd&&go test -tags=noasm -run=none -fuzz=FuzzEncoding -fuzztime=250000x -test.fuzzminimizetime=10ms -fuzz-end=3&&cd ..
+
+      - name: zstd/FuzzEncodingBest
+        run: cd zstd&&go test -run=none -fuzz=FuzzEncoding -fuzztime=25000x -test.fuzzminimizetime=10ms -fuzz-start=4&&cd ..
 
   fuzz-other:
     env:
