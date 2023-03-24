@@ -137,9 +137,6 @@ func FuzzEncoding(f *testing.F) {
 
 		// Also tests with dictionaries...
 		testDicts = true
-
-		// Max input size:
-		maxSize = 1 << 20
 	)
 
 	var dec *Decoder
@@ -152,9 +149,13 @@ func FuzzEncoding(f *testing.F) {
 		dicts = readDicts(f, zr)
 	}
 
+	if testing.Short() && *fuzzEndF > int(SpeedBetterCompression) {
+		*fuzzEndF = int(SpeedBetterCompression)
+	}
+
 	initEnc := func() func() {
 		var err error
-		dec, err = NewReader(nil, WithDecoderConcurrency(2), WithDecoderDicts(dicts...), WithDecoderMaxWindow(64<<10), WithDecoderMaxMemory(maxSize))
+		dec, err = NewReader(nil, WithDecoderConcurrency(2), WithDecoderDicts(dicts...), WithDecoderMaxWindow(64<<10), WithDecoderMaxMemory(uint64(*fuzzMaxF)))
 		if err != nil {
 			panic(err)
 		}
@@ -193,7 +194,7 @@ func FuzzEncoding(f *testing.F) {
 				t.Fatalf("%v:\n%v", r, string(stack))
 			}
 		}()
-		if len(data) > maxSize {
+		if len(data) > *fuzzMaxF {
 			return
 		}
 		var bufSize = len(data)
@@ -205,7 +206,7 @@ func FuzzEncoding(f *testing.F) {
 			}
 		}
 
-		for level := startFuzz; level <= endFuzz; level++ {
+		for level := *fuzzStartF; level <= *fuzzEndF; level++ {
 			enc := encs[level]
 			dst.Reset()
 			enc.Reset(&dst)
