@@ -473,7 +473,7 @@ func (b *blockEnc) encode(org []byte, raw, rawAllLits bool) error {
 		return b.encodeLits(b.literals, rawAllLits)
 	}
 	// We want some difference to at least account for the headers.
-	saved := b.size - len(b.literals) - (b.size >> 5)
+	saved := b.size - len(b.literals) - (b.size >> 6)
 	if saved < 16 {
 		if org == nil {
 			return errIncompressible
