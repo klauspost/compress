@@ -779,10 +779,12 @@ func (b *blockEnc) encode(org []byte, raw, rawAllLits bool) error {
 	}
 	b.output = wr.out
 
+	// Maybe even add a bigger margin.
 	if len(b.output)-3-bhOffset >= b.size {
-		// Maybe even add a bigger margin.
+		// Discard and encode as raw block.
+		b.encodeRaw(org)
 		b.litEnc.Reuse = huff0.ReusePolicyNone
-		return errIncompressible
+		return nil
 	}
 
 	// Size is output minus block header.
