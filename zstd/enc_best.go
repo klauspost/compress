@@ -34,7 +34,7 @@ type match struct {
 	est    int32
 }
 
-const highScore = 25000
+const highScore = maxMatchLen * 8
 
 // estBits will estimate output bits from predefined tables.
 func (m *match) estBits(bitsPerByte int32) {
@@ -201,6 +201,9 @@ encodeLoop:
 				return
 			}
 			if debugAsserts {
+				if offset <= 0 {
+					panic(offset)
+				}
 				if !bytes.Equal(src[s:s+4], src[offset:offset+4]) {
 					panic(fmt.Sprintf("first match mismatch: %v != %v, first: %08x", src[s:s+4], src[offset:offset+4], first))
 				}
@@ -291,37 +294,41 @@ encodeLoop:
 				continue
 			}
 
-			s := s + 1
 			candidateS = e.table[hashLen(cv>>8, bestShortTableBits, bestShortLen)]
-			cv = load6432(src, s)
-			cv2 := load6432(src, s+1)
+			cv = load6432(src, s+1)
+			cv2 := load6432(src, s+2)
 			candidateL = e.longTable[hashLen(cv, bestLongTableBits, bestLongLen)]
 			candidateL2 := e.longTable[hashLen(cv2, bestLongTableBits, bestLongLen)]
 
 			// Short at s+1
-			improve(&best, candidateS.offset-e.cur, s, uint32(cv), -1)
+			improve(&best, candidateS.offset-e.cur, s+1, uint32(cv), -1)
 			// Long at s+1, s+2
-			improve(&best, candidateL.offset-e.cur, s, uint32(cv), -1)
-			improve(&best, candidateL.prev-e.cur, s, uint32(cv), -1)
-			improve(&best, candidateL2.offset-e.cur, s+1, uint32(cv2), -1)
-			improve(&best, candidateL2.prev-e.cur, s+1, uint32(cv2), -1)
+			improve(&best, candidateL.offset-e.cur, s+1, uint32(cv), -1)
+			improve(&best, candidateL.prev-e.cur, s+1, uint32(cv), -1)
+			improve(&best, candidateL2.offset-e.cur, s+2, uint32(cv2), -1)
+			improve(&best, candidateL2.prev-e.cur, s+2, uint32(cv2), -1)
 			if false {
 				// Short at s+3.
 				// Too often worse...
-				improve(&best, e.table[hashLen(cv2>>8, bestShortTableBits, bestShortLen)].offset-e.cur, s+2, uint32(cv2>>8), -1)
+				improve(&best, e.table[hashLen(cv2>>8, bestShortTableBits, bestShortLen)].offset-e.cur, s+3, uint32(cv2>>8), -1)
 			}
-			// See if we can find a better match by checking where the current best ends.
-			// Use that offset to see if we can find a better full match.
-			if sAt := best.s + best.length; sAt < sLimit {
-				nextHashL := hashLen(load6432(src, sAt), bestLongTableBits, bestLongLen)
-				candidateEnd := e.longTable[nextHashL]
-				// Start check at a fixed offset to allow for a few mismatches.
-				// For this compression level 2 yields the best results.
-				const skipBeginning = 2
-				if pos := candidateEnd.offset - e.cur - best.length + skipBeginning; pos >= 0 {
-					improve(&best, pos, best.s+skipBeginning, load3232(src, best.s+skipBeginning), -1)
-					if pos := candidateEnd.prev - e.cur - best.length + skipBeginning; pos >= 0 {
-						improve(&best, pos, best.s+skipBeginning, load3232(src, best.s+skipBeginning), -1)
+
+			// Start check at a fixed offset to allow for a few mismatches.
+			// For this compression level 2 yields the best results.
+			// We cannot do this if we have already indexed this position.
+			const skipBeginning = 2
+			if best.s > s-skipBeginning {
+				// See if we can find a better match by checking where the current best ends.
+				// Use that offset to see if we can find a better full match.
+				if sAt := best.s + best.length; sAt < sLimit {
+					nextHashL := hashLen(load6432(src, sAt), bestLongTableBits, bestLongLen)
+					candidateEnd := e.longTable[nextHashL]
+
+					if off := candidateEnd.offset - e.cur - best.length + skipBeginning; off >= 0 {
+						improve(&best, off, best.s+skipBeginning, load3232(src, best.s+skipBeginning), -1)
+						if off := candidateEnd.prev - e.cur - best.length + skipBeginning; off >= 0 {
+							improve(&best, off, best.s+skipBeginning, load3232(src, best.s+skipBeginning), -1)
+						}
 					}
 				}
 			}
