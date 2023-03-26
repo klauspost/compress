@@ -159,7 +159,6 @@ func (e *bestFastEncoder) Encode(blk *blockEnc, src []byte) {
 
 	// nextEmit is where in src the next emitLiteral should start from.
 	nextEmit := s
-	cv := load6432(src, s)
 
 	// Relative offsets
 	offset1 := int32(blk.recentOffsets[0])
@@ -173,7 +172,6 @@ func (e *bestFastEncoder) Encode(blk *blockEnc, src []byte) {
 		blk.literals = append(blk.literals, src[nextEmit:until]...)
 		s.litLen = uint32(until - nextEmit)
 	}
-	_ = addLiterals
 
 	if debugEncoder {
 		println("recent offsets:", blk.recentOffsets)
@@ -189,6 +187,8 @@ encodeLoop:
 		}
 
 		const goodEnough = 250
+
+		cv := load6432(src, s)
 
 		nextHashL := hashLen(cv, bestLongTableBits, bestLongLen)
 		nextHashS := hashLen(cv, bestShortTableBits, bestShortLen)
@@ -290,7 +290,6 @@ encodeLoop:
 				if s >= sLimit {
 					break encodeLoop
 				}
-				cv = load6432(src, s)
 				continue
 			}
 
@@ -364,7 +363,6 @@ encodeLoop:
 			if s >= sLimit {
 				if debugEncoder {
 					println("repeat ended", s, best.length)
-
 				}
 				break encodeLoop
 			}
@@ -387,7 +385,6 @@ encodeLoop:
 			case 4 | 3:
 				offset1, offset2, offset3 = offset1-1, offset1, offset2
 			}
-			cv = load6432(src, s)
 			continue
 		}
 
@@ -435,7 +432,6 @@ encodeLoop:
 			e.table[h1] = prevEntry{offset: off, prev: e.table[h1].offset}
 			index0++
 		}
-		cv = load6432(src, s)
 	}
 
 	if int(nextEmit) < len(src) {
