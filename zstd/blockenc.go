@@ -782,7 +782,8 @@ func (b *blockEnc) encode(org []byte, raw, rawAllLits bool) error {
 	// Maybe even add a bigger margin.
 	if len(b.output)-3-bhOffset >= b.size {
 		// Discard and encode as raw block.
-		b.encodeRaw(org)
+		b.output = b.encodeRawTo(b.output[:bhOffset], org)
+		b.popOffsets()
 		b.litEnc.Reuse = huff0.ReusePolicyNone
 		return nil
 	}
