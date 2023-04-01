@@ -156,8 +156,8 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 		brPointer := GP64()
 		Load(br.Field("value"), brValue)
 		Load(br.Field("bitsRead"), brBitsRead)
-		Load(br.Field("off"), brOffset)
 		Load(br.Field("in").Base(), brPointer)
+		Load(br.Field("in").Len(), brOffset)
 		ADDQ(brOffset, brPointer) // Add current offset to read pointer.
 		MOVQ(brPointer, brPointerStash)
 	}
@@ -438,7 +438,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 	br := Dereference(Param("br"))
 	Store(brValue, br.Field("value"))
 	Store(brBitsRead.As8(), br.Field("bitsRead"))
-	Store(brOffset, br.Field("off"))
+	Store(brOffset, br.Field("in").Len())
 
 	if !o.useSeqs {
 		Comment("Update the context")
