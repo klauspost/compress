@@ -169,6 +169,10 @@ func (w *GzipResponseWriter) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
+func (w *GzipResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
 var castagnoliTable = crc32.MakeTable(crc32.Castagnoli)
 
 // startGzip initializes a GZIP writer and writes the buffer.
