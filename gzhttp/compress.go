@@ -923,6 +923,10 @@ func atoi(s string) (int, bool) {
 	return int(i64), err == nil
 }
 
+type unwrapper interface {
+	Unwrap() http.ResponseWriter
+}
+
 // newNoGzipResponseWriter will return a response writer that
 // cleans up compression artifacts.
 // Depending on whether http.Hijacker is supported the returned will as well.
@@ -933,10 +937,12 @@ func newNoGzipResponseWriter(w http.ResponseWriter) http.ResponseWriter {
 			http.ResponseWriter
 			http.Hijacker
 			http.Flusher
+			unwrapper
 		}{
 			ResponseWriter: n,
 			Hijacker:       hj,
 			Flusher:        n,
+			unwrapper:      n,
 		}
 		return x
 	}
