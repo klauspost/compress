@@ -986,3 +986,7 @@ func (n *NoGzipResponseWriter) WriteHeader(statusCode int) {
 	}
 	n.ResponseWriter.WriteHeader(statusCode)
 }
+
+func (n *NoGzipResponseWriter) Unwrap() http.ResponseWriter {
+	return n.ResponseWriter
+}
