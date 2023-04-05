@@ -22,6 +22,7 @@ type fastBase struct {
 	tmp         [8]byte
 	blk         *blockEnc
 	lastDictID  uint32
+	huffLogLess uint8
 	lowMem      bool
 }
 
@@ -133,7 +134,7 @@ func (e *fastBase) matchlen(s, t int32, src []byte) int32 {
 // Reset the encoding table.
 func (e *fastBase) resetBase(d *dict, singleBlock bool) {
 	if e.blk == nil {
-		e.blk = &blockEnc{lowMem: e.lowMem}
+		e.blk = &blockEnc{lowMem: e.lowMem, huffLogLess: e.huffLogLess}
 		e.blk.init()
 	} else {
 		e.blk.reset(nil)

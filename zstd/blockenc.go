@@ -27,8 +27,9 @@ type blockEnc struct {
 	recentOffsets     [3]uint32
 	prevRecentOffsets [3]uint32
 
-	last   bool
-	lowMem bool
+	huffLogLess uint8
+	last        bool
+	lowMem      bool
 }
 
 // init should be used once the block has been created.
@@ -68,7 +69,12 @@ func (b *blockEnc) init() {
 		b.coders.llEnc = &fseEncoder{}
 		b.coders.llPrev = &fseEncoder{}
 	}
-	b.litEnc = &huff0.Scratch{WantLogLess: 4}
+	if b.litEnc == nil {
+		b.litEnc = &huff0.Scratch{WantLogLess: b.huffLogLess}
+	} else {
+		b.litEnc.Reuse = huff0.ReusePolicyNone
+		b.litEnc.WantLogLess = b.huffLogLess
+	}
 	b.reset(nil)
 }
 

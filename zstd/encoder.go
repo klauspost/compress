@@ -109,7 +109,7 @@ func (e *Encoder) Reset(w io.Writer) {
 		s.current = s.current[:0]
 		s.previous = s.previous[:0]
 		if s.writing == nil {
-			s.writing = &blockEnc{lowMem: e.o.lowMem}
+			s.writing = &blockEnc{lowMem: e.o.lowMem, huffLogLess: e.o.huffLogLess}
 			s.writing.init()
 		}
 		s.writing.initNewEncode()
