@@ -32,12 +32,14 @@ type match struct {
 	length int32
 	rep    int32
 	est    int32
+
+	mlCode, llCode, ofCode uint8
 }
 
 const highScore = maxMatchLen * 8
 
 // estBits will estimate output bits from predefined tables.
-func (m *match) estBits(bitsPerByte int32) {
+func (m *match) estBits(bitsPerByte, litLen int32, of, ml, ll *compress.DynamicEstimate) {
 	mlc := mlCode(uint32(m.length - zstdMinMatch))
 	var ofc uint8
 	if m.rep < 0 {
@@ -45,15 +47,22 @@ func (m *match) estBits(bitsPerByte int32) {
 	} else {
 		ofc = ofCode(uint32(m.rep))
 	}
-	// Cost, excluding
-	ofTT, mlTT := fsePredefEnc[tableOffsets].ct.symbolTT[ofc], fsePredefEnc[tableMatchLengths].ct.symbolTT[mlc]
+	m.mlCode = mlc
+	m.ofCode = ofc
+	m.llCode = llCode(uint32(litLen))
+
+	// Cost
+	ofBits := fsePredefEnc[tableOffsets].ct.symbolTT[ofc].outBits
+	mlBits := fsePredefEnc[tableMatchLengths].ct.symbolTT[mlc].outBits
+	llBits := fsePredefEnc[tableLiteralLengths].ct.symbolTT[m.llCode].outBits
 
 	// Add cost of match encoding...
-	m.est = int32(ofTT.outBits + mlTT.outBits)
-	m.est += int32(ofTT.deltaNbBits>>16 + mlTT.deltaNbBits>>16)
+	m.est = int32(ofBits + mlBits + llBits)
+	m.est += int32(0.5 + of.EstByte(ofc) + ml.EstByte(mlc) + ll.EstByte(m.llCode))
+
 	// Subtract savings compared to literal encoding...
 	m.est -= (m.length * bitsPerByte) >> 10
-	if m.est > 0 {
+	if m.est > 4 {
 		// Unlikely gain..
 		m.length = 0
 		m.est = highScore
@@ -72,6 +81,8 @@ type bestFastEncoder struct {
 	longTable     [bestLongTableSize]prevEntry
 	dictTable     []prevEntry
 	dictLongTable []prevEntry
+
+	ml, of, ll compress.DynamicEstimate
 }
 
 // Encode improves compression...
@@ -240,7 +251,7 @@ encodeLoop:
 			}
 
 			cand := match{offset: offset, s: s, length: l, rep: rep}
-			cand.estBits(bitsPerByte)
+			cand.estBits(bitsPerByte, s-nextEmit, &e.of, &e.ml, &e.ll)
 			if m.est >= highScore || cand.est-m.est+(cand.s-m.s)*bitsPerByte>>10 < 0 {
 				*m = cand
 			}
@@ -338,6 +349,10 @@ encodeLoop:
 				panic(fmt.Sprintf("match mismatch: %v != %v", src[best.s:best.s+best.length], src[best.offset:best.offset+best.length]))
 			}
 		}
+
+		e.of.AddByte(best.ofCode)
+		e.ml.AddByte(best.mlCode)
+		e.ll.AddByte(best.llCode)
 
 		// We have a match, we can store the forward value
 		if best.rep > 0 {
@@ -441,6 +456,11 @@ encodeLoop:
 	blk.recentOffsets[0] = uint32(offset1)
 	blk.recentOffsets[1] = uint32(offset2)
 	blk.recentOffsets[2] = uint32(offset3)
+	const factor = 0.75
+	e.ll.CycleFactor(factor)
+	e.ml.CycleFactor(factor)
+	e.of.CycleFactor(factor)
+
 	if debugEncoder {
 		println("returning, recent offsets:", blk.recentOffsets, "extra literals:", blk.extraLits)
 	}
@@ -456,6 +476,13 @@ func (e *bestFastEncoder) EncodeNoHist(blk *blockEnc, src []byte) {
 
 // Reset will reset and set a dictionary if not nil
 func (e *bestFastEncoder) Reset(d *dict, singleBlock bool) {
+	// Seed with default distribution
+	e.ll.SeedHist([]int{4, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 2, 1, 1, 1, 1, 1})
+	e.ml.SeedHist([]int{1, 4, 3, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1})
+	e.of.SeedHist([]int{1, 1, 1, 1, 1, 1, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1})
+	e.ll.MaxBits = 9
+	e.ml.MaxBits = 9
+	e.of.MaxBits = 8
 	e.resetBase(d, singleBlock)
 	if d == nil {
 		return
