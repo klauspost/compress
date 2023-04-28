@@ -293,8 +293,8 @@ func (a *reader) initBuffers(rd io.Reader, buffers [][]byte, size int) {
 	a.in = rd
 	a.ready = make(chan *buffer, len(buffers))
 	a.reuse = make(chan *buffer, len(buffers))
-	a.exit = make(chan struct{}, 0)
-	a.exited = make(chan struct{}, 0)
+	a.exit = make(chan struct{})
+	a.exited = make(chan struct{})
 	a.buffers = len(buffers)
 	a.size = size
 	a.cur = nil

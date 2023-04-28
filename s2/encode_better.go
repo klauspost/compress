@@ -157,7 +157,6 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 				index0 := base + 1
 				index1 := s - 2
 
-				cv = load64(src, s)
 				for index0 < index1 {
 					cv0 := load64(src, index0)
 					cv1 := load64(src, index1)
@@ -599,7 +598,6 @@ searchDict:
 					if s >= sLimit {
 						break searchDict
 					}
-					cv = load64(src, s)
 					// Index in-between
 					index0 := base + 1
 					index1 := s - 2
@@ -961,7 +959,6 @@ searchDict:
 				index0 := base + 1
 				index1 := s - 2
 
-				cv = load64(src, s)
 				for index0 < index1 {
 					cv0 := load64(src, index0)
 					cv1 := load64(src, index1)
