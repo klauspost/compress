@@ -302,7 +302,14 @@ func (w *GzipResponseWriter) startPlain() error {
 }
 
 // WriteHeader just saves the response code until close or GZIP effective writes.
+// In the specific case of 1xx status codes, WriteHeader is directly calling the wrapped ResponseWriter,
 func (w *GzipResponseWriter) WriteHeader(code int) {
+	// Handle informational headers
+	if code >= 100 && code <= 199 {
+		w.ResponseWriter.WriteHeader(code)
+		return
+	}
+
 	if w.code == 0 {
 		w.code = code
 	}
