@@ -85,7 +85,7 @@ func TestEncoder_EncodeAllSimple(t *testing.T) {
 			defer e.Close()
 			start := time.Now()
 			dst := e.EncodeAll(in, nil)
-			t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
+			//t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
 			mbpersec := (float64(len(in)) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
 			t.Logf("Encoded %d bytes with %.2f MB/s", len(in), mbpersec)
 
@@ -98,7 +98,7 @@ func TestEncoder_EncodeAllSimple(t *testing.T) {
 				os.WriteFile("testdata/"+t.Name()+"-z000028.want", in, os.ModePerm)
 				t.Fatal("Decoded does not match")
 			}
-			t.Log("Encoded content matched")
+			//t.Log("Encoded content matched")
 		})
 	}
 }
@@ -136,6 +136,9 @@ func TestEncoder_EncodeAllConcurrent(t *testing.T) {
 				go func() {
 					defer wg.Done()
 					dst := e.EncodeAll(in, nil)
+					if len(dst) > e.MaxEncodedSize(len(in)) {
+						t.Errorf("max encoded size for %v: got: %d, want max: %d", len(in), len(dst), e.MaxEncodedSize(len(in)))
+					}
 					//t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
 					decoded, err := dec.DecodeAll(dst, nil)
 					if err != nil {
@@ -150,7 +153,7 @@ func TestEncoder_EncodeAllConcurrent(t *testing.T) {
 				}()
 			}
 			wg.Wait()
-			t.Log("Encoded content matched.", n, "goroutines")
+			//t.Log("Encoded content matched.", n, "goroutines")
 		})
 	}
 }
@@ -160,6 +163,8 @@ func TestEncoder_EncodeAllEncodeXML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer f.Close()
+
 	dec, err := NewReader(f)
 	if err != nil {
 		t.Fatal(err)
@@ -185,7 +190,10 @@ func TestEncoder_EncodeAllEncodeXML(t *testing.T) {
 			defer e.Close()
 			start := time.Now()
 			dst := e.EncodeAll(in, nil)
-			t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
+			if len(dst) > e.MaxEncodedSize(len(in)) {
+				t.Errorf("max encoded size for %v: got: %d, want max: %d", len(in), len(dst), e.MaxEncodedSize(len(in)))
+			}
+			//t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
 			mbpersec := (float64(len(in)) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
 			t.Logf("Encoded %d bytes with %.2f MB/s", len(in), mbpersec)
 
@@ -198,7 +206,7 @@ func TestEncoder_EncodeAllEncodeXML(t *testing.T) {
 				t.Error("Decoded does not match")
 				return
 			}
-			t.Log("Encoded content matched")
+			//t.Log("Encoded content matched")
 		})
 	}
 }
@@ -250,6 +258,9 @@ func TestEncoderRegression(t *testing.T) {
 						t.Error(err)
 					}
 					encoded := enc.EncodeAll(in, nil)
+					if len(encoded) > enc.MaxEncodedSize(len(in)) {
+						t.Errorf("max encoded size for %v: got: %d, want max: %d", len(in), len(encoded), enc.MaxEncodedSize(len(in)))
+					}
 					// Usually too small...
 					got, err := dec.DecodeAll(encoded, make([]byte, 0, len(in)))
 					if err != nil {
@@ -268,6 +279,9 @@ func TestEncoderRegression(t *testing.T) {
 						t.Error(err)
 					}
 					encoded = dst.Bytes()
+					if len(encoded) > enc.MaxEncodedSize(len(in)) {
+						t.Errorf("max encoded size for %v: got: %d, want max: %d", len(in), len(encoded), enc.MaxEncodedSize(len(in)))
+					}
 					got, err = dec.DecodeAll(encoded, make([]byte, 0, len(in)/2))
 					if err != nil {
 						t.Logf("error: %v\nwant: %v\ngot:  %v", err, in, got)
@@ -861,6 +875,8 @@ func TestEncoder_EncodeAllEnwik9(t *testing.T) {
 				"compress it with 'zstd -15 -T0 enwik9' and place it in " + file)
 		}
 	}
+	defer f.Close()
+
 	dec, err := NewReader(f)
 	if err != nil {
 		t.Fatal(err)
@@ -903,6 +919,8 @@ func TestEncoder_EncoderStreamEnwik9(t *testing.T) {
 				"compress it with 'zstd -15 -T0 enwik9' and place it in " + file)
 		}
 	}
+	defer f.Close()
+
 	dec, err := NewReader(f)
 	if err != nil {
 		t.Fatal(err)
@@ -945,6 +963,8 @@ func BenchmarkEncoder_EncodeAllXML(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	defer f.Close()
+
 	dec, err := NewReader(f)
 	if err != nil {
 		b.Fatal(err)
@@ -971,11 +991,7 @@ func BenchmarkEncoder_EncodeAllXML(b *testing.B) {
 }
 
 func BenchmarkEncoder_EncodeAllSimple(b *testing.B) {
-	f, err := os.Open("testdata/z000028")
-	if err != nil {
-		b.Fatal(err)
-	}
-	in, err := io.ReadAll(f)
+	in, err := os.ReadFile("testdata/z000028")
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -1003,11 +1019,7 @@ func BenchmarkEncoder_EncodeAllSimple(b *testing.B) {
 }
 
 func BenchmarkEncoder_EncodeAllSimple4K(b *testing.B) {
-	f, err := os.Open("testdata/z000028")
-	if err != nil {
-		b.Fatal(err)
-	}
-	in, err := io.ReadAll(f)
+	in, err := os.ReadFile("testdata/z000028")
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -1036,11 +1048,7 @@ func BenchmarkEncoder_EncodeAllSimple4K(b *testing.B) {
 }
 
 func BenchmarkEncoder_EncodeAllHTML(b *testing.B) {
-	f, err := os.Open("../testdata/html.txt")
-	if err != nil {
-		b.Fatal(err)
-	}
-	in, err := io.ReadAll(f)
+	in, err := os.ReadFile("../testdata/html.txt")
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -1060,11 +1068,7 @@ func BenchmarkEncoder_EncodeAllHTML(b *testing.B) {
 }
 
 func BenchmarkEncoder_EncodeAllTwain(b *testing.B) {
-	f, err := os.Open("../testdata/Mark.Twain-Tom.Sawyer.txt")
-	if err != nil {
-		b.Fatal(err)
-	}
-	in, err := io.ReadAll(f)
+	in, err := os.ReadFile("../testdata/Mark.Twain-Tom.Sawyer.txt")
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -1084,11 +1088,7 @@ func BenchmarkEncoder_EncodeAllTwain(b *testing.B) {
 }
 
 func BenchmarkEncoder_EncodeAllPi(b *testing.B) {
-	f, err := os.Open("../testdata/pi.txt")
-	if err != nil {
-		b.Fatal(err)
-	}
-	in, err := io.ReadAll(f)
+	in, err := os.ReadFile("../testdata/pi.txt")
 	if err != nil {
 		b.Fatal(err)
 	}

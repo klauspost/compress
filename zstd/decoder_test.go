@@ -563,6 +563,48 @@ func TestNewDecoderSmallFile(t *testing.T) {
 	t.Logf("Decoded %d bytes with %f.2 MB/s", n, mbpersec)
 }
 
+// cursedReader wraps a reader and returns zero bytes every other read.
+// This is used to test the ability of the consumer to handle empty reads without EOF,
+// which can happen when reading from a network connection.
+type cursedReader struct {
+	io.Reader
+	numReads int
+}
+
+func (r *cursedReader) Read(p []byte) (n int, err error) {
+	r.numReads++
+	if r.numReads%2 == 0 {
+		return 0, nil
+	}
+
+	return r.Reader.Read(p)
+}
+
+func TestNewDecoderZeroLengthReads(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
+	file := "testdata/z000028.zst"
+	const wantSize = 39807
+	f, err := os.Open(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	dec, err := NewReader(&cursedReader{Reader: f})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	n, err := io.Copy(io.Discard, dec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != wantSize {
+		t.Errorf("want size %d, got size %d", wantSize, n)
+	}
+}
+
 type readAndBlock struct {
 	buf     []byte
 	unblock chan struct{}
@@ -1157,12 +1199,18 @@ func testDecoderFileBad(t *testing.T, fn string, newDec func() (*Decoder, error)
 
 func BenchmarkDecoder_DecoderSmall(b *testing.B) {
 	zr := testCreateZipReader("testdata/benchdecoder.zip", b)
-	dec, err := NewReader(nil)
+	dec, err := NewReader(nil, WithDecodeBuffersBelow(1<<30))
 	if err != nil {
 		b.Fatal(err)
 		return
 	}
 	defer dec.Close()
+	dec2, err := NewReader(nil, WithDecodeBuffersBelow(0))
+	if err != nil {
+		b.Fatal(err)
+		return
+	}
+	defer dec2.Close()
 	for _, tt := range zr.File {
 		if !strings.HasSuffix(tt.Name, ".zst") {
 			continue
@@ -1183,6 +1231,7 @@ func BenchmarkDecoder_DecoderSmall(b *testing.B) {
 			in = append(in, in...)
 			// 8x
 			in = append(in, in...)
+
 			err = dec.Reset(bytes.NewBuffer(in))
 			if err != nil {
 				b.Fatal(err)
@@ -1191,19 +1240,235 @@ func BenchmarkDecoder_DecoderSmall(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			b.SetBytes(int64(len(got)))
+			b.Run("buffered", func(b *testing.B) {
+				b.SetBytes(int64(len(got)))
+				b.ReportAllocs()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					err = dec.Reset(bytes.NewBuffer(in))
+					if err != nil {
+						b.Fatal(err)
+					}
+					n, err := io.Copy(io.Discard, dec)
+					if err != nil {
+						b.Fatal(err)
+					}
+					if int(n) != len(got) {
+						b.Fatalf("want %d, got %d", len(got), n)
+					}
+
+				}
+			})
+			b.Run("unbuffered", func(b *testing.B) {
+				b.SetBytes(int64(len(got)))
+				b.ReportAllocs()
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					err = dec2.Reset(bytes.NewBuffer(in))
+					if err != nil {
+						b.Fatal(err)
+					}
+					n, err := io.Copy(io.Discard, dec2)
+					if err != nil {
+						b.Fatal(err)
+					}
+					if int(n) != len(got) {
+						b.Fatalf("want %d, got %d", len(got), n)
+					}
+				}
+			})
+		})
+	}
+}
+
+func BenchmarkDecoder_DecoderReset(b *testing.B) {
+	zr := testCreateZipReader("testdata/benchdecoder.zip", b)
+	dec, err := NewReader(nil, WithDecodeBuffersBelow(0))
+	if err != nil {
+		b.Fatal(err)
+		return
+	}
+	defer dec.Close()
+	bench := func(name string, b *testing.B, opts []DOption, in, want []byte) {
+		b.Helper()
+		buf := newBytesReader(in)
+		dec, err := NewReader(nil, opts...)
+		if err != nil {
+			b.Fatal(err)
+			return
+		}
+		defer dec.Close()
+		b.Run(name, func(b *testing.B) {
+			b.SetBytes(1)
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				err = dec.Reset(bytes.NewBuffer(in))
-				if err != nil {
-					b.Fatal(err)
-				}
-				_, err := io.Copy(io.Discard, dec)
+				buf.Reset(in)
+				err = dec.Reset(buf)
 				if err != nil {
 					b.Fatal(err)
 				}
 			}
+		})
+	}
+	for _, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, ".zst") {
+			continue
+		}
+		b.Run(tt.Name, func(b *testing.B) {
+			r, err := tt.Open()
+			if err != nil {
+				b.Fatal(err)
+			}
+			defer r.Close()
+			in, err := io.ReadAll(r)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			got, err := dec.DecodeAll(in, nil)
+			if err != nil {
+				b.Fatal(err)
+			}
+			// Disable buffers:
+			bench("stream", b, []DOption{WithDecodeBuffersBelow(0)}, in, got)
+			bench("stream-single", b, []DOption{WithDecodeBuffersBelow(0), WithDecoderConcurrency(1)}, in, got)
+			// Force buffers:
+			bench("buffer", b, []DOption{WithDecodeBuffersBelow(1 << 30)}, in, got)
+			bench("buffer-single", b, []DOption{WithDecodeBuffersBelow(1 << 30), WithDecoderConcurrency(1)}, in, got)
+		})
+	}
+}
+
+// newBytesReader returns a *bytes.Reader that also supports Bytes() []byte
+func newBytesReader(b []byte) *bytesReader {
+	return &bytesReader{Reader: bytes.NewReader(b), buf: b}
+}
+
+type bytesReader struct {
+	*bytes.Reader
+	buf []byte
+}
+
+func (b *bytesReader) Bytes() []byte {
+	n := b.Reader.Len()
+	if n > len(b.buf) {
+		panic("buffer mismatch")
+	}
+	return b.buf[len(b.buf)-n:]
+}
+
+func (b *bytesReader) Reset(data []byte) {
+	b.buf = data
+	b.Reader.Reset(data)
+}
+
+func BenchmarkDecoder_DecoderNewNoRead(b *testing.B) {
+	zr := testCreateZipReader("testdata/benchdecoder.zip", b)
+	dec, err := NewReader(nil)
+	if err != nil {
+		b.Fatal(err)
+		return
+	}
+	defer dec.Close()
+
+	bench := func(name string, b *testing.B, opts []DOption, in, want []byte) {
+		b.Helper()
+		b.Run(name, func(b *testing.B) {
+			buf := newBytesReader(in)
+			b.SetBytes(1)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				buf.Reset(in)
+				dec, err := NewReader(buf, opts...)
+				if err != nil {
+					b.Fatal(err)
+					return
+				}
+				dec.Close()
+			}
+		})
+	}
+	for _, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, ".zst") {
+			continue
+		}
+		b.Run(tt.Name, func(b *testing.B) {
+			r, err := tt.Open()
+			if err != nil {
+				b.Fatal(err)
+			}
+			defer r.Close()
+			in, err := io.ReadAll(r)
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			got, err := dec.DecodeAll(in, nil)
+			if err != nil {
+				b.Fatal(err)
+			}
+			// Disable buffers:
+			bench("stream", b, []DOption{WithDecodeBuffersBelow(0)}, in, got)
+			bench("stream-single", b, []DOption{WithDecodeBuffersBelow(0), WithDecoderConcurrency(1)}, in, got)
+			// Force buffers:
+			bench("buffer", b, []DOption{WithDecodeBuffersBelow(1 << 30)}, in, got)
+			bench("buffer-single", b, []DOption{WithDecodeBuffersBelow(1 << 30), WithDecoderConcurrency(1)}, in, got)
+		})
+	}
+}
+
+func BenchmarkDecoder_DecoderNewSomeRead(b *testing.B) {
+	var buf [1 << 20]byte
+	bench := func(name string, b *testing.B, opts []DOption, in *os.File) {
+		b.Helper()
+		b.Run(name, func(b *testing.B) {
+			//b.ReportAllocs()
+			b.ResetTimer()
+			var heapTotal int64
+			var m runtime.MemStats
+			for i := 0; i < b.N; i++ {
+				runtime.GC()
+				runtime.ReadMemStats(&m)
+				heapTotal -= int64(m.HeapInuse)
+				_, err := in.Seek(io.SeekStart, 0)
+				if err != nil {
+					b.Fatal(err)
+				}
+
+				dec, err := NewReader(in, opts...)
+				if err != nil {
+					b.Fatal(err)
+				}
+				// Read 16 MB
+				_, err = io.CopyBuffer(io.Discard, io.LimitReader(dec, 16<<20), buf[:])
+				if err != nil {
+					b.Fatal(err)
+				}
+				runtime.GC()
+				runtime.ReadMemStats(&m)
+				heapTotal += int64(m.HeapInuse)
+
+				dec.Close()
+			}
+			b.ReportMetric(float64(heapTotal)/float64(b.N), "b/op")
+		})
+	}
+	files := []string{"testdata/000002.map.win32K.zst", "testdata/000002.map.win1MB.zst", "testdata/000002.map.win8MB.zst"}
+	for _, file := range files {
+		if !strings.HasSuffix(file, ".zst") {
+			continue
+		}
+		r, err := os.Open(file)
+		if err != nil {
+			b.Fatal(err)
+		}
+		defer r.Close()
+
+		b.Run(file, func(b *testing.B) {
+			bench("stream-single", b, []DOption{WithDecodeBuffersBelow(0), WithDecoderConcurrency(1)}, r)
+			bench("stream-single-himem", b, []DOption{WithDecodeBuffersBelow(0), WithDecoderConcurrency(1), WithDecoderLowmem(false)}, r)
 		})
 	}
 }

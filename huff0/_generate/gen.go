@@ -47,14 +47,11 @@ func (d decompress4x) generateProcedure(name string) {
 	Doc(name+" is an x86 assembler implementation of Decompress4X when tablelog > 8.decodes a sequence", "")
 	Pragma("noescape")
 
-	exhausted := GP64()
-	XORQ(exhausted.As64(), exhausted.As64()) // exhausted = false
-
+	exhausted := GP8()
+	buffer := GP64()
 	limit := GP64()
 
-	bufferOrigin := GP64()
 	peekBits := GP64()
-	buffer := GP64()
 	dstEvery := GP64()
 	table := GP64()
 
@@ -64,7 +61,7 @@ func (d decompress4x) generateProcedure(name string) {
 	{
 		ctx := Dereference(Param("ctx"))
 		Load(ctx.Field("peekBits"), peekBits)
-		Load(ctx.Field("out"), bufferOrigin)
+		Load(ctx.Field("out"), buffer)
 		Load(ctx.Field("limit"), limit)
 		Load(ctx.Field("dstEvery"), dstEvery)
 		Load(ctx.Field("tbl"), table)
@@ -74,27 +71,26 @@ func (d decompress4x) generateProcedure(name string) {
 	Comment("Main loop")
 	Label("main_loop")
 
-	MOVQ(bufferOrigin, buffer)
-	// Check if we have space
+	// Check if we have space. We could zero exhausted outside the loop,
+	// but doing it here is a hint to the CPU that there's no dependency
+	// on the previous iteration's value.
+	XORL(exhausted.As32(), exhausted.As32())
 	CMPQ(buffer, limit)
 	SETGE(exhausted.As8())
-	d.decodeTwoValues(0, br, peekBits, table, buffer, exhausted)
-	ADDQ(dstEvery, buffer)
-	d.decodeTwoValues(1, br, peekBits, table, buffer, exhausted)
-	ADDQ(dstEvery, buffer)
-	d.decodeTwoValues(2, br, peekBits, table, buffer, exhausted)
-	ADDQ(dstEvery, buffer)
-	d.decodeTwoValues(3, br, peekBits, table, buffer, exhausted)
+	d.decodeTwoValues(0, br, peekBits, table, buffer, dstEvery, exhausted)
+	d.decodeTwoValues(1, br, peekBits, table, buffer, dstEvery, exhausted)
+	d.decodeTwoValues(2, br, peekBits, table, buffer, dstEvery, exhausted)
+	d.decodeTwoValues(3, br, peekBits, table, buffer, dstEvery, exhausted)
 
-	ADDQ(U8(2), bufferOrigin) // off += 2
+	ADDQ(U8(2), buffer) // off += 2
 
-	TESTB(exhausted.As8(), exhausted.As8()) // any br[i].ofs < 4?
+	TESTB(exhausted, exhausted) // any br[i].ofs < 4?
 	JZ(LabelRef("main_loop"))
 
 	{
 		ctx := Dereference(Param("ctx"))
 		ctxout, _ := ctx.Field("out").Resolve()
-		decoded := bufferOrigin
+		decoded := buffer
 		SUBQ(ctxout.Addr, decoded)
 		SHLQ(U8(2), decoded) // decoded *= 4
 
@@ -105,15 +101,14 @@ func (d decompress4x) generateProcedure(name string) {
 }
 
 // TODO [wmu]: I believe it's doable in avo, but can't figure out how to deal
-//
-//	with arbitrary pointers to a given type
+// with arbitrary pointers to a given type
 const bitReader_in = 0
 const bitReader_off = bitReader_in + 3*8 // {ptr, len, cap}
 const bitReader_value = bitReader_off + 8
 const bitReader_bitsRead = bitReader_value + 8
 const bitReader__size = bitReader_bitsRead + 8
 
-func (d decompress4x) decodeTwoValues(id int, br, peekBits, table, buffer, exhausted reg.GPVirtual) {
+func (d decompress4x) decodeTwoValues(id int, br, peekBits, table, buffer, dstEvery, exhausted reg.GPVirtual) {
 	brValue, brBitsRead := d.fillFast32(id, 32, br, exhausted)
 
 	val := GP64()
@@ -149,7 +144,7 @@ func (d decompress4x) decodeTwoValues(id int, br, peekBits, table, buffer, exhau
 	Comment("these two writes get coalesced")
 	Comment("out[id * dstEvery + 0] = uint8(v0.entry >> 8)")
 	Comment("out[id * dstEvery + 1] = uint8(v1.entry >> 8)")
-	MOVW(out.As16(), Mem{Base: buffer})
+	MOVW(out.As16(), bufferIndex(id, buffer, dstEvery))
 
 	Comment("update the bitreader structure")
 	offset := id * bitReader__size
@@ -163,14 +158,11 @@ func (d decompress4x) generateProcedure4x8bit(name string) {
 	Doc(name+" is an x86 assembler implementation of Decompress4X when tablelog > 8.decodes a sequence", "")
 	Pragma("noescape")
 
-	exhausted := GP64()                      // Fixed since we need 8H
-	XORQ(exhausted.As64(), exhausted.As64()) // exhausted = false
-
-	bufferOrigin := GP64()
+	exhausted := GP8()
+	buffer := GP64()
 	limit := GP64()
 
 	peekBits := GP64()
-	buffer := GP64()
 	dstEvery := GP64()
 	table := GP64()
 
@@ -180,7 +172,7 @@ func (d decompress4x) generateProcedure4x8bit(name string) {
 	{
 		ctx := Dereference(Param("ctx"))
 		Load(ctx.Field("peekBits"), peekBits)
-		Load(ctx.Field("out"), bufferOrigin)
+		Load(ctx.Field("out"), buffer)
 		Load(ctx.Field("limit"), limit)
 		Load(ctx.Field("dstEvery"), dstEvery)
 		Load(ctx.Field("tbl"), table)
@@ -190,27 +182,26 @@ func (d decompress4x) generateProcedure4x8bit(name string) {
 	Comment("Main loop")
 	Label("main_loop")
 
-	MOVQ(bufferOrigin, buffer)
-	// Check if we have space
+	// Check if we have space. We could zero exhausted outside the loop,
+	// but doing it here is a hint to the CPU that there's no dependency
+	// on the previous iteration's value.
+	XORL(exhausted.As32(), exhausted.As32())
 	CMPQ(buffer, limit)
-	SETGE(exhausted.As8())
-	d.decodeFourValues(0, br, peekBits, table, buffer, exhausted)
-	ADDQ(dstEvery, buffer)
-	d.decodeFourValues(1, br, peekBits, table, buffer, exhausted)
-	ADDQ(dstEvery, buffer)
-	d.decodeFourValues(2, br, peekBits, table, buffer, exhausted)
-	ADDQ(dstEvery, buffer)
-	d.decodeFourValues(3, br, peekBits, table, buffer, exhausted)
+	SETGE(exhausted)
+	d.decodeFourValues(0, br, peekBits, table, buffer, dstEvery, exhausted)
+	d.decodeFourValues(1, br, peekBits, table, buffer, dstEvery, exhausted)
+	d.decodeFourValues(2, br, peekBits, table, buffer, dstEvery, exhausted)
+	d.decodeFourValues(3, br, peekBits, table, buffer, dstEvery, exhausted)
 
-	ADDQ(U8(4), bufferOrigin) // off += 4
+	ADDQ(U8(4), buffer) // off += 4
 
-	TESTB(exhausted.As8(), exhausted.As8()) // any br[i].ofs < 4?
+	TESTB(exhausted, exhausted) // any br[i].ofs < 4?
 	JZ(LabelRef("main_loop"))
 
 	{
 		ctx := Dereference(Param("ctx"))
 		ctxout, _ := ctx.Field("out").Resolve()
-		decoded := bufferOrigin
+		decoded := buffer
 		SUBQ(ctxout.Addr, decoded)
 		SHLQ(U8(2), decoded) // decoded *= 4
 
@@ -219,7 +210,7 @@ func (d decompress4x) generateProcedure4x8bit(name string) {
 	RET()
 }
 
-func (d decompress4x) decodeFourValues(id int, br, peekBits, table, buffer, exhausted reg.GPVirtual) {
+func (d decompress4x) decodeFourValues(id int, br, peekBits, table, buffer, dstEvery, exhausted reg.GPVirtual) {
 	brValue, brBitsRead := d.fillFast32(id, 32, br, exhausted)
 
 	decompress := func(valID int, outByte reg.Register) {
@@ -253,12 +244,27 @@ func (d decompress4x) decodeFourValues(id int, br, peekBits, table, buffer, exha
 	Comment("out[id * dstEvery + 1] = uint8(v1.entry >> 8)")
 	Comment("out[id * dstEvery + 3] = uint8(v2.entry >> 8)")
 	Comment("out[id * dstEvery + 4] = uint8(v3.entry >> 8)")
-	MOVL(out.As32(), Mem{Base: buffer})
+	MOVL(out.As32(), bufferIndex(id, buffer, dstEvery))
 
 	Comment("update the bitreader structure")
 	offset := id * bitReader__size
 	MOVQ(brValue, Mem{Base: br, Disp: offset + bitReader_value})
 	MOVB(brBitsRead.As8(), Mem{Base: br, Disp: offset + bitReader_bitsRead})
+}
+
+func bufferIndex(id int, buffer, dstEvery reg.GPVirtual) Mem {
+	switch id {
+	case 0:
+		return Mem{Base: buffer}
+	case 1, 2:
+		return Mem{Base: buffer, Index: dstEvery, Scale: byte(id)}
+	case 3:
+		stride3 := GP64() // stride3 := 3*dstEvery
+		LEAQ(Mem{Base: dstEvery, Index: dstEvery, Scale: 2}, stride3)
+		return Mem{Base: buffer, Index: stride3, Scale: 1}
+	default:
+		panic("id must be >=0, <4")
+	}
 }
 
 func (d decompress4x) fillFast32(id, atLeast int, br, exhausted reg.GPVirtual) (brValue, brBitsRead reg.GPVirtual) {
@@ -297,11 +303,11 @@ func (d decompress4x) fillFast32(id, atLeast int, br, exhausted reg.GPVirtual) (
 	MOVQ(brOffset, Mem{Base: br, Disp: offset + bitReader_off})
 	ORQ(tmp.As64(), brValue)
 	{
-		Commentf("exhausted = exhausted || (br%d.off < 4)", id)
+		Commentf("exhausted += (br%d.off < 4)", id)
 		CMPQ(brOffset, U8(4))
-		tmp = GP64()
-		SETLT(tmp.As8())
-		ORB(tmp.As8(), exhausted.As8())
+		// Add carry from brOffset-4. We do this at most four times per iteration,
+		// and every iteration resets exhausted's lower byte, so it doesn't overflow.
+		ADCB(I8(0), exhausted)
 	}
 
 	Label("skip_fill" + strconv.Itoa(id))
@@ -409,7 +415,7 @@ func (d decompress1x) generateProcedure(name string) {
 		outCap := GP64()
 		Load(ctx.Field("outCap"), outCap)
 		CMPQ(outCap, U8(4))
-		JB(LabelRef("error_max_decoded_size_exeeded"))
+		JB(LabelRef("error_max_decoded_size_exceeded"))
 
 		LEAQ(Mem{Base: buffer, Index: outCap, Scale: 1}, bufferEnd)
 
@@ -432,7 +438,7 @@ func (d decompress1x) generateProcedure(name string) {
 		tmp := GP64()
 		LEAQ(Mem{Base: buffer, Disp: 4}, tmp)
 		CMPQ(tmp, bufferEnd)
-		JGE(LabelRef("error_max_decoded_size_exeeded"))
+		JGE(LabelRef("error_max_decoded_size_exceeded"))
 	}
 
 	decompress := func(id int, out reg.Register) {
@@ -474,7 +480,7 @@ func (d decompress1x) generateProcedure(name string) {
 	RET()
 
 	Comment("Report error")
-	Label("error_max_decoded_size_exeeded")
+	Label("error_max_decoded_size_exceeded")
 	{
 		ctx := Dereference(Param("ctx"))
 		tmp := GP64()

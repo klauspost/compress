@@ -38,28 +38,29 @@ func TestMaxEncodedLen(t *testing.T) {
 	testSet := []struct {
 		in, out int64
 	}{
-		{in: 0, out: 1},
-		{in: 1 << 24, out: 1<<24 + int64(binary.PutVarint([]byte{binary.MaxVarintLen32: 0}, int64(1<<24))) + literalExtraSize(1<<24)},
-		{in: MaxBlockSize, out: math.MaxUint32},
-		{in: math.MaxUint32 - binary.MaxVarintLen32 - literalExtraSize(math.MaxUint32), out: math.MaxUint32},
-		{in: math.MaxUint32 - 9, out: -1},
-		{in: math.MaxUint32 - 8, out: -1},
-		{in: math.MaxUint32 - 7, out: -1},
-		{in: math.MaxUint32 - 6, out: -1},
-		{in: math.MaxUint32 - 5, out: -1},
-		{in: math.MaxUint32 - 4, out: -1},
-		{in: math.MaxUint32 - 3, out: -1},
-		{in: math.MaxUint32 - 2, out: -1},
-		{in: math.MaxUint32 - 1, out: -1},
-		{in: math.MaxUint32, out: -1},
-		{in: -1, out: -1},
-		{in: -2, out: -1},
+		0:  {in: 0, out: 1},
+		1:  {in: 1 << 24, out: 1<<24 + int64(binary.PutVarint([]byte{binary.MaxVarintLen32: 0}, int64(1<<24))) + literalExtraSize(1<<24)},
+		2:  {in: MaxBlockSize, out: math.MaxUint32},
+		3:  {in: math.MaxUint32 - binary.MaxVarintLen32 - literalExtraSize(math.MaxUint32), out: math.MaxUint32},
+		4:  {in: math.MaxUint32 - 9, out: -1},
+		5:  {in: math.MaxUint32 - 8, out: -1},
+		6:  {in: math.MaxUint32 - 7, out: -1},
+		7:  {in: math.MaxUint32 - 6, out: -1},
+		8:  {in: math.MaxUint32 - 5, out: -1},
+		9:  {in: math.MaxUint32 - 4, out: -1},
+		10: {in: math.MaxUint32 - 3, out: -1},
+		11: {in: math.MaxUint32 - 2, out: -1},
+		12: {in: math.MaxUint32 - 1, out: -1},
+		13: {in: math.MaxUint32, out: -1},
+		14: {in: -1, out: -1},
+		15: {in: -2, out: -1},
 	}
 	// 32 bit platforms have a different threshold.
 	if maxInt == math.MaxInt32 {
-		testSet[2].out = -1
+		testSet[2].out = math.MaxInt32
 		testSet[3].out = -1
 	}
+	t.Log("Maxblock:", MaxBlockSize, "reduction:", intReduction)
 	// Test all sizes up to maxBlockSize.
 	for i := int64(0); i < maxBlockSize; i++ {
 		testSet = append(testSet, struct{ in, out int64 }{in: i, out: i + int64(binary.PutVarint([]byte{binary.MaxVarintLen32: 0}, i)) + literalExtraSize(i)})
@@ -69,7 +70,7 @@ func TestMaxEncodedLen(t *testing.T) {
 		want := tt.out
 		got := int64(MaxEncodedLen(int(tt.in)))
 		if got != want {
-			t.Fatalf("input: %d, want: %d, got: %d", tt.in, want, got)
+			t.Errorf("test %d: input: %d, want: %d, got: %d", i, tt.in, want, got)
 		}
 	}
 }
@@ -1657,6 +1658,26 @@ func benchFile(b *testing.B, i int, decode bool) {
 	}
 	bDir := filepath.FromSlash(*benchdataDir)
 	data := readFile(b, filepath.Join(bDir, testFiles[i].filename))
+	if !decode {
+		b.Run("est-size", func(b *testing.B) {
+			if n := testFiles[i].sizeLimit; 0 < n && n < len(data) {
+				data = data[:n]
+			}
+			b.SetBytes(int64(len(data)))
+			b.ReportAllocs()
+			b.ResetTimer()
+			b.RunParallel(func(pb *testing.PB) {
+				for pb.Next() {
+					_ = EstimateBlockSize(data)
+				}
+			})
+			sz := float64(EstimateBlockSize(data))
+			if sz > 0 {
+				b.ReportMetric(100*sz/float64(len(data)), "pct")
+				b.ReportMetric(sz, "B")
+			}
+		})
+	}
 	b.Run("block", func(b *testing.B) {
 		if n := testFiles[i].sizeLimit; 0 < n && n < len(data) {
 			data = data[:n]
@@ -1676,8 +1697,6 @@ func benchFile(b *testing.B, i int, decode bool) {
 					}
 				}
 			})
-			b.ReportMetric(100*float64(len(Encode(nil, data)))/float64(len(data)), "pct")
-
 		} else {
 			b.SetBytes(int64(len(data)))
 			b.ReportAllocs()
@@ -1700,6 +1719,7 @@ func benchFile(b *testing.B, i int, decode bool) {
 			})
 		}
 		b.ReportMetric(100*float64(len(Encode(nil, data)))/float64(len(data)), "pct")
+		b.ReportMetric(float64(len(Encode(nil, data))), "B")
 	})
 	b.Run("block-better", func(b *testing.B) {
 		if decode {
@@ -1717,7 +1737,6 @@ func benchFile(b *testing.B, i int, decode bool) {
 					}
 				}
 			})
-			b.ReportMetric(100*float64(len(EncodeBetter(nil, data)))/float64(len(data)), "pct")
 		} else {
 			b.SetBytes(int64(len(data)))
 			b.ReportAllocs()
@@ -1738,8 +1757,9 @@ func benchFile(b *testing.B, i int, decode bool) {
 					}
 				}
 			})
-			b.ReportMetric(100*float64(len(EncodeBetter(nil, data)))/float64(len(data)), "pct")
 		}
+		b.ReportMetric(100*float64(len(EncodeBetter(nil, data)))/float64(len(data)), "pct")
+		b.ReportMetric(float64(len(EncodeBetter(nil, data))), "B")
 	})
 
 	b.Run("block-best", func(b *testing.B) {
@@ -1781,6 +1801,7 @@ func benchFile(b *testing.B, i int, decode bool) {
 			})
 			b.ReportMetric(100*float64(len(EncodeBest(nil, data)))/float64(len(data)), "pct")
 		}
+		b.ReportMetric(float64(len(EncodeBest(nil, data))), "B")
 	})
 }
 
@@ -1827,6 +1848,7 @@ func benchFileSnappy(b *testing.B, i int, decode bool) {
 			})
 			b.ReportMetric(100*float64(len(EncodeSnappy(nil, data)))/float64(len(data)), "pct")
 		}
+		b.ReportMetric(float64(len(EncodeSnappy(nil, data))), "B")
 	})
 
 	b.Run("s2-snappy-better", func(b *testing.B) {
@@ -1870,6 +1892,7 @@ func benchFileSnappy(b *testing.B, i int, decode bool) {
 			})
 			b.ReportMetric(100*float64(len(EncodeSnappyBetter(nil, data)))/float64(len(data)), "pct")
 		}
+		b.ReportMetric(float64(len(EncodeSnappyBetter(nil, data))), "B")
 	})
 
 	b.Run("s2-snappy-best", func(b *testing.B) {
@@ -1911,6 +1934,7 @@ func benchFileSnappy(b *testing.B, i int, decode bool) {
 			})
 			b.ReportMetric(100*float64(len(EncodeSnappyBest(nil, data)))/float64(len(data)), "pct")
 		}
+		b.ReportMetric(float64(len(EncodeSnappyBest(nil, data))), "B")
 	})
 	b.Run("snappy-noasm", func(b *testing.B) {
 		if decode {

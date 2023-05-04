@@ -5,6 +5,7 @@
 package gzip
 
 import (
+	"bufio"
 	"bytes"
 	oldgz "compress/gzip"
 	"crypto/rand"
@@ -537,6 +538,7 @@ func TestWriteTo(t *testing.T) {
 		t.Fatal(err)
 	}
 	wtbuf := &bytes.Buffer{}
+
 	written, err := dec.WriteTo(wtbuf)
 	if err != nil {
 		t.Fatal(err)
@@ -706,5 +708,45 @@ func TestTruncatedGunzip(t *testing.T) {
 		case <-done:
 			timer.Stop()
 		}
+	}
+}
+
+func TestBufferedPartialCopyGzip(t *testing.T) {
+	var (
+		in           = []byte("hello\nworld")
+		compressedIn []byte
+	)
+
+	var buf bytes.Buffer
+	gzw := NewWriter(&buf)
+	if _, err := gzw.Write(in); err != nil {
+		panic(err)
+	}
+	if err := gzw.Flush(); err != nil {
+		panic(err)
+	}
+	if err := gzw.Close(); err != nil {
+		panic(err)
+	}
+
+	compressedIn = buf.Bytes()
+
+	gz, err := NewReader(bytes.NewReader(compressedIn))
+	if err != nil {
+		t.Errorf("constructing a reader: %v", err)
+	}
+
+	br := bufio.NewReader(gz)
+	if _, err := br.ReadBytes('\n'); err != nil {
+		t.Errorf("reading to the first newline: %v", err)
+	}
+
+	var out bytes.Buffer
+	_, err = io.Copy(&out, br)
+	if !bytes.Equal(out.Bytes(), []byte("world")) {
+		t.Errorf("unexpected output when reading the remainder")
+	}
+	if err != nil {
+		t.Errorf("reading the remainder: %v", err)
 	}
 }

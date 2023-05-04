@@ -13,9 +13,9 @@ import (
 )
 
 func FuzzEncodingBlocks(f *testing.F) {
-	fuzz.AddFromZip(f, "testdata/enc_regressions.zip", true, false)
-	fuzz.AddFromZip(f, "testdata/fuzz/block-corpus-raw.zip", true, testing.Short())
-	fuzz.AddFromZip(f, "testdata/fuzz/block-corpus-enc.zip", false, testing.Short())
+	fuzz.AddFromZip(f, "testdata/enc_regressions.zip", fuzz.TypeRaw, false)
+	fuzz.AddFromZip(f, "testdata/fuzz/block-corpus-raw.zip", fuzz.TypeRaw, testing.Short())
+	fuzz.AddFromZip(f, "testdata/fuzz/block-corpus-enc.zip", fuzz.TypeGoFuzz, testing.Short())
 
 	// Fuzzing tweaks:
 	const (
