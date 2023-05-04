@@ -268,18 +268,21 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 		lTable[hash7(cv0, lTableBits)] = uint32(index0)
 		sTable[hash4(cv0>>8, sTableBits)] = uint32(index0 + 1)
 
+		// lTable could be postponed, but very minor difference.
 		lTable[hash7(cv1, lTableBits)] = uint32(index1)
 		sTable[hash4(cv1>>8, sTableBits)] = uint32(index1 + 1)
 		index0 += 1
 		index1 -= 1
 		cv = load64(src, s)
 
-		// index every second long in between.
-		for index0 < index1 {
+		// Index large values sparsely in between.
+		// We do two starting from different offsets for speed.
+		index2 := (index0 + index1 + 1) >> 1
+		for index2 < index1 {
 			lTable[hash7(load64(src, index0), lTableBits)] = uint32(index0)
-			lTable[hash7(load64(src, index1), lTableBits)] = uint32(index1)
+			lTable[hash7(load64(src, index2), lTableBits)] = uint32(index2)
 			index0 += 2
-			index1 -= 2
+			index2 += 2
 		}
 	}
 
@@ -458,12 +461,14 @@ func encodeBlockBetterSnappyGo(dst, src []byte) (d int) {
 		index1 -= 1
 		cv = load64(src, s)
 
-		// index every second long in between.
-		for index0 < index1 {
+		// Index large values sparsely in between.
+		// We do two starting from different offsets for speed.
+		index2 := (index0 + index1 + 1) >> 1
+		for index2 < index1 {
 			lTable[hash7(load64(src, index0), lTableBits)] = uint32(index0)
-			lTable[hash7(load64(src, index1), lTableBits)] = uint32(index1)
+			lTable[hash7(load64(src, index2), lTableBits)] = uint32(index2)
 			index0 += 2
-			index1 -= 2
+			index2 += 2
 		}
 	}
 
@@ -863,12 +868,14 @@ searchDict:
 		index1 -= 1
 		cv = load64(src, s)
 
-		// index every second long in between.
-		for index0 < index1 {
+		// Index large values sparsely in between.
+		// We do two starting from different offsets for speed.
+		index2 := (index0 + index1 + 1) >> 1
+		for index2 < index1 {
 			lTable[hash7(load64(src, index0), lTableBits)] = uint32(index0)
-			lTable[hash7(load64(src, index1), lTableBits)] = uint32(index1)
+			lTable[hash7(load64(src, index2), lTableBits)] = uint32(index2)
 			index0 += 2
-			index1 -= 2
+			index2 += 2
 		}
 	}
 
@@ -1076,12 +1083,14 @@ searchDict:
 		index1 -= 1
 		cv = load64(src, s)
 
-		// index every second long in between.
-		for index0 < index1 {
+		// Index large values sparsely in between.
+		// We do two starting from different offsets for speed.
+		index2 := (index0 + index1 + 1) >> 1
+		for index2 < index1 {
 			lTable[hash7(load64(src, index0), lTableBits)] = uint32(index0)
-			lTable[hash7(load64(src, index1), lTableBits)] = uint32(index1)
+			lTable[hash7(load64(src, index2), lTableBits)] = uint32(index2)
 			index0 += 2
-			index1 -= 2
+			index2 += 2
 		}
 	}
 
