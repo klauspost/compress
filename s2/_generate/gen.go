@@ -1417,31 +1417,30 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, sTableBits, sk
 		MOVL(plusone0.As32(), sTab.Idx(hash0s, 4))
 		MOVL(plusone1.As32(), sTab.Idx(hash1s, 4))
 
+		// index2 := (index0 + index1 + 1) >> 1
+		index2 := GP64()
+		LEAQ(Mem{Base: index1, Disp: 1, Index: index0, Scale: 1}, index2)
+		SHRQ(U8(1), index2)
+
 		ADDQ(U8(1), index0)
 		SUBQ(U8(1), index1)
 
-		// forward := bits.Len(uint(index1 - index0))
-		forward := GP64()
-		MOVQ(index1, forward)
-		SUBQ(index0, forward)
-		BSRQ(forward, forward)
-		ADDQ(U8(1), forward)
-
 		Label("index_loop_" + name)
-		CMPQ(index0, index1)
+		// for index2 < index1
+		CMPQ(index2, index1)
 		JAE(LabelRef("search_loop_" + name))
 		hash0l, hash1l = GP64(), GP64()
 		MOVQ(Mem{Base: src, Index: index0, Scale: 1, Disp: 0}, hash0l)
-		MOVQ(Mem{Base: src, Index: index1, Scale: 1, Disp: 0}, hash1l)
+		MOVQ(Mem{Base: src, Index: index2, Scale: 1, Disp: 0}, hash1l)
 
 		lHasher.hash(hash0l)
 		lHasher.hash(hash1l)
 
 		MOVL(index0.As32(), lTab.Idx(hash0l, 4))
-		MOVL(index1.As32(), lTab.Idx(hash1l, 4))
+		MOVL(index2.As32(), lTab.Idx(hash1l, 4))
 
-		ADDQ(forward, index0)
-		SUBQ(forward, index1)
+		ADDQ(U8(2), index0)
+		ADDQ(U8(2), index2)
 		JMP(LabelRef("index_loop_" + name))
 	} else {
 		lHasher := hashN(lHashBytes, lTableBits)

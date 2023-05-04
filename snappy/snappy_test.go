@@ -665,7 +665,7 @@ func TestWriterGoldenOutput(t *testing.T) {
 		"\x0d\x01",         // Compressed payload: tagCopy1,   length=7,  offset=1.
 		"\x08\x65\x66\x43", // Compressed payload: tagLiteral, length=3,  "efC".
 		"\x4e\x01\x00",     // Compressed payload: tagCopy2,   length=20, offset=1.
-		"\x4e\x38\x00",     // Compressed payload: tagCopy2,   length=20, offset=56.
+		"\x4e\x3a\x00",     // Compressed payload: tagCopy2,   length=20, offset=58.
 		"\x00\x67",         // Compressed payload: tagLiteral, length=1,  "g".
 	}, "")
 	if got != want {
