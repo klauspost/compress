@@ -226,3 +226,15 @@ func cvtLZ4BlockSnappyAsm(dst []byte, src []byte) (uncompressed int, dstUsed int
 //
 //go:noescape
 func cvtLZ4sBlockSnappyAsm(dst []byte, src []byte) (uncompressed int, dstUsed int)
+
+// s2DecodeAsm encodes a non-empty src to a guaranteed-large-enough dst.
+// It assumes that the varint-encoded length of the decompressed bytes has already been read.
+//
+//go:noescape
+func s2DecodeAsm(dst []byte, src []byte) int
+
+// snappyDecodeAsm encodes a non-empty src to a guaranteed-large-enough dst.
+// It assumes that the varint-encoded length of the decompressed bytes has already been read.
+//
+//go:noescape
+func snappyDecodeAsm(dst []byte, src []byte) int

@@ -20432,3 +20432,697 @@ lz4s_snappy_dstfull:
 	LEAQ -2(AX), SI
 	MOVQ SI, uncompressed+48(FP)
 	RET
+
+// func s2DecodeAsm(dst []byte, src []byte) int
+// Requires: BMI, SSE2
+TEXT ·s2DecodeAsm(SB), $0-56
+	MOVQ dst_base+0(FP), AX
+	MOVQ dst_len+8(FP), CX
+	MOVQ src_base+24(FP), DX
+	MOVQ src_len+32(FP), BX
+	MOVQ AX, SI
+	MOVQ CX, DI
+	LEAQ (AX)(CX*1), AX
+	MOVQ DX, CX
+	MOVQ BX, DI
+	LEAQ -5(DX)(BX*1), DI
+
+loop_fast:
+	CMPQ   CX, DI
+	JEQ    loop_slow_init
+	XORQ   R8, R8
+	MOVL   (CX), R9
+	MOVL   $0x00000602, R10
+	MOVL   R9, R11
+	BEXTRL R9, R10, R10
+	ANDL   $0x03, R11
+	JNZ    copy_fast
+	CMPL   R10, $0x3c
+	JEQ    lit_1_fast
+	JA     lit_2_or_above_fast
+	INCL   R10
+	ADDQ   $0x01, CX
+
+litcopy_short_fast:
+	LEAQ (CX)(R10*1), R8
+	LEAQ (SI)(R10*1), R9
+	CMPQ R8, DI
+	JA   corrupt
+	CMPQ R9, AX
+	JA   corrupt
+
+	// genMemMoveShort
+	CMPQ R10, $0x03
+	JB   lit_0_copy_fast_memmove_move_1or2
+	JE   lit_0_copy_fast_memmove_move_3
+	CMPQ R10, $0x08
+	JB   lit_0_copy_fast_memmove_move_4through7
+	CMPQ R10, $0x10
+	JBE  lit_0_copy_fast_memmove_move_8through16
+	CMPQ R10, $0x20
+	JBE  lit_0_copy_fast_memmove_move_17through32
+	JMP  lit_0_copy_fast_memmove_move_33through64
+
+lit_0_copy_fast_memmove_move_1or2:
+	MOVB (CX), R8
+	MOVB -1(CX)(R10*1), R9
+	MOVB R8, (SI)
+	MOVB R9, -1(SI)(R10*1)
+	JMP  litcopy_done_fast
+
+lit_0_copy_fast_memmove_move_3:
+	MOVW (CX), R8
+	MOVB 2(CX), R9
+	MOVW R8, (SI)
+	MOVB R9, 2(SI)
+	JMP  litcopy_done_fast
+
+lit_0_copy_fast_memmove_move_4through7:
+	MOVL (CX), R8
+	MOVL -4(CX)(R10*1), R9
+	MOVL R8, (SI)
+	MOVL R9, -4(SI)(R10*1)
+	JMP  litcopy_done_fast
+
+lit_0_copy_fast_memmove_move_8through16:
+	MOVQ (CX), R8
+	MOVQ -8(CX)(R10*1), R9
+	MOVQ R8, (SI)
+	MOVQ R9, -8(SI)(R10*1)
+	JMP  litcopy_done_fast
+
+lit_0_copy_fast_memmove_move_17through32:
+	MOVOU (CX), X0
+	MOVOU -16(CX)(R10*1), X1
+	MOVOU X0, (SI)
+	MOVOU X1, -16(SI)(R10*1)
+	JMP   litcopy_done_fast
+
+lit_0_copy_fast_memmove_move_33through64:
+	MOVOU (CX), X0
+	MOVOU 16(CX), X1
+	MOVOU -32(CX)(R10*1), X2
+	MOVOU -16(CX)(R10*1), X3
+	MOVOU X0, (SI)
+	MOVOU X1, 16(SI)
+	MOVOU X2, -32(SI)(R10*1)
+	MOVOU X3, -16(SI)(R10*1)
+	JMP   litcopy_done_fast
+
+lit_1_fast:
+	MOVBLZX 1(CX), R10
+	ADDQ    $0x02, CX
+	JMP     litcopy_long_fast
+
+lit_2_or_above_fast:
+	CMPL    R10, $0x3e
+	JEQ     lit_3_fast
+	JA      lit_4_fast
+	MOVWLZX 1(CX), R10
+	ADDQ    $0x03, CX
+	JMP     litcopy_long_fast
+
+lit_3_fast:
+	SHRL $0x08, R9
+	MOVL R9, R10
+	ADDQ $0x04, CX
+	JMP  litcopy_long_fast
+
+lit_4_fast:
+	MOVL 1(CX), R10
+	ADDQ $0x05, CX
+
+litcopy_long_fast:
+	LEAQ (CX)(R10*1), R8
+	LEAQ (SI)(R10*1), R9
+	CMPQ R8, DI
+	JA   corrupt
+	CMPQ R9, AX
+	JA   corrupt
+	CMPL R10, $0x40
+	JBE  litcopy_short_fast
+
+	// genMemMoveLong
+	MOVOU (CX), X0
+	MOVOU 16(CX), X1
+	MOVOU -32(CX)(R10*1), X2
+	MOVOU -16(CX)(R10*1), X3
+	MOVQ  R10, R9
+	SHRQ  $0x05, R9
+	MOVQ  SI, R8
+	ANDL  $0x0000001f, R8
+	MOVQ  $0x00000040, R11
+	SUBQ  R8, R11
+	DECQ  R9
+	JA    do_litcopy_long_fastlarge_forward_sse_loop_32
+	LEAQ  -32(CX)(R11*1), R8
+	LEAQ  -32(SI)(R11*1), R12
+
+do_litcopy_long_fastlarge_big_loop_back:
+	MOVOU (R8), X4
+	MOVOU 16(R8), X5
+	MOVOA X4, (R12)
+	MOVOA X5, 16(R12)
+	ADDQ  $0x20, R12
+	ADDQ  $0x20, R8
+	ADDQ  $0x20, R11
+	DECQ  R9
+	JNA   do_litcopy_long_fastlarge_big_loop_back
+
+do_litcopy_long_fastlarge_forward_sse_loop_32:
+	MOVOU -32(CX)(R11*1), X4
+	MOVOU -16(CX)(R11*1), X5
+	MOVOA X4, -32(SI)(R11*1)
+	MOVOA X5, -16(SI)(R11*1)
+	ADDQ  $0x20, R11
+	CMPQ  R10, R11
+	JAE   do_litcopy_long_fastlarge_forward_sse_loop_32
+	MOVOU X0, (SI)
+	MOVOU X1, 16(SI)
+	MOVOU X2, -32(SI)(R10*1)
+	MOVOU X3, -16(SI)(R10*1)
+
+litcopy_done_fast:
+	ADDQ R10, CX
+	ADDQ R10, SI
+	JMP  loop_fast
+
+copy_fast:
+	CMPL    R11, $0x02
+	JEQ     copy_2_fast
+	JA      copy_4_fast
+	MOVBQZX 1(CX), R11
+	ANDL    $0x07, R10
+	ANDL    $0xe0, R9
+	LEAQ    4(R10), R10
+	SHLL    $0x03, R9
+	ORQ     R9, R11
+	ADDQ    $0x02, CX
+	TESTQ   R11, R11
+	JNZ     copy_2_regular_fast
+	TESTQ   R8, R8
+	JZ      corrupt
+	CMPQ    R10, $0x09
+	JL      copy_data_repeat_fast
+	JE      repeat_len1_fast
+	CMPQ    R10, $0x0a
+	JE      repeat_len2_fast
+	MOVL    -1(CX), R10
+	ADDQ    $0x03, CX
+	SHRQ    $0x08, R10
+	ADDQ    $0x00010004, R10
+	JMP     repeat_copy_long_fast
+
+repeat_len2_fast:
+	MOVWQZX (CX), R10
+	ADDQ    $0x02, CX
+	ADDQ    $0x00000104, R10
+	JMP     repeat_copy_long_fast
+
+repeat_len1_fast:
+	MOVBQZX (CX), R10
+	ADDQ    $0x01, CX
+	ADDQ    $0x00000008, R10
+	JMP     repeat_copy_long_fast
+	CMPQ R10, $0x40
+	JAE  repeat_copy_long_fast
+	MOVQ SI, R9
+	ADDQ R10, SI
+	MOVQ SI, R11
+	SUBQ R8, R9
+	CMPQ SI, AX
+	JA   corrupt
+
+	// genMemMoveShort
+	CMPQ R10, $0x08
+	JBE  rep1_copy_short_fast_memmove_move_8
+	CMPQ R10, $0x10
+	JBE  rep1_copy_short_fast_memmove_move_8through16
+	CMPQ R10, $0x20
+	JBE  rep1_copy_short_fast_memmove_move_17through32
+	JMP  rep1_copy_short_fast_memmove_move_33through64
+
+rep1_copy_short_fast_memmove_move_8:
+	MOVQ (R11), R8
+	MOVQ R8, (R9)
+	JMP  rep1_done_fast
+
+rep1_copy_short_fast_memmove_move_8through16:
+	MOVQ (R11), R8
+	MOVQ -8(R11)(R10*1), R11
+	MOVQ R8, (R9)
+	MOVQ R11, -8(R9)(R10*1)
+	JMP  rep1_done_fast
+
+rep1_copy_short_fast_memmove_move_17through32:
+	MOVOU (R11), X0
+	MOVOU -16(R11)(R10*1), X1
+	MOVOU X0, (R9)
+	MOVOU X1, -16(R9)(R10*1)
+	JMP   rep1_done_fast
+
+rep1_copy_short_fast_memmove_move_33through64:
+	MOVOU (R11), X0
+	MOVOU 16(R11), X1
+	MOVOU -32(R11)(R10*1), X2
+	MOVOU -16(R11)(R10*1), X3
+	MOVOU X0, (R9)
+	MOVOU X1, 16(R9)
+	MOVOU X2, -32(R9)(R10*1)
+	MOVOU X3, -16(R9)(R10*1)
+
+rep1_done_fast:
+	ADDQ R10, SI
+	JMP  loop_fast
+
+repeat_copy_long_fast:
+	MOVQ SI, R9
+	MOVQ SI, R11
+	ADDQ R10, SI
+	SUBQ R8, R9
+	CMPQ SI, AX
+	JA   corrupt
+
+	// genMemMoveLong
+	MOVOU (R11), X0
+	MOVOU 16(R11), X1
+	MOVOU -32(R11)(R10*1), X2
+	MOVOU -16(R11)(R10*1), X3
+	MOVQ  R10, R12
+	SHRQ  $0x05, R12
+	MOVQ  R9, R8
+	ANDL  $0x0000001f, R8
+	MOVQ  $0x00000040, R13
+	SUBQ  R8, R13
+	DECQ  R12
+	JA    rep2_copy_fastlarge_forward_sse_loop_32
+	LEAQ  -32(R11)(R13*1), R8
+	LEAQ  -32(R9)(R13*1), R14
+
+rep2_copy_fastlarge_big_loop_back:
+	MOVOU (R8), X4
+	MOVOU 16(R8), X5
+	MOVOA X4, (R14)
+	MOVOA X5, 16(R14)
+	ADDQ  $0x20, R14
+	ADDQ  $0x20, R8
+	ADDQ  $0x20, R13
+	DECQ  R12
+	JNA   rep2_copy_fastlarge_big_loop_back
+
+rep2_copy_fastlarge_forward_sse_loop_32:
+	MOVOU -32(R11)(R13*1), X4
+	MOVOU -16(R11)(R13*1), X5
+	MOVOA X4, -32(R9)(R13*1)
+	MOVOA X5, -16(R9)(R13*1)
+	ADDQ  $0x20, R13
+	CMPQ  R10, R13
+	JAE   rep2_copy_fastlarge_forward_sse_loop_32
+	MOVOU X0, (R9)
+	MOVOU X1, 16(R9)
+	MOVOU X2, -32(R9)(R10*1)
+	MOVOU X3, -16(R9)(R10*1)
+	ADDQ  R10, SI
+	JMP   loop_fast
+
+copy_2_regular_fast:
+	MOVQ R11, R8
+	JMP  copy_data_fast
+
+copy_2_fast:
+	LEAQ    1(R10), R10
+	MOVWQZX 1(CX), R8
+	ADDQ    $0x03, CX
+	JMP     copy_data_fast
+
+copy_4_fast:
+	LEAQ    1(R10), R10
+	MOVLQZX 1(CX), R8
+	ADDQ    $0x05, CX
+
+copy_data_fast:
+copy_data_repeat_fast:
+	ADDQ R10, SI
+	JMP  loop_fast
+
+loop_slow_init:
+	LEAQ -5(DX)(BX*1), DI
+	CMPQ CX, DI
+	JEQ  end
+
+end:
+	CMPQ SI, AX
+	JNE  corrupt
+	MOVQ $0x00000000, ret+48(FP)
+	RET
+
+corrupt:
+	MOVQ $0x00000001, ret+48(FP)
+	RET
+
+// func snappyDecodeAsm(dst []byte, src []byte) int
+// Requires: BMI, SSE2
+TEXT ·snappyDecodeAsm(SB), $0-56
+	MOVQ dst_base+0(FP), AX
+	MOVQ dst_len+8(FP), CX
+	MOVQ src_base+24(FP), DX
+	MOVQ src_len+32(FP), BX
+	MOVQ AX, SI
+	MOVQ CX, DI
+	LEAQ (AX)(CX*1), AX
+	MOVQ DX, CX
+	MOVQ BX, DI
+	LEAQ -5(DX)(BX*1), DI
+
+loop_fast:
+	CMPQ   CX, DI
+	JEQ    loop_slow_init
+	XORQ   R8, R8
+	MOVL   (CX), R9
+	MOVL   $0x00000602, R10
+	MOVL   R9, R11
+	BEXTRL R9, R10, R10
+	ANDL   $0x03, R11
+	JNZ    copy_fast
+	CMPL   R10, $0x3c
+	JEQ    lit_1_fast
+	JA     lit_2_or_above_fast
+	INCL   R10
+	ADDQ   $0x01, CX
+
+litcopy_short_fast:
+	LEAQ (CX)(R10*1), R8
+	LEAQ (SI)(R10*1), R9
+	CMPQ R8, DI
+	JA   corrupt
+	CMPQ R9, AX
+	JA   corrupt
+
+	// genMemMoveShort
+	CMPQ R10, $0x03
+	JB   lit_0_copy_fast_memmove_move_1or2
+	JE   lit_0_copy_fast_memmove_move_3
+	CMPQ R10, $0x08
+	JB   lit_0_copy_fast_memmove_move_4through7
+	CMPQ R10, $0x10
+	JBE  lit_0_copy_fast_memmove_move_8through16
+	CMPQ R10, $0x20
+	JBE  lit_0_copy_fast_memmove_move_17through32
+	JMP  lit_0_copy_fast_memmove_move_33through64
+
+lit_0_copy_fast_memmove_move_1or2:
+	MOVB (CX), R8
+	MOVB -1(CX)(R10*1), R9
+	MOVB R8, (SI)
+	MOVB R9, -1(SI)(R10*1)
+	JMP  litcopy_done_fast
+
+lit_0_copy_fast_memmove_move_3:
+	MOVW (CX), R8
+	MOVB 2(CX), R9
+	MOVW R8, (SI)
+	MOVB R9, 2(SI)
+	JMP  litcopy_done_fast
+
+lit_0_copy_fast_memmove_move_4through7:
+	MOVL (CX), R8
+	MOVL -4(CX)(R10*1), R9
+	MOVL R8, (SI)
+	MOVL R9, -4(SI)(R10*1)
+	JMP  litcopy_done_fast
+
+lit_0_copy_fast_memmove_move_8through16:
+	MOVQ (CX), R8
+	MOVQ -8(CX)(R10*1), R9
+	MOVQ R8, (SI)
+	MOVQ R9, -8(SI)(R10*1)
+	JMP  litcopy_done_fast
+
+lit_0_copy_fast_memmove_move_17through32:
+	MOVOU (CX), X0
+	MOVOU -16(CX)(R10*1), X1
+	MOVOU X0, (SI)
+	MOVOU X1, -16(SI)(R10*1)
+	JMP   litcopy_done_fast
+
+lit_0_copy_fast_memmove_move_33through64:
+	MOVOU (CX), X0
+	MOVOU 16(CX), X1
+	MOVOU -32(CX)(R10*1), X2
+	MOVOU -16(CX)(R10*1), X3
+	MOVOU X0, (SI)
+	MOVOU X1, 16(SI)
+	MOVOU X2, -32(SI)(R10*1)
+	MOVOU X3, -16(SI)(R10*1)
+	JMP   litcopy_done_fast
+
+lit_1_fast:
+	MOVBLZX 1(CX), R10
+	ADDQ    $0x02, CX
+	JMP     litcopy_long_fast
+
+lit_2_or_above_fast:
+	CMPL    R10, $0x3e
+	JEQ     lit_3_fast
+	JA      lit_4_fast
+	MOVWLZX 1(CX), R10
+	ADDQ    $0x03, CX
+	JMP     litcopy_long_fast
+
+lit_3_fast:
+	SHRL $0x08, R9
+	MOVL R9, R10
+	ADDQ $0x04, CX
+	JMP  litcopy_long_fast
+
+lit_4_fast:
+	MOVL 1(CX), R10
+	ADDQ $0x05, CX
+
+litcopy_long_fast:
+	LEAQ (CX)(R10*1), R8
+	LEAQ (SI)(R10*1), R9
+	CMPQ R8, DI
+	JA   corrupt
+	CMPQ R9, AX
+	JA   corrupt
+	CMPL R10, $0x40
+	JBE  litcopy_short_fast
+
+	// genMemMoveLong
+	MOVOU (CX), X0
+	MOVOU 16(CX), X1
+	MOVOU -32(CX)(R10*1), X2
+	MOVOU -16(CX)(R10*1), X3
+	MOVQ  R10, R9
+	SHRQ  $0x05, R9
+	MOVQ  SI, R8
+	ANDL  $0x0000001f, R8
+	MOVQ  $0x00000040, R11
+	SUBQ  R8, R11
+	DECQ  R9
+	JA    do_litcopy_long_fastlarge_forward_sse_loop_32
+	LEAQ  -32(CX)(R11*1), R8
+	LEAQ  -32(SI)(R11*1), R12
+
+do_litcopy_long_fastlarge_big_loop_back:
+	MOVOU (R8), X4
+	MOVOU 16(R8), X5
+	MOVOA X4, (R12)
+	MOVOA X5, 16(R12)
+	ADDQ  $0x20, R12
+	ADDQ  $0x20, R8
+	ADDQ  $0x20, R11
+	DECQ  R9
+	JNA   do_litcopy_long_fastlarge_big_loop_back
+
+do_litcopy_long_fastlarge_forward_sse_loop_32:
+	MOVOU -32(CX)(R11*1), X4
+	MOVOU -16(CX)(R11*1), X5
+	MOVOA X4, -32(SI)(R11*1)
+	MOVOA X5, -16(SI)(R11*1)
+	ADDQ  $0x20, R11
+	CMPQ  R10, R11
+	JAE   do_litcopy_long_fastlarge_forward_sse_loop_32
+	MOVOU X0, (SI)
+	MOVOU X1, 16(SI)
+	MOVOU X2, -32(SI)(R10*1)
+	MOVOU X3, -16(SI)(R10*1)
+
+litcopy_done_fast:
+	ADDQ R10, CX
+	ADDQ R10, SI
+	JMP  loop_fast
+
+copy_fast:
+	CMPL    R11, $0x02
+	JEQ     copy_2_fast
+	JA      copy_4_fast
+	MOVBQZX 1(CX), R11
+	ANDL    $0x07, R10
+	ANDL    $0xe0, R9
+	LEAQ    4(R10), R10
+	SHLL    $0x03, R9
+	ORQ     R9, R11
+	ADDQ    $0x02, CX
+	TESTQ   R11, R11
+	JNZ     copy_2_regular_fast
+	TESTQ   R8, R8
+	JZ      corrupt
+	CMPQ    R10, $0x09
+	JL      copy_data_repeat_fast
+	JE      repeat_len1_fast
+	CMPQ    R10, $0x0a
+	JE      repeat_len2_fast
+	MOVL    -1(CX), R10
+	ADDQ    $0x03, CX
+	SHRQ    $0x08, R10
+	ADDQ    $0x00010004, R10
+	JMP     repeat_copy_long_fast
+
+repeat_len2_fast:
+	MOVWQZX (CX), R10
+	ADDQ    $0x02, CX
+	ADDQ    $0x00000104, R10
+	JMP     repeat_copy_long_fast
+
+repeat_len1_fast:
+	MOVBQZX (CX), R10
+	ADDQ    $0x01, CX
+	ADDQ    $0x00000008, R10
+	JMP     repeat_copy_long_fast
+	CMPQ R10, $0x40
+	JAE  repeat_copy_long_fast
+	MOVQ SI, R9
+	ADDQ R10, SI
+	MOVQ SI, R11
+	SUBQ R8, R9
+	CMPQ SI, AX
+	JA   corrupt
+
+	// genMemMoveShort
+	CMPQ R10, $0x08
+	JBE  rep1_copy_short_fast_memmove_move_8
+	CMPQ R10, $0x10
+	JBE  rep1_copy_short_fast_memmove_move_8through16
+	CMPQ R10, $0x20
+	JBE  rep1_copy_short_fast_memmove_move_17through32
+	JMP  rep1_copy_short_fast_memmove_move_33through64
+
+rep1_copy_short_fast_memmove_move_8:
+	MOVQ (R11), R8
+	MOVQ R8, (R9)
+	JMP  rep1_done_fast
+
+rep1_copy_short_fast_memmove_move_8through16:
+	MOVQ (R11), R8
+	MOVQ -8(R11)(R10*1), R11
+	MOVQ R8, (R9)
+	MOVQ R11, -8(R9)(R10*1)
+	JMP  rep1_done_fast
+
+rep1_copy_short_fast_memmove_move_17through32:
+	MOVOU (R11), X0
+	MOVOU -16(R11)(R10*1), X1
+	MOVOU X0, (R9)
+	MOVOU X1, -16(R9)(R10*1)
+	JMP   rep1_done_fast
+
+rep1_copy_short_fast_memmove_move_33through64:
+	MOVOU (R11), X0
+	MOVOU 16(R11), X1
+	MOVOU -32(R11)(R10*1), X2
+	MOVOU -16(R11)(R10*1), X3
+	MOVOU X0, (R9)
+	MOVOU X1, 16(R9)
+	MOVOU X2, -32(R9)(R10*1)
+	MOVOU X3, -16(R9)(R10*1)
+
+rep1_done_fast:
+	ADDQ R10, SI
+	JMP  loop_fast
+
+repeat_copy_long_fast:
+	MOVQ SI, R9
+	MOVQ SI, R11
+	ADDQ R10, SI
+	SUBQ R8, R9
+	CMPQ SI, AX
+	JA   corrupt
+
+	// genMemMoveLong
+	MOVOU (R11), X0
+	MOVOU 16(R11), X1
+	MOVOU -32(R11)(R10*1), X2
+	MOVOU -16(R11)(R10*1), X3
+	MOVQ  R10, R12
+	SHRQ  $0x05, R12
+	MOVQ  R9, R8
+	ANDL  $0x0000001f, R8
+	MOVQ  $0x00000040, R13
+	SUBQ  R8, R13
+	DECQ  R12
+	JA    rep2_copy_fastlarge_forward_sse_loop_32
+	LEAQ  -32(R11)(R13*1), R8
+	LEAQ  -32(R9)(R13*1), R14
+
+rep2_copy_fastlarge_big_loop_back:
+	MOVOU (R8), X4
+	MOVOU 16(R8), X5
+	MOVOA X4, (R14)
+	MOVOA X5, 16(R14)
+	ADDQ  $0x20, R14
+	ADDQ  $0x20, R8
+	ADDQ  $0x20, R13
+	DECQ  R12
+	JNA   rep2_copy_fastlarge_big_loop_back
+
+rep2_copy_fastlarge_forward_sse_loop_32:
+	MOVOU -32(R11)(R13*1), X4
+	MOVOU -16(R11)(R13*1), X5
+	MOVOA X4, -32(R9)(R13*1)
+	MOVOA X5, -16(R9)(R13*1)
+	ADDQ  $0x20, R13
+	CMPQ  R10, R13
+	JAE   rep2_copy_fastlarge_forward_sse_loop_32
+	MOVOU X0, (R9)
+	MOVOU X1, 16(R9)
+	MOVOU X2, -32(R9)(R10*1)
+	MOVOU X3, -16(R9)(R10*1)
+	ADDQ  R10, SI
+	JMP   loop_fast
+
+copy_2_regular_fast:
+	MOVQ R11, R8
+	JMP  copy_data_fast
+
+copy_2_fast:
+	LEAQ    1(R10), R10
+	MOVWQZX 1(CX), R8
+	ADDQ    $0x03, CX
+	JMP     copy_data_fast
+
+copy_4_fast:
+	LEAQ    1(R10), R10
+	MOVLQZX 1(CX), R8
+	ADDQ    $0x05, CX
+
+copy_data_fast:
+copy_data_repeat_fast:
+	ADDQ R10, SI
+	JMP  loop_fast
+
+loop_slow_init:
+	LEAQ -5(DX)(BX*1), DI
+	CMPQ CX, DI
+	JEQ  end
+
+end:
+	CMPQ SI, AX
+	JNE  corrupt
+	MOVQ $0x00000000, ret+48(FP)
+	RET
+
+corrupt:
+	MOVQ $0x00000001, ret+48(FP)
+	RET

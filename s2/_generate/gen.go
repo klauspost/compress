@@ -110,6 +110,10 @@ func main() {
 	o.cvtLZ4BlockAsm(false)
 	o.cvtLZ4BlockAsm(true)
 
+	o.snappy = false
+	o.genDecodeBlockAsm("s2DecodeAsm")
+	o.snappy = false
+	o.genDecodeBlockAsm("snappyDecodeAsm")
 	Generate()
 }
 
@@ -3094,4 +3098,296 @@ func (o options) cvtLZ4BlockAsm(lz4s bool) {
 		Store(retval, ReturnIndex(0))
 		RET()
 	}
+}
+
+func (o options) genDecodeBlockAsm(name string) {
+	TEXT(name, 0, "func(dst, src []byte) int")
+	Doc(name+" encodes a non-empty src to a guaranteed-large-enough dst.",
+		"It assumes that the varint-encoded length of the decompressed bytes has already been read.", "")
+	Pragma("noescape")
+	dstBase := Load(Param("dst").Base(), GP64())
+	dstLen := Load(Param("dst").Len(), GP64())
+	srcBase := Load(Param("src").Base(), GP64())
+	srcLen := Load(Param("src").Len(), GP64())
+	dst, dstLeft, dstEnd := GP64(), GP64(), GP64()
+	MOVQ(dstBase, dst)
+	MOVQ(dstLen, dstLeft)
+	LEAQ(Mem{Base: dstBase, Index: dstLen, Scale: 1}, dstEnd)
+
+	src, srcLeft, srcEnd := GP64(), GP64(), GP64()
+	MOVQ(srcBase, src)
+	MOVQ(srcLen, srcLeft)
+	LEAQ(Mem{Base: srcBase, Index: srcLen, Scale: 1, Disp: -5}, srcEnd)
+
+	Label("loop_fast")
+	CMPQ(src, srcEnd)
+	JEQ(LabelRef("loop_slow_init"))
+	offset := GP64()
+	XORQ(offset, offset)
+	testSrcDst := func(gp reg.GP) {
+		tmpSrc := GP64()
+		tmpDst := GP64()
+		LEAQ(Mem{Base: src, Index: gp.As64(), Scale: 1}, tmpSrc)
+		LEAQ(Mem{Base: dst, Index: gp.As64(), Scale: 1}, tmpDst)
+		CMPQ(tmpSrc, srcEnd)
+		JA(LabelRef("corrupt"))
+		CMPQ(tmpDst, dstEnd)
+		JA(LabelRef("corrupt"))
+	}
+	testSrc := func(gp reg.GP) {
+		tmpSrc := GP64()
+		LEAQ(Mem{Base: src, Index: gp.As64(), Scale: 1}, tmpSrc)
+		CMPQ(tmpSrc, srcEnd)
+		JA(LabelRef("corrupt"))
+	}
+	testDstAbs := func(gp reg.GP) {
+		CMPQ(gp.As64(), dstEnd)
+		JA(LabelRef("corrupt"))
+	}
+	_ = testSrc
+
+	// Fast decompression. Assumes:
+	// 5 bytes are available on input (src).
+	// 8 bytes are available on output (dst).
+	{
+		const ext = "_fast"
+		// Read 4 bytes input
+		input := GP32()
+		MOVL(Mem{Base: src}, input)
+		mask := GP32()
+		MOVL(U32(2|((6)<<8)), mask)
+		tag := GP32()
+		x := GP64()
+		MOVL(input, tag)
+		BEXTRL(input, mask, x.As32()) // x = (src >> 2) & 63
+		ANDL(U8(3), tag)              // tag = src & 3
+		JNZ(LabelRef("copy" + ext))
+
+		// LITERAL
+		{
+			CMPL(x.As32(), U8(60))
+			JEQ(LabelRef("lit_1" + ext))
+			JA(LabelRef("lit_2_or_above" + ext))
+			// 1 -> 60
+			INCL(x.As32())
+			ADDQ(U8(1), src)
+		}
+
+		Label("litcopy_short" + ext)
+		{
+			testSrcDst(x)
+			o.genMemMoveShort("lit_0_copy"+ext, dst, src, x, LabelRef("litcopy_done"+ext))
+		}
+
+		Label("lit_1" + ext)
+		{
+			// 1 byte, just load.
+			MOVBLZX(Mem{Base: src, Disp: 1}, x.As32())
+			ADDQ(U8(2), src)
+			JMP(LabelRef("litcopy_long" + ext))
+		}
+
+		Label("lit_2_or_above" + ext)
+		CMPL(x.As32(), U8(62))
+		JEQ(LabelRef("lit_3" + ext))
+		JA(LabelRef("lit_4" + ext))
+
+		Label("lit_2" + ext)
+		{
+			// 2 bytes, just load
+			MOVWLZX(Mem{Base: src, Disp: 1}, x.As32())
+			ADDQ(U8(3), src)
+			JMP(LabelRef("litcopy_long" + ext))
+		}
+
+		Label("lit_3" + ext)
+		{
+			// 3 bytes, shift input.
+			SHRL(U8(8), input)
+			MOVL(input, x.As32())
+			ADDQ(U8(4), src)
+			JMP(LabelRef("litcopy_long" + ext))
+		}
+
+		Label("lit_4" + ext)
+		{
+			// 4 bytes, just load
+			MOVL(Mem{Base: src, Disp: 1}, x.As32())
+			ADDQ(U8(5), src)
+		}
+
+		// COPY LONG
+		Label("litcopy_long" + ext)
+		{
+			testSrcDst(x)
+			CMPL(x.As32(), U8(64))
+			JBE(LabelRef("litcopy_short" + ext))
+			o.genMemMoveLong("do_litcopy_long"+ext, dst, src, x, "litcopy_done"+ext)
+
+			Label("litcopy_done" + ext)
+			ADDQ(x, src)
+			ADDQ(x, dst)
+			JMP(LabelRef("loop" + ext))
+		}
+
+		Label("copy" + ext)
+		CMPL(tag, U8(2))
+		JEQ(LabelRef("copy_2" + ext))
+		JA(LabelRef("copy_4" + ext))
+		length := GP64()
+		// Copy 1
+		{
+			toffset := GP64()
+			if o.snappy {
+				toffset = offset
+			}
+			MOVBQZX(Mem{Base: src, Disp: 1}, toffset)
+			MOVL(x.As32(), length.As32())
+			ANDL(U8(7), length.As32())
+			ANDL(U8(0xe0), input)
+			LEAQ(Mem{Base: length, Disp: 4}, length) // length += 4
+			SHLL(U8(3), input)
+			ORQ(input.As64(), toffset)
+			ADDQ(U8(2), src)
+
+			// offset = int(uint32(src[s-2])&0xe0<<3 | uint32(src[s-1]))
+			// length = int(src[s-2])>>2&0x7
+			// 0 offset will be caught later.
+			if !o.snappy {
+				// S2 Repeat
+				TESTQ(toffset, toffset)
+				JNZ(LabelRef("copy_2_regular" + ext))
+				// If previous offset = 0, corrupt
+				TESTQ(offset, offset)
+				JZ(LabelRef("corrupt"))
+
+				{
+					CMPQ(length, U8(9))
+					JL(LabelRef("copy_data_repeat" + ext))
+					JE(LabelRef("repeat_len1" + ext))
+					CMPQ(length, U8(10))
+					JE(LabelRef("repeat_len2" + ext))
+				}
+				Label("repeat_len3" + ext)
+				{
+					// We have read 2, 3 additional is within bounds
+					MOVL(Mem{Base: src, Disp: -1}, length.As32())
+					ADDQ(U8(3), src)
+					SHRQ(U8(8), length)
+					ADDQ(U32(65540), length)
+					JMP(LabelRef("repeat_copy_long" + ext))
+				}
+				Label("repeat_len2" + ext)
+				{
+					MOVWQZX(Mem{Base: src, Disp: 0}, length)
+					ADDQ(U8(2), src)
+					ADDQ(U32(260), length)
+					JMP(LabelRef("repeat_copy_long" + ext))
+				}
+				Label("repeat_len1" + ext)
+				{
+					MOVBQZX(Mem{Base: src, Disp: 0}, length)
+					ADDQ(U8(1), src)
+					ADDQ(U32(8), length)
+					JMP(LabelRef("repeat_copy_long" + ext))
+					// if length >= 64 copy long
+					CMPQ(length, U8(64))
+					JAE(LabelRef("repeat_copy_long" + ext))
+
+					Label("rep1_short" + ext)
+					{
+						tmpDst := GP64()
+						MOVQ(dst, tmpDst)
+						ADDQ(length, dst)
+						tmpSrc := GP64()
+						MOVQ(dst, tmpSrc)
+						SUBQ(offset, tmpDst)
+						testDstAbs(dst)
+						o.outputMargin = 8
+						o.genMemMoveShort("rep1_copy_short"+ext, tmpDst, tmpSrc, length, "rep1_done"+ext)
+						o.outputMargin = 0
+						Label("rep1_done" + ext)
+						ADDQ(length, dst)
+						JMP(LabelRef("loop" + ext))
+					}
+				}
+
+				Label("repeat_copy_long" + ext)
+				{
+					tmpDst, tmpSrc := GP64(), GP64()
+					MOVQ(dst, tmpDst)
+					MOVQ(dst, tmpSrc)
+					ADDQ(length, dst)
+					// Offset is non-0 and a valid value.
+					SUBQ(offset, tmpDst)
+					// Check if we exceed dst
+					testDstAbs(dst)
+					// TODO: Handle overlaps
+					o.genMemMoveLong("rep2_copy"+ext, tmpDst, tmpSrc, length, "rep2_done"+ext)
+					Label("rep2_done" + ext)
+					ADDQ(length, dst)
+					JMP(LabelRef("loop" + ext))
+				}
+				Label("copy_2_regular" + ext)
+				{
+					MOVQ(toffset, offset)
+				}
+			}
+			JMP(LabelRef("copy_data" + ext))
+		}
+		Label("copy_2" + ext)
+		{
+			// length = 1 + int(src[0])>>2
+			LEAQ(Mem{Base: x.As64(), Disp: 1}, length.As64())
+			// offset = int(uint32(src[1]) | uint32(src[2])<<8)
+			MOVWQZX(Mem{Base: src, Disp: 1}, offset)
+			ADDQ(U8(3), src)
+			JMP(LabelRef("copy_data" + ext))
+		}
+		Label("copy_4" + ext)
+		{
+			// length = 1 + int(src[0])>>2
+			LEAQ(Mem{Base: x.As64(), Disp: 1}, length.As64())
+			// offset = int(uint32(src[1]) | uint32(src[2])<<8)
+			MOVLQZX(Mem{Base: src, Disp: 1}, offset)
+			ADDQ(U8(5), src)
+			JMP(LabelRef("copy_data" + ext))
+		}
+
+		Label("copy_data" + ext)
+		{
+			// TODO: TEST OFFSET
+			Label("copy_data_repeat" + ext)
+			// TEST DEST
+			// TODO: COPY
+		}
+		Label("copy_data_done" + ext)
+		{
+			ADDQ(length, dst)
+			JMP(LabelRef("loop" + ext))
+		}
+
+	}
+
+	// Remaining with extra checks...
+	{
+		Label("loop_slow_init")
+		LEAQ(Mem{Base: srcBase, Index: srcLen, Scale: 1, Disp: -5}, srcEnd)
+		Label("loop_slow")
+		CMPQ(src, srcEnd)
+		JEQ(LabelRef("end"))
+
+	}
+
+	// END
+	Label("end")
+	CMPQ(dst, dstEnd)
+	JNE(LabelRef("corrupt"))
+	ret, _ := ReturnIndex(0).Resolve()
+	MOVQ(U32(0), ret.Addr)
+	RET()
+
+	Label("corrupt")
+	MOVQ(U32(1), ret.Addr)
+	RET()
 }
