@@ -24,6 +24,7 @@ func main() {
 func generateMatchLen() {
 	Package("github.com/klauspost/compress/zstd")
 	TEXT("matchLen", NOSPLIT, "func (a, b []byte) int")
+	Pragma("noescape")
 	Comment("load param")
 	aptr := Load(Param("a").Base(), GP64())
 	alen := Load(Param("a").Len(), GP64())
