@@ -36,7 +36,6 @@ matchlen_loop_standalone:
 	LEAL 8(SI), SI
 	CMPL DX, $0x08
 	JAE  matchlen_loopback_standalone
-	JZ   gen_match_len_end
 
 matchlen_match4_standalone:
 	CMPL DX, $0x04
@@ -44,7 +43,7 @@ matchlen_match4_standalone:
 	MOVL (AX)(SI*1), BX
 	CMPL (CX)(SI*1), BX
 	JNE  matchlen_match2_standalone
-	SUBL $0x04, DX
+	LEAL -4(DX), DX
 	LEAL 4(SI), SI
 
 matchlen_match2_standalone:
@@ -53,7 +52,7 @@ matchlen_match2_standalone:
 	MOVW (AX)(SI*1), BX
 	CMPW (CX)(SI*1), BX
 	JNE  matchlen_match1_standalone
-	SUBL $0x02, DX
+	LEAL -2(DX), DX
 	LEAL 2(SI), SI
 
 matchlen_match1_standalone:
@@ -62,7 +61,7 @@ matchlen_match1_standalone:
 	MOVB (AX)(SI*1), BL
 	CMPB (CX)(SI*1), BL
 	JNE  gen_match_len_end
-	LEAL 1(SI), SI
+	INCL SI
 
 gen_match_len_end:
 	MOVQ SI, ret+48(FP)
