@@ -2785,18 +2785,20 @@ func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) re
 
 	// Test 2 bytes...
 	Label("matchlen_match2_" + name)
-	CMPL(len.As32(), U8(2))
-	JB(LabelRef("matchlen_match1_" + name))
+	CMPL(len.As32(), U8(1))
+	// If we don't have 1, branch appropriately
+	JE(LabelRef("matchlen_match1_" + name))
+	JB(end)
+	// 2 or 3
 	MOVW(Mem{Base: a, Index: matched, Scale: 1}, tmp.As16())
 	CMPW(Mem{Base: b, Index: matched, Scale: 1}, tmp.As16())
 	JNE(LabelRef("matchlen_match1_" + name))
-	LEAL(Mem{Base: len.As32(), Disp: -2}, len.As32())
 	LEAL(Mem{Base: matched, Disp: 2}, matched)
+	SUBL(U8(2), len.As32())
+	JZ(end)
 
 	// Test 1 byte...
 	Label("matchlen_match1_" + name)
-	CMPL(len.As32(), U8(1))
-	JB(end)
 	MOVB(Mem{Base: a, Index: matched, Scale: 1}, tmp.As8())
 	CMPB(Mem{Base: b, Index: matched, Scale: 1}, tmp.As8())
 	JNE(end)
