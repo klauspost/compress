@@ -274,7 +274,6 @@ matchlen_loop_repeat_extend_encodeBlockAsm:
 	LEAL 8(R11), R11
 	CMPL R8, $0x08
 	JAE  matchlen_loopback_repeat_extend_encodeBlockAsm
-	JZ   repeat_extend_forward_end_encodeBlockAsm
 
 matchlen_match4_repeat_extend_encodeBlockAsm:
 	CMPL R8, $0x04
@@ -282,21 +281,21 @@ matchlen_match4_repeat_extend_encodeBlockAsm:
 	MOVL (R9)(R11*1), R10
 	CMPL (BX)(R11*1), R10
 	JNE  matchlen_match2_repeat_extend_encodeBlockAsm
-	SUBL $0x04, R8
+	LEAL -4(R8), R8
 	LEAL 4(R11), R11
 
 matchlen_match2_repeat_extend_encodeBlockAsm:
-	CMPL R8, $0x02
-	JB   matchlen_match1_repeat_extend_encodeBlockAsm
+	CMPL R8, $0x01
+	JE   matchlen_match1_repeat_extend_encodeBlockAsm
+	JB   repeat_extend_forward_end_encodeBlockAsm
 	MOVW (R9)(R11*1), R10
 	CMPW (BX)(R11*1), R10
 	JNE  matchlen_match1_repeat_extend_encodeBlockAsm
-	SUBL $0x02, R8
 	LEAL 2(R11), R11
+	SUBL $0x02, R8
+	JZ   repeat_extend_forward_end_encodeBlockAsm
 
 matchlen_match1_repeat_extend_encodeBlockAsm:
-	CMPL R8, $0x01
-	JB   repeat_extend_forward_end_encodeBlockAsm
 	MOVB (R9)(R11*1), R10
 	CMPB (BX)(R11*1), R10
 	JNE  repeat_extend_forward_end_encodeBlockAsm
@@ -877,7 +876,6 @@ matchlen_loop_match_nolit_encodeBlockAsm:
 	LEAL 8(R9), R9
 	CMPL SI, $0x08
 	JAE  matchlen_loopback_match_nolit_encodeBlockAsm
-	JZ   match_nolit_end_encodeBlockAsm
 
 matchlen_match4_match_nolit_encodeBlockAsm:
 	CMPL SI, $0x04
@@ -885,21 +883,21 @@ matchlen_match4_match_nolit_encodeBlockAsm:
 	MOVL (DI)(R9*1), R8
 	CMPL (BX)(R9*1), R8
 	JNE  matchlen_match2_match_nolit_encodeBlockAsm
-	SUBL $0x04, SI
+	LEAL -4(SI), SI
 	LEAL 4(R9), R9
 
 matchlen_match2_match_nolit_encodeBlockAsm:
-	CMPL SI, $0x02
-	JB   matchlen_match1_match_nolit_encodeBlockAsm
+	CMPL SI, $0x01
+	JE   matchlen_match1_match_nolit_encodeBlockAsm
+	JB   match_nolit_end_encodeBlockAsm
 	MOVW (DI)(R9*1), R8
 	CMPW (BX)(R9*1), R8
 	JNE  matchlen_match1_match_nolit_encodeBlockAsm
-	SUBL $0x02, SI
 	LEAL 2(R9), R9
+	SUBL $0x02, SI
+	JZ   match_nolit_end_encodeBlockAsm
 
 matchlen_match1_match_nolit_encodeBlockAsm:
-	CMPL SI, $0x01
-	JB   match_nolit_end_encodeBlockAsm
 	MOVB (DI)(R9*1), R8
 	CMPB (BX)(R9*1), R8
 	JNE  match_nolit_end_encodeBlockAsm
@@ -1637,7 +1635,6 @@ matchlen_loop_repeat_extend_encodeBlockAsm4MB:
 	LEAL 8(R11), R11
 	CMPL R8, $0x08
 	JAE  matchlen_loopback_repeat_extend_encodeBlockAsm4MB
-	JZ   repeat_extend_forward_end_encodeBlockAsm4MB
 
 matchlen_match4_repeat_extend_encodeBlockAsm4MB:
 	CMPL R8, $0x04
@@ -1645,21 +1642,21 @@ matchlen_match4_repeat_extend_encodeBlockAsm4MB:
 	MOVL (R9)(R11*1), R10
 	CMPL (BX)(R11*1), R10
 	JNE  matchlen_match2_repeat_extend_encodeBlockAsm4MB
-	SUBL $0x04, R8
+	LEAL -4(R8), R8
 	LEAL 4(R11), R11
 
 matchlen_match2_repeat_extend_encodeBlockAsm4MB:
-	CMPL R8, $0x02
-	JB   matchlen_match1_repeat_extend_encodeBlockAsm4MB
+	CMPL R8, $0x01
+	JE   matchlen_match1_repeat_extend_encodeBlockAsm4MB
+	JB   repeat_extend_forward_end_encodeBlockAsm4MB
 	MOVW (R9)(R11*1), R10
 	CMPW (BX)(R11*1), R10
 	JNE  matchlen_match1_repeat_extend_encodeBlockAsm4MB
-	SUBL $0x02, R8
 	LEAL 2(R11), R11
+	SUBL $0x02, R8
+	JZ   repeat_extend_forward_end_encodeBlockAsm4MB
 
 matchlen_match1_repeat_extend_encodeBlockAsm4MB:
-	CMPL R8, $0x01
-	JB   repeat_extend_forward_end_encodeBlockAsm4MB
 	MOVB (R9)(R11*1), R10
 	CMPB (BX)(R11*1), R10
 	JNE  repeat_extend_forward_end_encodeBlockAsm4MB
@@ -2190,7 +2187,6 @@ matchlen_loop_match_nolit_encodeBlockAsm4MB:
 	LEAL 8(R9), R9
 	CMPL SI, $0x08
 	JAE  matchlen_loopback_match_nolit_encodeBlockAsm4MB
-	JZ   match_nolit_end_encodeBlockAsm4MB
 
 matchlen_match4_match_nolit_encodeBlockAsm4MB:
 	CMPL SI, $0x04
@@ -2198,21 +2194,21 @@ matchlen_match4_match_nolit_encodeBlockAsm4MB:
 	MOVL (DI)(R9*1), R8
 	CMPL (BX)(R9*1), R8
 	JNE  matchlen_match2_match_nolit_encodeBlockAsm4MB
-	SUBL $0x04, SI
+	LEAL -4(SI), SI
 	LEAL 4(R9), R9
 
 matchlen_match2_match_nolit_encodeBlockAsm4MB:
-	CMPL SI, $0x02
-	JB   matchlen_match1_match_nolit_encodeBlockAsm4MB
+	CMPL SI, $0x01
+	JE   matchlen_match1_match_nolit_encodeBlockAsm4MB
+	JB   match_nolit_end_encodeBlockAsm4MB
 	MOVW (DI)(R9*1), R8
 	CMPW (BX)(R9*1), R8
 	JNE  matchlen_match1_match_nolit_encodeBlockAsm4MB
-	SUBL $0x02, SI
 	LEAL 2(R9), R9
+	SUBL $0x02, SI
+	JZ   match_nolit_end_encodeBlockAsm4MB
 
 matchlen_match1_match_nolit_encodeBlockAsm4MB:
-	CMPL SI, $0x01
-	JB   match_nolit_end_encodeBlockAsm4MB
 	MOVB (DI)(R9*1), R8
 	CMPB (BX)(R9*1), R8
 	JNE  match_nolit_end_encodeBlockAsm4MB
@@ -2902,7 +2898,6 @@ matchlen_loop_repeat_extend_encodeBlockAsm12B:
 	LEAL 8(R11), R11
 	CMPL R8, $0x08
 	JAE  matchlen_loopback_repeat_extend_encodeBlockAsm12B
-	JZ   repeat_extend_forward_end_encodeBlockAsm12B
 
 matchlen_match4_repeat_extend_encodeBlockAsm12B:
 	CMPL R8, $0x04
@@ -2910,21 +2905,21 @@ matchlen_match4_repeat_extend_encodeBlockAsm12B:
 	MOVL (R9)(R11*1), R10
 	CMPL (BX)(R11*1), R10
 	JNE  matchlen_match2_repeat_extend_encodeBlockAsm12B
-	SUBL $0x04, R8
+	LEAL -4(R8), R8
 	LEAL 4(R11), R11
 
 matchlen_match2_repeat_extend_encodeBlockAsm12B:
-	CMPL R8, $0x02
-	JB   matchlen_match1_repeat_extend_encodeBlockAsm12B
+	CMPL R8, $0x01
+	JE   matchlen_match1_repeat_extend_encodeBlockAsm12B
+	JB   repeat_extend_forward_end_encodeBlockAsm12B
 	MOVW (R9)(R11*1), R10
 	CMPW (BX)(R11*1), R10
 	JNE  matchlen_match1_repeat_extend_encodeBlockAsm12B
-	SUBL $0x02, R8
 	LEAL 2(R11), R11
+	SUBL $0x02, R8
+	JZ   repeat_extend_forward_end_encodeBlockAsm12B
 
 matchlen_match1_repeat_extend_encodeBlockAsm12B:
-	CMPL R8, $0x01
-	JB   repeat_extend_forward_end_encodeBlockAsm12B
 	MOVB (R9)(R11*1), R10
 	CMPB (BX)(R11*1), R10
 	JNE  repeat_extend_forward_end_encodeBlockAsm12B
@@ -3333,7 +3328,6 @@ matchlen_loop_match_nolit_encodeBlockAsm12B:
 	LEAL 8(R9), R9
 	CMPL SI, $0x08
 	JAE  matchlen_loopback_match_nolit_encodeBlockAsm12B
-	JZ   match_nolit_end_encodeBlockAsm12B
 
 matchlen_match4_match_nolit_encodeBlockAsm12B:
 	CMPL SI, $0x04
@@ -3341,21 +3335,21 @@ matchlen_match4_match_nolit_encodeBlockAsm12B:
 	MOVL (DI)(R9*1), R8
 	CMPL (BX)(R9*1), R8
 	JNE  matchlen_match2_match_nolit_encodeBlockAsm12B
-	SUBL $0x04, SI
+	LEAL -4(SI), SI
 	LEAL 4(R9), R9
 
 matchlen_match2_match_nolit_encodeBlockAsm12B:
-	CMPL SI, $0x02
-	JB   matchlen_match1_match_nolit_encodeBlockAsm12B
+	CMPL SI, $0x01
+	JE   matchlen_match1_match_nolit_encodeBlockAsm12B
+	JB   match_nolit_end_encodeBlockAsm12B
 	MOVW (DI)(R9*1), R8
 	CMPW (BX)(R9*1), R8
 	JNE  matchlen_match1_match_nolit_encodeBlockAsm12B
-	SUBL $0x02, SI
 	LEAL 2(R9), R9
+	SUBL $0x02, SI
+	JZ   match_nolit_end_encodeBlockAsm12B
 
 matchlen_match1_match_nolit_encodeBlockAsm12B:
-	CMPL SI, $0x01
-	JB   match_nolit_end_encodeBlockAsm12B
 	MOVB (DI)(R9*1), R8
 	CMPB (BX)(R9*1), R8
 	JNE  match_nolit_end_encodeBlockAsm12B
@@ -3935,7 +3929,6 @@ matchlen_loop_repeat_extend_encodeBlockAsm10B:
 	LEAL 8(R11), R11
 	CMPL R8, $0x08
 	JAE  matchlen_loopback_repeat_extend_encodeBlockAsm10B
-	JZ   repeat_extend_forward_end_encodeBlockAsm10B
 
 matchlen_match4_repeat_extend_encodeBlockAsm10B:
 	CMPL R8, $0x04
@@ -3943,21 +3936,21 @@ matchlen_match4_repeat_extend_encodeBlockAsm10B:
 	MOVL (R9)(R11*1), R10
 	CMPL (BX)(R11*1), R10
 	JNE  matchlen_match2_repeat_extend_encodeBlockAsm10B
-	SUBL $0x04, R8
+	LEAL -4(R8), R8
 	LEAL 4(R11), R11
 
 matchlen_match2_repeat_extend_encodeBlockAsm10B:
-	CMPL R8, $0x02
-	JB   matchlen_match1_repeat_extend_encodeBlockAsm10B
+	CMPL R8, $0x01
+	JE   matchlen_match1_repeat_extend_encodeBlockAsm10B
+	JB   repeat_extend_forward_end_encodeBlockAsm10B
 	MOVW (R9)(R11*1), R10
 	CMPW (BX)(R11*1), R10
 	JNE  matchlen_match1_repeat_extend_encodeBlockAsm10B
-	SUBL $0x02, R8
 	LEAL 2(R11), R11
+	SUBL $0x02, R8
+	JZ   repeat_extend_forward_end_encodeBlockAsm10B
 
 matchlen_match1_repeat_extend_encodeBlockAsm10B:
-	CMPL R8, $0x01
-	JB   repeat_extend_forward_end_encodeBlockAsm10B
 	MOVB (R9)(R11*1), R10
 	CMPB (BX)(R11*1), R10
 	JNE  repeat_extend_forward_end_encodeBlockAsm10B
@@ -4366,7 +4359,6 @@ matchlen_loop_match_nolit_encodeBlockAsm10B:
 	LEAL 8(R9), R9
 	CMPL SI, $0x08
 	JAE  matchlen_loopback_match_nolit_encodeBlockAsm10B
-	JZ   match_nolit_end_encodeBlockAsm10B
 
 matchlen_match4_match_nolit_encodeBlockAsm10B:
 	CMPL SI, $0x04
@@ -4374,21 +4366,21 @@ matchlen_match4_match_nolit_encodeBlockAsm10B:
 	MOVL (DI)(R9*1), R8
 	CMPL (BX)(R9*1), R8
 	JNE  matchlen_match2_match_nolit_encodeBlockAsm10B
-	SUBL $0x04, SI
+	LEAL -4(SI), SI
 	LEAL 4(R9), R9
 
 matchlen_match2_match_nolit_encodeBlockAsm10B:
-	CMPL SI, $0x02
-	JB   matchlen_match1_match_nolit_encodeBlockAsm10B
+	CMPL SI, $0x01
+	JE   matchlen_match1_match_nolit_encodeBlockAsm10B
+	JB   match_nolit_end_encodeBlockAsm10B
 	MOVW (DI)(R9*1), R8
 	CMPW (BX)(R9*1), R8
 	JNE  matchlen_match1_match_nolit_encodeBlockAsm10B
-	SUBL $0x02, SI
 	LEAL 2(R9), R9
+	SUBL $0x02, SI
+	JZ   match_nolit_end_encodeBlockAsm10B
 
 matchlen_match1_match_nolit_encodeBlockAsm10B:
-	CMPL SI, $0x01
-	JB   match_nolit_end_encodeBlockAsm10B
 	MOVB (DI)(R9*1), R8
 	CMPB (BX)(R9*1), R8
 	JNE  match_nolit_end_encodeBlockAsm10B
@@ -4968,7 +4960,6 @@ matchlen_loop_repeat_extend_encodeBlockAsm8B:
 	LEAL 8(R11), R11
 	CMPL R8, $0x08
 	JAE  matchlen_loopback_repeat_extend_encodeBlockAsm8B
-	JZ   repeat_extend_forward_end_encodeBlockAsm8B
 
 matchlen_match4_repeat_extend_encodeBlockAsm8B:
 	CMPL R8, $0x04
@@ -4976,21 +4967,21 @@ matchlen_match4_repeat_extend_encodeBlockAsm8B:
 	MOVL (R9)(R11*1), R10
 	CMPL (BX)(R11*1), R10
 	JNE  matchlen_match2_repeat_extend_encodeBlockAsm8B
-	SUBL $0x04, R8
+	LEAL -4(R8), R8
 	LEAL 4(R11), R11
 
 matchlen_match2_repeat_extend_encodeBlockAsm8B:
-	CMPL R8, $0x02
-	JB   matchlen_match1_repeat_extend_encodeBlockAsm8B
+	CMPL R8, $0x01
+	JE   matchlen_match1_repeat_extend_encodeBlockAsm8B
+	JB   repeat_extend_forward_end_encodeBlockAsm8B
 	MOVW (R9)(R11*1), R10
 	CMPW (BX)(R11*1), R10
 	JNE  matchlen_match1_repeat_extend_encodeBlockAsm8B
-	SUBL $0x02, R8
 	LEAL 2(R11), R11
+	SUBL $0x02, R8
+	JZ   repeat_extend_forward_end_encodeBlockAsm8B
 
 matchlen_match1_repeat_extend_encodeBlockAsm8B:
-	CMPL R8, $0x01
-	JB   repeat_extend_forward_end_encodeBlockAsm8B
 	MOVB (R9)(R11*1), R10
 	CMPB (BX)(R11*1), R10
 	JNE  repeat_extend_forward_end_encodeBlockAsm8B
@@ -5385,7 +5376,6 @@ matchlen_loop_match_nolit_encodeBlockAsm8B:
 	LEAL 8(R9), R9
 	CMPL SI, $0x08
 	JAE  matchlen_loopback_match_nolit_encodeBlockAsm8B
-	JZ   match_nolit_end_encodeBlockAsm8B
 
 matchlen_match4_match_nolit_encodeBlockAsm8B:
 	CMPL SI, $0x04
@@ -5393,21 +5383,21 @@ matchlen_match4_match_nolit_encodeBlockAsm8B:
 	MOVL (DI)(R9*1), R8
 	CMPL (BX)(R9*1), R8
 	JNE  matchlen_match2_match_nolit_encodeBlockAsm8B
-	SUBL $0x04, SI
+	LEAL -4(SI), SI
 	LEAL 4(R9), R9
 
 matchlen_match2_match_nolit_encodeBlockAsm8B:
-	CMPL SI, $0x02
-	JB   matchlen_match1_match_nolit_encodeBlockAsm8B
+	CMPL SI, $0x01
+	JE   matchlen_match1_match_nolit_encodeBlockAsm8B
+	JB   match_nolit_end_encodeBlockAsm8B
 	MOVW (DI)(R9*1), R8
 	CMPW (BX)(R9*1), R8
 	JNE  matchlen_match1_match_nolit_encodeBlockAsm8B
-	SUBL $0x02, SI
 	LEAL 2(R9), R9
+	SUBL $0x02, SI
+	JZ   match_nolit_end_encodeBlockAsm8B
 
 matchlen_match1_match_nolit_encodeBlockAsm8B:
-	CMPL SI, $0x01
-	JB   match_nolit_end_encodeBlockAsm8B
 	MOVB (DI)(R9*1), R8
 	CMPB (BX)(R9*1), R8
 	JNE  match_nolit_end_encodeBlockAsm8B
@@ -5889,7 +5879,6 @@ matchlen_loop_match_nolit_encodeBetterBlockAsm:
 	LEAL 8(R11), R11
 	CMPL DI, $0x08
 	JAE  matchlen_loopback_match_nolit_encodeBetterBlockAsm
-	JZ   match_nolit_end_encodeBetterBlockAsm
 
 matchlen_match4_match_nolit_encodeBetterBlockAsm:
 	CMPL DI, $0x04
@@ -5897,21 +5886,21 @@ matchlen_match4_match_nolit_encodeBetterBlockAsm:
 	MOVL (R8)(R11*1), R10
 	CMPL (R9)(R11*1), R10
 	JNE  matchlen_match2_match_nolit_encodeBetterBlockAsm
-	SUBL $0x04, DI
+	LEAL -4(DI), DI
 	LEAL 4(R11), R11
 
 matchlen_match2_match_nolit_encodeBetterBlockAsm:
-	CMPL DI, $0x02
-	JB   matchlen_match1_match_nolit_encodeBetterBlockAsm
+	CMPL DI, $0x01
+	JE   matchlen_match1_match_nolit_encodeBetterBlockAsm
+	JB   match_nolit_end_encodeBetterBlockAsm
 	MOVW (R8)(R11*1), R10
 	CMPW (R9)(R11*1), R10
 	JNE  matchlen_match1_match_nolit_encodeBetterBlockAsm
-	SUBL $0x02, DI
 	LEAL 2(R11), R11
+	SUBL $0x02, DI
+	JZ   match_nolit_end_encodeBetterBlockAsm
 
 matchlen_match1_match_nolit_encodeBetterBlockAsm:
-	CMPL DI, $0x01
-	JB   match_nolit_end_encodeBetterBlockAsm
 	MOVB (R8)(R11*1), R10
 	CMPB (R9)(R11*1), R10
 	JNE  match_nolit_end_encodeBetterBlockAsm
@@ -6962,7 +6951,6 @@ matchlen_loop_match_nolit_encodeBetterBlockAsm4MB:
 	LEAL 8(R11), R11
 	CMPL DI, $0x08
 	JAE  matchlen_loopback_match_nolit_encodeBetterBlockAsm4MB
-	JZ   match_nolit_end_encodeBetterBlockAsm4MB
 
 matchlen_match4_match_nolit_encodeBetterBlockAsm4MB:
 	CMPL DI, $0x04
@@ -6970,21 +6958,21 @@ matchlen_match4_match_nolit_encodeBetterBlockAsm4MB:
 	MOVL (R8)(R11*1), R10
 	CMPL (R9)(R11*1), R10
 	JNE  matchlen_match2_match_nolit_encodeBetterBlockAsm4MB
-	SUBL $0x04, DI
+	LEAL -4(DI), DI
 	LEAL 4(R11), R11
 
 matchlen_match2_match_nolit_encodeBetterBlockAsm4MB:
-	CMPL DI, $0x02
-	JB   matchlen_match1_match_nolit_encodeBetterBlockAsm4MB
+	CMPL DI, $0x01
+	JE   matchlen_match1_match_nolit_encodeBetterBlockAsm4MB
+	JB   match_nolit_end_encodeBetterBlockAsm4MB
 	MOVW (R8)(R11*1), R10
 	CMPW (R9)(R11*1), R10
 	JNE  matchlen_match1_match_nolit_encodeBetterBlockAsm4MB
-	SUBL $0x02, DI
 	LEAL 2(R11), R11
+	SUBL $0x02, DI
+	JZ   match_nolit_end_encodeBetterBlockAsm4MB
 
 matchlen_match1_match_nolit_encodeBetterBlockAsm4MB:
-	CMPL DI, $0x01
-	JB   match_nolit_end_encodeBetterBlockAsm4MB
 	MOVB (R8)(R11*1), R10
 	CMPB (R9)(R11*1), R10
 	JNE  match_nolit_end_encodeBetterBlockAsm4MB
@@ -7961,7 +7949,6 @@ matchlen_loop_match_nolit_encodeBetterBlockAsm12B:
 	LEAL 8(R11), R11
 	CMPL DI, $0x08
 	JAE  matchlen_loopback_match_nolit_encodeBetterBlockAsm12B
-	JZ   match_nolit_end_encodeBetterBlockAsm12B
 
 matchlen_match4_match_nolit_encodeBetterBlockAsm12B:
 	CMPL DI, $0x04
@@ -7969,21 +7956,21 @@ matchlen_match4_match_nolit_encodeBetterBlockAsm12B:
 	MOVL (R8)(R11*1), R10
 	CMPL (R9)(R11*1), R10
 	JNE  matchlen_match2_match_nolit_encodeBetterBlockAsm12B
-	SUBL $0x04, DI
+	LEAL -4(DI), DI
 	LEAL 4(R11), R11
 
 matchlen_match2_match_nolit_encodeBetterBlockAsm12B:
-	CMPL DI, $0x02
-	JB   matchlen_match1_match_nolit_encodeBetterBlockAsm12B
+	CMPL DI, $0x01
+	JE   matchlen_match1_match_nolit_encodeBetterBlockAsm12B
+	JB   match_nolit_end_encodeBetterBlockAsm12B
 	MOVW (R8)(R11*1), R10
 	CMPW (R9)(R11*1), R10
 	JNE  matchlen_match1_match_nolit_encodeBetterBlockAsm12B
-	SUBL $0x02, DI
 	LEAL 2(R11), R11
+	SUBL $0x02, DI
+	JZ   match_nolit_end_encodeBetterBlockAsm12B
 
 matchlen_match1_match_nolit_encodeBetterBlockAsm12B:
-	CMPL DI, $0x01
-	JB   match_nolit_end_encodeBetterBlockAsm12B
 	MOVB (R8)(R11*1), R10
 	CMPB (R9)(R11*1), R10
 	JNE  match_nolit_end_encodeBetterBlockAsm12B
@@ -8813,7 +8800,6 @@ matchlen_loop_match_nolit_encodeBetterBlockAsm10B:
 	LEAL 8(R11), R11
 	CMPL DI, $0x08
 	JAE  matchlen_loopback_match_nolit_encodeBetterBlockAsm10B
-	JZ   match_nolit_end_encodeBetterBlockAsm10B
 
 matchlen_match4_match_nolit_encodeBetterBlockAsm10B:
 	CMPL DI, $0x04
@@ -8821,21 +8807,21 @@ matchlen_match4_match_nolit_encodeBetterBlockAsm10B:
 	MOVL (R8)(R11*1), R10
 	CMPL (R9)(R11*1), R10
 	JNE  matchlen_match2_match_nolit_encodeBetterBlockAsm10B
-	SUBL $0x04, DI
+	LEAL -4(DI), DI
 	LEAL 4(R11), R11
 
 matchlen_match2_match_nolit_encodeBetterBlockAsm10B:
-	CMPL DI, $0x02
-	JB   matchlen_match1_match_nolit_encodeBetterBlockAsm10B
+	CMPL DI, $0x01
+	JE   matchlen_match1_match_nolit_encodeBetterBlockAsm10B
+	JB   match_nolit_end_encodeBetterBlockAsm10B
 	MOVW (R8)(R11*1), R10
 	CMPW (R9)(R11*1), R10
 	JNE  matchlen_match1_match_nolit_encodeBetterBlockAsm10B
-	SUBL $0x02, DI
 	LEAL 2(R11), R11
+	SUBL $0x02, DI
+	JZ   match_nolit_end_encodeBetterBlockAsm10B
 
 matchlen_match1_match_nolit_encodeBetterBlockAsm10B:
-	CMPL DI, $0x01
-	JB   match_nolit_end_encodeBetterBlockAsm10B
 	MOVB (R8)(R11*1), R10
 	CMPB (R9)(R11*1), R10
 	JNE  match_nolit_end_encodeBetterBlockAsm10B
@@ -9665,7 +9651,6 @@ matchlen_loop_match_nolit_encodeBetterBlockAsm8B:
 	LEAL 8(R11), R11
 	CMPL DI, $0x08
 	JAE  matchlen_loopback_match_nolit_encodeBetterBlockAsm8B
-	JZ   match_nolit_end_encodeBetterBlockAsm8B
 
 matchlen_match4_match_nolit_encodeBetterBlockAsm8B:
 	CMPL DI, $0x04
@@ -9673,21 +9658,21 @@ matchlen_match4_match_nolit_encodeBetterBlockAsm8B:
 	MOVL (R8)(R11*1), R10
 	CMPL (R9)(R11*1), R10
 	JNE  matchlen_match2_match_nolit_encodeBetterBlockAsm8B
-	SUBL $0x04, DI
+	LEAL -4(DI), DI
 	LEAL 4(R11), R11
 
 matchlen_match2_match_nolit_encodeBetterBlockAsm8B:
-	CMPL DI, $0x02
-	JB   matchlen_match1_match_nolit_encodeBetterBlockAsm8B
+	CMPL DI, $0x01
+	JE   matchlen_match1_match_nolit_encodeBetterBlockAsm8B
+	JB   match_nolit_end_encodeBetterBlockAsm8B
 	MOVW (R8)(R11*1), R10
 	CMPW (R9)(R11*1), R10
 	JNE  matchlen_match1_match_nolit_encodeBetterBlockAsm8B
-	SUBL $0x02, DI
 	LEAL 2(R11), R11
+	SUBL $0x02, DI
+	JZ   match_nolit_end_encodeBetterBlockAsm8B
 
 matchlen_match1_match_nolit_encodeBetterBlockAsm8B:
-	CMPL DI, $0x01
-	JB   match_nolit_end_encodeBetterBlockAsm8B
 	MOVB (R8)(R11*1), R10
 	CMPB (R9)(R11*1), R10
 	JNE  match_nolit_end_encodeBetterBlockAsm8B
@@ -10615,7 +10600,6 @@ matchlen_loop_repeat_extend_encodeSnappyBlockAsm:
 	LEAL 8(R10), R10
 	CMPL DI, $0x08
 	JAE  matchlen_loopback_repeat_extend_encodeSnappyBlockAsm
-	JZ   repeat_extend_forward_end_encodeSnappyBlockAsm
 
 matchlen_match4_repeat_extend_encodeSnappyBlockAsm:
 	CMPL DI, $0x04
@@ -10623,21 +10607,21 @@ matchlen_match4_repeat_extend_encodeSnappyBlockAsm:
 	MOVL (R8)(R10*1), R9
 	CMPL (BX)(R10*1), R9
 	JNE  matchlen_match2_repeat_extend_encodeSnappyBlockAsm
-	SUBL $0x04, DI
+	LEAL -4(DI), DI
 	LEAL 4(R10), R10
 
 matchlen_match2_repeat_extend_encodeSnappyBlockAsm:
-	CMPL DI, $0x02
-	JB   matchlen_match1_repeat_extend_encodeSnappyBlockAsm
+	CMPL DI, $0x01
+	JE   matchlen_match1_repeat_extend_encodeSnappyBlockAsm
+	JB   repeat_extend_forward_end_encodeSnappyBlockAsm
 	MOVW (R8)(R10*1), R9
 	CMPW (BX)(R10*1), R9
 	JNE  matchlen_match1_repeat_extend_encodeSnappyBlockAsm
-	SUBL $0x02, DI
 	LEAL 2(R10), R10
+	SUBL $0x02, DI
+	JZ   repeat_extend_forward_end_encodeSnappyBlockAsm
 
 matchlen_match1_repeat_extend_encodeSnappyBlockAsm:
-	CMPL DI, $0x01
-	JB   repeat_extend_forward_end_encodeSnappyBlockAsm
 	MOVB (R8)(R10*1), R9
 	CMPB (BX)(R10*1), R9
 	JNE  repeat_extend_forward_end_encodeSnappyBlockAsm
@@ -10938,7 +10922,6 @@ matchlen_loop_match_nolit_encodeSnappyBlockAsm:
 	LEAL 8(R9), R9
 	CMPL SI, $0x08
 	JAE  matchlen_loopback_match_nolit_encodeSnappyBlockAsm
-	JZ   match_nolit_end_encodeSnappyBlockAsm
 
 matchlen_match4_match_nolit_encodeSnappyBlockAsm:
 	CMPL SI, $0x04
@@ -10946,21 +10929,21 @@ matchlen_match4_match_nolit_encodeSnappyBlockAsm:
 	MOVL (DI)(R9*1), R8
 	CMPL (BX)(R9*1), R8
 	JNE  matchlen_match2_match_nolit_encodeSnappyBlockAsm
-	SUBL $0x04, SI
+	LEAL -4(SI), SI
 	LEAL 4(R9), R9
 
 matchlen_match2_match_nolit_encodeSnappyBlockAsm:
-	CMPL SI, $0x02
-	JB   matchlen_match1_match_nolit_encodeSnappyBlockAsm
+	CMPL SI, $0x01
+	JE   matchlen_match1_match_nolit_encodeSnappyBlockAsm
+	JB   match_nolit_end_encodeSnappyBlockAsm
 	MOVW (DI)(R9*1), R8
 	CMPW (BX)(R9*1), R8
 	JNE  matchlen_match1_match_nolit_encodeSnappyBlockAsm
-	SUBL $0x02, SI
 	LEAL 2(R9), R9
+	SUBL $0x02, SI
+	JZ   match_nolit_end_encodeSnappyBlockAsm
 
 matchlen_match1_match_nolit_encodeSnappyBlockAsm:
-	CMPL SI, $0x01
-	JB   match_nolit_end_encodeSnappyBlockAsm
 	MOVB (DI)(R9*1), R8
 	CMPB (BX)(R9*1), R8
 	JNE  match_nolit_end_encodeSnappyBlockAsm
@@ -11479,7 +11462,6 @@ matchlen_loop_repeat_extend_encodeSnappyBlockAsm64K:
 	LEAL 8(R10), R10
 	CMPL DI, $0x08
 	JAE  matchlen_loopback_repeat_extend_encodeSnappyBlockAsm64K
-	JZ   repeat_extend_forward_end_encodeSnappyBlockAsm64K
 
 matchlen_match4_repeat_extend_encodeSnappyBlockAsm64K:
 	CMPL DI, $0x04
@@ -11487,21 +11469,21 @@ matchlen_match4_repeat_extend_encodeSnappyBlockAsm64K:
 	MOVL (R8)(R10*1), R9
 	CMPL (BX)(R10*1), R9
 	JNE  matchlen_match2_repeat_extend_encodeSnappyBlockAsm64K
-	SUBL $0x04, DI
+	LEAL -4(DI), DI
 	LEAL 4(R10), R10
 
 matchlen_match2_repeat_extend_encodeSnappyBlockAsm64K:
-	CMPL DI, $0x02
-	JB   matchlen_match1_repeat_extend_encodeSnappyBlockAsm64K
+	CMPL DI, $0x01
+	JE   matchlen_match1_repeat_extend_encodeSnappyBlockAsm64K
+	JB   repeat_extend_forward_end_encodeSnappyBlockAsm64K
 	MOVW (R8)(R10*1), R9
 	CMPW (BX)(R10*1), R9
 	JNE  matchlen_match1_repeat_extend_encodeSnappyBlockAsm64K
-	SUBL $0x02, DI
 	LEAL 2(R10), R10
+	SUBL $0x02, DI
+	JZ   repeat_extend_forward_end_encodeSnappyBlockAsm64K
 
 matchlen_match1_repeat_extend_encodeSnappyBlockAsm64K:
-	CMPL DI, $0x01
-	JB   repeat_extend_forward_end_encodeSnappyBlockAsm64K
 	MOVB (R8)(R10*1), R9
 	CMPB (BX)(R10*1), R9
 	JNE  repeat_extend_forward_end_encodeSnappyBlockAsm64K
@@ -11762,7 +11744,6 @@ matchlen_loop_match_nolit_encodeSnappyBlockAsm64K:
 	LEAL 8(R9), R9
 	CMPL SI, $0x08
 	JAE  matchlen_loopback_match_nolit_encodeSnappyBlockAsm64K
-	JZ   match_nolit_end_encodeSnappyBlockAsm64K
 
 matchlen_match4_match_nolit_encodeSnappyBlockAsm64K:
 	CMPL SI, $0x04
@@ -11770,21 +11751,21 @@ matchlen_match4_match_nolit_encodeSnappyBlockAsm64K:
 	MOVL (DI)(R9*1), R8
 	CMPL (BX)(R9*1), R8
 	JNE  matchlen_match2_match_nolit_encodeSnappyBlockAsm64K
-	SUBL $0x04, SI
+	LEAL -4(SI), SI
 	LEAL 4(R9), R9
 
 matchlen_match2_match_nolit_encodeSnappyBlockAsm64K:
-	CMPL SI, $0x02
-	JB   matchlen_match1_match_nolit_encodeSnappyBlockAsm64K
+	CMPL SI, $0x01
+	JE   matchlen_match1_match_nolit_encodeSnappyBlockAsm64K
+	JB   match_nolit_end_encodeSnappyBlockAsm64K
 	MOVW (DI)(R9*1), R8
 	CMPW (BX)(R9*1), R8
 	JNE  matchlen_match1_match_nolit_encodeSnappyBlockAsm64K
-	SUBL $0x02, SI
 	LEAL 2(R9), R9
+	SUBL $0x02, SI
+	JZ   match_nolit_end_encodeSnappyBlockAsm64K
 
 matchlen_match1_match_nolit_encodeSnappyBlockAsm64K:
-	CMPL SI, $0x01
-	JB   match_nolit_end_encodeSnappyBlockAsm64K
 	MOVB (DI)(R9*1), R8
 	CMPB (BX)(R9*1), R8
 	JNE  match_nolit_end_encodeSnappyBlockAsm64K
@@ -12263,7 +12244,6 @@ matchlen_loop_repeat_extend_encodeSnappyBlockAsm12B:
 	LEAL 8(R10), R10
 	CMPL DI, $0x08
 	JAE  matchlen_loopback_repeat_extend_encodeSnappyBlockAsm12B
-	JZ   repeat_extend_forward_end_encodeSnappyBlockAsm12B
 
 matchlen_match4_repeat_extend_encodeSnappyBlockAsm12B:
 	CMPL DI, $0x04
@@ -12271,21 +12251,21 @@ matchlen_match4_repeat_extend_encodeSnappyBlockAsm12B:
 	MOVL (R8)(R10*1), R9
 	CMPL (BX)(R10*1), R9
 	JNE  matchlen_match2_repeat_extend_encodeSnappyBlockAsm12B
-	SUBL $0x04, DI
+	LEAL -4(DI), DI
 	LEAL 4(R10), R10
 
 matchlen_match2_repeat_extend_encodeSnappyBlockAsm12B:
-	CMPL DI, $0x02
-	JB   matchlen_match1_repeat_extend_encodeSnappyBlockAsm12B
+	CMPL DI, $0x01
+	JE   matchlen_match1_repeat_extend_encodeSnappyBlockAsm12B
+	JB   repeat_extend_forward_end_encodeSnappyBlockAsm12B
 	MOVW (R8)(R10*1), R9
 	CMPW (BX)(R10*1), R9
 	JNE  matchlen_match1_repeat_extend_encodeSnappyBlockAsm12B
-	SUBL $0x02, DI
 	LEAL 2(R10), R10
+	SUBL $0x02, DI
+	JZ   repeat_extend_forward_end_encodeSnappyBlockAsm12B
 
 matchlen_match1_repeat_extend_encodeSnappyBlockAsm12B:
-	CMPL DI, $0x01
-	JB   repeat_extend_forward_end_encodeSnappyBlockAsm12B
 	MOVB (R8)(R10*1), R9
 	CMPB (BX)(R10*1), R9
 	JNE  repeat_extend_forward_end_encodeSnappyBlockAsm12B
@@ -12546,7 +12526,6 @@ matchlen_loop_match_nolit_encodeSnappyBlockAsm12B:
 	LEAL 8(R9), R9
 	CMPL SI, $0x08
 	JAE  matchlen_loopback_match_nolit_encodeSnappyBlockAsm12B
-	JZ   match_nolit_end_encodeSnappyBlockAsm12B
 
 matchlen_match4_match_nolit_encodeSnappyBlockAsm12B:
 	CMPL SI, $0x04
@@ -12554,21 +12533,21 @@ matchlen_match4_match_nolit_encodeSnappyBlockAsm12B:
 	MOVL (DI)(R9*1), R8
 	CMPL (BX)(R9*1), R8
 	JNE  matchlen_match2_match_nolit_encodeSnappyBlockAsm12B
-	SUBL $0x04, SI
+	LEAL -4(SI), SI
 	LEAL 4(R9), R9
 
 matchlen_match2_match_nolit_encodeSnappyBlockAsm12B:
-	CMPL SI, $0x02
-	JB   matchlen_match1_match_nolit_encodeSnappyBlockAsm12B
+	CMPL SI, $0x01
+	JE   matchlen_match1_match_nolit_encodeSnappyBlockAsm12B
+	JB   match_nolit_end_encodeSnappyBlockAsm12B
 	MOVW (DI)(R9*1), R8
 	CMPW (BX)(R9*1), R8
 	JNE  matchlen_match1_match_nolit_encodeSnappyBlockAsm12B
-	SUBL $0x02, SI
 	LEAL 2(R9), R9
+	SUBL $0x02, SI
+	JZ   match_nolit_end_encodeSnappyBlockAsm12B
 
 matchlen_match1_match_nolit_encodeSnappyBlockAsm12B:
-	CMPL SI, $0x01
-	JB   match_nolit_end_encodeSnappyBlockAsm12B
 	MOVB (DI)(R9*1), R8
 	CMPB (BX)(R9*1), R8
 	JNE  match_nolit_end_encodeSnappyBlockAsm12B
@@ -13047,7 +13026,6 @@ matchlen_loop_repeat_extend_encodeSnappyBlockAsm10B:
 	LEAL 8(R10), R10
 	CMPL DI, $0x08
 	JAE  matchlen_loopback_repeat_extend_encodeSnappyBlockAsm10B
-	JZ   repeat_extend_forward_end_encodeSnappyBlockAsm10B
 
 matchlen_match4_repeat_extend_encodeSnappyBlockAsm10B:
 	CMPL DI, $0x04
@@ -13055,21 +13033,21 @@ matchlen_match4_repeat_extend_encodeSnappyBlockAsm10B:
 	MOVL (R8)(R10*1), R9
 	CMPL (BX)(R10*1), R9
 	JNE  matchlen_match2_repeat_extend_encodeSnappyBlockAsm10B
-	SUBL $0x04, DI
+	LEAL -4(DI), DI
 	LEAL 4(R10), R10
 
 matchlen_match2_repeat_extend_encodeSnappyBlockAsm10B:
-	CMPL DI, $0x02
-	JB   matchlen_match1_repeat_extend_encodeSnappyBlockAsm10B
+	CMPL DI, $0x01
+	JE   matchlen_match1_repeat_extend_encodeSnappyBlockAsm10B
+	JB   repeat_extend_forward_end_encodeSnappyBlockAsm10B
 	MOVW (R8)(R10*1), R9
 	CMPW (BX)(R10*1), R9
 	JNE  matchlen_match1_repeat_extend_encodeSnappyBlockAsm10B
-	SUBL $0x02, DI
 	LEAL 2(R10), R10
+	SUBL $0x02, DI
+	JZ   repeat_extend_forward_end_encodeSnappyBlockAsm10B
 
 matchlen_match1_repeat_extend_encodeSnappyBlockAsm10B:
-	CMPL DI, $0x01
-	JB   repeat_extend_forward_end_encodeSnappyBlockAsm10B
 	MOVB (R8)(R10*1), R9
 	CMPB (BX)(R10*1), R9
 	JNE  repeat_extend_forward_end_encodeSnappyBlockAsm10B
@@ -13330,7 +13308,6 @@ matchlen_loop_match_nolit_encodeSnappyBlockAsm10B:
 	LEAL 8(R9), R9
 	CMPL SI, $0x08
 	JAE  matchlen_loopback_match_nolit_encodeSnappyBlockAsm10B
-	JZ   match_nolit_end_encodeSnappyBlockAsm10B
 
 matchlen_match4_match_nolit_encodeSnappyBlockAsm10B:
 	CMPL SI, $0x04
@@ -13338,21 +13315,21 @@ matchlen_match4_match_nolit_encodeSnappyBlockAsm10B:
 	MOVL (DI)(R9*1), R8
 	CMPL (BX)(R9*1), R8
 	JNE  matchlen_match2_match_nolit_encodeSnappyBlockAsm10B
-	SUBL $0x04, SI
+	LEAL -4(SI), SI
 	LEAL 4(R9), R9
 
 matchlen_match2_match_nolit_encodeSnappyBlockAsm10B:
-	CMPL SI, $0x02
-	JB   matchlen_match1_match_nolit_encodeSnappyBlockAsm10B
+	CMPL SI, $0x01
+	JE   matchlen_match1_match_nolit_encodeSnappyBlockAsm10B
+	JB   match_nolit_end_encodeSnappyBlockAsm10B
 	MOVW (DI)(R9*1), R8
 	CMPW (BX)(R9*1), R8
 	JNE  matchlen_match1_match_nolit_encodeSnappyBlockAsm10B
-	SUBL $0x02, SI
 	LEAL 2(R9), R9
+	SUBL $0x02, SI
+	JZ   match_nolit_end_encodeSnappyBlockAsm10B
 
 matchlen_match1_match_nolit_encodeSnappyBlockAsm10B:
-	CMPL SI, $0x01
-	JB   match_nolit_end_encodeSnappyBlockAsm10B
 	MOVB (DI)(R9*1), R8
 	CMPB (BX)(R9*1), R8
 	JNE  match_nolit_end_encodeSnappyBlockAsm10B
@@ -13831,7 +13808,6 @@ matchlen_loop_repeat_extend_encodeSnappyBlockAsm8B:
 	LEAL 8(R10), R10
 	CMPL DI, $0x08
 	JAE  matchlen_loopback_repeat_extend_encodeSnappyBlockAsm8B
-	JZ   repeat_extend_forward_end_encodeSnappyBlockAsm8B
 
 matchlen_match4_repeat_extend_encodeSnappyBlockAsm8B:
 	CMPL DI, $0x04
@@ -13839,21 +13815,21 @@ matchlen_match4_repeat_extend_encodeSnappyBlockAsm8B:
 	MOVL (R8)(R10*1), R9
 	CMPL (BX)(R10*1), R9
 	JNE  matchlen_match2_repeat_extend_encodeSnappyBlockAsm8B
-	SUBL $0x04, DI
+	LEAL -4(DI), DI
 	LEAL 4(R10), R10
 
 matchlen_match2_repeat_extend_encodeSnappyBlockAsm8B:
-	CMPL DI, $0x02
-	JB   matchlen_match1_repeat_extend_encodeSnappyBlockAsm8B
+	CMPL DI, $0x01
+	JE   matchlen_match1_repeat_extend_encodeSnappyBlockAsm8B
+	JB   repeat_extend_forward_end_encodeSnappyBlockAsm8B
 	MOVW (R8)(R10*1), R9
 	CMPW (BX)(R10*1), R9
 	JNE  matchlen_match1_repeat_extend_encodeSnappyBlockAsm8B
-	SUBL $0x02, DI
 	LEAL 2(R10), R10
+	SUBL $0x02, DI
+	JZ   repeat_extend_forward_end_encodeSnappyBlockAsm8B
 
 matchlen_match1_repeat_extend_encodeSnappyBlockAsm8B:
-	CMPL DI, $0x01
-	JB   repeat_extend_forward_end_encodeSnappyBlockAsm8B
 	MOVB (R8)(R10*1), R9
 	CMPB (BX)(R10*1), R9
 	JNE  repeat_extend_forward_end_encodeSnappyBlockAsm8B
@@ -14112,7 +14088,6 @@ matchlen_loop_match_nolit_encodeSnappyBlockAsm8B:
 	LEAL 8(R9), R9
 	CMPL SI, $0x08
 	JAE  matchlen_loopback_match_nolit_encodeSnappyBlockAsm8B
-	JZ   match_nolit_end_encodeSnappyBlockAsm8B
 
 matchlen_match4_match_nolit_encodeSnappyBlockAsm8B:
 	CMPL SI, $0x04
@@ -14120,21 +14095,21 @@ matchlen_match4_match_nolit_encodeSnappyBlockAsm8B:
 	MOVL (DI)(R9*1), R8
 	CMPL (BX)(R9*1), R8
 	JNE  matchlen_match2_match_nolit_encodeSnappyBlockAsm8B
-	SUBL $0x04, SI
+	LEAL -4(SI), SI
 	LEAL 4(R9), R9
 
 matchlen_match2_match_nolit_encodeSnappyBlockAsm8B:
-	CMPL SI, $0x02
-	JB   matchlen_match1_match_nolit_encodeSnappyBlockAsm8B
+	CMPL SI, $0x01
+	JE   matchlen_match1_match_nolit_encodeSnappyBlockAsm8B
+	JB   match_nolit_end_encodeSnappyBlockAsm8B
 	MOVW (DI)(R9*1), R8
 	CMPW (BX)(R9*1), R8
 	JNE  matchlen_match1_match_nolit_encodeSnappyBlockAsm8B
-	SUBL $0x02, SI
 	LEAL 2(R9), R9
+	SUBL $0x02, SI
+	JZ   match_nolit_end_encodeSnappyBlockAsm8B
 
 matchlen_match1_match_nolit_encodeSnappyBlockAsm8B:
-	CMPL SI, $0x01
-	JB   match_nolit_end_encodeSnappyBlockAsm8B
 	MOVB (DI)(R9*1), R8
 	CMPB (BX)(R9*1), R8
 	JNE  match_nolit_end_encodeSnappyBlockAsm8B
@@ -14523,7 +14498,6 @@ matchlen_loop_match_nolit_encodeSnappyBetterBlockAsm:
 	LEAL 8(R11), R11
 	CMPL DI, $0x08
 	JAE  matchlen_loopback_match_nolit_encodeSnappyBetterBlockAsm
-	JZ   match_nolit_end_encodeSnappyBetterBlockAsm
 
 matchlen_match4_match_nolit_encodeSnappyBetterBlockAsm:
 	CMPL DI, $0x04
@@ -14531,21 +14505,21 @@ matchlen_match4_match_nolit_encodeSnappyBetterBlockAsm:
 	MOVL (R8)(R11*1), R10
 	CMPL (R9)(R11*1), R10
 	JNE  matchlen_match2_match_nolit_encodeSnappyBetterBlockAsm
-	SUBL $0x04, DI
+	LEAL -4(DI), DI
 	LEAL 4(R11), R11
 
 matchlen_match2_match_nolit_encodeSnappyBetterBlockAsm:
-	CMPL DI, $0x02
-	JB   matchlen_match1_match_nolit_encodeSnappyBetterBlockAsm
+	CMPL DI, $0x01
+	JE   matchlen_match1_match_nolit_encodeSnappyBetterBlockAsm
+	JB   match_nolit_end_encodeSnappyBetterBlockAsm
 	MOVW (R8)(R11*1), R10
 	CMPW (R9)(R11*1), R10
 	JNE  matchlen_match1_match_nolit_encodeSnappyBetterBlockAsm
-	SUBL $0x02, DI
 	LEAL 2(R11), R11
+	SUBL $0x02, DI
+	JZ   match_nolit_end_encodeSnappyBetterBlockAsm
 
 matchlen_match1_match_nolit_encodeSnappyBetterBlockAsm:
-	CMPL DI, $0x01
-	JB   match_nolit_end_encodeSnappyBetterBlockAsm
 	MOVB (R8)(R11*1), R10
 	CMPB (R9)(R11*1), R10
 	JNE  match_nolit_end_encodeSnappyBetterBlockAsm
@@ -15147,7 +15121,6 @@ matchlen_loop_match_nolit_encodeSnappyBetterBlockAsm64K:
 	LEAL 8(R11), R11
 	CMPL DI, $0x08
 	JAE  matchlen_loopback_match_nolit_encodeSnappyBetterBlockAsm64K
-	JZ   match_nolit_end_encodeSnappyBetterBlockAsm64K
 
 matchlen_match4_match_nolit_encodeSnappyBetterBlockAsm64K:
 	CMPL DI, $0x04
@@ -15155,21 +15128,21 @@ matchlen_match4_match_nolit_encodeSnappyBetterBlockAsm64K:
 	MOVL (R8)(R11*1), R10
 	CMPL (R9)(R11*1), R10
 	JNE  matchlen_match2_match_nolit_encodeSnappyBetterBlockAsm64K
-	SUBL $0x04, DI
+	LEAL -4(DI), DI
 	LEAL 4(R11), R11
 
 matchlen_match2_match_nolit_encodeSnappyBetterBlockAsm64K:
-	CMPL DI, $0x02
-	JB   matchlen_match1_match_nolit_encodeSnappyBetterBlockAsm64K
+	CMPL DI, $0x01
+	JE   matchlen_match1_match_nolit_encodeSnappyBetterBlockAsm64K
+	JB   match_nolit_end_encodeSnappyBetterBlockAsm64K
 	MOVW (R8)(R11*1), R10
 	CMPW (R9)(R11*1), R10
 	JNE  matchlen_match1_match_nolit_encodeSnappyBetterBlockAsm64K
-	SUBL $0x02, DI
 	LEAL 2(R11), R11
+	SUBL $0x02, DI
+	JZ   match_nolit_end_encodeSnappyBetterBlockAsm64K
 
 matchlen_match1_match_nolit_encodeSnappyBetterBlockAsm64K:
-	CMPL DI, $0x01
-	JB   match_nolit_end_encodeSnappyBetterBlockAsm64K
 	MOVB (R8)(R11*1), R10
 	CMPB (R9)(R11*1), R10
 	JNE  match_nolit_end_encodeSnappyBetterBlockAsm64K
@@ -15706,7 +15679,6 @@ matchlen_loop_match_nolit_encodeSnappyBetterBlockAsm12B:
 	LEAL 8(R11), R11
 	CMPL DI, $0x08
 	JAE  matchlen_loopback_match_nolit_encodeSnappyBetterBlockAsm12B
-	JZ   match_nolit_end_encodeSnappyBetterBlockAsm12B
 
 matchlen_match4_match_nolit_encodeSnappyBetterBlockAsm12B:
 	CMPL DI, $0x04
@@ -15714,21 +15686,21 @@ matchlen_match4_match_nolit_encodeSnappyBetterBlockAsm12B:
 	MOVL (R8)(R11*1), R10
 	CMPL (R9)(R11*1), R10
 	JNE  matchlen_match2_match_nolit_encodeSnappyBetterBlockAsm12B
-	SUBL $0x04, DI
+	LEAL -4(DI), DI
 	LEAL 4(R11), R11
 
 matchlen_match2_match_nolit_encodeSnappyBetterBlockAsm12B:
-	CMPL DI, $0x02
-	JB   matchlen_match1_match_nolit_encodeSnappyBetterBlockAsm12B
+	CMPL DI, $0x01
+	JE   matchlen_match1_match_nolit_encodeSnappyBetterBlockAsm12B
+	JB   match_nolit_end_encodeSnappyBetterBlockAsm12B
 	MOVW (R8)(R11*1), R10
 	CMPW (R9)(R11*1), R10
 	JNE  matchlen_match1_match_nolit_encodeSnappyBetterBlockAsm12B
-	SUBL $0x02, DI
 	LEAL 2(R11), R11
+	SUBL $0x02, DI
+	JZ   match_nolit_end_encodeSnappyBetterBlockAsm12B
 
 matchlen_match1_match_nolit_encodeSnappyBetterBlockAsm12B:
-	CMPL DI, $0x01
-	JB   match_nolit_end_encodeSnappyBetterBlockAsm12B
 	MOVB (R8)(R11*1), R10
 	CMPB (R9)(R11*1), R10
 	JNE  match_nolit_end_encodeSnappyBetterBlockAsm12B
@@ -16265,7 +16237,6 @@ matchlen_loop_match_nolit_encodeSnappyBetterBlockAsm10B:
 	LEAL 8(R11), R11
 	CMPL DI, $0x08
 	JAE  matchlen_loopback_match_nolit_encodeSnappyBetterBlockAsm10B
-	JZ   match_nolit_end_encodeSnappyBetterBlockAsm10B
 
 matchlen_match4_match_nolit_encodeSnappyBetterBlockAsm10B:
 	CMPL DI, $0x04
@@ -16273,21 +16244,21 @@ matchlen_match4_match_nolit_encodeSnappyBetterBlockAsm10B:
 	MOVL (R8)(R11*1), R10
 	CMPL (R9)(R11*1), R10
 	JNE  matchlen_match2_match_nolit_encodeSnappyBetterBlockAsm10B
-	SUBL $0x04, DI
+	LEAL -4(DI), DI
 	LEAL 4(R11), R11
 
 matchlen_match2_match_nolit_encodeSnappyBetterBlockAsm10B:
-	CMPL DI, $0x02
-	JB   matchlen_match1_match_nolit_encodeSnappyBetterBlockAsm10B
+	CMPL DI, $0x01
+	JE   matchlen_match1_match_nolit_encodeSnappyBetterBlockAsm10B
+	JB   match_nolit_end_encodeSnappyBetterBlockAsm10B
 	MOVW (R8)(R11*1), R10
 	CMPW (R9)(R11*1), R10
 	JNE  matchlen_match1_match_nolit_encodeSnappyBetterBlockAsm10B
-	SUBL $0x02, DI
 	LEAL 2(R11), R11
+	SUBL $0x02, DI
+	JZ   match_nolit_end_encodeSnappyBetterBlockAsm10B
 
 matchlen_match1_match_nolit_encodeSnappyBetterBlockAsm10B:
-	CMPL DI, $0x01
-	JB   match_nolit_end_encodeSnappyBetterBlockAsm10B
 	MOVB (R8)(R11*1), R10
 	CMPB (R9)(R11*1), R10
 	JNE  match_nolit_end_encodeSnappyBetterBlockAsm10B
@@ -16824,7 +16795,6 @@ matchlen_loop_match_nolit_encodeSnappyBetterBlockAsm8B:
 	LEAL 8(R11), R11
 	CMPL DI, $0x08
 	JAE  matchlen_loopback_match_nolit_encodeSnappyBetterBlockAsm8B
-	JZ   match_nolit_end_encodeSnappyBetterBlockAsm8B
 
 matchlen_match4_match_nolit_encodeSnappyBetterBlockAsm8B:
 	CMPL DI, $0x04
@@ -16832,21 +16802,21 @@ matchlen_match4_match_nolit_encodeSnappyBetterBlockAsm8B:
 	MOVL (R8)(R11*1), R10
 	CMPL (R9)(R11*1), R10
 	JNE  matchlen_match2_match_nolit_encodeSnappyBetterBlockAsm8B
-	SUBL $0x04, DI
+	LEAL -4(DI), DI
 	LEAL 4(R11), R11
 
 matchlen_match2_match_nolit_encodeSnappyBetterBlockAsm8B:
-	CMPL DI, $0x02
-	JB   matchlen_match1_match_nolit_encodeSnappyBetterBlockAsm8B
+	CMPL DI, $0x01
+	JE   matchlen_match1_match_nolit_encodeSnappyBetterBlockAsm8B
+	JB   match_nolit_end_encodeSnappyBetterBlockAsm8B
 	MOVW (R8)(R11*1), R10
 	CMPW (R9)(R11*1), R10
 	JNE  matchlen_match1_match_nolit_encodeSnappyBetterBlockAsm8B
-	SUBL $0x02, DI
 	LEAL 2(R11), R11
+	SUBL $0x02, DI
+	JZ   match_nolit_end_encodeSnappyBetterBlockAsm8B
 
 matchlen_match1_match_nolit_encodeSnappyBetterBlockAsm8B:
-	CMPL DI, $0x01
-	JB   match_nolit_end_encodeSnappyBetterBlockAsm8B
 	MOVB (R8)(R11*1), R10
 	CMPB (R9)(R11*1), R10
 	JNE  match_nolit_end_encodeSnappyBetterBlockAsm8B
@@ -17398,7 +17368,6 @@ matchlen_loop_repeat_extend_calcBlockSize:
 	LEAL 8(R10), R10
 	CMPL DI, $0x08
 	JAE  matchlen_loopback_repeat_extend_calcBlockSize
-	JZ   repeat_extend_forward_end_calcBlockSize
 
 matchlen_match4_repeat_extend_calcBlockSize:
 	CMPL DI, $0x04
@@ -17406,21 +17375,21 @@ matchlen_match4_repeat_extend_calcBlockSize:
 	MOVL (R8)(R10*1), R9
 	CMPL (BX)(R10*1), R9
 	JNE  matchlen_match2_repeat_extend_calcBlockSize
-	SUBL $0x04, DI
+	LEAL -4(DI), DI
 	LEAL 4(R10), R10
 
 matchlen_match2_repeat_extend_calcBlockSize:
-	CMPL DI, $0x02
-	JB   matchlen_match1_repeat_extend_calcBlockSize
+	CMPL DI, $0x01
+	JE   matchlen_match1_repeat_extend_calcBlockSize
+	JB   repeat_extend_forward_end_calcBlockSize
 	MOVW (R8)(R10*1), R9
 	CMPW (BX)(R10*1), R9
 	JNE  matchlen_match1_repeat_extend_calcBlockSize
-	SUBL $0x02, DI
 	LEAL 2(R10), R10
+	SUBL $0x02, DI
+	JZ   repeat_extend_forward_end_calcBlockSize
 
 matchlen_match1_repeat_extend_calcBlockSize:
-	CMPL DI, $0x01
-	JB   repeat_extend_forward_end_calcBlockSize
 	MOVB (R8)(R10*1), R9
 	CMPB (BX)(R10*1), R9
 	JNE  repeat_extend_forward_end_calcBlockSize
@@ -17610,7 +17579,6 @@ matchlen_loop_match_nolit_calcBlockSize:
 	LEAL 8(R9), R9
 	CMPL SI, $0x08
 	JAE  matchlen_loopback_match_nolit_calcBlockSize
-	JZ   match_nolit_end_calcBlockSize
 
 matchlen_match4_match_nolit_calcBlockSize:
 	CMPL SI, $0x04
@@ -17618,21 +17586,21 @@ matchlen_match4_match_nolit_calcBlockSize:
 	MOVL (DI)(R9*1), R8
 	CMPL (BX)(R9*1), R8
 	JNE  matchlen_match2_match_nolit_calcBlockSize
-	SUBL $0x04, SI
+	LEAL -4(SI), SI
 	LEAL 4(R9), R9
 
 matchlen_match2_match_nolit_calcBlockSize:
-	CMPL SI, $0x02
-	JB   matchlen_match1_match_nolit_calcBlockSize
+	CMPL SI, $0x01
+	JE   matchlen_match1_match_nolit_calcBlockSize
+	JB   match_nolit_end_calcBlockSize
 	MOVW (DI)(R9*1), R8
 	CMPW (BX)(R9*1), R8
 	JNE  matchlen_match1_match_nolit_calcBlockSize
-	SUBL $0x02, SI
 	LEAL 2(R9), R9
+	SUBL $0x02, SI
+	JZ   match_nolit_end_calcBlockSize
 
 matchlen_match1_match_nolit_calcBlockSize:
-	CMPL SI, $0x01
-	JB   match_nolit_end_calcBlockSize
 	MOVB (DI)(R9*1), R8
 	CMPB (BX)(R9*1), R8
 	JNE  match_nolit_end_calcBlockSize
@@ -17929,7 +17897,6 @@ matchlen_loop_repeat_extend_calcBlockSizeSmall:
 	LEAL 8(R10), R10
 	CMPL DI, $0x08
 	JAE  matchlen_loopback_repeat_extend_calcBlockSizeSmall
-	JZ   repeat_extend_forward_end_calcBlockSizeSmall
 
 matchlen_match4_repeat_extend_calcBlockSizeSmall:
 	CMPL DI, $0x04
@@ -17937,21 +17904,21 @@ matchlen_match4_repeat_extend_calcBlockSizeSmall:
 	MOVL (R8)(R10*1), R9
 	CMPL (BX)(R10*1), R9
 	JNE  matchlen_match2_repeat_extend_calcBlockSizeSmall
-	SUBL $0x04, DI
+	LEAL -4(DI), DI
 	LEAL 4(R10), R10
 
 matchlen_match2_repeat_extend_calcBlockSizeSmall:
-	CMPL DI, $0x02
-	JB   matchlen_match1_repeat_extend_calcBlockSizeSmall
+	CMPL DI, $0x01
+	JE   matchlen_match1_repeat_extend_calcBlockSizeSmall
+	JB   repeat_extend_forward_end_calcBlockSizeSmall
 	MOVW (R8)(R10*1), R9
 	CMPW (BX)(R10*1), R9
 	JNE  matchlen_match1_repeat_extend_calcBlockSizeSmall
-	SUBL $0x02, DI
 	LEAL 2(R10), R10
+	SUBL $0x02, DI
+	JZ   repeat_extend_forward_end_calcBlockSizeSmall
 
 matchlen_match1_repeat_extend_calcBlockSizeSmall:
-	CMPL DI, $0x01
-	JB   repeat_extend_forward_end_calcBlockSizeSmall
 	MOVB (R8)(R10*1), R9
 	CMPB (BX)(R10*1), R9
 	JNE  repeat_extend_forward_end_calcBlockSizeSmall
@@ -18111,7 +18078,6 @@ matchlen_loop_match_nolit_calcBlockSizeSmall:
 	LEAL 8(R9), R9
 	CMPL SI, $0x08
 	JAE  matchlen_loopback_match_nolit_calcBlockSizeSmall
-	JZ   match_nolit_end_calcBlockSizeSmall
 
 matchlen_match4_match_nolit_calcBlockSizeSmall:
 	CMPL SI, $0x04
@@ -18119,21 +18085,21 @@ matchlen_match4_match_nolit_calcBlockSizeSmall:
 	MOVL (DI)(R9*1), R8
 	CMPL (BX)(R9*1), R8
 	JNE  matchlen_match2_match_nolit_calcBlockSizeSmall
-	SUBL $0x04, SI
+	LEAL -4(SI), SI
 	LEAL 4(R9), R9
 
 matchlen_match2_match_nolit_calcBlockSizeSmall:
-	CMPL SI, $0x02
-	JB   matchlen_match1_match_nolit_calcBlockSizeSmall
+	CMPL SI, $0x01
+	JE   matchlen_match1_match_nolit_calcBlockSizeSmall
+	JB   match_nolit_end_calcBlockSizeSmall
 	MOVW (DI)(R9*1), R8
 	CMPW (BX)(R9*1), R8
 	JNE  matchlen_match1_match_nolit_calcBlockSizeSmall
-	SUBL $0x02, SI
 	LEAL 2(R9), R9
+	SUBL $0x02, SI
+	JZ   match_nolit_end_calcBlockSizeSmall
 
 matchlen_match1_match_nolit_calcBlockSizeSmall:
-	CMPL SI, $0x01
-	JB   match_nolit_end_calcBlockSizeSmall
 	MOVB (DI)(R9*1), R8
 	CMPB (BX)(R9*1), R8
 	JNE  match_nolit_end_calcBlockSizeSmall
@@ -18899,7 +18865,6 @@ matchlen_loop_standalone:
 	LEAL 8(SI), SI
 	CMPL DX, $0x08
 	JAE  matchlen_loopback_standalone
-	JZ   gen_match_len_end
 
 matchlen_match4_standalone:
 	CMPL DX, $0x04
@@ -18907,21 +18872,21 @@ matchlen_match4_standalone:
 	MOVL (AX)(SI*1), BX
 	CMPL (CX)(SI*1), BX
 	JNE  matchlen_match2_standalone
-	SUBL $0x04, DX
+	LEAL -4(DX), DX
 	LEAL 4(SI), SI
 
 matchlen_match2_standalone:
-	CMPL DX, $0x02
-	JB   matchlen_match1_standalone
+	CMPL DX, $0x01
+	JE   matchlen_match1_standalone
+	JB   gen_match_len_end
 	MOVW (AX)(SI*1), BX
 	CMPW (CX)(SI*1), BX
 	JNE  matchlen_match1_standalone
-	SUBL $0x02, DX
 	LEAL 2(SI), SI
+	SUBL $0x02, DX
+	JZ   gen_match_len_end
 
 matchlen_match1_standalone:
-	CMPL DX, $0x01
-	JB   gen_match_len_end
 	MOVB (AX)(SI*1), BL
 	CMPB (CX)(SI*1), BL
 	JNE  gen_match_len_end
