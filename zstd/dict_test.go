@@ -189,6 +189,154 @@ func TestEncoder_SmallDict(t *testing.T) {
 	}
 }
 
+func TestEncoder_SmallDictFresh(t *testing.T) {
+	// All files have CRC
+	zr := testCreateZipReader("testdata/dict-tests-small.zip", t)
+	var dicts [][]byte
+	var encs []func() *Encoder
+	var noDictEncs []*Encoder
+	var encNames []string
+
+	for _, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, ".dict") {
+			continue
+		}
+		func() {
+			r, err := tt.Open()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer r.Close()
+			in, err := io.ReadAll(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			dicts = append(dicts, in)
+			for level := SpeedFastest; level < speedLast; level++ {
+				if isRaceTest && level >= SpeedBestCompression {
+					break
+				}
+				level := level
+				encs = append(encs, func() *Encoder {
+					enc, err := NewWriter(nil, WithEncoderConcurrency(1), WithEncoderDict(in), WithEncoderLevel(level), WithWindowSize(1<<17))
+					if err != nil {
+						t.Fatal(err)
+					}
+					return enc
+				})
+				encNames = append(encNames, fmt.Sprint("level-", level.String(), "-dict-", len(dicts)))
+
+				enc, err := NewWriter(nil, WithEncoderConcurrency(1), WithEncoderLevel(level), WithWindowSize(1<<17))
+				if err != nil {
+					t.Fatal(err)
+				}
+				noDictEncs = append(noDictEncs, enc)
+			}
+		}()
+	}
+	dec, err := NewReader(nil, WithDecoderConcurrency(1), WithDecoderDicts(dicts...))
+	if err != nil {
+		t.Fatal(err)
+		return
+	}
+	defer dec.Close()
+	for i, tt := range zr.File {
+		if testing.Short() && i > 100 {
+			break
+		}
+		if !strings.HasSuffix(tt.Name, ".zst") {
+			continue
+		}
+		r, err := tt.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer r.Close()
+		in, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded, err := dec.DecodeAll(in, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if testing.Short() && len(decoded) > 1000 {
+			continue
+		}
+
+		t.Run("encodeall-"+tt.Name, func(t *testing.T) {
+			// Attempt to compress with all dicts
+			var b []byte
+			var tmp []byte
+			for i := range encs {
+				i := i
+				t.Run(encNames[i], func(t *testing.T) {
+					enc := encs[i]()
+					defer enc.Close()
+					b = enc.EncodeAll(decoded, b[:0])
+					tmp, err = dec.DecodeAll(in, tmp[:0])
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Equal(tmp, decoded) {
+						t.Fatal("output mismatch")
+					}
+
+					tmp = noDictEncs[i].EncodeAll(decoded, tmp[:0])
+
+					if strings.Contains(t.Name(), "dictplain") && strings.Contains(t.Name(), "dict-1") {
+						t.Log("reference:", len(in), "no dict:", len(tmp), "with dict:", len(b), "SAVED:", len(tmp)-len(b))
+						// Check that we reduced this significantly
+						if len(b) > 250 {
+							t.Error("output was bigger than expected")
+						}
+					}
+				})
+			}
+		})
+		t.Run("stream-"+tt.Name, func(t *testing.T) {
+			// Attempt to compress with all dicts
+			var tmp []byte
+			for i := range encs {
+				i := i
+				t.Run(encNames[i], func(t *testing.T) {
+					enc := encs[i]()
+					defer enc.Close()
+					var buf bytes.Buffer
+					enc.ResetContentSize(&buf, int64(len(decoded)))
+					_, err := enc.Write(decoded)
+					if err != nil {
+						t.Fatal(err)
+					}
+					err = enc.Close()
+					if err != nil {
+						t.Fatal(err)
+					}
+					tmp, err = dec.DecodeAll(buf.Bytes(), tmp[:0])
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Equal(tmp, decoded) {
+						t.Fatal("output mismatch")
+					}
+					var buf2 bytes.Buffer
+					noDictEncs[i].Reset(&buf2)
+					noDictEncs[i].Write(decoded)
+					noDictEncs[i].Close()
+
+					if strings.Contains(t.Name(), "dictplain") && strings.Contains(t.Name(), "dict-1") {
+						t.Log("reference:", len(in), "no dict:", buf2.Len(), "with dict:", buf.Len(), "SAVED:", buf2.Len()-buf.Len())
+						// Check that we reduced this significantly
+						if buf.Len() > 250 {
+							t.Error("output was bigger than expected")
+						}
+					}
+				})
+			}
+		})
+	}
+}
+
 func benchmarkEncodeAllLimitedBySize(b *testing.B, lowerLimit int, upperLimit int) {
 	zr := testCreateZipReader("testdata/dict-tests-small.zip", b)
 	t := testing.TB(b)
