@@ -367,7 +367,7 @@ func TestIndex(t *testing.T) {
 					}
 				})
 			}
-			t.Run(fmt.Sprintf("ReadAt"), func(t *testing.T) {
+			t.Run("ReadAt", func(t *testing.T) {
 				// Read it from a seekable stream
 				dec = NewReader(bytes.NewReader(compressed))
 

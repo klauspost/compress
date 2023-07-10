@@ -235,7 +235,7 @@ func TestSeeking(t *testing.T) {
 		})
 	}
 	// Test seek current
-	t.Run(fmt.Sprintf("seekCurrent"), func(t *testing.T) {
+	t.Run("seekCurrent", func(t *testing.T) {
 		dec := s2.NewReader(io.ReadSeeker(bytes.NewReader(compressed.Bytes())))
 
 		seeker, err := dec.ReadSeeker(true, index)
@@ -269,7 +269,7 @@ func TestSeeking(t *testing.T) {
 		}
 	})
 	// Test ReadAt
-	t.Run(fmt.Sprintf("ReadAt"), func(t *testing.T) {
+	t.Run("ReadAt", func(t *testing.T) {
 		dec := s2.NewReader(io.ReadSeeker(bytes.NewReader(compressed.Bytes())))
 
 		seeker, err := dec.ReadSeeker(true, index)
