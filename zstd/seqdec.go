@@ -197,9 +197,7 @@ func (s *sequenceDecs) execute(seqs []seqVals, hist []byte) error {
 				dst = dst[:len(src)]
 				t += len(src)
 				// Destination is the space we just added.
-				for i := range src {
-					dst[i] = src[i]
-				}
+				copy(dst, src)
 			}
 		}
 	}
@@ -395,9 +393,7 @@ func (s *sequenceDecs) decodeSync(hist []byte) error {
 				// Destination is the space we just added.
 				dst := out[len(out)-ml:]
 				dst = dst[:len(src)]
-				for i := range src {
-					dst[i] = src[i]
-				}
+				copy(dst, src)
 			}
 		}
 		if i == 0 {
