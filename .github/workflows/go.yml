@@ -198,6 +198,9 @@ jobs:
       - name: flate/FuzzEncoding
         run: go test -run=none -fuzz=FuzzEncoding -fuzztime=100000x -test.fuzzminimizetime=10ms ./flate/.
 
+      - name: flate/FuzzEncoding/noasm
+        run: go test -run=none -tags=noasm -fuzz=FuzzEncoding -fuzztime=100000x -test.fuzzminimizetime=10ms ./flate/.
+
       - name: zip/FuzzReader
         run: go test -run=none -fuzz=FuzzReader -fuzztime=500000x -test.fuzzminimizetime=10ms ./zip/.
 
