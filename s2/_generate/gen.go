@@ -2743,16 +2743,48 @@ func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) re
 	}
 	Label("avx2_continue_" + name)
 
+	Label("matchlen_loopback_16_" + name)
+	tmp2 := GP64()
+	CMPL(len.As32(), U8(16))
+	JB(LabelRef("matchlen_match8_" + name))
+	MOVQ(Mem{Base: a, Index: matched, Scale: 1}, tmp)
+	MOVQ(Mem{Base: a, Index: matched, Scale: 1, Disp: 8}, tmp2)
+	XORQ(Mem{Base: b, Index: matched, Scale: 1}, tmp)
+	JNZ(LabelRef("matchlen_bsf_8_" + name))
+	XORQ(Mem{Base: b, Index: matched, Scale: 1, Disp: 8}, tmp2)
+	JNZ(LabelRef("matchlen_bsf_16" + name))
+	// All 8 byte matched, update and loop.
+	LEAL(Mem{Base: len, Disp: -16}, len.As32())
+	LEAL(Mem{Base: matched, Disp: 16}, matched)
+	JMP(LabelRef("matchlen_loopback_16_" + name))
+
+	Label("matchlen_bsf_16" + name)
+	// Not all match.
+	Comment("#ifdef GOAMD64_v3")
+	// 2016 BMI                 :TZCNT r64, r64                        L:   0.57ns=  2.0c  T:   0.29ns=  1.00c
+	//  315 AMD64               :BSF r64, r64                          L:   0.88ns=  3.1c  T:   0.86ns=  3.00c
+	TZCNTQ(tmp2, tmp2)
+	Comment("#else")
+	BSFQ(tmp2, tmp2)
+	Comment("#endif")
+
+	SARQ(U8(3), tmp2)
+	LEAL(Mem{Base: matched, Index: tmp2, Scale: 1, Disp: 8}, matched)
+	JMP(end)
+
+	Label("matchlen_match8_" + name)
 	CMPL(len.As32(), U8(8))
 	JB(LabelRef("matchlen_match4_" + name))
-
-	Label("matchlen_loopback_" + name)
 	MOVQ(Mem{Base: a, Index: matched, Scale: 1}, tmp)
 	XORQ(Mem{Base: b, Index: matched, Scale: 1}, tmp)
-	TESTQ(tmp, tmp)
-	JZ(LabelRef("matchlen_loop_" + name))
-	// Not all match.
+	JNZ(LabelRef("matchlen_bsf_8_" + name))
+	// All 8 byte matched, update and loop.
+	LEAL(Mem{Base: len, Disp: -8}, len.As32())
+	LEAL(Mem{Base: matched, Disp: 8}, matched)
+	JMP(LabelRef("matchlen_match4_" + name))
+	Label("matchlen_bsf_8_" + name)
 
+	// Not all match.
 	Comment("#ifdef GOAMD64_v3")
 	// 2016 BMI                 :TZCNT r64, r64                        L:   0.57ns=  2.0c  T:   0.29ns=  1.00c
 	//  315 AMD64               :BSF r64, r64                          L:   0.88ns=  3.1c  T:   0.86ns=  3.00c
@@ -2764,13 +2796,6 @@ func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) re
 	SARQ(U8(3), tmp)
 	LEAL(Mem{Base: matched, Index: tmp, Scale: 1}, matched)
 	JMP(end)
-
-	// All 8 byte matched, update and loop.
-	Label("matchlen_loop_" + name)
-	LEAL(Mem{Base: len, Disp: -8}, len.As32())
-	LEAL(Mem{Base: matched, Disp: 8}, matched)
-	CMPL(len.As32(), U8(8))
-	JAE(LabelRef("matchlen_loopback_" + name))
 
 	// Less than 8 bytes left.
 	// Test 4 bytes...
