@@ -81,6 +81,7 @@ const (
 	speed    = BestSpeed
 	default_ = DefaultCompression
 	compress = BestCompression
+	oneK     = -1024
 )
 
 func BenchmarkDecodeDigitsSpeed1e4(b *testing.B)    { benchmarkDecode(b, digits, speed, 1e4) }

@@ -7,6 +7,7 @@ package gzip
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 	"math/rand"
 	"os"
@@ -252,7 +253,7 @@ func testFile(i, level int, t *testing.T) {
 
 	br := bytes.NewBuffer(testbuf)
 	var buf bytes.Buffer
-	w, err := NewWriterLevel(&buf, DefaultCompression)
+	w, err := NewWriterLevel(&buf, level)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -307,6 +308,56 @@ func TestFile200(t *testing.T) {
 		t.Skip("skipping during short test")
 	}
 	testFile(200, BestSpeed, t)
+}
+
+func TestFileWindow(t *testing.T) {
+	for sz := MinCustomWindowSize; sz <= MaxCustomWindowSize; sz *= 2 {
+		t.Run(fmt.Sprint(sz), func(t *testing.T) {
+			testFileWindow(1, sz, t)
+		})
+	}
+}
+
+func testFileWindow(i, window int, t *testing.T) {
+	dat, _ := os.ReadFile("testdata/test.json")
+	dl := len(dat)
+	if len(testbuf) != i*dl {
+		// Make results predictable
+		testbuf = make([]byte, i*dl)
+		for j := 0; j < i; j++ {
+			copy(testbuf[j*dl:j*dl+dl], dat)
+		}
+	}
+
+	br := bytes.NewBuffer(testbuf)
+	var buf bytes.Buffer
+	w, err := NewWriterWindow(&buf, window)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := io.Copy(w, br)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if int(n) != len(testbuf) {
+		t.Fatal("Short write:", n, "!=", testbuf)
+	}
+	err = w.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("size: %d bytes", buf.Len())
+	r, err := NewReader(&buf)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	decoded, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	if !bytes.Equal(testbuf, decoded) {
+		t.Errorf("decoded content does not match.")
+	}
 }
 
 func testBigGzip(i int, t *testing.T) {
@@ -385,7 +436,7 @@ func TestDeterministicL7(t *testing.T) { testDeterm(7, t) }
 func TestDeterministicL8(t *testing.T) { testDeterm(8, t) }
 func TestDeterministicL9(t *testing.T) { testDeterm(9, t) }
 
-func testDeterm(i int, t *testing.T) {
+func testDeterm(level int, t *testing.T) {
 	var length = 500000
 	if testing.Short() {
 		length = 100000
@@ -398,7 +449,7 @@ func testDeterm(i int, t *testing.T) {
 
 	br := bytes.NewBuffer(t1)
 	var b1 bytes.Buffer
-	w, err := NewWriterLevel(&b1, i)
+	w, err := NewWriterLevel(&b1, level)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -419,7 +470,7 @@ func testDeterm(i int, t *testing.T) {
 
 	br2 := bytes.NewBuffer(t2)
 	var b2 bytes.Buffer
-	w2, err := NewWriterLevel(&b2, i)
+	w2, err := NewWriterLevel(&b2, level)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -445,7 +496,7 @@ func testDeterm(i int, t *testing.T) {
 	b2b := b2.Bytes()
 
 	if !bytes.Equal(b1b, b2b) {
-		t.Fatalf("Level %d did not produce deterministric result, len(a) = %d, len(b) = %d", i, len(b1b), len(b2b))
+		t.Fatalf("Level %d did not produce deterministric result, len(a) = %d, len(b) = %d", level, len(b1b), len(b2b))
 	}
 }
 
