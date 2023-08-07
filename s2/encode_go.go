@@ -92,12 +92,11 @@ func emitLiteral(dst, lit []byte) int {
 		dst[0] = 62<<2 | tagLiteral
 		i = 4
 	default:
-		dst[4] = uint8(n >> 24)
 		dst[3] = uint8(n >> 16)
 		dst[2] = uint8(n >> 8)
 		dst[1] = uint8(n)
 		dst[0] = 63<<2 | tagLiteral
-		i = 5
+		i = 4
 	}
 	return i + copy(dst[i:], lit)
 }
@@ -163,7 +162,6 @@ func emitCopy(dst []byte, offset, length int) int {
 		i := 0
 		if length > 64 {
 			// Emit a length 64 copy, encoded as 5 bytes.
-			dst[4] = uint8(offset >> 24)
 			dst[3] = uint8(offset >> 16)
 			dst[2] = uint8(offset >> 8)
 			dst[1] = uint8(offset)
@@ -171,9 +169,9 @@ func emitCopy(dst []byte, offset, length int) int {
 			length -= 64
 			if length >= 4 {
 				// Emit remaining as repeats
-				return 5 + emitRepeat(dst[5:], offset, length)
+				return 4 + emitRepeat(dst[4:], offset, length)
 			}
-			i = 5
+			i = 4
 		}
 		if length == 0 {
 			return i
@@ -183,8 +181,7 @@ func emitCopy(dst []byte, offset, length int) int {
 		dst[i+1] = uint8(offset)
 		dst[i+2] = uint8(offset >> 8)
 		dst[i+3] = uint8(offset >> 16)
-		dst[i+4] = uint8(offset >> 24)
-		return i + 5
+		return i + 4
 	}
 
 	// Offset no more than 2 bytes.
@@ -232,7 +229,6 @@ func emitCopyNoRepeat(dst []byte, offset, length int) int {
 		i := 0
 		if length > 64 {
 			// Emit a length 64 copy, encoded as 5 bytes.
-			dst[4] = uint8(offset >> 24)
 			dst[3] = uint8(offset >> 16)
 			dst[2] = uint8(offset >> 8)
 			dst[1] = uint8(offset)
@@ -240,9 +236,9 @@ func emitCopyNoRepeat(dst []byte, offset, length int) int {
 			length -= 64
 			if length >= 4 {
 				// Emit remaining as repeats
-				return 5 + emitCopyNoRepeat(dst[5:], offset, length)
+				return 4 + emitCopyNoRepeat(dst[4:], offset, length)
 			}
-			i = 5
+			i = 4
 		}
 		if length == 0 {
 			return i
@@ -252,8 +248,7 @@ func emitCopyNoRepeat(dst []byte, offset, length int) int {
 		dst[i+1] = uint8(offset)
 		dst[i+2] = uint8(offset >> 8)
 		dst[i+3] = uint8(offset >> 16)
-		dst[i+4] = uint8(offset >> 24)
-		return i + 5
+		return i + 4
 	}
 
 	// Offset no more than 2 bytes.

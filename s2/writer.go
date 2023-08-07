@@ -448,13 +448,23 @@ func (w *Writer) encodeBlock(obuf, uncompressed []byte) int {
 		}
 		return 0
 	}
+	adjust := func(n int) int {
+		if n <= 0 {
+			return 0
+		}
+		n += 3
+		if n >= len(uncompressed) {
+			return 0
+		}
+		return n
+	}
 	switch w.level {
 	case levelFast:
-		return encodeBlock(obuf, uncompressed)
+		return adjust(encodeBlock(obuf, uncompressed))
 	case levelBetter:
-		return encodeBlockBetter(obuf, uncompressed)
+		return adjust(encodeBlockBetter(obuf, uncompressed))
 	case levelBest:
-		return encodeBlockBest(obuf, uncompressed, nil)
+		return adjust(encodeBlockBest(obuf, uncompressed, nil))
 	}
 	return 0
 }
