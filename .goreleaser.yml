@@ -3,7 +3,8 @@
 before:
   hooks:
     - ./gen.sh
-    
+    - go install mvdan.cc/garble@v0.10.1
+
 builds:
   -
     id: "s2c"
