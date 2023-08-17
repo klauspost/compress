@@ -368,7 +368,14 @@ func (b *blockEnc) encodeLits(lits []byte, raw bool) error {
 	} else {
 		err = huff0.ErrIncompressible
 	}
-
+	if err == nil && len(out)+5 > len(lits) {
+		// If we are close, we may still be worse or equal to raw.
+		var lh literalsHeader
+		lh.setSizes(len(out), len(lits), single)
+		if len(out)+lh.size() >= len(lits) {
+			err = huff0.ErrIncompressible
+		}
+	}
 	switch err {
 	case huff0.ErrIncompressible:
 		if debugEncoder {
@@ -511,6 +518,17 @@ func (b *blockEnc) encode(org []byte, raw, rawAllLits bool) error {
 		err = huff0.ErrIncompressible
 	}
 
+	if err == nil && len(out)+5 > len(b.literals) {
+		// If we are close, we may still be worse or equal to raw.
+		var lh literalsHeader
+		lh.setSize(len(b.literals))
+		szRaw := lh.size()
+		lh.setSizes(len(out), len(b.literals), single)
+		szComp := lh.size()
+		if len(out)+szComp >= len(b.literals)+szRaw {
+			err = huff0.ErrIncompressible
+		}
+	}
 	switch err {
 	case huff0.ErrIncompressible:
 		lh.setType(literalsBlockRaw)
