@@ -1,10 +1,12 @@
 package zstd
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 
 	"github.com/klauspost/compress/huff0"
 )
@@ -158,4 +160,215 @@ func InspectDictionary(b []byte) (interface {
 	initPredefined()
 	d, err := loadDict(b)
 	return d, err
+}
+
+type BuildDictOptions struct {
+	// Dictionary ID.
+	ID uint32
+
+	// Content to use to create dictionary tables.
+	Contents [][]byte
+
+	// History to use for all blocks.
+	History []byte
+
+	// Offsets to use.
+	Offsets [3]int
+}
+
+func BuildDict(o BuildDictOptions) ([]byte, error) {
+	initPredefined()
+	hist := o.History
+	contents := o.Contents
+	const debug = false
+	if len(hist) > dictMaxLength {
+		return nil, fmt.Errorf("dictionary of size %d > %d", len(hist), dictMaxLength)
+	}
+	if len(hist) < 8 {
+		return nil, fmt.Errorf("dictionary of size %d < %d", len(hist), 8)
+	}
+	if len(contents) == 0 {
+		return nil, errors.New("no content provided")
+	}
+	d := dict{
+		id:      o.ID,
+		litEnc:  nil,
+		llDec:   sequenceDec{},
+		ofDec:   sequenceDec{},
+		mlDec:   sequenceDec{},
+		offsets: o.Offsets,
+		content: hist,
+	}
+	block := blockEnc{lowMem: false}
+	block.init()
+	enc := &bestFastEncoder{fastBase: fastBase{maxMatchOff: int32(maxMatchLen), bufferReset: math.MaxInt32 - int32(maxMatchLen*2), lowMem: false}}
+	var (
+		remain [256]int
+		ll     [256]int
+		ml     [256]int
+		of     [256]int
+	)
+	addValues := func(dst *[256]int, src []byte) {
+		for _, v := range src {
+			dst[v]++
+		}
+	}
+	addHist := func(dst *[256]int, src *[256]uint32) {
+		for i, v := range src {
+			dst[i] += int(v)
+		}
+	}
+	seqs := 0
+	nUsed := 0
+	litTotal := 0
+	for _, b := range contents {
+		block.reset(nil)
+		if len(b) < 8 {
+			continue
+		}
+		nUsed++
+		enc.Reset(&d, true)
+		enc.Encode(&block, b)
+		addValues(&remain, block.literals)
+		litTotal += len(block.literals)
+		seqs += len(block.sequences)
+		block.genCodes()
+		addHist(&ll, block.coders.llEnc.Histogram())
+		addHist(&ml, block.coders.mlEnc.Histogram())
+		addHist(&of, block.coders.ofEnc.Histogram())
+	}
+	if nUsed == 0 || seqs == 0 {
+		return nil, fmt.Errorf("%d blocks, %d sequences found", nUsed, seqs)
+	}
+	if debug {
+		fmt.Println("Sequences:", seqs, "Blocks:", nUsed, "Literals:", litTotal)
+	}
+	if seqs/nUsed < 512 {
+		// Use 512 as minimum.
+		nUsed = seqs / 512
+	}
+	copyHist := func(dst *fseEncoder, src *[256]int) ([]byte, error) {
+		hist := dst.Histogram()
+		var maxSym uint8
+		var maxCount int
+		var fakeLength int
+		for i, v := range src {
+			if v > 0 {
+				v = v / nUsed
+				if v == 0 {
+					v = 1
+				}
+			}
+			if v > maxCount {
+				maxCount = v
+			}
+			if v != 0 {
+				maxSym = uint8(i)
+			}
+			fakeLength += v
+			hist[i] = uint32(v)
+		}
+		dst.HistogramFinished(maxSym, maxCount)
+		dst.reUsed = false
+		dst.useRLE = false
+		err := dst.normalizeCount(fakeLength)
+		if err != nil {
+			return nil, err
+		}
+		if debug {
+			fmt.Println("RAW:", dst.count[:maxSym+1], "NORM:", dst.norm[:maxSym+1], "LEN:", fakeLength)
+		}
+		return dst.writeCount(nil)
+	}
+	if debug {
+		fmt.Print("Literal lengths: ")
+	}
+	llTable, err := copyHist(block.coders.llEnc, &ll)
+	if err != nil {
+		return nil, err
+	}
+	if debug {
+		fmt.Print("Match lengths: ")
+	}
+	mlTable, err := copyHist(block.coders.mlEnc, &ml)
+	if err != nil {
+		return nil, err
+	}
+	if debug {
+		fmt.Print("Offsets: ")
+	}
+	ofTable, err := copyHist(block.coders.ofEnc, &of)
+	if err != nil {
+		return nil, err
+	}
+
+	// Liteal table
+	avgSize := litTotal
+	if avgSize > huff0.BlockSizeMax/2 {
+		avgSize = huff0.BlockSizeMax / 2
+	}
+	huffBuff := make([]byte, 0, avgSize)
+	// Target size
+	div := litTotal / avgSize
+	if div < 1 {
+		div = 1
+	}
+	if debug {
+		fmt.Println("Huffman weights:")
+	}
+	for i, n := range remain[:] {
+		if n > 0 {
+			n = n / div
+			// Allow all entries to be represented.
+			if n == 0 {
+				n = 1
+			}
+			huffBuff = append(huffBuff, bytes.Repeat([]byte{byte(i)}, n)...)
+			if debug {
+				fmt.Printf("[%d: %d], ", i, n)
+			}
+		}
+	}
+	if remain[255]/div == 0 {
+		huffBuff = append(huffBuff, 255)
+	}
+	scratch := &huff0.Scratch{TableLog: 11}
+	_, _, err = huff0.Compress1X(huffBuff, scratch)
+	if err != nil {
+		// TODO: Handle RLE
+		return nil, err
+	}
+
+	var out bytes.Buffer
+	out.Write([]byte(dictMagic))
+	out.Write(binary.LittleEndian.AppendUint32(nil, o.ID))
+	out.Write(scratch.OutTable)
+	if debug {
+		fmt.Println("huff table:", len(scratch.OutTable), "bytes")
+		fmt.Println("of table:", len(ofTable), "bytes")
+		fmt.Println("ml table:", len(mlTable), "bytes")
+		fmt.Println("ll table:", len(llTable), "bytes")
+	}
+	out.Write(ofTable)
+	out.Write(mlTable)
+	out.Write(llTable)
+	out.Write(binary.LittleEndian.AppendUint32(nil, uint32(o.Offsets[0])))
+	out.Write(binary.LittleEndian.AppendUint32(nil, uint32(o.Offsets[1])))
+	out.Write(binary.LittleEndian.AppendUint32(nil, uint32(o.Offsets[2])))
+	out.Write(hist)
+	if debug {
+		_, err := loadDict(out.Bytes())
+		if err != nil {
+			panic(err)
+		}
+		i, err := InspectDictionary(out.Bytes())
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println("ID:", i.ID())
+		fmt.Println("Content size:", i.ContentSize())
+		fmt.Println("Encoder:", i.LitEncoder() != nil)
+		fmt.Println("Offsets:", i.Offsets())
+	}
+	return out.Bytes(), nil
 }
