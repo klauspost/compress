@@ -181,8 +181,8 @@ func BuildDict(o BuildDictOptions) ([]byte, error) {
 	hist := o.History
 	contents := o.Contents
 	const debug = false
-	if len(hist) > dictMaxLength {
-		return nil, fmt.Errorf("dictionary of size %d > %d", len(hist), dictMaxLength)
+	if int64(len(hist)) > dictMaxLength {
+		return nil, fmt.Errorf("dictionary of size %d > %d", len(hist), int64(dictMaxLength))
 	}
 	if len(hist) < 8 {
 		return nil, fmt.Errorf("dictionary of size %d < %d", len(hist), 8)

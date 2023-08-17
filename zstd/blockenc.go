@@ -361,7 +361,7 @@ func (b *blockEnc) encodeLits(lits []byte, raw bool) error {
 	if len(lits) >= 1024 {
 		// Use 4 Streams.
 		out, reUsed, err = huff0.Compress4X(lits, b.litEnc)
-	} else if len(lits) > 32 {
+	} else if len(lits) > 16 {
 		// Use 1 stream
 		single = true
 		out, reUsed, err = huff0.Compress1X(lits, b.litEnc)
@@ -503,7 +503,7 @@ func (b *blockEnc) encode(org []byte, raw, rawAllLits bool) error {
 	if len(b.literals) >= 1024 && !raw {
 		// Use 4 Streams.
 		out, reUsed, err = huff0.Compress4X(b.literals, b.litEnc)
-	} else if len(b.literals) > 32 && !raw {
+	} else if len(b.literals) > 16 && !raw {
 		// Use 1 stream
 		single = true
 		out, reUsed, err = huff0.Compress1X(b.literals, b.litEnc)
