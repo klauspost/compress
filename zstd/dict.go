@@ -16,9 +16,8 @@ type dict struct {
 
 	litEnc              *huff0.Scratch
 	llDec, ofDec, mlDec sequenceDec
-	//llEnc, ofEnc, mlEnc []*fseEncoder
-	offsets [3]int
-	content []byte
+	offsets             [3]int
+	content             []byte
 }
 
 const dictMagic = "\x37\xa4\x30\xec"
@@ -333,10 +332,52 @@ func BuildDict(o BuildDictOptions) ([]byte, error) {
 		huffBuff = append(huffBuff, 255)
 	}
 	scratch := &huff0.Scratch{TableLog: 11}
-	_, _, err = huff0.Compress1X(huffBuff, scratch)
-	if err != nil {
-		// TODO: Handle RLE
-		return nil, err
+	for tries := 0; tries < 255; tries++ {
+		scratch = &huff0.Scratch{TableLog: 11}
+		_, _, err = huff0.Compress1X(huffBuff, scratch)
+		if err == nil {
+			break
+		}
+		if debug {
+			fmt.Printf("Try %d: Huffman error: %v\n", tries+1, err)
+		}
+		huffBuff = huffBuff[:0]
+		if tries == 250 {
+			if debug {
+				fmt.Println("Huffman: Bailing out with predefined table")
+			}
+
+			// Bail out.... Just generate something
+			huffBuff = append(huffBuff, bytes.Repeat([]byte{255}, 10000)...)
+			for i := 0; i < 128; i++ {
+				huffBuff = append(huffBuff, byte(i))
+			}
+			continue
+		}
+		if errors.Is(err, huff0.ErrIncompressible) {
+			// Try truncating least common.
+			for i, n := range remain[:] {
+				if n > 0 {
+					n = n / (div * (i + 1))
+					if n > 0 {
+						huffBuff = append(huffBuff, bytes.Repeat([]byte{byte(i)}, n)...)
+					}
+				}
+				if i == 255 && (len(huffBuff) == 0 || huffBuff[len(huffBuff)-1] != 255) {
+					huffBuff = append(huffBuff, 255)
+				}
+			}
+		}
+		if errors.Is(err, huff0.ErrUseRLE) {
+			for i, n := range remain[:] {
+				n = n / (div * (i + 1))
+				// Allow all entries to be represented.
+				if n == 0 {
+					n = 1
+				}
+				huffBuff = append(huffBuff, bytes.Repeat([]byte{byte(i)}, n)...)
+			}
+		}
 	}
 
 	var out bytes.Buffer

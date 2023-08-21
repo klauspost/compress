@@ -17,7 +17,7 @@ import (
 
 var (
 	wantLenFlag   = flag.Int("len", 112<<10, "Specify custom output size")
-	wantHashBytes = flag.Int("hash", 8, "Hash bytes match length. Minimum match length.")
+	wantHashBytes = flag.Int("hash", 6, "Hash bytes match length. Minimum match length.")
 	wantMaxBytes  = flag.Int("max", 32<<10, "Max input length to index per input file")
 	wantOutput    = flag.String("o", "dictionary.bin", "Output name")
 	wantFormat    = flag.String("format", "zstd", `Output type. "zstd" "s2" or "raw"`)

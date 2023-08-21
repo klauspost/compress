@@ -228,15 +228,17 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 		}
 		tmp = append(tmp, m.value...)
 		delete(output, e.hash)
+
 		wantLen := e.n / uint32(hashBytes) / 4
 		if wantLen <= lowestOcc {
 			wantLen = lowestOcc
 		}
+		sortedFollow := make([]match, 0, len(m.followBy))
 		for {
 			var nh uint32 // Next hash
 			stopAfter := false
 			if true {
-				sortedFollow := make([]match, 0, len(m.followBy))
+				sortedFollow = sortedFollow[:0]
 				for k, v := range m.followBy {
 					if _, ok := output[k]; !ok {
 						continue
@@ -247,6 +249,20 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 					})
 				}
 				if len(sortedFollow) == 0 {
+					// Step back
+					if len(tmp) > hashBytes {
+						var t8 [8]byte
+						copy(t8[:], tmp[len(tmp)-hashBytes-1:])
+						m, ok = output[hashLen(binary.LittleEndian.Uint64(t8[:]), 32, uint8(hashBytes))]
+						if ok && len(m.followBy) > 0 {
+							tmp = tmp[:len(tmp)-1]
+							continue
+						}
+					} else {
+						if i < printUntil {
+							printf("FOLLOW: none after %q\n", string(m.value))
+						}
+					}
 					break
 				}
 				sort.Slice(sortedFollow, func(i, j int) bool {
@@ -254,6 +270,9 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 				})
 				nh = sortedFollow[0].hash
 				stopAfter = sortedFollow[0].n < wantLen
+				if stopAfter && i < printUntil {
+					printf("FOLLOW: %d > %d after %q\n", sortedFollow[0].n, wantLen, string(m.value))
+				}
 			}
 			m, ok = output[nh]
 			if !ok {
@@ -283,10 +302,8 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 			for j := range tmp[:len(tmp)-hashBytes+1] {
 				var t8 [8]byte
 				copy(t8[:], tmp[j:])
-				if i < 100 {
-					if false {
-						printf("DELETE %q\n", string(t8[:hashBytes]))
-					}
+				if i < printUntil {
+					printf("* POST DELETE %q\n", string(t8[:hashBytes]))
 				}
 				delete(output, hashLen(binary.LittleEndian.Uint64(t8[:]), 32, uint8(hashBytes)))
 			}
