@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"sort"
 
 	"github.com/klauspost/compress/huff0"
 )
@@ -220,6 +221,7 @@ func BuildDict(o BuildDictOptions) ([]byte, error) {
 	seqs := 0
 	nUsed := 0
 	litTotal := 0
+	newOffsets := make(map[uint32]int, 1000)
 	for _, b := range contents {
 		block.reset(nil)
 		if len(b) < 8 {
@@ -235,7 +237,55 @@ func BuildDict(o BuildDictOptions) ([]byte, error) {
 		addHist(&ll, block.coders.llEnc.Histogram())
 		addHist(&ml, block.coders.mlEnc.Histogram())
 		addHist(&of, block.coders.ofEnc.Histogram())
+		for i, seq := range block.sequences {
+			if i > 3 {
+				break
+			}
+			offset := seq.offset
+			if offset == 0 {
+				continue
+			}
+			if offset > 3 {
+				newOffsets[offset-3]++
+			} else {
+				newOffsets[uint32(o.Offsets[offset-1])]++
+			}
+		}
 	}
+	// Find most used offsets.
+	var sortedOffsets []uint32
+	for k := range newOffsets {
+		sortedOffsets = append(sortedOffsets, k)
+	}
+	sort.Slice(sortedOffsets, func(i, j int) bool {
+		a, b := sortedOffsets[i], sortedOffsets[j]
+		if a == b {
+			// Prefer the longer offset
+			return sortedOffsets[i] > sortedOffsets[j]
+		}
+		return newOffsets[sortedOffsets[i]] > newOffsets[sortedOffsets[j]]
+	})
+	if len(sortedOffsets) > 3 {
+		if debug {
+			fmt.Print("Offsets:")
+			for i, v := range sortedOffsets {
+				if i > 20 {
+					break
+				}
+				fmt.Printf("[%d: %d],", v, newOffsets[v])
+			}
+			fmt.Println("")
+		}
+
+		sortedOffsets = sortedOffsets[:3]
+	}
+	for i, v := range sortedOffsets {
+		o.Offsets[i] = int(v)
+	}
+	if debug {
+		fmt.Println("New repeat offsets", o.Offsets)
+	}
+
 	if nUsed == 0 || seqs == 0 {
 		return nil, fmt.Errorf("%d blocks, %d sequences found", nUsed, seqs)
 	}
@@ -301,7 +351,7 @@ func BuildDict(o BuildDictOptions) ([]byte, error) {
 		return nil, err
 	}
 
-	// Liteal table
+	// Literal table
 	avgSize := litTotal
 	if avgSize > huff0.BlockSizeMax/2 {
 		avgSize = huff0.BlockSizeMax / 2
@@ -410,6 +460,18 @@ func BuildDict(o BuildDictOptions) ([]byte, error) {
 		fmt.Println("Content size:", i.ContentSize())
 		fmt.Println("Encoder:", i.LitEncoder() != nil)
 		fmt.Println("Offsets:", i.Offsets())
+		enc, err := NewWriter(nil, WithEncoderDict(out.Bytes()))
+		if err != nil {
+			panic(err)
+		}
+		defer enc.Close()
+		var dst []byte
+		var totalSize int
+		for _, b := range contents {
+			dst = enc.EncodeAll(b, dst[:0])
+			totalSize += len(dst)
+		}
+		fmt.Println("Compressed size:", totalSize)
 	}
 	return out.Bytes(), nil
 }

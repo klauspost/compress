@@ -127,8 +127,20 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 		sorted = append(sorted, match{hash: k, n: v, offset: offsets[k]})
 	}
 	sort.Slice(sorted, func(i, j int) bool {
-		if sorted[i].n == sorted[j].n {
-			return sorted[i].offset < sorted[j].offset
+		if true {
+			// Group very similar counts together and emit low offsets first.
+			// This will keep together strings that are very similar.
+			deltaN := int(sorted[i].n) - int(sorted[j].n)
+			if deltaN < 0 {
+				deltaN = -deltaN
+			}
+			if uint32(deltaN) < sorted[i].n/32 {
+				return sorted[i].offset < sorted[j].offset
+			}
+		} else {
+			if sorted[i].n == sorted[j].n {
+				return sorted[i].offset < sorted[j].offset
+			}
 		}
 		return sorted[i].n > sorted[j].n
 	})
@@ -199,6 +211,7 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 	const printUntil = 500
 	for i, e := range sorted {
 		if added > o.MaxDictSize {
+			println("Ending. Next Occurrence:", e.n)
 			break
 		}
 		m, ok := output[e.hash]
@@ -206,11 +219,16 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 			// Already added
 			continue
 		}
+		wantLen := e.n / uint32(hashBytes) / 4
+		if wantLen <= lowestOcc {
+			wantLen = lowestOcc
+		}
+
 		var tmp = make([]byte, 0, hashBytes*2)
 		{
 			sortedPrev := make([]match, 0, len(m.followBy))
 			for k, v := range m.preceededBy {
-				if _, ok := output[k]; !ok {
+				if _, ok := output[k]; v < wantLen || !ok {
 					continue
 				}
 				sortedPrev = append(sortedPrev, match{
@@ -229,35 +247,47 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 		tmp = append(tmp, m.value...)
 		delete(output, e.hash)
 
-		wantLen := e.n / uint32(hashBytes) / 4
-		if wantLen <= lowestOcc {
-			wantLen = lowestOcc
-		}
 		sortedFollow := make([]match, 0, len(m.followBy))
 		for {
 			var nh uint32 // Next hash
 			stopAfter := false
-			if true {
+			{
 				sortedFollow = sortedFollow[:0]
 				for k, v := range m.followBy {
 					if _, ok := output[k]; !ok {
 						continue
 					}
 					sortedFollow = append(sortedFollow, match{
-						hash: k,
-						n:    v,
+						hash:   k,
+						n:      v,
+						offset: offsets[k],
 					})
 				}
 				if len(sortedFollow) == 0 {
 					// Step back
-					if len(tmp) > hashBytes {
+					// Extremely small impact, but helps longer hashes a bit.
+					const stepBack = 2
+					if stepBack > 0 && len(tmp) >= hashBytes+stepBack {
 						var t8 [8]byte
-						copy(t8[:], tmp[len(tmp)-hashBytes-1:])
+						copy(t8[:], tmp[len(tmp)-hashBytes-stepBack:])
 						m, ok = output[hashLen(binary.LittleEndian.Uint64(t8[:]), 32, uint8(hashBytes))]
 						if ok && len(m.followBy) > 0 {
-							tmp = tmp[:len(tmp)-1]
-							continue
+							found := []byte(nil)
+							for k := range m.followBy {
+								v, ok := output[k]
+								if !ok {
+									continue
+								}
+								found = v.value
+								break
+							}
+							if found != nil {
+								tmp = tmp[:len(tmp)-stepBack]
+								printf("Step back: %q +  %q\n", string(tmp), string(found))
+								continue
+							}
 						}
+						break
 					} else {
 						if i < printUntil {
 							printf("FOLLOW: none after %q\n", string(m.value))
@@ -266,12 +296,15 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 					break
 				}
 				sort.Slice(sortedFollow, func(i, j int) bool {
+					if sortedFollow[i].n == sortedFollow[j].n {
+						return sortedFollow[i].offset > sortedFollow[j].offset
+					}
 					return sortedFollow[i].n > sortedFollow[j].n
 				})
 				nh = sortedFollow[0].hash
 				stopAfter = sortedFollow[0].n < wantLen
 				if stopAfter && i < printUntil {
-					printf("FOLLOW: %d > %d after %q\n", sortedFollow[0].n, wantLen, string(m.value))
+					printf("FOLLOW: %d < %d after %q. Stopping after this.\n", sortedFollow[0].n, wantLen, string(m.value))
 				}
 			}
 			m, ok = output[nh]
@@ -303,7 +336,7 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 				var t8 [8]byte
 				copy(t8[:], tmp[j:])
 				if i < printUntil {
-					printf("* POST DELETE %q\n", string(t8[:hashBytes]))
+					//printf("* POST DELETE %q\n", string(t8[:hashBytes]))
 				}
 				delete(output, hashLen(binary.LittleEndian.Uint64(t8[:]), 32, uint8(hashBytes)))
 			}
