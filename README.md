@@ -645,6 +645,7 @@ Here are other packages of good quality and pure Go (no cgo wrappers or autoconv
 * [github.com/dsnet/compress](https://github.com/dsnet/compress) - brotli decompression, bzip2 writer.
 * [github.com/ronanh/intcomp](https://github.com/ronanh/intcomp) - Integer compression.
 * [github.com/spenczar/fpc](https://github.com/spenczar/fpc) - Float compression.
+* [github.com/minio/zipindex](https://github.com/minio/zipindex) - External ZIP directory index.
 
 # license
 
