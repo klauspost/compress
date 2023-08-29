@@ -11,27 +11,34 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 
 	"github.com/klauspost/compress/dict"
+	"github.com/klauspost/compress/zstd"
 )
 
 var (
-	wantLenFlag   = flag.Int("len", 112<<10, "Specify custom output size")
-	wantHashBytes = flag.Int("hash", 6, "Hash bytes match length. Minimum match length.")
-	wantMaxBytes  = flag.Int("max", 32<<10, "Max input length to index per input file")
-	wantOutput    = flag.String("o", "dictionary.bin", "Output name")
-	wantFormat    = flag.String("format", "zstd", `Output type. "zstd" "s2" or "raw"`)
-	wantZstdID    = flag.Uint("zstdid", 0, "Zstd dictionary ID. 0 will be random")
-	quiet         = flag.Bool("q", false, "Do not print progress")
+	wantLenFlag    = flag.Int("len", 112<<10, "Specify custom output size")
+	wantHashBytes  = flag.Int("hash", 6, "Hash bytes match length. Minimum match length.")
+	wantMaxBytes   = flag.Int("max", 32<<10, "Max input length to index per input file")
+	wantOutput     = flag.String("o", "dictionary.bin", "Output name")
+	wantFormat     = flag.String("format", "zstd", `Output type. "zstd" "s2" or "raw"`)
+	wantZstdID     = flag.Uint("dictID", 0, "Zstd dictionary ID. Default (0) will be random")
+	wantZstdCompat = flag.Bool("zcompat", true, "Generate dictionary compatible with zstd 1.5.5 and older")
+	wantZstdLevel  = flag.Int("zlevel", 0, "Zstd compression level. 0-4")
+	quiet          = flag.Bool("q", false, "Do not print progress")
 )
 
 func main() {
 	flag.Parse()
+	debug.SetGCPercent(25)
 	o := dict.Options{
-		MaxDictSize: *wantLenFlag,
-		HashBytes:   *wantHashBytes,
-		Output:      os.Stdout,
-		ZstdDictID:  uint32(*wantZstdID),
+		MaxDictSize:    *wantLenFlag,
+		HashBytes:      *wantHashBytes,
+		Output:         os.Stdout,
+		ZstdDictID:     uint32(*wantZstdID),
+		ZstdDictCompat: *wantZstdCompat,
+		ZstdLevel:      zstd.EncoderLevel(*wantZstdLevel),
 	}
 	if *wantOutput == "" || *quiet {
 		o.Output = nil
@@ -39,11 +46,15 @@ func main() {
 	var input [][]byte
 	base := flag.Arg(0)
 	if base == "" {
+		flag.Usage()
 		log.Fatal("no path with files specified")
 	}
 
 	// Index ALL hashes in all files.
-	filepath.Walk(base, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(base, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
 		if info.IsDir() {
 			return nil
 		}
@@ -58,14 +69,22 @@ func main() {
 		if len(b) < 8 {
 			return nil
 		}
+		if len(b) == 0 {
+			return nil
+		}
 		input = append(input, b)
 		if !*quiet {
 			fmt.Print("\r"+info.Name(), " read...")
 		}
 		return nil
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	if len(input) == 0 {
+		log.Fatal("no files read")
+	}
 	var out []byte
-	var err error
 	switch *wantFormat {
 	case "zstd":
 		out, err = dict.BuildZstdDict(input, o)

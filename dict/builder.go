@@ -7,6 +7,7 @@ package dict
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -44,6 +45,16 @@ type Options struct {
 	// Leave at zero to generate a random ID.
 	ZstdDictID uint32
 
+	// ZstdDictCompat will make the dictionary compatible with Zstd v1.5.5 and earlier.
+	// See https://github.com/facebook/zstd/issues/3724
+	ZstdDictCompat bool
+
+	// Use the specified encoder level for Zstandard dictionaries.
+	// The dictionary will be built using the specified encoder level,
+	// which will reflect speed and make the dictionary tailored for that level.
+	// If not set zstd.SpeedBestCompression will be used.
+	ZstdLevel zstd.EncoderLevel
+
 	outFormat int
 }
 
@@ -53,6 +64,7 @@ const (
 	formatS2
 )
 
+// BuildZstdDict will build a Zstandard dictionary from the provided input.
 func BuildZstdDict(input [][]byte, o Options) ([]byte, error) {
 	o.outFormat = formatZstd
 	if o.ZstdDictID == 0 {
@@ -62,11 +74,17 @@ func BuildZstdDict(input [][]byte, o Options) ([]byte, error) {
 	return buildDict(input, o)
 }
 
+// BuildS2Dict will build a S2 dictionary from the provided input.
 func BuildS2Dict(input [][]byte, o Options) ([]byte, error) {
 	o.outFormat = formatS2
+	if o.MaxDictSize > s2.MaxDictSize {
+		return nil, errors.New("max dict size too large")
+	}
 	return buildDict(input, o)
 }
 
+// BuildRawDict will build a raw dictionary from the provided input.
+// This can be used for deflate, lz4 and others.
 func BuildRawDict(input [][]byte, o Options) ([]byte, error) {
 	o.outFormat = formatRaw
 	return buildDict(input, o)
@@ -425,34 +443,7 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 		}
 		return dict.Bytes(), nil
 	}
-	/*
-		avgSize := 256
-		println("\nHuffman: literal total:", remainTotal, "normalized counts on remainder size:", avgSize)
-		huffBuff := make([]byte, 0, avgSize)
-		// Target size
-		div := remainTotal / avgSize
-		if div < 1 {
-			div = 1
-		}
-		for i, n := range remainCnt[:] {
-			if n > 0 {
-				n = n / div
-				if n == 0 {
-					n = 1
-				}
-				huffBuff = append(huffBuff, bytes.Repeat([]byte{byte(i)}, n)...)
-				fmt.Printf("[%d: %d], ", i, n)
-			}
-		}
-		println("")
-		scratch := &huff0.Scratch{}
-		_, _, err := huff0.Compress1X(huffBuff, scratch)
-		if err != nil {
-			// TODO: Handle RLE
-			return nil, err
-		}
-		println("Huffman table:", len(scratch.OutTable), "bytes")
-	*/
+
 	offsetsZstd := [3]int{1, 4, 8}
 	for i, off := range firstOffsets {
 		if i >= 3 || off == 0 || off >= out.Len() {
@@ -462,10 +453,13 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 	}
 	println("\nCompressing. Offsets:", offsetsZstd)
 	return zstd.BuildDict(zstd.BuildDictOptions{
-		ID:       o.ZstdDictID,
-		Contents: input,
-		History:  out.Bytes(),
-		Offsets:  offsetsZstd,
+		ID:         o.ZstdDictID,
+		Contents:   input,
+		History:    out.Bytes(),
+		Offsets:    offsetsZstd,
+		CompatV155: o.ZstdDictCompat,
+		Level:      o.ZstdLevel,
+		DebugOut:   o.Output,
 	})
 }
 
