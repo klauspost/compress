@@ -106,12 +106,12 @@ func MakeDict(data []byte, searchStart []byte) *Dict {
 	return &d
 }
 
-// MakeDict will create a dictionary.
-// 'data' must be at least MinDictSize.
-// If data is longer than MaxDictSize only the last MaxDictSize bytes will be used.
-// A manual first repeat value must be provided. It cannot be 0.
+// MakeDictManual will create a dictionary.
+// 'data' must be at least MinDictSize and less than or equal to MaxDictSize.
+// A manual first repeat index into data must be provided.
+// It must be less than len(data)-8.
 func MakeDictManual(data []byte, firstIdx uint16) *Dict {
-	if len(data) == 0 || int(firstIdx) > len(data)-8 || len(data) > MaxDictSize {
+	if len(data) < MinDictSize || int(firstIdx) >= len(data)-8 || len(data) > MaxDictSize {
 		return nil
 	}
 	var d Dict
@@ -119,9 +119,6 @@ func MakeDictManual(data []byte, firstIdx uint16) *Dict {
 	d.dict = dict
 	if cap(d.dict) < len(d.dict)+16 {
 		d.dict = append(make([]byte, 0, len(d.dict)+16), d.dict...)
-	}
-	if len(dict) < MinDictSize {
-		return nil
 	}
 
 	d.repeat = int(firstIdx)

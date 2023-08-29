@@ -1,6 +1,6 @@
 # Dictionary builder
 
-This is an *experimental* dictionary builder for Zstandard, S2, LZ4 and more.
+This is an *experimental* dictionary builder for Zstandard, S2, LZ4, deflate and more.
 
 This diverges from the Zstandard dictionary builder, and may have some failure scenarios for very small or uniform inputs.
 
