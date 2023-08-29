@@ -231,7 +231,7 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 			candidateL += 8
 		}
 
-		if offset > 65535 && s-base <= 5 && repeat != offset {
+		if offset > 65535 && s-base <= 4 && repeat != offset {
 			// Bail if the match is equal or worse to the encoding.
 			s = nextS + 1
 			if s >= sLimit {

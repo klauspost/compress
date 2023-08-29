@@ -161,7 +161,7 @@ func emitCopy(dst []byte, offset, length int) int {
 	if offset >= 65536 {
 		i := 0
 		if length > 64 {
-			// Emit a length 64 copy, encoded as 5 bytes.
+			// Emit a length 64 copy, encoded as 4 bytes.
 			dst[3] = uint8(offset >> 16)
 			dst[2] = uint8(offset >> 8)
 			dst[1] = uint8(offset)
@@ -176,7 +176,7 @@ func emitCopy(dst []byte, offset, length int) int {
 		if length == 0 {
 			return i
 		}
-		// Emit a copy, offset encoded as 4 bytes.
+		// Emit a copy, offset encoded as 3 bytes.
 		dst[i+0] = uint8(length-1)<<2 | tagCopy4
 		dst[i+1] = uint8(offset)
 		dst[i+2] = uint8(offset >> 8)

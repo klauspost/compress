@@ -375,7 +375,7 @@ func encodeBlockBest(dst, src []byte, dict *Dict) (d int) {
 		offset := s - best.offset
 		s += best.length
 
-		if offset > 65535 && s-base <= 5 && !best.rep {
+		if offset > 65535 && s-base <= 4 && !best.rep {
 			// Bail if the match is equal or worse to the encoding.
 			s = best.s + 1
 			if s >= sLimit {
