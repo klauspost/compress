@@ -92,11 +92,7 @@ func emitLiteral(dst, lit []byte) int {
 		dst[0] = 62<<2 | tagLiteral
 		i = 4
 	default:
-		dst[3] = uint8(n >> 16)
-		dst[2] = uint8(n >> 8)
-		dst[1] = uint8(n)
-		dst[0] = 63<<2 | tagLiteral
-		i = 4
+		panic("unreachable")
 	}
 	return i + copy(dst[i:], lit)
 }
@@ -105,45 +101,30 @@ func emitLiteral(dst, lit []byte) int {
 // Length must be at least 4 and < 1<<24
 func emitRepeat(dst []byte, offset, length int) int {
 	// Repeat offset, make length cheaper
-	length -= 4
-	if length <= 4 {
-		dst[0] = uint8(length)<<2 | tagCopy1
-		dst[1] = 0
+	if length <= 256 {
+		dst[1] = uint8(length - 1)
+		dst[0] = 63 | tagLiteral
 		return 2
 	}
-	if length < 8 && offset < 2048 {
-		// Encode WITH offset
-		dst[1] = uint8(offset)
-		dst[0] = uint8(offset>>8)<<5 | uint8(length)<<2 | tagCopy1
-		return 2
-	}
-	if length < (1<<8)+4 {
-		length -= 4
-		dst[2] = uint8(length)
-		dst[1] = 0
-		dst[0] = 5<<2 | tagCopy1
-		return 3
-	}
-	if length < (1<<16)+(1<<8) {
-		length -= 1 << 8
+	length--
+	if length < 65536 {
 		dst[3] = uint8(length >> 8)
 		dst[2] = uint8(length >> 0)
 		dst[1] = 0
-		dst[0] = 6<<2 | tagCopy1
+		dst[0] = 0<<2 | tagCopy1
 		return 4
 	}
 	const maxRepeat = (1 << 24) - 1
-	length -= 1 << 16
-	left := 0
+	var left int
 	if length > maxRepeat {
-		left = length - maxRepeat + 4
-		length = maxRepeat - 4
+		left = length - maxRepeat
+		length = maxRepeat
 	}
 	dst[4] = uint8(length >> 16)
 	dst[3] = uint8(length >> 8)
 	dst[2] = uint8(length >> 0)
 	dst[1] = 0
-	dst[0] = 7<<2 | tagCopy1
+	dst[0] = 1<<2 | tagCopy1
 	if left > 0 {
 		return 5 + emitRepeat(dst[5:], offset, left)
 	}

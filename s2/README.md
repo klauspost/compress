@@ -1050,7 +1050,7 @@ Default streaming block size is 1MB.
 
 ## 3 Byte Offsets
 
-If the first bytes of a block is `0x80, 0x00, 0x00` (copy, 2 byte offset = 0), this indicates that all [Copy with 4-byte offset (11)](https://github.com/google/snappy/blob/main/format_description.txt#L106) are all 3 bytes instead for the remainder of the block.
+If the first bytes of a block is `0x80, 0x00, 0x00` (copy, 2 byte offset = 0), this indicates that all [Copy with 4-byte offset (11)](https://github.com/google/snappy/blob/main/format_description.txt#L106) are all 3 bytes instead for the remainder of the block and literal value 63 is now a repeat code.
 
 There can be no literals before this tag and no repeats before a match as specified above.
 This will only trigger on this exact tag.
@@ -1060,6 +1060,12 @@ This will only trigger on this exact tag.
 > 16-bit integer (and thus will occupy three bytes).
 
 When in this mode the maximum backreference offset is 16777215.
+
+Furthermore, encoding with literal code 63 no longer emits literals, but indicates a 1 byte repeat offset code.
+
+The next byte indicates the length of the repeat offset - minus one, so length 1 to 256 can be encoded as 2 bytes.
+
+Decode as such: `if tag == 63 { length = readByte() + 1 }`.
 
 # Dictionary Encoding
 

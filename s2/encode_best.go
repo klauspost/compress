@@ -770,21 +770,16 @@ func emitCopyNoRepeatSize(offset, length int) int {
 // emitRepeatSize returns the number of bytes required to encode a repeat.
 // Length must be at least 4 and < 1<<24
 func emitRepeatSize(offset, length int) int {
-	// Repeat offset, make length cheaper
-	if length <= 4+4 || (length < 8+4 && offset < 2048) {
+	if length <= 256 {
 		return 2
 	}
-	if length < (1<<8)+4+4 {
-		return 3
-	}
-	if length < (1<<16)+(1<<8)+4 {
+	if length <= 65536 {
 		return 4
 	}
 	const maxRepeat = (1 << 24) - 1
-	length -= (1 << 16) - 4
 	left := 0
 	if length > maxRepeat {
-		left = length - maxRepeat + 4
+		left = length - maxRepeat
 	}
 	if left > 0 {
 		return 5 + emitRepeatSize(offset, left)
