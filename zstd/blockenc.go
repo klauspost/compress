@@ -791,10 +791,7 @@ func (b *blockEnc) encode(org []byte, raw, rawAllLits bool) error {
 	ml.flush(mlEnc.actualTableLog)
 	of.flush(ofEnc.actualTableLog)
 	ll.flush(llEnc.actualTableLog)
-	err = wr.close()
-	if err != nil {
-		return err
-	}
+	wr.close()
 	b.output = wr.out
 
 	// Maybe even add a bigger margin.
