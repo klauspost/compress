@@ -106,7 +106,7 @@ func emitRepeat(dst []byte, offset, length int) int {
 		dst[0] = 63 | tagLiteral
 		return 2
 	}
-	length--
+
 	if length < 65536 {
 		dst[3] = uint8(length >> 8)
 		dst[2] = uint8(length >> 0)
@@ -140,51 +140,45 @@ func emitRepeat(dst []byte, offset, length int) int {
 //	4 <= length && length <= 1 << 24
 func emitCopy(dst []byte, offset, length int) int {
 	if offset >= 65536 {
-		i := 0
-		if length > 64 {
-			// Emit a length 64 copy, encoded as 4 bytes.
-			dst[3] = uint8(offset >> 16)
-			dst[2] = uint8(offset >> 8)
+		// Emit a length 64 copy, encoded as 4 bytes.
+		if length <= 64 {
+			// Emit a copy, offset encoded as 3 bytes.
+			dst[0] = uint8(length-1)<<2 | tagCopy4
 			dst[1] = uint8(offset)
-			dst[0] = 63<<2 | tagCopy4
-			length -= 64
-			if length >= 4 {
-				// Emit remaining as repeats
-				return 4 + emitRepeat(dst[4:], offset, length)
-			}
-			i = 4
+			dst[2] = uint8(offset >> 8)
+			dst[3] = uint8(offset >> 16)
+			return 4
 		}
-		if length == 0 {
-			return i
-		}
-		// Emit a copy, offset encoded as 3 bytes.
-		dst[i+0] = uint8(length-1)<<2 | tagCopy4
-		dst[i+1] = uint8(offset)
-		dst[i+2] = uint8(offset >> 8)
-		dst[i+3] = uint8(offset >> 16)
-		return i + 4
+
+		dst[3] = uint8(offset >> 16)
+		dst[2] = uint8(offset >> 8)
+		dst[1] = uint8(offset)
+		dst[0] = 63<<2 | tagCopy4
+		length -= 64
+		// Emit remaining as repeats
+		return 4 + emitRepeat(dst[4:], offset, length)
 	}
 
 	// Offset no more than 2 bytes.
 	if length > 64 {
-		off := 3
 		if offset < 2048 {
 			// emit 8 bytes as tagCopy1, rest as repeats.
 			dst[1] = uint8(offset)
-			dst[0] = uint8(offset>>8)<<5 | uint8(8-4)<<2 | tagCopy1
-			length -= 8
-			off = 2
+			dst[0] = uint8(offset>>8)<<5 | uint8(7)<<2 | tagCopy1
+			length -= 12
+			return 2 + emitRepeat(dst[2:], offset, length)
 		} else {
-			// Emit a length 60 copy, encoded as 3 bytes.
-			// Emit remaining as repeat value (minimum 4 bytes).
+			// Emit a length 64 copy, encoded as 3 bytes.
+			// Emit remaining as repeat value.
 			dst[2] = uint8(offset >> 8)
 			dst[1] = uint8(offset)
-			dst[0] = 59<<2 | tagCopy2
-			length -= 60
+			dst[0] = 63<<2 | tagCopy2
+			length -= 64
+			// Emit remaining as repeats. At least 1 byte.
+			return 3 + emitRepeat(dst[3:], offset, length)
 		}
-		// Emit remaining as repeats, at least 4 bytes remain.
-		return off + emitRepeat(dst[off:], offset, length)
 	}
+
 	if length >= 12 || offset >= 2048 {
 		// Emit the remaining copy, encoded as 3 bytes.
 		dst[2] = uint8(offset >> 8)
