@@ -34,6 +34,9 @@ const errorNotEnoughLiterals = 4
 // error reported when capacity of `out` is too small
 const errorNotEnoughSpace = 5
 
+// error reported when bits are overread.
+const errorOverread = 6
+
 const maxMatchLen = 131074
 
 // size of struct seqVals
@@ -247,8 +250,9 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 	{
 		brPointer := GP64()
 		MOVQ(brPointerStash, brPointer)
+
 		Comment("Fill bitreader to have enough for the offset and match length.")
-		o.bitreaderFill(name+"_fill", brValue, brBitsRead, brOffset, brPointer)
+		o.bitreaderFill(name+"_fill", brValue, brBitsRead, brOffset, brPointer, LabelRef("error_overread"))
 
 		Comment("Update offset")
 		// Up to 32 extra bits
@@ -261,7 +265,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 		// If we need more than 56 in total, we must refill here.
 		if !o.fiftysix {
 			Comment("Fill bitreader to have enough for the remaining")
-			o.bitreaderFill(name+"_fill_2", brValue, brBitsRead, brOffset, brPointer)
+			o.bitreaderFill(name+"_fill_2", brValue, brBitsRead, brOffset, brPointer, LabelRef("error_overread"))
 		}
 
 		Comment("Update literal length")
@@ -502,6 +506,12 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 		o.returnWithCode(errorNotEnoughLiterals)
 	}
 
+	Comment("Return with overread error")
+	{
+		Label("error_overread")
+		o.returnWithCode(errorOverread)
+	}
+
 	if !o.useSeqs {
 		Comment("Return with not enough output space error")
 		Label("error_not_enough_space")
@@ -529,7 +539,7 @@ func (o options) returnWithCode(returnCode uint32) {
 }
 
 // bitreaderFill will make sure at least 56 bits are available.
-func (o options) bitreaderFill(name string, brValue, brBitsRead, brOffset, brPointer reg.GPVirtual) {
+func (o options) bitreaderFill(name string, brValue, brBitsRead, brOffset, brPointer reg.GPVirtual, overread LabelRef) {
 	// bitreader_fill begin
 	CMPQ(brOffset, U8(8)) //  b.off >= 8
 	JL(LabelRef(name + "_byte_by_byte"))
@@ -545,7 +555,7 @@ func (o options) bitreaderFill(name string, brValue, brBitsRead, brOffset, brPoi
 
 	Label(name + "_byte_by_byte")
 	CMPQ(brOffset, U8(0)) /* for b.off > 0 */
-	JLE(LabelRef(name + "_end"))
+	JLE(LabelRef(name + "_check_overread"))
 
 	CMPQ(brBitsRead, U8(7)) /* for brBitsRead > 7 */
 	JLE(LabelRef(name + "_end"))
@@ -564,6 +574,10 @@ func (o options) bitreaderFill(name string, brValue, brBitsRead, brOffset, brPoi
 		ORQ(tmp, brValue)
 	}
 	JMP(LabelRef(name + "_byte_by_byte"))
+
+	Label(name + "_check_overread")
+	CMPQ(brBitsRead, U8(64))
+	JA(overread)
 
 	Label(name + "_end")
 }

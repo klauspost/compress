@@ -77,6 +77,7 @@ const (
 	magicChunkSnappy = "\xff\x06\x00\x00" + magicBodySnappy
 	magicBodySnappy  = "sNaPpY"
 	magicBody        = "S2sTwO"
+	magicBodyPP      = "S2s2++"
 
 	// maxBlockSize is the maximum size of the input to encodeBlock.
 	//

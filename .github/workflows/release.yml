@@ -5,12 +5,11 @@ on:
     tags:
       - 'v*'
 
-permissions: read-all
+permissions:
+  contents: write # for goreleaser/goreleaser-action to create a GitHub release
 
 jobs:
   goreleaser:
-    permissions:
-        content: write # for goreleaser/goreleaser-action to create a GitHub release
     runs-on: ubuntu-latest
     steps:
       -

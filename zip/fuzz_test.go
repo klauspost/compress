@@ -30,8 +30,8 @@ func FuzzReader(f *testing.F) {
 		}
 		f.Add(b)
 	}
-	fuzz.AddFromZip(f, "testdata/FuzzReader-raw.zip", true, testing.Short())
-	fuzz.AddFromZip(f, "testdata/FuzzReader-enc.zip", false, testing.Short())
+	fuzz.AddFromZip(f, "testdata/FuzzReader-raw.zip", fuzz.TypeRaw, testing.Short())
+	fuzz.AddFromZip(f, "testdata/FuzzReader-enc.zip", fuzz.TypeGoFuzz, testing.Short())
 
 	f.Fuzz(func(t *testing.T, b []byte) {
 		r, err := NewReader(bytes.NewReader(b), int64(len(b)))

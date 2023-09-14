@@ -4,6 +4,7 @@
 package zstd
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"runtime"
@@ -14,7 +15,13 @@ import (
 
 var isRaceTest bool
 
+// Fuzzing tweaks:
+var fuzzStartF = flag.Int("fuzz-start", int(SpeedFastest), "Start fuzzing at this level")
+var fuzzEndF = flag.Int("fuzz-end", int(SpeedBestCompression), "End fuzzing at this level (inclusive)")
+var fuzzMaxF = flag.Int("fuzz-max", 1<<20, "Maximum input size")
+
 func TestMain(m *testing.M) {
+	flag.Parse()
 	ec := m.Run()
 	if ec == 0 && runtime.NumGoroutine() > 2 {
 		n := 0

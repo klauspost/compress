@@ -30,7 +30,7 @@ func TestWriterMemUsage(t *testing.T) {
 		t.Logf("%s: Memory Used: %dKB, %d allocs", t.Name(), (after.HeapInuse-before.HeapInuse)/1024, after.HeapObjects-before.HeapObjects)
 	}
 	data := make([]byte, 100000)
-	t.Run(fmt.Sprint("stateless"), func(t *testing.T) {
+	t.Run("stateless", func(t *testing.T) {
 		testMem(t, func() {
 			StatelessDeflate(io.Discard, data, false, nil)
 		})

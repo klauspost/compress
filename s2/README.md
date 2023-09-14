@@ -1022,6 +1022,7 @@ See [using indexes](https://github.com/klauspost/compress/tree/master/s2#using-i
 * Frame [Stream identifier](https://github.com/google/snappy/blob/master/framing_format.txt#L68) changed from `sNaPpY` to `S2sTwO`.
 * [Framed compressed blocks](https://github.com/google/snappy/blob/master/format_description.txt) can be up to 4MB (up from 64KB).
 * Compressed blocks can have an offset of `0`, which indicates to repeat the last seen offset.
+* If the first bytes of a block is `0x80, 0x00, 0x00` (copy, 2 byte offset = 0), this indicates that all [Copy with 4-byte offset (11)](https://github.com/google/snappy/blob/main/format_description.txt#L106) are all 3 bytes instead for the remainder of the block.
 
 Repeat offsets must be encoded as a [2.2.1. Copy with 1-byte offset (01)](https://github.com/google/snappy/blob/master/format_description.txt#L89), where the offset is 0.
 
@@ -1046,6 +1047,25 @@ Lengths are stored as little endian values.
 The first copy of a block cannot be a repeat offset and the offset is reset on every block in streams.
 
 Default streaming block size is 1MB.
+
+## 3 Byte Offsets
+
+If the first bytes of a block is `0x80, 0x00, 0x00` (copy, 2 byte offset = 0), this indicates that all [Copy with 4-byte offset (11)](https://github.com/google/snappy/blob/main/format_description.txt#L106) are all 3 bytes instead for the remainder of the block and literal value 63 is now a repeat code.
+
+There can be no literals before this tag and no repeats before a match as specified above.
+This will only trigger on this exact tag.
+
+> These are like the copies with 2-byte offsets (see previous subsection),
+> except that the offset is stored as a 24-bit integer instead of a
+> 16-bit integer (and thus will occupy three bytes).
+
+When in this mode the maximum backreference offset is 16777215.
+
+Furthermore, encoding with literal code 63 no longer emits literals, but indicates a 1 byte repeat offset code.
+
+The next byte indicates the length of the repeat offset - minus one, so length 1 to 256 can be encoded as 2 bytes.
+
+Decode as such: `if tag == 63 { length = readByte() + 1 }`.
 
 # Dictionary Encoding
 

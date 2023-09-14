@@ -375,7 +375,7 @@ func encodeBlockBest(dst, src []byte, dict *Dict) (d int) {
 		offset := s - best.offset
 		s += best.length
 
-		if offset > 65535 && s-base <= 5 && !best.rep {
+		if offset > 65535 && s-base <= 4 && !best.rep {
 			// Bail if the match is equal or worse to the encoding.
 			s = best.s + 1
 			if s >= sLimit {
@@ -713,29 +713,18 @@ emitRemainder:
 //	4 <= length && length <= 1 << 24
 func emitCopySize(offset, length int) int {
 	if offset >= 65536 {
-		i := 0
-		if length > 64 {
-			length -= 64
-			if length >= 4 {
-				// Emit remaining as repeats
-				return 5 + emitRepeatSize(offset, length)
-			}
-			i = 5
-		}
-		if length == 0 {
-			return i
-		}
-		return i + 5
+		// Emit remaining as repeats
+		return 4 + emitRepeatSize(offset, length-64)
 	}
 
 	// Offset no more than 2 bytes.
 	if length > 64 {
 		if offset < 2048 {
 			// Emit 8 bytes, then rest as repeats...
-			return 2 + emitRepeatSize(offset, length-8)
+			return 2 + emitRepeatSize(offset, length-12)
 		}
 		// Emit remaining as repeats, at least 4 bytes remain.
-		return 3 + emitRepeatSize(offset, length-60)
+		return 3 + emitRepeatSize(offset, length-64)
 	}
 	if length >= 12 || offset >= 2048 {
 		return 3
@@ -752,7 +741,7 @@ func emitCopySize(offset, length int) int {
 //	4 <= length && length <= 1 << 24
 func emitCopyNoRepeatSize(offset, length int) int {
 	if offset >= 65536 {
-		return 5 + 5*(length/64)
+		return 4 + 4*(length/64)
 	}
 
 	// Offset no more than 2 bytes.
@@ -770,24 +759,19 @@ func emitCopyNoRepeatSize(offset, length int) int {
 // emitRepeatSize returns the number of bytes required to encode a repeat.
 // Length must be at least 4 and < 1<<24
 func emitRepeatSize(offset, length int) int {
-	// Repeat offset, make length cheaper
-	if length <= 4+4 || (length < 8+4 && offset < 2048) {
+	if length <= 0 {
+		return 0
+	}
+	if length <= 256 {
 		return 2
 	}
-	if length < (1<<8)+4+4 {
-		return 3
-	}
-	if length < (1<<16)+(1<<8)+4 {
+	if length <= 65536 {
 		return 4
 	}
 	const maxRepeat = (1 << 24) - 1
-	length -= (1 << 16) - 4
 	left := 0
 	if length > maxRepeat {
-		left = length - maxRepeat + 4
+		left = length - maxRepeat
 	}
-	if left > 0 {
-		return 5 + emitRepeatSize(offset, left)
-	}
-	return 5
+	return 5 + emitRepeatSize(offset, left)
 }

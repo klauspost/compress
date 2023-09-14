@@ -563,6 +563,48 @@ func TestNewDecoderSmallFile(t *testing.T) {
 	t.Logf("Decoded %d bytes with %f.2 MB/s", n, mbpersec)
 }
 
+// cursedReader wraps a reader and returns zero bytes every other read.
+// This is used to test the ability of the consumer to handle empty reads without EOF,
+// which can happen when reading from a network connection.
+type cursedReader struct {
+	io.Reader
+	numReads int
+}
+
+func (r *cursedReader) Read(p []byte) (n int, err error) {
+	r.numReads++
+	if r.numReads%2 == 0 {
+		return 0, nil
+	}
+
+	return r.Reader.Read(p)
+}
+
+func TestNewDecoderZeroLengthReads(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
+	file := "testdata/z000028.zst"
+	const wantSize = 39807
+	f, err := os.Open(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	dec, err := NewReader(&cursedReader{Reader: f})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	n, err := io.Copy(io.Discard, dec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != wantSize {
+		t.Errorf("want size %d, got size %d", wantSize, n)
+	}
+}
+
 type readAndBlock struct {
 	buf     []byte
 	unblock chan struct{}

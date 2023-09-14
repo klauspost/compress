@@ -2,7 +2,6 @@ package gzhttp
 
 import (
 	"bufio"
-	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
@@ -76,7 +75,7 @@ type GzipResponseWriter struct {
 	suffixETag       string // Suffix to add to ETag header if response is compressed.
 	dropETag         bool   // Drop ETag header if response is compressed (supersedes suffixETag).
 	sha256Jitter     bool   // Use sha256 for jitter.
-	randomJitter     []byte // Add random bytes to output as header field.
+	randomJitter     string // Add random bytes to output as header field.
 	jitterBuffer     int    // Maximum buffer to accumulate before doing jitter.
 
 	contentTypeFilter func(ct string) bool // Only compress if the response is one of these content-types. All are accepted if empty.
@@ -170,6 +169,10 @@ func (w *GzipResponseWriter) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
+func (w *GzipResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
 var castagnoliTable = crc32.MakeTable(crc32.Castagnoli)
 
 // startGzip initializes a GZIP writer and writes the buffer.
@@ -216,7 +219,7 @@ func (w *GzipResponseWriter) startGzip(remain []byte) error {
 		// Initialize the GZIP response.
 		w.init()
 
-		// Set random jitter based on CRC of current buffer
+		// Set random jitter based on CRC or SHA-256 of current buffer.
 		// Before first write.
 		if len(w.randomJitter) > 0 {
 			var jitRNG uint32
@@ -232,20 +235,19 @@ func (w *GzipResponseWriter) startGzip(remain []byte) error {
 						}
 						h.Write(remain)
 					}
-					var tmp [sha256.BlockSize]byte
+					var tmp [sha256.Size]byte
 					jitRNG = binary.LittleEndian.Uint32(h.Sum(tmp[:0]))
 				} else {
-					h := crc32.New(castagnoliTable)
-					h.Write(w.buf)
+					h := crc32.Update(0, castagnoliTable, w.buf)
 					// Use only up to "w.jitterBuffer", otherwise the output depends on write sizes.
 					if len(remain) > 0 && len(w.buf) < w.jitterBuffer {
 						remain := remain
 						if len(remain)+len(w.buf) > w.jitterBuffer {
 							remain = remain[:w.jitterBuffer-len(w.buf)]
 						}
-						h.Write(remain)
+						h = crc32.Update(h, castagnoliTable, remain)
 					}
-					jitRNG = bits.RotateLeft32(h.Sum32(), 19) ^ 0xab0755de
+					jitRNG = bits.RotateLeft32(h, 19) ^ 0xab0755de
 				}
 			} else {
 				// Get from rand.Reader
@@ -300,7 +302,15 @@ func (w *GzipResponseWriter) startPlain() error {
 }
 
 // WriteHeader just saves the response code until close or GZIP effective writes.
+// In the specific case of 1xx status codes, WriteHeader is directly calling the wrapped ResponseWriter.
 func (w *GzipResponseWriter) WriteHeader(code int) {
+	// Handle informational headers
+	// This is gated to not forward 1xx responses on builds prior to go1.20.
+	if shouldWrite1xxResponses() && code >= 100 && code <= 199 {
+		w.ResponseWriter.WriteHeader(code)
+		return
+	}
+
 	if w.code == 0 {
 		w.code = code
 	}
@@ -526,7 +536,7 @@ type config struct {
 	suffixETag       string
 	dropETag         bool
 	jitterBuffer     int
-	randomJitter     []byte
+	randomJitter     string
 	sha256Jitter     bool
 }
 
@@ -721,14 +731,13 @@ func RandomJitter(n, buffer int, paranoid bool) option {
 	return func(c *config) {
 		if n > 0 {
 			c.sha256Jitter = paranoid
-			c.randomJitter = bytes.Repeat([]byte("Padding-"), 1+(n/8))
-			c.randomJitter = c.randomJitter[:(n + 1)]
+			c.randomJitter = strings.Repeat("Padding-", 1+(n/8))[:n+1]
 			c.jitterBuffer = buffer
 			if c.jitterBuffer == 0 {
 				c.jitterBuffer = 64 << 10
 			}
 		} else {
-			c.randomJitter = nil
+			c.randomJitter = ""
 			c.jitterBuffer = 0
 		}
 	}
@@ -922,6 +931,10 @@ func atoi(s string) (int, bool) {
 	return int(i64), err == nil
 }
 
+type unwrapper interface {
+	Unwrap() http.ResponseWriter
+}
+
 // newNoGzipResponseWriter will return a response writer that
 // cleans up compression artifacts.
 // Depending on whether http.Hijacker is supported the returned will as well.
@@ -932,10 +945,12 @@ func newNoGzipResponseWriter(w http.ResponseWriter) http.ResponseWriter {
 			http.ResponseWriter
 			http.Hijacker
 			http.Flusher
+			unwrapper
 		}{
 			ResponseWriter: n,
 			Hijacker:       hj,
 			Flusher:        n,
+			unwrapper:      n,
 		}
 		return x
 	}
@@ -984,4 +999,8 @@ func (n *NoGzipResponseWriter) WriteHeader(statusCode int) {
 		n.hdrCleaned = true
 	}
 	n.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (n *NoGzipResponseWriter) Unwrap() http.ResponseWriter {
+	return n.ResponseWriter
 }

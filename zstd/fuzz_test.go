@@ -15,18 +15,9 @@ import (
 )
 
 func FuzzDecodeAll(f *testing.F) {
-	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-raw.zip", true, testing.Short())
-	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-encoded.zip", false, testing.Short())
-	decLow, err := NewReader(nil, WithDecoderLowmem(true), WithDecoderConcurrency(2), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true))
-	if err != nil {
-		f.Fatal(err)
-	}
-	defer decLow.Close()
-	decHi, err := NewReader(nil, WithDecoderLowmem(false), WithDecoderConcurrency(2), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true))
-	if err != nil {
-		f.Fatal(err)
-	}
-	defer decHi.Close()
+	fuzz.AddFromZip(f, "testdata/decode-regression.zip", fuzz.TypeRaw, false)
+	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-raw.zip", fuzz.TypeRaw, testing.Short())
+	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-encoded.zip", fuzz.TypeGoFuzz, testing.Short())
 
 	f.Fuzz(func(t *testing.T, b []byte) {
 		// Just test if we crash...
@@ -36,10 +27,23 @@ func FuzzDecodeAll(f *testing.F) {
 				t.Fatal(r)
 			}
 		}()
-		b1, err1 := decLow.DecodeAll(b, nil)
-		b2, err2 := decHi.DecodeAll(b, nil)
+
+		decLow, err := NewReader(nil, WithDecoderLowmem(true), WithDecoderConcurrency(2), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true))
+		if err != nil {
+			f.Fatal(err)
+		}
+		defer decLow.Close()
+		decHi, err := NewReader(nil, WithDecoderLowmem(false), WithDecoderConcurrency(2), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true))
+		if err != nil {
+			f.Fatal(err)
+		}
+		defer decHi.Close()
+		b1, err1 := decLow.DecodeAll(b, make([]byte, 0, len(b)))
+		b2, err2 := decHi.DecodeAll(b, make([]byte, 0, len(b)))
 		if err1 != err2 {
-			t.Log(err1, err2)
+			if (err1 == nil) != (err2 == nil) {
+				t.Errorf("err low: %v, hi: %v", err1, err2)
+			}
 		}
 		if err1 != nil {
 			b1, b2 = b1[:0], b2[:0]
@@ -60,8 +64,9 @@ func FuzzDecAllNoBMI2(f *testing.F) {
 }
 
 func FuzzDecoder(f *testing.F) {
-	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-raw.zip", true, testing.Short())
-	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-encoded.zip", false, testing.Short())
+	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-raw.zip", fuzz.TypeRaw, testing.Short())
+	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-encoded.zip", fuzz.TypeGoFuzz, testing.Short())
+	//fuzz.AddFromZip(f, "testdata/fuzz/decode-oss.zip", fuzz.TypeOSSFuzz, false)
 
 	brLow := newBytesReader(nil)
 	brHi := newBytesReader(nil)
@@ -88,16 +93,25 @@ func FuzzDecoder(f *testing.F) {
 		}
 		defer decHi.Close()
 
+		if debugDecoder {
+			fmt.Println("LOW CONCURRENT")
+		}
 		b1, err1 := io.ReadAll(decLow)
+
+		if debugDecoder {
+			fmt.Println("HI NOT CONCURRENT")
+		}
 		b2, err2 := io.ReadAll(decHi)
 		if err1 != err2 {
-			t.Log(err1, err2)
+			if (err1 == nil) != (err2 == nil) {
+				t.Errorf("err low concurrent: %v, hi: %v", err1, err2)
+			}
 		}
 		if err1 != nil {
 			b1, b2 = b1[:0], b2[:0]
 		}
 		if !bytes.Equal(b1, b2) {
-			t.Fatalf("Output mismatch, low: %v, hi: %v", err1, err2)
+			t.Fatalf("Output mismatch, low concurrent: %v, hi: %v", err1, err2)
 		}
 	})
 }
@@ -112,20 +126,17 @@ func FuzzNoBMI2Dec(f *testing.F) {
 }
 
 func FuzzEncoding(f *testing.F) {
-	fuzz.AddFromZip(f, "testdata/fuzz/encode-corpus-raw.zip", true, testing.Short())
-	fuzz.AddFromZip(f, "testdata/comp-crashers.zip", true, false)
-	fuzz.AddFromZip(f, "testdata/fuzz/encode-corpus-encoded.zip", false, testing.Short())
+	fuzz.AddFromZip(f, "testdata/fuzz/encode-corpus-raw.zip", fuzz.TypeRaw, testing.Short())
+	fuzz.AddFromZip(f, "testdata/comp-crashers.zip", fuzz.TypeRaw, false)
+	fuzz.AddFromZip(f, "testdata/fuzz/encode-corpus-encoded.zip", fuzz.TypeGoFuzz, testing.Short())
 	// Fuzzing tweaks:
 	const (
 		// Test a subset of encoders.
 		startFuzz = SpeedFastest
-		endFuzz   = SpeedBetterCompression
+		endFuzz   = SpeedBestCompression
 
 		// Also tests with dictionaries...
 		testDicts = true
-
-		// Max input size:
-		maxSize = 1 << 20
 	)
 
 	var dec *Decoder
@@ -138,16 +149,20 @@ func FuzzEncoding(f *testing.F) {
 		dicts = readDicts(f, zr)
 	}
 
+	if testing.Short() && *fuzzEndF > int(SpeedBetterCompression) {
+		*fuzzEndF = int(SpeedBetterCompression)
+	}
+
 	initEnc := func() func() {
 		var err error
-		dec, err = NewReader(nil, WithDecoderConcurrency(2), WithDecoderDicts(dicts...), WithDecoderMaxWindow(64<<10), WithDecoderMaxMemory(maxSize))
+		dec, err = NewReader(nil, WithDecoderConcurrency(2), WithDecoderDicts(dicts...), WithDecoderMaxWindow(64<<10), WithDecoderMaxMemory(uint64(*fuzzMaxF)))
 		if err != nil {
 			panic(err)
 		}
 		for level := startFuzz; level <= endFuzz; level++ {
 			encs[level], err = NewWriter(nil, WithEncoderCRC(true), WithEncoderLevel(level), WithEncoderConcurrency(2), WithWindowSize(64<<10), WithZeroFrames(true), WithLowerEncoderMem(true))
 			if testDicts {
-				encsD[level], err = NewWriter(nil, WithEncoderCRC(true), WithEncoderLevel(level), WithEncoderConcurrency(2), WithWindowSize(64<<10), WithZeroFrames(true), WithEncoderDict(dicts[level]), WithLowerEncoderMem(true), WithLowerEncoderMem(true))
+				encsD[level], err = NewWriter(nil, WithEncoderCRC(true), WithEncoderLevel(level), WithEncoderConcurrency(2), WithWindowSize(64<<10), WithZeroFrames(true), WithEncoderDict(dicts[int(level)%len(dicts)]), WithLowerEncoderMem(true), WithLowerEncoderMem(true))
 			}
 		}
 		return func() {
@@ -179,7 +194,7 @@ func FuzzEncoding(f *testing.F) {
 				t.Fatalf("%v:\n%v", r, string(stack))
 			}
 		}()
-		if len(data) > maxSize {
+		if len(data) > *fuzzMaxF {
 			return
 		}
 		var bufSize = len(data)
@@ -191,7 +206,7 @@ func FuzzEncoding(f *testing.F) {
 			}
 		}
 
-		for level := startFuzz; level <= endFuzz; level++ {
+		for level := *fuzzStartF; level <= *fuzzEndF; level++ {
 			enc := encs[level]
 			dst.Reset()
 			enc.Reset(&dst)

@@ -6,6 +6,7 @@ package fuzz
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -16,8 +17,20 @@ import (
 	"testing"
 )
 
+type InputType uint8
+
+const (
+	// TypeRaw indicates that files are raw bytes.
+	TypeRaw InputType = iota
+	// TypeGoFuzz indicates files are from Go Fuzzer.
+	TypeGoFuzz
+	// TypeOSSFuzz indicates that files are from OSS fuzzer with size before data.
+	TypeOSSFuzz
+)
+
 // AddFromZip will read the supplied zip and add all as corpus for f.
-func AddFromZip(f *testing.F, filename string, raw, short bool) {
+// Byte slices only.
+func AddFromZip(f *testing.F, filename string, t InputType, short bool) {
 	file, err := os.Open(filename)
 	if err != nil {
 		f.Fatal(err)
@@ -44,11 +57,25 @@ func AddFromZip(f *testing.F, filename string, raw, short bool) {
 			f.Fatal(err)
 		}
 		rc.Close()
-		raw := raw
-		if bytes.HasPrefix(b, []byte("go test fuzz")) {
-			raw = false
+		t := t
+		if t == TypeOSSFuzz {
+			t = TypeRaw // Fallback
+			if len(b) >= 4 {
+				sz := binary.BigEndian.Uint32(b)
+				if sz <= uint32(len(b))-4 {
+					f.Add(b[4 : 4+sz])
+					continue
+				}
+			}
 		}
-		if raw {
+
+		if bytes.HasPrefix(b, []byte("go test fuzz")) {
+			t = TypeGoFuzz
+		} else {
+			t = TypeRaw
+		}
+
+		if t == TypeRaw {
 			f.Add(b)
 			continue
 		}
