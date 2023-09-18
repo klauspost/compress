@@ -1048,24 +1048,33 @@ The first copy of a block cannot be a repeat offset and the offset is reset on e
 
 Default streaming block size is 1MB.
 
-## 3 Byte Offsets
+## S2++ Mode
 
 If the first bytes of a block is `0x80, 0x00, 0x00` (copy, 2 byte offset = 0), this indicates that all [Copy with 4-byte offset (11)](https://github.com/google/snappy/blob/main/format_description.txt#L106) are all 3 bytes instead for the remainder of the block and literal value 63 is now a repeat code.
 
 There can be no literals before this tag and no repeats before a match as specified above.
 This will only trigger on this exact tag.
 
-> These are like the copies with 2-byte offsets (see previous subsection),
-> except that the offset is stored as a 24-bit integer instead of a
-> 16-bit integer (and thus will occupy three bytes).
+## Tag 0x3 (TagCopy4)
 
-When in this mode the maximum backreference offset is 16777215.
+| Bits | Meaning | Description                                                            |
+|------|---------|------------------------------------------------------------------------|
+| 0-1  | Tag     | Always 0x3                                                             |
+| 2    | Repeat  | 0 if copy, 1 if repeat.                                                |
+| 3-7  | Length  | Length of copy or repeat<br/>Values are 0-31. See decoding table below |
 
-Furthermore, encoding with literal code 63 no longer emits literals, but indicates a 1 byte repeat offset code.
+| Value | Output              |
+|-------|---------------------|
+| 0-28  | Base + Value        |
+| 29    | Base + Read 1 byte  |
+| 30    | Base + Read 2 bytes |
+| 31    | Base + Read 3 bytes |
 
-The next byte indicates the length of the repeat offset - minus one, so length 1 to 256 can be encoded as 2 bytes.
+For copy operations the Base value is `4` For repeat, the base value is `1`.
 
-Decode as such: `if tag == 63 { length = readByte() + 1 }`.
+Copy offsets are encoded as `3` bytes following the length. The maximum backreference offset is therefore 16777215.
+
+The S2 repeat encoding specified on TagCopy2 is not valid in this mode.
 
 # Dictionary Encoding
 
