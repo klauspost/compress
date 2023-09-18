@@ -16,7 +16,7 @@ This package provides various compression algorithms.
 
 # changelog
 
-* Sept 19th, 2023 - [v1.17.1](https://github.com/klauspost/compress/releases/tag/v1.17.0)
+* Sept 19th, 2023 - [v1.17.0](https://github.com/klauspost/compress/releases/tag/v1.17.0)
 	* Add experimental dictionary builder  https://github.com/klauspost/compress/pull/853
 	* Add xerial snappy read/writer https://github.com/klauspost/compress/pull/838
 	* flate: Add limited window compression https://github.com/klauspost/compress/pull/843
