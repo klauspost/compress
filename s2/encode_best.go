@@ -714,7 +714,7 @@ emitRemainder:
 func emitCopySize(offset, length int) int {
 	if offset >= 65536 {
 		// Emit remaining as repeats
-		return 4 + emitRepeatSize(offset, length-64)
+		return 3 + emitRepeatSize(offset, length-3)
 	}
 
 	// Offset no more than 2 bytes.
@@ -762,16 +762,20 @@ func emitRepeatSize(offset, length int) int {
 	if length <= 0 {
 		return 0
 	}
+
+	if length <= 29 {
+		return 1
+	}
 	if length <= 256 {
 		return 2
 	}
 	if length <= 65536 {
-		return 4
+		return 3
 	}
 	const maxRepeat = (1 << 24) - 1
 	left := 0
 	if length > maxRepeat {
 		left = length - maxRepeat
 	}
-	return 5 + emitRepeatSize(offset, left)
+	return 4 + emitRepeatSize(offset, left)
 }
