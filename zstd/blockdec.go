@@ -675,6 +675,9 @@ func (b *blockDec) decodeSequences(hist *history) error {
 	}
 	b.sequence = b.sequence[:hist.decoders.nSeqs]
 	if hist.decoders.nSeqs == 0 {
+		if len(hist.decoders.literals) == 0 {
+			return errors.New("invalid block: no literals nor sequences found")
+		}
 		hist.decoders.seqSize = len(hist.decoders.literals)
 		return nil
 	}
