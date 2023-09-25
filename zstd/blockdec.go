@@ -489,9 +489,6 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		return err
 	}
 	if hist.decoders.nSeqs == 0 {
-		if len(hist.decoders.literals) == 0 {
-			return errors.New("invalid block: no literals nor sequences found")
-		}
 		b.dst = append(b.dst, hist.decoders.literals...)
 		return nil
 	}
