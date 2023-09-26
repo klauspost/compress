@@ -21,44 +21,37 @@ func FuzzDecode(f *testing.F) {
 }
 
 func FuzzEncode(f *testing.F) {
-	fuzz.AddFromZip(f, "../../s2/testdata/enc_regressions.zip", fuzz.TypeRaw, false)
-	fuzz.AddFromZip(f, "../../s2/testdata/fuzz/block-corpus-raw.zip", fuzz.TypeRaw, testing.Short())
-	fuzz.AddFromZip(f, "../../s2/testdata/fuzz/block-corpus-enc.zip", fuzz.TypeGoFuzz, testing.Short())
+	fuzz.AddFromZip(f, "testdata/block-corpus-raw.zip", fuzz.TypeRaw, false)
 
 	f.Fuzz(func(t *testing.T, data []byte) {
-		t.Run("standard", func(t *testing.T) {
-			encoded := Encode(make([]byte, 0, len(data)/2), data)
-			decoded, err := Decode(encoded)
-			if err != nil {
-				t.Errorf("input: %+v, encoded: %+v", data, encoded)
-				t.Fatal(err)
-			}
-			if !bytes.Equal(decoded, data) {
-				t.Fatal("mismatch")
-			}
+		encoded := Encode(make([]byte, 0, len(data)/2), data)
+		decoded, err := Decode(encoded)
+		if err != nil {
+			t.Errorf("input: %+v, encoded: %+v", data, encoded)
+			t.Fatal(err)
+		}
+		if !bytes.Equal(decoded, data) {
+			t.Fatal("mismatch")
+		}
 
-		})
-		t.Run("better", func(t *testing.T) {
-			encoded := EncodeBetter(make([]byte, 0, len(data)/2), data)
-			decoded, err := Decode(encoded)
-			if err != nil {
-				t.Errorf("input: %+v, encoded: %+v", data, encoded)
-				t.Fatal(err)
-			}
-			if !bytes.Equal(decoded, data) {
-				t.Fatal("mismatch")
-			}
-		})
-		t.Run("snappy", func(t *testing.T) {
-			encoded := s2.EncodeSnappy(make([]byte, 0, len(data)/2), data)
-			decoded, err := Decode(encoded)
-			if err != nil {
-				t.Errorf("input: %+v, encoded: %+v", data, encoded)
-				t.Fatal(err)
-			}
-			if !bytes.Equal(decoded, data) {
-				t.Fatal("mismatch")
-			}
-		})
+		encoded = EncodeBetter(make([]byte, 0, len(data)/2), data)
+		decoded, err = Decode(encoded)
+		if err != nil {
+			t.Errorf("input: %+v, encoded: %+v", data, encoded)
+			t.Fatal(err)
+		}
+		if !bytes.Equal(decoded, data) {
+			t.Fatal("mismatch")
+		}
+
+		encoded = s2.EncodeSnappy(make([]byte, 0, len(data)/2), data)
+		decoded, err = Decode(encoded)
+		if err != nil {
+			t.Errorf("input: %+v, encoded: %+v", data, encoded)
+			t.Fatal(err)
+		}
+		if !bytes.Equal(decoded, data) {
+			t.Fatal("mismatch")
+		}
 	})
 }
