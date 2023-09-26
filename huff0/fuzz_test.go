@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"testing"
+
 	"github.com/klauspost/compress/internal/fuzz"
 )
 
