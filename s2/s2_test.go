@@ -1652,6 +1652,14 @@ func downloadBenchmarkFiles(b testing.TB, basename string) (errRet error) {
 	return nil
 }
 
+func TestEstimateBlockSize(t *testing.T) {
+	var input []byte
+	for i := 0; i < 100; i++ {
+		EstimateBlockSize(input)
+		input = append(input, 0)
+	}
+}
+
 func benchFile(b *testing.B, i int, decode bool) {
 	if err := downloadBenchmarkFiles(b, testFiles[i].filename); err != nil {
 		b.Fatalf("failed to download testdata: %s", err)
