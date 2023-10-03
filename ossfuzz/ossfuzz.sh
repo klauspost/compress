@@ -15,6 +15,9 @@
 #
 ################################################################################
 
+# This script is meant to be run by
+# https://github.com/google/oss-fuzz/tree/master/projects/compress
+
 # In one of the Zstd fuzzers, the "dict" variable is created by reading a series of files.
 # These files are not available at runtime in the OSS-FUzz environment,
 # so we add the contents of these files to a variable and create a new file
