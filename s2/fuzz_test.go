@@ -126,5 +126,25 @@ func FuzzEncodingBlocks(f *testing.F) {
 			t.Error(fmt.Errorf("MaxEncodedLen Exceed: input: %d, mel: %d, got %d", len(data), mel, len(comp)))
 			return
 		}
+
+		concat, err := ConcatBlocks(nil, data, []byte{0})
+		if err != nil || concat == nil {
+			return
+		}
+
+		EstimateBlockSize(data)
+		encoded := make([]byte, MaxEncodedLen(len(data)))
+		if len(encoded) < MaxEncodedLen(len(data)) || minNonLiteralBlockSize > len(data) || len(data) > maxBlockSize {
+			return
+		}
+
+		encodeBlockGo(encoded, data)
+		encodeBlockBetterGo(encoded, data)
+		encodeBlockSnappyGo(encoded, data)
+		encodeBlockBetterSnappyGo(encoded, data)
+		dst := encodeGo(encoded, data)
+		if dst == nil {
+			return
+		}
 	})
 }
