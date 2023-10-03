@@ -33,9 +33,6 @@ cp $SRC/compress/zstd/fuzzDicts.go $OUT/
 
 cd $SRC/compress
 
-# Temporarily use a fork of go-fuzz-headers with some improvements that has not been merged yet.
-#go mod edit -replace github.com/AdaLogics/go-fuzz-headers=github.com/AdamKorcz/go-fuzz-headers-1@22e92b7968997eabd210694dd4825dd0d19b697c
-
 # Modify some files. This would be better done upstream.
 sed -i '38 a\
 	if fi == nil { return }' $SRC/compress/internal/fuzz/helpers.go
