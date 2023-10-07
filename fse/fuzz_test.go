@@ -35,6 +35,7 @@ func FuzzDecompress(f *testing.F) {
 	fuzz.AddFromZip(f, "testdata/fse_decompress.zip", fuzz.TypeRaw, false)
 	f.Fuzz(func(t *testing.T, buf0 []byte) {
 		var s2 Scratch
+		s2.DecompressLimit = 128 << 10
 		//Decompress
 		got, err := Decompress(buf0, &s2)
 		if err != nil || len(got) == 0 {
