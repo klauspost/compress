@@ -66,13 +66,14 @@ func benchmarkDecode(b *testing.B, testfile, level, n int) {
 	buf0, compressed, w = nil, nil, nil
 	const ioCopyBuffSize = 32 * 1024 // taken from io.copyBuffer, in case passed buf==nil
 	ioCopyBuff := make([]byte, ioCopyBuffSize)
-	runtime.GC()
-	b.StartTimer()
 	r := NewReader(bytes.NewReader(buf1))
 	res := r.(Resetter)
+	runtime.GC()
+	b.StartTimer()
+
 	for i := 0; i < b.N; i++ {
-		res.Reset(bytes.NewReader(buf1), nil)
-		io.CopyBuffer(io.Discard, r, ioCopyBuff)
+		_ = res.Reset(bytes.NewReader(buf1), nil)
+		_, _ = io.CopyBuffer(io.Discard, r, ioCopyBuff)
 	}
 }
 
