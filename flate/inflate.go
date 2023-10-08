@@ -201,8 +201,7 @@ func (h *huffmanDecoder) init(lengths []int) bool {
 			if cap(h.links[off]) < numLinks {
 				h.links[off] = make([]uint16, numLinks)
 			} else {
-				links := h.links[off][:0]
-				h.links[off] = links[:numLinks]
+				h.links[off] = h.links[off][:numLinks]
 			}
 		}
 	} else {
