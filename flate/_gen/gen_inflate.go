@@ -109,7 +109,7 @@ readLiteral:
 			dict.writeByte(byte(v))
 			if dict.availWrite() == 0 {
 				f.toRead = dict.readFlush()
-				f.step = (*decompressor).$FUNCNAME$
+				f.step = $FUNCNAME$
 				f.stepState = stateInit
 				f.b, f.nb = fb, fnb
 				return
@@ -275,7 +275,7 @@ copyHistory:
 
 		if dict.availWrite() == 0 || f.copyLen > 0 {
 			f.toRead = dict.readFlush()
-			f.step = (*decompressor).$FUNCNAME$ // We need to continue this work
+			f.step = $FUNCNAME$ // We need to continue this work
 			f.stepState = stateDict
 			f.b, f.nb = fb, fnb
 			return

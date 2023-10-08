@@ -285,6 +285,18 @@ type Reader interface {
 	io.ByteReader
 }
 
+type step uint8
+
+const (
+	copyData step = iota + 1
+	nextBlock
+	huffmanBytesBuffer
+	huffmanBytesReader
+	huffmanBufioReader
+	huffmanStringsReader
+	huffmanGenericReader
+)
+
 // Decompress state.
 type decompressor struct {
 	// Input source.
@@ -303,7 +315,7 @@ type decompressor struct {
 
 	// Next step in the decompression,
 	// and decompression state.
-	step      func(*decompressor)
+	step      step
 	stepState int
 	err       error
 	toRead    []byte
@@ -379,7 +391,24 @@ func (f *decompressor) Read(b []byte) (int, error) {
 		if f.err != nil {
 			return 0, f.err
 		}
-		f.step(f)
+
+		switch f.step {
+		case copyData:
+			f.copyData()
+		case nextBlock:
+			f.nextBlock()
+		case huffmanBytesBuffer:
+			f.huffmanBytesBuffer()
+		case huffmanBytesReader:
+			f.huffmanBytesReader()
+		case huffmanBufioReader:
+			f.huffmanBufioReader()
+		case huffmanStringsReader:
+			f.huffmanStringsReader()
+		case huffmanGenericReader:
+			f.huffmanGenericReader()
+		}
+
 		if f.err != nil && len(f.toRead) == 0 {
 			f.toRead = f.dict.readFlush() // Flush what's left in case of error
 		}
@@ -410,7 +439,22 @@ func (f *decompressor) WriteTo(w io.Writer) (int64, error) {
 			return total, f.err
 		}
 		if f.err == nil {
-			f.step(f)
+			switch f.step {
+			case copyData:
+				f.copyData()
+			case nextBlock:
+				f.nextBlock()
+			case huffmanBytesBuffer:
+				f.huffmanBytesBuffer()
+			case huffmanBytesReader:
+				f.huffmanBytesReader()
+			case huffmanBufioReader:
+				f.huffmanBufioReader()
+			case huffmanStringsReader:
+				f.huffmanStringsReader()
+			case huffmanGenericReader:
+				f.huffmanGenericReader()
+			}
 		}
 		if len(f.toRead) == 0 && f.err != nil && !flushed {
 			f.toRead = f.dict.readFlush() // Flush what's left in case of error
@@ -631,7 +675,8 @@ func (f *decompressor) copyData() {
 
 	if f.dict.availWrite() == 0 || f.copyLen > 0 {
 		f.toRead = f.dict.readFlush()
-		f.step = (*decompressor).copyData
+		f.step = copyData
+		//f.step = (*decompressor).copyData
 		return
 	}
 	f.finishBlock()
@@ -644,7 +689,8 @@ func (f *decompressor) finishBlock() {
 		}
 		f.err = io.EOF
 	}
-	f.step = (*decompressor).nextBlock
+	f.step = nextBlock
+	//f.step = (*decompressor).nextBlock
 }
 
 // noEOF returns err, unless err == io.EOF, in which case it returns io.ErrUnexpectedEOF.
@@ -747,7 +793,7 @@ func (f *decompressor) Reset(r io.Reader, dict []byte) error {
 		h1:       f.h1,
 		h2:       f.h2,
 		dict:     f.dict,
-		step:     (*decompressor).nextBlock,
+		step:     nextBlock,
 	}
 	f.dict.init(maxMatchOffset, dict)
 	return nil
@@ -768,7 +814,7 @@ func NewReader(r io.Reader) io.ReadCloser {
 	f.r = makeReader(r)
 	f.bits = new([maxNumLit + maxNumDist]int)
 	f.codebits = new([numCodes]int)
-	f.step = (*decompressor).nextBlock
+	f.step = nextBlock
 	f.dict.init(maxMatchOffset, nil)
 	return &f
 }
@@ -787,7 +833,7 @@ func NewReaderDict(r io.Reader, dict []byte) io.ReadCloser {
 	f.r = makeReader(r)
 	f.bits = new([maxNumLit + maxNumDist]int)
 	f.codebits = new([numCodes]int)
-	f.step = (*decompressor).nextBlock
+	f.step = nextBlock
 	f.dict.init(maxMatchOffset, dict)
 	return &f
 }
