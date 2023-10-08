@@ -1265,19 +1265,19 @@ copyHistory:
 	// Not reached
 }
 
-func (f *decompressor) huffmanBlockDecoder() func() {
+func (f *decompressor) huffmanBlockDecoder() {
 	switch f.r.(type) {
 	case *bytes.Buffer:
-		return f.huffmanBytesBuffer
+		f.huffmanBytesBuffer()
 	case *bytes.Reader:
-		return f.huffmanBytesReader
+		f.huffmanBytesReader()
 	case *bufio.Reader:
-		return f.huffmanBufioReader
+		f.huffmanBufioReader()
 	case *strings.Reader:
-		return f.huffmanStringsReader
+		f.huffmanStringsReader()
 	case Reader:
-		return f.huffmanGenericReader
+		f.huffmanGenericReader()
 	default:
-		return f.huffmanGenericReader
+		f.huffmanGenericReader()
 	}
 }

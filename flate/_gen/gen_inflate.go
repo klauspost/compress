@@ -291,13 +291,13 @@ copyHistory:
 		s = strings.Replace(s, "$TYPE$", t, -1)
 		f.WriteString(s)
 	}
-	f.WriteString("func (f *decompressor) huffmanBlockDecoder() func() {\n")
+	f.WriteString("func (f *decompressor) huffmanBlockDecoder() {\n")
 	f.WriteString("\tswitch f.r.(type) {\n")
 	for i, t := range types {
 		f.WriteString("\t\tcase " + t + ":\n")
-		f.WriteString("\t\t\treturn f.huffman" + names[i] + "\n")
+		f.WriteString("\t\t\tf.huffman" + names[i] + "()\n")
 	}
 	f.WriteString("\t\tdefault:\n")
-	f.WriteString("\t\t\treturn f.huffmanGenericReader\n")
+	f.WriteString("\t\t\tf.huffmanGenericReader()\n")
 	f.WriteString("\t}\n}\n")
 }

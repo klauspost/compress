@@ -120,8 +120,9 @@ func (h *huffmanDecoder) init(lengths []int) bool {
 	const sanity = false
 
 	if h.chunks == nil {
-		h.chunks = &[huffmanNumChunks]uint16{}
+		h.chunks = new([huffmanNumChunks]uint16)
 	}
+
 	if h.maxRead != 0 {
 		*h = huffmanDecoder{chunks: h.chunks, links: h.links}
 	}
@@ -352,7 +353,7 @@ func (f *decompressor) nextBlock() {
 		// compressed, fixed Huffman tables
 		f.hl = &fixedHuffmanDecoder
 		f.hd = nil
-		f.huffmanBlockDecoder()()
+		f.huffmanBlockDecoder()
 		if debugDecode {
 			fmt.Println("predefinied huffman block")
 		}
@@ -363,7 +364,7 @@ func (f *decompressor) nextBlock() {
 		}
 		f.hl = &f.h1
 		f.hd = &f.h2
-		f.huffmanBlockDecoder()()
+		f.huffmanBlockDecoder()
 		if debugDecode {
 			fmt.Println("dynamic huffman block")
 		}
