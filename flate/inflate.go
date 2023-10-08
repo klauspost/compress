@@ -175,9 +175,8 @@ func (h *huffmanDecoder) init(lengths []int) bool {
 	}
 
 	h.maxRead = min
-	chunks := h.chunks[:]
-	for i := range chunks {
-		chunks[i] = 0
+	for i := range h.chunks {
+		h.chunks[i] = 0
 	}
 
 	if max > huffmanChunkBits {
