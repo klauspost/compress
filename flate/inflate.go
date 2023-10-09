@@ -391,22 +391,7 @@ func (f *decompressor) Read(b []byte) (int, error) {
 			return 0, f.err
 		}
 
-		switch f.step {
-		case copyData:
-			f.copyData()
-		case nextBlock:
-			f.nextBlock()
-		case huffmanBytesBuffer:
-			f.huffmanBytesBuffer()
-		case huffmanBytesReader:
-			f.huffmanBytesReader()
-		case huffmanBufioReader:
-			f.huffmanBufioReader()
-		case huffmanStringsReader:
-			f.huffmanStringsReader()
-		case huffmanGenericReader:
-			f.huffmanGenericReader()
-		}
+		f.doStep()
 
 		if f.err != nil && len(f.toRead) == 0 {
 			f.toRead = f.dict.readFlush() // Flush what's left in case of error
@@ -438,22 +423,7 @@ func (f *decompressor) WriteTo(w io.Writer) (int64, error) {
 			return total, f.err
 		}
 		if f.err == nil {
-			switch f.step {
-			case copyData:
-				f.copyData()
-			case nextBlock:
-				f.nextBlock()
-			case huffmanBytesBuffer:
-				f.huffmanBytesBuffer()
-			case huffmanBytesReader:
-				f.huffmanBytesReader()
-			case huffmanBufioReader:
-				f.huffmanBufioReader()
-			case huffmanStringsReader:
-				f.huffmanStringsReader()
-			case huffmanGenericReader:
-				f.huffmanGenericReader()
-			}
+			f.doStep()
 		}
 		if len(f.toRead) == 0 && f.err != nil && !flushed {
 			f.toRead = f.dict.readFlush() // Flush what's left in case of error
@@ -688,6 +658,29 @@ func (f *decompressor) finishBlock() {
 		f.err = io.EOF
 	}
 	f.step = nextBlock
+}
+
+func (f *decompressor) doStep() {
+	switch f.step {
+	case copyData:
+		f.copyData()
+	case nextBlock:
+		f.nextBlock()
+	case huffmanBytesBuffer:
+		f.huffmanBytesBuffer()
+	case huffmanBytesReader:
+		f.huffmanBytesReader()
+	case huffmanBufioReader:
+		f.huffmanBufioReader()
+	case huffmanStringsReader:
+		f.huffmanStringsReader()
+	case huffmanGenericReader:
+		f.huffmanGenericReader()
+	default:
+		if debugDecode {
+			fmt.Println("BUG: unexpected step state")
+		}
+	}
 }
 
 // noEOF returns err, unless err == io.EOF, in which case it returns io.ErrUnexpectedEOF.
