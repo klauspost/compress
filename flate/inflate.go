@@ -43,9 +43,6 @@ var bitMask32 = [32]uint32{
 	0x1ffFFFF, 0x3ffFFFF, 0x7ffFFFF, 0xfffFFFF, 0x1fffFFFF, 0x3fffFFFF, 0x7fffFFFF,
 } // up to 32 bits
 
-// zeroChunks is used to nullify decompressor.chunks array
-var zeroChunks = make([]uint16, huffmanNumChunks)
-
 // Initialize the fixedHuffmanDecoder only once upon first use.
 var fixedOnce sync.Once
 var fixedHuffmanDecoder huffmanDecoder
@@ -180,9 +177,10 @@ func (h *huffmanDecoder) init(lengths []int) bool {
 
 	h.maxRead = min
 
-	// instead of iterating over the whole array, just copy already null-filled
-	// slice in it.
-	copy(h.chunks[:], zeroChunks)
+	chunks := h.chunks[:]
+	for i := range chunks {
+		chunks[i] = 0
+	}
 
 	if max > huffmanChunkBits {
 		numLinks := 1 << (uint(max) - huffmanChunkBits)
@@ -403,7 +401,7 @@ func (f *decompressor) Read(b []byte) (int, error) {
 	}
 }
 
-// Support the io.WriteTo interface for io.Copy and friends.
+// WriteTo implements the io.WriteTo interface for io.Copy and friends.
 func (f *decompressor) WriteTo(w io.Writer) (int64, error) {
 	total := int64(0)
 	flushed := false
@@ -681,9 +679,7 @@ func (f *decompressor) doStep() {
 	case huffmanGenericReader:
 		f.huffmanGenericReader()
 	default:
-		if debugDecode {
-			fmt.Println("BUG: unexpected step state")
-		}
+		panic("BUG: unexpected step state")
 	}
 }
 
