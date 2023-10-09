@@ -64,8 +64,6 @@ func benchmarkDecode(b *testing.B, testfile, level, n int) {
 	w.Close()
 	buf1 := compressed.Bytes()
 	buf0, compressed, w = nil, nil, nil
-	const ioCopyBuffSize = 32 * 1024 // taken from io.copyBuffer, in case passed buf==nil
-	ioCopyBuff := make([]byte, ioCopyBuffSize)
 	r := NewReader(bytes.NewReader(buf1))
 	res := r.(Resetter)
 	runtime.GC()
@@ -73,7 +71,7 @@ func benchmarkDecode(b *testing.B, testfile, level, n int) {
 
 	for i := 0; i < b.N; i++ {
 		_ = res.Reset(bytes.NewReader(buf1), nil)
-		_, _ = io.CopyBuffer(io.Discard, r, ioCopyBuff)
+		_, _ = io.Copy(io.Discard, r)
 	}
 }
 
