@@ -43,6 +43,9 @@ var bitMask32 = [32]uint32{
 	0x1ffFFFF, 0x3ffFFFF, 0x7ffFFFF, 0xfffFFFF, 0x1fffFFFF, 0x3fffFFFF, 0x7fffFFFF,
 } // up to 32 bits
 
+// zeroChunks is used to nullify decompressor.chunks array
+var zeroChunks = make([]uint16, huffmanNumChunks)
+
 // Initialize the fixedHuffmanDecoder only once upon first use.
 var fixedOnce sync.Once
 var fixedHuffmanDecoder huffmanDecoder
@@ -176,9 +179,10 @@ func (h *huffmanDecoder) init(lengths []int) bool {
 	}
 
 	h.maxRead = min
-	for i := range h.chunks {
-		h.chunks[i] = 0
-	}
+
+	// instead of iterating over the whole array, just copy already null-filled
+	// slice in it.
+	copy(h.chunks[:], zeroChunks)
 
 	if max > huffmanChunkBits {
 		numLinks := 1 << (uint(max) - huffmanChunkBits)
@@ -276,7 +280,7 @@ func (h *huffmanDecoder) init(lengths []int) bool {
 	return true
 }
 
-// The actual read interface needed by NewReader.
+// Reader is the actual read interface needed by NewReader.
 // If the passed in io.Reader does not also have ReadByte,
 // the NewReader will introduce its own buffering.
 type Reader interface {
