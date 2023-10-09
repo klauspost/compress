@@ -675,7 +675,6 @@ func (f *decompressor) copyData() {
 	if f.dict.availWrite() == 0 || f.copyLen > 0 {
 		f.toRead = f.dict.readFlush()
 		f.step = copyData
-		//f.step = (*decompressor).copyData
 		return
 	}
 	f.finishBlock()
@@ -689,7 +688,6 @@ func (f *decompressor) finishBlock() {
 		f.err = io.EOF
 	}
 	f.step = nextBlock
-	//f.step = (*decompressor).nextBlock
 }
 
 // noEOF returns err, unless err == io.EOF, in which case it returns io.ErrUnexpectedEOF.
