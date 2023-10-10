@@ -109,7 +109,7 @@ readLiteral:
 			dict.writeByte(byte(v))
 			if dict.availWrite() == 0 {
 				f.toRead = dict.readFlush()
-				f.step = (*decompressor).$FUNCNAME$
+				f.step = $FUNCNAME$
 				f.stepState = stateInit
 				f.b, f.nb = fb, fnb
 				return
@@ -275,7 +275,7 @@ copyHistory:
 
 		if dict.availWrite() == 0 || f.copyLen > 0 {
 			f.toRead = dict.readFlush()
-			f.step = (*decompressor).$FUNCNAME$ // We need to continue this work
+			f.step = $FUNCNAME$ // We need to continue this work
 			f.stepState = stateDict
 			f.b, f.nb = fb, fnb
 			return
@@ -291,13 +291,13 @@ copyHistory:
 		s = strings.Replace(s, "$TYPE$", t, -1)
 		f.WriteString(s)
 	}
-	f.WriteString("func (f *decompressor) huffmanBlockDecoder() func() {\n")
+	f.WriteString("func (f *decompressor) huffmanBlockDecoder() {\n")
 	f.WriteString("\tswitch f.r.(type) {\n")
 	for i, t := range types {
 		f.WriteString("\t\tcase " + t + ":\n")
-		f.WriteString("\t\t\treturn f.huffman" + names[i] + "\n")
+		f.WriteString("\t\t\tf.huffman" + names[i] + "()\n")
 	}
 	f.WriteString("\t\tdefault:\n")
-	f.WriteString("\t\t\treturn f.huffmanGenericReader\n")
+	f.WriteString("\t\t\tf.huffmanGenericReader()\n")
 	f.WriteString("\t}\n}\n")
 }
