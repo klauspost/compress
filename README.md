@@ -654,6 +654,7 @@ Here are other packages of good quality and pure Go (no cgo wrappers or autoconv
 * [github.com/ronanh/intcomp](https://github.com/ronanh/intcomp) - Integer compression.
 * [github.com/spenczar/fpc](https://github.com/spenczar/fpc) - Float compression.
 * [github.com/minio/zipindex](https://github.com/minio/zipindex) - External ZIP directory index.
+* [github.com/ybirader/pzip](https://github.com/ybirader/pzip) - Fast concurrent zip archiver and extractor.
 
 # license
 
