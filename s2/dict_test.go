@@ -402,13 +402,14 @@ func TestDictSize(t *testing.T) {
 			}
 		})
 	}
-	fmt.Printf("%d files, %d -> %d (%.2f%%) - %.02f bytes saved/file\n", totalCount, totalIn, totalOut, float64(totalOut*100)/float64(totalIn), float64(totalIn-totalOut)/float64(totalCount))
+	t.Logf("%d files, %d -> %d (%.2f%%) - %.02f bytes saved/file\n", totalCount, totalIn, totalOut, float64(totalOut*100)/float64(totalIn), float64(totalIn-totalOut)/float64(totalCount))
 }
 
 func FuzzDictBlocks(f *testing.F) {
 	fuzz.AddFromZip(f, "testdata/enc_regressions.zip", fuzz.TypeRaw, false)
 	fuzz.AddFromZip(f, "testdata/fuzz/block-corpus-raw.zip", fuzz.TypeRaw, testing.Short())
 	fuzz.AddFromZip(f, "testdata/fuzz/block-corpus-enc.zip", fuzz.TypeGoFuzz, testing.Short())
+	fuzz.AddFromZip(f, "testdata/fuzz/dict-corpus-oss.zip", fuzz.TypeOSSFuzz, testing.Short())
 
 	// Fuzzing tweaks:
 	const (
