@@ -345,7 +345,7 @@ encodeLoop:
 			var seq seq
 			seq.matchLen = uint32(best.length - zstdMinMatch)
 			if debugAsserts && s < nextEmit {
-				panic("s <= nextEmit")
+				panic("s < nextEmit")
 			}
 			addLiterals(&seq, best.s)
 
