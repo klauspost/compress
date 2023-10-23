@@ -201,15 +201,6 @@ encodeLoop:
 			if delta >= e.maxMatchOff || delta <= 0 || load3232(src, offset) != first {
 				return
 			}
-			if m.length > 0 && delta == m.s-m.offset {
-				// If we have already checked offset,
-				// skip, but update with rep if it matches.
-				if m.rep < rep {
-					m.rep = rep
-					m.estBits(bitsPerByte)
-				}
-				return
-			}
 			if debugAsserts {
 				if offset >= s {
 					panic(fmt.Sprintf("offset: %d - s:%d - rep: %d - cur :%d - max: %d", offset, s, rep, e.cur, e.maxMatchOff))
