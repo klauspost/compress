@@ -37,7 +37,7 @@ type match struct {
 const highScore = maxMatchLen * 8
 
 // estBits will estimate output bits from predefined tables.
-func (m *match) estBits(bitsPerByte int32) {
+func (m *match) estBits(t *estBitTables, ll uint32) {
 	mlc := mlCode(uint32(m.length - zstdMinMatch))
 	var ofc uint8
 	if m.rep < 0 {
@@ -46,14 +46,15 @@ func (m *match) estBits(bitsPerByte int32) {
 		ofc = ofCode(uint32(m.rep) & 3)
 	}
 	// Cost, excluding
-	ofTT, mlTT := fsePredefEnc[tableOffsets].ct.symbolTT[ofc], fsePredefEnc[tableMatchLengths].ct.symbolTT[mlc]
+	ofTT, mlTT, llTT := t.ofTT[ofc], t.mlTT[mlc], t.llTT[llCode(ll)]
 
 	// Add cost of match encoding...
-	m.est = int32(ofTT.outBits + mlTT.outBits)
-	m.est += int32(ofTT.deltaNbBits>>16 + mlTT.deltaNbBits>>16)
+	m.est = int32(ofTT.outBits + mlTT.outBits + llTT.outBits)
+	m.est += int32(ofTT.deltaNbBits>>16 + mlTT.deltaNbBits>>16 + llTT.deltaNbBits>>16)
+
 	// Subtract savings compared to literal encoding...
-	m.est -= (m.length * bitsPerByte) >> 10
-	if m.est > 0 {
+	m.est -= (m.length * t.bitsPerByte) >> 10
+	if m.est > 5 {
 		// Unlikely gain..
 		m.length = 0
 		m.est = highScore
@@ -72,10 +73,92 @@ type bestFastEncoder struct {
 	longTable     [bestLongTableSize]prevEntry
 	dictTable     []prevEntry
 	dictLongTable []prevEntry
+	tables        estBitTables
+	//tableStored     [bestShortTableSize]prevEntry
+	//longTableStored [bestLongTableSize]prevEntry
+}
+
+type estBitTables struct {
+	ofTT, mlTT, llTT []symbolTransform
+	bitsPerByte      int32
+}
+
+func (e *bestFastEncoder) Encode(blk *blockEnc, src []byte) {
+	e.tables.ofTT = fsePredefEnc[tableOffsets].ct.symbolTT
+	e.tables.mlTT = fsePredefEnc[tableMatchLengths].ct.symbolTT
+	e.tables.llTT = fsePredefEnc[tableLiteralLengths].ct.symbolTT
+
+	// Use this to estimate literal cost.
+	// Scaled by 10 bits.
+	e.tables.bitsPerByte = int32((compress.ShannonEntropyBits(src) * 1024) / len(src))
+	// Huffman can never go < 1 bit/byte
+	if e.tables.bitsPerByte < 1024 {
+		e.tables.bitsPerByte = 1024
+	}
+	e.encode(blk, src)
+
+	/*
+		offsets := blk.recentOffsets
+		e.tableStored = e.table
+		e.longTableStored = e.longTable
+		cur := e.cur
+		hist := e.hist
+		e.encode(blk, src)
+
+		if true || len(blk.sequences) < 8 {
+			return
+		}
+		// Update and re-encode.
+		if false && len(blk.literals) > 0 {
+			e.tables.bitsPerByte = int32((compress.ShannonEntropyBits(blk.literals) * 1024) / len(blk.literals))
+			if e.tables.bitsPerByte < 1024 {
+				e.tables.bitsPerByte = 1024
+			}
+		}
+
+		e.table = e.tableStored
+		e.longTable = e.longTableStored
+		e.cur = cur
+		e.hist = hist
+		blk.genCodes()
+		normAndOne := func(i tableIndex, f *fseEncoder, msl uint16) *fseEncoder {
+			n := len(blk.sequences)
+			if true {
+				for i := range f.count[:f.symbolLen] {
+					f.count[i]++
+				}
+				n += int(f.symbolLen)
+			}
+			//fmt.Println(f.count[:f.symbolLen])
+			f.normalizeCount(n)
+			//fmt.Println(f.norm[:f.symbolLen])
+			f.setBits(bitTables[i])
+			if bitTables[i] != nil {
+				//fmt.Println(bitTables[i][:f.symbolLen])
+			}
+			// Make remaining symbols 255 (unreasonably expensive)
+			rem := f.ct.symbolTT[f.symbolLen:msl]
+			for i := range rem {
+				rem[i].outBits = 255
+			}
+			//fmt.Println(f.ct.symbolTT[:msl])
+			return f
+		}
+
+		if true {
+			e.tables.llTT = normAndOne(tableLiteralLengths, blk.coders.llEnc, maxLiteralLengthSymbol).ct.symbolTT
+			e.tables.ofTT = normAndOne(tableOffsets, blk.coders.ofEnc, maxOffsetLengthSymbol).ct.symbolTT
+			e.tables.mlTT = normAndOne(tableMatchLengths, blk.coders.mlEnc, maxMatchLengthSymbol).ct.symbolTT
+		}
+		// Re-encode
+		blk.reset(nil)
+		blk.recentOffsets = offsets
+		e.encode(blk, src)
+	*/
 }
 
 // Encode improves compression...
-func (e *bestFastEncoder) Encode(blk *blockEnc, src []byte) {
+func (e *bestFastEncoder) encode(blk *blockEnc, src []byte) {
 	const (
 		// Input margin is the number of bytes we read (8)
 		// and the maximum we will read ahead (2)
@@ -142,14 +225,6 @@ func (e *bestFastEncoder) Encode(blk *blockEnc, src []byte) {
 		blk.literals = blk.literals[:len(src)]
 		copy(blk.literals, src)
 		return
-	}
-
-	// Use this to estimate literal cost.
-	// Scaled by 10 bits.
-	bitsPerByte := int32((compress.ShannonEntropyBits(src) * 1024) / len(src))
-	// Huffman can never go < 1 bit/byte
-	if bitsPerByte < 1024 {
-		bitsPerByte = 1024
 	}
 
 	// Override src
@@ -227,22 +302,25 @@ encodeLoop:
 				}
 			}
 			l := 4 + e.matchlen(s+4, offset+4, src)
-			if true {
-				// Extend candidate match backwards as far as possible.
-				tMin := s - e.maxMatchOff
-				if tMin < 0 {
-					tMin = 0
-				}
-				for offset > tMin && s > nextEmit && src[offset-1] == src[s-1] && l < maxMatchLength {
-					s--
-					offset--
-					l++
-				}
+			sLim := nextEmit
+
+			if rep >= 0 {
+				sLim = nextEmit + 1
+			}
+			// Extend candidate match backwards as far as possible.
+			tMin := s - e.maxMatchOff
+			if tMin < 0 {
+				tMin = 0
+			}
+			for offset > tMin && s > sLim && src[offset-1] == src[s-1] && l < maxMatchLength {
+				s--
+				offset--
+				l++
 			}
 
 			cand := match{offset: offset, s: s, length: l, rep: rep}
-			cand.estBits(bitsPerByte)
-			if m.est >= highScore || cand.est-m.est+(cand.s-m.s)*bitsPerByte>>10 < 0 {
+			cand.estBits(&e.tables, uint32(s-nextEmit))
+			if m.est >= highScore || cand.est-m.est+(cand.s-m.s)*e.tables.bitsPerByte>>10 < 0 {
 				*m = cand
 			}
 		}
