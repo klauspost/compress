@@ -12,7 +12,7 @@ jobs:
   build:
     strategy:
       matrix:
-        go-version: [1.18.x, 1.19.x, 1.20.x]
+        go-version: [1.19.x, 1.20.x, 1.21.x]
         os: [ubuntu-latest, macos-latest, windows-latest]
     env:
       CGO_ENABLED: 0
@@ -54,7 +54,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v2
       with:
-        go-version: 1.20.x
+        go-version: 1.21.x
 
     - name: Checkout code
       uses: actions/checkout@v2
@@ -76,7 +76,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v2
       with:
-        go-version: 1.20.x
+        go-version: 1.21.x
 
     - name: Checkout code
       uses: actions/checkout@v2
@@ -90,14 +90,11 @@ jobs:
     - name: Build s2c
       run: go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d&&./s2c -verify s2c &&./s2d s2c.s2&&rm ./s2c&&rm s2d&&rm s2c.s2
 
-    - name: install garble
-      run: go install mvdan.cc/garble@v0.9.2
-
     - name: goreleaser deprecation
-      run: curl -sfL https://git.io/goreleaser | VERSION=v1.9.2 sh -s -- check
+      run: curl -sfL https://git.io/goreleaser | VERSION=v1.20.0 sh -s -- check
 
     - name: goreleaser snapshot
-      run: curl -sL https://git.io/goreleaser | VERSION=v1.9.2 sh -s -- --snapshot --skip-publish --rm-dist
+      run: curl -sL https://git.io/goreleaser | VERSION=v1.20.0 sh -s -- --snapshot --skip-publish --rm-dist
 
     - name: Test S2 GOAMD64 v3
       env:
@@ -119,7 +116,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.20.x
+          go-version: 1.21.x
 
       - name: Checkout code
         uses: actions/checkout@v2
@@ -150,7 +147,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.20.x
+          go-version: 1.21.x
 
       - name: Checkout code
         uses: actions/checkout@v2
@@ -190,7 +187,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.20.x
+          go-version: 1.21.x
 
       - name: Checkout code
         uses: actions/checkout@v2
@@ -204,3 +201,8 @@ jobs:
       - name: zip/FuzzReader
         run: go test -run=none -fuzz=FuzzReader -fuzztime=500000x -test.fuzzminimizetime=10ms ./zip/.
 
+      - name: fse/FuzzCompress
+        run: go test -run=none -fuzz=FuzzCompress -fuzztime=1000000x -test.fuzzminimizetime=10ms ./fse/.
+
+      - name: fse/FuzzDecompress
+        run: go test -run=none -fuzz=FuzzDecompress -fuzztime=1000000x -test.fuzzminimizetime=10ms ./fse/.

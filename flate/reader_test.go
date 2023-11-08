@@ -64,13 +64,14 @@ func benchmarkDecode(b *testing.B, testfile, level, n int) {
 	w.Close()
 	buf1 := compressed.Bytes()
 	buf0, compressed, w = nil, nil, nil
-	runtime.GC()
-	b.StartTimer()
 	r := NewReader(bytes.NewReader(buf1))
 	res := r.(Resetter)
+	runtime.GC()
+	b.StartTimer()
+
 	for i := 0; i < b.N; i++ {
-		res.Reset(bytes.NewReader(buf1), nil)
-		io.Copy(io.Discard, r)
+		_ = res.Reset(bytes.NewReader(buf1), nil)
+		_, _ = io.Copy(io.Discard, r)
 	}
 }
 
@@ -81,6 +82,7 @@ const (
 	speed    = BestSpeed
 	default_ = DefaultCompression
 	compress = BestCompression
+	oneK     = -1024
 )
 
 func BenchmarkDecodeDigitsSpeed1e4(b *testing.B)    { benchmarkDecode(b, digits, speed, 1e4) }

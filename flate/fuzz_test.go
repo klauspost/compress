@@ -19,6 +19,7 @@ var fuzzStartF = flag.Int("start", HuffmanOnly, "Start fuzzing at this level")
 var fuzzEndF = flag.Int("end", BestCompression, "End fuzzing at this level (inclusive)")
 var fuzzMaxF = flag.Int("max", 1<<20, "Maximum input size")
 var fuzzSLF = flag.Bool("sl", true, "Include stateless encodes")
+var fuzzWindow = flag.Bool("windows", true, "Include windowed encodes")
 
 func TestMain(m *testing.M) {
 	flag.Parse()
@@ -34,6 +35,7 @@ func FuzzEncoding(f *testing.F) {
 	endFuzz := *fuzzEndF
 	maxSize := *fuzzMaxF
 	stateless := *fuzzSLF
+	fuzzWindow := *fuzzWindow
 
 	decoder := NewReader(nil)
 	buf := new(bytes.Buffer)
@@ -98,31 +100,79 @@ func FuzzEncoding(f *testing.F) {
 				t.Fatal(msg + "not equal")
 			}
 		}
-		if !stateless {
-			return
-		}
-		// Split into two and use history...
-		buf.Reset()
-		err := StatelessDeflate(buf, data[:len(data)/2], false, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		if stateless {
+			// Split into two and use history...
+			msg := "stateless:"
+			buf.Reset()
+			err := StatelessDeflate(buf, data[:len(data)/2], false, nil)
+			if err != nil {
+				t.Error(err)
+			}
 
-		// Use top half as dictionary...
-		dict := data[:len(data)/2]
-		err = StatelessDeflate(buf, data[len(data)/2:], true, dict)
-		if err != nil {
-			t.Error(err)
-		}
+			// Use top half as dictionary...
+			dict := data[:len(data)/2]
+			err = StatelessDeflate(buf, data[len(data)/2:], true, dict)
+			if err != nil {
+				t.Error(err)
+			}
 
-		decoder.(Resetter).Reset(buf, nil)
-		data2, err := io.ReadAll(decoder)
-		if err != nil {
-			t.Error(err)
+			decoder.(Resetter).Reset(buf, nil)
+			data2, err := io.ReadAll(decoder)
+			if err != nil {
+				t.Error(err)
+			}
+			if !bytes.Equal(data, data2) {
+				//fmt.Printf("want:%x\ngot: %x\n", data1, data2)
+				t.Error(msg + "not equal")
+			}
 		}
-		if !bytes.Equal(data, data2) {
-			//fmt.Printf("want:%x\ngot: %x\n", data1, data2)
-			t.Error("not equal")
+		if fuzzWindow {
+			msg := "windowed:"
+			buf.Reset()
+			fw, err := NewWriterWindow(buf, 1000)
+			if err != nil {
+				t.Fatal(msg + err.Error())
+			}
+			fw.Reset(buf)
+			n, err := fw.Write(data)
+			if n != len(data) {
+				t.Fatal(msg + "short write")
+			}
+			if err != nil {
+				t.Fatal(msg + err.Error())
+			}
+			err = fw.Close()
+			if err != nil {
+				t.Fatal(msg + err.Error())
+			}
+			decoder.(Resetter).Reset(buf, nil)
+			data2, err := io.ReadAll(decoder)
+			if err != nil {
+				t.Fatal(msg + err.Error())
+			}
+			if !bytes.Equal(data, data2) {
+				t.Fatal(msg + "not equal")
+			}
+			// Do it again...
+			msg = msg + " (reset):"
+			buf.Reset()
+			fw.Reset(buf)
+			n, err = fw.Write(data)
+			if n != len(data) {
+				t.Fatal(msg + "short write")
+			}
+			if err != nil {
+				t.Fatal(msg + err.Error())
+			}
+			err = fw.Close()
+			if err != nil {
+				t.Fatal(msg + err.Error())
+			}
+			decoder.(Resetter).Reset(buf, nil)
+			data2, err = io.ReadAll(decoder)
+			if err != nil {
+				t.Fatal(msg + err.Error())
+			}
 		}
 	})
 }

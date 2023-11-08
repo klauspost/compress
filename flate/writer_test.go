@@ -217,6 +217,10 @@ func BenchmarkEncodeTwainSL1e4(b *testing.B)        { benchmarkStatelessEncoder(
 func BenchmarkEncodeTwainSL1e5(b *testing.B)        { benchmarkStatelessEncoder(b, twain, 1e5) }
 func BenchmarkEncodeTwainSL1e6(b *testing.B)        { benchmarkStatelessEncoder(b, twain, 1e6) }
 
+func BenchmarkEncodeTwain1024Win1e4(b *testing.B) { benchmarkEncoder(b, twain, oneK, 1e4) }
+func BenchmarkEncodeTwain1024Win1e5(b *testing.B) { benchmarkEncoder(b, twain, oneK, 1e5) }
+func BenchmarkEncodeTwain1024Win1e6(b *testing.B) { benchmarkEncoder(b, twain, oneK, 1e6) }
+
 func benchmarkStatelessEncoder(b *testing.B, testfile, n int) {
 	b.SetBytes(int64(n))
 	buf0, err := os.ReadFile(testfiles[testfile])
