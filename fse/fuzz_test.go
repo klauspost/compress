@@ -9,7 +9,7 @@ import (
 )
 
 func FuzzCompress(f *testing.F) {
-	fuzz.AddFromZip(f, "testdata/fse_compress.zip", fuzz.TypeRaw, false)
+	fuzz.AddFromZip(f, "testdata/fse_compress.zip", fuzz.TypeGoFuzz, false)
 	f.Fuzz(func(t *testing.T, buf0 []byte) {
 		var s, s2 Scratch
 		b, err := Compress(buf0, &s)

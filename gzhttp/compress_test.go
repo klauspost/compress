@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/klauspost/compress/gzip"
@@ -1882,4 +1883,69 @@ func Test1xxResponses(t *testing.T) {
 
 	body, _ := io.ReadAll(res.Body)
 	assertEqual(t, gzipStrLevel(testBody, gzip.DefaultCompression), body)
+}
+
+func TestContentTypeDetectWithJitter(t *testing.T) {
+	t.Parallel()
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		content := `<!DOCTYPE html>` + strings.Repeat("foo", 400)
+		w.Write([]byte(content))
+	})
+
+	for _, tc := range []struct {
+		name    string
+		wrapper func(http.Handler) (http.Handler, error)
+	}{
+		{
+			name: "no wrapping",
+			wrapper: func(h http.Handler) (http.Handler, error) {
+				return h, nil
+			},
+		},
+		{
+			name: "default",
+			wrapper: func(h http.Handler) (http.Handler, error) {
+				wrapper, err := NewWrapper()
+				if err != nil {
+					return nil, err
+				}
+				return wrapper(h), nil
+			},
+		},
+		{
+			name: "jitter, default buffer",
+			wrapper: func(h http.Handler) (http.Handler, error) {
+				wrapper, err := NewWrapper(RandomJitter(32, 0, false))
+				if err != nil {
+					return nil, err
+				}
+				return wrapper(h), nil
+			},
+		},
+		{
+			name: "jitter, small buffer",
+			wrapper: func(h http.Handler) (http.Handler, error) {
+				wrapper, err := NewWrapper(RandomJitter(32, DefaultMinSize, false))
+				if err != nil {
+					return nil, err
+				}
+				return wrapper(h), nil
+			},
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			handler, err := tc.wrapper(handler)
+			assertNil(t, err)
+
+			req, resp := httptest.NewRequest(http.MethodGet, "/", nil), httptest.NewRecorder()
+			req.Header.Add("Accept-Encoding", "gzip")
+
+			handler.ServeHTTP(resp, req)
+
+			assertEqual(t, "text/html; charset=utf-8", resp.Header().Get("Content-Type"))
+		})
+	}
 }
