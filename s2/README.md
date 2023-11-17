@@ -1050,10 +1050,33 @@ Default streaming block size is 1MB.
 
 ## S2++ Mode
 
-If the first bytes of a block is `0x80, 0x00, 0x00` (copy, 2 byte offset = 0), this indicates that all [Copy with 4-byte offset (11)](https://github.com/google/snappy/blob/main/format_description.txt#L106) are all 3 bytes instead for the remainder of the block and literal value 63 is now a repeat code.
+If the first bytes of a block is `0x80, 0x00, 0x00` (copy, 2 byte offset = 0), 
+this indicates that all [Copy with 2-byte offset (10)](https://github.com/google/snappy/blob/main/format_description.txt#L98)
+and [Copy with 4-byte offset (11)](https://github.com/google/snappy/blob/main/format_description.txt#L106) tags change.
 
 There can be no literals before this tag and no repeats before a match as specified above.
 This will only trigger on this exact tag.
+
+## Tag 0x2 (TagCopy2)
+
+The length field now has a base value of 4 and there are 3 special valaues for longer matches.
+
+| Bits | Meaning | Description                                                            |
+|------|---------|------------------------------------------------------------------------|
+| 0-1  | Tag     | Always 0x2                                                             |
+| 2-7  | Length  | Length of copy or repeat<br/>Values are 0-63. See decoding table below |
+
+| Value | Output              |
+|-------|---------------------|
+| 0-60  | Base + Value        |
+| 61    | Base + Read 1 byte  |
+| 62    | Base + Read 2 bytes |
+| 63    | Base + Read 3 bytes |
+
+Base value is 4 for all copies.
+
+Offsets are encoded as 2 bytes following the length. 
+The maximum backreference offset is therefore 65535.
 
 ## Tag 0x3 (TagCopy4)
 

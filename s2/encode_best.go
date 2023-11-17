@@ -721,19 +721,11 @@ func emitCopySize(offset, length int) int {
 	}
 
 	// Offset no more than 2 bytes.
-	if length > 64 {
-		if offset < 2048 {
-			// Emit 8 bytes, then rest as repeats...
-			return 2 + emitRepeatSize(offset, length-12)
-		}
-		// Emit remaining as repeats, at least 4 bytes remain.
-		return 3 + emitRepeatSize(offset, length-64)
+	if offset < 2048 {
+		// Emit 11 bytes, then rest as repeats...
+		return 2 + emitRepeatSize(offset, length-12)
 	}
-	if length >= 12 || offset >= 2048 {
-		return 3
-	}
-	// Emit the remaining copy, encoded as 2 bytes.
-	return 2
+	return 2 + emitCopy2Size(length)
 }
 
 // emitCopyNoRepeatSize returns the size to encode the offset+length
@@ -781,4 +773,29 @@ func emitRepeatSize(offset, length int) int {
 		left = length - maxRepeat
 	}
 	return 4 + emitRepeatSize(offset, left)
+}
+
+// emitRepeatSize returns the number of bytes required to encode a repeat.
+// Length must be at least 4 and < 1<<24
+func emitCopy2Size(length int) int {
+	length -= 4
+	if length < 0 {
+		return 0
+	}
+
+	if length <= 60 {
+		return 1
+	}
+	if length <= 256 {
+		return 2
+	}
+	if length <= 65536 {
+		return 3
+	}
+	const maxRepeat = (1 << 24) - 1
+	left := 0
+	if length > maxRepeat {
+		left = length - maxRepeat
+	}
+	return 4 + emitRepeatSize(0, left)
 }

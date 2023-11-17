@@ -5,6 +5,7 @@ package s2
 
 import (
 	"bytes"
+	"fmt"
 	"math/bits"
 )
 
@@ -121,6 +122,9 @@ func emitRepeat(dst []byte, offset, length int) int {
 func encodeLength(dst []byte, tag uint8, length int) int {
 	// Repeat offset, make length cheaper
 	length--
+	if length < 0 {
+		panic(fmt.Sprintf("invalid length %d", length))
+	}
 	if length <= 28 {
 		dst[0] = uint8(length)<<3 | tag
 		return 1
@@ -148,6 +152,41 @@ func encodeLength(dst []byte, tag uint8, length int) int {
 	return 4
 }
 
+// encodeLength60 encodes a length and returns the number of bytes written.
+// length must be at least 4 and < 1<<24
+func encodeLength60(dst []byte, tag uint8, length int) int {
+	// Repeat offset, make length cheaper
+	length -= 4
+	if length < 0 {
+		panic(fmt.Sprintf("invalid length %d", length))
+	}
+	if length <= 60 {
+		dst[0] = uint8(length)<<2 | tag
+		return 1
+	}
+	if length < 256 {
+		dst[1] = uint8(length >> 0)
+		dst[0] = 61<<2 | tag
+		return 2
+	}
+
+	if length < 65536 {
+		dst[2] = uint8(length >> 8)
+		dst[1] = uint8(length >> 0)
+		dst[0] = 62<<2 | tag
+		return 3
+	}
+	const maxRepeat = (1 << 24) - 1
+	if length > maxRepeat {
+		panic("unreachable")
+	}
+	dst[3] = uint8(length >> 16)
+	dst[2] = uint8(length >> 8)
+	dst[1] = uint8(length >> 0)
+	dst[0] = 63<<2 | tagRepeat
+	return 4
+}
+
 // emitCopy writes a copy chunk and returns the number of bytes written.
 //
 // It assumes that:
@@ -167,36 +206,22 @@ func emitCopy(dst []byte, offset, length int) int {
 	}
 
 	// Offset no more than 2 bytes.
-	if length > 64 {
-		if offset < 2048 {
-			// emit 8 bytes as tagCopy1, rest as repeats.
-			dst[1] = uint8(offset)
-			dst[0] = uint8(offset>>8)<<5 | uint8(7)<<2 | tagCopy1
-			length -= 12
-			return 2 + emitRepeat(dst[2:], offset, length)
-		} else {
-			// Emit a length 64 copy, encoded as 3 bytes.
-			// Emit remaining as repeat value.
-			dst[2] = uint8(offset >> 8)
-			dst[1] = uint8(offset)
-			dst[0] = 63<<2 | tagCopy2
-			length -= 64
-			// Emit remaining as repeats. At least 1 byte.
-			return 3 + emitRepeat(dst[3:], offset, length)
+	if offset < 2048 {
+		// emit 12 bytes as tagCopy1, rest as repeats.
+		dst[1] = uint8(offset)
+		dst[0] = uint8(offset>>8)<<5 | uint8(7)<<2 | tagCopy1
+		length -= 12
+		if length > 0 {
+			emitRepeat(dst[2:], offset, length)
 		}
+		return 2
 	}
 
-	if length >= 12 || offset >= 2048 {
-		// Emit the remaining copy, encoded as 3 bytes.
-		dst[2] = uint8(offset >> 8)
-		dst[1] = uint8(offset)
-		dst[0] = uint8(length-1)<<2 | tagCopy2
-		return 3
-	}
-	// Emit the remaining copy, encoded as 2 bytes.
-	dst[1] = uint8(offset)
-	dst[0] = uint8(offset>>8)<<5 | uint8(length-4)<<2 | tagCopy1
-	return 2
+	// Emit the remaining copy, encoded as 3+ bytes.
+	n := encodeLength60(dst, tagCopy2, length)
+	dst[n+1] = uint8(offset >> 8)
+	dst[n] = uint8(offset)
+	return n + 2
 }
 
 // emitCopyNoRepeat writes a copy chunk and returns the number of bytes written.
