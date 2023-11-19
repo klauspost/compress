@@ -350,6 +350,7 @@ func (s *Scratch) compress4Xp(src []byte) ([]byte, error) {
 // Does not update s.clearCount.
 func (s *Scratch) countSimple(in []byte) (max int, reuse bool) {
 	reuse = true
+	_ = s.count // Assert that s != nil to speed up the following loop.
 	for _, v := range in {
 		s.count[v]++
 	}
