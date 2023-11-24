@@ -716,16 +716,17 @@ emitRemainder:
 //	4 <= length && length <= 1 << 24
 func emitCopySize(offset, length int) int {
 	if offset >= 65536 {
-		// Emit remaining as repeats
+		// 3 Byte offset + Variable length (base length 4).
 		return 3 + emitRepeatSize(offset, length-3)
 	}
 
 	// Offset no more than 2 bytes.
-	if offset < 2048 {
-		// Emit 11 bytes, then rest as repeats...
-		return 2 + emitRepeatSize(offset, length-12)
+	if offset < 2048 && length < 12 {
+		// Emit up to 11 bytes with short offset.
+		return 2
 	}
-	return 2 + emitCopy2Size(length)
+	// 2 byte offset + Variable length (base length 4).
+	return emitCopy2Size(length)
 }
 
 // emitCopyNoRepeatSize returns the size to encode the offset+length
@@ -752,7 +753,7 @@ func emitCopyNoRepeatSize(offset, length int) int {
 }
 
 // emitRepeatSize returns the number of bytes required to encode a repeat.
-// Length must be at least 4 and < 1<<24
+// Length must be at least 1 and < 1<<24
 func emitRepeatSize(offset, length int) int {
 	if length <= 0 {
 		return 0
@@ -761,6 +762,7 @@ func emitRepeatSize(offset, length int) int {
 	if length <= 29 {
 		return 1
 	}
+	length -= 29
 	if length <= 256 {
 		return 2
 	}
@@ -775,27 +777,34 @@ func emitRepeatSize(offset, length int) int {
 	return 4 + emitRepeatSize(offset, left)
 }
 
-// emitRepeatSize returns the number of bytes required to encode a repeat.
-// Length must be at least 4 and < 1<<24
+// emitCopy2Size returns the number of bytes required to encode a copy2.
+// Length must be less than 1<<24
 func emitCopy2Size(length int) int {
 	length -= 4
 	if length < 0 {
-		return 0
+		// Should not happen, but we keep it so caller doesn't have to check.
+		return 2
 	}
 
 	if length <= 60 {
-		return 1
+		// Length inside tag.
+		return 1 + 2
 	}
+	length -= 60
 	if length <= 256 {
-		return 2
+		// Length in 1 byte.
+		return 2 + 2
 	}
 	if length <= 65536 {
-		return 3
+		// Length in 2 bytes.
+		return 3 + 2
 	}
+	// Length in 3 bytes.
+	// Anything remaining must be repeats.
 	const maxRepeat = (1 << 24) - 1
 	left := 0
 	if length > maxRepeat {
 		left = length - maxRepeat
 	}
-	return 4 + emitRepeatSize(0, left)
+	return 2 + 4 + emitRepeatSize(0, left)
 }
