@@ -111,63 +111,26 @@ func emitLiteral(dst, lit []byte) int {
 const tagRepeat = tagCopy4 | 4
 
 // emitRepeat writes a repeat chunk and returns the number of bytes written.
-// Length must be at least 4 and < 1<<24
-func emitRepeat(dst []byte, offset, length int) int {
+// Length must be at least 1 and < 1<<24
+func emitRepeat(dst []byte, length int) int {
 	// Repeat offset, make length cheaper
-	return encodeLength(dst, tagRepeat, length)
-}
-
-// encodeLength encodes a length and returns the number of bytes written.
-// length must be at least 1 and < 1<<24
-func encodeLength(dst []byte, tag uint8, length int) int {
-	// Repeat offset, make length cheaper
-	length--
-	if length < 0 {
-		panic(fmt.Sprintf("invalid length %d", length))
-	}
-	if length <= 28 {
-		dst[0] = uint8(length)<<3 | tag
-		return 1
-	}
-	length -= 28
-	if length < 256 {
-		dst[1] = uint8(length >> 0)
-		dst[0] = 29<<3 | tag
-		return 2
-	}
-
-	if length < 65536 {
-		dst[2] = uint8(length >> 8)
-		dst[1] = uint8(length >> 0)
-		dst[0] = 30<<3 | tag
-		return 3
-	}
-	const maxRepeat = (1 << 24) - 1
-	if length > maxRepeat {
-		panic("unreachable")
-	}
-	dst[3] = uint8(length >> 16)
-	dst[2] = uint8(length >> 8)
-	dst[1] = uint8(length >> 0)
-	dst[0] = 31<<3 | tagRepeat
-	return 4
+	return encodeLength60(dst, tagCopy4, ((length-1)<<1)|1)
 }
 
 // encodeLength60 encodes a length and returns the number of bytes written.
-// length must be at least 4 and < 1<<24
+// length must be at least 0 and < 1<<24
 func encodeLength60(dst []byte, tag uint8, length int) int {
 	// Repeat offset, make length cheaper
-	length -= 4
 	if length < 0 {
 		panic(fmt.Sprintf("invalid length %d", length))
 	}
+	// Handle 0 -> 60
 	if length <= 60 {
 		dst[0] = uint8(length)<<2 | tag
 		return 1
 	}
-	length -= 60
-	if length < 256 {
-		dst[1] = uint8(length >> 0)
+	if length < 256+61 {
+		dst[1] = uint8((length - 61) >> 0)
 		dst[0] = 61<<2 | tag
 		return 2
 	}
@@ -185,7 +148,7 @@ func encodeLength60(dst []byte, tag uint8, length int) int {
 	dst[3] = uint8(length >> 16)
 	dst[2] = uint8(length >> 8)
 	dst[1] = uint8(length >> 0)
-	dst[0] = 63<<2 | tagRepeat
+	dst[0] = 63<<2 | tag
 	return 4
 }
 
@@ -199,7 +162,7 @@ func encodeLength60(dst []byte, tag uint8, length int) int {
 func emitCopy(dst []byte, offset, length int) int {
 	if offset >= 65536 {
 		// Encode tag+length as up to 4 bytes.
-		n := encodeLength(dst, tagCopy4, length-3)
+		n := encodeLength60(dst, tagCopy4, (length-4)<<1)
 		// Encode offset as 3 bytes.
 		dst[n+2] = uint8(offset >> 16)
 		dst[n+1] = uint8(offset >> 8)
@@ -211,13 +174,12 @@ func emitCopy(dst []byte, offset, length int) int {
 	if offset < 2048 && length < 12 {
 		// emit 12 bytes as tagCopy1, rest as repeats.
 		dst[1] = uint8(offset)
-		dst[0] = uint8(offset>>8)<<5 | uint8(7)<<2 | tagCopy1
-		length -= 12
+		dst[0] = uint8(offset>>8)<<5 | uint8(length-4)<<2 | tagCopy1
 		return 2
 	}
 
 	// 2 byte offset, with variable length.
-	n := encodeLength60(dst, tagCopy2, length)
+	n := encodeLength60(dst, tagCopy2, length-4)
 	dst[n+1] = uint8(offset >> 8)
 	dst[n] = uint8(offset)
 	return n + 2

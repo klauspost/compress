@@ -117,7 +117,7 @@ func encodeBlockBest(dst, src []byte, dict *Dict) (d int) {
 				}
 				offset := m.s - m.offset
 				if m.rep {
-					return score - emitRepeatSize(offset, m.length)
+					return score - emitRepeatSize(m.length)
 				}
 				return score - emitCopySize(offset, m.length)
 			}
@@ -397,7 +397,7 @@ func encodeBlockBest(dst, src []byte, dict *Dict) (d int) {
 					fmt.Println("REPEAT, length", best.length, "offset:", offset, "s-after:", s, "dict:", best.dict, "best:", best)
 				}
 				// same as `add := emitCopy(dst[d:], repeat, s-base)` but skips storing offset.
-				d += emitRepeat(dst[d:], offset, best.length)
+				d += emitRepeat(dst[d:], best.length)
 			} else {
 				// First match without dict cannot be a repeat.
 				if debug {
@@ -717,7 +717,7 @@ emitRemainder:
 func emitCopySize(offset, length int) int {
 	if offset >= 65536 {
 		// 3 Byte offset + Variable length (base length 4).
-		return 3 + emitRepeatSize(offset, length-3)
+		return 3 + emitCopy4Size(length)
 	}
 
 	// Offset no more than 2 bytes.
@@ -752,29 +752,24 @@ func emitCopyNoRepeatSize(offset, length int) int {
 	return 2
 }
 
-// emitRepeatSize returns the number of bytes required to encode a repeat.
+// emitRepeatSize returns the number of bytes required to encode a repeat including tag.
 // Length must be at least 1 and < 1<<24
-func emitRepeatSize(offset, length int) int {
+func emitRepeatSize(length int) int {
 	if length <= 0 {
 		return 0
 	}
+	length = ((length - 1) << 1) + 1
+	return emitCopy2Size(length) - 2
+}
 
-	if length <= 29 {
-		return 1
+// emitRepeatSize returns the number of bytes required to encode a repeat including tag.
+// Length must be at least 1 and < 1<<24
+func emitCopy4Size(length int) int {
+	if length <= 0 {
+		return 0
 	}
-	length -= 29
-	if length <= 256 {
-		return 2
-	}
-	if length <= 65536 {
-		return 3
-	}
-	const maxRepeat = (1 << 24) - 1
-	left := 0
-	if length > maxRepeat {
-		left = length - maxRepeat
-	}
-	return 4 + emitRepeatSize(offset, left)
+	length = (length - 4) << 1
+	return emitCopy2Size(length) + 1
 }
 
 // emitCopy2Size returns the number of bytes required to encode a copy2.
@@ -790,8 +785,7 @@ func emitCopy2Size(length int) int {
 		// Length inside tag.
 		return 1 + 2
 	}
-	length -= 60
-	if length <= 256 {
+	if length < 256+61 {
 		// Length in 1 byte.
 		return 2 + 2
 	}
@@ -806,5 +800,5 @@ func emitCopy2Size(length int) int {
 	if length > maxRepeat {
 		left = length - maxRepeat
 	}
-	return 2 + 4 + emitRepeatSize(0, left)
+	return 2 + 4 + emitRepeatSize(left)
 }

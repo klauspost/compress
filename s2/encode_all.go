@@ -143,7 +143,7 @@ func encodeBlockGo(dst, src []byte) (d int) {
 				}
 				if nextEmit > 0 {
 					// same as `add := emitCopy(dst[d:], repeat, s-base)` but skips storing offset.
-					d += emitRepeat(dst[d:], repeat, s-base)
+					d += emitRepeat(dst[d:], s-base)
 				} else {
 					// First match, cannot be repeat.
 					d += emitCopy(dst[d:], repeat, s-base)
@@ -546,7 +546,7 @@ searchDict:
 					s += 8
 					candidate += 8
 				}
-				d += emitRepeat(dst[d:], repeat, s-base)
+				d += emitRepeat(dst[d:], s-base)
 				if debug {
 					fmt.Println("emitted dict repeat length", s-base, "offset:", repeat, "s:", s)
 				}
@@ -594,7 +594,7 @@ searchDict:
 
 			if nextEmit > 0 {
 				// same as `add := emitCopy(dst[d:], repeat, s-base)` but skips storing offset.
-				d += emitRepeat(dst[d:], repeat, s-base)
+				d += emitRepeat(dst[d:], s-base)
 			} else {
 				// First match, cannot be repeat.
 				d += emitCopy(dst[d:], repeat, s-base)
@@ -712,7 +712,7 @@ searchDict:
 				} else {
 					// Split to ensure we don't start a copy within next block
 					d += emitCopy(dst[d:], repeat, 4)
-					d += emitRepeat(dst[d:], repeat, s-base-4)
+					d += emitRepeat(dst[d:], s-base-4)
 				}
 				if false {
 					// Validate match.
@@ -908,7 +908,7 @@ searchDict:
 				}
 				if nextEmit > 0 {
 					// same as `add := emitCopy(dst[d:], repeat, s-base)` but skips storing offset.
-					d += emitRepeat(dst[d:], repeat, s-base)
+					d += emitRepeat(dst[d:], s-base)
 				} else {
 					// First match, cannot be repeat.
 					d += emitCopy(dst[d:], repeat, s-base)

@@ -148,7 +148,7 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 					candidate += 8
 				}
 				// same as `add := emitCopy(dst[d:], repeat, s-base)` but skips storing offset.
-				d += emitRepeat(dst[d:], repeat, s-base)
+				d += emitRepeat(dst[d:], s-base)
 				nextEmit = s
 				if s >= sLimit {
 					goto emitRemainder
@@ -243,7 +243,7 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 
 		d += emitLiteral(dst[d:], src[nextEmit:base])
 		if repeat == offset {
-			d += emitRepeat(dst[d:], offset, s-base)
+			d += emitRepeat(dst[d:], s-base)
 		} else {
 			d += emitCopy(dst[d:], offset, s-base)
 			repeat = offset
@@ -595,7 +595,7 @@ searchDict:
 						s += 8
 						candidate += 8
 					}
-					d += emitRepeat(dst[d:], repeat, s-base)
+					d += emitRepeat(dst[d:], s-base)
 					if debug {
 						fmt.Println("emitted dict repeat length", s-base, "offset:", repeat, "s:", s)
 					}
@@ -718,7 +718,7 @@ searchDict:
 					if debug {
 						fmt.Println("emitted dict repeat, length", s-base, "offset:", offset, "s:", s, "dict offset:", candidateL)
 					}
-					d += emitRepeat(dst[d:], offset, s-base)
+					d += emitRepeat(dst[d:], s-base)
 				} else {
 					if debug {
 						fmt.Println("emitted dict copy, length", s-base, "offset:", offset, "s:", s, "dict offset:", candidateL)
@@ -729,7 +729,7 @@ searchDict:
 					} else {
 						// Split to ensure we don't start a copy within next block.
 						d += emitCopy(dst[d:], offset, 4)
-						d += emitRepeat(dst[d:], offset, s-base-4)
+						d += emitRepeat(dst[d:], s-base-4)
 					}
 					repeat = offset
 				}
@@ -834,7 +834,7 @@ searchDict:
 			if debug {
 				fmt.Println("emitted match repeat, length", s-base, "offset:", offset, "s:", s)
 			}
-			d += emitRepeat(dst[d:], offset, s-base)
+			d += emitRepeat(dst[d:], s-base)
 		} else {
 			if debug {
 				fmt.Println("emitted match copy, length", s-base, "offset:", offset, "s:", s)
@@ -957,7 +957,7 @@ searchDict:
 					candidate += 8
 				}
 				// same as `add := emitCopy(dst[d:], repeat, s-base)` but skips storing offset.
-				d += emitRepeat(dst[d:], repeat, s-base)
+				d += emitRepeat(dst[d:], s-base)
 				nextEmit = s
 				if s >= sLimit {
 					goto emitRemainder
@@ -1052,7 +1052,7 @@ searchDict:
 
 		d += emitLiteral(dst[d:], src[nextEmit:base])
 		if repeat == offset {
-			d += emitRepeat(dst[d:], offset, s-base)
+			d += emitRepeat(dst[d:], s-base)
 		} else {
 			d += emitCopy(dst[d:], offset, s-base)
 			repeat = offset
