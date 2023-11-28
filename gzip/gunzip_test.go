@@ -9,6 +9,7 @@ import (
 	"bytes"
 	oldgz "compress/gzip"
 	"crypto/rand"
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -408,11 +409,14 @@ func TestDecompressor(t *testing.T) {
 }
 
 func TestIssue6550(t *testing.T) {
-	f, err := os.Open("testdata/issue6550.gz")
+	b, err := os.ReadFile("testdata/issue6550.gz")
 	if err != nil {
 		t.Fatal(err)
 	}
-	gzip, err := NewReader(f)
+	// issue6550.gz has invalid flag bit set.
+	// TestReservedBits tests that. Fix it up for this test.
+	b[3] &= 0x1f
+	gzip, err := NewReader(bytes.NewReader(b))
 	if err != nil {
 		t.Fatalf("NewReader(testdata/issue6550.gz): %v", err)
 	}
@@ -432,6 +436,21 @@ func TestIssue6550(t *testing.T) {
 		t.Errorf("Copy hung")
 	case <-done:
 		// ok
+	}
+}
+
+func TestReservedBits(t *testing.T) {
+	f, err := os.Open("testdata/issue6550.gz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	_, err = NewReader(f)
+	if err == nil {
+		t.Fatalf("Reserved bits did not result in error")
+	}
+	if !errors.Is(err, ErrHeader) {
+		t.Fatal("Expected ErrHeader, got", err)
 	}
 }
 
