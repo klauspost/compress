@@ -16,6 +16,18 @@ This package provides various compression algorithms.
 
 # changelog
 
+* Dec 1st, 2023 - [v1.17.4](https://github.com/klauspost/compress/releases/tag/v1.17.4)
+	* huff0: Speed up symbol counting by @greatroar in https://github.com/klauspost/compress/pull/887
+	* huff0: Remove byteReader by @greatroar in https://github.com/klauspost/compress/pull/886
+	* gzhttp: Allow overriding decompression on transport https://github.com/klauspost/compress/pull/892
+	* gzhttp: Clamp compression level https://github.com/klauspost/compress/pull/890
+	* gzip: Error out if reserved bits are set https://github.com/klauspost/compress/pull/891
+
+* Nov 15th, 2023 - [v1.17.3](https://github.com/klauspost/compress/releases/tag/v1.17.3)
+	* fse: Fix max header size https://github.com/klauspost/compress/pull/881
+	* zstd: Improve better/best compression https://github.com/klauspost/compress/pull/877
+	* gzhttp: Fix missing content type on Close https://github.com/klauspost/compress/pull/883
+
 * Oct 22nd, 2023 - [v1.17.2](https://github.com/klauspost/compress/releases/tag/v1.17.2)
 	* zstd: Fix rare *CORRUPTION* output in "best" mode. See https://github.com/klauspost/compress/pull/876
 
