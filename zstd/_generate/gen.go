@@ -316,7 +316,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 				lowBits := GP64()
 				BZHIQ(nBits, bits, lowBits) // lowBits = bits & ((1 << nBits) - 1))
 				SHRXQ(nBits, bits, bits)    // bits >>= nBits
-				o.nextState(name+"_ofState", ofState, lowBits, "ofTable")
+				o.nextState(ofState, lowBits, "ofTable")
 			}
 			Comment("Update Match Length State")
 			{
@@ -324,22 +324,22 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 				lowBits := GP64()
 				BZHIQ(nBits, bits, lowBits) // lowBits = bits & ((1 << nBits) - 1))
 				SHRXQ(nBits, bits, bits)    // lowBits >>= nBits
-				o.nextState(name+"_mlState", mlState, lowBits, "mlTable")
+				o.nextState(mlState, lowBits, "mlTable")
 			}
 			Comment("Update Literal Length State")
 			{
 				nBits := llState
 				lowBits := GP64()
 				BZHIQ(nBits, bits, lowBits) // lowBits = bits & ((1 << nBits) - 1))
-				o.nextState(name+"_llState", llState, lowBits, "llTable")
+				o.nextState(llState, lowBits, "llTable")
 			}
 		} else {
 			Comment("Update Literal Length State")
-			o.updateState(name+"_llState", llState, brValue, brBitsRead, "llTable")
+			o.updateState(llState, brValue, brBitsRead, "llTable")
 			Comment("Update Match Length State")
-			o.updateState(name+"_mlState", mlState, brValue, brBitsRead, "mlTable")
+			o.updateState(mlState, brValue, brBitsRead, "mlTable")
 			Comment("Update Offset State")
-			o.updateState(name+"_ofState", ofState, brValue, brBitsRead, "ofTable")
+			o.updateState(ofState, brValue, brBitsRead, "ofTable")
 		}
 	}
 	Label(name + "_skip_update")
@@ -631,8 +631,7 @@ func (o options) updateLength(name string, brValue, brBitsRead, state reg.GPVirt
 	}
 }
 
-func (o options) updateState(name string, state, brValue, brBitsRead reg.GPVirtual, table string) {
-	name = name + "_updateState"
+func (o options) updateState(state, brValue, brBitsRead reg.GPVirtual, table string) {
 	AX := GP64()
 	MOVBQZX(state.As8(), AX) // AX = nBits
 	// Check we have a reasonable nBits
@@ -674,7 +673,7 @@ func (o options) updateState(name string, state, brValue, brBitsRead reg.GPVirtu
 	MOVQ(Mem{Base: tablePtr, Index: DX, Scale: 8}, state)
 }
 
-func (o options) nextState(name string, state, lowBits reg.GPVirtual, table string) {
+func (o options) nextState(state, lowBits reg.GPVirtual, table string) {
 	DX := GP64()
 	MOVL(state.As32(), DX.As32()) // Clear the top 32 bits.
 	SHRL(U8(16), DX.As32())
