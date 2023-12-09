@@ -642,15 +642,8 @@ func (o options) updateState(name string, state, brValue, brBitsRead reg.GPVirtu
 	})
 
 	DX := GP64()
-	if o.bmi2 {
-		tmp := GP64()
-		MOVQ(U32(16|(16<<8)), tmp)
-		BEXTRQ(tmp, state, DX)
-	} else {
-		MOVQ(state, DX)
-		SHRQ(U8(16), DX)
-		MOVWQZX(DX.As16(), DX)
-	}
+	MOVL(state.As32(), DX.As32()) // Clear the top 32 bits.
+	SHRL(U8(16), DX.As32())
 
 	{
 		lowBits := o.getBits(AX, brValue, brBitsRead)
@@ -683,15 +676,8 @@ func (o options) updateState(name string, state, brValue, brBitsRead reg.GPVirtu
 
 func (o options) nextState(name string, state, lowBits reg.GPVirtual, table string) {
 	DX := GP64()
-	if o.bmi2 {
-		tmp := GP64()
-		MOVQ(U32(16|(16<<8)), tmp)
-		BEXTRQ(tmp, state, DX)
-	} else {
-		MOVQ(state, DX)
-		SHRQ(U8(16), DX)
-		MOVWQZX(DX.As16(), DX)
-	}
+	MOVL(state.As32(), DX.As32()) // Clear the top 32 bits.
+	SHRL(U8(16), DX.As32())
 
 	ADDQ(lowBits, DX)
 
