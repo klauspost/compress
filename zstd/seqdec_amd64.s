@@ -223,51 +223,28 @@ sequenceDecs_decode_amd64_skip_update:
 	JMP  sequenceDecs_decode_amd64_after_adjust
 
 sequenceDecs_decode_amd64_adjust_offsetB_1_or_0:
-	CMPQ (R10), $0x00000000
-	JNE  sequenceDecs_decode_amd64_adjust_offset_maybezero
-	INCQ CX
-	JMP  sequenceDecs_decode_amd64_adjust_offset_nonzero
-
-sequenceDecs_decode_amd64_adjust_offset_maybezero:
-	TESTQ CX, CX
-	JNZ   sequenceDecs_decode_amd64_adjust_offset_nonzero
-	MOVQ  R11, CX
-	JMP   sequenceDecs_decode_amd64_after_adjust
+	LEAQ    1(CX), AX
+	CMPQ    (R10), $0x00000000
+	CMOVQEQ AX, CX
+	TESTQ   CX, CX
+	JNZ     sequenceDecs_decode_amd64_adjust_offset_nonzero
+	MOVQ    R11, CX
+	JMP     sequenceDecs_decode_amd64_after_adjust
 
 sequenceDecs_decode_amd64_adjust_offset_nonzero:
-	CMPQ CX, $0x01
-	JB   sequenceDecs_decode_amd64_adjust_zero
-	JEQ  sequenceDecs_decode_amd64_adjust_one
-	CMPQ CX, $0x02
-	JA   sequenceDecs_decode_amd64_adjust_three
-	JMP  sequenceDecs_decode_amd64_adjust_two
-
-sequenceDecs_decode_amd64_adjust_zero:
-	MOVQ R11, AX
-	JMP  sequenceDecs_decode_amd64_adjust_test_temp_valid
-
-sequenceDecs_decode_amd64_adjust_one:
-	MOVQ R12, AX
-	JMP  sequenceDecs_decode_amd64_adjust_test_temp_valid
-
-sequenceDecs_decode_amd64_adjust_two:
-	MOVQ R13, AX
-	JMP  sequenceDecs_decode_amd64_adjust_test_temp_valid
-
-sequenceDecs_decode_amd64_adjust_three:
-	LEAQ -1(R11), AX
-
-sequenceDecs_decode_amd64_adjust_test_temp_valid:
-	TESTQ AX, AX
-	JNZ   sequenceDecs_decode_amd64_adjust_temp_valid
-	MOVQ  $0x00000001, AX
+	LEAQ    -1(R11), AX
+	CMPQ    CX, $0x02
+	CMOVQEQ R13, AX
+	CMOVQCS R12, AX
+	CMOVQCC R12, R13
+	TESTQ   AX, AX
+	JNZ     sequenceDecs_decode_amd64_adjust_temp_valid
+	INCL    AX
 
 sequenceDecs_decode_amd64_adjust_temp_valid:
-	CMPQ    CX, $0x01
-	CMOVQNE R12, R13
-	MOVQ    R11, R12
-	MOVQ    AX, R11
-	MOVQ    AX, CX
+	MOVQ R11, R12
+	MOVQ AX, R11
+	MOVQ AX, CX
 
 sequenceDecs_decode_amd64_after_adjust:
 	MOVQ CX, 16(R10)
@@ -522,51 +499,28 @@ sequenceDecs_decode_56_amd64_skip_update:
 	JMP  sequenceDecs_decode_56_amd64_after_adjust
 
 sequenceDecs_decode_56_amd64_adjust_offsetB_1_or_0:
-	CMPQ (R10), $0x00000000
-	JNE  sequenceDecs_decode_56_amd64_adjust_offset_maybezero
-	INCQ CX
-	JMP  sequenceDecs_decode_56_amd64_adjust_offset_nonzero
-
-sequenceDecs_decode_56_amd64_adjust_offset_maybezero:
-	TESTQ CX, CX
-	JNZ   sequenceDecs_decode_56_amd64_adjust_offset_nonzero
-	MOVQ  R11, CX
-	JMP   sequenceDecs_decode_56_amd64_after_adjust
+	LEAQ    1(CX), AX
+	CMPQ    (R10), $0x00000000
+	CMOVQEQ AX, CX
+	TESTQ   CX, CX
+	JNZ     sequenceDecs_decode_56_amd64_adjust_offset_nonzero
+	MOVQ    R11, CX
+	JMP     sequenceDecs_decode_56_amd64_after_adjust
 
 sequenceDecs_decode_56_amd64_adjust_offset_nonzero:
-	CMPQ CX, $0x01
-	JB   sequenceDecs_decode_56_amd64_adjust_zero
-	JEQ  sequenceDecs_decode_56_amd64_adjust_one
-	CMPQ CX, $0x02
-	JA   sequenceDecs_decode_56_amd64_adjust_three
-	JMP  sequenceDecs_decode_56_amd64_adjust_two
-
-sequenceDecs_decode_56_amd64_adjust_zero:
-	MOVQ R11, AX
-	JMP  sequenceDecs_decode_56_amd64_adjust_test_temp_valid
-
-sequenceDecs_decode_56_amd64_adjust_one:
-	MOVQ R12, AX
-	JMP  sequenceDecs_decode_56_amd64_adjust_test_temp_valid
-
-sequenceDecs_decode_56_amd64_adjust_two:
-	MOVQ R13, AX
-	JMP  sequenceDecs_decode_56_amd64_adjust_test_temp_valid
-
-sequenceDecs_decode_56_amd64_adjust_three:
-	LEAQ -1(R11), AX
-
-sequenceDecs_decode_56_amd64_adjust_test_temp_valid:
-	TESTQ AX, AX
-	JNZ   sequenceDecs_decode_56_amd64_adjust_temp_valid
-	MOVQ  $0x00000001, AX
+	LEAQ    -1(R11), AX
+	CMPQ    CX, $0x02
+	CMOVQEQ R13, AX
+	CMOVQCS R12, AX
+	CMOVQCC R12, R13
+	TESTQ   AX, AX
+	JNZ     sequenceDecs_decode_56_amd64_adjust_temp_valid
+	INCL    AX
 
 sequenceDecs_decode_56_amd64_adjust_temp_valid:
-	CMPQ    CX, $0x01
-	CMOVQNE R12, R13
-	MOVQ    R11, R12
-	MOVQ    AX, R11
-	MOVQ    AX, CX
+	MOVQ R11, R12
+	MOVQ AX, R11
+	MOVQ AX, CX
 
 sequenceDecs_decode_56_amd64_after_adjust:
 	MOVQ CX, 16(R10)
@@ -808,51 +762,28 @@ sequenceDecs_decode_bmi2_skip_update:
 	JMP  sequenceDecs_decode_bmi2_after_adjust
 
 sequenceDecs_decode_bmi2_adjust_offsetB_1_or_0:
-	CMPQ (R9), $0x00000000
-	JNE  sequenceDecs_decode_bmi2_adjust_offset_maybezero
-	INCQ CX
-	JMP  sequenceDecs_decode_bmi2_adjust_offset_nonzero
-
-sequenceDecs_decode_bmi2_adjust_offset_maybezero:
-	TESTQ CX, CX
-	JNZ   sequenceDecs_decode_bmi2_adjust_offset_nonzero
-	MOVQ  R10, CX
-	JMP   sequenceDecs_decode_bmi2_after_adjust
+	LEAQ    1(CX), R13
+	CMPQ    (R9), $0x00000000
+	CMOVQEQ R13, CX
+	TESTQ   CX, CX
+	JNZ     sequenceDecs_decode_bmi2_adjust_offset_nonzero
+	MOVQ    R10, CX
+	JMP     sequenceDecs_decode_bmi2_after_adjust
 
 sequenceDecs_decode_bmi2_adjust_offset_nonzero:
-	CMPQ CX, $0x01
-	JB   sequenceDecs_decode_bmi2_adjust_zero
-	JEQ  sequenceDecs_decode_bmi2_adjust_one
-	CMPQ CX, $0x02
-	JA   sequenceDecs_decode_bmi2_adjust_three
-	JMP  sequenceDecs_decode_bmi2_adjust_two
-
-sequenceDecs_decode_bmi2_adjust_zero:
-	MOVQ R10, R13
-	JMP  sequenceDecs_decode_bmi2_adjust_test_temp_valid
-
-sequenceDecs_decode_bmi2_adjust_one:
-	MOVQ R11, R13
-	JMP  sequenceDecs_decode_bmi2_adjust_test_temp_valid
-
-sequenceDecs_decode_bmi2_adjust_two:
-	MOVQ R12, R13
-	JMP  sequenceDecs_decode_bmi2_adjust_test_temp_valid
-
-sequenceDecs_decode_bmi2_adjust_three:
-	LEAQ -1(R10), R13
-
-sequenceDecs_decode_bmi2_adjust_test_temp_valid:
-	TESTQ R13, R13
-	JNZ   sequenceDecs_decode_bmi2_adjust_temp_valid
-	MOVQ  $0x00000001, R13
+	LEAQ    -1(R10), R13
+	CMPQ    CX, $0x02
+	CMOVQEQ R12, R13
+	CMOVQCS R11, R13
+	CMOVQCC R11, R12
+	TESTQ   R13, R13
+	JNZ     sequenceDecs_decode_bmi2_adjust_temp_valid
+	INCL    R13
 
 sequenceDecs_decode_bmi2_adjust_temp_valid:
-	CMPQ    CX, $0x01
-	CMOVQNE R11, R12
-	MOVQ    R10, R11
-	MOVQ    R13, R10
-	MOVQ    R13, CX
+	MOVQ R10, R11
+	MOVQ R13, R10
+	MOVQ R13, CX
 
 sequenceDecs_decode_bmi2_after_adjust:
 	MOVQ CX, 16(R9)
@@ -1065,51 +996,28 @@ sequenceDecs_decode_56_bmi2_skip_update:
 	JMP  sequenceDecs_decode_56_bmi2_after_adjust
 
 sequenceDecs_decode_56_bmi2_adjust_offsetB_1_or_0:
-	CMPQ (R9), $0x00000000
-	JNE  sequenceDecs_decode_56_bmi2_adjust_offset_maybezero
-	INCQ CX
-	JMP  sequenceDecs_decode_56_bmi2_adjust_offset_nonzero
-
-sequenceDecs_decode_56_bmi2_adjust_offset_maybezero:
-	TESTQ CX, CX
-	JNZ   sequenceDecs_decode_56_bmi2_adjust_offset_nonzero
-	MOVQ  R10, CX
-	JMP   sequenceDecs_decode_56_bmi2_after_adjust
+	LEAQ    1(CX), R13
+	CMPQ    (R9), $0x00000000
+	CMOVQEQ R13, CX
+	TESTQ   CX, CX
+	JNZ     sequenceDecs_decode_56_bmi2_adjust_offset_nonzero
+	MOVQ    R10, CX
+	JMP     sequenceDecs_decode_56_bmi2_after_adjust
 
 sequenceDecs_decode_56_bmi2_adjust_offset_nonzero:
-	CMPQ CX, $0x01
-	JB   sequenceDecs_decode_56_bmi2_adjust_zero
-	JEQ  sequenceDecs_decode_56_bmi2_adjust_one
-	CMPQ CX, $0x02
-	JA   sequenceDecs_decode_56_bmi2_adjust_three
-	JMP  sequenceDecs_decode_56_bmi2_adjust_two
-
-sequenceDecs_decode_56_bmi2_adjust_zero:
-	MOVQ R10, R13
-	JMP  sequenceDecs_decode_56_bmi2_adjust_test_temp_valid
-
-sequenceDecs_decode_56_bmi2_adjust_one:
-	MOVQ R11, R13
-	JMP  sequenceDecs_decode_56_bmi2_adjust_test_temp_valid
-
-sequenceDecs_decode_56_bmi2_adjust_two:
-	MOVQ R12, R13
-	JMP  sequenceDecs_decode_56_bmi2_adjust_test_temp_valid
-
-sequenceDecs_decode_56_bmi2_adjust_three:
-	LEAQ -1(R10), R13
-
-sequenceDecs_decode_56_bmi2_adjust_test_temp_valid:
-	TESTQ R13, R13
-	JNZ   sequenceDecs_decode_56_bmi2_adjust_temp_valid
-	MOVQ  $0x00000001, R13
+	LEAQ    -1(R10), R13
+	CMPQ    CX, $0x02
+	CMOVQEQ R12, R13
+	CMOVQCS R11, R13
+	CMOVQCC R11, R12
+	TESTQ   R13, R13
+	JNZ     sequenceDecs_decode_56_bmi2_adjust_temp_valid
+	INCL    R13
 
 sequenceDecs_decode_56_bmi2_adjust_temp_valid:
-	CMPQ    CX, $0x01
-	CMOVQNE R11, R12
-	MOVQ    R10, R11
-	MOVQ    R13, R10
-	MOVQ    R13, CX
+	MOVQ R10, R11
+	MOVQ R13, R10
+	MOVQ R13, CX
 
 sequenceDecs_decode_56_bmi2_after_adjust:
 	MOVQ CX, 16(R9)
@@ -2036,10 +1944,9 @@ sequenceDecs_decodeSync_amd64_adjust_offset_maybezero:
 sequenceDecs_decodeSync_amd64_adjust_offset_nonzero:
 	MOVQ    R13, AX
 	XORQ    R14, R14
-	MOVQ    $-1, R15
 	CMPQ    R13, $0x03
 	CMOVQEQ R14, AX
-	CMOVQEQ R15, R14
+	ADCQ    $-1, R14
 	ADDQ    144(CX)(AX*8), R14
 	JNZ     sequenceDecs_decodeSync_amd64_adjust_temp_valid
 	MOVQ    $0x00000001, R14
@@ -2556,10 +2463,9 @@ sequenceDecs_decodeSync_bmi2_adjust_offset_maybezero:
 sequenceDecs_decodeSync_bmi2_adjust_offset_nonzero:
 	MOVQ    R13, R12
 	XORQ    R14, R14
-	MOVQ    $-1, R15
 	CMPQ    R13, $0x03
 	CMOVQEQ R14, R12
-	CMOVQEQ R15, R14
+	ADCQ    $-1, R14
 	ADDQ    144(CX)(R12*8), R14
 	JNZ     sequenceDecs_decodeSync_bmi2_adjust_temp_valid
 	MOVQ    $0x00000001, R14
@@ -3118,10 +3024,9 @@ sequenceDecs_decodeSync_safe_amd64_adjust_offset_maybezero:
 sequenceDecs_decodeSync_safe_amd64_adjust_offset_nonzero:
 	MOVQ    R13, AX
 	XORQ    R14, R14
-	MOVQ    $-1, R15
 	CMPQ    R13, $0x03
 	CMOVQEQ R14, AX
-	CMOVQEQ R15, R14
+	ADCQ    $-1, R14
 	ADDQ    144(CX)(AX*8), R14
 	JNZ     sequenceDecs_decodeSync_safe_amd64_adjust_temp_valid
 	MOVQ    $0x00000001, R14
@@ -3740,10 +3645,9 @@ sequenceDecs_decodeSync_safe_bmi2_adjust_offset_maybezero:
 sequenceDecs_decodeSync_safe_bmi2_adjust_offset_nonzero:
 	MOVQ    R13, R12
 	XORQ    R14, R14
-	MOVQ    $-1, R15
 	CMPQ    R13, $0x03
 	CMOVQEQ R14, R12
-	CMOVQEQ R15, R14
+	ADCQ    $-1, R14
 	ADDQ    144(CX)(R12*8), R14
 	JNZ     sequenceDecs_decodeSync_safe_bmi2_adjust_temp_valid
 	MOVQ    $0x00000001, R14

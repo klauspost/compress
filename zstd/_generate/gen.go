@@ -747,18 +747,10 @@ func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual, 
 	//     offset++
 	// }
 	{
-		if true {
-			CMPQ(llP, U32(0))
-			JNE(LabelRef(name + "_offset_maybezero"))
-			INCQ(offset)
-			JMP(LabelRef(name + "_offset_nonzero"))
-		} else {
-			// No idea why this doesn't work:
-			tmp := GP64()
-			LEAQ(Mem{Base: offset, Disp: 1}, tmp)
-			CMPQ(llP, U32(0))
-			CMOVQEQ(tmp, offset)
-		}
+		tmp := GP64()
+		LEAQ(Mem{Base: offset, Disp: 1}, tmp)
+		CMPQ(llP, U32(0))
+		CMOVQEQ(tmp, offset)
 
 		// if offset == 0 {
 		//     return s.prevOffset[0]
@@ -771,56 +763,25 @@ func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual, 
 			JMP(end)
 		}
 	}
+
 	Label(name + "_offset_nonzero")
 	{
-		// if offset == 3 {
-		//     temp = s.prevOffset[0] - 1
-		// } else {
-		//     temp = s.prevOffset[offset]
-		// }
 		temp := GP64()
-		CMPQ(offset, U8(1))
-		JB(LabelRef(name + "_zero"))
-		JEQ(LabelRef(name + "_one"))
-		CMPQ(offset, U8(2))
-		JA(LabelRef(name + "_three"))
-		JMP(LabelRef(name + "_two"))
-
-		Label(name + "_zero")
-		MOVQ(offsets[0], temp)
-		JMP(LabelRef(name + "_test_temp_valid"))
-
-		Label(name + "_one")
-		MOVQ(offsets[1], temp)
-		JMP(LabelRef(name + "_test_temp_valid"))
-
-		Label(name + "_two")
-		MOVQ(offsets[2], temp)
-		JMP(LabelRef(name + "_test_temp_valid"))
-
-		Label(name + "_three")
+		// temp = s.prevOffset[0] - 1, for when offset == 3.
 		LEAQ(Mem{Base: offsets[0], Disp: -1}, temp)
 
-		Label(name + "_test_temp_valid")
-		// if temp == 0 {
-		//     temp = 1
-		// }
+		CMPQ(offset, U8(2))
+		CMOVQEQ(offsets[2], temp)       // If offset == 2.
+		CMOVQCS(offsets[1], temp)       // If offset == 1.
+		CMOVQCC(offsets[1], offsets[2]) // If offset >= 2.
+
+		// if temp == 0 { temp = 1 } to handle invalid inputs.
+		// This is a perfectly predictable branch, no need for CMOV.
 		TESTQ(temp, temp)
 		JNZ(LabelRef(name + "_temp_valid"))
-		MOVQ(U32(1), temp)
-
+		INCL(temp.As32())
 		Label(name + "_temp_valid")
-		// if offset != 1 {
-		//     s.prevOffset[2] = s.prevOffset[1]
-		// }
-		CMPQ(offset, U8(1))
-		if false {
-			JZ(LabelRef(name + "_skip"))
-			MOVQ(offsets[1], offsets[2]) // s.prevOffset[2] = s.prevOffset[1]
-			Label(name + "_skip")
-		} else {
-			CMOVQNE(offsets[1], offsets[2])
-		}
+
 		// s.prevOffset[1] = s.prevOffset[0]
 		// s.prevOffset[0] = temp
 		MOVQ(offsets[0], offsets[1])
@@ -914,13 +875,12 @@ func (o options) adjustOffsetInMemory(name string, moP, llP Mem, offsetB reg.GPV
 		// }
 		// temp := s.prevOffset[ofs] + shift
 		// TODO: This should be easier...
-		CX, DX, R15 := GP64(), GP64(), GP64()
+		CX, DX := GP64(), GP64()
 		MOVQ(offset, CX)
 		XORQ(DX, DX)
-		MOVQ(I32(-1), R15)
 		CMPQ(offset, U8(3))
 		CMOVQEQ(DX, CX)
-		CMOVQEQ(R15, DX)
+		ADCQ(I32(-1), DX) // DX += (offset < 0) - 1
 		assert(func(ok LabelRef) {
 			CMPQ(CX, U32(0))
 			JAE(ok)
