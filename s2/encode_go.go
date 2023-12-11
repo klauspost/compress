@@ -199,8 +199,13 @@ func encodeLength60(dst []byte, tag uint8, length int) int {
 func emitCopy(dst []byte, offset, length int) int {
 	offset--
 	if offset >= 65536 {
+		length = length - 3
 		// Encode tag+length as up to 4 bytes.
-		n := encodeLength(dst, tagCopy4, length-3)
+		if length > 28 {
+			offset |= 1 << 23
+			length -= 28
+		}
+		n := encodeLength(dst, tagCopy4, length)
 		// Encode offset as 3 bytes.
 		dst[n+2] = uint8(offset >> 16)
 		dst[n+1] = uint8(offset >> 8)

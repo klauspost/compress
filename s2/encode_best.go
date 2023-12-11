@@ -717,7 +717,11 @@ emitRemainder:
 func emitCopySize(offset, length int) int {
 	if offset >= 65536 {
 		// 3 Byte offset + Variable length (base length 4).
-		return 3 + emitRepeatSize(offset, length-3)
+		length -= 3
+		if length > 28 {
+			length -= 28
+		}
+		return 3 + emitRepeatSize(offset, length)
 	}
 
 	// Offset no more than 2 bytes.
