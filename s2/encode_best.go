@@ -721,9 +721,14 @@ func emitCopySize(offset, length int) int {
 	}
 
 	// Offset no more than 2 bytes.
-	if offset < 2048 && length < 12 {
-		// Emit up to 11 bytes with short offset.
-		return 2
+	if offset < 1024 {
+		if length < 11+8 {
+			// Emit up to 18 bytes with short offset.
+			return 2
+		}
+		if length < 18+256 {
+			return 3
+		}
 	}
 	// 2 byte offset + Variable length (base length 4).
 	return emitCopy2Size(length)

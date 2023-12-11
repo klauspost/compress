@@ -197,6 +197,7 @@ func encodeLength60(dst []byte, tag uint8, length int) int {
 //	1 <= offset && offset <= math.MaxUint32
 //	4 <= length && length <= 1 << 24
 func emitCopy(dst []byte, offset, length int) int {
+	offset--
 	if offset >= 65536 {
 		// Encode tag+length as up to 4 bytes.
 		n := encodeLength(dst, tagCopy4, length-3)
@@ -208,12 +209,20 @@ func emitCopy(dst []byte, offset, length int) int {
 	}
 
 	// Offset no more than 2 bytes and length less than 12.
-	if offset < 2048 && length < 12 {
-		// emit 12 bytes as tagCopy1, rest as repeats.
-		dst[1] = uint8(offset)
-		dst[0] = uint8(offset>>8)<<5 | uint8(7)<<2 | tagCopy1
-		length -= 12
-		return 2
+	if offset < 1024 {
+		if length < 12+8 {
+			// FIXME: Incorrect encoding
+			dst[1] = uint8(offset)
+			dst[0] = uint8(offset>>8)<<5 | uint8(length-4)<<2 | tagCopy1
+			return 2
+		}
+		if length < 18+256 {
+			// FIXME: Incorrect encoding
+			dst[2] = uint8(length - 18)
+			dst[1] = uint8(offset)
+			dst[0] = uint8(offset>>8)<<5 | uint8(11+8)<<2 | tagCopy1
+			return 3
+		}
 	}
 
 	// 2 byte offset, with variable length.
