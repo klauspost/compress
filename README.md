@@ -566,18 +566,18 @@ For direct deflate use, NewStatelessWriter and StatelessDeflate are available. S
 
 A `bufio.Writer` can of course be used to control write sizes. For example, to use a 4KB buffer:
 
-```
-	// replace 'ioutil.Discard' with your output.
-	gzw, err := gzip.NewWriterLevel(ioutil.Discard, gzip.StatelessCompression)
-	if err != nil {
-		return err
-	}
-	defer gzw.Close()
+```go
+// replace 'ioutil.Discard' with your output.
+gzw, err := gzip.NewWriterLevel(ioutil.Discard, gzip.StatelessCompression)
+if err != nil {
+	return err
+}
+defer gzw.Close()
 
-	w := bufio.NewWriterSize(gzw, 4096)
-	defer w.Flush()
-	
-	// Write to 'w' 
+w := bufio.NewWriterSize(gzw, 4096)
+defer w.Flush()
+
+// Write to 'w' 
 ```
 
 This will only use up to 4KB in memory when the writer is idle. 
