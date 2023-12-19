@@ -13,6 +13,8 @@ import (
 	"io"
 	"runtime"
 	"sync"
+
+	"github.com/klauspost/compress/internal/race"
 )
 
 const (
@@ -385,6 +387,8 @@ func (w *Writer) EncodeBuffer(buf []byte) (err error) {
 		buf = buf[len(uncompressed):]
 		// Get an output buffer.
 		obuf := w.buffers.Get().([]byte)[:len(uncompressed)+obufHeaderLen]
+		race.WriteSlice(obuf)
+
 		output := make(chan result)
 		// Queue output now, so we keep order.
 		w.output <- output
@@ -393,6 +397,8 @@ func (w *Writer) EncodeBuffer(buf []byte) (err error) {
 		}
 		w.uncompWritten += int64(len(uncompressed))
 		go func() {
+			race.ReadSlice(uncompressed)
+
 			checksum := crc(uncompressed)
 
 			// Set to uncompressed.
