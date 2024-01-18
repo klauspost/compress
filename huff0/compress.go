@@ -74,7 +74,11 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 		// One symbol, use RLE
 		return nil, false, ErrUseRLE
 	}
-	if maxCount == 1 || maxCount < (len(in)>>7) {
+	atLeastEach := (len(in) + 255) / 256
+	if s.WantLogLess > 0 {
+		atLeastEach = (len(in) + 255 - (len(in) >> s.WantLogLess)) / 256
+	}
+	if maxCount == 1 || maxCount <= atLeastEach {
 		// Each symbol present maximum once or too well distributed.
 		return nil, false, ErrIncompressible
 	}

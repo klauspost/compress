@@ -20,6 +20,7 @@ type encoderOptions struct {
 	pad             int
 	blockSize       int
 	windowSize      int
+	huffLogLess     uint8
 	crc             bool
 	fullZero        bool
 	noEntropy       bool
@@ -41,30 +42,32 @@ func (o *encoderOptions) setDefault() {
 		level:         SpeedDefault,
 		allLitEntropy: false,
 		lowMem:        false,
+		huffLogLess:   4,
 	}
 }
 
 // encoder returns an encoder with the selected options.
 func (o encoderOptions) encoder() encoder {
+	base := fastBase{maxMatchOff: int32(o.windowSize), bufferReset: math.MaxInt32 - int32(o.windowSize*2), lowMem: o.lowMem, huffLogLess: o.huffLogLess}
 	switch o.level {
 	case SpeedFastest:
 		if o.dict != nil {
-			return &fastEncoderDict{fastEncoder: fastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize), bufferReset: math.MaxInt32 - int32(o.windowSize*2), lowMem: o.lowMem}}}
+			return &fastEncoderDict{fastEncoder: fastEncoder{fastBase: base}}
 		}
-		return &fastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize), bufferReset: math.MaxInt32 - int32(o.windowSize*2), lowMem: o.lowMem}}
+		return &fastEncoder{fastBase: base}
 
 	case SpeedDefault:
 		if o.dict != nil {
-			return &doubleFastEncoderDict{fastEncoderDict: fastEncoderDict{fastEncoder: fastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize), bufferReset: math.MaxInt32 - int32(o.windowSize*2), lowMem: o.lowMem}}}}
+			return &doubleFastEncoderDict{fastEncoderDict: fastEncoderDict{fastEncoder: fastEncoder{fastBase: base}}}
 		}
-		return &doubleFastEncoder{fastEncoder: fastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize), bufferReset: math.MaxInt32 - int32(o.windowSize*2), lowMem: o.lowMem}}}
+		return &doubleFastEncoder{fastEncoder: fastEncoder{fastBase: base}}
 	case SpeedBetterCompression:
 		if o.dict != nil {
-			return &betterFastEncoderDict{betterFastEncoder: betterFastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize), bufferReset: math.MaxInt32 - int32(o.windowSize*2), lowMem: o.lowMem}}}
+			return &betterFastEncoderDict{betterFastEncoder: betterFastEncoder{fastBase: base}}
 		}
-		return &betterFastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize), bufferReset: math.MaxInt32 - int32(o.windowSize*2), lowMem: o.lowMem}}
+		return &betterFastEncoder{fastBase: base}
 	case SpeedBestCompression:
-		return &bestFastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize), bufferReset: math.MaxInt32 - int32(o.windowSize*2), lowMem: o.lowMem}}
+		return &bestFastEncoder{fastBase: base}
 	}
 	panic("unknown compression level")
 }
@@ -233,8 +236,10 @@ func WithEncoderLevel(l EncoderLevel) EOption {
 				o.windowSize = 8 << 20
 			case SpeedBetterCompression:
 				o.windowSize = 16 << 20
+				o.huffLogLess = 5
 			case SpeedBestCompression:
 				o.windowSize = 32 << 20
+				o.huffLogLess = 8
 			}
 		}
 		if !o.customALEntropy {

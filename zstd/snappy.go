@@ -84,7 +84,7 @@ func (r *SnappyConverter) Convert(in io.Reader, w io.Writer) (int64, error) {
 	r.err = nil
 	r.r = in
 	if r.block == nil {
-		r.block = &blockEnc{}
+		r.block = &blockEnc{huffLogLess: 4}
 		r.block.init()
 	}
 	r.block.initNewEncode()
