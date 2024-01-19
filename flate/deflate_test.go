@@ -538,6 +538,14 @@ func TestWriterReset(t *testing.T) {
 			return w2, nil
 		})
 	}
+	testResetOutput(t, fmt.Sprint("dict-reset-window"), func(w io.Writer) (*Writer, error) {
+		w2, err := NewWriterWindow(nil, 1024)
+		if err != nil {
+			return w2, err
+		}
+		w2.ResetDict(w, dict)
+		return w2, nil
+	})
 }
 
 func testResetOutput(t *testing.T, name string, newWriter func(w io.Writer) (*Writer, error)) {
