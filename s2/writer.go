@@ -273,7 +273,7 @@ func (w *Writer) AddSkippableBlock(id uint8, data []byte) (err error) {
 		return fmt.Errorf("skippable block excessed maximum size")
 	}
 	var header [4]byte
-	chunkLen := 4 + len(data)
+	chunkLen := len(data)
 	header[0] = id
 	header[1] = uint8(chunkLen >> 0)
 	header[2] = uint8(chunkLen >> 8)
