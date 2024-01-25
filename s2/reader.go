@@ -104,6 +104,8 @@ func ReaderIgnoreStreamIdentifier() ReaderOption {
 // For each chunk with the ID, the callback is called with the content.
 // Any returned non-nil error will abort decompression.
 // Only one callback per ID is supported, latest sent will be used.
+// You can peek the stream, triggering the callback, by doing a Read with a 0
+// byte buffer.
 func ReaderSkippableCB(id uint8, fn func(r io.Reader) error) ReaderOption {
 	return func(r *Reader) error {
 		if id < 0x80 || id > 0xfd {
@@ -1053,6 +1055,8 @@ func (r *Reader) ReadByte() (byte, error) {
 // Any returned non-nil error will abort decompression.
 // Only one callback per ID is supported, latest sent will be used.
 // Sending a nil function will disable previous callbacks.
+// You can peek the stream, triggering the callback, by doing a Read with a 0
+// byte buffer.
 func (r *Reader) SkippableCB(id uint8, fn func(r io.Reader) error) error {
 	if id < 0x80 || id >= chunkTypePadding {
 		return fmt.Errorf("ReaderSkippableCB: Invalid id provided, must be 0x80-0xfe (inclusive)")
