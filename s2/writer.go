@@ -284,7 +284,7 @@ func (w *Writer) AddSkippableBlock(id uint8, data []byte) (err error) {
 			if err = w.err(err); err != nil {
 				return err
 			}
-			if n != len(data) {
+			if n != len(b) {
 				return w.err(io.ErrShortWrite)
 			}
 			w.written += int64(n)
@@ -305,9 +305,7 @@ func (w *Writer) AddSkippableBlock(id uint8, data []byte) (err error) {
 		if err := write(header[:]); err != nil {
 			return err
 		}
-		if err := write(data); err != nil {
-			return err
-		}
+		return write(data)
 	}
 
 	// Create output...
