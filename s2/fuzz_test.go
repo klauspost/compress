@@ -6,6 +6,7 @@ package s2
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"testing"
 
 	"github.com/klauspost/compress/internal/fuzz"
@@ -145,6 +146,39 @@ func FuzzEncodingBlocks(f *testing.F) {
 		dst := encodeGo(encoded, data)
 		if dst == nil {
 			return
+		}
+	})
+}
+
+func FuzzStreamDecode(f *testing.F) {
+	enc := NewWriter(nil, WriterBlockSize(8<<10))
+	addCompressed := func(b []byte) {
+		var buf bytes.Buffer
+		enc.Reset(&buf)
+		enc.Write(b)
+		enc.Close()
+		f.Add(buf.Bytes())
+	}
+	fuzz.ReturnFromZip(f, "testdata/enc_regressions.zip", fuzz.TypeRaw, addCompressed)
+	fuzz.ReturnFromZip(f, "testdata/fuzz/block-corpus-raw.zip", fuzz.TypeRaw, addCompressed)
+	fuzz.ReturnFromZip(f, "testdata/fuzz/block-corpus-enc.zip", fuzz.TypeGoFuzz, addCompressed)
+	dec := NewReader(nil, ReaderIgnoreCRC())
+	f.Fuzz(func(t *testing.T, data []byte) {
+		// Using Read
+		dec.Reset(bytes.NewReader(data))
+		io.Copy(io.Discard, dec)
+
+		// Using DecodeConcurrent
+		dec.Reset(bytes.NewReader(data))
+		dec.DecodeConcurrent(io.Discard, 2)
+
+		// Use ByteReader.
+		dec.Reset(bytes.NewReader(data))
+		for {
+			_, err := dec.ReadByte()
+			if err != nil {
+				break
+			}
 		}
 	})
 }
