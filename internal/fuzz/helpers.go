@@ -89,6 +89,64 @@ func AddFromZip(f *testing.F, filename string, t InputType, short bool) {
 	}
 }
 
+// ReturnFromZip will read the supplied zip and add all as corpus for f.
+// Byte slices only.
+func ReturnFromZip(tb testing.TB, filename string, t InputType, fn func([]byte)) {
+	file, err := os.Open(filename)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	fi, err := file.Stat()
+	if err != nil {
+		tb.Fatal(err)
+	}
+	zr, err := zip.NewReader(file, fi.Size())
+	if err != nil {
+		tb.Fatal(err)
+	}
+	for _, file := range zr.File {
+		rc, err := file.Open()
+		if err != nil {
+			tb.Fatal(err)
+		}
+
+		b, err := io.ReadAll(rc)
+		if err != nil {
+			tb.Fatal(err)
+		}
+		rc.Close()
+		t := t
+		if t == TypeOSSFuzz {
+			t = TypeRaw // Fallback
+			if len(b) >= 4 {
+				sz := binary.BigEndian.Uint32(b)
+				if sz <= uint32(len(b))-4 {
+					fn(b[4 : 4+sz])
+					continue
+				}
+			}
+		}
+
+		if bytes.HasPrefix(b, []byte("go test fuzz")) {
+			t = TypeGoFuzz
+		} else {
+			t = TypeRaw
+		}
+
+		if t == TypeRaw {
+			fn(b)
+			continue
+		}
+		vals, err := unmarshalCorpusFile(b)
+		if err != nil {
+			tb.Fatal(err)
+		}
+		for _, v := range vals {
+			fn(v)
+		}
+	}
+}
+
 // unmarshalCorpusFile decodes corpus bytes into their respective values.
 func unmarshalCorpusFile(b []byte) ([][]byte, error) {
 	if len(b) == 0 {
