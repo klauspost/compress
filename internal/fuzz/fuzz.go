@@ -1,6 +1,8 @@
-//go:build go1.18
-// +build go1.18
+// Copyright (c) 2024+ Klaus Post. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
+// Package fuzz provides a way to add test cases to a testing.F instance from a zip file.
 package fuzz
 
 import (
