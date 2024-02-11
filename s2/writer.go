@@ -716,8 +716,8 @@ func (w *Writer) writeSync(p []byte) (nRet int, errRet error) {
 	return nRet, nil
 }
 
-// AsyncFlush writes any buffered bytes to a block, but does not flush it to the
-// underlying io.Writer.
+// AsyncFlush writes any buffered bytes to a block and starts compressing it.
+// It does not wait for the output has been written as Flush() does.
 func (w *Writer) AsyncFlush() error {
 	if err := w.err(nil); err != nil {
 		return err
