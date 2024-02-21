@@ -10,6 +10,7 @@ import (
 
 func FuzzCompress(f *testing.F) {
 	fuzz.AddFromZip(f, "testdata/fse_compress.zip", fuzz.TypeRaw, false)
+	fuzz.AddFromZip(f, "testdata/regression.zip", fuzz.TypeRaw, testing.Short())
 	f.Fuzz(func(t *testing.T, buf0 []byte) {
 		//use of Compress1X
 		var s Scratch
@@ -76,15 +77,27 @@ func FuzzCompress(f *testing.F) {
 
 func FuzzDecompress1x(f *testing.F) {
 	fuzz.AddFromZip(f, "testdata/huff0_decompress1x.zip", fuzz.TypeRaw, false)
+	var s Scratch
+	addCompressed := func(b []byte) {
+		s.Reuse = ReusePolicyNone
+		if b2, _, err := Compress1X(b, &s); err == nil {
+			f.Add(b2)
+		}
+		s.Reuse = ReusePolicyNone
+		if b2, _, err := Compress4X(b, &s); err == nil {
+			f.Add(b2)
+		}
+	}
+	fuzz.ReturnFromZip(f, "testdata/regression.zip", fuzz.TypeRaw, addCompressed)
+	fuzz.ReturnFromZip(f, "testdata/fse_compress.zip", fuzz.TypeRaw, addCompressed)
+
 	f.Fuzz(func(t *testing.T, buf0 []byte) {
 		var s Scratch
 		_, remain, err := ReadTable(buf0, &s)
 		if err != nil {
 			return
 		}
-		out, err := s.Decompress1X(remain)
-		if err != nil || out == nil {
-			return
-		}
+		s.Decompress1X(remain)
+		s.Decompress4X(remain, len(buf0))
 	})
 }
