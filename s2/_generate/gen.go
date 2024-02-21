@@ -418,18 +418,37 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes, m
 			}
 			Label("repeat_extend_back_end_" + name)
 
+			{
+				// tmp = s-nextEmit
+				tmp := GP64()
+				MOVL(base.As32(), tmp.As32())
+				SUBL(nextEmitL, tmp.As32())
+				// tmp = &dst + s-nextEmit
+				LEAQ(Mem{Base: dst, Index: tmp, Scale: 1, Disp: literalMaxOverhead}, tmp)
+				CMPQ(tmp, dstLimitPtrQ)
+				JB(LabelRef("repeat_dst_size_check_" + name))
+				ri, err := ReturnIndex(0).Resolve()
+				if err != nil {
+					panic(err)
+				}
+				MOVQ(U32(0), ri.Addr)
+				if o.avx2 {
+					VZEROUPPER()
+				}
+				RET()
+			}
+			Label("repeat_dst_size_check_" + name)
+
 			// Base is now at start. Emit until base.
 			// d += emitLiteral(dst[d:], src[nextEmit:base])
-			if true {
-				o.emitLiteralsDstP(nextEmitL, base, src, dst, "repeat_emit_"+name)
-			}
+			o.emitLiteralsDstP(nextEmitL, base, src, dst, "repeat_emit_"+name)
 
 			// Extend forward
 			{
 				// s += 4 + checkRep
 				ADDL(U8(4+checkRep), s)
 
-				if true {
+				{
 					// candidate := s - repeat + 4 + checkRep
 					MOVL(s, candidate)
 					SUBL(repeatL, candidate) // candidate = s - repeat
@@ -458,7 +477,7 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes, m
 				}
 			}
 			// Emit
-			if true {
+			{
 				// length = s-base
 				length := GP32()
 				MOVL(s, length)
@@ -602,7 +621,7 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes, m
 	Label("match_extend_back_end_" + name)
 
 	// Bail if we exceed the maximum size.
-	if true {
+	{
 		// tmp = s-nextEmit
 		tmp := GP64()
 		MOVL(s, tmp.As32())
