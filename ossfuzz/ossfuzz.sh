@@ -34,8 +34,6 @@ cp $SRC/compress/zstd/fuzzDicts.go $OUT/
 cd $SRC/compress
 
 # Modify some files. This would be better done upstream.
-sed -i '38 a\
-	if fi == nil { return }' $SRC/compress/internal/fuzz/helpers.go
 printf "package compress\nimport _ \"github.com/AdamKorcz/go-118-fuzz-build/testing\"\n" > registerfuzzdependency.go
 sed -i 's/zr := testCreateZipReader/\/\/zr := testCreateZipReader/g' "${SRC}"/compress/zstd/fuzz_test.go
 sed -i 's/dicts = readDicts(f, zr)/dicts = fuzzDicts/g' "${SRC}"/compress/zstd/fuzz_test.go
