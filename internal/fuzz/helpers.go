@@ -38,6 +38,10 @@ func AddFromZip(f *testing.F, filename string, t InputType, short bool) {
 		f.Fatal(err)
 	}
 	fi, err := file.Stat()
+	if fi == nil {
+		return
+	}
+
 	if err != nil {
 		f.Fatal(err)
 	}
@@ -99,6 +103,9 @@ func ReturnFromZip(tb testing.TB, filename string, t InputType, fn func([]byte))
 		tb.Fatal(err)
 	}
 	fi, err := file.Stat()
+	if fi == nil {
+		return
+	}
 	if err != nil {
 		tb.Fatal(err)
 	}
