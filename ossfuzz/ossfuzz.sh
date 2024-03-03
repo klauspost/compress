@@ -40,6 +40,7 @@ sed -i 's/dicts = readDicts(f, zr)/dicts = fuzzDicts/g' "${SRC}"/compress/zstd/f
 
 if [ "$SANITIZER" != "coverage" ]; then
 	sed -i 's/\"testing\"/\"github.com\/AdamKorcz\/go-118-fuzz-build\/testing\"/g' "${SRC}"/compress/internal/fuzz/helpers.go
+	printf "\n\nreplace github.com/AdamKorcz/go-118-fuzz-build => github.com/klauspost/go-118-fuzz-build d5f2eff5a9ec105b249e0bb1a24c1725330ed424\n" >> go.mod
 fi
 
 # OSS-Fuzz uses 'go build' to build the fuzzers, so we move the tests
