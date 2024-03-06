@@ -1,6 +1,6 @@
 module github.com/klauspost/compress/s2/_generate
 
-go 1.17
+go 1.19
 
 require (
 	github.com/klauspost/asmfmt v1.3.2

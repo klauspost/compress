@@ -1,6 +1,8 @@
-//go:build go1.18
-// +build go1.18
+// Copyright (c) 2024+ Klaus Post. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
+// Package fuzz provides a way to add test cases to a testing.F instance from a zip file.
 package fuzz
 
 import (
@@ -36,6 +38,10 @@ func AddFromZip(f *testing.F, filename string, t InputType, short bool) {
 		f.Fatal(err)
 	}
 	fi, err := file.Stat()
+	if fi == nil {
+		return
+	}
+
 	if err != nil {
 		f.Fatal(err)
 	}
@@ -85,6 +91,67 @@ func AddFromZip(f *testing.F, filename string, t InputType, short bool) {
 		}
 		for _, v := range vals {
 			f.Add(v)
+		}
+	}
+}
+
+// ReturnFromZip will read the supplied zip and add all as corpus for f.
+// Byte slices only.
+func ReturnFromZip(tb testing.TB, filename string, t InputType, fn func([]byte)) {
+	file, err := os.Open(filename)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	fi, err := file.Stat()
+	if fi == nil {
+		return
+	}
+	if err != nil {
+		tb.Fatal(err)
+	}
+	zr, err := zip.NewReader(file, fi.Size())
+	if err != nil {
+		tb.Fatal(err)
+	}
+	for _, file := range zr.File {
+		rc, err := file.Open()
+		if err != nil {
+			tb.Fatal(err)
+		}
+
+		b, err := io.ReadAll(rc)
+		if err != nil {
+			tb.Fatal(err)
+		}
+		rc.Close()
+		t := t
+		if t == TypeOSSFuzz {
+			t = TypeRaw // Fallback
+			if len(b) >= 4 {
+				sz := binary.BigEndian.Uint32(b)
+				if sz <= uint32(len(b))-4 {
+					fn(b[4 : 4+sz])
+					continue
+				}
+			}
+		}
+
+		if bytes.HasPrefix(b, []byte("go test fuzz")) {
+			t = TypeGoFuzz
+		} else {
+			t = TypeRaw
+		}
+
+		if t == TypeRaw {
+			fn(b)
+			continue
+		}
+		vals, err := unmarshalCorpusFile(b)
+		if err != nil {
+			tb.Fatal(err)
+		}
+		for _, v := range vals {
+			fn(v)
 		}
 	}
 }

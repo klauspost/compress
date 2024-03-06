@@ -206,6 +206,51 @@ func TestDefaultTransport(t *testing.T) {
 	}
 }
 
+func TestTransportCustomEval(t *testing.T) {
+	bin, err := os.ReadFile("testdata/benchmark.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	server := httptest.NewServer(newTestHandler(bin))
+	calledWith := ""
+	c := http.Client{Transport: Transport(http.DefaultTransport, TransportEnableZstd(false), TransportCustomEval(func(h http.Header) bool {
+		calledWith = h.Get("Content-Encoding")
+		return true
+	}))}
+	resp, err := c.Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, bin) {
+		t.Errorf("data mismatch")
+	}
+	if calledWith != "gzip" {
+		t.Fatalf("Expected encoding %q, got %q", "gzip", calledWith)
+	}
+	// Test returning false
+	c = http.Client{Transport: Transport(http.DefaultTransport, TransportCustomEval(func(h http.Header) bool {
+		calledWith = h.Get("Content-Encoding")
+		return false
+	}))}
+	resp, err = c.Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Check we got the compressed data
+	gotCE := resp.Header.Get("Content-Encoding")
+	if gotCE != "gzip" {
+		t.Fatalf("Expected encoding %q, got %q", "gzip", gotCE)
+	}
+	if calledWith != "gzip" {
+		t.Fatalf("Expected encoding %q, got %q", "gzip", calledWith)
+	}
+}
+
 func BenchmarkTransport(b *testing.B) {
 	raw, err := os.ReadFile("testdata/benchmark.json")
 	if err != nil {
