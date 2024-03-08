@@ -378,7 +378,7 @@ func TestEncoder_EncodeRLE(t *testing.T) {
 						t.Error(err, len(decoded))
 					}
 					if !bytes.Equal(decoded, in) {
-						os.WriteFile("testdata/"+t.Name()+"-Mark.Twain-Tom.Sawyer.txt.got", decoded, os.ModePerm)
+						os.WriteFile("testdata/"+t.Name()+"-RLE.got", decoded, os.ModePerm)
 						t.Fatal("Decoded does not match")
 					}
 					t.Log("Encoded content matched")
