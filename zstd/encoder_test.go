@@ -342,6 +342,52 @@ func TestEncoder_EncodeAllTwain(t *testing.T) {
 	}
 }
 
+func TestEncoder_EncodeRLE(t *testing.T) {
+	in := make([]byte, 1<<20)
+	testWindowSizes := testWindowSizes
+	if testing.Short() {
+		testWindowSizes = []int{1 << 20}
+	}
+
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+
+	for level := speedNotSet + 1; level < speedLast; level++ {
+		t.Run(level.String(), func(t *testing.T) {
+			if isRaceTest && level >= SpeedBestCompression {
+				t.SkipNow()
+			}
+			for _, windowSize := range testWindowSizes {
+				t.Run(fmt.Sprintf("window:%d", windowSize), func(t *testing.T) {
+					e, err := NewWriter(nil, WithEncoderLevel(level), WithWindowSize(windowSize))
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer e.Close()
+					start := time.Now()
+					dst := e.EncodeAll(in, nil)
+					t.Log("Simple Encoder len", len(in), "-> zstd len", len(dst))
+					mbpersec := (float64(len(in)) / (1024 * 1024)) / (float64(time.Since(start)) / (float64(time.Second)))
+					t.Logf("Encoded %d bytes with %.2f MB/s", len(in), mbpersec)
+
+					decoded, err := dec.DecodeAll(dst, nil)
+					if err != nil {
+						t.Error(err, len(decoded))
+					}
+					if !bytes.Equal(decoded, in) {
+						os.WriteFile("testdata/"+t.Name()+"-RLE.got", decoded, os.ModePerm)
+						t.Fatal("Decoded does not match")
+					}
+					t.Log("Encoded content matched")
+				})
+			}
+		})
+	}
+}
+
 func TestEncoder_EncodeAllPi(t *testing.T) {
 	in, err := os.ReadFile("../testdata/pi.txt")
 	if err != nil {
