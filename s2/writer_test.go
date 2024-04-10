@@ -603,6 +603,36 @@ func BenchmarkWriterRandom(b *testing.B) {
 	}
 }
 
+func BenchmarkReadFromRandom(b *testing.B) {
+	rng := rand.New(rand.NewSource(1))
+	// Make max window so we never get matches.
+	data := make([]byte, 8<<20)
+	for i := range data {
+		data[i] = uint8(rng.Intn(256))
+	}
+
+	for name, opts := range testOptions(b) {
+		w := NewWriter(io.Discard, opts...)
+		in := bytes.NewReader(data)
+		w.ReadFrom(in)
+		b.Run(name, func(b *testing.B) {
+			b.ResetTimer()
+			b.ReportAllocs()
+			b.SetBytes(int64(len(data)))
+			for i := 0; i < b.N; i++ {
+				in.Reset(data)
+				_, err := w.ReadFrom(in)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+			// Flush output
+			w.Flush()
+		})
+		w.Close()
+	}
+}
+
 func BenchmarkIndexFind(b *testing.B) {
 	fatalErr := func(t testing.TB, err error) {
 		if err != nil {
