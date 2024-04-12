@@ -289,6 +289,9 @@ func BuildDict(o BuildDictOptions) ([]byte, error) {
 			if offset == 0 {
 				continue
 			}
+			if int(offset) >= len(o.History) {
+				continue
+			}
 			if offset > 3 {
 				newOffsets[offset-3]++
 			} else {
