@@ -191,7 +191,7 @@ func (fi headerFileInfo) Sys() any          { return fi.fh }
 func (fi headerFileInfo) Info() (fs.FileInfo, error) { return fi, nil }
 
 func (fi headerFileInfo) String() string {
-	return fs.FormatFileInfo(fi)
+	return formatFileInfo(fi)
 }
 
 // FileInfoHeader creates a partially-populated [FileHeader] from an
