@@ -368,6 +368,59 @@ func TestWriterDirAttributes(t *testing.T) {
 	}
 }
 
+func TestWriterCopyKP(t *testing.T) {
+	want, err := os.ReadFile("testdata/test.zip")
+	if err != nil {
+		t.Fatalf("unexpected ReadFile error: %v", err)
+	}
+	r, err := NewReader(bytes.NewReader(want), int64(len(want)))
+	if err != nil {
+		t.Fatalf("unexpected NewReader error: %v", err)
+	}
+	var buf bytes.Buffer
+	w := NewWriter(&buf)
+	for _, f := range r.File {
+		err := w.Copy(f)
+		if err != nil {
+			t.Fatalf("unexpected Copy error: %v", err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("unexpected Close error: %v", err)
+	}
+
+	// Read back...
+	got := buf.Bytes()
+	r2, err := NewReader(bytes.NewReader(got), int64(len(got)))
+	if err != nil {
+		t.Fatalf("unexpected NewReader error: %v", err)
+	}
+	for i, fWAnt := range r.File {
+		wantR, err := fWAnt.Open()
+		if err != nil {
+			t.Fatalf("unexpected Open error: %v", err)
+		}
+		want, err := io.ReadAll(wantR)
+		if err != nil {
+			t.Fatalf("unexpected Copy error: %v", err)
+		}
+
+		fGot := r2.File[i]
+		gotR, err := fGot.Open()
+		if err != nil {
+			t.Fatalf("unexpected Open error: %v", err)
+		}
+		got, err := io.ReadAll(gotR)
+		if err != nil {
+			t.Fatalf("unexpected Copy error: %v", err)
+		}
+		if !bytes.Equal(got, want) {
+			fmt.Printf("%x\n%x\n", got, want)
+			t.Error("contents of copied mismatch")
+		}
+	}
+}
+
 func TestWriterCopy(t *testing.T) {
 	// make a zip file
 	buf := new(bytes.Buffer)
