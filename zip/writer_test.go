@@ -16,6 +16,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 )
 
@@ -368,59 +369,6 @@ func TestWriterDirAttributes(t *testing.T) {
 }
 
 func TestWriterCopy(t *testing.T) {
-	want, err := os.ReadFile("testdata/test.zip")
-	if err != nil {
-		t.Fatalf("unexpected ReadFile error: %v", err)
-	}
-	r, err := NewReader(bytes.NewReader(want), int64(len(want)))
-	if err != nil {
-		t.Fatalf("unexpected NewReader error: %v", err)
-	}
-	var buf bytes.Buffer
-	w := NewWriter(&buf)
-	for _, f := range r.File {
-		err := w.Copy(f)
-		if err != nil {
-			t.Fatalf("unexpected Copy error: %v", err)
-		}
-	}
-	if err := w.Close(); err != nil {
-		t.Fatalf("unexpected Close error: %v", err)
-	}
-
-	// Read back...
-	got := buf.Bytes()
-	r2, err := NewReader(bytes.NewReader(got), int64(len(got)))
-	if err != nil {
-		t.Fatalf("unexpected NewReader error: %v", err)
-	}
-	for i, fWAnt := range r.File {
-		wantR, err := fWAnt.Open()
-		if err != nil {
-			t.Fatalf("unexpected Open error: %v", err)
-		}
-		want, err := io.ReadAll(wantR)
-		if err != nil {
-			t.Fatalf("unexpected Copy error: %v", err)
-		}
-
-		fGot := r2.File[i]
-		gotR, err := fGot.Open()
-		if err != nil {
-			t.Fatalf("unexpected Open error: %v", err)
-		}
-		got, err := io.ReadAll(gotR)
-		if err != nil {
-			t.Fatalf("unexpected Copy error: %v", err)
-		}
-		if !bytes.Equal(got, want) {
-			fmt.Printf("%x\n%x\n", got, want)
-			t.Error("contents of copied mismatch")
-		}
-	}
-}
-
-func TestWriterCopy2(t *testing.T) {
 	// make a zip file
 	buf := new(bytes.Buffer)
 	w := NewWriter(buf)
@@ -654,4 +602,72 @@ func BenchmarkCompressedZipGarbage(b *testing.B) {
 			runOnce(&buf)
 		}
 	})
+}
+
+func writeTestsToFS(tests []WriteTest) fs.FS {
+	fsys := fstest.MapFS{}
+	for _, wt := range tests {
+		fsys[wt.Name] = &fstest.MapFile{
+			Data: wt.Data,
+			Mode: wt.Mode,
+		}
+	}
+	return fsys
+}
+
+func TestWriterAddFS(t *testing.T) {
+	buf := new(bytes.Buffer)
+	w := NewWriter(buf)
+	tests := []WriteTest{
+		{
+			Name: "file.go",
+			Data: []byte("hello"),
+			Mode: 0644,
+		},
+		{
+			Name: "subfolder/another.go",
+			Data: []byte("world"),
+			Mode: 0644,
+		},
+	}
+	err := w.AddFS(writeTestsToFS(tests))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// read it back
+	r, err := NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, wt := range tests {
+		testReadFile(t, r.File[i], &wt)
+	}
+}
+
+func TestIssue61875(t *testing.T) {
+	buf := new(bytes.Buffer)
+	w := NewWriter(buf)
+	tests := []WriteTest{
+		{
+			Name:   "symlink",
+			Data:   []byte("../link/target"),
+			Method: Deflate,
+			Mode:   0755 | fs.ModeSymlink,
+		},
+		{
+			Name:   "device",
+			Data:   []byte(""),
+			Method: Deflate,
+			Mode:   0755 | fs.ModeDevice,
+		},
+	}
+	err := w.AddFS(writeTestsToFS(tests))
+	if err == nil {
+		t.Errorf("expected error, got nil")
+	}
 }

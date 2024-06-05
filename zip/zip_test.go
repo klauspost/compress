@@ -23,13 +23,13 @@ func TestOver65kFiles(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping in short mode")
 	}
-	buf := new(bytes.Buffer)
+	buf := new(strings.Builder)
 	w := NewWriter(buf)
 	const nFiles = (1 << 16) + 42
 	for i := 0; i < nFiles; i++ {
 		_, err := w.CreateHeader(&FileHeader{
 			Name:   fmt.Sprintf("%d.dat", i),
-			Method: Store, // avoid Issue 6136 and Issue 6138
+			Method: Store, // Deflate is too slow when it is compiled with -race flag
 		})
 		if err != nil {
 			t.Fatalf("creating file %d: %v", i, err)
@@ -596,7 +596,7 @@ func testZip64(t testing.TB, size int64) *rleBuffer {
 	}
 
 	// read back zip file and check that we get to the end of it
-	r, err := NewReader(buf, int64(buf.Size()))
+	r, err := NewReader(buf, buf.Size())
 	if err != nil {
 		t.Fatal("reader:", err)
 	}
