@@ -153,24 +153,36 @@ func TestWriter(t *testing.T) {
 }
 
 func TestWriterBig(t *testing.T) {
-	for _, fn := range filenames {
+	for i, fn := range filenames {
 		testFileLevelDict(t, fn, DefaultCompression, "")
 		testFileLevelDict(t, fn, NoCompression, "")
 		testFileLevelDict(t, fn, HuffmanOnly, "")
 		for level := BestSpeed; level <= BestCompression; level++ {
 			testFileLevelDict(t, fn, level, "")
+			if level >= 1 && testing.Short() {
+				break
+			}
+		}
+		if i == 0 && testing.Short() {
+			break
 		}
 	}
 }
 
 func TestWriterDict(t *testing.T) {
 	const dictionary = "0123456789."
-	for _, fn := range filenames {
+	for i, fn := range filenames {
 		testFileLevelDict(t, fn, DefaultCompression, dictionary)
 		testFileLevelDict(t, fn, NoCompression, dictionary)
 		testFileLevelDict(t, fn, HuffmanOnly, dictionary)
 		for level := BestSpeed; level <= BestCompression; level++ {
 			testFileLevelDict(t, fn, level, dictionary)
+			if level >= 1 && testing.Short() {
+				break
+			}
+		}
+		if i == 0 && testing.Short() {
+			break
 		}
 	}
 }
