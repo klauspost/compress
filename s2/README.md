@@ -1022,6 +1022,7 @@ See [using indexes](https://github.com/klauspost/compress/tree/master/s2#using-i
 * Frame [Stream identifier](https://github.com/google/snappy/blob/master/framing_format.txt#L68) changed from `sNaPpY` to `S2sTwO`.
 * [Framed compressed blocks](https://github.com/google/snappy/blob/master/format_description.txt) can be up to 4MB (up from 64KB).
 * Compressed blocks can have an offset of `0`, which indicates to repeat the last seen offset.
+* If the first bytes of a block is `0x80, 0x00, 0x00` (copy, 2 byte offset = 0), this indicates that all [Copy with 4-byte offset (11)](https://github.com/google/snappy/blob/main/format_description.txt#L106) are all 3 bytes instead for the remainder of the block.
 
 Repeat offsets must be encoded as a [2.2.1. Copy with 1-byte offset (01)](https://github.com/google/snappy/blob/master/format_description.txt#L89), where the offset is 0.
 
@@ -1046,6 +1047,57 @@ Lengths are stored as little endian values.
 The first copy of a block cannot be a repeat offset and the offset is reset on every block in streams.
 
 Default streaming block size is 1MB.
+
+## S2++ Mode
+
+If the first bytes of a block is `0x80, 0x00, 0x00` (copy, 2 byte offset = 0), 
+this indicates that all [Copy with 2-byte offset (10)](https://github.com/google/snappy/blob/main/format_description.txt#L98)
+and [Copy with 4-byte offset (11)](https://github.com/google/snappy/blob/main/format_description.txt#L106) tags change.
+
+There can be no literals before this tag and no repeats before a match as specified above.
+This will only trigger on this exact tag.
+
+## Tag 0x2 (TagCopy2)
+
+The length field now has a base value of 4 and there are 3 special valaues for longer matches.
+
+| Bits | Meaning | Description                                                            |
+|------|---------|------------------------------------------------------------------------|
+| 0-1  | Tag     | Always 0x2                                                             |
+| 2-7  | Length  | Length of copy or repeat<br/>Values are 0-63. See decoding table below |
+
+| Value | Output              |
+|-------|---------------------|
+| 0-60  | Base + Value        |
+| 61    | Base + Read 1 byte  |
+| 62    | Base + Read 2 bytes |
+| 63    | Base + Read 3 bytes |
+
+Base value is 4 for all copies.
+
+Offsets are encoded as 2 bytes following the length. 
+The maximum backreference offset is therefore 65535.
+
+## Tag 0x3 (TagCopy4)
+
+| Bits | Meaning | Description                                                            |
+|------|---------|------------------------------------------------------------------------|
+| 0-1  | Tag     | Always 0x3                                                             |
+| 2    | Repeat  | 0 if copy, 1 if repeat.                                                |
+| 3-7  | Length  | Length of copy or repeat<br/>Values are 0-31. See decoding table below |
+
+| Value | Output              |
+|-------|---------------------|
+| 0-28  | Base + Value        |
+| 29    | Base + Read 1 byte  |
+| 30    | Base + Read 2 bytes |
+| 31    | Base + Read 3 bytes |
+
+For copy operations the Base value is `4` For repeat, the base value is `1`.
+
+Copy offsets are encoded as `3` bytes following the length. The maximum backreference offset is therefore 16777215.
+
+The S2 repeat encoding specified on TagCopy2 is not valid in this mode.
 
 # Dictionary Encoding
 

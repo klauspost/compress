@@ -378,7 +378,7 @@ func encodeBlockBest(dst, src []byte, dict *Dict) (d int) {
 		offset := s - best.offset
 		s += best.length
 
-		if offset > 65535 && s-base <= 5 && !best.rep {
+		if offset > 65535 && s-base <= 4 && !best.rep {
 			// Bail if the match is equal or worse to the encoding.
 			s = best.s + 1
 			if s >= sLimit {
@@ -716,35 +716,26 @@ emitRemainder:
 //	4 <= length && length <= 1 << 24
 func emitCopySize(offset, length int) int {
 	if offset >= 65536 {
-		i := 0
-		if length > 64 {
-			length -= 64
-			if length >= 4 {
-				// Emit remaining as repeats
-				return 5 + emitRepeatSize(offset, length)
-			}
-			i = 5
+		// 3 Byte offset + Variable length (base length 4).
+		length -= 3
+		if length > 28 {
+			length -= 28
 		}
-		if length == 0 {
-			return i
-		}
-		return i + 5
+		return 3 + emitRepeatSize(offset, length)
 	}
 
 	// Offset no more than 2 bytes.
-	if length > 64 {
-		if offset < 2048 {
-			// Emit 8 bytes, then rest as repeats...
-			return 2 + emitRepeatSize(offset, length-8)
+	if offset < 1024 {
+		if length < 11+8 {
+			// Emit up to 18 bytes with short offset.
+			return 2
 		}
-		// Emit remaining as repeats, at least 4 bytes remain.
-		return 3 + emitRepeatSize(offset, length-60)
+		if length < 18+256 {
+			return 3
+		}
 	}
-	if length >= 12 || offset >= 2048 {
-		return 3
-	}
-	// Emit the remaining copy, encoded as 2 bytes.
-	return 2
+	// 2 byte offset + Variable length (base length 4).
+	return emitCopy2Size(length)
 }
 
 // emitCopyNoRepeatSize returns the size to encode the offset+length
@@ -755,7 +746,7 @@ func emitCopySize(offset, length int) int {
 //	4 <= length && length <= 1 << 24
 func emitCopyNoRepeatSize(offset, length int) int {
 	if offset >= 65536 {
-		return 5 + 5*(length/64)
+		return 4 + 4*(length/64)
 	}
 
 	// Offset no more than 2 bytes.
@@ -771,26 +762,58 @@ func emitCopyNoRepeatSize(offset, length int) int {
 }
 
 // emitRepeatSize returns the number of bytes required to encode a repeat.
-// Length must be at least 4 and < 1<<24
+// Length must be at least 1 and < 1<<24
 func emitRepeatSize(offset, length int) int {
-	// Repeat offset, make length cheaper
-	if length <= 4+4 || (length < 8+4 && offset < 2048) {
+	if length <= 0 {
+		return 0
+	}
+
+	if length <= 29 {
+		return 1
+	}
+	length -= 29
+	if length <= 256 {
 		return 2
 	}
-	if length < (1<<8)+4+4 {
+	if length <= 65536 {
 		return 3
 	}
-	if length < (1<<16)+(1<<8)+4 {
-		return 4
-	}
 	const maxRepeat = (1 << 24) - 1
-	length -= (1 << 16) - 4
 	left := 0
 	if length > maxRepeat {
-		left = length - maxRepeat + 4
+		left = length - maxRepeat
 	}
-	if left > 0 {
-		return 5 + emitRepeatSize(offset, left)
+	return 4 + emitRepeatSize(offset, left)
+}
+
+// emitCopy2Size returns the number of bytes required to encode a copy2.
+// Length must be less than 1<<24
+func emitCopy2Size(length int) int {
+	length -= 4
+	if length < 0 {
+		// Should not happen, but we keep it so caller doesn't have to check.
+		return 2
 	}
-	return 5
+
+	if length <= 60 {
+		// Length inside tag.
+		return 1 + 2
+	}
+	length -= 60
+	if length <= 256 {
+		// Length in 1 byte.
+		return 2 + 2
+	}
+	if length <= 65536 {
+		// Length in 2 bytes.
+		return 3 + 2
+	}
+	// Length in 3 bytes.
+	// Anything remaining must be repeats.
+	const maxRepeat = (1 << 24) - 1
+	left := 0
+	if length > maxRepeat {
+		left = length - maxRepeat
+	}
+	return 2 + 4 + emitRepeatSize(0, left)
 }
