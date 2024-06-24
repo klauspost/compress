@@ -7,6 +7,7 @@ package s2
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"sync"
 )
 
@@ -34,6 +35,9 @@ type Dict struct {
 
 	bestTableShort *[1 << 16]uint32
 	bestTableLong  *[1 << 19]uint32
+
+	rolzTab  [256][8]uint16
+	rolzVals [256][8]uint32
 }
 
 // NewDict will read a dictionary.
@@ -60,7 +64,36 @@ func NewDict(dict []byte) *Dict {
 	if d.repeat > len(dict) {
 		return nil
 	}
+	d.initROLZ()
 	return &d
+}
+
+func (d *Dict) initROLZ() {
+	for c := 0; c < 256; c++ {
+		filled := 0
+	nextEntry:
+		for i := range d.dict[:len(d.dict)-4] {
+			if d.dict[i] == byte(c) {
+				// Don't fill the same 3 bytes several times.
+				const matchMask = (1 << (3 * 8)) - 1
+				for j := range d.rolzVals[c][:filled] {
+					if d.rolzVals[c][j]&matchMask == uint32(i)&matchMask {
+						continue nextEntry
+					}
+				}
+				d.rolzVals[c][filled] = binary.LittleEndian.Uint32(d.dict[i:])
+				d.rolzTab[c][filled] = uint16(i + 1)
+				filled++
+				if filled == 8 {
+					break
+				}
+			}
+		}
+		f := filled - 1
+		if false && f >= 0 {
+			fmt.Println(c, "filled", filled, "at index", d.rolzTab[c][f], "of", len(d.dict))
+		}
+	}
 }
 
 // Bytes will return a serialized version of the dictionary.
@@ -102,6 +135,7 @@ func MakeDict(data []byte, searchStart []byte) *Dict {
 			break
 		}
 	}
+	d.initROLZ()
 
 	return &d
 }
@@ -120,7 +154,7 @@ func MakeDictManual(data []byte, firstIdx uint16) *Dict {
 	if cap(d.dict) < len(d.dict)+16 {
 		d.dict = append(make([]byte, 0, len(d.dict)+16), d.dict...)
 	}
-
+	d.initROLZ()
 	d.repeat = int(firstIdx)
 	return &d
 }
