@@ -72,7 +72,8 @@ func (d *Dict) initROLZ() {
 	for c := range d.rolzTab {
 		filled := 0
 	nextEntry:
-		for i := range d.dict[:len(d.dict)-4] {
+		for i := len(d.dict) - 4; i >= 0; i-- {
+			//for i := range d.dict[:len(d.dict)-4] {
 			if binary.LittleEndian.Uint16(d.dict[i:]) == uint16(c) {
 				// Don't fill the same 2 bytes several times.
 				const matchMask = (1 << (4 * 8)) - 1
