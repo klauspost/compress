@@ -226,7 +226,7 @@ func encodeBlockBest(dst, src []byte, dict *Dict) (d int) {
 				if false {
 					return match{s: s}
 				}
-				tab := &dict.rolzVals[first&255]
+				tab := &dict.rolzVals[first&65535]
 				idx := -1
 				for i, v := range tab {
 					if v == first {
@@ -240,8 +240,8 @@ func encodeBlockBest(dst, src []byte, dict *Dict) (d int) {
 				if idx < 0 {
 					return match{s: s}
 				}
-				offset := int(dict.rolzTab[first&255][idx])
-				m := match{rolzIdx: uint8(idx), s: s + 1, length: offset + 3, dict: true, rolz: true, offset: -len(dict.dict) + offset}
+				offset := int(dict.rolzTab[first&65535][idx])
+				m := match{rolzIdx: uint8(idx), s: s + 2, length: offset + 2, dict: true, rolz: true, offset: -len(dict.dict) + offset}
 				s += 4
 				for s < sLimitDict && m.length < len(dict.dict) {
 					if len(src)-s < 8 || len(dict.dict)-m.length < 8 {
@@ -260,6 +260,9 @@ func encodeBlockBest(dst, src []byte, dict *Dict) (d int) {
 					m.length += 8
 				}
 				m.length -= offset
+				if m.length < 3 {
+					return match{s: s}
+				}
 				m.score = score(m)
 				if false {
 					fmt.Println("ROLZ", m.length, "SCORE", m.score+m.s)
@@ -298,8 +301,9 @@ func encodeBlockBest(dst, src []byte, dict *Dict) (d int) {
 				best = bestOf(best, matchDict(int(candidateL>>16), s, uint32(cv), false))
 				best = bestOf(best, matchDict(int(candidateS&0xffff), s, uint32(cv), false))
 				best = bestOf(best, matchDict(int(candidateS>>16), s, uint32(cv), false))
-				//if nextEmit < s {
-				if s >= 1 {
+				//if nextEmit < s && s >= 2 {
+				if s >= 2 {
+					best = bestOf(best, matchDictROLZ(s-2, load32(src, s-2)))
 					best = bestOf(best, matchDictROLZ(s-1, load32(src, s-1)))
 				}
 				best = bestOf(best, matchDictROLZ(s, uint32(cv)))

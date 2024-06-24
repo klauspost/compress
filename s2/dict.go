@@ -36,8 +36,8 @@ type Dict struct {
 	bestTableShort *[1 << 16]uint32
 	bestTableLong  *[1 << 19]uint32
 
-	rolzTab  [256][8]uint16
-	rolzVals [256][8]uint32
+	rolzTab  [65536][8]uint16
+	rolzVals [65536][8]uint32
 }
 
 // NewDict will read a dictionary.
@@ -69,20 +69,20 @@ func NewDict(dict []byte) *Dict {
 }
 
 func (d *Dict) initROLZ() {
-	for c := 0; c < 256; c++ {
+	for c := range d.rolzTab {
 		filled := 0
 	nextEntry:
 		for i := range d.dict[:len(d.dict)-4] {
-			if d.dict[i] == byte(c) {
-				// Don't fill the same 3 bytes several times.
-				const matchMask = (1 << (3 * 8)) - 1
+			if binary.LittleEndian.Uint16(d.dict[i:]) == uint16(c) {
+				// Don't fill the same 2 bytes several times.
+				const matchMask = (1 << (4 * 8)) - 1
 				for j := range d.rolzVals[c][:filled] {
 					if d.rolzVals[c][j]&matchMask == uint32(i)&matchMask {
 						continue nextEntry
 					}
 				}
 				d.rolzVals[c][filled] = binary.LittleEndian.Uint32(d.dict[i:])
-				d.rolzTab[c][filled] = uint16(i + 1)
+				d.rolzTab[c][filled] = uint16(i + 2)
 				filled++
 				if filled == 8 {
 					break
