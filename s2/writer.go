@@ -922,7 +922,7 @@ func WriterBetterCompression() WriterOption {
 }
 
 // WriterBestCompression will enable better compression.
-// EncodeBetter compresses better than Encode but typically with a
+// EncodeBest compresses better than Encode but typically with a
 // big speed decrease on compression.
 func WriterBestCompression() WriterOption {
 	return func(w *Writer) error {
