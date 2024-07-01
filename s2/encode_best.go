@@ -83,7 +83,9 @@ func encodeBlockBest(dst, src []byte, dict *Dict) (d int) {
 			s         int
 			length    int
 			score     int
+			rolzIdx   uint8
 			rep, dict bool
+			rolz      bool
 		}
 		var best match
 		for {
@@ -111,10 +113,15 @@ func encodeBlockBest(dst, src []byte, dict *Dict) (d int) {
 			score := func(m match) int {
 				// Matches that are longer forward are penalized since we must emit it as a literal.
 				score := m.length - m.s
+				if m.rolz {
+					// One byte to emit.
+					return score - 1 - emitRepeatShortSize(m.length-10)
+				}
 				if nextEmit == m.s {
 					// If we do not have to emit literals, we save 1 byte
 					score++
 				}
+
 				offset := m.s - m.offset
 				if m.rep {
 					return score - emitRepeatSize(offset, m.length)
@@ -215,6 +222,57 @@ func encodeBlockBest(dst, src []byte, dict *Dict) (d int) {
 				}
 				return m
 			}
+			matchDictROLZ := func(s int, first uint32) match {
+				if false {
+					return match{s: s}
+				}
+				tab := &dict.rolzVals[first&65535]
+				idx := -1
+				for i, v := range tab {
+					if v == first {
+						if v == 0 {
+							return match{s: s}
+						}
+						idx = i
+						break
+					}
+				}
+				if idx < 0 {
+					return match{s: s}
+				}
+				offset := int(dict.rolzTab[first&65535][idx])
+				m := match{rolzIdx: uint8(idx), s: s + 2, length: offset + 2, dict: true, rolz: true, offset: -len(dict.dict) + offset}
+				s += 4
+				for s < sLimitDict && m.length < len(dict.dict) {
+					if len(src)-s < 8 || len(dict.dict)-m.length < 8 {
+						if src[s] == dict.dict[m.length] {
+							m.length++
+							s++
+							continue
+						}
+						break
+					}
+					if diff := load64(src, s) ^ load64(dict.dict, m.length); diff != 0 {
+						m.length += bits.TrailingZeros64(diff) >> 3
+						break
+					}
+					s += 8
+					m.length += 8
+				}
+				m.length -= offset
+				if m.length < 3 {
+					return match{s: s}
+				}
+				m.score = score(m)
+				if false {
+					fmt.Println("ROLZ", m.length, "SCORE", m.score+m.s)
+				}
+				if m.score < -m.s {
+					// Eliminate if no savings, we might find a better one.
+					m.length = 0
+				}
+				return m
+			}
 
 			bestOf := func(a, b match) match {
 				if b.length == 0 {
@@ -243,6 +301,14 @@ func encodeBlockBest(dst, src []byte, dict *Dict) (d int) {
 				best = bestOf(best, matchDict(int(candidateL>>16), s, uint32(cv), false))
 				best = bestOf(best, matchDict(int(candidateS&0xffff), s, uint32(cv), false))
 				best = bestOf(best, matchDict(int(candidateS>>16), s, uint32(cv), false))
+				if s >= 2 {
+					// Enable ROLZ after copy. Requires different encoding.
+					if true || nextEmit < s-2 {
+						best = bestOf(best, matchDictROLZ(s-2, load32(src, s-2)))
+					}
+					best = bestOf(best, matchDictROLZ(s-1, load32(src, s-1)))
+				}
+				best = bestOf(best, matchDictROLZ(s, uint32(cv)))
 			}
 			{
 				if (dict == nil || repeat <= s) && repeat > 0 {
@@ -274,6 +340,7 @@ func encodeBlockBest(dst, src []byte, dict *Dict) (d int) {
 
 						best = bestOf(best, matchDict(int(candidateL&0xffff), s, uint32(cv), false))
 						best = bestOf(best, matchDict(int(candidateS&0xffff), s, uint32(cv), false))
+						best = bestOf(best, matchDictROLZ(s, uint32(cv)))
 					}
 
 					// s+2
@@ -306,6 +373,7 @@ func encodeBlockBest(dst, src []byte, dict *Dict) (d int) {
 
 							best = bestOf(best, matchDict(int(candidateL&0xffff), s, uint32(cv), false))
 							best = bestOf(best, matchDict(int(candidateS&0xffff), s, uint32(cv), false))
+							best = bestOf(best, matchDictROLZ(s, uint32(cv)))
 						}
 					}
 					// Search for a match at best match end, see if that is better.
@@ -405,6 +473,13 @@ func encodeBlockBest(dst, src []byte, dict *Dict) (d int) {
 				}
 				d += emitCopy(dst[d:], offset, best.length)
 			}
+		} else if best.rolz {
+			if false {
+				fmt.Println("ROLZ, length", best.length, "idx", best.rolzIdx, "offset:", offset, "s-after:", s)
+			}
+
+			d += emitROLZ(dst[d:], best.rolzIdx, best.length)
+			offset = best.offset
 		} else {
 			if debug {
 				fmt.Println("COPY, length", best.length, "offset:", offset, "s-after:", s, "dict:", best.dict, "best:", best)
@@ -445,6 +520,15 @@ emitRemainder:
 		d += emitLiteral(dst[d:], src[nextEmit:])
 	}
 	return d
+}
+
+func emitROLZ(d []byte, idx uint8, length int) int {
+	if length > 10 {
+		d[0] = uint8(idx<<5) | (0x7 << 2)
+		return emitRepeatShort(d[1:], length-10) + 1
+	}
+	d[0] = idx<<5 | uint8(length-3)<<2
+	return 1
 }
 
 // encodeBlockBestSnappy encodes a non-empty src to a guaranteed-large-enough dst. It
@@ -774,6 +858,9 @@ func emitCopyNoRepeatSize(offset, length int) int {
 // Length must be at least 4 and < 1<<24
 func emitRepeatSize(offset, length int) int {
 	// Repeat offset, make length cheaper
+	if length <= 0 {
+		return 0
+	}
 	if length <= 4+4 || (length < 8+4 && offset < 2048) {
 		return 2
 	}
@@ -793,4 +880,67 @@ func emitRepeatSize(offset, length int) int {
 		return 5 + emitRepeatSize(offset, left)
 	}
 	return 5
+}
+
+func emitRepeatShort(dst []byte, length int) int {
+	// Repeat offset, make length cheaper
+	const debugEncode = false
+	const tagRepeat = 3 | 4
+	if debugEncode {
+		fmt.Println("(repeat)", length)
+	}
+	if length <= 0 {
+		return 0
+	}
+	length--
+	if debugEncode && length < 0 {
+		panic(fmt.Sprintf("invalid length %d", length))
+	}
+	if length <= 28 {
+		dst[0] = uint8(length)<<3 | tagRepeat
+		return 1
+	}
+	length -= 28
+	if length < 256 {
+		dst[1] = uint8(length >> 0)
+		dst[0] = 29<<3 | tagRepeat
+		return 2
+	}
+
+	if length < 65536 {
+		dst[2] = uint8(length >> 8)
+		dst[1] = uint8(length >> 0)
+		dst[0] = 30<<3 | tagRepeat
+		return 3
+	}
+	dst[3] = uint8(length >> 16)
+	dst[2] = uint8(length >> 8)
+	dst[1] = uint8(length >> 0)
+	dst[0] = 31<<3 | tagRepeat
+	return 4
+}
+
+// emitRepeatShortSize returns the number of bytes required to encode a repeat.
+// Length must be at least 1 and < 1<<24
+func emitRepeatShortSize(length int) int {
+	if length <= 0 {
+		return 0
+	}
+
+	if length <= 29 {
+		return 1
+	}
+	length -= 29
+	if length <= 256 {
+		return 2
+	}
+	if length <= 65536 {
+		return 3
+	}
+	const maxRepeat = (1 << 24) - 1
+	left := 0
+	if length > maxRepeat {
+		left = length - maxRepeat
+	}
+	return 4 + emitRepeatShortSize(left)
 }

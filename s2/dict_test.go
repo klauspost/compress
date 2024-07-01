@@ -311,9 +311,9 @@ func TestDictBest2(t *testing.T) {
 func TestDictSize(t *testing.T) {
 	//f, err := os.Open("testdata/xlmeta.tar.s2")
 	//f, err := os.Open("testdata/broken.tar.s2")
-	f, err := os.Open("testdata/github_users_sample_set.tar.s2")
+	//f, err := os.Open("testdata/github_users_sample_set.tar.s2")
 	//f, err := os.Open("testdata/gofiles2.tar.s2")
-	//f, err := os.Open("testdata/gosrc.tar.s2")
+	f, err := os.Open("testdata/gosrc.tar.s2")
 	if err != nil {
 		t.Skip(err)
 	}
@@ -389,6 +389,9 @@ func TestDictSize(t *testing.T) {
 			}
 			totalOut += res
 			encoded = encoded[:res]
+			if true {
+				return
+			}
 			//t.Log("encoded", len(data), "->", res, "saved", len(data)-res, "bytes")
 			decoded := make([]byte, len(data))
 			res = s2DecodeDict(decoded, encoded, d)
@@ -402,7 +405,7 @@ func TestDictSize(t *testing.T) {
 			}
 		})
 	}
-	t.Logf("%d files, %d -> %d (%.2f%%) - %.02f bytes saved/file\n", totalCount, totalIn, totalOut, float64(totalOut*100)/float64(totalIn), float64(totalIn-totalOut)/float64(totalCount))
+	fmt.Printf("%d files, %d -> %d (%.2f%%) - %.02f bytes saved/file\n", totalCount, totalIn, totalOut, float64(totalOut*100)/float64(totalIn), float64(totalIn-totalOut)/float64(totalCount))
 }
 
 func FuzzDictBlocks(f *testing.F) {
