@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/klauspost/compress/gzip"
+	"github.com/klauspost/compress/zstd"
 )
 
 var (
@@ -1756,14 +1757,32 @@ func runBenchmark(b *testing.B, req *http.Request, handler http.Handler) {
 }
 
 func newTestHandler(body []byte) http.Handler {
+	var gzBuf bytes.Buffer
+	var zstdBuf bytes.Buffer
+	gz := gzip.NewWriter(&gzBuf)
+	gz.Write(body)
+	gz.Close()
+	zs, _ := zstd.NewWriter(&zstdBuf)
+	zs.Write(body)
+	zs.Close()
 	return GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/gzipped":
+			// Add header. Write body as is.
 			w.Header().Set("Content-Encoding", "gzip")
 			w.Write(body)
 		case "/zstd":
+			// Add header. Write body as is.
 			w.Header().Set("Content-Encoding", "zstd")
 			w.Write(body)
+		case "/gzipped/do":
+			// Add header. Write gzipped body.
+			w.Header().Set("Content-Encoding", "gzip")
+			w.Write(gzBuf.Bytes())
+		case "/zstd/do":
+			// Add header. Write zstd body.
+			w.Header().Set("Content-Encoding", "zstd")
+			w.Write(zstdBuf.Bytes())
 		default:
 			w.Write(body)
 		}
@@ -1803,11 +1822,6 @@ func TestGzipHandlerNilContentType(t *testing.T) {
 
 // This test is an adapted version of net/http/httputil.Test1xxResponses test.
 func Test1xxResponses(t *testing.T) {
-	// do not test 1xx responses on builds prior to go1.20.
-	if !shouldWrite1xxResponses() {
-		return
-	}
-
 	wrapper, _ := NewWrapper()
 	handler := wrapper(http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
