@@ -5,7 +5,6 @@
 package gzhttp
 
 import (
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -125,7 +124,6 @@ func (g *gzRoundtripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		resp.Uncompressed = true
 	}
 	if (decompress || g.withZstd) && asciiEqualFold(resp.Header.Get("Content-Encoding"), "zstd") {
-		fmt.Println("Decompressing zstd")
 		resp.Body = &zstdReader{body: resp.Body}
 		resp.Header.Del("Content-Encoding")
 		resp.Header.Del("Content-Length")
