@@ -5,6 +5,7 @@
 package gzhttp
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -61,10 +62,21 @@ func TransportCustomEval(fn func(header http.Header) bool) transportOption {
 	}
 }
 
+// TransportAlwaysDecompress will always decompress the response,
+// regardless of whether we requested it or not.
+// Default is false, which will pass compressed data through
+// if we did not request compression.
+func TransportAlwaysDecompress(enabled bool) transportOption {
+	return func(c *gzRoundtripper) {
+		c.alwaysDecomp = enabled
+	}
+}
+
 type gzRoundtripper struct {
 	parent             http.RoundTripper
 	acceptEncoding     string
 	withZstd, withGzip bool
+	alwaysDecomp       bool
 	customEval         func(header http.Header) bool
 }
 
@@ -90,15 +102,19 @@ func (g *gzRoundtripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	resp, err := g.parent.RoundTrip(req)
-	if err != nil || !requestedComp {
+	if err != nil {
 		return resp, err
 	}
-	decompress := false
+	decompress := g.alwaysDecomp
 	if g.customEval != nil {
 		if !g.customEval(resp.Header) {
 			return resp, nil
 		}
 		decompress = true
+	} else {
+		if !requestedComp && !g.alwaysDecomp {
+			return resp, nil
+		}
 	}
 	// Decompress
 	if (decompress || g.withGzip) && asciiEqualFold(resp.Header.Get("Content-Encoding"), "gzip") {
@@ -109,6 +125,7 @@ func (g *gzRoundtripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		resp.Uncompressed = true
 	}
 	if (decompress || g.withZstd) && asciiEqualFold(resp.Header.Get("Content-Encoding"), "zstd") {
+		fmt.Println("Decompressing zstd")
 		resp.Body = &zstdReader{body: resp.Body}
 		resp.Header.Del("Content-Encoding")
 		resp.Header.Del("Content-Length")
