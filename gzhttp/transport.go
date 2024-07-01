@@ -69,7 +69,7 @@ type gzRoundtripper struct {
 }
 
 func (g *gzRoundtripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	var requestedComp bool
+
 	if req.Header.Get("Accept-Encoding") == "" &&
 		req.Header.Get("Range") == "" &&
 		req.Method != "HEAD" {
@@ -85,12 +85,13 @@ func (g *gzRoundtripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		// We don't request gzip if the request is for a range, since
 		// auto-decoding a portion of a gzipped document will just fail
 		// anyway. See https://golang.org/issue/8923
-		requestedComp = len(g.acceptEncoding) > 0
-		req.Header.Set("Accept-Encoding", g.acceptEncoding)
+		if len(g.acceptEncoding) > 0 {
+			req.Header.Set("Accept-Encoding", g.acceptEncoding)
+		}
 	}
 
 	resp, err := g.parent.RoundTrip(req)
-	if err != nil || !requestedComp {
+	if err != nil {
 		return resp, err
 	}
 	decompress := false
@@ -107,8 +108,7 @@ func (g *gzRoundtripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		resp.Header.Del("Content-Length")
 		resp.ContentLength = -1
 		resp.Uncompressed = true
-	}
-	if (decompress || g.withZstd) && asciiEqualFold(resp.Header.Get("Content-Encoding"), "zstd") {
+	} else if (decompress || g.withZstd) && asciiEqualFold(resp.Header.Get("Content-Encoding"), "zstd") {
 		resp.Body = &zstdReader{body: resp.Body}
 		resp.Header.Del("Content-Encoding")
 		resp.Header.Del("Content-Length")
