@@ -26,7 +26,7 @@ The commandline tool can do this truncation for you.
 To install the command line tool run:
 
 ```
-$ go install github.com/klaupost/compress/dict/cmd/builddict@latest
+$ go install github.com/klauspost/compress/dict/cmd/builddict@latest
 ```
 
 Collect the samples in a directory, for example `samples/`.
