@@ -576,6 +576,49 @@ func TestBigEncodeBufferSync(t *testing.T) {
 	t.Log(n)
 }
 
+func TestWriterBufferDone(t *testing.T) {
+	const blockSize = 1 << 20
+	var buffers [][]byte
+	for _, size := range []int{10, 100, 10000, blockSize, blockSize * 8} {
+		buffers = append(buffers, make([]byte, size))
+	}
+
+	dst := io.Discard
+	wantNextBuf := 0
+	var cbErr error
+	enc := NewWriter(dst, WriterBlockSize(blockSize), WriterConcurrency(4), WriterBufferDone(func(b []byte) {
+		if !bytes.Equal(b, buffers[wantNextBuf]) && cbErr == nil {
+			cbErr = fmt.Errorf("wrong buffer returned, want %v got %v", buffers[wantNextBuf], b)
+		}
+		// Detect races.
+		for i := range b[:] {
+			b[i] = 255
+		}
+		wantNextBuf++
+	}))
+	for n, buf := range buffers {
+		// Change the buffer to a new value.
+		for i := range buf[:] {
+			buf[i] = byte(n)
+		}
+		// Send the buffer
+		err := enc.EncodeBuffer(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	err := enc.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wantNextBuf != len(buffers) {
+		t.Fatalf("want %d buffers, got %d ", len(buffers), wantNextBuf)
+	}
+	if cbErr != nil {
+		t.Fatal(cbErr)
+	}
+}
+
 func BenchmarkWriterRandom(b *testing.B) {
 	rng := rand.New(rand.NewSource(1))
 	// Make max window so we never get matches.
