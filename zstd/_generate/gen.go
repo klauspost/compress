@@ -220,7 +220,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 				ADDQ(tmp, ec.histBasePtr) // Note: we always copy from &hist[len(hist) - v]
 			}
 
-			Comment("Calculate poiter to s.out[cap(s.out)] (a past-end pointer)")
+			Comment("Calculate pointer to s.out[cap(s.out)] (a past-end pointer)")
 			ADDQ(ec.outBase, ec.outEndPtr)
 
 			Comment("outBase += outPosition")

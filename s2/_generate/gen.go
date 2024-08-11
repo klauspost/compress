@@ -1920,7 +1920,7 @@ func (o options) emitLiteral(name string, litLen, retval, dstBase, litBase reg.G
 	return
 }
 
-// genEmitRepeat generates a standlone emitRepeat.
+// genEmitRepeat generates a standalone emitRepeat.
 func (o options) genEmitRepeat() {
 	TEXT("emitRepeat", NOSPLIT, "func(dst []byte, offset, length int) int")
 	Doc("emitRepeat writes a repeat chunk and returns the number of bytes written.",
@@ -2088,7 +2088,7 @@ func (o options) emitRepeat(name string, length reg.GPVirtual, offset reg.GPVirt
 //	1 <= offset && offset <= math.MaxUint32
 //	4 <= length && length <= 1 << 24
 
-// genEmitCopy generates a standlone emitCopy
+// genEmitCopy generates a standalone emitCopy
 func (o options) genEmitCopy() {
 	TEXT("emitCopy", NOSPLIT, "func(dst []byte, offset, length int) int")
 	Doc("emitCopy writes a copy chunk and returns the number of bytes written.", "",
@@ -2118,7 +2118,7 @@ func (o options) genEmitCopy() {
 //	1 <= offset && offset <= math.MaxUint32
 //	4 <= length && length <= 1 << 24
 
-// genEmitCopy generates a standlone emitCopy
+// genEmitCopy generates a standalone emitCopy
 func (o options) genEmitCopyNoRepeat() {
 	TEXT("emitCopyNoRepeat", NOSPLIT, "func(dst []byte, offset, length int) int")
 	Doc("emitCopyNoRepeat writes a copy chunk and returns the number of bytes written.", "",
