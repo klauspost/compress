@@ -462,7 +462,7 @@ func TestWithEncoderPadding(t *testing.T) {
 		// Test the added padding is invisible.
 		dst := e.EncodeAll(src, nil)
 		if len(dst)%padding != 0 {
-			t.Fatalf("wanted size to be mutiple of %d, got size %d with remainder %d", padding, len(dst), len(dst)%padding)
+			t.Fatalf("wanted size to be multiple of %d, got size %d with remainder %d", padding, len(dst), len(dst)%padding)
 		}
 		got, err := d.DecodeAll(dst, nil)
 		if err != nil {
@@ -474,7 +474,7 @@ func TestWithEncoderPadding(t *testing.T) {
 		// Test when we supply data as well.
 		dst = e.EncodeAll(src, make([]byte, rng.Int()&255))
 		if len(dst)%padding != 0 {
-			t.Fatalf("wanted size to be mutiple of %d, got size %d with remainder %d", padding, len(dst), len(dst)%padding)
+			t.Fatalf("wanted size to be multiple of %d, got size %d with remainder %d", padding, len(dst), len(dst)%padding)
 		}
 
 		// Test using the writer.
@@ -490,7 +490,7 @@ func TestWithEncoderPadding(t *testing.T) {
 		}
 		dst = buf.Bytes()
 		if len(dst)%padding != 0 {
-			t.Fatalf("wanted size to be mutiple of %d, got size %d with remainder %d", padding, len(dst), len(dst)%padding)
+			t.Fatalf("wanted size to be multiple of %d, got size %d with remainder %d", padding, len(dst), len(dst)%padding)
 		}
 		// Test the added padding is invisible.
 		got, err = d.DecodeAll(dst, nil)
@@ -513,7 +513,7 @@ func TestWithEncoderPadding(t *testing.T) {
 		}
 		dst = buf.Bytes()
 		if len(dst)%padding != 0 {
-			t.Fatalf("wanted size to be mutiple of %d, got size %d with remainder %d", padding, len(dst), len(dst)%padding)
+			t.Fatalf("wanted size to be multiple of %d, got size %d with remainder %d", padding, len(dst), len(dst)%padding)
 		}
 		// Test the added padding is invisible.
 		got, err = d.DecodeAll(dst, nil)

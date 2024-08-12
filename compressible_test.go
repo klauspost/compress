@@ -8,7 +8,7 @@ import (
 
 func BenchmarkEstimate(b *testing.B) {
 	b.ReportAllocs()
-	// (predictable, low entropy distibution)
+	// (predictable, low entropy distribution)
 	b.Run("zeroes-5k", func(b *testing.B) {
 		var testData = make([]byte, 5000)
 		b.SetBytes(int64(len(testData)))
@@ -19,7 +19,7 @@ func BenchmarkEstimate(b *testing.B) {
 		b.Log(Estimate(testData))
 	})
 
-	// (predictable, high entropy distibution)
+	// (predictable, high entropy distribution)
 	b.Run("predictable-5k", func(b *testing.B) {
 		var testData = make([]byte, 5000)
 		for i := range testData {
@@ -33,7 +33,7 @@ func BenchmarkEstimate(b *testing.B) {
 		b.Log(Estimate(testData))
 	})
 
-	// (not predictable, high entropy distibution)
+	// (not predictable, high entropy distribution)
 	b.Run("random-500b", func(b *testing.B) {
 		var testData = make([]byte, 500)
 		rand.Read(testData)
@@ -45,7 +45,7 @@ func BenchmarkEstimate(b *testing.B) {
 		b.Log(Estimate(testData))
 	})
 
-	// (not predictable, high entropy distibution)
+	// (not predictable, high entropy distribution)
 	b.Run("random-5k", func(b *testing.B) {
 		var testData = make([]byte, 5000)
 		rand.Read(testData)
@@ -57,7 +57,7 @@ func BenchmarkEstimate(b *testing.B) {
 		b.Log(Estimate(testData))
 	})
 
-	// (not predictable, high entropy distibution)
+	// (not predictable, high entropy distribution)
 	b.Run("random-50k", func(b *testing.B) {
 		var testData = make([]byte, 50000)
 		rand.Read(testData)
@@ -69,7 +69,7 @@ func BenchmarkEstimate(b *testing.B) {
 		b.Log(Estimate(testData))
 	})
 
-	// (not predictable, high entropy distibution)
+	// (not predictable, high entropy distribution)
 	b.Run("random-500k", func(b *testing.B) {
 		var testData = make([]byte, 500000)
 		rand.Read(testData)
@@ -81,7 +81,7 @@ func BenchmarkEstimate(b *testing.B) {
 		b.Log(Estimate(testData))
 	})
 
-	// (not predictable, medium entropy distibution)
+	// (not predictable, medium entropy distribution)
 	b.Run("base-32-5k", func(b *testing.B) {
 		var testData = make([]byte, 5000)
 		rand.Read(testData)
@@ -95,7 +95,7 @@ func BenchmarkEstimate(b *testing.B) {
 		}
 		b.Log(Estimate(testData))
 	})
-	// (medium predictable, medium entropy distibution)
+	// (medium predictable, medium entropy distribution)
 	b.Run("text", func(b *testing.B) {
 		var testData = []byte(`If compression is done per-chunk, care should be taken that it doesn't leave restic backups open to watermarking/fingerprinting attacks.
 This is essentially the same problem we discussed related to fingerprinting the CDC deduplication process:
@@ -122,7 +122,7 @@ Thoughts?`)
 
 func BenchmarkSnannonEntropyBits(b *testing.B) {
 	b.ReportAllocs()
-	// (predictable, low entropy distibution)
+	// (predictable, low entropy distribution)
 	b.Run("zeroes-5k", func(b *testing.B) {
 		var testData = make([]byte, 5000)
 		b.SetBytes(int64(len(testData)))
@@ -133,7 +133,7 @@ func BenchmarkSnannonEntropyBits(b *testing.B) {
 		b.Log(ShannonEntropyBits(testData))
 	})
 
-	// (predictable, high entropy distibution)
+	// (predictable, high entropy distribution)
 	b.Run("predictable-5k", func(b *testing.B) {
 		var testData = make([]byte, 5000)
 		for i := range testData {
@@ -147,7 +147,7 @@ func BenchmarkSnannonEntropyBits(b *testing.B) {
 		b.Log(ShannonEntropyBits(testData))
 	})
 
-	// (not predictable, high entropy distibution)
+	// (not predictable, high entropy distribution)
 	b.Run("random-500b", func(b *testing.B) {
 		var testData = make([]byte, 500)
 		rand.Read(testData)
@@ -159,7 +159,7 @@ func BenchmarkSnannonEntropyBits(b *testing.B) {
 		b.Log(ShannonEntropyBits(testData))
 	})
 
-	// (not predictable, high entropy distibution)
+	// (not predictable, high entropy distribution)
 	b.Run("random-5k", func(b *testing.B) {
 		var testData = make([]byte, 5000)
 		rand.Read(testData)
@@ -171,7 +171,7 @@ func BenchmarkSnannonEntropyBits(b *testing.B) {
 		b.Log(ShannonEntropyBits(testData))
 	})
 
-	// (not predictable, high entropy distibution)
+	// (not predictable, high entropy distribution)
 	b.Run("random-50k", func(b *testing.B) {
 		var testData = make([]byte, 50000)
 		rand.Read(testData)
@@ -183,7 +183,7 @@ func BenchmarkSnannonEntropyBits(b *testing.B) {
 		b.Log(ShannonEntropyBits(testData))
 	})
 
-	// (not predictable, high entropy distibution)
+	// (not predictable, high entropy distribution)
 	b.Run("random-500k", func(b *testing.B) {
 		var testData = make([]byte, 500000)
 		rand.Read(testData)
@@ -195,7 +195,7 @@ func BenchmarkSnannonEntropyBits(b *testing.B) {
 		b.Log(ShannonEntropyBits(testData))
 	})
 
-	// (not predictable, medium entropy distibution)
+	// (not predictable, medium entropy distribution)
 	b.Run("base-32-5k", func(b *testing.B) {
 		var testData = make([]byte, 5000)
 		rand.Read(testData)
@@ -209,7 +209,7 @@ func BenchmarkSnannonEntropyBits(b *testing.B) {
 		}
 		b.Log(ShannonEntropyBits(testData))
 	})
-	// (medium predictable, medium entropy distibution)
+	// (medium predictable, medium entropy distribution)
 	b.Run("text", func(b *testing.B) {
 		var testData = []byte(`If compression is done per-chunk, care should be taken that it doesn't leave restic backups open to watermarking/fingerprinting attacks.
 This is essentially the same problem we discussed related to fingerprinting the CDC deduplication process:

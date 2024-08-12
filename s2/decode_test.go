@@ -124,7 +124,7 @@ func TestDecoderMaxBlockSize(t *testing.T) {
 					return
 				}
 				if enc.pad > 0 && buf.Len()%enc.pad != 0 {
-					t.Error(fmt.Errorf("wanted size to be mutiple of %d, got size %d with remainder %d", enc.pad, buf.Len(), buf.Len()%enc.pad))
+					t.Error(fmt.Errorf("wanted size to be multiple of %d, got size %d with remainder %d", enc.pad, buf.Len(), buf.Len()%enc.pad))
 					return
 				}
 				encoded := buf.Bytes()

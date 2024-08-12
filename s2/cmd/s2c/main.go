@@ -247,7 +247,7 @@ Options:`)
 								fmt.Printf(" %d -> %d [%.02f%%]; %v, %.01fMB/s", len(compressed), len(decomp), pct, ms, mbpersec)
 							}
 							if !bytes.Equal(decomp, b) {
-								exitErr(fmt.Errorf("decompresed data mismatch"))
+								exitErr(fmt.Errorf("decompressed data mismatch"))
 							}
 							if !*quiet {
 								fmt.Print("... Verified ok.")

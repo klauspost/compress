@@ -411,7 +411,7 @@ func (a *seekable) Seek(offset int64, whence int) (res int64, err error) {
 	}
 	//Seek the actual Seeker
 	if res, err = seeker.Seek(offset, whence); err == nil {
-		//If the seek was successful, reinitalize ourselves (with the new position).
+		//If the seek was successful, reinitialize ourselves (with the new position).
 		a.initBuffers(a.in, a.bufs, a.size)
 	}
 	return

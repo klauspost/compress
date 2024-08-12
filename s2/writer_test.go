@@ -165,7 +165,7 @@ func TestEncoderRegression(t *testing.T) {
 				}
 				comp := buf.Bytes()
 				if enc.pad > 0 && len(comp)%enc.pad != 0 {
-					t.Error(fmt.Errorf("wanted size to be mutiple of %d, got size %d with remainder %d", enc.pad, len(comp), len(comp)%enc.pad))
+					t.Error(fmt.Errorf("wanted size to be multiple of %d, got size %d with remainder %d", enc.pad, len(comp), len(comp)%enc.pad))
 					return
 				}
 				var got []byte
@@ -203,7 +203,7 @@ func TestEncoderRegression(t *testing.T) {
 					return
 				}
 				if enc.pad > 0 && buf.Len()%enc.pad != 0 {
-					t.Error(fmt.Errorf("wanted size to be mutiple of %d, got size %d with remainder %d", enc.pad, buf.Len(), buf.Len()%enc.pad))
+					t.Error(fmt.Errorf("wanted size to be multiple of %d, got size %d with remainder %d", enc.pad, buf.Len(), buf.Len()%enc.pad))
 					return
 				}
 				if !strings.Contains(name, "-snappy") {
@@ -433,7 +433,7 @@ func TestWriterPadding(t *testing.T) {
 		}
 
 		if dst.Len()%padding != 0 {
-			t.Fatalf("wanted size to be mutiple of %d, got size %d with remainder %d", padding, dst.Len(), dst.Len()%padding)
+			t.Fatalf("wanted size to be multiple of %d, got size %d with remainder %d", padding, dst.Len(), dst.Len()%padding)
 		}
 		var got bytes.Buffer
 		d.Reset(&dst)
@@ -457,7 +457,7 @@ func TestWriterPadding(t *testing.T) {
 			t.Fatal(err)
 		}
 		if dst.Len()%padding != 0 {
-			t.Fatalf("wanted size to be mutiple of %d, got size %d with remainder %d", padding, dst.Len(), dst.Len()%padding)
+			t.Fatalf("wanted size to be multiple of %d, got size %d with remainder %d", padding, dst.Len(), dst.Len()%padding)
 		}
 
 		got.Reset()

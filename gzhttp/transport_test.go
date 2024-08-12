@@ -127,7 +127,7 @@ func TestTransportInvalid(t *testing.T) {
 	server := httptest.NewServer(newTestHandler(bin))
 
 	c := http.Client{Transport: Transport(http.DefaultTransport)}
-	// Serves json as gzippped...
+	// Serves json as gzipped...
 	resp, err := c.Get(server.URL + "/gzipped")
 	if err != nil {
 		t.Fatal(err)
