@@ -302,8 +302,8 @@ const (
 type flushMode uint8
 
 const (
-	syncFlush flushMode = iota // return data after sync flush block
-	partialFlush // return data after each block
+	syncFlush    flushMode = iota // return data after sync flush block
+	partialFlush                  // return data after each block
 )
 
 // Decompress state.
