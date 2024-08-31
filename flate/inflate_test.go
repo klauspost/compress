@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -277,5 +278,25 @@ func TestWriteTo(t *testing.T) {
 	}
 	if !bytes.Equal(wtbuf.Bytes(), input) {
 		t.Fatal("output did not match input")
+	}
+}
+
+func TestReaderPartialBlock(t *testing.T) {
+	data, err := os.ReadFile("testdata/partial-block")
+	if err != nil {
+		t.Error(err)
+	}
+
+	r := NewReaderOpts(bytes.NewReader(data), WithPartialBlock())
+	rb := make([]byte, 32)
+	n, err := r.Read(rb)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+
+	expected := "hello, world"
+	actual := string(rb[:n])
+	if expected != actual {
+		t.Fatalf("expected: %v, got: %v", expected, actual)
 	}
 }
