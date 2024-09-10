@@ -465,12 +465,9 @@ func NewWrapper(opts ...option) (func(http.Handler) http.HandlerFunc, error) {
 		return func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add(vary, acceptEncoding)
 			if contentGzip(r) {
-				readerGzipBody, err := gzip.NewReader(r.Body)
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusBadRequest)
-					return
+				if readerGzipBody, err := gzip.NewReader(r.Body); err == nil {
+					r.Body = io.NopCloser(readerGzipBody)
 				}
-				r.Body = io.NopCloser(readerGzipBody)
 			}
 
 			if acceptsGzip(r) {
