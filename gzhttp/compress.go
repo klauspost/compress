@@ -464,11 +464,29 @@ func NewWrapper(opts ...option) (func(http.Handler) http.HandlerFunc, error) {
 	return func(h http.Handler) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add(vary, acceptEncoding)
-			if contentGzip(r) {
+			if c.allowCompressedRequests && contentGzip(r) {
 				r.Header.Del(contentEncoding)
 
-				if readerGzipBody, err := gzip.NewReader(r.Body); err == nil {
-					r.Body = io.NopCloser(readerGzipBody)
+				var (
+					err error
+					gz  *gzip.Reader
+				)
+
+				zr, ok := gzReaderPool.Get().(*gzip.Reader)
+				if ok {
+					gz, err = zr, zr.Reset(r.Body)
+				} else {
+					gz, err = gzip.NewReader(r.Body)
+				}
+
+				defer func() {
+					gzReaderPool.Put(gz)
+					gz = nil
+				}()
+
+				if err == nil {
+					r.Body = io.NopCloser(gz)
+					defer r.Body.Close()
 				}
 			}
 
@@ -544,17 +562,18 @@ func (pct parsedContentType) equals(mediaType string, params map[string]string) 
 
 // Used for functional configuration.
 type config struct {
-	minSize          int
-	level            int
-	writer           writer.GzipWriterFactory
-	contentTypes     func(ct string) bool
-	keepAcceptRanges bool
-	setContentType   bool
-	suffixETag       string
-	dropETag         bool
-	jitterBuffer     int
-	randomJitter     string
-	sha256Jitter     bool
+	minSize                 int
+	level                   int
+	writer                  writer.GzipWriterFactory
+	contentTypes            func(ct string) bool
+	keepAcceptRanges        bool
+	setContentType          bool
+	suffixETag              string
+	dropETag                bool
+	jitterBuffer            int
+	randomJitter            string
+	sha256Jitter            bool
+	allowCompressedRequests bool
 }
 
 func (c *config) validate() error {
@@ -584,6 +603,15 @@ type option func(c *config)
 func MinSize(size int) option {
 	return func(c *config) {
 		c.minSize = size
+	}
+}
+
+// AllowCompressedRequests will enable or disable RFC 7694 compressed requests.
+// By default this is Disabled.
+// See https://datatracker.ietf.org/doc/html/rfc7694
+func AllowCompressedRequests(b bool) option {
+	return func(c *config) {
+		c.allowCompressedRequests = b
 	}
 }
 
