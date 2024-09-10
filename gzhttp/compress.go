@@ -464,6 +464,15 @@ func NewWrapper(opts ...option) (func(http.Handler) http.HandlerFunc, error) {
 	return func(h http.Handler) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add(vary, acceptEncoding)
+			if contentGzip(r) {
+				readerGzipBody, err := gzip.NewReader(r.Body)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+				r.Body = io.NopCloser(readerGzipBody)
+			}
+
 			if acceptsGzip(r) {
 				gw := grwPool.Get().(*GzipResponseWriter)
 				*gw = GzipResponseWriter{
@@ -750,6 +759,11 @@ func RandomJitter(n, buffer int, paranoid bool) option {
 			c.jitterBuffer = 0
 		}
 	}
+}
+
+func contentGzip(r *http.Request) bool {
+	// See more detail in `acceptsGzip`
+	return r.Method != http.MethodHead && parseEncodingGzip(r.Header.Get(contentEncoding)) > 0
 }
 
 // acceptsGzip returns true if the given HTTP request indicates that it will
