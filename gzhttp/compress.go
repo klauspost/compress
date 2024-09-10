@@ -758,6 +758,7 @@ func RandomJitter(n, buffer int, paranoid bool) option {
 	}
 }
 
+// contentGzip returns true if the given HTTP request indicates that it gzipped.
 func contentGzip(r *http.Request) bool {
 	// See more detail in `acceptsGzip`
 	return r.Method != http.MethodHead && parseEncodingGzip(r.Header.Get(contentEncoding)) > 0
