@@ -466,28 +466,8 @@ func NewWrapper(opts ...option) (func(http.Handler) http.HandlerFunc, error) {
 			w.Header().Add(vary, acceptEncoding)
 			if c.allowCompressedRequests && contentGzip(r) {
 				r.Header.Del(contentEncoding)
-
-				var (
-					err error
-					gz  *gzip.Reader
-				)
-
-				zr, ok := gzReaderPool.Get().(*gzip.Reader)
-				if ok {
-					gz, err = zr, zr.Reset(r.Body)
-				} else {
-					gz, err = gzip.NewReader(r.Body)
-				}
-
-				defer func() {
-					gzReaderPool.Put(gz)
-					gz = nil
-				}()
-
-				if err == nil {
-					r.Body = io.NopCloser(gz)
-					defer r.Body.Close()
-				}
+				r.Body = io.NopCloser(&gzipReader{body: r.Body})
+				defer r.Body.Close()
 			}
 
 			if acceptsGzip(r) {
