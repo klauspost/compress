@@ -466,8 +466,7 @@ func NewWrapper(opts ...option) (func(http.Handler) http.HandlerFunc, error) {
 			w.Header().Add(vary, acceptEncoding)
 			if c.allowCompressedRequests && contentGzip(r) {
 				r.Header.Del(contentEncoding)
-				r.Body = io.NopCloser(&gzipReader{body: r.Body})
-				defer r.Body.Close()
+				r.Body = &gzipReader{body: r.Body}
 			}
 
 			if acceptsGzip(r) {
