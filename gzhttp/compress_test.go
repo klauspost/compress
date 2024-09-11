@@ -89,6 +89,41 @@ func TestMustNewGzipHandler(t *testing.T) {
 	handler.ServeHTTP(res3, req3)
 
 	assertEqual(t, http.DetectContentType([]byte(testBody)), res3.Header().Get("Content-Type"))
+
+	// send compress request body with `AllowCompressedRequests`
+	handler = newTestHandlerLevel(testBody, AllowCompressedRequests(true))
+
+	var b bytes.Buffer
+	writerGzip := gzip.NewWriter(&b)
+	writerGzip.Write(testBody)
+	writerGzip.Close()
+
+	req5, _ := http.NewRequest("POST", "/whatever", &b)
+	req5.Header.Set("Content-Encoding", "gzip")
+	resp5 := httptest.NewRecorder()
+	handler.ServeHTTP(resp5, req5)
+	res5 := resp5.Result()
+
+	assertEqual(t, 200, res5.StatusCode)
+
+	body, _ := io.ReadAll(res5.Body)
+	assertEqual(t, len(testBody), len(body))
+
+	// send compress request body without `AllowCompressedRequests`
+	writerGzip = gzip.NewWriter(&b)
+	writerGzip.Write(testBody)
+	writerGzip.Close()
+
+	handler = newTestHandlerLevel(b.Bytes())
+
+	req6, _ := http.NewRequest("POST", "/whatever", &b)
+	resp6 := httptest.NewRecorder()
+	handler.ServeHTTP(resp6, req6)
+	res6 := resp6.Result()
+
+	assertEqual(t, 200, res6.StatusCode)
+	body, _ = io.ReadAll(res6.Body)
+	assertEqual(t, b.Len(), len(body))
 }
 
 func TestGzipHandlerSmallBodyNoCompression(t *testing.T) {
