@@ -16,6 +16,20 @@ This package provides various compression algorithms.
 
 # changelog
 
+* Jun 12th, 2024 - [1.17.9](https://github.com/klauspost/compress/releases/tag/v1.17.9)
+	* s2: Reduce ReadFrom temporary allocations https://github.com/klauspost/compress/pull/949
+	* flate, zstd: Shave some bytes off amd64 matchLen by @greatroar in https://github.com/klauspost/compress/pull/963
+	* Upgrade zip/zlib to 1.22.4 upstream https://github.com/klauspost/compress/pull/970 https://github.com/klauspost/compress/pull/971
+	* zstd: BuildDict fails with RLE table https://github.com/klauspost/compress/pull/951
+
+* Apr 9th, 2024 - [1.17.8](https://github.com/klauspost/compress/releases/tag/v1.17.8)
+	* zstd: Reject blocks where reserved values are not 0 https://github.com/klauspost/compress/pull/885
+	* zstd: Add RLE detection+encoding https://github.com/klauspost/compress/pull/938
+
+* Feb 21st, 2024 - [1.17.7](https://github.com/klauspost/compress/releases/tag/v1.17.7)
+	* s2: Add AsyncFlush method: Complete the block without flushing by @Jille in https://github.com/klauspost/compress/pull/927
+	* s2: Fix literal+repeat exceeds dst crash https://github.com/klauspost/compress/pull/930
+  
 * Feb 5th, 2024 - [1.17.6](https://github.com/klauspost/compress/releases/tag/v1.17.6)
 	* zstd: Fix incorrect repeat coding in best mode https://github.com/klauspost/compress/pull/923
 	* s2: Fix DecodeConcurrent deadlock on errors https://github.com/klauspost/compress/pull/925
