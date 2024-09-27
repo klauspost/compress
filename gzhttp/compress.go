@@ -324,6 +324,20 @@ func (w *GzipResponseWriter) init() {
 	w.gw = w.gwFactory.New(w.ResponseWriter, w.level)
 }
 
+// bodyAllowedForStatus reports whether a given response status code
+// permits a body. See RFC 7230, section 3.3.
+func bodyAllowedForStatus(status int) bool {
+	switch {
+	case status >= 100 && status <= 199:
+		return false
+	case status == 204:
+		return false
+	case status == 304:
+		return false
+	}
+	return true
+}
+
 // Close will close the gzip.Writer and will put it back in the gzipWriterPool.
 func (w *GzipResponseWriter) Close() error {
 	if w.ignore {
@@ -335,7 +349,7 @@ func (w *GzipResponseWriter) Close() error {
 			ce = w.Header().Get(contentEncoding)
 			cr = w.Header().Get(contentRange)
 		)
-		if ct == "" {
+		if ct == "" && bodyAllowedForStatus(w.code) {
 			ct = http.DetectContentType(w.buf)
 
 			// Handles the intended case of setting a nil Content-Type (as for http/server or http/fs)
