@@ -349,12 +349,12 @@ func (w *GzipResponseWriter) Close() error {
 			ce = w.Header().Get(contentEncoding)
 			cr = w.Header().Get(contentRange)
 		)
-		if ct == "" && bodyAllowedForStatus(w.code) {
+		if ct == "" {
 			ct = http.DetectContentType(w.buf)
 
 			// Handles the intended case of setting a nil Content-Type (as for http/server or http/fs)
 			// Set the header only if the key does not exist
-			if _, ok := w.Header()[contentType]; w.setContentType && !ok {
+			if _, ok := w.Header()[contentType]; bodyAllowedForStatus(w.code) && w.setContentType && !ok {
 				w.Header().Set(contentType, ct)
 			}
 		}
