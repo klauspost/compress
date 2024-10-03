@@ -131,15 +131,15 @@ func (w *GzipResponseWriter) Write(b []byte) (int, error) {
 
 			// If the Content-Length is larger than minSize or the current buffer is larger than minSize, then continue.
 			if cl >= w.minSize || len(w.buf) >= w.minSize {
-				// If a Content-Type wasn't specified, infer it from the current buffer.
-				if ct == "" {
+				// If a Content-Type wasn't specified, infer it from the current buffer when the response has a body.
+				if ct == "" && bodyAllowedForStatus(w.code) && len(w.buf) > 0 {
 					ct = http.DetectContentType(w.buf)
-				}
 
-				// Handles the intended case of setting a nil Content-Type (as for http/server or http/fs)
-				// Set the header only if the key does not exist
-				if _, ok := hdr[contentType]; w.setContentType && !ok {
-					hdr.Set(contentType, ct)
+					// Handles the intended case of setting a nil Content-Type (as for http/server or http/fs)
+					// Set the header only if the key does not exist
+					if _, ok := hdr[contentType]; w.setContentType && !ok {
+						hdr.Set(contentType, ct)
+					}
 				}
 
 				// If the Content-Type is acceptable to GZIP, initialize the GZIP writer.
@@ -349,12 +349,14 @@ func (w *GzipResponseWriter) Close() error {
 			ce = w.Header().Get(contentEncoding)
 			cr = w.Header().Get(contentRange)
 		)
-		if ct == "" {
+
+		// Detects the response content-type when it does not exist and the response has a body.
+		if ct == "" && bodyAllowedForStatus(w.code) && len(w.buf) > 0 {
 			ct = http.DetectContentType(w.buf)
 
 			// Handles the intended case of setting a nil Content-Type (as for http/server or http/fs)
 			// Set the header only if the key does not exist
-			if _, ok := w.Header()[contentType]; bodyAllowedForStatus(w.code) && w.setContentType && !ok {
+			if _, ok := w.Header()[contentType]; w.setContentType && !ok {
 				w.Header().Set(contentType, ct)
 			}
 		}
@@ -393,7 +395,8 @@ func (w *GzipResponseWriter) Flush() {
 			cr    = w.Header().Get(contentRange)
 		)
 
-		if ct == "" {
+		// Detects the response content-type when it does not exist and the response has a body.
+		if ct == "" && bodyAllowedForStatus(w.code) && len(w.buf) > 0 {
 			ct = http.DetectContentType(w.buf)
 
 			// Handles the intended case of setting a nil Content-Type (as for http/server or http/fs)
