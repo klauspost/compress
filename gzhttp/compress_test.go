@@ -1617,6 +1617,25 @@ func TestNoContentTypeWhenNoContent(t *testing.T) {
 
 }
 
+func TestNoContentTypeWhenNoBody(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	wrapper, err := NewWrapper()
+	assertNil(t, err)
+
+	req, _ := http.NewRequest("GET", "/", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	resp := httptest.NewRecorder()
+	wrapper(handler).ServeHTTP(resp, req)
+	res := resp.Result()
+
+	assertEqual(t, http.StatusOK, res.StatusCode)
+	assertEqual(t, "", res.Header.Get("Content-Type"))
+
+}
+
 func TestContentTypeDetect(t *testing.T) {
 	for _, tt := range sniffTests {
 		t.Run(tt.desc, func(t *testing.T) {
