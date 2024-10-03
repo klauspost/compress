@@ -67,22 +67,22 @@ func EstimateBlockSize(src []byte) (d int) {
 	}
 	if len(src) <= 1024 {
 		const sz, pool = 2048, 0
-		tmp, ok := encPools[pool].Get().(*[sz]byte)
+		tmp, ok := estblockPool[pool].Get().(*[sz]byte)
 		if !ok {
 			tmp = &[sz]byte{}
 		}
 		race.WriteSlice(tmp[:])
-		defer encPools[pool].Put(tmp)
+		defer estblockPool[pool].Put(tmp)
 
 		d = calcBlockSizeSmall(src, tmp)
 	} else {
 		const sz, pool = 32768, 1
-		tmp, ok := encPools[pool].Get().(*[sz]byte)
+		tmp, ok := estblockPool[pool].Get().(*[sz]byte)
 		if !ok {
 			tmp = &[sz]byte{}
 		}
 		race.WriteSlice(tmp[:])
-		defer encPools[pool].Put(tmp)
+		defer estblockPool[pool].Put(tmp)
 
 		d = calcBlockSize(src, tmp)
 	}
