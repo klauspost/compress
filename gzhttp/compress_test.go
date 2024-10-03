@@ -662,7 +662,7 @@ func TestFlushAfterWrite3(t *testing.T) {
 	}
 	handler := gz(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		rw.WriteHeader(http.StatusOK)
-		//rw.Write(nil)
+		// rw.Write(nil)
 		rw.(http.Flusher).Flush()
 	}))
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -1596,6 +1596,44 @@ var sniffTests = []struct {
 	{"RAR v5+", []byte("Rar!\x1A\x07\x01\x00"), "application/x-rar-compressed"},
 	{"Incorrect RAR v1.5-v4.0", []byte("Rar \x1A\x07\x00"), "application/octet-stream"},
 	{"Incorrect RAR v5+", []byte("Rar \x1A\x07\x01\x00"), "application/octet-stream"},
+}
+
+func TestNoContentTypeWhenNoContent(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	wrapper, err := NewWrapper()
+	assertNil(t, err)
+
+	req, _ := http.NewRequest("GET", "/", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	resp := httptest.NewRecorder()
+	wrapper(handler).ServeHTTP(resp, req)
+	res := resp.Result()
+
+	assertEqual(t, http.StatusNoContent, res.StatusCode)
+	assertEqual(t, "", res.Header.Get("Content-Type"))
+
+}
+
+func TestNoContentTypeWhenNoBody(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	wrapper, err := NewWrapper()
+	assertNil(t, err)
+
+	req, _ := http.NewRequest("GET", "/", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	resp := httptest.NewRecorder()
+	wrapper(handler).ServeHTTP(resp, req)
+	res := resp.Result()
+
+	assertEqual(t, http.StatusOK, res.StatusCode)
+	assertEqual(t, "", res.Header.Get("Content-Type"))
+
 }
 
 func TestContentTypeDetect(t *testing.T) {
