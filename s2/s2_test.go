@@ -2201,3 +2201,51 @@ func TestMatchLen(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkDecodeBlockSingle(b *testing.B) {
+	for i := range testFiles {
+		b.Run(fmt.Sprint(i, "-", testFiles[i].label), func(b *testing.B) {
+			if err := downloadBenchmarkFiles(b, testFiles[i].filename); err != nil {
+				b.Fatalf("failed to download testdata: %s", err)
+			}
+			bDir := filepath.FromSlash(*benchdataDir)
+			data := readFile(b, filepath.Join(bDir, testFiles[i].filename))
+			if testFiles[i].sizeLimit > 0 && len(data) > testFiles[i].sizeLimit {
+				data = data[:testFiles[i].sizeLimit]
+			}
+			benchDecode(b, data)
+		})
+	}
+}
+
+func BenchmarkDecodeBlockParallel(b *testing.B) {
+	for i := range testFiles {
+		b.Run(fmt.Sprint(i, "-", testFiles[i].label), func(b *testing.B) {
+			benchFile(b, i, true)
+		})
+	}
+}
+
+func BenchmarkEncodeBlockSingle(b *testing.B) {
+	for i := range testFiles {
+		b.Run(fmt.Sprint(i, "-", testFiles[i].label), func(b *testing.B) {
+			if err := downloadBenchmarkFiles(b, testFiles[i].filename); err != nil {
+				b.Fatalf("failed to download testdata: %s", err)
+			}
+			bDir := filepath.FromSlash(*benchdataDir)
+			data := readFile(b, filepath.Join(bDir, testFiles[i].filename))
+			if testFiles[i].sizeLimit > 0 && len(data) > testFiles[i].sizeLimit {
+				data = data[:testFiles[i].sizeLimit]
+			}
+			benchEncode(b, data)
+		})
+	}
+}
+
+func BenchmarkEncodeBlockParallel(b *testing.B) {
+	for i := range testFiles {
+		b.Run(fmt.Sprint(i, "-", testFiles[i].label), func(b *testing.B) {
+			benchFile(b, i, false)
+		})
+	}
+}
