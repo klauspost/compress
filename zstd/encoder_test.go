@@ -6,6 +6,7 @@ package zstd
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -281,6 +282,10 @@ func TestEncoderRegression(t *testing.T) {
 					err = enc.Close()
 					if err != nil {
 						t.Error(err)
+					}
+					_, err = enc.Write([]byte{1, 2, 3, 4})
+					if !errors.Is(err, ErrEncoderClosed) {
+						t.Errorf("unexpected error: %v", err)
 					}
 					encoded = dst.Bytes()
 					if len(encoded) > enc.MaxEncodedSize(len(in)) {
