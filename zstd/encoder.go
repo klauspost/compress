@@ -6,6 +6,7 @@ package zstd
 
 import (
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -417,7 +418,7 @@ func (e *Encoder) Flush() error {
 // The Encoder can still be re-used after calling this.
 func (e *Encoder) Close() error {
 	s := &e.state
-	if s.encoder == nil {
+	if s.encoder == nil || errors.Is(s.err, ErrDecoderClosed) {
 		return nil
 	}
 	err := e.nextBlock(true)
@@ -459,6 +460,11 @@ func (e *Encoder) Close() error {
 		}
 		_, s.err = s.w.Write(frame)
 	}
+	if s.err == nil {
+		s.err = ErrDecoderClosed
+		return nil
+	}
+
 	return s.err
 }
 
