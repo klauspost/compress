@@ -46,7 +46,7 @@ func (b *bitReaderBytes) init(in []byte) error {
 	return nil
 }
 
-// peekBitsFast requires that at least one bit is requested every time.
+// peekByteFast requires that at least one byte is requested every time.
 // There are no checks if the buffer is filled.
 func (b *bitReaderBytes) peekByteFast() uint8 {
 	got := uint8(b.value >> 56)
