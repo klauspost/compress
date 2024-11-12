@@ -123,7 +123,7 @@ func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
 }
 
 // Read bytes from the decompressed stream into p.
-// Returns the number of bytes written and any error that occurred.
+// Returns the number of bytes read and any error that occurred.
 // When the stream is done, io.EOF will be returned.
 func (d *Decoder) Read(p []byte) (int, error) {
 	var n int
