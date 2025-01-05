@@ -323,7 +323,7 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 		frame.bBuf = nil
 		if frame.history.decoders.br != nil {
 			frame.history.decoders.br.in = nil
-			frame.history.decoders.br.off = 0
+			frame.history.decoders.br.cursor = 0
 		}
 		d.decoders <- block
 	}()
