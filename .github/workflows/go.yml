@@ -35,15 +35,21 @@ jobs:
     - name: Test Noasm
       run: go test -tags=noasm ./...
 
+    - name: Test Nounsafe
+      run: go test -tags=nounsafe ./...
+
+    - name: Test Nounsafe, noasm
+      run: go test -tags=nounsafe,noasm ./...
+
     - name: Test Race 1 CPU
       env:
         CGO_ENABLED: 1
-      run: go test -cpu=1 -short -race -v ./...
+      run: go test -cpu=1 -short -race -tags=nounsafe -v ./...
 
     - name: Test Race 4 CPU
       env:
         CGO_ENABLED: 1
-      run: go test -cpu=4 -short -race -v ./...
+      run: go test -cpu=4 -short -race -tags=nounsafe -v ./...
 
   generate:
     strategy:
@@ -122,22 +128,22 @@ jobs:
         uses: actions/checkout@v4
 
       - name: S2/FuzzDictBlocks
-        run: go test -run=none -fuzz=FuzzDictBlocks -fuzztime=100000x -test.fuzzminimizetime=10ms ./s2/.
+        run: go test -tags=nounsafe -run=none -fuzz=FuzzDictBlocks -fuzztime=100000x -test.fuzzminimizetime=10ms ./s2/.
 
       - name: S2/FuzzEncodingBlocks
-        run: go test -run=none -fuzz=FuzzEncodingBlocks -fuzztime=500000x -test.fuzzminimizetime=10ms ./s2/.
+        run: go test -tags=nounsafe -run=none -fuzz=FuzzEncodingBlocks -fuzztime=500000x -test.fuzzminimizetime=10ms ./s2/.
 
       - name: S2/FuzzLZ4Block
-        run: go test -run=none -fuzz=FuzzLZ4Block -fuzztime=500000x -test.fuzzminimizetime=10ms ./s2/.
+        run: go test -tags=nounsafe -run=none -fuzz=FuzzLZ4Block -fuzztime=500000x -test.fuzzminimizetime=10ms ./s2/.
 
       - name: S2/FuzzDictBlocks/noasm
-        run: go test -tags=noasm -run=none -fuzz=FuzzDictBlocks -fuzztime=100000x -test.fuzzminimizetime=10ms ./s2/.
+        run: go test -tags=noasm,nounsafe -run=none -fuzz=FuzzDictBlocks -fuzztime=100000x -test.fuzzminimizetime=10ms ./s2/.
 
       - name: S2/FuzzEncodingBlocks/noasm
-        run: go test -tags=noasm -run=none -fuzz=FuzzEncodingBlocks -fuzztime=500000x -test.fuzzminimizetime=10ms ./s2/.
+        run: go test -tags=noasm,nounsafe -run=none -fuzz=FuzzEncodingBlocks -fuzztime=500000x -test.fuzzminimizetime=10ms ./s2/.
 
       - name: S2/FuzzLZ4Block/noasm
-        run: go test -tags=noasm -run=none -fuzz=FuzzLZ4Block -fuzztime=500000x -test.fuzzminimizetime=10ms ./s2/.
+        run: go test -tags=noasm,nounsafe -run=none -fuzz=FuzzLZ4Block -fuzztime=500000x -test.fuzzminimizetime=10ms ./s2/.
 
   fuzz-zstd:
     env:
@@ -153,28 +159,28 @@ jobs:
         uses: actions/checkout@v4
 
       - name: zstd/FuzzDecodeAll
-        run: go test -run=none -fuzz=FuzzDecodeAll -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
+        run: go test -tags=nounsafe -run=none -fuzz=FuzzDecodeAll -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
 
       - name: zstd/FuzzDecAllNoBMI2
-        run: go test -run=none -fuzz=FuzzDecAllNoBMI2 -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
+        run: go test -tags=nounsafe -run=none -fuzz=FuzzDecAllNoBMI2 -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
 
       - name: zstd/FuzzDecoder
-        run: go test -run=none -fuzz=FuzzDecoder -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
+        run: go test -tags=nounsafe -run=none -fuzz=FuzzDecoder -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
 
       - name: zstd/FuzzNoBMI2Dec
-        run: go test -run=none -fuzz=FuzzNoBMI2Dec -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
+        run: go test -tags=nounsafe -run=none -fuzz=FuzzNoBMI2Dec -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
 
       - name: zstd/FuzzEncoding
-        run: cd zstd&&go test -run=none -fuzz=FuzzEncoding -fuzztime=250000x -test.fuzzminimizetime=10ms -fuzz-end=3&&cd ..
+        run: cd zstd&&go test -tags=nounsafe -run=none -fuzz=FuzzEncoding -fuzztime=250000x -test.fuzzminimizetime=10ms -fuzz-end=3&&cd ..
 
       - name: zstd/FuzzDecodeAll/noasm
-        run: go test -tags=noasm -run=none -fuzz=FuzzDecodeAll -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
+        run: go test -tags=noasm,nounsafe -run=none -fuzz=FuzzDecodeAll -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
 
       - name: zstd/FuzzDecoder/noasm
-        run: go test -tags=noasm -run=none -fuzz=FuzzDecoder -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
+        run: go test -tags=noasm,nounsafe -run=none -fuzz=FuzzDecoder -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
 
       - name: zstd/FuzzEncoding/noasm
-        run: cd zstd&&go test -tags=noasm -run=none -fuzz=FuzzEncoding -fuzztime=250000x -test.fuzzminimizetime=10ms -fuzz-end=3&&cd ..
+        run: cd zstd&&go test -tags=noasm,nounsafe -run=none -fuzz=FuzzEncoding -fuzztime=250000x -test.fuzzminimizetime=10ms -fuzz-end=3&&cd ..
 
       - name: zstd/FuzzEncodingBest
         run: cd zstd&&go test -run=none -fuzz=FuzzEncoding -fuzztime=25000x -test.fuzzminimizetime=10ms -fuzz-start=4&&cd ..
@@ -193,16 +199,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: flate/FuzzEncoding
-        run: go test -run=none -fuzz=FuzzEncoding -fuzztime=100000x -test.fuzzminimizetime=10ms ./flate/.
+        run: go test -tags=nounsafe -run=none -fuzz=FuzzEncoding -fuzztime=100000x -test.fuzzminimizetime=10ms ./flate/.
 
       - name: flate/FuzzEncoding/noasm
-        run: go test -run=none -tags=noasm -fuzz=FuzzEncoding -fuzztime=100000x -test.fuzzminimizetime=10ms ./flate/.
+        run: go test -run=none -tags=noasm,nounsafe -fuzz=FuzzEncoding -fuzztime=100000x -test.fuzzminimizetime=10ms ./flate/.
 
       - name: zip/FuzzReader
-        run: go test -run=none -fuzz=FuzzReader -fuzztime=500000x -test.fuzzminimizetime=10ms ./zip/.
+        run: go test -tags=nounsafe -run=none -fuzz=FuzzReader -fuzztime=500000x -test.fuzzminimizetime=10ms ./zip/.
 
       - name: fse/FuzzCompress
-        run: go test -run=none -fuzz=FuzzCompress -fuzztime=1000000x -test.fuzzminimizetime=10ms ./fse/.
+        run: go test -tags=nounsafe -run=none -fuzz=FuzzCompress -fuzztime=1000000x -test.fuzzminimizetime=10ms ./fse/.
 
       - name: fse/FuzzDecompress
-        run: go test -run=none -fuzz=FuzzDecompress -fuzztime=1000000x -test.fuzzminimizetime=10ms ./fse/.
+        run: go test -tags=nounsafe -run=none -fuzz=FuzzDecompress -fuzztime=1000000x -test.fuzzminimizetime=10ms ./fse/.
