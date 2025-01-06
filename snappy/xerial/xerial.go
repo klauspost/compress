@@ -115,13 +115,6 @@ func EncodeBetter(dst, src []byte) []byte {
 	return dst
 }
 
-func min(x, y int) int {
-	if x < y {
-		return x
-	}
-	return y
-}
-
 const (
 	sizeOffset = 16
 	sizeBytes  = 4
