@@ -7,21 +7,27 @@
 package flate
 
 import (
-	"encoding/binary"
 	"math/bits"
+
+	"github.com/klauspost/compress/internal/le"
 )
 
 // matchLen returns the maximum common prefix length of a and b.
 // a must be the shortest of the two.
 func matchLen(a, b []byte) (n int) {
-	for ; len(a) >= 8 && len(b) >= 8; a, b = a[8:], b[8:] {
-		diff := binary.LittleEndian.Uint64(a) ^ binary.LittleEndian.Uint64(b)
-		if diff != 0 {
-			return n + bits.TrailingZeros64(diff)>>3
+	if len(a) >= 8 && len(b) >= 8 {
+		left := len(a) - 8
+		for left >= 0 {
+			diff := le.Load64(a, n) ^ le.Load64(b, n)
+			if diff != 0 {
+				return n + bits.TrailingZeros64(diff)>>3
+			}
+			n += 8
+			left -= 8
 		}
-		n += 8
 	}
-
+	a = a[n:]
+	b = b[n:]
 	for i := range a {
 		if a[i] != b[i] {
 			break
@@ -29,5 +35,4 @@ func matchLen(a, b []byte) (n int) {
 		n++
 	}
 	return n
-
 }
