@@ -15,16 +15,14 @@ import (
 // matchLen returns the maximum common prefix length of a and b.
 // a must be the shortest of the two.
 func matchLen(a, b []byte) (n int) {
-	if len(a) >= 8 && len(b) >= 8 {
-		left := len(a) - 8
-		for left >= 0 {
-			diff := le.Load64(a, n) ^ le.Load64(b, n)
-			if diff != 0 {
-				return n + bits.TrailingZeros64(diff)>>3
-			}
-			n += 8
-			left -= 8
+	left := len(a)
+	for left >= 8 {
+		diff := le.Load64(a, n) ^ le.Load64(b, n)
+		if diff != 0 {
+			return n + bits.TrailingZeros64(diff)>>3
 		}
+		n += 8
+		left -= 8
 	}
 	a = a[n:]
 	b = b[n:]
