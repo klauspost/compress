@@ -14,6 +14,17 @@ This package provides various compression algorithms.
 [![Go](https://github.com/klauspost/compress/actions/workflows/go.yml/badge.svg)](https://github.com/klauspost/compress/actions/workflows/go.yml)
 [![Sourcegraph Badge](https://sourcegraph.com/github.com/klauspost/compress/-/badge.svg)](https://sourcegraph.com/github.com/klauspost/compress?badge)
 
+# package usage
+
+Use `go get github.com/klauspost/compress@latest` to add it to your project.
+
+This package will support the current Go version and 2 versions back.
+
+* Use the `nounsafe` tag to disable all use of the "unsafe" package.
+* Use the `noasm` tag to disable all assembly across packages.
+
+Use the links above for more information on each.
+
 # changelog
 
 * Sep 23rd, 2024 - [1.17.10](https://github.com/klauspost/compress/releases/tag/v1.17.10)
