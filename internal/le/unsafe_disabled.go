@@ -25,3 +25,7 @@ func Store16(b []byte, v uint16) {
 func Store32(b []byte, v uint32) {
 	binary.LittleEndian.PutUint32(b, v)
 }
+
+func Store64(b []byte, v uint64) {
+	binary.LittleEndian.PutUint64(b, v)
+}

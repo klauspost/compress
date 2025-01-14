@@ -9,37 +9,40 @@ import (
 )
 
 // Load16 will load from b at index i.
-// If the compiler can prove that b is at least 1 byte this will be without bounds check.
 func Load16[I Indexer](b []byte, i I) uint16 {
 	//return binary.LittleEndian.Uint16(b[i:])
 	//return *(*uint16)(unsafe.Pointer(&b[i]))
-	return *(*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(unsafe.SliceData(b))) + uintptr(i)*unsafe.Sizeof(b[0])))
+	return *(*uint16)(unsafe.Add(unsafe.Pointer(unsafe.SliceData(b)), i))
 }
 
 // Load32 will load from b at index i.
-// If the compiler can prove that b is at least 1 byte this will be without bounds check.
 func Load32[I Indexer](b []byte, i I) uint32 {
 	//return binary.LittleEndian.Uint32(b[i:])
 	//return *(*uint32)(unsafe.Pointer(&b[i]))
-	return *(*uint32)(unsafe.Pointer(uintptr(unsafe.Pointer(unsafe.SliceData(b))) + uintptr(i)*unsafe.Sizeof(b[0])))
+	return *(*uint32)(unsafe.Add(unsafe.Pointer(unsafe.SliceData(b)), i))
 }
 
 // Load64 will load from b at index i.
-// If the compiler can prove that b is at least 1 byte this will be without bounds check.
 func Load64[I Indexer](b []byte, i I) uint64 {
 	//return binary.LittleEndian.Uint64(b[i:])
 	//return *(*uint64)(unsafe.Pointer(&b[i]))
-	return *(*uint64)(unsafe.Pointer(uintptr(unsafe.Pointer(unsafe.SliceData(b))) + uintptr(i)*unsafe.Sizeof(b[0])))
+	return *(*uint64)(unsafe.Add(unsafe.Pointer(unsafe.SliceData(b)), i))
 }
 
 // Store16 will store v at b.
-// If the compiler can prove
 func Store16(b []byte, v uint16) {
 	//binary.LittleEndian.PutUint16(b, v)
 	*(*uint16)(unsafe.Pointer(unsafe.SliceData(b))) = v
 }
 
+// Store32 will store v at b.
 func Store32(b []byte, v uint32) {
 	//binary.LittleEndian.PutUint32(b, v)
 	*(*uint32)(unsafe.Pointer(unsafe.SliceData(b))) = v
+}
+
+// Store64 will store v at b.
+func Store64(b []byte, v uint64) {
+	//binary.LittleEndian.PutUint64(b, v)
+	*(*uint64)(unsafe.Pointer(unsafe.SliceData(b))) = v
 }
