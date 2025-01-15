@@ -32,18 +32,24 @@ jobs:
     - name: Test
       run: go test ./...
 
-    - name: Test Noasm
+    - name: Test No-asm
       run: go test -tags=noasm ./...
+
+    - name: Test No-unsafe
+      run: go test -tags=nounsafe ./...
+
+    - name: Test No-unsafe, noasm
+      run: go test -tags="nounsafe,noasm" ./...
 
     - name: Test Race 1 CPU
       env:
         CGO_ENABLED: 1
-      run: go test -cpu=1 -short -race -v ./...
+      run: go test -cpu=1 -short -race -tags=nounsafe -v ./...
 
     - name: Test Race 4 CPU
       env:
         CGO_ENABLED: 1
-      run: go test -cpu=4 -short -race -v ./...
+      run: go test -cpu=4 -short -race -tags=nounsafe -v ./...
 
   generate:
     strategy:
@@ -112,6 +118,9 @@ jobs:
     env:
       CGO_ENABLED: 0
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        tags: [ 'nounsafe', '"noasm,nounsafe"' ]
     steps:
       - name: Set up Go
         uses: actions/setup-go@v5.2.0
@@ -121,28 +130,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: S2/FuzzDictBlocks
-        run: go test -run=none -fuzz=FuzzDictBlocks -fuzztime=100000x -test.fuzzminimizetime=10ms ./s2/.
+      - name: S2/FuzzDictBlocks/${{ matrix.tags }}
+        run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzDictBlocks -fuzztime=100000x -test.fuzzminimizetime=10ms ./s2/.
 
-      - name: S2/FuzzEncodingBlocks
-        run: go test -run=none -fuzz=FuzzEncodingBlocks -fuzztime=500000x -test.fuzzminimizetime=10ms ./s2/.
+      - name: S2/FuzzEncodingBlocks/${{ matrix.tags }}
+        run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzEncodingBlocks -fuzztime=500000x -test.fuzzminimizetime=10ms ./s2/.
 
-      - name: S2/FuzzLZ4Block
-        run: go test -run=none -fuzz=FuzzLZ4Block -fuzztime=500000x -test.fuzzminimizetime=10ms ./s2/.
+      - name: S2/FuzzLZ4Block/${{ matrix.tags }}
+        run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzLZ4Block -fuzztime=500000x -test.fuzzminimizetime=10ms ./s2/.
 
-      - name: S2/FuzzDictBlocks/noasm
-        run: go test -tags=noasm -run=none -fuzz=FuzzDictBlocks -fuzztime=100000x -test.fuzzminimizetime=10ms ./s2/.
-
-      - name: S2/FuzzEncodingBlocks/noasm
-        run: go test -tags=noasm -run=none -fuzz=FuzzEncodingBlocks -fuzztime=500000x -test.fuzzminimizetime=10ms ./s2/.
-
-      - name: S2/FuzzLZ4Block/noasm
-        run: go test -tags=noasm -run=none -fuzz=FuzzLZ4Block -fuzztime=500000x -test.fuzzminimizetime=10ms ./s2/.
 
   fuzz-zstd:
     env:
       CGO_ENABLED: 0
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        tags: [ 'nounsafe', '"noasm,nounsafe"' ]
     steps:
       - name: Set up Go
         uses: actions/setup-go@v5.2.0
@@ -152,57 +156,44 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: zstd/FuzzDecodeAll
-        run: go test -run=none -fuzz=FuzzDecodeAll -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
+      - name: zstd/FuzzDecodeAll/${{ matrix.tags }}
+        run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzDecodeAll -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
 
-      - name: zstd/FuzzDecAllNoBMI2
-        run: go test -run=none -fuzz=FuzzDecAllNoBMI2 -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
+      - name: zstd/FuzzDecAllNoBMI2/${{ matrix.tags }}
+        run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzDecAllNoBMI2 -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
 
-      - name: zstd/FuzzDecoder
-        run: go test -run=none -fuzz=FuzzDecoder -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
+      - name: zstd/FuzzDecoder/${{ matrix.tags }}
+        run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzDecoder -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
 
-      - name: zstd/FuzzNoBMI2Dec
-        run: go test -run=none -fuzz=FuzzNoBMI2Dec -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
+      - name: zstd/FuzzNoBMI2Dec/${{ matrix.tags }}
+        run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzNoBMI2Dec -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
 
-      - name: zstd/FuzzEncoding
-        run: cd zstd&&go test -run=none -fuzz=FuzzEncoding -fuzztime=250000x -test.fuzzminimizetime=10ms -fuzz-end=3&&cd ..
-
-      - name: zstd/FuzzDecodeAll/noasm
-        run: go test -tags=noasm -run=none -fuzz=FuzzDecodeAll -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
-
-      - name: zstd/FuzzDecoder/noasm
-        run: go test -tags=noasm -run=none -fuzz=FuzzDecoder -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
-
-      - name: zstd/FuzzEncoding/noasm
-        run: cd zstd&&go test -tags=noasm -run=none -fuzz=FuzzEncoding -fuzztime=250000x -test.fuzzminimizetime=10ms -fuzz-end=3&&cd ..
-
-      - name: zstd/FuzzEncodingBest
-        run: cd zstd&&go test -run=none -fuzz=FuzzEncoding -fuzztime=25000x -test.fuzzminimizetime=10ms -fuzz-start=4&&cd ..
+      - name: zstd/FuzzEncoding/${{ matrix.tags }}
+        run: cd zstd&&go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzEncoding -fuzztime=250000x -test.fuzzminimizetime=10ms -fuzz-end=3&&cd ..
 
   fuzz-other:
     env:
       CGO_ENABLED: 0
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        tags: [ 'nounsafe', '"noasm,nounsafe"' ]
     steps:
       - name: Set up Go
         uses: actions/setup-go@v5.2.0
         with:
           go-version: 1.23.x
-
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: flate/FuzzEncoding
-        run: go test -run=none -fuzz=FuzzEncoding -fuzztime=100000x -test.fuzzminimizetime=10ms ./flate/.
+      - name: flate/FuzzEncoding/${{ matrix.tags }}
+        run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzEncoding -fuzztime=100000x -test.fuzzminimizetime=10ms ./flate/.
 
-      - name: flate/FuzzEncoding/noasm
-        run: go test -run=none -tags=noasm -fuzz=FuzzEncoding -fuzztime=100000x -test.fuzzminimizetime=10ms ./flate/.
+      - name: zip/FuzzReader/${{ matrix.tags }}
+        run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzReader -fuzztime=500000x -test.fuzzminimizetime=10ms ./zip/.
 
-      - name: zip/FuzzReader
-        run: go test -run=none -fuzz=FuzzReader -fuzztime=500000x -test.fuzzminimizetime=10ms ./zip/.
+      - name: fse/FuzzCompress/${{ matrix.tags }}
+        run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzCompress -fuzztime=1000000x -test.fuzzminimizetime=10ms ./fse/.
 
-      - name: fse/FuzzCompress
-        run: go test -run=none -fuzz=FuzzCompress -fuzztime=1000000x -test.fuzzminimizetime=10ms ./fse/.
-
-      - name: fse/FuzzDecompress
-        run: go test -run=none -fuzz=FuzzDecompress -fuzztime=1000000x -test.fuzzminimizetime=10ms ./fse/.
+      - name: fse/FuzzDecompress/${{ matrix.tags }}
+        run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzDecompress -fuzztime=1000000x -test.fuzzminimizetime=10ms ./fse/.

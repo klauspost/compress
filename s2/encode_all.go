@@ -10,14 +10,16 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math/bits"
+
+	"github.com/klauspost/compress/internal/le"
 )
 
 func load32(b []byte, i int) uint32 {
-	return binary.LittleEndian.Uint32(b[i:])
+	return le.Load32(b, i)
 }
 
 func load64(b []byte, i int) uint64 {
-	return binary.LittleEndian.Uint64(b[i:])
+	return le.Load64(b, i)
 }
 
 // hash6 returns the hash of the lowest 6 bytes of u to fit in a hash table with h bits.

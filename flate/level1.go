@@ -1,9 +1,10 @@
 package flate
 
 import (
-	"encoding/binary"
 	"fmt"
 	"math/bits"
+
+	"github.com/klauspost/compress/internal/le"
 )
 
 // fastGen maintains the table for matches,
@@ -126,26 +127,26 @@ func (e *fastEncL1) Encode(dst *tokens, src []byte) {
 				l = e.matchlenLong(s+4, t+4, src) + 4
 			} else {
 				// inlined:
-				a := src[s+4:]
-				b := src[t+4:]
-				for len(a) >= 8 {
-					if diff := binary.LittleEndian.Uint64(a) ^ binary.LittleEndian.Uint64(b); diff != 0 {
+				a := src[s:]
+				b := src[t:]
+				left := len(a) - 4
+				for left >= 8 {
+					if diff := le.Load64(a, l) ^ le.Load64(b, l); diff != 0 {
 						l += int32(bits.TrailingZeros64(diff) >> 3)
-						break
+						goto endMatch
 					}
 					l += 8
-					a = a[8:]
-					b = b[8:]
+					left -= 8
 				}
-				if len(a) < 8 {
-					b = b[:len(a)]
-					for i := range a {
-						if a[i] != b[i] {
-							break
-						}
-						l++
+				a = a[l:]
+				b = b[l:]
+				for i := range a {
+					if a[i] != b[i] {
+						break
 					}
+					l++
 				}
+			endMatch:
 			}
 
 			// Extend backwards

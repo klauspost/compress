@@ -91,7 +91,7 @@ func TestDecompress1X(t *testing.T) {
 					t.Log(string(dc))
 				}
 				//t.Errorf(test.name+": decompressed, got delta: \n%s")
-				t.Errorf(test.name + ": decompressed, got delta")
+				t.Error(test.name + ": decompressed, got delta")
 			}
 			if !t.Failed() {
 				t.Log("... roundtrip ok!")
@@ -221,7 +221,7 @@ func TestDecompress4X(t *testing.T) {
 							t.Log(string(dc))
 						}
 						//t.Errorf(test.name+": decompressed, got delta: \n%s")
-						t.Errorf(test.name + ": decompressed, got delta")
+						t.Error(test.name + ": decompressed, got delta")
 					}
 					if !t.Failed() {
 						t.Log("... roundtrip ok!")
@@ -315,7 +315,7 @@ func TestRoundtrip1XFuzz(t *testing.T) {
 					t.Log(string(dc))
 				}
 				//t.Errorf(test.name+": decompressed, got delta: \n%s")
-				t.Errorf(test.name + ": decompressed, got delta")
+				t.Error(test.name + ": decompressed, got delta")
 			}
 			if !t.Failed() {
 				t.Log("... roundtrip ok!")
@@ -406,7 +406,7 @@ func TestRoundtrip4XFuzz(t *testing.T) {
 					t.Log(string(dc))
 				}
 				//t.Errorf(test.name+": decompressed, got delta: \n%s")
-				t.Errorf(test.name + ": decompressed, got delta")
+				t.Error(test.name + ": decompressed, got delta")
 			}
 			if !t.Failed() {
 				t.Log("... roundtrip ok!")
