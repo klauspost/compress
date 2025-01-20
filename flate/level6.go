@@ -113,7 +113,7 @@ func (e *fastEncL6) Encode(dst *tokens, src []byte) {
 
 			t = lCandidate.Cur.offset - e.cur
 			if s-t < maxMatchOffset {
-				if uint32(cv) == load3232(src, lCandidate.Cur.offset-e.cur) {
+				if uint32(cv) == load3232(src, t) {
 					// Long candidate matches at least 4 bytes.
 
 					// Store the next match
@@ -123,7 +123,7 @@ func (e *fastEncL6) Encode(dst *tokens, src []byte) {
 
 					// Check the previous long candidate as well.
 					t2 := lCandidate.Prev.offset - e.cur
-					if s-t2 < maxMatchOffset && uint32(cv) == load3232(src, lCandidate.Prev.offset-e.cur) {
+					if s-t2 < maxMatchOffset && uint32(cv) == load3232(src, t2) {
 						l = e.matchlen(s+4, t+4, src) + 4
 						ml1 := e.matchlen(s+4, t2+4, src) + 4
 						if ml1 > l {
@@ -136,7 +136,7 @@ func (e *fastEncL6) Encode(dst *tokens, src []byte) {
 				}
 				// Current value did not match, but check if previous long value does.
 				t = lCandidate.Prev.offset - e.cur
-				if s-t < maxMatchOffset && uint32(cv) == load3232(src, lCandidate.Prev.offset-e.cur) {
+				if s-t < maxMatchOffset && uint32(cv) == load3232(src, t) {
 					// Store the next match
 					e.table[nextHashS] = tableEntry{offset: nextS + e.cur}
 					eLong := &e.bTable[nextHashL]
@@ -146,7 +146,7 @@ func (e *fastEncL6) Encode(dst *tokens, src []byte) {
 			}
 
 			t = sCandidate.offset - e.cur
-			if s-t < maxMatchOffset && uint32(cv) == load3232(src, sCandidate.offset-e.cur) {
+			if s-t < maxMatchOffset && uint32(cv) == load3232(src, t) {
 				// Found a 4 match...
 				l = e.matchlen(s+4, t+4, src) + 4
 
@@ -175,7 +175,7 @@ func (e *fastEncL6) Encode(dst *tokens, src []byte) {
 				// If the next long is a candidate, use that...
 				t2 = lCandidate.Cur.offset - e.cur
 				if nextS-t2 < maxMatchOffset {
-					if load3232(src, lCandidate.Cur.offset-e.cur) == uint32(next) {
+					if load3232(src, t2) == uint32(next) {
 						ml := e.matchlen(nextS+4, t2+4, src) + 4
 						if ml > l {
 							t = t2
@@ -186,7 +186,7 @@ func (e *fastEncL6) Encode(dst *tokens, src []byte) {
 					}
 					// If the previous long is a candidate, use that...
 					t2 = lCandidate.Prev.offset - e.cur
-					if nextS-t2 < maxMatchOffset && load3232(src, lCandidate.Prev.offset-e.cur) == uint32(next) {
+					if nextS-t2 < maxMatchOffset && load3232(src, t2) == uint32(next) {
 						ml := e.matchlen(nextS+4, t2+4, src) + 4
 						if ml > l {
 							t = t2
