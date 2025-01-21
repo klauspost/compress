@@ -2,9 +2,6 @@ package flate
 
 import (
 	"fmt"
-	"math/bits"
-
-	"github.com/klauspost/compress/internal/le"
 )
 
 // fastGen maintains the table for matches,
@@ -122,32 +119,7 @@ func (e *fastEncL1) Encode(dst *tokens, src []byte) {
 
 			// Extend the 4-byte match as long as possible.
 			t := candidate.offset - e.cur
-			var l = int32(4)
-			if false {
-				l = e.matchlenLong(s+4, t+4, src) + 4
-			} else {
-				// inlined:
-				a := src[s:]
-				b := src[t:]
-				left := len(a) - 4
-				for left >= 8 {
-					if diff := le.Load64(a, l) ^ le.Load64(b, l); diff != 0 {
-						l += int32(bits.TrailingZeros64(diff) >> 3)
-						goto endMatch
-					}
-					l += 8
-					left -= 8
-				}
-				a = a[l:]
-				b = b[l:]
-				for i := range a {
-					if a[i] != b[i] {
-						break
-					}
-					l++
-				}
-			endMatch:
-			}
+			l := e.matchlenLong(s+4, t+4, src) + 4
 
 			// Extend backwards
 			for t > 0 && s > nextEmit && src[t-1] == src[s-1] {
