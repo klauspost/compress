@@ -182,3 +182,64 @@ func FuzzStreamDecode(f *testing.F) {
 		}
 	})
 }
+
+func FuzzDecodeBlock(f *testing.F) {
+	addCompressed := func(b []byte) {
+		b2 := Encode(nil, b)
+		f.Add(b2)
+		f.Add(EncodeBetter(nil, b))
+	}
+	fuzz.ReturnFromZip(f, "testdata/enc_regressions.zip", fuzz.TypeRaw, addCompressed)
+	fuzz.ReturnFromZip(f, "testdata/fuzz/block-corpus-raw.zip", fuzz.TypeRaw, addCompressed)
+	fuzz.ReturnFromZip(f, "testdata/fuzz/block-corpus-enc.zip", fuzz.TypeGoFuzz, addCompressed)
+	fuzz.AddFromZip(f, "testdata/dec-block-regressions.zip", fuzz.TypeRaw, false)
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		if t.Failed() {
+			return
+		}
+
+		dCopy := append([]byte{}, data...)
+		dlen, err := DecodedLen(data)
+		if dlen > 8<<20 {
+			return
+		}
+		base, baseErr := Decode(nil, data)
+		if !bytes.Equal(data, dCopy) {
+			t.Fatal("data was changed")
+		}
+		hasErr := baseErr != nil
+		dataCapped := make([]byte, 0, len(data)+1024)
+		dataCapped = append(dataCapped, data...)
+		dataCapped = append(dataCapped, bytes.Repeat([]byte{0xff, 0xff, 0xff, 0xff}, 1024/4)...)
+		dataCapped = dataCapped[:len(data):len(data)]
+		if dlen > MaxBlockSize {
+			dlen = MaxBlockSize
+		}
+		dst2 := bytes.Repeat([]byte{0xfe}, dlen+1024)
+		got, err := Decode(dst2[:dlen:dlen], dataCapped[:len(data)])
+		if !bytes.Equal(dataCapped[:len(data)], dCopy) {
+			t.Fatal("data was changed")
+		}
+		if err != nil && !hasErr {
+			t.Fatalf("base err: %v, capped: %v", baseErr, err)
+		}
+		for i, v := range dst2[dlen:] {
+			if v != 0xfe {
+				t.Errorf("DST overwritten beyond cap! index %d: got 0x%02x, want 0x%02x, err:%v", i, v, 0xfe, err)
+				break
+			}
+		}
+		if baseErr == nil {
+			if !bytes.Equal(got, base) {
+				t.Fatal("data mismatch")
+			}
+			gotLen, err := DecodedLen(data)
+			if err != nil {
+				t.Errorf("DecodedLen returned error: %v", err)
+			} else if gotLen != len(got) {
+				t.Errorf("DecodedLen mismatch: got %d, want %d", gotLen, len(got))
+			}
+		}
+	})
+}
