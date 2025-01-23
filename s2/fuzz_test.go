@@ -143,6 +143,12 @@ func FuzzEncodingBlocks(f *testing.F) {
 		encodeBlockBetterGo(encoded, data)
 		encodeBlockSnappyGo(encoded, data)
 		encodeBlockBetterSnappyGo(encoded, data)
+		if len(data) <= 64<<10 {
+			encodeBlockGo64K(encoded, data)
+			encodeBlockSnappyGo64K(encoded, data)
+			encodeBlockBetterGo64K(encoded, data)
+			encodeBlockBetterSnappyGo64K(encoded, data)
+		}
 		dst := encodeGo(encoded, data)
 		if dst == nil {
 			return
