@@ -348,12 +348,7 @@ func encodeBlockBetterSnappyGo(dst, src []byte) (d int) {
 		nextS := 0
 		for {
 			// Next src position to check
-			nextS = (s-nextEmit)>>7 + 1
-			if nextS > maxSkip {
-				nextS = s + maxSkip
-			} else {
-				nextS += s
-			}
+			nextS = min(s+(s-nextEmit)>>7+1, s+maxSkip)
 
 			if nextS > sLimit {
 				goto emitRemainder
@@ -492,6 +487,7 @@ func encodeBlockBetterGo64K(dst, src []byte) (d int) {
 		return 0
 	}
 	// Initialize the hash tables.
+	// Use smaller tables for smaller blocks
 	const (
 		// Long hash matches.
 		lTableBits    = 16
@@ -666,16 +662,6 @@ func encodeBlockBetterGo64K(dst, src []byte) (d int) {
 			candidateL += 8
 		}
 
-		if offset > 65535 && s-base <= 5 && repeat != offset {
-			// Bail if the match is equal or worse to the encoding.
-			s = nextS + 1
-			if s >= sLimit {
-				goto emitRemainder
-			}
-			cv = load64(src, s)
-			continue
-		}
-
 		d += emitLiteral(dst[d:], src[nextEmit:base])
 		if repeat == offset {
 			d += emitRepeat(dst[d:], offset, s-base)
@@ -750,6 +736,7 @@ func encodeBlockBetterSnappyGo64K(dst, src []byte) (d int) {
 	}
 
 	// Initialize the hash tables.
+	// Use smaller tables for smaller blocks
 	const (
 		// Long hash matches.
 		lTableBits    = 15
@@ -774,8 +761,6 @@ func encodeBlockBetterSnappyGo64K(dst, src []byte) (d int) {
 	s := 1
 	cv := load64(src, s)
 
-	// We initialize repeat to 0, so we never match on first attempt
-	repeat := 0
 	const maxSkip = 100
 
 	for {
@@ -783,12 +768,7 @@ func encodeBlockBetterSnappyGo64K(dst, src []byte) (d int) {
 		nextS := 0
 		for {
 			// Next src position to check
-			nextS = (s-nextEmit)>>6 + 1
-			if nextS > maxSkip {
-				nextS = s + maxSkip
-			} else {
-				nextS += s
-			}
+			nextS = min(s+(s-nextEmit)>>6+1, s+maxSkip)
 
 			if nextS > sLimit {
 				goto emitRemainder
@@ -857,19 +837,8 @@ func encodeBlockBetterSnappyGo64K(dst, src []byte) (d int) {
 			candidateL += 8
 		}
 
-		if offset > 65535 && s-base <= 5 && repeat != offset {
-			// Bail if the match is equal or worse to the encoding.
-			s = nextS + 1
-			if s >= sLimit {
-				goto emitRemainder
-			}
-			cv = load64(src, s)
-			continue
-		}
-
 		d += emitLiteral(dst[d:], src[nextEmit:base])
 		d += emitCopyNoRepeat(dst[d:], offset, s-base)
-		repeat = offset
 
 		nextEmit = s
 		if s >= sLimit {
