@@ -488,7 +488,9 @@ func encodeBlockBetterGo64K(dst, src []byte) (d int) {
 	// lets us use a fast path for emitLiteral in the main loop, while we are
 	// looking for copies.
 	sLimit := len(src) - inputMargin
-
+	if len(src) < minNonLiteralBlockSize {
+		return 0
+	}
 	// Initialize the hash tables.
 	const (
 		// Long hash matches.

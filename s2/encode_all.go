@@ -725,13 +725,13 @@ func encodeBlockSnappyGo64K(dst, src []byte) (d int) {
 			if nextS > sLimit {
 				goto emitRemainder
 			}
-			hash0 := hash5(cv, tableBits)
-			hash1 := hash5(cv>>8, tableBits)
+			hash0 := hash6(cv, tableBits)
+			hash1 := hash6(cv>>8, tableBits)
 			candidate = int(table[hash0])
 			candidate2 := int(table[hash1])
 			table[hash0] = uint16(s)
 			table[hash1] = uint16(s + 1)
-			hash2 := hash5(cv>>16, tableBits)
+			hash2 := hash6(cv>>16, tableBits)
 
 			// Check repeat at offset checkRep.
 			const checkRep = 1
@@ -855,8 +855,8 @@ func encodeBlockSnappyGo64K(dst, src []byte) (d int) {
 			}
 			// Check for an immediate match, otherwise start search at s+1
 			x := load64(src, s-2)
-			m2Hash := hash5(x, tableBits)
-			currHash := hash5(x>>16, tableBits)
+			m2Hash := hash6(x, tableBits)
+			currHash := hash6(x>>16, tableBits)
 			candidate = int(table[currHash])
 			table[m2Hash] = uint16(s - 2)
 			table[currHash] = uint16(s)
