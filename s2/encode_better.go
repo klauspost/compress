@@ -522,7 +522,7 @@ func encodeBlockBetterGo64K(dst, src []byte) (d int) {
 		nextS := 0
 		for {
 			// Next src position to check
-			nextS = s + (s-nextEmit)>>7 + 1
+			nextS = s + (s-nextEmit)>>6 + 1
 			if nextS > sLimit {
 				goto emitRemainder
 			}
@@ -758,8 +758,8 @@ func encodeBlockBetterSnappyGo64K(dst, src []byte) (d int) {
 		maxSTableSize = 1 << sTableBits
 	)
 
-	var lTable [maxLTableSize]uint32
-	var sTable [maxSTableSize]uint32
+	var lTable [maxLTableSize]uint16
+	var sTable [maxSTableSize]uint16
 
 	// Bail if we can't compress to at least this.
 	dstLimit := len(src) - len(src)>>5 - 6
@@ -781,7 +781,7 @@ func encodeBlockBetterSnappyGo64K(dst, src []byte) (d int) {
 		nextS := 0
 		for {
 			// Next src position to check
-			nextS = (s-nextEmit)>>7 + 1
+			nextS = (s-nextEmit)>>6 + 1
 			if nextS > maxSkip {
 				nextS = s + maxSkip
 			} else {
@@ -795,8 +795,8 @@ func encodeBlockBetterSnappyGo64K(dst, src []byte) (d int) {
 			hashS := hash4(cv, sTableBits)
 			candidateL = int(lTable[hashL])
 			candidateS := int(sTable[hashS])
-			lTable[hashL] = uint32(s)
-			sTable[hashS] = uint32(s)
+			lTable[hashL] = uint16(s)
+			sTable[hashS] = uint16(s)
 
 			if uint32(cv) == load32(src, candidateL) {
 				break
@@ -807,7 +807,7 @@ func encodeBlockBetterSnappyGo64K(dst, src []byte) (d int) {
 				// Try a long candidate at s+1
 				hashL = hash7(cv>>8, lTableBits)
 				candidateL = int(lTable[hashL])
-				lTable[hashL] = uint32(s + 1)
+				lTable[hashL] = uint16(s + 1)
 				if uint32(cv>>8) == load32(src, candidateL) {
 					s++
 					break
@@ -885,11 +885,11 @@ func encodeBlockBetterSnappyGo64K(dst, src []byte) (d int) {
 
 		cv0 := load64(src, index0)
 		cv1 := load64(src, index1)
-		lTable[hash7(cv0, lTableBits)] = uint32(index0)
-		sTable[hash4(cv0>>8, sTableBits)] = uint32(index0 + 1)
+		lTable[hash7(cv0, lTableBits)] = uint16(index0)
+		sTable[hash4(cv0>>8, sTableBits)] = uint16(index0 + 1)
 
-		lTable[hash7(cv1, lTableBits)] = uint32(index1)
-		sTable[hash4(cv1>>8, sTableBits)] = uint32(index1 + 1)
+		lTable[hash7(cv1, lTableBits)] = uint16(index1)
+		sTable[hash4(cv1>>8, sTableBits)] = uint16(index1 + 1)
 		index0 += 1
 		index1 -= 1
 		cv = load64(src, s)
@@ -898,8 +898,8 @@ func encodeBlockBetterSnappyGo64K(dst, src []byte) (d int) {
 		// We do two starting from different offsets for speed.
 		index2 := (index0 + index1 + 1) >> 1
 		for index2 < index1 {
-			lTable[hash7(load64(src, index0), lTableBits)] = uint32(index0)
-			lTable[hash7(load64(src, index2), lTableBits)] = uint32(index2)
+			lTable[hash7(load64(src, index0), lTableBits)] = uint16(index0)
+			lTable[hash7(load64(src, index2), lTableBits)] = uint16(index2)
 			index0 += 2
 			index2 += 2
 		}
