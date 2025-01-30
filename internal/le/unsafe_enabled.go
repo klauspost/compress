@@ -8,6 +8,13 @@ import (
 	"unsafe"
 )
 
+// Load8 will load from b at index i.
+func Load8[I Indexer](b []byte, i I) byte {
+	//return binary.LittleEndian.Uint16(b[i:])
+	//return *(*uint16)(unsafe.Pointer(&b[i]))
+	return *(*byte)(unsafe.Add(unsafe.Pointer(unsafe.SliceData(b)), i))
+}
+
 // Load16 will load from b at index i.
 func Load16[I Indexer](b []byte, i I) uint16 {
 	//return binary.LittleEndian.Uint16(b[i:])
