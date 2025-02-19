@@ -136,7 +136,7 @@ func hashLen(u uint64, length, mls uint8) uint32 {
 // matchlen will return the match length between offsets and t in src.
 // The maximum length returned is maxMatchLength - 4.
 // It is assumed that s > t, that t >=0 and s < len(src).
-func (e *fastGen) matchlen(s, t int32, src []byte) int32 {
+func (e *fastGen) matchlen(s, t int, src []byte) int32 {
 	if debugDeflate {
 		if t >= s {
 			panic(fmt.Sprint("t >=s:", t, s))
@@ -151,7 +151,7 @@ func (e *fastGen) matchlen(s, t int32, src []byte) int32 {
 			panic(fmt.Sprint(s, "-", t, "(", s-t, ") > maxMatchLength (", maxMatchOffset, ")"))
 		}
 	}
-	s1 := min(s+maxMatchLength-4, int32(len(src)))
+	s1 := min(s+maxMatchLength-4, len(src))
 	left := s1 - s
 	n := int32(0)
 	for left >= 8 {
@@ -178,7 +178,7 @@ func (e *fastGen) matchlen(s, t int32, src []byte) int32 {
 
 // matchlenLong will return the match length between offsets and t in src.
 // It is assumed that s > t, that t >=0 and s < len(src).
-func (e *fastGen) matchlenLong(s, t int32, src []byte) int32 {
+func (e *fastGen) matchlenLong(s, t int, src []byte) int32 {
 	if debugDeflate {
 		if t >= s {
 			panic(fmt.Sprint("t >=s:", t, s))
@@ -194,7 +194,7 @@ func (e *fastGen) matchlenLong(s, t int32, src []byte) int32 {
 		}
 	}
 	// Extend the match to be as long as possible.
-	left := int32(len(src)) - s
+	left := len(src) - s
 	n := int32(0)
 	for left >= 8 {
 		diff := le.Load64(src, s) ^ le.Load64(src, t)
