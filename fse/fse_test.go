@@ -210,12 +210,12 @@ func TestReadNCount(t *testing.T) {
 			got := s2.norm[:s2.symbolLen]
 			if !reflect.DeepEqual(want, got) {
 				if s.actualTableLog != s2.actualTableLog {
-					t.Errorf(name+"norm table, want tablelog: %d, got %d", s.actualTableLog, s2.actualTableLog)
+					t.Errorf("%snorm table, want tablelog: %d, got %d", name, s.actualTableLog, s2.actualTableLog)
 				}
 				if s.symbolLen != s2.symbolLen {
-					t.Errorf(name+"norm table, want size: %d, got %d", s.symbolLen, s2.symbolLen)
+					t.Errorf("%snorm table, want size: %d, got %d", name, s.symbolLen, s2.symbolLen)
 				}
-				t.Errorf(name + "norm table, got delta: \n")
+				t.Errorf("%snorm table, got delta: \n", name)
 				return
 			}
 			for i, dec := range s2.decTable {
@@ -228,19 +228,19 @@ func TestReadNCount(t *testing.T) {
 			}
 			if dc != nil {
 				if len(buf0) != len(dc) {
-					t.Errorf(name+"decompressed, want size: %d, got %d", len(buf0), len(dc))
+					t.Errorf("%sdecompressed, want size: %d, got %d", name, len(buf0), len(dc))
 					if len(buf0) > len(dc) {
 						buf0 = buf0[:len(dc)]
 					} else {
 						dc = dc[:len(buf0)]
 					}
 					if !bytes.Equal(buf0, dc) {
-						t.Errorf(name+"decompressed, got delta: (in) %v != (out) %v\n", buf0, dc)
+						t.Errorf("%sdecompressed, got delta: (in) %v != (out) %v\n", name, buf0, dc)
 					}
 					return
 				}
 				if !bytes.Equal(buf0, dc) {
-					t.Errorf(name + "decompressed, got delta.")
+					t.Errorf("%sdecompressed, got delta.", name)
 				}
 				if !t.Failed() {
 					t.Log("... roundtrip ok!")

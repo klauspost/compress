@@ -12,7 +12,7 @@ jobs:
   build:
     strategy:
       matrix:
-        go-version: [1.21.x, 1.22.x, 1.23.x]
+        go-version: [1.22.x, 1.23.x, 1.24.x]
         os: [ubuntu-latest, macos-latest, windows-latest]
     env:
       CGO_ENABLED: 0
@@ -60,7 +60,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5.3.0
       with:
-        go-version: 1.23.x
+        go-version: 1.24.x
 
     - name: Checkout code
       uses: actions/checkout@v4
@@ -82,7 +82,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5.3.0
       with:
-        go-version: 1.23.x
+        go-version: 1.24.x
 
     - name: Checkout code
       uses: actions/checkout@v4
@@ -125,7 +125,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5.3.0
         with:
-          go-version: 1.23.x
+          go-version: 1.24.x
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -151,7 +151,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5.3.0
         with:
-          go-version: 1.22.x
+          go-version: 1.24.x
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -182,7 +182,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5.3.0
         with:
-          go-version: 1.23.x
+          go-version: 1.24.x
       - name: Checkout code
         uses: actions/checkout@v4
 
