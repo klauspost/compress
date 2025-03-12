@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	dictShardBits = 6
+	dictShardBits = 7
 )
 
 type fastBase struct {
