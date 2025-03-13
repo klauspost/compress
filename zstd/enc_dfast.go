@@ -13,7 +13,7 @@ const (
 	dFastLongLen       = 8                       // Bytes used for table hash
 
 	dLongTableShardCnt  = 1 << (dFastLongTableBits - dictShardBits) // Number of shards in the table
-	dLongTableShardSize = dFastLongTableSize / tableShardCnt        // Size of an individual shard
+	dLongTableShardSize = dFastLongTableSize / dLongTableShardCnt   // Size of an individual shard
 
 	dFastShortTableBits = tableBits                // Bits used in the short match table
 	dFastShortTableSize = 1 << dFastShortTableBits // Size of the table
