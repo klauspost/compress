@@ -1388,11 +1388,13 @@ func testSnappyDecode(t *testing.T, src []byte) {
 func benchDecode(b *testing.B, src []byte) {
 	b.Run("default", func(b *testing.B) {
 		encoded := Encode(nil, src)
+		buf := make([]byte, 0, len(src))
 		b.SetBytes(int64(len(src)))
 		b.ReportAllocs()
 		b.ResetTimer()
+		var err error
 		for i := 0; i < b.N; i++ {
-			_, err := Decode(src[:0], encoded)
+			buf, err = Decode(buf[:0], encoded)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -1401,11 +1403,13 @@ func benchDecode(b *testing.B, src []byte) {
 	})
 	b.Run("better", func(b *testing.B) {
 		encoded := EncodeBetter(nil, src)
+		buf := make([]byte, 0, len(src))
 		b.SetBytes(int64(len(src)))
 		b.ReportAllocs()
 		b.ResetTimer()
+		var err error
 		for i := 0; i < b.N; i++ {
-			_, err := Decode(src[:0], encoded)
+			buf, err = Decode(buf[:0], encoded)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -1414,11 +1418,13 @@ func benchDecode(b *testing.B, src []byte) {
 	})
 	b.Run("best", func(b *testing.B) {
 		encoded := EncodeBest(nil, src)
+		buf := make([]byte, 0, len(src))
 		b.SetBytes(int64(len(src)))
 		b.ReportAllocs()
 		b.ResetTimer()
+		var err error
 		for i := 0; i < b.N; i++ {
-			_, err := Decode(src[:0], encoded)
+			buf, err = Decode(buf[:0], encoded)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -1427,11 +1433,13 @@ func benchDecode(b *testing.B, src []byte) {
 	})
 	b.Run("snappy-input", func(b *testing.B) {
 		encoded := snapref.Encode(nil, src)
+		buf := make([]byte, 0, len(src))
 		b.SetBytes(int64(len(src)))
 		b.ReportAllocs()
 		b.ResetTimer()
+		var err error
 		for i := 0; i < b.N; i++ {
-			_, err := Decode(src[:0], encoded)
+			buf, err = Decode(buf[:0], encoded)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -1442,63 +1450,75 @@ func benchDecode(b *testing.B, src []byte) {
 
 func benchEncode(b *testing.B, src []byte) {
 	// Bandwidth is in amount of uncompressed data.
-	dst := make([]byte, snapref.MaxEncodedLen(len(src)))
-	b.ResetTimer()
 	b.Run("default", func(b *testing.B) {
+		dst := make([]byte, MaxEncodedLen(len(src)))
+		b.ResetTimer()
 		b.SetBytes(int64(len(src)))
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			Encode(dst, src)
+			dst = Encode(dst[:0], src)
 		}
-		b.ReportMetric(100*float64(len(Encode(dst, src)))/float64(len(src)), "pct")
+		b.ReportMetric(100*float64(len(dst))/float64(len(src)), "pct")
 	})
 	b.Run("better", func(b *testing.B) {
+		dst := make([]byte, MaxEncodedLen(len(src)))
+		b.ResetTimer()
 		b.SetBytes(int64(len(src)))
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			EncodeBetter(dst, src)
+			dst = EncodeBetter(dst[:0], src)
 		}
-		b.ReportMetric(100*float64(len(EncodeBetter(dst, src)))/float64(len(src)), "pct")
+		b.ReportMetric(100*float64(len(dst))/float64(len(src)), "pct")
 	})
 	b.Run("best", func(b *testing.B) {
+		dst := make([]byte, MaxEncodedLen(len(src)))
+		b.ResetTimer()
 		b.SetBytes(int64(len(src)))
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			EncodeBest(dst, src)
+			dst = EncodeBest(dst[:0], src)
 		}
-		b.ReportMetric(100*float64(len(EncodeBest(dst, src)))/float64(len(src)), "pct")
+		b.ReportMetric(100*float64(len(dst))/float64(len(src)), "pct")
 	})
 	b.Run("snappy-default", func(b *testing.B) {
+		dst := make([]byte, MaxEncodedLen(len(src)))
 		b.SetBytes(int64(len(src)))
 		b.ReportAllocs()
+		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			EncodeSnappy(dst, src)
+			dst = EncodeSnappy(dst[:0], src)
 		}
-		b.ReportMetric(100*float64(len(EncodeSnappy(dst, src)))/float64(len(src)), "pct")
+		b.ReportMetric(100*float64(len(dst))/float64(len(src)), "pct")
 	})
 	b.Run("snappy-better", func(b *testing.B) {
+		dst := make([]byte, MaxEncodedLen(len(src)))
 		b.SetBytes(int64(len(src)))
 		b.ReportAllocs()
+		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			EncodeSnappyBetter(dst, src)
+			dst = EncodeSnappyBetter(dst[:0], src)
 		}
-		b.ReportMetric(100*float64(len(EncodeSnappyBetter(dst, src)))/float64(len(src)), "pct")
+		b.ReportMetric(100*float64(len(dst))/float64(len(src)), "pct")
 	})
 	b.Run("snappy-best", func(b *testing.B) {
+		dst := make([]byte, MaxEncodedLen(len(src)))
 		b.SetBytes(int64(len(src)))
 		b.ReportAllocs()
+		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			EncodeSnappyBest(dst, src)
+			dst = EncodeSnappyBest(dst[:0], src)
 		}
-		b.ReportMetric(100*float64(len(EncodeSnappyBest(dst, src)))/float64(len(src)), "pct")
+		b.ReportMetric(100*float64(len(dst))/float64(len(src)), "pct")
 	})
 	b.Run("snappy-ref-noasm", func(b *testing.B) {
+		dst := make([]byte, snapref.MaxEncodedLen(len(src)))
 		b.SetBytes(int64(len(src)))
 		b.ReportAllocs()
+		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			snapref.Encode(dst, src)
+			dst = snapref.Encode(dst[:0], src)
 		}
-		b.ReportMetric(100*float64(len(snapref.Encode(dst, src)))/float64(len(src)), "pct")
+		b.ReportMetric(100*float64(len(dst))/float64(len(src)), "pct")
 	})
 }
 
