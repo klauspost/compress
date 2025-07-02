@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"io"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/klauspost/compress/zip"
@@ -28,9 +27,6 @@ func TestEncodeTo(t *testing.T) {
 	}
 
 	for i, tt := range zr.File {
-		if !strings.HasSuffix(t.Name(), "") {
-			continue
-		}
 		if testing.Short() && i > 10 {
 			break
 		}
