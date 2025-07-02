@@ -30,7 +30,7 @@ func EncodeTo(dst []byte, src []byte) []byte {
 	}
 	weakMu.Unlock()
 
-	return enc.EncodeAll(dst, src)
+	return enc.EncodeAll(src, dst)
 }
 
 // DecodeTo appends the decoded data from src to dst.

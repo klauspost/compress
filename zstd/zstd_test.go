@@ -110,8 +110,6 @@ func TestWriterMemUsage(t *testing.T) {
 	})
 }
 
-var data = []byte{1, 2, 3}
-
 func newZstdWriter() (*Encoder, error) {
 	return NewWriter(
 		io.Discard,
@@ -123,6 +121,7 @@ func newZstdWriter() (*Encoder, error) {
 }
 
 func BenchmarkMem(b *testing.B) {
+	var data = []byte{1, 2, 3}
 	b.Run("flush", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
