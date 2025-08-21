@@ -7,6 +7,7 @@ package zstd
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"io"
 	"sync"
 
@@ -67,7 +68,7 @@ type decoderState struct {
 var (
 	// Check the interfaces we want to support.
 	_ = io.WriterTo(&Decoder{})
-	_ = io.Reader(&Decoder{})
+	_ = io.ReadCloser(&Decoder{})
 )
 
 // NewReader creates a new decoder.
@@ -569,10 +570,12 @@ func (d *Decoder) stashDecoder() {
 }
 
 // Close will release all resources.
+// Calling Close more than once has no effect.
 // It is NOT possible to reuse the decoder after this.
-func (d *Decoder) Close() {
-	if d.current.err == ErrDecoderClosed {
-		return
+func (d *Decoder) Close() error {
+	if errors.Is(d.current.err, ErrDecoderClosed) {
+		// Calling Close() multiple times will not throw an error.
+		return nil
 	}
 	d.drainOutput()
 	if d.current.cancel != nil {
@@ -592,6 +595,7 @@ func (d *Decoder) Close() {
 		d.current.d = nil
 	}
 	d.current.err = ErrDecoderClosed
+	return nil
 }
 
 // IOReadCloser returns the decoder as an io.ReadCloser for convenience.
