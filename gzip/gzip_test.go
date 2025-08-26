@@ -246,7 +246,7 @@ func testFile(i, level int, t *testing.T) {
 	if len(testbuf) != i*dl {
 		// Make results predictable
 		testbuf = make([]byte, i*dl)
-		for j := 0; j < i; j++ {
+		for j := range i {
 			copy(testbuf[j*dl:j*dl+dl], dat)
 		}
 	}
@@ -324,7 +324,7 @@ func testFileWindow(i, window int, t *testing.T) {
 	if len(testbuf) != i*dl {
 		// Make results predictable
 		testbuf = make([]byte, i*dl)
-		for j := 0; j < i; j++ {
+		for j := range i {
 			copy(testbuf[j*dl:j*dl+dl], dat)
 		}
 	}

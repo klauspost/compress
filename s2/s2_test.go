@@ -62,7 +62,7 @@ func TestMaxEncodedLen(t *testing.T) {
 	}
 	t.Log("Maxblock:", MaxBlockSize, "reduction:", intReduction)
 	// Test all sizes up to maxBlockSize.
-	for i := int64(0); i < maxBlockSize; i++ {
+	for i := range int64(maxBlockSize) {
 		testSet = append(testSet, struct{ in, out int64 }{in: i, out: i + int64(binary.PutVarint([]byte{binary.MaxVarintLen32: 0}, i)) + literalExtraSize(i)})
 	}
 	for i := range testSet {
@@ -161,7 +161,7 @@ func TestEmpty(t *testing.T) {
 func TestSmallCopy(t *testing.T) {
 	for _, ebuf := range [][]byte{nil, make([]byte, 20), make([]byte, 64)} {
 		for _, dbuf := range [][]byte{nil, make([]byte, 20), make([]byte, 64)} {
-			for i := 0; i < 32; i++ {
+			for i := range 32 {
 				s := "aaaa" + strings.Repeat("b", i) + "aaaabbbb"
 				if err := roundtrip([]byte(s), ebuf, dbuf); err != nil {
 					t.Errorf("len(ebuf)=%d, len(dbuf)=%d, i=%d: %v", len(ebuf), len(dbuf), i, err)
@@ -749,13 +749,13 @@ func TestFramingFormat(t *testing.T) {
 	// because it is larger than maxBlockSize (64k).
 	src := make([]byte, 1e6)
 	rng := rand.New(rand.NewSource(1))
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		if i%2 == 0 {
-			for j := 0; j < 1e5; j++ {
+			for j := range int(1e5) {
 				src[1e5*i+j] = uint8(rng.Intn(256))
 			}
 		} else {
-			for j := 0; j < 1e5; j++ {
+			for j := range int(1e5) {
 				src[1e5*i+j] = uint8(i)
 			}
 		}
@@ -785,13 +785,13 @@ func TestFramingFormatBetter(t *testing.T) {
 	// because it is larger than maxBlockSize (64k).
 	src := make([]byte, 1e6)
 	rng := rand.New(rand.NewSource(1))
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		if i%2 == 0 {
-			for j := 0; j < 1e5; j++ {
+			for j := range int(1e5) {
 				src[1e5*i+j] = uint8(rng.Intn(256))
 			}
 		} else {
-			for j := 0; j < 1e5; j++ {
+			for j := range int(1e5) {
 				src[1e5*i+j] = uint8(i)
 			}
 		}
@@ -1674,7 +1674,7 @@ func downloadBenchmarkFiles(b testing.TB, basename string) (errRet error) {
 
 func TestEstimateBlockSize(t *testing.T) {
 	var input []byte
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		EstimateBlockSize(input)
 		input = append(input, 0)
 	}

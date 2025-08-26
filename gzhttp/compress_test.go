@@ -974,10 +974,7 @@ func TestFlush(t *testing.T) {
 				for len(tb) > 0 {
 					// Write 100 bytes per run
 					// Detection should not be affected (we send 100 bytes)
-					toWrite := 100
-					if toWrite > len(tb) {
-						toWrite = len(tb)
-					}
+					toWrite := min(100, len(tb))
 					_, err := w.Write(tb[:toWrite])
 					if err != nil {
 						t.Fatal(err)
@@ -1064,7 +1061,7 @@ func TestRandomJitter(t *testing.T) {
 		t.Fatal(err)
 	}
 	changed := false
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		w = httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
 		result = w.Result()
@@ -1095,7 +1092,7 @@ func TestRandomJitter(t *testing.T) {
 		}
 	}))
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		w = httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
 		result = w.Result()
@@ -1121,7 +1118,7 @@ func TestRandomJitter(t *testing.T) {
 		w.Write(payload[:512])
 	}))
 	changed = false
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		w = httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
 		result = w.Result()
@@ -1153,7 +1150,7 @@ func TestRandomJitter(t *testing.T) {
 	}))
 
 	changed = false
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		w = httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
 		result = w.Result()
@@ -1178,7 +1175,7 @@ func TestRandomJitter(t *testing.T) {
 
 	// Mutate *after* the flush.
 	// Should no longer affect length.
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		w = httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
 		result = w.Result()
@@ -1208,7 +1205,7 @@ func TestRandomJitter(t *testing.T) {
 	}
 	handler = wrapper(writePayload)
 	changed = false
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		w = httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
 		result = w.Result()
@@ -1280,7 +1277,7 @@ func TestRandomJitterParanoid(t *testing.T) {
 		t.Fatal(err)
 	}
 	changed := false
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		w = httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
 		result = w.Result()
@@ -1311,7 +1308,7 @@ func TestRandomJitterParanoid(t *testing.T) {
 		}
 	}))
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		w = httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
 		result = w.Result()
@@ -1337,7 +1334,7 @@ func TestRandomJitterParanoid(t *testing.T) {
 		w.Write(payload[:512])
 	}))
 	changed = false
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		w = httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
 		result = w.Result()
@@ -1369,7 +1366,7 @@ func TestRandomJitterParanoid(t *testing.T) {
 	}))
 
 	changed = false
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		w = httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
 		result = w.Result()
@@ -1394,7 +1391,7 @@ func TestRandomJitterParanoid(t *testing.T) {
 
 	// Mutate *after* the flush.
 	// Should no longer affect length.
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		w = httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
 		result = w.Result()
@@ -1424,7 +1421,7 @@ func TestRandomJitterParanoid(t *testing.T) {
 	}
 	handler = wrapper(writePayload)
 	changed = false
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		w = httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
 		result = w.Result()
@@ -2020,7 +2017,6 @@ func TestContentTypeDetectWithJitter(t *testing.T) {
 			},
 		},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 

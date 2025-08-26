@@ -632,7 +632,7 @@ func BenchmarkCompressedZipGarbage(b *testing.B) {
 	runOnce := func(buf *bytes.Buffer) {
 		buf.Reset()
 		zw := NewWriter(buf)
-		for j := 0; j < 3; j++ {
+		for range 3 {
 			w, _ := zw.CreateHeader(&FileHeader{
 				Name:   "foo",
 				Method: Deflate,

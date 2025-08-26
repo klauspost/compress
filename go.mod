@@ -1,6 +1,6 @@
 module github.com/klauspost/compress
 
-go 1.22
+go 1.23
 
 retract (
 	// https://github.com/klauspost/compress/pull/503

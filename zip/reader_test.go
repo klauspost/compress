@@ -659,7 +659,7 @@ func readTestZip(t *testing.T, zt ZipTest) {
 	// test simultaneous reads
 	n := 0
 	done := make(chan bool)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		for j, ft := range zt.File {
 			go func(j int, ft ZipTestFile) {
 				readTestFile(t, zt, ft, z.File[j], raw)
@@ -1049,7 +1049,7 @@ func biggestZipBytes() []byte {
 
 func returnBigZipBytes() (r io.ReaderAt, size int64) {
 	b := biggestZipBytes()
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		r, err := NewReader(bytes.NewReader(b), int64(len(b)))
 		if err != nil {
 			panic(err)
@@ -1215,7 +1215,6 @@ func TestFS(t *testing.T) {
 			[]string{"a/b/c"},
 		},
 	} {
-		test := test
 		t.Run(test.file, func(t *testing.T) {
 			t.Parallel()
 			z, err := OpenReader(test.file)
@@ -1249,7 +1248,6 @@ func TestFSWalk(t *testing.T) {
 			wantErr: true,
 		},
 	} {
-		test := test
 		t.Run(test.file, func(t *testing.T) {
 			t.Parallel()
 			z, err := OpenReader(test.file)
@@ -1458,7 +1456,7 @@ func TestCVE202133196(t *testing.T) {
 	// files doesn't cause an issue
 	b := bytes.NewBuffer(nil)
 	w := NewWriter(b)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		_, err := w.Create("")
 		if err != nil {
 			t.Fatalf("Writer.Create failed: %s", err)

@@ -77,7 +77,7 @@ func (c *Compressor) put(h uint32, si int) {
 
 func (c *Compressor) reset() { c.inUse = [htSize / 32]uint32{} }
 
-var compressorPool = sync.Pool{New: func() interface{} { return new(Compressor) }}
+var compressorPool = sync.Pool{New: func() any { return new(Compressor) }}
 
 func CompressBlock(src, dst []byte) (int, error) {
 	c := compressorPool.Get().(*Compressor)

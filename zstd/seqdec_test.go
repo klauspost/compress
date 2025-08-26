@@ -103,7 +103,7 @@ func TestSequenceDecsAdjustOffset(t *testing.T) {
 	for i := range tc {
 		// given
 		var sd sequenceDecs
-		for j := 0; j < 3; j++ {
+		for j := range 3 {
 			sd.prevOffset[j] = tc[i].prevOffset[j]
 		}
 
@@ -117,7 +117,7 @@ func TestSequenceDecsAdjustOffset(t *testing.T) {
 			t.Errorf("testcase #%d: wrong function result", i)
 		}
 
-		for j := 0; j < 3; j++ {
+		for j := range 3 {
 			if sd.prevOffset[j] != tc[i].res.prevOffset[j] {
 				t.Logf("result:   %v", sd.prevOffset)
 				t.Logf("expected: %v", tc[i].res.prevOffset)
@@ -279,7 +279,7 @@ func Test_seqdec_decoder(t *testing.T) {
 				w, err := zw.Create(tt.Name)
 				fatalIf(err)
 				c := csv.NewWriter(w)
-				w.Write([]byte(fmt.Sprintf("%d,%d,%d\n", s.prevOffset[0], s.prevOffset[1], s.prevOffset[2])))
+				w.Write(fmt.Appendf(nil, "%d,%d,%d\n", s.prevOffset[0], s.prevOffset[1], s.prevOffset[2]))
 				for _, seq := range seqs {
 					c.Write([]string{strconv.Itoa(seq.mo), strconv.Itoa(seq.ml), strconv.Itoa(seq.ll)})
 				}

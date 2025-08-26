@@ -132,7 +132,7 @@ func Test_sequenceDecs_decodeNoBMI(t *testing.T) {
 				w, err := zw.Create(tt.Name)
 				fatalIf(err)
 				c := csv.NewWriter(w)
-				w.Write([]byte(fmt.Sprintf("%d,%d,%d\n", s.prevOffset[0], s.prevOffset[1], s.prevOffset[2])))
+				w.Write(fmt.Appendf(nil, "%d,%d,%d\n", s.prevOffset[0], s.prevOffset[1], s.prevOffset[2]))
 				for _, seq := range seqs {
 					c.Write([]string{strconv.Itoa(seq.mo), strconv.Itoa(seq.ml), strconv.Itoa(seq.ll)})
 				}

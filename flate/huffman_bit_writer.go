@@ -303,10 +303,7 @@ func (w *huffmanBitWriter) generateCodegen(numLiterals int, numOffsets int, litE
 			w.codegenFreq[size]++
 			count--
 			for count >= 3 {
-				n := 6
-				if n > count {
-					n = count
-				}
+				n := min(6, count)
 				codegen[outIndex] = 16
 				outIndex++
 				codegen[outIndex] = uint8(n - 3)
@@ -316,10 +313,7 @@ func (w *huffmanBitWriter) generateCodegen(numLiterals int, numOffsets int, litE
 			}
 		} else {
 			for count >= 11 {
-				n := 138
-				if n > count {
-					n = count
-				}
+				n := min(138, count)
 				codegen[outIndex] = 18
 				outIndex++
 				codegen[outIndex] = uint8(n - 11)
@@ -472,7 +466,7 @@ func (w *huffmanBitWriter) writeDynamicHeader(numLiterals int, numOffsets int, n
 	w.writeBits(int32(numOffsets-1), 5)
 	w.writeBits(int32(numCodegens-4), 4)
 
-	for i := 0; i < numCodegens; i++ {
+	for i := range numCodegens {
 		value := uint(w.codegenEncoding.codes[codegenOrder[i]].len())
 		w.writeBits(int32(value), 3)
 	}

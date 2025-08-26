@@ -113,10 +113,7 @@ func TestNewReaderMismatch(t *testing.T) {
 				if err == nil {
 					const sizeBack = 8 << 20
 					defer org.Close()
-					start := int64(cHash)/4*blockSize - sizeBack
-					if start < 0 {
-						start = 0
-					}
+					start := max(int64(cHash)/4*blockSize-sizeBack, 0)
 					_, err = org.Seek(start, io.SeekStart)
 					if err != nil {
 						t.Fatal(err)
@@ -227,7 +224,7 @@ func TestNewDecoderMemory(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Write 256KB
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		tmp := strings.Repeat(string([]byte{byte(i)}), 1024)
 		_, err := enc.Write([]byte(tmp))
 		if err != nil {
@@ -292,7 +289,7 @@ func TestNewDecoderMemoryHighMem(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Write 256KB
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		tmp := strings.Repeat(string([]byte{byte(i)}), 1024)
 		_, err := enc.Write([]byte(tmp))
 		if err != nil {
@@ -357,7 +354,7 @@ func TestNewDecoderFrameSize(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Write 256KB
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		tmp := strings.Repeat(string([]byte{byte(i)}), 1024)
 		_, err := enc.Write([]byte(tmp))
 		if err != nil {
@@ -873,7 +870,7 @@ func TestDecoder_Reset(t *testing.T) {
 	t.Log("Encoded content matched")
 
 	// Decode using reset+copy
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		err = dec.Reset(bytes.NewBuffer(dst))
 		if err != nil {
 			t.Fatal(err)
@@ -894,7 +891,7 @@ func TestDecoder_Reset(t *testing.T) {
 		}
 	}
 	// Test without WriterTo interface support.
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		err = dec.Reset(bytes.NewBuffer(dst))
 		if err != nil {
 			t.Fatal(err)
@@ -1834,7 +1831,6 @@ func testDecoderDecodeAll(t *testing.T, fn string, dec *Decoder) {
 	}
 	var wg sync.WaitGroup
 	for i, tt := range zr.File {
-		tt := tt
 		if !strings.HasSuffix(tt.Name, ".zst") || (testing.Short() && i > 20) {
 			continue
 		}
@@ -1892,7 +1888,6 @@ func testDecoderDecodeAllError(t *testing.T, fn string, dec *Decoder, errMap map
 
 	var wg sync.WaitGroup
 	for _, tt := range zr.File {
-		tt := tt
 		if !strings.HasSuffix(tt.Name, ".zst") {
 			continue
 		}

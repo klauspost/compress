@@ -9,21 +9,21 @@ import (
 	"testing"
 )
 
-func assertEqual(t testing.TB, want, got interface{}) {
+func assertEqual(t testing.TB, want, got any) {
 	t.Helper()
 	if !reflect.DeepEqual(want, got) {
 		t.Fatalf("want %#v, got %#v", want, got)
 	}
 }
 
-func assertNotEqual(t testing.TB, want, got interface{}) {
+func assertNotEqual(t testing.TB, want, got any) {
 	t.Helper()
 	if reflect.DeepEqual(want, got) {
 		t.Fatalf("did not want %#v, got %#v", want, got)
 	}
 }
 
-func assertNil(t testing.TB, object interface{}) {
+func assertNil(t testing.TB, object any) {
 	if isNil(object) {
 		return
 	}
@@ -31,7 +31,7 @@ func assertNil(t testing.TB, object interface{}) {
 	t.Fatalf("Expected value to be nil.")
 }
 
-func assertNotNil(t testing.TB, object interface{}) {
+func assertNotNil(t testing.TB, object any) {
 	if !isNil(object) {
 		return
 	}
@@ -40,7 +40,7 @@ func assertNotNil(t testing.TB, object interface{}) {
 }
 
 // isNil checks if a specified object is nil or not, without Failing.
-func isNil(object interface{}) bool {
+func isNil(object any) bool {
 	if object == nil {
 		return true
 	}
@@ -63,7 +63,7 @@ func isNil(object interface{}) bool {
 
 // containsKind checks if a specified kind in the slice of kinds.
 func containsKind(kinds []reflect.Kind, kind reflect.Kind) bool {
-	for i := 0; i < len(kinds); i++ {
+	for i := range kinds {
 		if kind == kinds[i] {
 			return true
 		}

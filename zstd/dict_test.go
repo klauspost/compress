@@ -124,7 +124,6 @@ func TestEncoder_SmallDict(t *testing.T) {
 			var b []byte
 			var tmp []byte
 			for i := range encs {
-				i := i
 				t.Run(encNames[i], func(t *testing.T) {
 					b = encs[i].EncodeAll(decoded, b[:0])
 					tmp, err = dec.DecodeAll(in, tmp[:0])
@@ -151,7 +150,6 @@ func TestEncoder_SmallDict(t *testing.T) {
 			// Attempt to compress with all dicts
 			var tmp []byte
 			for i := range encs {
-				i := i
 				enc := encs[i]
 				t.Run(encNames[i], func(t *testing.T) {
 					var buf bytes.Buffer
@@ -269,7 +267,6 @@ func TestEncoder_SmallDictFresh(t *testing.T) {
 			var b []byte
 			var tmp []byte
 			for i := range encs {
-				i := i
 				t.Run(encNames[i], func(t *testing.T) {
 					enc := encs[i]()
 					defer enc.Close()
@@ -298,7 +295,6 @@ func TestEncoder_SmallDictFresh(t *testing.T) {
 			// Attempt to compress with all dicts
 			var tmp []byte
 			for i := range encs {
-				i := i
 				t.Run(encNames[i], func(t *testing.T) {
 					enc := encs[i]()
 					defer enc.Close()

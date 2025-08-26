@@ -100,7 +100,7 @@ func TestWriterMemUsage(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					for i := 0; i < 100; i++ {
+					for range 100 {
 						_ = zr.EncodeAll(data, dst[:0])
 					}
 				})
@@ -130,7 +130,7 @@ func BenchmarkMem(b *testing.B) {
 				b.Fatal(err)
 			}
 
-			for j := 0; j < 16; j++ {
+			for range 16 {
 				w.Reset(io.Discard)
 
 				if _, err := w.Write(data); err != nil {
@@ -156,7 +156,7 @@ func BenchmarkMem(b *testing.B) {
 				b.Fatal(err)
 			}
 
-			for j := 0; j < 16; j++ {
+			for range 16 {
 				w.Reset(io.Discard)
 
 				if _, err := w.Write(data); err != nil {
