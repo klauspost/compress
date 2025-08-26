@@ -81,7 +81,7 @@ func testLevelDict(t *testing.T, fn string, b0 []byte, level int, d string) {
 		t.Errorf("%s (level=%d, dict=%q): length mismatch %d versus %d", fn, level, d, len(b0), len(b1))
 		return
 	}
-	for i := 0; i < len(b0); i++ {
+	for i := range b0 {
 		if b0[i] != b1[i] {
 			t.Errorf("%s (level=%d, dict=%q): mismatch at %d, 0x%02x versus 0x%02x\n", fn, level, d, i, b0[i], b1[i])
 			return

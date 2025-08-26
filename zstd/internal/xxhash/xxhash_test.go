@@ -115,7 +115,7 @@ func TestBinaryMarshaling(t *testing.T) {
 
 	d0 := New()
 	d1 := New()
-	for i := 0; i < 64; i++ {
+	for i := range 64 {
 		b, err := d0.MarshalBinary()
 		if err != nil {
 			t.Fatal(err)

@@ -7,7 +7,7 @@ import (
 )
 
 type testFatal interface {
-	Fatal(args ...interface{})
+	Fatal(args ...any)
 }
 
 // loadTestTokens will load test tokens.

@@ -26,7 +26,7 @@ func TestOver65kFiles(t *testing.T) {
 	buf := new(strings.Builder)
 	w := NewWriter(buf)
 	const nFiles = (1 << 16) + 42
-	for i := 0; i < nFiles; i++ {
+	for i := range nFiles {
 		_, err := w.CreateHeader(&FileHeader{
 			Name:   fmt.Sprintf("%d.dat", i),
 			Method: Store, // Deflate is too slow when it is compiled with -race flag
@@ -46,7 +46,7 @@ func TestOver65kFiles(t *testing.T) {
 	if got := len(zr.File); got != nFiles {
 		t.Fatalf("File contains %d files, want %d", got, nFiles)
 	}
-	for i := 0; i < nFiles; i++ {
+	for i := range nFiles {
 		want := fmt.Sprintf("%d.dat", i)
 		if zr.File[i].Name != want {
 			t.Fatalf("File(%d) = %q, want %q", i, zr.File[i].Name, want)
@@ -350,7 +350,7 @@ func TestZip64ManyRecords(t *testing.T) {
 	t.Parallel()
 	gen := func(numRec int) func(*Writer) {
 		return func(w *Writer) {
-			for i := 0; i < numRec; i++ {
+			for range numRec {
 				_, err := w.CreateHeader(&FileHeader{
 					Name:   "a.txt",
 					Method: Store,
@@ -422,10 +422,7 @@ func (ss *suffixSaver) Write(p []byte) (n int, err error) {
 	ss.size += int64(len(p))
 	if len(ss.buf) < ss.keep {
 		space := ss.keep - len(ss.buf)
-		add := len(p)
-		if add > space {
-			add = space
-		}
+		add := min(len(p), space)
 		ss.buf = append(ss.buf, p[:add]...)
 		p = p[add:]
 	}
@@ -567,7 +564,7 @@ func testZip64(t testing.TB, size int64) *rleBuffer {
 	for i := range chunk {
 		chunk[i] = '.'
 	}
-	for i := 0; i < chunks; i++ {
+	for range chunks {
 		_, err := f.Write(chunk)
 		if err != nil {
 			t.Fatal("write chunk:", err)
@@ -599,7 +596,7 @@ func testZip64(t testing.TB, size int64) *rleBuffer {
 		t.Fatal("opening:", err)
 	}
 	rc.(*checksumReader).hash = fakeHash32{}
-	for i := 0; i < chunks; i++ {
+	for range chunks {
 		_, err := io.ReadFull(rc, chunk)
 		if err != nil {
 			t.Fatal("read:", err)

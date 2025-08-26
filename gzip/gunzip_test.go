@@ -519,7 +519,7 @@ func TestWriteTo(t *testing.T) {
 	}
 	compressed := &bytes.Buffer{}
 	// Do it twice to test MultiStream functionality
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		w, err := NewWriterLevel(compressed, -2)
 		if err != nil {
 			t.Fatal(err)

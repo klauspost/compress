@@ -103,12 +103,12 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 	if hashBytes < 4 || hashBytes > 8 {
 		return nil, fmt.Errorf("HashBytes must be >= 4 and <= 8")
 	}
-	println := func(args ...interface{}) {
+	println := func(args ...any) {
 		if o.Output != nil {
 			fmt.Fprintln(o.Output, args...)
 		}
 	}
-	printf := func(s string, args ...interface{}) {
+	printf := func(s string, args ...any) {
 		if o.Output != nil {
 			fmt.Fprintf(o.Output, s, args...)
 		}
@@ -237,10 +237,7 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 			// Already added
 			continue
 		}
-		wantLen := e.n / uint32(hashBytes) / 4
-		if wantLen <= lowestOcc {
-			wantLen = lowestOcc
-		}
+		wantLen := max(e.n/uint32(hashBytes)/4, lowestOcc)
 
 		var tmp = make([]byte, 0, hashBytes*2)
 		{

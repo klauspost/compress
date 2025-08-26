@@ -1,8 +1,6 @@
 module github.com/klauspost/compress/s2/_generate
 
-go 1.22.0
-
-toolchain go1.22.4
+go 1.23
 
 require (
 	github.com/klauspost/asmfmt v1.3.2
@@ -12,5 +10,5 @@ require (
 require (
 	golang.org/x/mod v0.21.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
-	golang.org/x/tools v0.25.0 // indirect
+	golang.org/x/tools v0.25.1 // indirect
 )

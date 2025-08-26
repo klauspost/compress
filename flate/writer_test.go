@@ -280,7 +280,7 @@ func TestWriteError(t *testing.T) {
 	in := buf.Bytes()
 	// We create our own buffer to control number of writes.
 	copyBuf := make([]byte, 128)
-	for l := 0; l < 10; l++ {
+	for l := range 10 {
 		for fail := 1; fail <= 256; fail *= 2 {
 			// Fail after 'fail' writes
 			ew := &errorWriter{N: fail}
@@ -334,7 +334,7 @@ func TestWriter_Reset(t *testing.T) {
 		fmt.Fprintf(buf, "asdasfasf%d%dfghfgujyut%dyutyu\n", i, i, i)
 	}
 	in := buf.Bytes()
-	for l := 0; l < 10; l++ {
+	for l := range 10 {
 		l := l
 		if testing.Short() && l > 1 {
 			continue
@@ -364,7 +364,7 @@ func TestWriter_Reset(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				for i := 0; i < 50; i++ {
+				for range 50 {
 					// skip ahead again... This should wrap around...
 					w.d.fast.Reset()
 				}
@@ -374,7 +374,7 @@ func TestWriter_Reset(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				for i := 0; i < (math.MaxUint32-bufferReset)/maxMatchOffset; i++ {
+				for range (math.MaxUint32 - bufferReset) / maxMatchOffset {
 					// skip ahead to where we are close to wrap around...
 					w.d.fast.Reset()
 				}

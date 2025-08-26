@@ -400,7 +400,7 @@ func TestCompress4XReuse(t *testing.T) {
 	rng := rand.NewSource(0x1337)
 	var s Scratch
 	s.Reuse = ReusePolicyAllow
-	for i := 0; i < 255; i++ {
+	for i := range 255 {
 		if testing.Short() && i > 10 {
 			break
 		}
@@ -434,7 +434,7 @@ func TestCompress4XReuseActually(t *testing.T) {
 	rng := rand.NewSource(0x1337)
 	var s Scratch
 	s.Reuse = ReusePolicyAllow
-	for i := 0; i < 255; i++ {
+	for i := range 255 {
 		if testing.Short() && i > 10 {
 			break
 		}

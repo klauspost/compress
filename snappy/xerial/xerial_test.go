@@ -18,9 +18,10 @@ var snappyStreamTestCases = map[string][]byte{
 
 func makeMassive(input string, numCopies int) string {
 	outBuff := make([]byte, len(input)*numCopies)
-
-	for i := 0; i < numCopies; i++ {
-		copy(outBuff[len(outBuff):], input)
+	in := []byte(input)
+	for i := range numCopies {
+		start := i * len(in)
+		copy(outBuff[start:], in)
 	}
 
 	return string(outBuff)
@@ -66,7 +67,7 @@ func TestSnappyDecodeStreams(t *testing.T) {
 
 func TestSnappyDecodeMalformedTruncatedHeader(t *testing.T) {
 	// Truncated headers should not cause a panic.
-	for i := 0; i < len(xerialHeader); i++ {
+	for i := range xerialHeader {
 		buf := make([]byte, i)
 		copy(buf, xerialHeader[:i])
 		if _, err := Decode(buf); err != ErrMalformed {
