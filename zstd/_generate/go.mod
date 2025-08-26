@@ -1,4 +1,4 @@
-module github.com/klauspost/compress/s2/_generate
+module github.com/klauspost/compress/zstd/_generate
 
 go 1.23
 

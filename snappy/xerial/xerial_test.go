@@ -18,9 +18,10 @@ var snappyStreamTestCases = map[string][]byte{
 
 func makeMassive(input string, numCopies int) string {
 	outBuff := make([]byte, len(input)*numCopies)
-
-	for range numCopies {
-		copy(outBuff[len(outBuff):], input)
+	in := []byte(input)
+	for i := range numCopies {
+		start := i * len(in)
+		copy(outBuff[start:], in)
 	}
 
 	return string(outBuff)
