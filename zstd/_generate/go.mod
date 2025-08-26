@@ -1,8 +1,8 @@
 module github.com/klauspost/compress/s2/_generate
 
-go 1.22.0
+go 1.23
 
-toolchain go1.22.4
+toolchain go1.24.2
 
 require (
 	github.com/klauspost/compress v1.15.15
