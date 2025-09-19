@@ -211,7 +211,9 @@ func (w *huffmanBitWriter) flush() {
 		n++
 	}
 	w.bits = 0
-	w.write(w.bytes[:n])
+	if n > 0 {
+		w.write(w.bytes[:n])
+	}
 	w.nbytes = 0
 }
 
