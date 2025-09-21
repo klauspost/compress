@@ -6,11 +6,12 @@
 package flate
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"math"
+
+	"github.com/klauspost/compress/internal/le"
 )
 
 const (
@@ -362,7 +363,7 @@ func (d *compressor) writeStoredBlock(buf []byte) error {
 // of the supplied slice.
 // The caller must ensure that len(b) >= 4.
 func hash4(b []byte) uint32 {
-	return hash4u(binary.LittleEndian.Uint32(b), hashBits)
+	return hash4u(le.Load32(b, 0), hashBits)
 }
 
 // hash4 returns the hash of u to fit in a hash table with h bits.
@@ -377,7 +378,7 @@ func bulkHash4(b []byte, dst []uint32) {
 	if len(b) < 4 {
 		return
 	}
-	hb := binary.LittleEndian.Uint32(b)
+	hb := le.Load32(b, 0)
 
 	dst[0] = hash4u(hb, hashBits)
 	end := len(b) - 4 + 1

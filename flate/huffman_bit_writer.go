@@ -434,8 +434,8 @@ func (w *huffmanBitWriter) writeOutBits() {
 	w.nbits -= 48
 	n := w.nbytes
 
-	// We over-write, but faster...
-	le.Store64(w.bytes[n:], bits)
+	// We overwrite, but faster...
+	le.Store64(w.bytes[:], n, bits)
 	n += 6
 
 	if n >= bufferFlushSize {
@@ -851,8 +851,7 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 			bits |= c.code64() << (nbits & 63)
 			nbits += c.len()
 			if nbits >= 48 {
-				le.Store64(w.bytes[nbytes:], bits)
-				//*(*uint64)(unsafe.Pointer(&w.bytes[nbytes])) = bits
+				le.Store64(w.bytes[:], nbytes, bits)
 				bits >>= 48
 				nbits -= 48
 				nbytes += 6
@@ -879,8 +878,7 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 			bits |= c.code64() << (nbits & 63)
 			nbits += c.len()
 			if nbits >= 48 {
-				le.Store64(w.bytes[nbytes:], bits)
-				//*(*uint64)(unsafe.Pointer(&w.bytes[nbytes])) = bits
+				le.Store64(w.bytes[:], nbytes, bits)
 				bits >>= 48
 				nbits -= 48
 				nbytes += 6
@@ -902,8 +900,7 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 			bits |= uint64(extraLength) << (nbits & 63)
 			nbits += extraLengthBits
 			if nbits >= 48 {
-				le.Store64(w.bytes[nbytes:], bits)
-				//*(*uint64)(unsafe.Pointer(&w.bytes[nbytes])) = bits
+				le.Store64(w.bytes[:], nbytes, bits)
 				bits >>= 48
 				nbits -= 48
 				nbytes += 6
@@ -928,8 +925,7 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 			bits |= c.code64() << (nbits & 63)
 			nbits += c.len()
 			if nbits >= 48 {
-				le.Store64(w.bytes[nbytes:], bits)
-				//*(*uint64)(unsafe.Pointer(&w.bytes[nbytes])) = bits
+				le.Store64(w.bytes[:], nbytes, bits)
 				bits >>= 48
 				nbits -= 48
 				nbytes += 6
@@ -950,8 +946,7 @@ func (w *huffmanBitWriter) writeTokens(tokens []token, leCodes, oeCodes []hcode)
 			bits |= uint64((offset-(offsetComb>>8))&matchOffsetOnlyMask) << (nbits & 63)
 			nbits += uint8(offsetComb)
 			if nbits >= 48 {
-				le.Store64(w.bytes[nbytes:], bits)
-				//*(*uint64)(unsafe.Pointer(&w.bytes[nbytes])) = bits
+				le.Store64(w.bytes[:], nbytes, bits)
 				bits >>= 48
 				nbits -= 48
 				nbytes += 6
@@ -1104,7 +1099,7 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 		// We must have at least 48 bits free.
 		if nbits >= 8 {
 			n := nbits >> 3
-			le.Store64(w.bytes[nbytes:], bits)
+			le.Store64(w.bytes[:], nbytes, bits)
 			bits >>= (n * 8) & 63
 			nbits -= n * 8
 			nbytes += n
@@ -1133,8 +1128,7 @@ func (w *huffmanBitWriter) writeBlockHuff(eof bool, input []byte, sync bool) {
 	// Remaining...
 	for _, t := range input {
 		if nbits >= 48 {
-			le.Store64(w.bytes[nbytes:], bits)
-			//*(*uint64)(unsafe.Pointer(&w.bytes[nbytes])) = bits
+			le.Store64(w.bytes[:], nbytes, bits)
 			bits >>= 48
 			nbits -= 48
 			nbytes += 6
