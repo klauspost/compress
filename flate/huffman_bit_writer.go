@@ -646,7 +646,7 @@ func (w *huffmanBitWriter) writeBlockDynamic(tokens *tokens, eof bool, input []b
 		w.lastHeader = 0
 	}
 
-	numLiterals, numOffsets := w.indexTokens(tokens, !sync)
+	numLiterals, numOffsets := w.indexTokens(tokens, fillReuse && !sync)
 	extraBits := 0
 	ssize, storable := w.storedSize(input)
 
