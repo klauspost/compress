@@ -63,7 +63,7 @@ var bitWriterPool = sync.Pool{
 
 // tokensPool contains tokens struct objects that can be reused
 var tokensPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		return &tokens{}
 	},
 }
