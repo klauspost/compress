@@ -94,17 +94,44 @@ func (h *history) append(b []byte) {
 
 // ensureBlock will ensure there is space for at least one block...
 func (h *history) ensureBlock() {
-	if cap(h.b) < h.allocFrameBuffer {
-		h.b = make([]byte, 0, h.allocFrameBuffer)
+	target := h.allocFrameBuffer
+	if target <= 0 {
+		if len(h.b) != 0 {
+			h.b = h.b[:0]
+		}
 		return
+	}
+
+	if len(h.b) == 0 && cap(h.b) > target {
+		excess := cap(h.b) - target
+		limit := target / 2
+		if limit < maxCompressedBlockSize {
+			limit = maxCompressedBlockSize
+		}
+		if excess > limit {
+			h.b = make([]byte, 0, target)
+			return
+		}
+	}
+
+	if cap(h.b) < target {
+		if len(h.b) == 0 {
+			h.b = make([]byte, 0, target)
+			return
+		}
+		newBuf := make([]byte, len(h.b), target)
+		copy(newBuf, h.b)
+		h.b = newBuf
 	}
 
 	avail := cap(h.b) - len(h.b)
 	if avail >= h.windowSize || avail > maxCompressedBlockSize {
 		return
 	}
+	if len(h.b) <= h.windowSize {
+		return
+	}
 	// Move data down so we only have window size left.
-	// We know we have less than window size in b at this point.
 	discard := len(h.b) - h.windowSize
 	copy(h.b, h.b[discard:])
 	h.b = h.b[:h.windowSize]
