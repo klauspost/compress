@@ -170,6 +170,39 @@ func TestVeryLongSparseChunk(t *testing.T) {
 	t.Log("Length:", buf.Len())
 }
 
+func TestOneMByte(t *testing.T) {
+	var input [1024 * 1024]byte
+
+	var compressedOutput bytes.Buffer
+	for level := HuffmanOnly; level <= BestCompression; level++ {
+		compressedOutput.Reset()
+		compressor, err := NewWriter(&compressedOutput, level)
+		if err != nil {
+			t.Fatalf("create: %s", err)
+		}
+		// Use single write...
+		if _, err := compressor.Write(input[:]); err != nil {
+			t.Fatalf("compress: %s", err)
+		}
+
+		if err := compressor.Close(); err != nil {
+			t.Fatalf("close: %s", err)
+		}
+
+		var decompressedOutput bytes.Buffer
+
+		decompresser := NewReader(&compressedOutput)
+		t.Log("level:", level, "compressed:", compressedOutput.Len())
+		if _, err := io.Copy(&decompressedOutput, decompresser); err != nil {
+			t.Fatalf("decompress: %s", err)
+		}
+
+		if !bytes.Equal(input[:], decompressedOutput.Bytes()) {
+			t.Fatal("input and output do not match")
+		}
+	}
+}
+
 type syncBuffer struct {
 	buf    bytes.Buffer
 	mu     sync.RWMutex
