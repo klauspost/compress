@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/base64"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math/rand"
@@ -99,6 +100,43 @@ func TestDict(t *testing.T) {
 		os.WriteFile("decoded.bin", decoded, os.ModePerm)
 		os.WriteFile("original.bin", data, os.ModePerm)
 		t.Fatal("decoded mismatch")
+	}
+}
+
+func TestNewDictRepeatBounds(t *testing.T) {
+	// Test that NewDict rejects repeat indices that don't leave 8 bytes readable
+	dict := make([]byte, 20)
+	for i := range dict {
+		dict[i] = byte(i)
+	}
+
+	tests := []struct {
+		name   string
+		repeat uint64
+		want   bool // true if NewDict should succeed
+	}{
+		{"repeat at valid position", 0, true},
+		{"repeat near end but valid", 11, true},  // 20-11=9 bytes readable
+		{"repeat leaves only 8 bytes", 12, true}, // 20-12=8 bytes readable
+		{"repeat leaves only 7 bytes", 13, false},
+		{"repeat at last byte", 19, false},
+		{"repeat at len", 20, false},
+		{"repeat beyond len", 21, false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Build dict with varint-encoded repeat prefix
+			buf := make([]byte, 2)
+			n := binary.PutUvarint(buf, tc.repeat)
+			input := append(buf[:n], dict...)
+
+			d := NewDict(input)
+			got := d != nil
+			if got != tc.want {
+				t.Errorf("NewDict with repeat=%d: got valid=%v, want %v", tc.repeat, got, tc.want)
+			}
+		})
 	}
 }
 

@@ -57,7 +57,7 @@ func NewDict(dict []byte) *Dict {
 		return nil
 	}
 	d.repeat = int(r)
-	if d.repeat > len(dict) {
+	if d.repeat > len(dict)-8 {
 		return nil
 	}
 	return &d
