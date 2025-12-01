@@ -27,7 +27,11 @@ Use the links above for more information on each.
 
 # changelog
 
-* Oct 20, 2025 - [1.18.1](https://github.com/klauspost/compress/releases/tag/v1.18.1)
+* Dec 1st, 2025 - [1.18.2](https://github.com/klauspost/compress/releases/tag/v1.18.2)
+	* flate: Fix invalid encoding on level 9 with single value input in https://github.com/klauspost/compress/pull/1115
+	* flate: reduce stateless allocations by @RXamzin in https://github.com/klauspost/compress/pull/1106
+
+* Oct 20, 2025 - [1.18.1](https://github.com/klauspost/compress/releases/tag/v1.18.1) - RETRACTED
   * zstd: Add simple zstd EncodeTo/DecodeTo functions  https://github.com/klauspost/compress/pull/1079
   * zstd: Fix incorrect buffer size in dictionary encodes https://github.com/klauspost/compress/pull/1059
   * s2: check for cap, not len of buffer in EncodeBetter/Best by @vdarulis in https://github.com/klauspost/compress/pull/1080
@@ -683,4 +687,5 @@ Here are other packages of good quality and pure Go (no cgo wrappers or autoconv
 # license
 
 This code is licensed under the same conditions as the original Go code. See LICENSE file.
+
 
