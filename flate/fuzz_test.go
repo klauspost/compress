@@ -75,14 +75,11 @@ func FuzzEncoding(f *testing.F) {
 			if !bytes.Equal(data, data2) {
 				t.Fatal(msg + "not equal")
 			}
-			// Do it again...
+			// Do it again... (also uses copy)
 			msg = "level " + strconv.Itoa(level) + " (reset):"
 			buf.Reset()
 			fw.Reset(buf)
-			n, err = fw.Write(data)
-			if n != len(data) {
-				t.Fatal(msg + "short write")
-			}
+			_, err = io.Copy(fw, bytes.NewReader(data))
 			if err != nil {
 				t.Fatal(msg + err.Error())
 			}
