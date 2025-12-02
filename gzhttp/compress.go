@@ -881,9 +881,9 @@ func parseCoding(s string) (coding string, qvalue float64, err error) {
 		}
 		return coding, DefaultQValue, err
 	}
+	qvalue = DefaultQValue
 	for n, part := range strings.Split(s, ";") {
 		part = strings.TrimSpace(part)
-		qvalue = DefaultQValue
 
 		if n == 0 {
 			coding = strings.ToLower(part)

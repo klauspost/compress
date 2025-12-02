@@ -40,6 +40,9 @@ func TestParseEncodings(t *testing.T) {
 		// More random stuff
 		"AAA;q=1":     {"aaa": 1.0},
 		"BBB ; q = 2": {"bbb": 1.0},
+
+		"gzip;q=0.5;level=6":     {"gzip": 0.5},
+		"gzip;q=0.3;level=6;x=y": {"gzip": 0.3},
 	}
 
 	for eg, exp := range examples {
