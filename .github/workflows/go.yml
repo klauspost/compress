@@ -24,7 +24,7 @@ jobs:
         go-version: ${{ matrix.go-version }}
 
     - name: Checkout code
-      uses: actions/checkout@v6.0.0
+      uses: actions/checkout@v6.0.1
 
     - name: Vet
       run: go vet ./...
@@ -63,7 +63,7 @@ jobs:
         go-version: 1.25.x
 
     - name: Checkout code
-      uses: actions/checkout@v6.0.0
+      uses: actions/checkout@v6.0.1
 
     - name: Generate
       working-directory: ${{ matrix.pkg }}/_generate
@@ -85,7 +85,7 @@ jobs:
         go-version: 1.25.x
 
     - name: Checkout code
-      uses: actions/checkout@v6.0.0
+      uses: actions/checkout@v6.0.1
 
     - name: fmt
       run: diff <(gofmt -d .) <(printf "")
@@ -128,7 +128,7 @@ jobs:
           go-version: 1.25.x
 
       - name: Checkout code
-        uses: actions/checkout@v6.0.0
+        uses: actions/checkout@v6.0.1
 
       - name: S2/FuzzDictBlocks/${{ matrix.tags }}
         run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzDictBlocks -fuzztime=100000x -test.fuzzminimizetime=10ms ./s2/.
@@ -154,7 +154,7 @@ jobs:
           go-version: 1.25.x
 
       - name: Checkout code
-        uses: actions/checkout@v6.0.0
+        uses: actions/checkout@v6.0.1
 
       - name: zstd/FuzzDecodeAll/${{ matrix.tags }}
         run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzDecodeAll -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
@@ -184,7 +184,7 @@ jobs:
         with:
           go-version: 1.25.x
       - name: Checkout code
-        uses: actions/checkout@v6.0.0
+        uses: actions/checkout@v6.0.1
 
       - name: flate/FuzzEncoding/${{ matrix.tags }}
         run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzEncoding -fuzztime=100000x -test.fuzzminimizetime=10ms ./flate/.
