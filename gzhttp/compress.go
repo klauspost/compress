@@ -247,7 +247,7 @@ func (w *GzipResponseWriter) startCompression(remain []byte) error {
 		w.Header().Del(acceptRanges)
 	}
 
-	// Suffix ETag.
+	// Suffix ETag with encoding-specific value to avoid cache conflicts.
 	if w.suffixETag != "" && !w.dropETag && w.Header().Get(eTag) != "" {
 		orig := w.Header().Get(eTag)
 		insertPoint := strings.LastIndex(orig, `"`)
@@ -255,8 +255,17 @@ func (w *GzipResponseWriter) startCompression(remain []byte) error {
 			insertPoint = len(orig)
 		}
 		suffix := w.suffixETag
-		if w.enc == encodingZstd {
-			suffix = strings.Replace(suffix, "gzip", "zstd", 1)
+		switch w.enc {
+		case encodingGzip:
+			if !strings.Contains(suffix, "gzip") {
+				suffix += "-gzip"
+			}
+		case encodingZstd:
+			if strings.Contains(suffix, "gzip") {
+				suffix = strings.Replace(suffix, "gzip", "zstd", 1)
+			} else {
+				suffix += "-zstd"
+			}
 		}
 		w.Header().Set(eTag, orig[:insertPoint]+suffix+orig[insertPoint:])
 	}

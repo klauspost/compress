@@ -314,6 +314,40 @@ func TestGzipHandlerDropETag(t *testing.T) {
 	assertEqual(t, testBody, got)
 }
 
+func TestSuffixETagEncodingSpecific(t *testing.T) {
+	tests := []struct {
+		name           string
+		suffix         string
+		acceptEncoding string
+		wantETag       string
+	}{
+		{"gzip-with-gzip-suffix", "-gzip", "gzip", `W/"1234-gzip"`},
+		{"zstd-with-gzip-suffix", "-gzip", "zstd", `W/"1234-zstd"`},
+		{"gzip-with-custom-suffix", "-compressed", "gzip", `W/"1234-compressed-gzip"`},
+		{"zstd-with-custom-suffix", "-compressed", "zstd", `W/"1234-compressed-zstd"`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wrapper, err := NewWrapper(SuffixETag(tt.suffix))
+			assertNil(t, err)
+
+			handler := wrapper(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("ETag", `W/"1234"`)
+				w.Write(testBody)
+			}))
+
+			req, _ := http.NewRequest("GET", "/", nil)
+			req.Header.Set("Accept-Encoding", tt.acceptEncoding)
+			resp := httptest.NewRecorder()
+			handler.ServeHTTP(resp, req)
+
+			res := resp.Result()
+			assertEqual(t, tt.wantETag, res.Header.Get("ETag"))
+		})
+	}
+}
+
 func TestNewGzipLevelHandler(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
