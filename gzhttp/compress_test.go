@@ -2068,9 +2068,15 @@ func TestZstdLevels(t *testing.T) {
 			assertEqual(t, "zstd", res.Header().Get("Content-Encoding"))
 
 			// Decompress and verify
-			dec, _ := zstd.NewReader(res.Body)
-			got, _ := io.ReadAll(dec)
+			dec, err := zstd.NewReader(res.Body)
+			if err != nil {
+				t.Fatalf("zstd.NewReader failed: %v", err)
+			}
+			got, err := io.ReadAll(dec)
 			dec.Close()
+			if err != nil {
+				t.Fatalf("io.ReadAll failed: %v", err)
+			}
 			if !bytes.Equal(testBody, got) {
 				t.Errorf("response body mismatch at level %d", level)
 			}
@@ -2078,7 +2084,7 @@ func TestZstdLevels(t *testing.T) {
 	}
 }
 
-// TestPreferGzip tests the PreferZstd option.
+// TestPreferGzip tests that gzip is preferred when PreferZstd(false) is set.
 func TestPreferGzip(t *testing.T) {
 	wrapper, err := NewWrapper(PreferZstd(false))
 	if err != nil {
@@ -2251,7 +2257,10 @@ func TestZstdRandomJitter(t *testing.T) {
 		w = httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
 		result = w.Result()
-		bx, _ := io.ReadAll(result.Body)
+		bx, err := io.ReadAll(result.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
 		changed = len(bx) != len(b)
 	}
 	if !changed {

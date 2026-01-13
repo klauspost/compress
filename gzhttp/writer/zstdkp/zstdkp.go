@@ -49,6 +49,9 @@ type pooledWriter struct {
 }
 
 func (pw *pooledWriter) Close() error {
+	if pw.Encoder == nil {
+		return nil
+	}
 	err := pw.Encoder.Close()
 	pw.Encoder.Reset(nil)
 	zstdWriterPools[pw.index].Put(pw.Encoder)
