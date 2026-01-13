@@ -59,6 +59,7 @@ func (pw *pooledWriter) Close() error {
 	return err
 }
 
+// NewWriter returns a pooled zstd writer. The writer is returned to the pool on Close.
 func NewWriter(w io.Writer, level int) writer.ZstdWriter {
 	index := poolIndex(level)
 	enc := zstdWriterPools[index].Get().(*zstd.Encoder)
@@ -69,10 +70,7 @@ func NewWriter(w io.Writer, level int) writer.ZstdWriter {
 	}
 }
 
+// Levels returns the supported compression level range.
 func Levels() (min, max int) {
 	return int(zstd.SpeedFastest), int(zstd.SpeedBestCompression)
-}
-
-func ImplementationInfo() string {
-	return "klauspost/compress/zstd"
 }

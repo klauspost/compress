@@ -1,3 +1,6 @@
+// Package writer provides interfaces for pluggable compression implementations
+// used by gzhttp. Custom gzip and zstd encoders can be provided by implementing
+// the GzipWriter/ZstdWriter interfaces and corresponding factory types.
 package writer
 
 import (

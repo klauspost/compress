@@ -1,3 +1,29 @@
+// Package gzhttp provides HTTP middleware for compressing response bodies
+// using gzip or zstd (RFC 8878). It wraps http.Handler to transparently
+// compress responses based on the client's Accept-Encoding header.
+//
+// The package supports content negotiation, preferring zstd when both
+// encodings are accepted with equal quality values. Both encodings are
+// enabled by default with conservative settings for broad compatibility.
+//
+// Basic usage:
+//
+//	wrapper, _ := gzhttp.NewWrapper()
+//	http.Handle("/", wrapper(myHandler))
+//
+// Or use the convenience function:
+//
+//	http.Handle("/", gzhttp.GzipHandler(myHandler))
+//
+// Custom compression implementations can be provided via GzipImplementation
+// and ZstdImplementation options.
+//
+// For HTTP clients, the Transport function wraps an http.RoundTripper to
+// automatically request and decompress gzip/zstd responses:
+//
+//	client := http.Client{
+//		Transport: gzhttp.Transport(http.DefaultTransport),
+//	}
 package gzhttp
 
 import (
