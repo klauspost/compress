@@ -1,6 +1,7 @@
 package zstd
 
 import (
+	"bytes"
 	"strconv"
 	"testing"
 )
@@ -150,5 +151,88 @@ func TestWindowSize(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestEncoderResetWithOptions(t *testing.T) {
+	var buf bytes.Buffer
+	enc, err := NewWriter(&buf, WithEncoderLevel(SpeedFastest), WithEncoderCRC(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer enc.Close()
+
+	// Test changing safe options
+	t.Run("change-crc", func(t *testing.T) {
+		err := enc.ResetWithOptions(&buf, WithEncoderCRC(false))
+		if err != nil {
+			t.Errorf("ResetWithOptions should allow changing CRC: %v", err)
+		}
+	})
+
+	t.Run("change-padding", func(t *testing.T) {
+		err := enc.ResetWithOptions(&buf, WithEncoderPadding(64))
+		if err != nil {
+			t.Errorf("ResetWithOptions should allow changing padding: %v", err)
+		}
+	})
+
+	// Test error when changing unsafe options
+	t.Run("change-level-error", func(t *testing.T) {
+		err := enc.ResetWithOptions(&buf, WithEncoderLevel(SpeedBestCompression))
+		if err == nil {
+			t.Error("ResetWithOptions should error when changing level")
+		}
+	})
+
+	t.Run("change-concurrency-error", func(t *testing.T) {
+		err := enc.ResetWithOptions(&buf, WithEncoderConcurrency(99))
+		if err == nil {
+			t.Error("ResetWithOptions should error when changing concurrency")
+		}
+	})
+
+	t.Run("change-window-error", func(t *testing.T) {
+		err := enc.ResetWithOptions(&buf, WithWindowSize(1<<15))
+		if err == nil {
+			t.Error("ResetWithOptions should error when changing window size")
+		}
+	})
+
+	t.Run("change-lowmem-error", func(t *testing.T) {
+		err := enc.ResetWithOptions(&buf, WithLowerEncoderMem(true))
+		if err == nil {
+			t.Error("ResetWithOptions should error when changing lowMem")
+		}
+	})
+
+	// Test same value is allowed
+	t.Run("same-level-ok", func(t *testing.T) {
+		err := enc.ResetWithOptions(&buf, WithEncoderLevel(SpeedFastest))
+		if err != nil {
+			t.Errorf("ResetWithOptions should allow same level: %v", err)
+		}
+	})
+}
+
+func TestEncoderDictDelete(t *testing.T) {
+	var buf bytes.Buffer
+	dictContent := []byte("test dictionary content for compression")
+	enc, err := NewWriter(&buf, WithEncoderDictRaw(123, dictContent))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer enc.Close()
+
+	if enc.o.dict == nil {
+		t.Fatal("dict should be set")
+	}
+
+	err = enc.ResetWithOptions(&buf, WithEncoderDictDelete())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if enc.o.dict != nil {
+		t.Error("dict should be nil after delete")
 	}
 }
