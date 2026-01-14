@@ -232,7 +232,7 @@ func TestTransportCustomEval(t *testing.T) {
 	if calledWith != "gzip" {
 		t.Fatalf("Expected encoding %q, got %q", "gzip", calledWith)
 	}
-	// Test returning false
+	// Test returning false - now with zstd enabled on client, server prefers zstd
 	c = http.Client{Transport: Transport(http.DefaultTransport, TransportCustomEval(func(h http.Header) bool {
 		calledWith = h.Get("Content-Encoding")
 		return false
@@ -241,13 +241,13 @@ func TestTransportCustomEval(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Check we got the compressed data
+	// Check we got the compressed data (zstd is now preferred by default)
 	gotCE := resp.Header.Get("Content-Encoding")
-	if gotCE != "gzip" {
-		t.Fatalf("Expected encoding %q, got %q", "gzip", gotCE)
+	if gotCE != "zstd" {
+		t.Fatalf("Expected encoding %q, got %q", "zstd", gotCE)
 	}
-	if calledWith != "gzip" {
-		t.Fatalf("Expected encoding %q, got %q", "gzip", calledWith)
+	if calledWith != "zstd" {
+		t.Fatalf("Expected encoding %q, got %q", "zstd", calledWith)
 	}
 }
 

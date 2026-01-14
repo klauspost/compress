@@ -314,6 +314,40 @@ func TestGzipHandlerDropETag(t *testing.T) {
 	assertEqual(t, testBody, got)
 }
 
+func TestSuffixETagEncodingSpecific(t *testing.T) {
+	tests := []struct {
+		name           string
+		suffix         string
+		acceptEncoding string
+		wantETag       string
+	}{
+		{"gzip-with-gzip-suffix", "-gzip", "gzip", `W/"1234-gzip"`},
+		{"zstd-with-gzip-suffix", "-gzip", "zstd", `W/"1234-zstd"`},
+		{"gzip-with-custom-suffix", "-compressed", "gzip", `W/"1234-compressed-gzip"`},
+		{"zstd-with-custom-suffix", "-compressed", "zstd", `W/"1234-compressed-zstd"`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wrapper, err := NewWrapper(SuffixETag(tt.suffix))
+			assertNil(t, err)
+
+			handler := wrapper(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("ETag", `W/"1234"`)
+				w.Write(testBody)
+			}))
+
+			req, _ := http.NewRequest("GET", "/", nil)
+			req.Header.Set("Accept-Encoding", tt.acceptEncoding)
+			resp := httptest.NewRecorder()
+			handler.ServeHTTP(resp, req)
+
+			res := resp.Result()
+			assertEqual(t, tt.wantETag, res.Header.Get("ETag"))
+		})
+	}
+}
+
 func TestNewGzipLevelHandler(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -1782,6 +1816,41 @@ func Benchmark2kJitterRNG(b *testing.B) {
 	benchmark(b, false, 2048, CompressionLevel(gzip.BestSpeed), RandomJitter(32, -1, false))
 }
 
+func Benchmark2kZstd(b *testing.B) {
+	benchmarkZstd(b, false, 2048, EnableGzip(false))
+}
+
+func Benchmark2kZstdJitter(b *testing.B) {
+	benchmarkZstd(b, false, 2048, EnableGzip(false), RandomJitter(32, 0, false))
+}
+
+func Benchmark2kZstdJitterParanoid(b *testing.B) {
+	benchmarkZstd(b, false, 2048, EnableGzip(false), RandomJitter(32, 0, true))
+}
+
+func Benchmark2kZstdJitterRNG(b *testing.B) {
+	benchmarkZstd(b, false, 2048, EnableGzip(false), RandomJitter(32, -1, false))
+}
+
+func BenchmarkZstdHandler_S2k(b *testing.B) {
+	benchmarkZstd(b, false, 2048, EnableGzip(false))
+}
+func BenchmarkZstdHandler_S20k(b *testing.B) {
+	benchmarkZstd(b, false, 20480, EnableGzip(false))
+}
+func BenchmarkZstdHandler_S100k(b *testing.B) {
+	benchmarkZstd(b, false, 102400, EnableGzip(false))
+}
+func BenchmarkZstdHandler_P2k(b *testing.B) {
+	benchmarkZstd(b, true, 2048, EnableGzip(false))
+}
+func BenchmarkZstdHandler_P20k(b *testing.B) {
+	benchmarkZstd(b, true, 20480, EnableGzip(false))
+}
+func BenchmarkZstdHandler_P100k(b *testing.B) {
+	benchmarkZstd(b, true, 102400, EnableGzip(false))
+}
+
 // --------------------------------------------------------------------
 
 func gzipStrLevel(s []byte, lvl int) []byte {
@@ -1800,6 +1869,33 @@ func benchmark(b *testing.B, parallel bool, size int, opts ...option) {
 
 	req, _ := http.NewRequest("GET", "/whatever", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
+	handler := newTestHandlerLevel(bin[:size], opts...)
+
+	b.ReportAllocs()
+	b.SetBytes(int64(size))
+	if parallel {
+		b.ResetTimer()
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				runBenchmark(b, req, handler)
+			}
+		})
+	} else {
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			runBenchmark(b, req, handler)
+		}
+	}
+}
+
+func benchmarkZstd(b *testing.B, parallel bool, size int, opts ...option) {
+	bin, err := os.ReadFile("testdata/benchmark.json")
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	req, _ := http.NewRequest("GET", "/whatever", nil)
+	req.Header.Set("Accept-Encoding", "zstd")
 	handler := newTestHandlerLevel(bin[:size], opts...)
 
 	b.ReportAllocs()
@@ -1891,6 +1987,319 @@ func TestGzipHandlerNilContentType(t *testing.T) {
 	handler.ServeHTTP(res, req)
 
 	assertEqual(t, "", res.Header().Get("Content-Type"))
+}
+
+// TestZstdHandler tests basic zstd compression.
+func TestZstdHandler(t *testing.T) {
+	handler := newTestHandler(testBody)
+
+	req, _ := http.NewRequest("GET", "/whatever", nil)
+	req.Header.Set("Accept-Encoding", "zstd")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+
+	assertEqual(t, http.StatusOK, res.Code)
+	assertEqual(t, "zstd", res.Header().Get("Content-Encoding"))
+
+	// Decompress and verify
+	dec, err := zstd.NewReader(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(dec)
+	dec.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(testBody, got) {
+		t.Errorf("response body mismatch")
+	}
+}
+
+// TestZstdPreferredOverGzip tests that zstd is preferred when both are accepted with equal qvalues.
+func TestZstdPreferredOverGzip(t *testing.T) {
+	handler := newTestHandler(testBody)
+
+	req, _ := http.NewRequest("GET", "/whatever", nil)
+	req.Header.Set("Accept-Encoding", "gzip, zstd")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+
+	assertEqual(t, "zstd", res.Header().Get("Content-Encoding"))
+}
+
+// TestGzipPreferredByQValue tests that gzip is used when it has higher qvalue.
+func TestGzipPreferredByQValue(t *testing.T) {
+	handler := newTestHandler(testBody)
+
+	req, _ := http.NewRequest("GET", "/whatever", nil)
+	req.Header.Set("Accept-Encoding", "gzip;q=1.0, zstd;q=0.5")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+
+	assertEqual(t, "gzip", res.Header().Get("Content-Encoding"))
+}
+
+// TestDisableZstd tests that zstd can be disabled.
+func TestDisableZstd(t *testing.T) {
+	wrapper, err := NewWrapper(EnableZstd(false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := wrapper(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(testBody)
+	}))
+
+	req, _ := http.NewRequest("GET", "/", nil)
+	req.Header.Set("Accept-Encoding", "gzip, zstd")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+
+	assertEqual(t, "gzip", res.Header().Get("Content-Encoding"))
+}
+
+// TestDisableGzip tests that gzip can be disabled.
+func TestDisableGzip(t *testing.T) {
+	wrapper, err := NewWrapper(EnableGzip(false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := wrapper(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(testBody)
+	}))
+
+	req, _ := http.NewRequest("GET", "/", nil)
+	req.Header.Set("Accept-Encoding", "gzip, zstd")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+
+	assertEqual(t, "zstd", res.Header().Get("Content-Encoding"))
+}
+
+// TestZstdLevels tests zstd compression levels.
+func TestZstdLevels(t *testing.T) {
+	levels := []int{
+		int(zstd.SpeedFastest),
+		int(zstd.SpeedDefault),
+		int(zstd.SpeedBetterCompression),
+		int(zstd.SpeedBestCompression),
+	}
+	for _, level := range levels {
+		t.Run(fmt.Sprintf("level-%d", level), func(t *testing.T) {
+			wrapper, err := NewWrapper(EnableGzip(false), ZstdCompressionLevel(level))
+			if err != nil {
+				t.Fatal(err)
+			}
+			handler := wrapper(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Write(testBody)
+			}))
+
+			req, _ := http.NewRequest("GET", "/", nil)
+			req.Header.Set("Accept-Encoding", "zstd")
+			res := httptest.NewRecorder()
+			handler.ServeHTTP(res, req)
+
+			assertEqual(t, "zstd", res.Header().Get("Content-Encoding"))
+
+			// Decompress and verify
+			dec, err := zstd.NewReader(res.Body)
+			if err != nil {
+				t.Fatalf("zstd.NewReader failed: %v", err)
+			}
+			got, err := io.ReadAll(dec)
+			dec.Close()
+			if err != nil {
+				t.Fatalf("io.ReadAll failed: %v", err)
+			}
+			if !bytes.Equal(testBody, got) {
+				t.Errorf("response body mismatch at level %d", level)
+			}
+		})
+	}
+}
+
+// TestPreferGzip tests that gzip is preferred when PreferZstd(false) is set.
+func TestPreferGzip(t *testing.T) {
+	wrapper, err := NewWrapper(PreferZstd(false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := wrapper(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(testBody)
+	}))
+
+	req, _ := http.NewRequest("GET", "/", nil)
+	req.Header.Set("Accept-Encoding", "gzip, zstd")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+
+	// With PreferZstd(false), gzip should be selected when qvalues are equal
+	assertEqual(t, "gzip", res.Header().Get("Content-Encoding"))
+}
+
+// TestZstdOnlyClientGetsZstd tests that a zstd-only client gets zstd.
+func TestZstdOnlyClientGetsZstd(t *testing.T) {
+	handler := newTestHandler(testBody)
+
+	req, _ := http.NewRequest("GET", "/whatever", nil)
+	req.Header.Set("Accept-Encoding", "zstd")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+
+	assertEqual(t, "zstd", res.Header().Get("Content-Encoding"))
+}
+
+// TestGzipOnlyClientGetsGzip tests that a gzip-only client gets gzip.
+func TestGzipOnlyClientGetsGzip(t *testing.T) {
+	handler := newTestHandler(testBody)
+
+	req, _ := http.NewRequest("GET", "/whatever", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+
+	assertEqual(t, "gzip", res.Header().Get("Content-Encoding"))
+}
+
+// TestSelectEncodingFunction tests the selectEncoding function directly.
+func TestSelectEncodingFunction(t *testing.T) {
+	tests := []struct {
+		name        string
+		acceptEnc   string
+		gzipEnabled bool
+		zstdEnabled bool
+		preferZstd  bool
+		want        encoding
+	}{
+		{"no-accept-encoding", "", true, true, true, encodingNone},
+		{"gzip-only-accepts-gzip", "gzip", true, true, true, encodingGzip},
+		{"zstd-only-accepts-zstd", "zstd", true, true, true, encodingZstd},
+		{"both-prefers-zstd", "gzip, zstd", true, true, true, encodingZstd},
+		{"both-prefers-gzip", "gzip, zstd", true, true, false, encodingGzip},
+		{"zstd-higher-qvalue", "gzip;q=0.5, zstd;q=1.0", true, true, false, encodingZstd},
+		{"gzip-higher-qvalue", "gzip;q=1.0, zstd;q=0.5", true, true, true, encodingGzip},
+		{"gzip-disabled", "gzip, zstd", false, true, true, encodingZstd},
+		{"zstd-disabled", "gzip, zstd", true, false, true, encodingGzip},
+		{"both-disabled", "gzip, zstd", false, false, true, encodingNone},
+		{"accepts-neither", "br", true, true, true, encodingNone},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, _ := http.NewRequest("GET", "/", nil)
+			if tt.acceptEnc != "" {
+				req.Header.Set("Accept-Encoding", tt.acceptEnc)
+			}
+			got := selectEncoding(req, tt.gzipEnabled, tt.zstdEnabled, tt.preferZstd)
+			if got != tt.want {
+				t.Errorf("selectEncoding() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestZstdRandomJitter tests that RandomJitter works with zstd using skippable frames.
+func TestZstdRandomJitter(t *testing.T) {
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Set("Accept-Encoding", "zstd")
+
+	// 4KB input, incompressible to avoid compression variations.
+	rng := rand.New(rand.NewSource(0))
+	payload := make([]byte, 4096)
+	_, err := io.ReadFull(rng, payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Disable gzip so we're only testing zstd
+	wrapper, err := NewWrapper(RandomJitter(256, 1024, false), MinSize(10), EnableGzip(false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writePayload := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(payload)
+	})
+
+	// Get reference without jitter
+	refWrapper, _ := NewWrapper(MinSize(10), EnableGzip(false))
+	refHandler := refWrapper(writePayload)
+	w := httptest.NewRecorder()
+	refHandler.ServeHTTP(w, r)
+	result := w.Result()
+	refBody, err := io.ReadAll(result.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("Reference length: %d", len(refBody))
+
+	// Get output with jitter
+	handler := wrapper(writePayload)
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+
+	result = w.Result()
+	b, err := io.ReadAll(result.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(refBody) >= len(b) {
+		t.Fatal("padding was not applied")
+	}
+	t.Logf("With jitter length: %d (padding: %d)", len(b), len(b)-len(refBody))
+
+	// Verify the output can still be decompressed
+	dec, err := zstd.NewReader(bytes.NewReader(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := io.ReadAll(dec)
+	dec.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(decoded, payload) {
+		t.Error("decompressed data doesn't match original")
+	}
+
+	// Verify same input produces same jitter (content-aware)
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+	result = w.Result()
+	b2, err := io.ReadAll(result.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b2) != len(b) {
+		t.Errorf("jitter should be deterministic for same input: got %d, want %d", len(b2), len(b))
+	}
+
+	// Verify changing content changes jitter
+	payload[0]++
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+	result = w.Result()
+	b3, err := io.ReadAll(result.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Note: different content may still produce same jitter by chance,
+	// but over multiple changes it should differ at least once.
+	changed := len(b3) != len(b)
+	for i := 0; i < 10 && !changed; i++ {
+		payload[0]++
+		w = httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		result = w.Result()
+		bx, err := io.ReadAll(result.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		changed = len(bx) != len(b)
+	}
+	if !changed {
+		t.Error("jitter didn't change after 10 content changes")
+	}
 }
 
 // This test is an adapted version of net/http/httputil.Test1xxResponses test.
