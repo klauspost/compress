@@ -2213,3 +2213,129 @@ func TestWithDecodeAllCapLimit(t *testing.T) {
 		})
 	}
 }
+
+func TestDecoderResetWithOptions(t *testing.T) {
+	dec, err := NewReader(nil, WithDecoderConcurrency(1), WithDecoderLowmem(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+
+	// Test changing safe options
+	t.Run("change-maxmemory", func(t *testing.T) {
+		err := dec.ResetWithOptions(nil, WithDecoderMaxMemory(1<<20))
+		if err != nil {
+			t.Errorf("ResetWithOptions should allow changing maxMemory: %v", err)
+		}
+	})
+
+	t.Run("change-maxwindow", func(t *testing.T) {
+		err := dec.ResetWithOptions(nil, WithDecoderMaxWindow(1<<20))
+		if err != nil {
+			t.Errorf("ResetWithOptions should allow changing maxWindow: %v", err)
+		}
+	})
+
+	t.Run("change-ignorechecksum", func(t *testing.T) {
+		err := dec.ResetWithOptions(nil, IgnoreChecksum(true))
+		if err != nil {
+			t.Errorf("ResetWithOptions should allow changing ignoreChecksum: %v", err)
+		}
+	})
+
+	// Test error when changing unsafe options
+	t.Run("change-concurrency-error", func(t *testing.T) {
+		err := dec.ResetWithOptions(nil, WithDecoderConcurrency(4))
+		if err == nil {
+			t.Error("ResetWithOptions should error when changing concurrency")
+		}
+	})
+
+	t.Run("change-lowmem-error", func(t *testing.T) {
+		err := dec.ResetWithOptions(nil, WithDecoderLowmem(false))
+		if err == nil {
+			t.Error("ResetWithOptions should error when changing lowmem")
+		}
+	})
+
+	// Test same value is allowed
+	t.Run("same-concurrency-ok", func(t *testing.T) {
+		err := dec.ResetWithOptions(nil, WithDecoderConcurrency(1))
+		if err != nil {
+			t.Errorf("ResetWithOptions should allow same concurrency: %v", err)
+		}
+	})
+}
+
+func TestDecoderDictDelete(t *testing.T) {
+	dictContent := []byte("test dictionary content for decompression testing purposes")
+
+	dec, err := NewReader(nil, WithDecoderDictRaw(100, dictContent), WithDecoderDictRaw(200, dictContent))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+
+	if len(dec.o.dicts) != 2 {
+		t.Fatalf("expected 2 dicts, got %d", len(dec.o.dicts))
+	}
+
+	// Delete specific dict
+	err = dec.ResetWithOptions(nil, WithDecoderDictDelete(100))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dec.o.dicts) != 1 {
+		t.Errorf("expected 1 dict after delete, got %d", len(dec.o.dicts))
+	}
+	if _, ok := dec.o.dicts[200]; !ok {
+		t.Error("dict 200 should still exist")
+	}
+
+	// Add another dict
+	err = dec.ResetWithOptions(nil, WithDecoderDictRaw(300, dictContent))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dec.o.dicts) != 2 {
+		t.Errorf("expected 2 dicts after add, got %d", len(dec.o.dicts))
+	}
+
+	// Delete all dicts with no arguments
+	err = dec.ResetWithOptions(nil, WithDecoderDictDelete())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dec.o.dicts) != 0 {
+		t.Errorf("expected 0 dicts after delete all, got %d", len(dec.o.dicts))
+	}
+}
+
+func TestDecoderDictDeleteMultiple(t *testing.T) {
+	dictContent := []byte("test dictionary content")
+
+	dec, err := NewReader(nil,
+		WithDecoderDictRaw(100, dictContent),
+		WithDecoderDictRaw(200, dictContent),
+		WithDecoderDictRaw(300, dictContent))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+
+	if len(dec.o.dicts) != 3 {
+		t.Fatalf("expected 3 dicts, got %d", len(dec.o.dicts))
+	}
+
+	// Delete multiple dicts in one call
+	err = dec.ResetWithOptions(nil, WithDecoderDictDelete(100, 300))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dec.o.dicts) != 1 {
+		t.Errorf("expected 1 dict after delete, got %d", len(dec.o.dicts))
+	}
+	if _, ok := dec.o.dicts[200]; !ok {
+		t.Error("dict 200 should still exist")
+	}
+}
