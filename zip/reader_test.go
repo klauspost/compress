@@ -1852,7 +1852,7 @@ func BenchmarkReaderOneDeepDir(b *testing.B) {
 	}
 	data := buf.Bytes()
 
-	for b.Loop() {
+	for range b.N {
 		zr, err := NewReader(bytes.NewReader(data), int64(len(data)))
 		if err != nil {
 			b.Fatal(err)
@@ -1880,7 +1880,7 @@ func BenchmarkReaderManyDeepDirs(b *testing.B) {
 	}
 	data := buf.Bytes()
 
-	for b.Loop() {
+	for range b.N {
 		zr, err := NewReader(bytes.NewReader(data), int64(len(data)))
 		if err != nil {
 			b.Fatal(err)
@@ -1906,7 +1906,7 @@ func BenchmarkReaderManyShallowFiles(b *testing.B) {
 	}
 	data := buf.Bytes()
 
-	for b.Loop() {
+	for range b.N {
 		zr, err := NewReader(bytes.NewReader(data), int64(len(data)))
 		if err != nil {
 			b.Fatal(err)
