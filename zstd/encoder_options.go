@@ -82,10 +82,14 @@ func WithEncoderCRC(b bool) EOption {
 // By default this will be set to GOMAXPROCS.
 func WithEncoderConcurrency(n int) EOption {
 	return func(o *encoderOptions) error {
-		if n <= 0 {
-			return fmt.Errorf("concurrency must be at least 1")
+		if n < 0 {
+			return errors.New("concurrency must be at least 1")
 		}
-		o.concurrent = n
+		if n == 0 {
+			o.concurrent = runtime.GOMAXPROCS(0)
+		} else {
+			o.concurrent = n
+		}
 		return nil
 	}
 }
