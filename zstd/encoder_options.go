@@ -77,7 +77,7 @@ func WithEncoderCRC(b bool) EOption {
 
 // WithEncoderConcurrency will set the concurrency,
 // meaning the maximum number of encoders to run concurrently.
-// The value supplied must be >= 0.
+// The value supplied must be at least 0.
 // When a value of 0 is provided GOMAXPROCS will be used.
 // For streams, setting a value of 1 will disable async compression.
 // By default this will be set to GOMAXPROCS.
