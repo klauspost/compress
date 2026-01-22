@@ -26,6 +26,8 @@ This package will support the current Go version and 2 versions back.
 Use the links above for more information on each.
 
 # changelog
+* Jan 16th, 2026 [1.18.3](https://github.com/klauspost/compress/releases/tag/v1.18.3)
+	* Downstream CVE-2025-61728. See [golang/go#77102](https://github.com/golang/go/issues/77102).
 
 * Dec 1st, 2025 - [1.18.2](https://github.com/klauspost/compress/releases/tag/v1.18.2)
 	* flate: Fix invalid encoding on level 9 with single value input in https://github.com/klauspost/compress/pull/1115
@@ -687,5 +689,6 @@ Here are other packages of good quality and pure Go (no cgo wrappers or autoconv
 # license
 
 This code is licensed under the same conditions as the original Go code. See LICENSE file.
+
 
 
