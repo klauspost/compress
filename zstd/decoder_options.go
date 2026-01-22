@@ -53,12 +53,13 @@ func WithDecoderLowmem(b bool) DOption {
 // inflight blocks.
 // When decoding streams and setting maximum to 1,
 // no async decoding will be done.
+// The value supplied must be at least 0.
 // When a value of 0 is provided GOMAXPROCS will be used.
 // By default this will be set to 4 or GOMAXPROCS, whatever is lower.
 func WithDecoderConcurrency(n int) DOption {
 	return func(o *decoderOptions) error {
 		if n < 0 {
-			return errors.New("concurrency must be at least 1")
+			return errors.New("concurrency must be at least 0")
 		}
 		if n == 0 {
 			o.concurrent = runtime.GOMAXPROCS(0)
