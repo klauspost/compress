@@ -609,7 +609,7 @@ While the release has been extensively tested, it is recommended to testing when
 
 # deflate usage
 
-The packages are drop-in replacements for standard libraries. Simply replace the import path to use them:
+The packages are drop-in replacements for standard library [deflate](https://godoc.org/github.com/klauspost/compress/flate), [gzip](https://godoc.org/github.com/klauspost/compress/gzip), [zip](https://godoc.org/github.com/klauspost/compress/zip), and [zlib](https://godoc.org/github.com/klauspost/compress/zlib). Simply replace the import path to use them:
 
 Typical speed is about 2x of the standard library packages.
 
@@ -620,17 +620,15 @@ Typical speed is about 2x of the standard library packages.
 | `archive/zip`    | `github.com/klauspost/compress/zip`   | [zip](https://pkg.go.dev/github.com/klauspost/compress/zip?tab=doc)     |
 | `compress/flate` | `github.com/klauspost/compress/flate` | [flate](https://pkg.go.dev/github.com/klauspost/compress/flate?tab=doc) |
 
-* Optimized [deflate](https://godoc.org/github.com/klauspost/compress/flate) packages which can be used as a dropin replacement for [gzip](https://godoc.org/github.com/klauspost/compress/gzip), [zip](https://godoc.org/github.com/klauspost/compress/zip) and [zlib](https://godoc.org/github.com/klauspost/compress/zlib).
+You may also be interested in [pgzip](https://github.com/klauspost/pgzip), which is a drop-in replacement for gzip, which support multithreaded compression on big files and the optimized [crc32](https://github.com/klauspost/crc32) package used by these packages.
 
-You may also be interested in [pgzip](https://github.com/klauspost/pgzip), which is a drop in replacement for gzip, which support multithreaded compression on big files and the optimized [crc32](https://github.com/klauspost/crc32) package used by these packages.
-
-The packages contains the same as the standard library, so you can use the godoc for that: [gzip](http://golang.org/pkg/compress/gzip/), [zip](http://golang.org/pkg/archive/zip/),  [zlib](http://golang.org/pkg/compress/zlib/), [flate](http://golang.org/pkg/compress/flate/).
+The packages implement the same API as the standard library, so you can use the original godoc documentation: [gzip](http://golang.org/pkg/compress/gzip/), [zip](http://golang.org/pkg/archive/zip/), [zlib](http://golang.org/pkg/compress/zlib/), [flate](http://golang.org/pkg/compress/flate/).
 
 Currently there is only minor speedup on decompression (mostly CRC32 calculation).
 
 Memory usage is typically 1MB for a Writer. stdlib is in the same range. 
 If you expect to have a lot of concurrently allocated Writers consider using 
-the stateless compress described below.
+the stateless compression described below.
 
 For compression performance, see: [this spreadsheet](https://docs.google.com/spreadsheets/d/1nuNE2nPfuINCZJRMt6wFWhKpToF95I47XjSsc-1rbPQ/edit?usp=sharing).
 
@@ -689,6 +687,7 @@ Here are other packages of good quality and pure Go (no cgo wrappers or autoconv
 # license
 
 This code is licensed under the same conditions as the original Go code. See LICENSE file.
+
 
 
 
