@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build go1.16
-// +build go1.16
 
 // Package obscuretestdata contains functionality used by tests to more easily
 // work with testdata that must be obscured primarily due to

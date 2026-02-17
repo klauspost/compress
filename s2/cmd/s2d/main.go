@@ -197,8 +197,8 @@ Options:`)
 	for _, filename := range files {
 		dstFilename := cleanFileName(filename)
 		block := *block
-		if strings.HasSuffix(dstFilename, ".block") {
-			dstFilename = strings.TrimSuffix(dstFilename, ".block")
+		if before, ok := strings.CutSuffix(dstFilename, ".block"); ok {
+			dstFilename = before
 			block = true
 		}
 		switch {
