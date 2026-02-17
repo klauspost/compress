@@ -361,12 +361,12 @@ func testFileWindow(i, window int, t *testing.T) {
 }
 
 func testBigGzip(i int, t *testing.T) {
+	rng := rand.New(rand.NewSource(1337))
 	if len(testbuf) != i {
 		// Make results predictable
-		rand.Seed(1337)
 		testbuf = make([]byte, i)
 		for idx := range testbuf {
-			testbuf[idx] = byte(65 + rand.Intn(20))
+			testbuf[idx] = byte(65 + rng.Intn(20))
 		}
 	}
 	c := BestCompression
@@ -441,10 +441,10 @@ func testDeterm(level int, t *testing.T) {
 	if testing.Short() {
 		length = 100000
 	}
-	rand.Seed(1337)
+	rng := rand.New(rand.NewSource(1337))
 	t1 := make([]byte, length)
 	for idx := range t1 {
-		t1[idx] = byte(65 + rand.Intn(8))
+		t1[idx] = byte(65 + rng.Intn(8))
 	}
 
 	br := bytes.NewBuffer(t1)
@@ -462,10 +462,10 @@ func testDeterm(level int, t *testing.T) {
 
 	// We recreate the buffer, so we have a goos chance of getting a
 	// different memory address.
-	rand.Seed(1337)
+	rng = rand.New(rand.NewSource(1337))
 	t2 := make([]byte, length)
 	for idx := range t2 {
-		t2[idx] = byte(65 + rand.Intn(8))
+		t2[idx] = byte(65 + rng.Intn(8))
 	}
 
 	br2 := bytes.NewBuffer(t2)
@@ -537,46 +537,6 @@ func benchmarkGzipN(b *testing.B, level int) {
 		}
 	}
 }
-
-/*
-func BenchmarkOldGzipL1(b *testing.B) { benchmarkOldGzipN(b, 1) }
-func BenchmarkOldGzipL2(b *testing.B) { benchmarkOldGzipN(b, 2) }
-func BenchmarkOldGzipL3(b *testing.B) { benchmarkOldGzipN(b, 3) }
-func BenchmarkOldGzipL4(b *testing.B) { benchmarkOldGzipN(b, 4) }
-func BenchmarkOldGzipL5(b *testing.B) { benchmarkOldGzipN(b, 5) }
-func BenchmarkOldGzipL6(b *testing.B) { benchmarkOldGzipN(b, 6) }
-func BenchmarkOldGzipL7(b *testing.B) { benchmarkOldGzipN(b, 7) }
-func BenchmarkOldGzipL8(b *testing.B) { benchmarkOldGzipN(b, 8) }
-func BenchmarkOldGzipL9(b *testing.B) { benchmarkOldGzipN(b, 9) }
-
-func benchmarkOldGzipN(b *testing.B, level int) {
-	dat, _ := os.ReadFile("testdata/test.json")
-	dat = append(dat, dat...)
-	dat = append(dat, dat...)
-	dat = append(dat, dat...)
-	dat = append(dat, dat...)
-	dat = append(dat, dat...)
-
-	b.SetBytes(int64(len(dat)))
-	w, _ := oldgz.NewWriterLevel(io.Discard, level)
-	b.ResetTimer()
-	for n := 0; n < b.N; n++ {
-		w.Reset(io.Discard)
-		n, err := w.Write(dat)
-		if n != len(dat) {
-			panic("short write")
-		}
-		if err != nil {
-			panic(err)
-		}
-		err = w.Close()
-		if err != nil {
-			panic(err)
-		}
-	}
-}
-
-*/
 
 func BenchmarkCompressAllocations(b *testing.B) {
 	payload := []byte(strings.Repeat("Tiny payload", 20))
