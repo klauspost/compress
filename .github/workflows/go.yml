@@ -97,10 +97,10 @@ jobs:
       run: go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d&&./s2c -verify s2c &&./s2d s2c.s2&&rm ./s2c&&rm s2d&&rm s2c.s2
 
     - name: goreleaser deprecation
-      run: curl -sfL https://git.io/goreleaser | VERSION=v2.13.3 sh -s -- check
+      run: curl -sfL https://goreleaser.com/static/run | VERSION=v2.13.3 bash -s -- check
 
     - name: goreleaser snapshot
-      run: curl -sL https://git.io/goreleaser | VERSION=v2.13.3 sh -s -- --snapshot --clean
+      run: curl -sfL https://goreleaser.com/static/run | VERSION=v2.13.3 bash -s -- --snapshot --clean
 
     - name: Test S2 GOAMD64 v3
       env:
