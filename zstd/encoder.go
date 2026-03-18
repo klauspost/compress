@@ -138,10 +138,17 @@ func (e *Encoder) Reset(w io.Writer) {
 func (e *Encoder) ResetWithOptions(w io.Writer, opts ...EOption) error {
 	e.o.resetOpt = true
 	defer func() { e.o.resetOpt = false }()
+	hadDict := e.o.dict != nil
 	for _, o := range opts {
 		if err := o(&e.o); err != nil {
 			return err
 		}
+	}
+	hasDict := e.o.dict != nil
+	if hadDict != hasDict {
+		// Dict presence changed — encoder type must be recreated.
+		e.state.encoder = nil
+		e.init = sync.Once{}
 	}
 	e.Reset(w)
 	return nil
@@ -445,7 +452,7 @@ func (e *Encoder) Flush() error {
 // The Encoder can still be re-used after calling this.
 func (e *Encoder) Close() error {
 	s := &e.state
-	if s.encoder == nil {
+	if s.encoder == nil || s.w == nil {
 		return nil
 	}
 	err := e.nextBlock(true)

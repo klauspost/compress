@@ -694,3 +694,39 @@ func TestEncoderDictResetDifferentContent(t *testing.T) {
 		})
 	}
 }
+
+// TestEncoderDictAddViaReset verifies that adding a dict via ResetWithOptions
+// to an encoder created without one works (requires recreating the encoder type).
+func TestEncoderDictAddViaReset(t *testing.T) {
+	dict := make([]byte, 120)
+	for i := range dict {
+		dict[i] = byte(i)
+	}
+	payload := []byte("hello world, this is a test payload!!")
+
+	for level := SpeedFastest; level < speedLast; level++ {
+		t.Run(level.String(), func(t *testing.T) {
+			enc, err := NewWriter(nil, WithEncoderConcurrency(1), WithEncoderLevel(level))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := enc.ResetWithOptions(nil, WithEncoderDictRaw(42, dict)); err != nil {
+				t.Fatal(err)
+			}
+			compressed := enc.EncodeAll(payload, nil)
+
+			dec, err := NewReader(nil, WithDecoderConcurrency(1), WithDecoderDictRaw(42, dict))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer dec.Close()
+			got, err := dec.DecodeAll(compressed, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, payload) {
+				t.Errorf("round-trip mismatch: got %q, want %q", got, payload)
+			}
+		})
+	}
+}
