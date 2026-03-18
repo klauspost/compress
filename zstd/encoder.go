@@ -452,8 +452,15 @@ func (e *Encoder) Flush() error {
 // The Encoder can still be re-used after calling this.
 func (e *Encoder) Close() error {
 	s := &e.state
-	if s.encoder == nil || s.w == nil {
+	if s.encoder == nil {
 		return nil
+	}
+	if s.w == nil {
+		if len(s.filling) == 0 && !s.headerWritten && !s.eofWritten && s.nInput == 0 {
+			return nil
+		}
+		return errors.New("zstd: encoder has no writer")
+	}
 	}
 	err := e.nextBlock(true)
 	if err != nil {
