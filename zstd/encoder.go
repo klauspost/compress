@@ -461,7 +461,6 @@ func (e *Encoder) Close() error {
 		}
 		return errors.New("zstd: encoder has no writer")
 	}
-	}
 	err := e.nextBlock(true)
 	if err != nil {
 		if errors.Is(s.err, ErrEncoderClosed) {

@@ -695,8 +695,8 @@ func TestEncoderDictResetDifferentContent(t *testing.T) {
 	}
 }
 
-// TestEncoderDictAddViaReset verifies that adding a dict via ResetWithOptions
-// to an encoder created without one works (requires recreating the encoder type).
+// TestEncoderDictAddViaReset verifies that adding/removing a dict via
+// ResetWithOptions works (requires recreating the encoder type).
 func TestEncoderDictAddViaReset(t *testing.T) {
 	dict := make([]byte, 120)
 	for i := range dict {
@@ -705,7 +705,7 @@ func TestEncoderDictAddViaReset(t *testing.T) {
 	payload := []byte("hello world, this is a test payload!!")
 
 	for level := SpeedFastest; level < speedLast; level++ {
-		t.Run(level.String(), func(t *testing.T) {
+		t.Run("nil-to-dict/"+level.String(), func(t *testing.T) {
 			enc, err := NewWriter(nil, WithEncoderConcurrency(1), WithEncoderLevel(level))
 			if err != nil {
 				t.Fatal(err)
@@ -721,6 +721,64 @@ func TestEncoderDictAddViaReset(t *testing.T) {
 			}
 			defer dec.Close()
 			got, err := dec.DecodeAll(compressed, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, payload) {
+				t.Errorf("round-trip mismatch: got %q, want %q", got, payload)
+			}
+		})
+
+		t.Run("dict-to-nil/"+level.String(), func(t *testing.T) {
+			enc, err := NewWriter(nil, WithEncoderConcurrency(1), WithEncoderLevel(level), WithEncoderDictRaw(42, dict))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := enc.ResetWithOptions(nil, WithEncoderDictDelete()); err != nil {
+				t.Fatal(err)
+			}
+			compressed := enc.EncodeAll(payload, nil)
+
+			dec, err := NewReader(nil, WithDecoderConcurrency(1))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer dec.Close()
+			got, err := dec.DecodeAll(compressed, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, payload) {
+				t.Errorf("round-trip mismatch: got %q, want %q", got, payload)
+			}
+		})
+
+		t.Run("streaming-dict-to-nil/"+level.String(), func(t *testing.T) {
+			var buf bytes.Buffer
+			enc, err := NewWriter(&buf, WithEncoderConcurrency(2), WithEncoderLevel(level), WithEncoderDictRaw(42, dict))
+			if err != nil {
+				t.Fatal(err)
+			}
+			enc.Close()
+
+			buf.Reset()
+			if err := enc.ResetWithOptions(&buf, WithEncoderDictDelete()); err != nil {
+				t.Fatal(err)
+			}
+			_, err = enc.Write(payload)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := enc.Close(); err != nil {
+				t.Fatal(err)
+			}
+
+			dec, err := NewReader(nil, WithDecoderConcurrency(1))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer dec.Close()
+			got, err := dec.DecodeAll(buf.Bytes(), nil)
 			if err != nil {
 				t.Fatal(err)
 			}
