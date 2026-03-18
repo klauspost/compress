@@ -6,6 +6,7 @@ package gzhttp
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -51,7 +52,7 @@ func isNil(object any) bool {
 		[]reflect.Kind{
 			reflect.Chan, reflect.Func,
 			reflect.Interface, reflect.Map,
-			reflect.Ptr, reflect.Slice},
+			reflect.Pointer, reflect.Slice},
 		kind)
 
 	if isNilableKind && value.IsNil() {
@@ -63,11 +64,5 @@ func isNil(object any) bool {
 
 // containsKind checks if a specified kind in the slice of kinds.
 func containsKind(kinds []reflect.Kind, kind reflect.Kind) bool {
-	for i := range kinds {
-		if kind == kinds[i] {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(kinds, kind)
 }

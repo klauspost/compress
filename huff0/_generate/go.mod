@@ -1,6 +1,6 @@
 module github.com/klauspost/compress/huff0/_generate
 
-go 1.23
+go 1.24
 
 toolchain go1.24.2
 

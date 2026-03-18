@@ -335,7 +335,6 @@ func TestWriter_Reset(t *testing.T) {
 	}
 	in := buf.Bytes()
 	for l := range 10 {
-		l := l
 		if testing.Short() && l > 1 {
 			continue
 		}
