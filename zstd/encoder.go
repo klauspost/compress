@@ -78,13 +78,8 @@ func NewWriter(w io.Writer, opts ...EOption) (*Encoder, error) {
 			return nil, err
 		}
 	}
-	if e.o.concurrentBlocks {
-		if e.o.dict != nil {
-			return nil, errors.New("WithConcurrentBlocks is incompatible with dictionary encoding")
-		}
-		if e.o.concurrent <= 1 {
-			e.o.concurrentBlocks = false
-		}
+	if e.o.concurrentBlocks && (e.o.dict != nil || e.o.concurrent <= 1) {
+		e.o.concurrentBlocks = false
 	}
 	if w != nil {
 		e.Reset(w)
@@ -177,7 +172,7 @@ func (e *Encoder) ResetWithOptions(w io.Writer, opts ...EOption) error {
 	}
 	hasDict := e.o.dict != nil
 	if e.o.concurrentBlocks && hasDict {
-		return errors.New("WithConcurrentBlocks is incompatible with dictionary encoding")
+		e.o.concurrentBlocks = false
 	}
 	if hadDict != hasDict {
 		// Dict presence changed — encoder type must be recreated.

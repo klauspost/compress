@@ -316,7 +316,7 @@ func TestConcurrentBlocks_Padding(t *testing.T) {
 	}
 }
 
-func TestConcurrentBlocks_DictIncompatible(t *testing.T) {
+func TestConcurrentBlocks_DictDisables(t *testing.T) {
 	d, err := os.ReadFile("testdata/d0.dict")
 	if os.IsNotExist(err) {
 		t.Skip("no dict test data")
@@ -324,12 +324,15 @@ func TestConcurrentBlocks_DictIncompatible(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = NewWriter(nil,
+	enc, err := NewWriter(nil,
 		WithConcurrentBlocks(true),
 		WithEncoderDict(d),
 	)
-	if err == nil {
-		t.Fatal("expected error for dict + concurrent blocks")
+	if err != nil {
+		t.Fatal("unexpected error:", err)
+	}
+	if enc.o.concurrentBlocks {
+		t.Fatal("concurrentBlocks should be disabled when dict is set")
 	}
 }
 

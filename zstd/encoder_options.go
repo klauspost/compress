@@ -340,7 +340,7 @@ func WithLowerEncoderMem(b bool) EOption {
 // Each non-first job receives an overlap prefix from the previous job for match context.
 // Output is flushed in order, producing a valid single-frame zstd stream.
 //
-// This is incompatible with dictionary encoding.
+// Currently disabled when used with dictionary encoding.
 // Cannot be changed with ResetWithOptions.
 func WithConcurrentBlocks(b bool) EOption {
 	return func(o *encoderOptions) error {
