@@ -82,7 +82,7 @@ func TestConcurrentBlocks_RoundTrip(t *testing.T) {
 	for _, level := range levels {
 		for _, size := range sizes {
 			for _, conc := range []int{2, 4} {
-				name := level.String()
+				name := fmt.Sprintf("%s-sz%d-c%d", level, size, conc)
 				t.Run(name, func(t *testing.T) {
 					input := make([]byte, size)
 					for i := range input {
@@ -1195,6 +1195,10 @@ func TestConcurrentBlocks_Empty(t *testing.T) {
 			}
 			if len(decoded) != 0 {
 				t.Fatalf("expected empty decoded, got %d bytes", len(decoded))
+			}
+		} else {
+			if buf.Len() != 0 {
+				t.Fatalf("expected no output without fullZero, got %d bytes", buf.Len())
 			}
 		}
 	}

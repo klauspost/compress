@@ -11,20 +11,20 @@ import (
 )
 
 type encJob struct {
-	prefix []byte       // overlap from previous job (nil for first)
-	input  []byte       // job's own input data (swapped from filling)
-	last   bool         // last block of last job gets last=true
-	output []byte       // compressed blocks (filled by worker)
-	err    error        // encoding error
+	prefix []byte        // overlap from previous job (nil for first)
+	input  []byte        // job's own input data (swapped from filling)
+	last   bool          // last block of last job gets last=true
+	output []byte        // compressed blocks (filled by worker)
+	err    error         // encoding error
 	done   chan struct{} // closed when complete
 }
 
 type jobState struct {
 	jobSize     int
 	overlapSize int
-	filling     []byte // accumulates input up to jobSize
-	overlap  [2][]byte // double-buffered overlap (alternating)
-	overlapN int       // which overlap buffer is current
+	filling     []byte    // accumulates input up to jobSize
+	overlap     [2][]byte // double-buffered overlap (alternating)
+	overlapN    int       // which overlap buffer is current
 
 	jobSeq int // next job sequence number
 
@@ -41,8 +41,8 @@ type jobState struct {
 	flusherErr error
 	started    bool
 
-	inputPool  sync.Pool // []byte buffers of jobSize cap
-	outputPool sync.Pool // []byte buffers for compressed output
+	inputPool  sync.Pool // *[]byte buffers of jobSize cap
+	outputPool sync.Pool // *[]byte buffers for compressed output
 }
 
 func (e *Encoder) startJobWorkers() {
@@ -119,7 +119,8 @@ func (e *Encoder) compressJob(enc encoder, job *encJob) {
 
 func (js *jobState) getInputBuf(size int) []byte {
 	if v := js.inputPool.Get(); v != nil {
-		b := v.([]byte)
+		bp := v.(*[]byte)
+		b := *bp
 		if cap(b) >= size {
 			return b[:0]
 		}
@@ -129,13 +130,15 @@ func (js *jobState) getInputBuf(size int) []byte {
 
 func (js *jobState) putInputBuf(b []byte) {
 	if cap(b) > 0 {
-		js.inputPool.Put(b[:0])
+		b = b[:0]
+		js.inputPool.Put(&b)
 	}
 }
 
 func (js *jobState) getOutputBuf(size int) []byte {
 	if v := js.outputPool.Get(); v != nil {
-		b := v.([]byte)
+		bp := v.(*[]byte)
+		b := *bp
 		if cap(b) >= size {
 			return b[:0]
 		}
@@ -145,7 +148,8 @@ func (js *jobState) getOutputBuf(size int) []byte {
 
 func (js *jobState) putOutputBuf(b []byte) {
 	if cap(b) > 0 {
-		js.outputPool.Put(b[:0])
+		b = b[:0]
+		js.outputPool.Put(&b)
 	}
 }
 
