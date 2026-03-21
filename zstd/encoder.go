@@ -588,15 +588,14 @@ func (e *Encoder) Close() error {
 	if s.encoder == nil {
 		return nil
 	}
+	if e.o.concurrentBlocks {
+		return e.closeJobs()
+	}
 	if s.w == nil {
 		if len(s.filling) == 0 && !s.headerWritten && !s.eofWritten && s.nInput == 0 {
 			return nil
 		}
 		return errors.New("zstd: encoder has no writer")
-	}
-
-	if e.o.concurrentBlocks {
-		return e.closeJobs()
 	}
 
 	err := e.nextBlock(true)
@@ -655,6 +654,13 @@ func (e *Encoder) closeJobs() error {
 
 	if errors.Is(s.err, ErrEncoderClosed) {
 		return nil
+	}
+
+	if s.w == nil {
+		if len(js.filling) == 0 && !s.headerWritten && !s.eofWritten && s.nInput == 0 {
+			return nil
+		}
+		return errors.New("zstd: encoder has no writer")
 	}
 
 	if err := e.dispatchJob(true); err != nil {
