@@ -1094,9 +1094,6 @@ func TestRandomJitter(t *testing.T) {
 		t.Fatal("padding was not applied")
 	}
 
-	if err != nil {
-		t.Fatal(err)
-	}
 	changed := false
 	for i := range 10 {
 		w = httptest.NewRecorder()
@@ -1310,9 +1307,6 @@ func TestRandomJitterParanoid(t *testing.T) {
 		t.Fatal("padding was not applied")
 	}
 
-	if err != nil {
-		t.Fatal(err)
-	}
 	changed := false
 	for i := range 10 {
 		w = httptest.NewRecorder()
