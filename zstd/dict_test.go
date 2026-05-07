@@ -47,6 +47,104 @@ func TestDecoder_SmallDict(t *testing.T) {
 	}
 }
 
+func buildDictLevelPathFixture() (samples [][]byte, history, src []byte) {
+	history = bytes.Repeat([]byte("build dict common phrase alpha beta gamma delta "), 16)
+	sample := func(suffix string) []byte {
+		b := append([]byte(nil), history...)
+		return append(b, suffix...)
+	}
+	samples = [][]byte{
+		sample("city=honolulu email=a@example.com status=active"),
+		sample("city=seattle email=b@example.com status=active"),
+		sample("city=london email=c@example.com status=paused"),
+		sample("city=honolulu email=d@example.com status=active"),
+	}
+	src = sample("city=honolulu email=roundtrip@example.com status=active")
+	return samples, history, src
+}
+
+func TestBuildDictLevelPathsRoundTrip(t *testing.T) {
+	samples, history, src := buildDictLevelPathFixture()
+	for _, tt := range []struct {
+		name  string
+		level EncoderLevel
+	}{
+		{name: "default"},
+		{name: "explicit", level: SpeedFastest},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dict, err := BuildDict(BuildDictOptions{
+				ID:       1,
+				Contents: samples,
+				History:  history,
+				Offsets:  [3]int{1, 4, 8},
+				Level:    tt.level,
+			})
+			if err != nil {
+				t.Fatalf("BuildDict failed: %v", err)
+			}
+
+			enc, err := NewWriter(nil, WithEncoderDict(dict), WithEncoderLevel(SpeedFastest), WithEncoderConcurrency(1))
+			if err != nil {
+				t.Fatalf("NewWriter failed: %v", err)
+			}
+			defer enc.Close()
+			encoded := enc.EncodeAll(src, nil)
+
+			dec, err := NewReader(nil, WithDecoderDicts(dict), WithDecoderConcurrency(1))
+			if err != nil {
+				t.Fatalf("NewReader failed: %v", err)
+			}
+			defer dec.Close()
+			decoded, err := dec.DecodeAll(encoded, nil)
+			if err != nil {
+				t.Fatalf("DecodeAll failed: %v", err)
+			}
+			if !bytes.Equal(decoded, src) {
+				t.Fatalf("decoded output mismatch: got %q want %q", decoded, src)
+			}
+		})
+	}
+}
+
+func BenchmarkBuildDictLevelPaths(b *testing.B) {
+	samples, history, _ := buildDictLevelPathFixture()
+	for _, tt := range []struct {
+		name  string
+		level EncoderLevel
+	}{
+		{name: "default"},
+		{name: "explicit-fastest", level: SpeedFastest},
+	} {
+		b.Run(tt.name, func(b *testing.B) {
+			_, err := BuildDict(BuildDictOptions{
+				ID:       1,
+				Contents: samples,
+				History:  history,
+				Offsets:  [3]int{1, 4, 8},
+				Level:    tt.level,
+			})
+			if err != nil {
+				b.Fatal(err)
+			}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_, err := BuildDict(BuildDictOptions{
+					ID:       1,
+					Contents: samples,
+					History:  history,
+					Offsets:  [3]int{1, 4, 8},
+					Level:    tt.level,
+				})
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
 func TestEncoder_SmallDict(t *testing.T) {
 	// All files have CRC
 	zr := testCreateZipReader("testdata/dict-tests-small.zip", t)
