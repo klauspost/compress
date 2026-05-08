@@ -146,6 +146,15 @@ func TestInvalidVarint(t *testing.T) {
 		// varint] (up to a maximum of 2^32 - 1)".
 		"valid varint (as uint64), but value overflows uint32",
 		"\x80\x80\x80\x80\x10",
+	}, {
+		// 8-byte overlong varint encoding value 4. The format spec limits
+		// the varint preamble to 5 bytes. binary.Uvarint accepts up to 10
+		// bytes so this decodes to a valid uint32 value (4), but the
+		// overlong encoding must be rejected.
+		"overlong varint (8 bytes encoding value 4), exceeds 5-byte max",
+		"\x84\x80\x80\x80\x80\x80\x80\x00" +
+			"\x00\x00\x00\x00\x00\x00\x00" +
+			"\x30",
 	}}
 
 	for _, tc := range testCases {
