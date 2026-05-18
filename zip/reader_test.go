@@ -1914,3 +1914,114 @@ func BenchmarkReaderManyShallowFiles(b *testing.B) {
 		zr.Open("does-not-exist")
 	}
 }
+
+// TestNameDecoder verifies that a NameDecoder passed via ReaderOptions may
+// rewrite Name and Comment before UTF-8 detection runs.
+func TestNameDecoder(t *testing.T) {
+	rawName := "\x93\xfa\x96{\x8c\xea.txt"
+	rawComment := "\x83R\x83\x81\x83\x93\x83g"
+	decodedName := "日本語.txt"
+	decodedComment := "コメント"
+
+	var buf bytes.Buffer
+	zw := NewWriter(&buf)
+	if _, err := zw.CreateHeader(&FileHeader{
+		Name:    rawName,
+		Comment: rawComment,
+		NonUTF8: true,
+		Method:  Store,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var called int
+	decoder := func(f *FileHeader) error {
+		called++
+		if f.Name != rawName {
+			t.Errorf("decoder got Name=%q, want %q", f.Name, rawName)
+		}
+		if f.Comment != rawComment {
+			t.Errorf("decoder got Comment=%q, want %q", f.Comment, rawComment)
+		}
+		f.Name = decodedName
+		f.Comment = decodedComment
+		// Mark the entry as UTF-8 now that the decoder has rewritten it.
+		f.Flags |= 0x800
+		return nil
+	}
+	zr, err := NewReaderWithOptions(bytes.NewReader(buf.Bytes()), int64(buf.Len()), ReaderOptions{NameDecoder: decoder})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if called != 1 {
+		t.Fatalf("NameDecoder called %d times, want 1", called)
+	}
+	if len(zr.File) != 1 {
+		t.Fatalf("File count = %d, want 1", len(zr.File))
+	}
+	got := zr.File[0]
+	if got.Name != decodedName {
+		t.Errorf("Name = %q, want %q", got.Name, decodedName)
+	}
+	if got.Comment != decodedComment {
+		t.Errorf("Comment = %q, want %q", got.Comment, decodedComment)
+	}
+	if got.NonUTF8 {
+		t.Errorf("NonUTF8 = true, want false after decoder rewrite to UTF-8")
+	}
+}
+
+// TestNameDecoderDefault verifies that NewReader preserves the existing
+// behavior when no decoder is supplied.
+func TestNameDecoderDefault(t *testing.T) {
+	rawName := "\x93\xfa\x96{\x8c\xea.txt"
+
+	var buf bytes.Buffer
+	zw := NewWriter(&buf)
+	if _, err := zw.CreateHeader(&FileHeader{
+		Name:    rawName,
+		NonUTF8: true,
+		Method:  Store,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	zr, err := NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(zr.File) != 1 {
+		t.Fatalf("File count = %d, want 1", len(zr.File))
+	}
+	if zr.File[0].Name != rawName {
+		t.Errorf("Name = %q, want raw %q", zr.File[0].Name, rawName)
+	}
+	if !zr.File[0].NonUTF8 {
+		t.Errorf("NonUTF8 = false, want true for non-UTF-8 raw name")
+	}
+}
+
+// TestNameDecoderError verifies that an error returned by the decoder is
+// propagated from NewReaderWithOptions.
+func TestNameDecoderError(t *testing.T) {
+	var buf bytes.Buffer
+	zw := NewWriter(&buf)
+	if _, err := zw.CreateHeader(&FileHeader{Name: "file.txt", Method: Store}); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	wantErr := fmt.Errorf("decode failure")
+	_, err := NewReaderWithOptions(bytes.NewReader(buf.Bytes()), int64(buf.Len()), ReaderOptions{NameDecoder: func(*FileHeader) error { return wantErr }})
+	if err != wantErr {
+		t.Errorf("NewReaderWithOptions err = %v, want %v", err, wantErr)
+	}
+}
