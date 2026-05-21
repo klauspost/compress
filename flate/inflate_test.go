@@ -281,6 +281,154 @@ func TestWriteTo(t *testing.T) {
 	}
 }
 
+func TestInflateCheckpointResume(t *testing.T) {
+	// Compress a moderately large, varied input so the deflate writer emits
+	// multiple blocks. Most boundaries land on non-byte-aligned bit positions,
+	// which exercises BitOffset on resume.
+	raw := make([]byte, 0, 256<<10)
+	for range 4000 {
+		raw = append(raw, "the quick brown fox jumps over the lazy dog "...)
+		raw = append(raw, "Lorem ipsum dolor sit amet, consectetur "...)
+	}
+
+	var compressed bytes.Buffer
+	w, err := NewWriter(&compressed, DefaultCompression)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write(raw); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	type cpRec struct {
+		cp     InflateCheckpoint
+		window []byte
+	}
+	var cps []cpRec
+	var seenFinal bool
+	cb := func(cp InflateCheckpoint) {
+		if cp.Final {
+			if seenFinal {
+				t.Fatalf("final callback called twice")
+			}
+			seenFinal = true
+			return
+		}
+		// Window is reused between callbacks, copy it.
+		cps = append(cps, cpRec{cp: cp, window: append([]byte(nil), cp.Window...)})
+	}
+
+	r := NewReaderOpts(bytes.NewReader(compressed.Bytes()), WithEobCallback(cb))
+	decoded, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !bytes.Equal(decoded, raw) {
+		t.Fatalf("decoded mismatch: %d vs %d", len(decoded), len(raw))
+	}
+	if len(cps) < 2 {
+		t.Fatalf("expected multiple non-final block callbacks, got %d", len(cps))
+	}
+	t.Logf("got %d block(s)", len(cps))
+
+	// Offsets must be monotonically non-decreasing.
+	for i := 1; i < len(cps); i++ {
+		prev, cur := cps[i-1].cp, cps[i].cp
+		if cur.UncompressedOffset < prev.UncompressedOffset {
+			t.Errorf("UncompressedOffset regressed at %d: %d -> %d", i, prev.UncompressedOffset, cur.UncompressedOffset)
+		}
+		pbits := prev.CompressedOffset*8 + int64(prev.BitOffset)
+		cbits := cur.CompressedOffset*8 + int64(cur.BitOffset)
+		if cbits < pbits {
+			t.Errorf("CompressedOffset regressed at %d: %d -> %d", i, pbits, cbits)
+		}
+	}
+
+	// Resume from every checkpoint (the final block no longer triggers cb).
+	sawBitOffset := false
+	for i, rec := range cps {
+		cp := rec.cp
+		cp.Window = rec.window
+		if cp.BitOffset != 0 {
+			sawBitOffset = true
+		}
+		src := compressed.Bytes()[cp.CompressedOffset:]
+		rr := NewReaderOpts(bytes.NewReader(src), WithResumeFrom(cp))
+		got, err := io.ReadAll(rr)
+		if err != nil {
+			t.Errorf("resume %d (CompOff=%d BitOff=%d): %v", i, cp.CompressedOffset, cp.BitOffset, err)
+			continue
+		}
+		want := raw[cp.UncompressedOffset:]
+		if !bytes.Equal(got, want) {
+			t.Errorf("resume %d: output mismatch (%d vs %d bytes)", i, len(got), len(want))
+		}
+	}
+	if !sawBitOffset {
+		t.Errorf("no non-zero BitOffset checkpoints — BitOffset resume path not exercised")
+	}
+}
+
+func TestInflateCheckpointResetCP(t *testing.T) {
+	// Verify ResetCP applies a checkpoint to an existing reader.
+	var raw []byte
+	for range 4000 {
+		raw = append(raw, "the quick brown fox jumps over the lazy dog "...)
+		raw = append(raw, "Lorem ipsum dolor sit amet, consectetur "...)
+	}
+
+	var compressed bytes.Buffer
+	w, err := NewWriter(&compressed, DefaultCompression)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Write(raw)
+	w.Close()
+
+	var cps []InflateCheckpoint
+	var seenFinal bool
+	cb := func(cp InflateCheckpoint) {
+		if cp.Final {
+			if seenFinal {
+				t.Fatalf("final callback called twice")
+			}
+			seenFinal = true
+			return
+		}
+		cp.Window = append([]byte(nil), cp.Window...)
+		cps = append(cps, cp)
+	}
+	r := NewReaderOpts(bytes.NewReader(compressed.Bytes()), WithEobCallback(cb))
+	if _, err := io.ReadAll(r); err != nil {
+		t.Fatal(err)
+	}
+	if len(cps) < 2 {
+		t.Skipf("only %d block(s); need at least 2 for ResetCP test", len(cps))
+	}
+	t.Logf("ResetCP test with %d block(s)", len(cps))
+
+	cp := cps[len(cps)-1]
+	dec, ok := NewReader(nil).(interface {
+		ResetCP(io.Reader, InflateCheckpoint) error
+	})
+	if !ok {
+		t.Fatal("reader does not implement ResetCP")
+	}
+	if err := dec.ResetCP(bytes.NewReader(compressed.Bytes()[cp.CompressedOffset:]), cp); err != nil {
+		t.Fatalf("ResetCP: %v", err)
+	}
+	got, err := io.ReadAll(dec.(io.Reader))
+	if err != nil {
+		t.Fatalf("read after ResetCP: %v", err)
+	}
+	if want := raw[cp.UncompressedOffset:]; !bytes.Equal(got, want) {
+		t.Fatalf("ResetCP output mismatch (%d vs %d bytes)", len(got), len(want))
+	}
+}
+
 func TestReaderPartialBlock(t *testing.T) {
 	data, err := os.ReadFile("testdata/partial-block")
 	if err != nil {
