@@ -18,6 +18,9 @@ func (s *Scratch) BuildCTable(count *[256]uint32) error {
 	if s == nil {
 		return errors.New("huff0: BuildCTable on nil Scratch")
 	}
+	if count == nil {
+		return errors.New("huff0: nil count passed to BuildCTable")
+	}
 	var err error
 	s, err = s.prepare(nil)
 	if err != nil {
@@ -64,7 +67,7 @@ func (s *Scratch) BuildCTable(count *[256]uint32) error {
 // -1 when the table cannot encode every non-zero symbol of hist (i.e. when
 // CanUseTable would return false). The estimate excludes the table header.
 func (s *Scratch) EstimateSize(hist *[256]uint32) int {
-	if s == nil || len(s.prevTable) == 0 {
+	if s == nil || hist == nil || len(s.prevTable) == 0 {
 		return -1
 	}
 	pt := s.prevTable
@@ -84,7 +87,7 @@ func (s *Scratch) EstimateSize(hist *[256]uint32) int {
 // CanUseTable reports whether the table in prevTable can encode every
 // non-zero symbol present in hist.
 func (s *Scratch) CanUseTable(hist *[256]uint32) bool {
-	if s == nil || len(s.prevTable) == 0 {
+	if s == nil || hist == nil || len(s.prevTable) == 0 {
 		return false
 	}
 	pt := s.prevTable

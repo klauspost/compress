@@ -36,6 +36,38 @@ func TestBuildCTableEmpty(t *testing.T) {
 	}
 }
 
+func TestBuildCTableNilCount(t *testing.T) {
+	var s Scratch
+	if err := s.BuildCTable(nil); err == nil {
+		t.Fatalf("expected error for nil count")
+	}
+}
+
+func TestEstimateSizeAndCanUseTableNilHist(t *testing.T) {
+	var count [256]uint32
+	count['a'] = 10
+	count['b'] = 5
+	var s Scratch
+	if err := s.BuildCTable(&count); err != nil {
+		t.Fatalf("BuildCTable: %v", err)
+	}
+	if got := s.EstimateSize(nil); got != -1 {
+		t.Fatalf("EstimateSize(nil) = %d, want -1", got)
+	}
+	if s.CanUseTable(nil) {
+		t.Fatalf("CanUseTable(nil) = true, want false")
+	}
+	// Also exercise the nil-receiver and unloaded-table paths so the guards
+	// behave even before BuildCTable has installed prevTable.
+	var empty Scratch
+	if got := empty.EstimateSize(&count); got != -1 {
+		t.Fatalf("EstimateSize on empty Scratch = %d, want -1", got)
+	}
+	if empty.CanUseTable(&count) {
+		t.Fatalf("CanUseTable on empty Scratch = true, want false")
+	}
+}
+
 func TestBuildCTableSingleSymbol(t *testing.T) {
 	var count [256]uint32
 	count[42] = 100
