@@ -37,6 +37,10 @@ type Reader struct {
 	Comment       string
 	decompressors map[uint16]Decompressor
 
+	// nameDecoder, if non-nil, rewrites Name/Comment from a legacy encoding
+	// into UTF-8 before encoding detection runs. It is set via NewReaderWithOptions.
+	nameDecoder func(f *FileHeader) error
+
 	// Some JAR files are zip files with a prefix that is a bash script.
 	// The baseOffset field is the start of the zip file proper.
 	baseOffset int64
@@ -107,6 +111,31 @@ func NewReader(r io.ReaderAt, size int64) (*Reader, error) {
 		return nil, errors.New("zip: size cannot be negative")
 	}
 	zr := new(Reader)
+	var err error
+	if err = zr.init(r, size); err != nil && err != ErrInsecurePath {
+		return nil, err
+	}
+	return zr, err
+}
+
+// ReaderOptions holds optional knobs for [NewReaderWithOptions]. The zero
+// value is equivalent to calling [NewReader]. New fields may be added in the
+// future; callers should set only the options they need.
+type ReaderOptions struct {
+	// NameDecoder, if non-nil, is invoked for each entry as its directory
+	// header is read, before UTF-8 encoding detection runs. The callback may
+	// rewrite Name and Comment to convert from a legacy encoding into UTF-8.
+	// If NameDecoder returns a non-nil error, archive reading stops and the
+	// error is returned.
+	NameDecoder func(f *FileHeader) error
+}
+
+// NewReaderWithOptions is like [NewReader] but applies the supplied options.
+func NewReaderWithOptions(r io.ReaderAt, size int64, opts ReaderOptions) (*Reader, error) {
+	if size < 0 {
+		return nil, errors.New("zip: size cannot be negative")
+	}
+	zr := &Reader{nameDecoder: opts.NameDecoder}
 	var err error
 	if err = zr.init(r, size); err != nil && err != ErrInsecurePath {
 		return nil, err
@@ -387,6 +416,14 @@ func readDirectoryHeader(f *File, r io.Reader) error {
 	f.Name = string(d[:filenameLen])
 	f.Extra = d[filenameLen : filenameLen+extraLen]
 	f.Comment = string(d[filenameLen+extraLen:])
+
+	// Allow the user to rewrite Name/Comment from a legacy encoding into
+	// UTF-8 before encoding detection runs.
+	if f.zip != nil && f.zip.nameDecoder != nil {
+		if err := f.zip.nameDecoder(&f.FileHeader); err != nil {
+			return err
+		}
+	}
 
 	// Determine the character encoding.
 	utf8Valid1, utf8Require1 := detectUTF8(f.Name)
