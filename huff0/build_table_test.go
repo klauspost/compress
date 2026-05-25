@@ -36,6 +36,37 @@ func TestBuildCTableEmpty(t *testing.T) {
 	}
 }
 
+// TestBuildCTableOversizedTotal exercises histograms that sum to more than
+// huff0's internal BlockSizeMax — the case that arises when summing the
+// per-block histograms of a multi-block bitmap. Without scaling, huffSort
+// places nodes at out-of-range rank indices and buildCTable panics on a
+// negative index.
+func TestBuildCTableOversizedTotal(t *testing.T) {
+	var count [256]uint32
+	// 4 MB of one dominant symbol, plus a handful of rare singletons.
+	count[0] = 4 << 20
+	count[1] = 2
+	count[2] = 1
+	count[128] = 1
+	count[255] = 3
+	var s Scratch
+	if err := s.BuildCTable(&count); err != nil {
+		t.Fatalf("BuildCTable: %v", err)
+	}
+	if len(s.prevTable) == 0 {
+		t.Fatalf("prevTable not installed")
+	}
+	// Every originally non-zero symbol must be representable.
+	for i, v := range count {
+		if v == 0 {
+			continue
+		}
+		if i >= len(s.prevTable) || s.prevTable[i].nBits == 0 {
+			t.Fatalf("symbol %d lost during scaling", i)
+		}
+	}
+}
+
 func TestBuildCTableNilCount(t *testing.T) {
 	var s Scratch
 	if err := s.BuildCTable(nil); err == nil {
