@@ -44,6 +44,38 @@ func (s *Scratch) BuildCTable(count *[256]uint32) error {
 	if symLen < 2 || maxCount == total {
 		return ErrUseRLE
 	}
+	// huff0's internal rank table assumes total ≤ BlockSizeMax (it uses
+	// highBit32(count+1) + 1 as a rank index into a fixed-size array).
+	// Histograms summed across multiple blocks can exceed that; scale the
+	// counts down preserving the distribution. Non-zero entries round up so
+	// rare symbols stay representable.
+	if total > BlockSizeMax {
+		shift := uint(0)
+		for total>>shift > BlockSizeMax {
+			shift++
+		}
+		round := uint32(1<<shift) - 1
+		var newTotal, newMax int
+		for i, v := range s.count {
+			if v == 0 {
+				continue
+			}
+			scaled := (v + round) >> shift
+			if scaled == 0 {
+				scaled = 1
+			}
+			s.count[i] = scaled
+			newTotal += int(scaled)
+			if int(scaled) > newMax {
+				newMax = int(scaled)
+			}
+		}
+		total = newTotal
+		maxCount = newMax
+		if maxCount == total {
+			return ErrUseRLE
+		}
+	}
 	s.symbolLen = symLen
 	s.maxCount = maxCount
 	s.srcLen = total
