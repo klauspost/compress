@@ -52,6 +52,7 @@ func getEncOpts(cMax int) []testEncOpt {
 				addOpt("pad1k", WithEncoderPadding(1024))
 				addOpt("zerof", WithZeroFrames(true))
 				addOpt("1seg", WithSingleSegment(true))
+				addOpt("conc", WithConcurrentBlocks(true))
 			}
 			if testing.Short() && conc == 2 {
 				break
