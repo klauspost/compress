@@ -108,13 +108,13 @@ func (e *Encoder) Reset(w io.Writer) {
 		js := &s.jobs
 		js.jobSize = e.o.jobSize()
 		js.overlapSize = e.o.overlapSize()
-		if cap(js.filling) < js.jobSize {
-			js.filling = make([]byte, 0, js.jobSize)
-		}
+		// js.filling is allocated lazily on first Write/ReadFrom so callers
+		// that only use EncodeAll don't pay the (up to ~32 MB) jobSize cost.
 		js.filling = js.filling[:0]
-		js.overlap[0] = js.overlap[0][:0]
-		js.overlap[1] = js.overlap[1][:0]
-		js.overlapN = 0
+		if js.nextPrefix != nil {
+			js.putOverlapBuf(js.nextPrefix)
+			js.nextPrefix = nil
+		}
 		js.jobSeq = 0
 		js.flushedSeq = 0
 		js.flusherErr = nil
@@ -215,6 +215,9 @@ func (e *Encoder) writeJobs(p []byte) (n int, err error) {
 	s := &e.state
 	js := &s.jobs
 	jobSize := js.jobSize
+	if cap(js.filling) == 0 && len(p) > 0 {
+		js.filling = make([]byte, 0, jobSize)
+	}
 	for len(p) > 0 {
 		if len(p)+len(js.filling) < jobSize {
 			if e.o.crc {
@@ -664,6 +667,7 @@ func (e *Encoder) closeJobs() error {
 	}
 
 	if err := e.dispatchJob(true); err != nil {
+		e.shutdownJobWorkers()
 		if errors.Is(s.err, ErrEncoderClosed) {
 			return nil
 		}

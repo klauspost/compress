@@ -22,9 +22,8 @@ type encJob struct {
 type jobState struct {
 	jobSize     int
 	overlapSize int
-	filling     []byte    // accumulates input up to jobSize
-	overlap     [2][]byte // double-buffered overlap (alternating)
-	overlapN    int       // which overlap buffer is current
+	filling     []byte // accumulates input up to jobSize
+	nextPrefix  []byte // overlap prefix prepared for the next dispatched job
 
 	jobSeq int // next job sequence number
 
@@ -41,8 +40,9 @@ type jobState struct {
 	flusherErr error
 	started    bool
 
-	inputPool  sync.Pool // *[]byte buffers of jobSize cap
-	outputPool sync.Pool // *[]byte buffers for compressed output
+	inputPool   sync.Pool // *[]byte buffers of jobSize cap
+	outputPool  sync.Pool // *[]byte buffers for compressed output
+	overlapPool sync.Pool // *[]byte buffers for overlap prefixes
 }
 
 func (e *Encoder) startJobWorkers() {
@@ -53,7 +53,7 @@ func (e *Encoder) startJobWorkers() {
 	js.flushedSeq = 0
 	js.cond = sync.NewCond(&js.mu)
 
-	for i := 0; i < n; i++ {
+	for range n {
 		enc := e.o.encoder()
 		js.workerWg.Add(1)
 		go e.jobWorker(enc)
@@ -153,11 +153,35 @@ func (js *jobState) putOutputBuf(b []byte) {
 	}
 }
 
+func (js *jobState) getOverlapBuf(size int) []byte {
+	if v := js.overlapPool.Get(); v != nil {
+		bp := v.(*[]byte)
+		b := *bp
+		if cap(b) >= size {
+			return b[:size]
+		}
+	}
+	return make([]byte, size)
+}
+
+func (js *jobState) putOverlapBuf(b []byte) {
+	if cap(b) > 0 {
+		b = b[:0]
+		js.overlapPool.Put(&b)
+	}
+}
+
 func (e *Encoder) jobFlusher() {
 	js := &e.state.jobs
 	defer js.flusherWg.Done()
 	for job := range js.resultCh {
 		<-job.done
+		// Worker has fully exited compressJob, so the prefix is no longer
+		// in use. Return it to the pool regardless of outcome.
+		if job.prefix != nil {
+			js.putOverlapBuf(job.prefix)
+			job.prefix = nil
+		}
 		if job.err != nil {
 			js.mu.Lock()
 			js.flusherErr = job.err
@@ -281,10 +305,7 @@ func (e *Encoder) dispatchJob(final bool) error {
 	}
 
 	// Estimate output size for pooled buffer.
-	outputEst := len(js.filling) / 2
-	if outputEst < 512 {
-		outputEst = 512
-	}
+	outputEst := max(len(js.filling)/2, 512)
 
 	job := &encJob{
 		last:   final,
@@ -292,25 +313,19 @@ func (e *Encoder) dispatchJob(final bool) error {
 		output: js.getOutputBuf(outputEst),
 	}
 
-	// Set prefix from PREVIOUS overlap buffer.
-	cur := js.overlapN
-	if js.jobSeq > 0 && len(js.overlap[cur]) > 0 {
-		job.prefix = js.overlap[cur]
+	// Each job owns its prefix slice; the flusher returns it to the pool
+	// after <-job.done, so workers and dispatch never share a buffer.
+	if js.nextPrefix != nil {
+		job.prefix = js.nextPrefix
+		js.nextPrefix = nil
 	}
 
-	// Save NEW overlap into the OTHER buffer for next job.
+	// Build the next job's prefix from the tail of this job's input.
 	if !final && len(js.filling) > 0 {
-		next := 1 - cur
-		overlapLen := js.overlapSize
-		if overlapLen > len(js.filling) {
-			overlapLen = len(js.filling)
-		}
-		if cap(js.overlap[next]) < overlapLen {
-			js.overlap[next] = make([]byte, overlapLen)
-		}
-		js.overlap[next] = js.overlap[next][:overlapLen]
-		copy(js.overlap[next], js.filling[len(js.filling)-overlapLen:])
-		js.overlapN = next
+		overlapLen := min(js.overlapSize, len(js.filling))
+		np := js.getOverlapBuf(overlapLen)
+		copy(np, js.filling[len(js.filling)-overlapLen:])
+		js.nextPrefix = np
 	}
 
 	// Swap filling buffer into job — zero-copy for the input data.
