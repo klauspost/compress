@@ -43,6 +43,10 @@ func TestParseEncodings(t *testing.T) {
 
 		"gzip;q=0.5;level=6":     {"gzip": 0.5},
 		"gzip;q=0.3;level=6;x=y": {"gzip": 0.3},
+
+		"gzip;Q=0.5":     {"gzip": 0.5},
+		"GZIP;Q=0.7":     {"gzip": 0.7},
+		"gzip;Q=0.4;x=y": {"gzip": 0.4},
 	}
 
 	for eg, exp := range examples {
