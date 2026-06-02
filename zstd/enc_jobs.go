@@ -53,20 +53,26 @@ func (e *Encoder) startJobWorkers() {
 	js.flushedSeq = 0
 	js.cond = sync.NewCond(&js.mu)
 
+	// Workers borrow encoders from the shared e.encoders pool per-job.
+	// Ensure the pool is initialized before any worker tries to borrow.
+	e.init.Do(e.initialize)
+
 	for range n {
-		enc := e.o.encoder()
 		js.workerWg.Add(1)
-		go e.jobWorker(enc)
+		go e.jobWorker()
 	}
 	js.flusherWg.Add(1)
 	go e.jobFlusher()
 	js.started = true
 }
 
-func (e *Encoder) jobWorker(enc encoder) {
-	defer e.state.jobs.workerWg.Done()
-	for job := range e.state.jobs.jobCh {
+func (e *Encoder) jobWorker() {
+	js := &e.state.jobs
+	defer js.workerWg.Done()
+	for job := range js.jobCh {
+		enc := <-e.encoders
 		e.compressJob(enc, job)
+		e.encoders <- enc
 		close(job.done)
 	}
 }
