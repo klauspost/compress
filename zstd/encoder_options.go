@@ -354,10 +354,7 @@ func WithConcurrentBlocks(b bool) EOption {
 
 // jobSize returns the input section size per parallel job.
 func (o *encoderOptions) jobSize() int {
-	s := o.windowSize * 4
-	if s < 512<<10 {
-		s = 512 << 10
-	}
+	s := max(o.windowSize*4, 512<<10)
 	return s
 }
 
