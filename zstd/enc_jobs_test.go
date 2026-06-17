@@ -375,7 +375,7 @@ func TestConcurrentBlocks_MultipleFlushes(t *testing.T) {
 
 	rng := mrand.New(mrand.NewSource(66))
 	var want bytes.Buffer
-	for flush := 0; flush < 5; flush++ {
+	for flush := range 5 {
 		chunk := make([]byte, 1<<17)
 		for i := range chunk {
 			chunk[i] = byte(rng.Intn(32))
@@ -580,15 +580,10 @@ func TestConcurrentBlocks_WindowSizes(t *testing.T) {
 	for _, winSize := range testWindowSizes {
 		t.Run(fmt.Sprintf("w%dk", winSize/1024), func(t *testing.T) {
 			// Input must exceed jobSize to trigger multi-job.
-			jobSize := winSize * 4
-			if jobSize < 512<<10 {
-				jobSize = 512 << 10
-			}
-			inputSize := jobSize*2 + 1000
-			// Cap at 8MB for test speed.
-			if inputSize > 8<<20 {
-				inputSize = 8 << 20
-			}
+			jobSize := max(winSize*4, 512<<10)
+			inputSize := min(
+				// Cap at 8MB for test speed.
+				jobSize*2+1000, 8<<20)
 
 			input := make([]byte, inputSize)
 			for i := range input {
@@ -863,7 +858,7 @@ func TestConcurrentBlocks_EncodeAllAlongside(t *testing.T) {
 
 	// Concurrent EncodeAll calls.
 	var encAllWg sync.WaitGroup
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		in := streamInput[rng.Intn(len(streamInput)/2):]
 		in = in[:rng.Intn(len(in)/4+1)]
 		encAllWg.Add(1)
@@ -1101,7 +1096,7 @@ func TestConcurrentBlocks_Reset(t *testing.T) {
 	}
 
 	rng := mrand.New(mrand.NewSource(77))
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		var buf bytes.Buffer
 		enc.Reset(&buf)
 
@@ -1258,7 +1253,7 @@ func TestConcurrentBlocks_ManySmallWrites(t *testing.T) {
 	rng := mrand.New(mrand.NewSource(33))
 	var want bytes.Buffer
 	chunk := make([]byte, 1024)
-	for i := 0; i < 8192; i++ {
+	for range 8192 {
 		for j := range chunk {
 			chunk[j] = byte(rng.Intn(32))
 		}

@@ -90,6 +90,9 @@ jobs:
     - name: fmt
       run: diff <(gofmt -d .) <(printf "")
 
+    - name: fix
+      run: diff <(go fix -diff ./...) <(printf "")
+
     - name: Test 386
       run: GOOS=linux GOARCH=386 go test -short ./...
 
