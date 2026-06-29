@@ -293,6 +293,16 @@ func untar(dst string, r io.Reader) error {
 			f.Close()
 		case tar.TypeSymlink:
 			target = path.Clean(target)
+			// A symlink target is resolved relative to the link's own
+			// directory (or used as-is when absolute); reject any that
+			// escape dst so the link cannot point outside the archive root.
+			linkTarget := header.Linkname
+			if !filepath.IsAbs(linkTarget) {
+				linkTarget = filepath.Join(filepath.Dir(target), linkTarget)
+			}
+			if !within(dst, linkTarget) {
+				return fmt.Errorf("illegal link target: %s", header.Linkname)
+			}
 			if !*quiet {
 				fmt.Println(target)
 			}
@@ -303,6 +313,10 @@ func untar(dst string, r io.Reader) error {
 			}
 		case tar.TypeLink:
 			target = path.Clean(target)
+			// Hardlink targets are relative to the archive root.
+			if err := checkPath(dst, header.Linkname); err != nil {
+				return err
+			}
 			if !*quiet {
 				fmt.Println(target)
 			}
@@ -318,12 +332,22 @@ func untar(dst string, r io.Reader) error {
 // Thanks to https://github.com/mholt/archiver for the following:
 
 func checkPath(dst, filename string) error {
-	dest := filepath.Join(dst, filename)
 	//prevent path traversal attacks
-	if !strings.HasPrefix(dest, dst) {
+	if !within(dst, filepath.Join(dst, filename)) {
 		return fmt.Errorf("illegal file path: %s", filename)
 	}
 	return nil
+}
+
+// within reports whether target stays inside dst. A raw strings.HasPrefix
+// check is not separator-aware: dst "out" would wrongly accept the sibling
+// "out_evil". filepath.Rel collapses the path and a ".." result means escape.
+func within(dst, target string) bool {
+	rel, err := filepath.Rel(dst, target)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
 }
 
 func writeNewSymbolicLink(fpath string, target string) error {
