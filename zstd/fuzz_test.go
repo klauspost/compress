@@ -62,15 +62,14 @@ func FuzzDecodeAll(f *testing.F) {
 		if compareNonAsm && cpuinfo.HasBMI2() {
 			// Decode again with the BMI2 assembly disabled and require identical
 			// output, exercising the assembly against the non-assembly path.
-			restore := cpuinfo.DisableBMI2()
+			// Defer the restore so BMI2 is re-enabled on every exit path.
+			defer cpuinfo.DisableBMI2()()
 			decRef, errRef := NewReader(nil, WithDecoderLowmem(true), WithDecoderConcurrency(1), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true))
 			if errRef != nil {
-				restore()
 				t.Fatal(errRef)
 			}
+			defer decRef.Close()
 			bRef, errRef := decRef.DecodeAll(b, make([]byte, 0, len(b)))
-			decRef.Close()
-			restore()
 			if (err1 == nil) != (errRef == nil) {
 				t.Errorf("err asm: %v, non-asm: %v", err1, errRef)
 			}
