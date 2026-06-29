@@ -18,6 +18,14 @@ func FuzzDecodeAll(f *testing.F) {
 	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-raw.zip", fuzz.TypeRaw, testing.Short())
 	fuzz.AddFromZip(f, "testdata/fuzz/decode-corpus-encoded.zip", fuzz.TypeGoFuzz, testing.Short())
 
+	// compareNonAsm cross-checks the assembly decoder against a non-assembly
+	// path and requires byte-identical output. On amd64 this disables the BMI2
+	// assembly, comparing the BMI2 and non-BMI2 routines. On other architectures
+	// cpuinfo.HasBMI2 is false so the in-process check is skipped; run this
+	// fuzzer additionally with -tags=noasm over the shared corpus to cover the
+	// assembly-vs-generic differential there.
+	const compareNonAsm = true
+
 	f.Fuzz(func(t *testing.T, b []byte) {
 		// Just test if we crash...
 		defer func() {
@@ -49,6 +57,26 @@ func FuzzDecodeAll(f *testing.F) {
 		}
 		if !bytes.Equal(b1, b2) {
 			t.Fatalf("Output mismatch, low: %v, hi: %v", err1, err2)
+		}
+
+		if compareNonAsm && cpuinfo.HasBMI2() {
+			// Decode again with the BMI2 assembly disabled and require identical
+			// output, exercising the assembly against the non-assembly path.
+			restore := cpuinfo.DisableBMI2()
+			decRef, errRef := NewReader(nil, WithDecoderLowmem(true), WithDecoderConcurrency(1), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true))
+			if errRef != nil {
+				restore()
+				t.Fatal(errRef)
+			}
+			bRef, errRef := decRef.DecodeAll(b, make([]byte, 0, len(b)))
+			decRef.Close()
+			restore()
+			if (err1 == nil) != (errRef == nil) {
+				t.Errorf("err asm: %v, non-asm: %v", err1, errRef)
+			}
+			if err1 == nil && !bytes.Equal(b1, bRef) {
+				t.Fatalf("asm vs non-asm output mismatch")
+			}
 		}
 	})
 }

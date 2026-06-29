@@ -1,6 +1,6 @@
 package main
 
-//go:generate go run gen.go -out ../seqdec_amd64.s -arm64 ../seqdec_arm64.s -pkg=zstd
+//go:generate go run gen.go -out ../seqdec.s -arch amd64,arm64 -pkg=zstd
 
 import (
 	"flag"
