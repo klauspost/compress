@@ -1,7 +1,7 @@
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
-github.com/honeycombio/avo v0.6.1-0.20260622001601-69cdd77ca886 h1:KstpVB7P++jCDVJsiGcr3IHG8R1SN8zf1FWxBh+dKss=
-github.com/honeycombio/avo v0.6.1-0.20260622001601-69cdd77ca886/go.mod h1:+Pk+j3KceMwAIGb32HZSCvkMCzJvxy6xCRk+urz7iPw=
+github.com/honeycombio/avo v0.6.1-0.20260629191455-df503373ce29 h1:+SJIQ6jb9Gfiax8i58lPqKW9gsAaJnuaSfEjGdF73x4=
+github.com/honeycombio/avo v0.6.1-0.20260629191455-df503373ce29/go.mod h1:+Pk+j3KceMwAIGb32HZSCvkMCzJvxy6xCRk+urz7iPw=
 golang.org/x/mod v0.27.0 h1:kb+q2PyFnEADO2IEF935ehFUXlWiNjJWtRNgBLSfbxQ=
 golang.org/x/mod v0.27.0/go.mod h1:rWI627Fq0DEoudcK+MBkNkCe0EetEaDSwJJkCcjpazc=
 golang.org/x/sync v0.16.0 h1:ycBJEhp9p4vXvUZNszeOq0kGTPghopOL8q0fq3vstxw=
