@@ -538,6 +538,58 @@ func benchmarkGzipN(b *testing.B, level int) {
 	}
 }
 
+func TestWriterPoolRoundtrip(t *testing.T) {
+	for level := HuffmanOnly; level <= BestCompression; level++ {
+		t.Run(fmt.Sprint("level-", level), func(t *testing.T) {
+			pool := NewWriterPool(level)
+			payload := []byte("Hello, World! This is a test payload.")
+			var buf bytes.Buffer
+
+			w := pool.Get(&buf)
+			n, err := w.Write(payload)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if n != len(payload) {
+				t.Fatalf("short write: %d != %d", n, len(payload))
+			}
+			pool.Put(w)
+
+			r, err := NewReader(&buf)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := io.ReadAll(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r.Close()
+			if !bytes.Equal(got, payload) {
+				t.Fatalf("roundtrip mismatch")
+			}
+
+			// Reuse the writer from pool
+			var buf2 bytes.Buffer
+			w2 := pool.Get(&buf2)
+			w2.Write(payload)
+			pool.Put(w2)
+
+			r2, err := NewReader(&buf2)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got2, err := io.ReadAll(r2)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r2.Close()
+			if !bytes.Equal(got2, payload) {
+				t.Fatalf("roundtrip mismatch on reuse")
+			}
+		})
+	}
+}
+
 func BenchmarkCompressAllocations(b *testing.B) {
 	payload := []byte(strings.Repeat("Tiny payload", 20))
 	for j := -2; j <= 9; j++ {
@@ -572,6 +624,37 @@ func BenchmarkCompressAllocationsSingle(b *testing.B) {
 			}
 			w.Write(payload)
 			w.Close()
+		}
+	})
+}
+
+func BenchmarkCompressAllocationsPool(b *testing.B) {
+	payload := []byte(strings.Repeat("Tiny payload", 20))
+	for level := HuffmanOnly; level <= BestCompression; level++ {
+		b.Run("level("+strconv.Itoa(level)+")", func(b *testing.B) {
+			pool := NewWriterPool(level)
+			b.Run("pool", func(b *testing.B) {
+				b.ReportAllocs()
+				for i := 0; i < b.N; i++ {
+					w := pool.Get(io.Discard)
+					w.Write(payload)
+					pool.Put(w)
+				}
+			})
+		})
+	}
+}
+
+func BenchmarkCompressAllocationsPoolSingle(b *testing.B) {
+	payload := []byte(strings.Repeat("Tiny payload", 20))
+	const level = 2
+	pool := NewWriterPool(level)
+	b.Run("pool", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			w := pool.Get(io.Discard)
+			w.Write(payload)
+			pool.Put(w)
 		}
 	})
 }
