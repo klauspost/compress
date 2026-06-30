@@ -13,7 +13,7 @@ jobs:
     strategy:
       matrix:
         go-version: [1.24.x, 1.25.x, 1.26.x]
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
     env:
       CGO_ENABLED: 0
     runs-on: ${{ matrix.os }}
@@ -146,9 +146,10 @@ jobs:
   fuzz-zstd:
     env:
       CGO_ENABLED: 0
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [ ubuntu-latest, ubuntu-24.04-arm ]
         tags: [ 'nounsafe', '"noasm,nounsafe"' ]
     steps:
       - name: Set up Go
