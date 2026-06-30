@@ -9,8 +9,10 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/base64"
+	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"os"
 	"strings"
@@ -99,6 +101,35 @@ func TestDict(t *testing.T) {
 		os.WriteFile("decoded.bin", decoded, os.ModePerm)
 		os.WriteFile("original.bin", data, os.ModePerm)
 		t.Fatal("decoded mismatch")
+	}
+}
+
+func TestNewDictRepeatOverflow(t *testing.T) {
+	// A repeat value that doesn't fit in the dict must be rejected before the
+	// int(r) cast: the cast wraps such values negative (CWE-190) — on 32-bit
+	// for r >= 1<<31, on 64-bit for r > MaxInt64 — and a negative repeat slips
+	// past the bounds check, later causing an OOB read in encodeBlockDictGo.
+	for _, r := range []uint64{
+		1 << 31,           // wraps to a negative int32 on 32-bit platforms
+		math.MaxUint32,    // wraps to int32(-1) on 32-bit platforms
+		math.MaxInt64 + 1, // wraps to a negative int64 on 64-bit platforms
+		math.MaxUint64,
+		12687765596934209639, // from the original report
+	} {
+		var buf [binary.MaxVarintLen64]byte
+		n := binary.PutUvarint(buf[:], r)
+		dictData := append(append([]byte{}, buf[:n]...), make([]byte, MinDictSize)...)
+		if d := NewDict(dictData); d != nil {
+			t.Errorf("repeat %d: expected nil dict, got repeat=%d", r, d.repeat)
+		}
+	}
+
+	// Boundary repeat == len(dict) must still be accepted (unchanged behavior).
+	dict := make([]byte, MinDictSize)
+	var buf [binary.MaxVarintLen64]byte
+	n := binary.PutUvarint(buf[:], uint64(len(dict)))
+	if NewDict(append(append([]byte{}, buf[:n]...), dict...)) == nil {
+		t.Error("repeat == len(dict) should be accepted")
 	}
 }
 
