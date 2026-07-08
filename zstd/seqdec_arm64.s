@@ -3,288 +3,295 @@
 
 //go:build arm64 && !appengine && !noasm && gc && !noasm
 
-// func sequenceDecs_decode_amd64(s *sequenceDecs, br *bitReader, ctx *decodeAsmContext) int
-// Requires: CMOV
-TEXT ·sequenceDecs_decode_arm64(SB), $8-32
-	MOVD  br+8(FP), R1
-	MOVD  24(R1), R2
-	MOVBU 40(R1), R3
-	MOVD  (R1), R0
-	MOVD  32(R1), R5
-	ADD   R5, R0, R0
-	MOVD  R0, (RSP)
-	MOVD  ctx+16(FP), R0
-	MOVD  72(R0), R6
-	MOVD  80(R0), R7
-	MOVD  88(R0), R8
-	MOVD  104(R0), R9
-	MOVD  s+0(FP), R0
-	MOVD  144(R0), R10
-	MOVD  152(R0), R11
-	MOVD  160(R0), R12
+// skipped sequenceDecs_decode_amd64 (BMI2 twin preferred on arm64)
 
-sequenceDecs_decode_amd64_main_loop:
-	MOVD (RSP), R13
+// skipped sequenceDecs_decode_56_amd64 (BMI2 twin preferred on arm64)
+
+// func sequenceDecs_decode_bmi2(s *sequenceDecs, br *bitReader, ctx *decodeAsmContext) int
+TEXT ·sequenceDecs_decode_arm64(SB), $8-32
+	MOVD  br+8(FP), R3
+	MOVD  24(R3), R0
+	MOVBU 40(R3), R2
+	MOVD  (R3), R1
+	MOVD  32(R3), R3
+	ADD   R3, R1, R1
+	MOVD  R1, (RSP)
+	MOVD  ctx+16(FP), R1
+	MOVD  72(R1), R5
+	MOVD  80(R1), R6
+	MOVD  88(R1), R7
+	MOVD  104(R1), R8
+	MOVD  s+0(FP), R1
+	MOVD  144(R1), R9
+	MOVD  152(R1), R10
+	MOVD  160(R1), R11
+
+sequenceDecs_decode_bmi2_main_loop:
+	MOVD (RSP), R12
 
 	// Fill bitreader to have enough for the offset and match length.
-	CMP  $0x08, R5
-	BLT  sequenceDecs_decode_amd64_fill_byte_by_byte
-	MOVD R3, R0
-	LSR  $0x03, R0, R0
-	SUB  R0, R13, R13
-	MOVD (R13), R2
-	SUB  R0, R5, R5
-	AND  $0x07, R3, R3
-	JMP  sequenceDecs_decode_amd64_fill_end
+	CMP  $0x08, R3
+	BLT  sequenceDecs_decode_bmi2_fill_byte_by_byte
+	MOVD R2, R1
+	LSR  $0x03, R1, R1
+	SUB  R1, R12, R12
+	MOVD (R12), R0
+	SUB  R1, R3, R3
+	AND  $0x07, R2, R2
+	JMP  sequenceDecs_decode_bmi2_fill_end
 
-sequenceDecs_decode_amd64_fill_byte_by_byte:
-	CMP   $0x00, R5
-	BLE   sequenceDecs_decode_amd64_fill_check_overread
-	CMP   $0x07, R3
-	BLE   sequenceDecs_decode_amd64_fill_end
-	LSL   $0x08, R2, R2
-	SUB   $0x01, R13, R13
-	SUB   $0x01, R5, R5
-	SUB   $0x08, R3, R3
-	MOVBU (R13), R0
-	ORR   R0, R2, R2
-	JMP   sequenceDecs_decode_amd64_fill_byte_by_byte
+sequenceDecs_decode_bmi2_fill_byte_by_byte:
+	CMP   $0x00, R3
+	BLE   sequenceDecs_decode_bmi2_fill_check_overread
+	CMP   $0x07, R2
+	BLE   sequenceDecs_decode_bmi2_fill_end
+	LSL   $0x08, R0, R0
+	SUB   $0x01, R12, R12
+	SUB   $0x01, R3, R3
+	SUB   $0x08, R2, R2
+	MOVBU (R12), R1
+	ORR   R1, R0, R0
+	JMP   sequenceDecs_decode_bmi2_fill_byte_by_byte
 
-sequenceDecs_decode_amd64_fill_check_overread:
-	CMP $0x40, R3
+sequenceDecs_decode_bmi2_fill_check_overread:
+	CMP $0x40, R2
 	BHI error_overread
 
-sequenceDecs_decode_amd64_fill_end:
+sequenceDecs_decode_bmi2_fill_end:
 	// Update offset
-	MOVD R8, R0
-	MOVD R3, R1
-	MOVD R2, R14
-	LSL  R1, R14, R14
-	UBFX $8, R0, $8, R1
-	LSR  $0x20, R0, R0
-	TST  R1, R1
-	BEQ  sequenceDecs_decode_amd64_of_update_zero
-	ADD  R1, R3, R3
-	CMP  $0x40, R3
-	BHI  sequenceDecs_decode_amd64_of_update_zero
-	CMP  $0x40, R1
-	BHS  sequenceDecs_decode_amd64_of_update_zero
-	NEG  R1, R1
-	LSR  R1, R14, R14
-	ADD  R14, R0, R0
-
-sequenceDecs_decode_amd64_of_update_zero:
-	MOVD R0, 16(R9)
+	MOVD $0x00000808, R1
+	UBFX $0, R1, $8, R16
+	UBFX $8, R1, $8, R15
+	LSR  R16, R7, R13
+	MOVD $1, R16
+	LSL  R15, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R13, R13
+	MOVD R0, R14
+	ADD  R13, R2, R1
+	NEG  R1, R16
+	ROR  R16, R14, R14
+	MOVD $1, R16
+	LSL  R13, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R14, R14
+	MOVD R1, R2
+	MOVD R7, R1
+	LSR  $0x20, R1, R1
+	ADD  R14, R1, R1
+	MOVD R1, 16(R8)
 
 	// Update match length
-	MOVD R7, R0
-	MOVD R3, R1
-	MOVD R2, R14
-	LSL  R1, R14, R14
-	UBFX $8, R0, $8, R1
-	LSR  $0x20, R0, R0
-	TST  R1, R1
-	BEQ  sequenceDecs_decode_amd64_ml_update_zero
-	ADD  R1, R3, R3
-	CMP  $0x40, R3
-	BHI  sequenceDecs_decode_amd64_ml_update_zero
-	CMP  $0x40, R1
-	BHS  sequenceDecs_decode_amd64_ml_update_zero
-	NEG  R1, R1
-	LSR  R1, R14, R14
-	ADD  R14, R0, R0
-
-sequenceDecs_decode_amd64_ml_update_zero:
-	MOVD R0, 8(R9)
+	MOVD $0x00000808, R1
+	UBFX $0, R1, $8, R16
+	UBFX $8, R1, $8, R15
+	LSR  R16, R6, R13
+	MOVD $1, R16
+	LSL  R15, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R13, R13
+	MOVD R0, R14
+	ADD  R13, R2, R1
+	NEG  R1, R16
+	ROR  R16, R14, R14
+	MOVD $1, R16
+	LSL  R13, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R14, R14
+	MOVD R1, R2
+	MOVD R6, R1
+	LSR  $0x20, R1, R1
+	ADD  R14, R1, R1
+	MOVD R1, 8(R8)
 
 	// Fill bitreader to have enough for the remaining
-	CMP  $0x08, R5
-	BLT  sequenceDecs_decode_amd64_fill_2_byte_by_byte
-	MOVD R3, R0
-	LSR  $0x03, R0, R0
-	SUB  R0, R13, R13
-	MOVD (R13), R2
-	SUB  R0, R5, R5
-	AND  $0x07, R3, R3
-	JMP  sequenceDecs_decode_amd64_fill_2_end
+	CMP  $0x08, R3
+	BLT  sequenceDecs_decode_bmi2_fill_2_byte_by_byte
+	MOVD R2, R1
+	LSR  $0x03, R1, R1
+	SUB  R1, R12, R12
+	MOVD (R12), R0
+	SUB  R1, R3, R3
+	AND  $0x07, R2, R2
+	JMP  sequenceDecs_decode_bmi2_fill_2_end
 
-sequenceDecs_decode_amd64_fill_2_byte_by_byte:
-	CMP   $0x00, R5
-	BLE   sequenceDecs_decode_amd64_fill_2_check_overread
-	CMP   $0x07, R3
-	BLE   sequenceDecs_decode_amd64_fill_2_end
-	LSL   $0x08, R2, R2
-	SUB   $0x01, R13, R13
-	SUB   $0x01, R5, R5
-	SUB   $0x08, R3, R3
-	MOVBU (R13), R0
-	ORR   R0, R2, R2
-	JMP   sequenceDecs_decode_amd64_fill_2_byte_by_byte
+sequenceDecs_decode_bmi2_fill_2_byte_by_byte:
+	CMP   $0x00, R3
+	BLE   sequenceDecs_decode_bmi2_fill_2_check_overread
+	CMP   $0x07, R2
+	BLE   sequenceDecs_decode_bmi2_fill_2_end
+	LSL   $0x08, R0, R0
+	SUB   $0x01, R12, R12
+	SUB   $0x01, R3, R3
+	SUB   $0x08, R2, R2
+	MOVBU (R12), R1
+	ORR   R1, R0, R0
+	JMP   sequenceDecs_decode_bmi2_fill_2_byte_by_byte
 
-sequenceDecs_decode_amd64_fill_2_check_overread:
-	CMP $0x40, R3
+sequenceDecs_decode_bmi2_fill_2_check_overread:
+	CMP $0x40, R2
 	BHI error_overread
 
-sequenceDecs_decode_amd64_fill_2_end:
+sequenceDecs_decode_bmi2_fill_2_end:
 	// Update literal length
-	MOVD R6, R0
-	MOVD R3, R1
-	MOVD R2, R14
-	LSL  R1, R14, R14
-	UBFX $8, R0, $8, R1
-	LSR  $0x20, R0, R0
-	TST  R1, R1
-	BEQ  sequenceDecs_decode_amd64_ll_update_zero
-	ADD  R1, R3, R3
-	CMP  $0x40, R3
-	BHI  sequenceDecs_decode_amd64_ll_update_zero
-	CMP  $0x40, R1
-	BHS  sequenceDecs_decode_amd64_ll_update_zero
-	NEG  R1, R1
-	LSR  R1, R14, R14
-	ADD  R14, R0, R0
-
-sequenceDecs_decode_amd64_ll_update_zero:
-	MOVD R0, (R9)
+	MOVD $0x00000808, R1
+	UBFX $0, R1, $8, R16
+	UBFX $8, R1, $8, R15
+	LSR  R16, R5, R13
+	MOVD $1, R16
+	LSL  R15, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R13, R13
+	MOVD R0, R14
+	ADD  R13, R2, R1
+	NEG  R1, R16
+	ROR  R16, R14, R14
+	MOVD $1, R16
+	LSL  R13, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R14, R14
+	MOVD R1, R2
+	MOVD R5, R1
+	LSR  $0x20, R1, R1
+	ADD  R14, R1, R1
+	MOVD R1, (R8)
 
 	// Fill bitreader for state updates
-	MOVD  R13, (RSP)
-	MOVD  R8, R0
-	LSR   $0x08, R0, R0
-	MOVBU R0, R0
+	MOVD  R12, (RSP)
+	MOVD  $0x00000808, R1
+	UBFX  $0, R1, $8, R16
+	UBFX  $8, R1, $8, R15
+	LSR   R16, R7, R12
+	MOVD  $1, R16
+	LSL   R15, R16, R16
+	SUB   $1, R16, R16
+	AND   R16, R12, R12
 	MOVD  ctx+16(FP), R1
 	MOVD  96(R1), R16
 	CMP   $0x00, R16
-	BEQ   sequenceDecs_decode_amd64_skip_update
-
-	// Update Literal Length State
-	MOVBU R6, R13
-	LSRW  $0x10, R6, R6
-	ADD   R13, R3, R1
-	MOVD  R2, R14
-	MOVD  R1, R3
+	BEQ   sequenceDecs_decode_bmi2_skip_update
+	ADD   R6, R5, R13
+	ADD   R7, R13, R13
+	MOVBU R13, R13
+	ADD   R13, R2, R1
+	MOVD  R0, R14
+	MOVD  R1, R2
 	NEG   R1, R16
 	ROR   R16, R14, R14
-	MOVD  $0x00000001, R4
-	MOVB  R13, R1
-	LSLW  R1, R4, R4
-	SUBW  $1, R4, R4
-	AND   R4, R14, R14
-	ADD   R14, R6, R6
-
-	// Load ctx.llTable
-	MOVD ctx+16(FP), R1
-	MOVD (R1), R1
-	ADD  R6<<3, R1, R15
-	MOVD (R15), R6
-
-	// Update Match Length State
-	MOVBU R7, R13
-	LSRW  $0x10, R7, R7
-	ADD   R13, R3, R1
-	MOVD  R2, R14
-	MOVD  R1, R3
-	NEG   R1, R16
-	ROR   R16, R14, R14
-	MOVD  $0x00000001, R4
-	MOVB  R13, R1
-	LSLW  R1, R4, R4
-	SUBW  $1, R4, R4
-	AND   R4, R14, R14
-	ADD   R14, R7, R7
-
-	// Load ctx.mlTable
-	MOVD ctx+16(FP), R1
-	MOVD 24(R1), R1
-	ADD  R7<<3, R1, R15
-	MOVD (R15), R7
+	MOVD  $1, R16
+	LSL   R13, R16, R16
+	SUB   $1, R16, R16
+	AND   R16, R14, R14
 
 	// Update Offset State
-	MOVBU R8, R13
-	LSRW  $0x10, R8, R8
-	ADD   R13, R3, R1
-	MOVD  R2, R14
-	MOVD  R1, R3
-	NEG   R1, R16
-	ROR   R16, R14, R14
-	MOVD  $0x00000001, R4
-	MOVB  R13, R1
-	LSLW  R1, R4, R4
-	SUBW  $1, R4, R4
-	AND   R4, R14, R14
-	ADD   R14, R8, R8
+	MOVD $1, R16
+	LSL  R7, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R14, R1
+	LSR  R7, R14, R14
+	LSRW $0x10, R7, R7
+	ADD  R1, R7, R7
 
 	// Load ctx.ofTable
 	MOVD ctx+16(FP), R1
 	MOVD 48(R1), R1
-	ADD  R8<<3, R1, R15
-	MOVD (R15), R8
+	ADD  R7<<3, R1, R15
+	MOVD (R15), R7
 
-sequenceDecs_decode_amd64_skip_update:
+	// Update Match Length State
+	MOVD $1, R16
+	LSL  R6, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R14, R1
+	LSR  R6, R14, R14
+	LSRW $0x10, R6, R6
+	ADD  R1, R6, R6
+
+	// Load ctx.mlTable
+	MOVD ctx+16(FP), R1
+	MOVD 24(R1), R1
+	ADD  R6<<3, R1, R15
+	MOVD (R15), R6
+
+	// Update Literal Length State
+	MOVD $1, R16
+	LSL  R5, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R14, R1
+	LSRW $0x10, R5, R5
+	ADD  R1, R5, R5
+
+	// Load ctx.llTable
+	MOVD ctx+16(FP), R1
+	MOVD (R1), R1
+	ADD  R5<<3, R1, R15
+	MOVD (R15), R5
+
+sequenceDecs_decode_bmi2_skip_update:
 	// Adjust offset
-	MOVD 16(R9), R1
-	CMP  $0x01, R0
-	BLS  sequenceDecs_decode_amd64_adjust_offsetB_1_or_0
-	MOVD R11, R12
+	MOVD 16(R8), R1
+	CMP  $0x01, R12
+	BLS  sequenceDecs_decode_bmi2_adjust_offsetB_1_or_0
 	MOVD R10, R11
-	MOVD R1, R10
-	JMP  sequenceDecs_decode_amd64_after_adjust
+	MOVD R9, R10
+	MOVD R1, R9
+	JMP  sequenceDecs_decode_bmi2_after_adjust
 
-sequenceDecs_decode_amd64_adjust_offsetB_1_or_0:
-	MOVD (R9), R16
+sequenceDecs_decode_bmi2_adjust_offsetB_1_or_0:
+	MOVD (R8), R16
 	CMP  $0x00000000, R16
-	BNE  sequenceDecs_decode_amd64_adjust_offset_maybezero
+	BNE  sequenceDecs_decode_bmi2_adjust_offset_maybezero
 	ADD  $1, R1, R1
-	JMP  sequenceDecs_decode_amd64_adjust_offset_nonzero
+	JMP  sequenceDecs_decode_bmi2_adjust_offset_nonzero
 
-sequenceDecs_decode_amd64_adjust_offset_maybezero:
+sequenceDecs_decode_bmi2_adjust_offset_maybezero:
 	TST  R1, R1
-	BNE  sequenceDecs_decode_amd64_adjust_offset_nonzero
-	MOVD R10, R1
-	JMP  sequenceDecs_decode_amd64_after_adjust
+	BNE  sequenceDecs_decode_bmi2_adjust_offset_nonzero
+	MOVD R9, R1
+	JMP  sequenceDecs_decode_bmi2_after_adjust
 
-sequenceDecs_decode_amd64_adjust_offset_nonzero:
+sequenceDecs_decode_bmi2_adjust_offset_nonzero:
 	CMP $0x01, R1
-	BLO sequenceDecs_decode_amd64_adjust_zero
-	BEQ sequenceDecs_decode_amd64_adjust_one
+	BLO sequenceDecs_decode_bmi2_adjust_zero
+	BEQ sequenceDecs_decode_bmi2_adjust_one
 	CMP $0x02, R1
-	BHI sequenceDecs_decode_amd64_adjust_three
-	JMP sequenceDecs_decode_amd64_adjust_two
+	BHI sequenceDecs_decode_bmi2_adjust_three
+	JMP sequenceDecs_decode_bmi2_adjust_two
 
-sequenceDecs_decode_amd64_adjust_zero:
-	MOVD R10, R0
-	JMP  sequenceDecs_decode_amd64_adjust_test_temp_valid
+sequenceDecs_decode_bmi2_adjust_zero:
+	MOVD R9, R12
+	JMP  sequenceDecs_decode_bmi2_adjust_test_temp_valid
 
-sequenceDecs_decode_amd64_adjust_one:
-	MOVD R11, R0
-	JMP  sequenceDecs_decode_amd64_adjust_test_temp_valid
+sequenceDecs_decode_bmi2_adjust_one:
+	MOVD R10, R12
+	JMP  sequenceDecs_decode_bmi2_adjust_test_temp_valid
 
-sequenceDecs_decode_amd64_adjust_two:
-	MOVD R12, R0
-	JMP  sequenceDecs_decode_amd64_adjust_test_temp_valid
+sequenceDecs_decode_bmi2_adjust_two:
+	MOVD R11, R12
+	JMP  sequenceDecs_decode_bmi2_adjust_test_temp_valid
 
-sequenceDecs_decode_amd64_adjust_three:
-	SUB $1, R10, R0
+sequenceDecs_decode_bmi2_adjust_three:
+	SUB $1, R9, R12
 
-sequenceDecs_decode_amd64_adjust_test_temp_valid:
-	TST  R0, R0
-	BNE  sequenceDecs_decode_amd64_adjust_temp_valid
-	MOVD $0x00000001, R0
+sequenceDecs_decode_bmi2_adjust_test_temp_valid:
+	TST  R12, R12
+	BNE  sequenceDecs_decode_bmi2_adjust_temp_valid
+	MOVD $0x00000001, R12
 
-sequenceDecs_decode_amd64_adjust_temp_valid:
+sequenceDecs_decode_bmi2_adjust_temp_valid:
 	CMP  $0x01, R1
-	CSEL NE, R11, R12, R12
-	MOVD R10, R11
-	MOVD R0, R10
-	MOVD R0, R1
+	CSEL NE, R10, R11, R11
+	MOVD R9, R10
+	MOVD R12, R9
+	MOVD R12, R1
 
-sequenceDecs_decode_amd64_after_adjust:
-	MOVD R1, 16(R9)
+sequenceDecs_decode_bmi2_after_adjust:
+	MOVD R1, 16(R8)
 
 	// Check values
-	MOVD 8(R9), R0
-	MOVD (R9), R13
-	ADD  R13, R0, R14
+	MOVD 8(R8), R12
+	MOVD (R8), R13
+	ADD  R13, R12, R14
 	MOVD s+0(FP), R4
 	MOVD 256(R4), R16
 	ADD  R14, R16, R16
@@ -294,28 +301,28 @@ sequenceDecs_decode_amd64_after_adjust:
 	SUBS R13, R16, R16
 	MOVD R16, 128(R14)
 	BMI  error_not_enough_literals
-	CMP  $0x00020002, R0
-	BHI  sequenceDecs_decode_amd64_error_match_len_too_big
+	CMP  $0x00020002, R12
+	BHI  sequenceDecs_decode_bmi2_error_match_len_too_big
 	TST  R1, R1
-	BNE  sequenceDecs_decode_amd64_match_len_ofs_ok
-	TST  R0, R0
-	BNE  sequenceDecs_decode_amd64_error_match_len_ofs_mismatch
+	BNE  sequenceDecs_decode_bmi2_match_len_ofs_ok
+	TST  R12, R12
+	BNE  sequenceDecs_decode_bmi2_error_match_len_ofs_mismatch
 
-sequenceDecs_decode_amd64_match_len_ofs_ok:
-	ADD  $0x18, R9, R9
-	MOVD ctx+16(FP), R0
-	MOVD 96(R0), R16
+sequenceDecs_decode_bmi2_match_len_ofs_ok:
+	ADD  $0x18, R8, R8
+	MOVD ctx+16(FP), R1
+	MOVD 96(R1), R16
 	SUBS $1, R16, R16
-	MOVD R16, 96(R0)
-	BPL  sequenceDecs_decode_amd64_main_loop
-	MOVD s+0(FP), R0
-	MOVD R10, 144(R0)
-	MOVD R11, 152(R0)
-	MOVD R12, 160(R0)
-	MOVD br+8(FP), R0
-	MOVD R2, 24(R0)
-	MOVB R3, 40(R0)
-	MOVD R5, 32(R0)
+	MOVD R16, 96(R1)
+	BPL  sequenceDecs_decode_bmi2_main_loop
+	MOVD s+0(FP), R1
+	MOVD R9, 144(R1)
+	MOVD R10, 152(R1)
+	MOVD R11, 160(R1)
+	MOVD br+8(FP), R1
+	MOVD R0, 24(R1)
+	MOVB R2, 40(R1)
+	MOVD R3, 32(R1)
 
 	// Return success
 	MOVD $0x00000000, R16
@@ -323,13 +330,13 @@ sequenceDecs_decode_amd64_match_len_ofs_ok:
 	RET
 
 	// Return with match length error
-sequenceDecs_decode_amd64_error_match_len_ofs_mismatch:
+sequenceDecs_decode_bmi2_error_match_len_ofs_mismatch:
 	MOVD $0x00000001, R16
 	MOVD R16, ret+24(FP)
 	RET
 
 	// Return with match too long error
-sequenceDecs_decode_amd64_error_match_len_too_big:
+sequenceDecs_decode_bmi2_error_match_len_too_big:
 	MOVD $0x00000002, R16
 	MOVD R16, ret+24(FP)
 	RET
@@ -351,259 +358,262 @@ error_overread:
 	MOVD R16, ret+24(FP)
 	RET
 
-// func sequenceDecs_decode_56_amd64(s *sequenceDecs, br *bitReader, ctx *decodeAsmContext) int
-// Requires: CMOV
+// func sequenceDecs_decode_56_bmi2(s *sequenceDecs, br *bitReader, ctx *decodeAsmContext) int
 TEXT ·sequenceDecs_decode_56_arm64(SB), $8-32
-	MOVD  br+8(FP), R1
-	MOVD  24(R1), R2
-	MOVBU 40(R1), R3
-	MOVD  (R1), R0
-	MOVD  32(R1), R5
-	ADD   R5, R0, R0
-	MOVD  R0, (RSP)
-	MOVD  ctx+16(FP), R0
-	MOVD  72(R0), R6
-	MOVD  80(R0), R7
-	MOVD  88(R0), R8
-	MOVD  104(R0), R9
-	MOVD  s+0(FP), R0
-	MOVD  144(R0), R10
-	MOVD  152(R0), R11
-	MOVD  160(R0), R12
+	MOVD  br+8(FP), R3
+	MOVD  24(R3), R0
+	MOVBU 40(R3), R2
+	MOVD  (R3), R1
+	MOVD  32(R3), R3
+	ADD   R3, R1, R1
+	MOVD  R1, (RSP)
+	MOVD  ctx+16(FP), R1
+	MOVD  72(R1), R5
+	MOVD  80(R1), R6
+	MOVD  88(R1), R7
+	MOVD  104(R1), R8
+	MOVD  s+0(FP), R1
+	MOVD  144(R1), R9
+	MOVD  152(R1), R10
+	MOVD  160(R1), R11
 
-sequenceDecs_decode_56_amd64_main_loop:
-	MOVD (RSP), R13
+sequenceDecs_decode_56_bmi2_main_loop:
+	MOVD (RSP), R12
 
 	// Fill bitreader to have enough for the offset and match length.
-	CMP  $0x08, R5
-	BLT  sequenceDecs_decode_56_amd64_fill_byte_by_byte
-	MOVD R3, R0
-	LSR  $0x03, R0, R0
-	SUB  R0, R13, R13
-	MOVD (R13), R2
-	SUB  R0, R5, R5
-	AND  $0x07, R3, R3
-	JMP  sequenceDecs_decode_56_amd64_fill_end
+	CMP  $0x08, R3
+	BLT  sequenceDecs_decode_56_bmi2_fill_byte_by_byte
+	MOVD R2, R1
+	LSR  $0x03, R1, R1
+	SUB  R1, R12, R12
+	MOVD (R12), R0
+	SUB  R1, R3, R3
+	AND  $0x07, R2, R2
+	JMP  sequenceDecs_decode_56_bmi2_fill_end
 
-sequenceDecs_decode_56_amd64_fill_byte_by_byte:
-	CMP   $0x00, R5
-	BLE   sequenceDecs_decode_56_amd64_fill_check_overread
-	CMP   $0x07, R3
-	BLE   sequenceDecs_decode_56_amd64_fill_end
-	LSL   $0x08, R2, R2
-	SUB   $0x01, R13, R13
-	SUB   $0x01, R5, R5
-	SUB   $0x08, R3, R3
-	MOVBU (R13), R0
-	ORR   R0, R2, R2
-	JMP   sequenceDecs_decode_56_amd64_fill_byte_by_byte
+sequenceDecs_decode_56_bmi2_fill_byte_by_byte:
+	CMP   $0x00, R3
+	BLE   sequenceDecs_decode_56_bmi2_fill_check_overread
+	CMP   $0x07, R2
+	BLE   sequenceDecs_decode_56_bmi2_fill_end
+	LSL   $0x08, R0, R0
+	SUB   $0x01, R12, R12
+	SUB   $0x01, R3, R3
+	SUB   $0x08, R2, R2
+	MOVBU (R12), R1
+	ORR   R1, R0, R0
+	JMP   sequenceDecs_decode_56_bmi2_fill_byte_by_byte
 
-sequenceDecs_decode_56_amd64_fill_check_overread:
-	CMP $0x40, R3
+sequenceDecs_decode_56_bmi2_fill_check_overread:
+	CMP $0x40, R2
 	BHI error_overread
 
-sequenceDecs_decode_56_amd64_fill_end:
+sequenceDecs_decode_56_bmi2_fill_end:
 	// Update offset
-	MOVD R8, R0
-	MOVD R3, R1
-	MOVD R2, R14
-	LSL  R1, R14, R14
-	UBFX $8, R0, $8, R1
-	LSR  $0x20, R0, R0
-	TST  R1, R1
-	BEQ  sequenceDecs_decode_56_amd64_of_update_zero
-	ADD  R1, R3, R3
-	CMP  $0x40, R3
-	BHI  sequenceDecs_decode_56_amd64_of_update_zero
-	CMP  $0x40, R1
-	BHS  sequenceDecs_decode_56_amd64_of_update_zero
-	NEG  R1, R1
-	LSR  R1, R14, R14
-	ADD  R14, R0, R0
-
-sequenceDecs_decode_56_amd64_of_update_zero:
-	MOVD R0, 16(R9)
+	MOVD $0x00000808, R1
+	UBFX $0, R1, $8, R16
+	UBFX $8, R1, $8, R15
+	LSR  R16, R7, R13
+	MOVD $1, R16
+	LSL  R15, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R13, R13
+	MOVD R0, R14
+	ADD  R13, R2, R1
+	NEG  R1, R16
+	ROR  R16, R14, R14
+	MOVD $1, R16
+	LSL  R13, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R14, R14
+	MOVD R1, R2
+	MOVD R7, R1
+	LSR  $0x20, R1, R1
+	ADD  R14, R1, R1
+	MOVD R1, 16(R8)
 
 	// Update match length
-	MOVD R7, R0
-	MOVD R3, R1
-	MOVD R2, R14
-	LSL  R1, R14, R14
-	UBFX $8, R0, $8, R1
-	LSR  $0x20, R0, R0
-	TST  R1, R1
-	BEQ  sequenceDecs_decode_56_amd64_ml_update_zero
-	ADD  R1, R3, R3
-	CMP  $0x40, R3
-	BHI  sequenceDecs_decode_56_amd64_ml_update_zero
-	CMP  $0x40, R1
-	BHS  sequenceDecs_decode_56_amd64_ml_update_zero
-	NEG  R1, R1
-	LSR  R1, R14, R14
-	ADD  R14, R0, R0
-
-sequenceDecs_decode_56_amd64_ml_update_zero:
-	MOVD R0, 8(R9)
+	MOVD $0x00000808, R1
+	UBFX $0, R1, $8, R16
+	UBFX $8, R1, $8, R15
+	LSR  R16, R6, R13
+	MOVD $1, R16
+	LSL  R15, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R13, R13
+	MOVD R0, R14
+	ADD  R13, R2, R1
+	NEG  R1, R16
+	ROR  R16, R14, R14
+	MOVD $1, R16
+	LSL  R13, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R14, R14
+	MOVD R1, R2
+	MOVD R6, R1
+	LSR  $0x20, R1, R1
+	ADD  R14, R1, R1
+	MOVD R1, 8(R8)
 
 	// Update literal length
-	MOVD R6, R0
-	MOVD R3, R1
-	MOVD R2, R14
-	LSL  R1, R14, R14
-	UBFX $8, R0, $8, R1
-	LSR  $0x20, R0, R0
-	TST  R1, R1
-	BEQ  sequenceDecs_decode_56_amd64_ll_update_zero
-	ADD  R1, R3, R3
-	CMP  $0x40, R3
-	BHI  sequenceDecs_decode_56_amd64_ll_update_zero
-	CMP  $0x40, R1
-	BHS  sequenceDecs_decode_56_amd64_ll_update_zero
-	NEG  R1, R1
-	LSR  R1, R14, R14
-	ADD  R14, R0, R0
-
-sequenceDecs_decode_56_amd64_ll_update_zero:
-	MOVD R0, (R9)
+	MOVD $0x00000808, R1
+	UBFX $0, R1, $8, R16
+	UBFX $8, R1, $8, R15
+	LSR  R16, R5, R13
+	MOVD $1, R16
+	LSL  R15, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R13, R13
+	MOVD R0, R14
+	ADD  R13, R2, R1
+	NEG  R1, R16
+	ROR  R16, R14, R14
+	MOVD $1, R16
+	LSL  R13, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R14, R14
+	MOVD R1, R2
+	MOVD R5, R1
+	LSR  $0x20, R1, R1
+	ADD  R14, R1, R1
+	MOVD R1, (R8)
 
 	// Fill bitreader for state updates
-	MOVD  R13, (RSP)
-	MOVD  R8, R0
-	LSR   $0x08, R0, R0
-	MOVBU R0, R0
+	MOVD  R12, (RSP)
+	MOVD  $0x00000808, R1
+	UBFX  $0, R1, $8, R16
+	UBFX  $8, R1, $8, R15
+	LSR   R16, R7, R12
+	MOVD  $1, R16
+	LSL   R15, R16, R16
+	SUB   $1, R16, R16
+	AND   R16, R12, R12
 	MOVD  ctx+16(FP), R1
 	MOVD  96(R1), R16
 	CMP   $0x00, R16
-	BEQ   sequenceDecs_decode_56_amd64_skip_update
-
-	// Update Literal Length State
-	MOVBU R6, R13
-	LSRW  $0x10, R6, R6
-	ADD   R13, R3, R1
-	MOVD  R2, R14
-	MOVD  R1, R3
+	BEQ   sequenceDecs_decode_56_bmi2_skip_update
+	ADD   R6, R5, R13
+	ADD   R7, R13, R13
+	MOVBU R13, R13
+	ADD   R13, R2, R1
+	MOVD  R0, R14
+	MOVD  R1, R2
 	NEG   R1, R16
 	ROR   R16, R14, R14
-	MOVD  $0x00000001, R4
-	MOVB  R13, R1
-	LSLW  R1, R4, R4
-	SUBW  $1, R4, R4
-	AND   R4, R14, R14
-	ADD   R14, R6, R6
-
-	// Load ctx.llTable
-	MOVD ctx+16(FP), R1
-	MOVD (R1), R1
-	ADD  R6<<3, R1, R15
-	MOVD (R15), R6
-
-	// Update Match Length State
-	MOVBU R7, R13
-	LSRW  $0x10, R7, R7
-	ADD   R13, R3, R1
-	MOVD  R2, R14
-	MOVD  R1, R3
-	NEG   R1, R16
-	ROR   R16, R14, R14
-	MOVD  $0x00000001, R4
-	MOVB  R13, R1
-	LSLW  R1, R4, R4
-	SUBW  $1, R4, R4
-	AND   R4, R14, R14
-	ADD   R14, R7, R7
-
-	// Load ctx.mlTable
-	MOVD ctx+16(FP), R1
-	MOVD 24(R1), R1
-	ADD  R7<<3, R1, R15
-	MOVD (R15), R7
+	MOVD  $1, R16
+	LSL   R13, R16, R16
+	SUB   $1, R16, R16
+	AND   R16, R14, R14
 
 	// Update Offset State
-	MOVBU R8, R13
-	LSRW  $0x10, R8, R8
-	ADD   R13, R3, R1
-	MOVD  R2, R14
-	MOVD  R1, R3
-	NEG   R1, R16
-	ROR   R16, R14, R14
-	MOVD  $0x00000001, R4
-	MOVB  R13, R1
-	LSLW  R1, R4, R4
-	SUBW  $1, R4, R4
-	AND   R4, R14, R14
-	ADD   R14, R8, R8
+	MOVD $1, R16
+	LSL  R7, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R14, R1
+	LSR  R7, R14, R14
+	LSRW $0x10, R7, R7
+	ADD  R1, R7, R7
 
 	// Load ctx.ofTable
 	MOVD ctx+16(FP), R1
 	MOVD 48(R1), R1
-	ADD  R8<<3, R1, R15
-	MOVD (R15), R8
+	ADD  R7<<3, R1, R15
+	MOVD (R15), R7
 
-sequenceDecs_decode_56_amd64_skip_update:
+	// Update Match Length State
+	MOVD $1, R16
+	LSL  R6, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R14, R1
+	LSR  R6, R14, R14
+	LSRW $0x10, R6, R6
+	ADD  R1, R6, R6
+
+	// Load ctx.mlTable
+	MOVD ctx+16(FP), R1
+	MOVD 24(R1), R1
+	ADD  R6<<3, R1, R15
+	MOVD (R15), R6
+
+	// Update Literal Length State
+	MOVD $1, R16
+	LSL  R5, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R14, R1
+	LSRW $0x10, R5, R5
+	ADD  R1, R5, R5
+
+	// Load ctx.llTable
+	MOVD ctx+16(FP), R1
+	MOVD (R1), R1
+	ADD  R5<<3, R1, R15
+	MOVD (R15), R5
+
+sequenceDecs_decode_56_bmi2_skip_update:
 	// Adjust offset
-	MOVD 16(R9), R1
-	CMP  $0x01, R0
-	BLS  sequenceDecs_decode_56_amd64_adjust_offsetB_1_or_0
-	MOVD R11, R12
+	MOVD 16(R8), R1
+	CMP  $0x01, R12
+	BLS  sequenceDecs_decode_56_bmi2_adjust_offsetB_1_or_0
 	MOVD R10, R11
-	MOVD R1, R10
-	JMP  sequenceDecs_decode_56_amd64_after_adjust
+	MOVD R9, R10
+	MOVD R1, R9
+	JMP  sequenceDecs_decode_56_bmi2_after_adjust
 
-sequenceDecs_decode_56_amd64_adjust_offsetB_1_or_0:
-	MOVD (R9), R16
+sequenceDecs_decode_56_bmi2_adjust_offsetB_1_or_0:
+	MOVD (R8), R16
 	CMP  $0x00000000, R16
-	BNE  sequenceDecs_decode_56_amd64_adjust_offset_maybezero
+	BNE  sequenceDecs_decode_56_bmi2_adjust_offset_maybezero
 	ADD  $1, R1, R1
-	JMP  sequenceDecs_decode_56_amd64_adjust_offset_nonzero
+	JMP  sequenceDecs_decode_56_bmi2_adjust_offset_nonzero
 
-sequenceDecs_decode_56_amd64_adjust_offset_maybezero:
+sequenceDecs_decode_56_bmi2_adjust_offset_maybezero:
 	TST  R1, R1
-	BNE  sequenceDecs_decode_56_amd64_adjust_offset_nonzero
-	MOVD R10, R1
-	JMP  sequenceDecs_decode_56_amd64_after_adjust
+	BNE  sequenceDecs_decode_56_bmi2_adjust_offset_nonzero
+	MOVD R9, R1
+	JMP  sequenceDecs_decode_56_bmi2_after_adjust
 
-sequenceDecs_decode_56_amd64_adjust_offset_nonzero:
+sequenceDecs_decode_56_bmi2_adjust_offset_nonzero:
 	CMP $0x01, R1
-	BLO sequenceDecs_decode_56_amd64_adjust_zero
-	BEQ sequenceDecs_decode_56_amd64_adjust_one
+	BLO sequenceDecs_decode_56_bmi2_adjust_zero
+	BEQ sequenceDecs_decode_56_bmi2_adjust_one
 	CMP $0x02, R1
-	BHI sequenceDecs_decode_56_amd64_adjust_three
-	JMP sequenceDecs_decode_56_amd64_adjust_two
+	BHI sequenceDecs_decode_56_bmi2_adjust_three
+	JMP sequenceDecs_decode_56_bmi2_adjust_two
 
-sequenceDecs_decode_56_amd64_adjust_zero:
-	MOVD R10, R0
-	JMP  sequenceDecs_decode_56_amd64_adjust_test_temp_valid
+sequenceDecs_decode_56_bmi2_adjust_zero:
+	MOVD R9, R12
+	JMP  sequenceDecs_decode_56_bmi2_adjust_test_temp_valid
 
-sequenceDecs_decode_56_amd64_adjust_one:
-	MOVD R11, R0
-	JMP  sequenceDecs_decode_56_amd64_adjust_test_temp_valid
+sequenceDecs_decode_56_bmi2_adjust_one:
+	MOVD R10, R12
+	JMP  sequenceDecs_decode_56_bmi2_adjust_test_temp_valid
 
-sequenceDecs_decode_56_amd64_adjust_two:
-	MOVD R12, R0
-	JMP  sequenceDecs_decode_56_amd64_adjust_test_temp_valid
+sequenceDecs_decode_56_bmi2_adjust_two:
+	MOVD R11, R12
+	JMP  sequenceDecs_decode_56_bmi2_adjust_test_temp_valid
 
-sequenceDecs_decode_56_amd64_adjust_three:
-	SUB $1, R10, R0
+sequenceDecs_decode_56_bmi2_adjust_three:
+	SUB $1, R9, R12
 
-sequenceDecs_decode_56_amd64_adjust_test_temp_valid:
-	TST  R0, R0
-	BNE  sequenceDecs_decode_56_amd64_adjust_temp_valid
-	MOVD $0x00000001, R0
+sequenceDecs_decode_56_bmi2_adjust_test_temp_valid:
+	TST  R12, R12
+	BNE  sequenceDecs_decode_56_bmi2_adjust_temp_valid
+	MOVD $0x00000001, R12
 
-sequenceDecs_decode_56_amd64_adjust_temp_valid:
+sequenceDecs_decode_56_bmi2_adjust_temp_valid:
 	CMP  $0x01, R1
-	CSEL NE, R11, R12, R12
-	MOVD R10, R11
-	MOVD R0, R10
-	MOVD R0, R1
+	CSEL NE, R10, R11, R11
+	MOVD R9, R10
+	MOVD R12, R9
+	MOVD R12, R1
 
-sequenceDecs_decode_56_amd64_after_adjust:
-	MOVD R1, 16(R9)
+sequenceDecs_decode_56_bmi2_after_adjust:
+	MOVD R1, 16(R8)
 
 	// Check values
-	MOVD 8(R9), R0
-	MOVD (R9), R13
-	ADD  R13, R0, R14
+	MOVD 8(R8), R12
+	MOVD (R8), R13
+	ADD  R13, R12, R14
 	MOVD s+0(FP), R4
 	MOVD 256(R4), R16
 	ADD  R14, R16, R16
@@ -613,28 +623,28 @@ sequenceDecs_decode_56_amd64_after_adjust:
 	SUBS R13, R16, R16
 	MOVD R16, 128(R14)
 	BMI  error_not_enough_literals
-	CMP  $0x00020002, R0
-	BHI  sequenceDecs_decode_56_amd64_error_match_len_too_big
+	CMP  $0x00020002, R12
+	BHI  sequenceDecs_decode_56_bmi2_error_match_len_too_big
 	TST  R1, R1
-	BNE  sequenceDecs_decode_56_amd64_match_len_ofs_ok
-	TST  R0, R0
-	BNE  sequenceDecs_decode_56_amd64_error_match_len_ofs_mismatch
+	BNE  sequenceDecs_decode_56_bmi2_match_len_ofs_ok
+	TST  R12, R12
+	BNE  sequenceDecs_decode_56_bmi2_error_match_len_ofs_mismatch
 
-sequenceDecs_decode_56_amd64_match_len_ofs_ok:
-	ADD  $0x18, R9, R9
-	MOVD ctx+16(FP), R0
-	MOVD 96(R0), R16
+sequenceDecs_decode_56_bmi2_match_len_ofs_ok:
+	ADD  $0x18, R8, R8
+	MOVD ctx+16(FP), R1
+	MOVD 96(R1), R16
 	SUBS $1, R16, R16
-	MOVD R16, 96(R0)
-	BPL  sequenceDecs_decode_56_amd64_main_loop
-	MOVD s+0(FP), R0
-	MOVD R10, 144(R0)
-	MOVD R11, 152(R0)
-	MOVD R12, 160(R0)
-	MOVD br+8(FP), R0
-	MOVD R2, 24(R0)
-	MOVB R3, 40(R0)
-	MOVD R5, 32(R0)
+	MOVD R16, 96(R1)
+	BPL  sequenceDecs_decode_56_bmi2_main_loop
+	MOVD s+0(FP), R1
+	MOVD R9, 144(R1)
+	MOVD R10, 152(R1)
+	MOVD R11, 160(R1)
+	MOVD br+8(FP), R1
+	MOVD R0, 24(R1)
+	MOVB R2, 40(R1)
+	MOVD R3, 32(R1)
 
 	// Return success
 	MOVD $0x00000000, R16
@@ -642,13 +652,13 @@ sequenceDecs_decode_56_amd64_match_len_ofs_ok:
 	RET
 
 	// Return with match length error
-sequenceDecs_decode_56_amd64_error_match_len_ofs_mismatch:
+sequenceDecs_decode_56_bmi2_error_match_len_ofs_mismatch:
 	MOVD $0x00000001, R16
 	MOVD R16, ret+24(FP)
 	RET
 
 	// Return with match too long error
-sequenceDecs_decode_56_amd64_error_match_len_too_big:
+sequenceDecs_decode_56_bmi2_error_match_len_too_big:
 	MOVD $0x00000002, R16
 	MOVD R16, ret+24(FP)
 	RET
@@ -669,10 +679,6 @@ error_overread:
 	MOVD $0x00000006, R16
 	MOVD R16, ret+24(FP)
 	RET
-
-// skipped sequenceDecs_decode_bmi2 (BMI2 not available on arm64)
-
-// skipped sequenceDecs_decode_56_bmi2 (BMI2 not available on arm64)
 
 // func sequenceDecs_executeSimple_amd64(ctx *executeAsmContext) bool
 // Requires: SSE
@@ -1352,385 +1358,390 @@ empty_seqs:
 	MOVB R16, ret+8(FP)
 	RET
 
-// func sequenceDecs_decodeSync_amd64(s *sequenceDecs, br *bitReader, ctx *decodeSyncAsmContext) int
-// Requires: CMOV, SSE
+// skipped sequenceDecs_decodeSync_amd64 (BMI2 twin preferred on arm64)
+
+// func sequenceDecs_decodeSync_bmi2(s *sequenceDecs, br *bitReader, ctx *decodeSyncAsmContext) int
 TEXT ·sequenceDecs_decodeSync_arm64(SB), $64-32
-	MOVD  br+8(FP), R1
-	MOVD  24(R1), R2
-	MOVBU 40(R1), R3
-	MOVD  (R1), R0
-	MOVD  32(R1), R5
-	ADD   R5, R0, R0
-	MOVD  R0, (RSP)
-	MOVD  ctx+16(FP), R0
-	MOVD  72(R0), R6
-	MOVD  80(R0), R7
-	MOVD  88(R0), R8
-	MOVD  $0, R1
-	MOVD  R1, 8(RSP)
-	MOVD  R1, 16(RSP)
-	MOVD  R1, 24(RSP)
-	MOVD  112(R0), R9
-	MOVD  128(R0), R1
-	MOVD  R1, 32(RSP)
-	MOVD  144(R0), R10
-	MOVD  136(R0), R11
-	MOVD  200(R0), R1
-	MOVD  R1, 56(RSP)
-	MOVD  176(R0), R1
-	MOVD  R1, 48(RSP)
-	MOVD  184(R0), R0
-	MOVD  R0, 40(RSP)
-	MOVD  40(RSP), R0
+	MOVD  br+8(FP), R3
+	MOVD  24(R3), R0
+	MOVBU 40(R3), R2
+	MOVD  (R3), R1
+	MOVD  32(R3), R3
+	ADD   R3, R1, R1
+	MOVD  R1, (RSP)
+	MOVD  ctx+16(FP), R1
+	MOVD  72(R1), R5
+	MOVD  80(R1), R6
+	MOVD  88(R1), R7
+	MOVD  $0, R8
+	MOVD  R8, 8(RSP)
+	MOVD  R8, 16(RSP)
+	MOVD  R8, 24(RSP)
+	MOVD  112(R1), R8
+	MOVD  128(R1), R9
+	MOVD  R9, 32(RSP)
+	MOVD  144(R1), R9
+	MOVD  136(R1), R10
+	MOVD  200(R1), R11
+	MOVD  R11, 56(RSP)
+	MOVD  176(R1), R11
+	MOVD  R11, 48(RSP)
+	MOVD  184(R1), R1
+	MOVD  R1, 40(RSP)
+	MOVD  40(RSP), R1
 	MOVD  48(RSP), R16
-	ADD   R0, R16, R16
+	ADD   R1, R16, R16
 	MOVD  R16, 48(RSP)
 
 	// Calculate pointer to s.out[cap(s.out)] (a past-end pointer)
 	MOVD 32(RSP), R16
-	ADD  R9, R16, R16
+	ADD  R8, R16, R16
 	MOVD R16, 32(RSP)
 
 	// outBase += outPosition
-	ADD R11, R9, R9
+	ADD R10, R8, R8
 
-sequenceDecs_decodeSync_amd64_main_loop:
-	MOVD (RSP), R12
+sequenceDecs_decodeSync_bmi2_main_loop:
+	MOVD (RSP), R11
 
 	// Fill bitreader to have enough for the offset and match length.
-	CMP  $0x08, R5
-	BLT  sequenceDecs_decodeSync_amd64_fill_byte_by_byte
-	MOVD R3, R0
-	LSR  $0x03, R0, R0
-	SUB  R0, R12, R12
-	MOVD (R12), R2
-	SUB  R0, R5, R5
-	AND  $0x07, R3, R3
-	JMP  sequenceDecs_decodeSync_amd64_fill_end
+	CMP  $0x08, R3
+	BLT  sequenceDecs_decodeSync_bmi2_fill_byte_by_byte
+	MOVD R2, R1
+	LSR  $0x03, R1, R1
+	SUB  R1, R11, R11
+	MOVD (R11), R0
+	SUB  R1, R3, R3
+	AND  $0x07, R2, R2
+	JMP  sequenceDecs_decodeSync_bmi2_fill_end
 
-sequenceDecs_decodeSync_amd64_fill_byte_by_byte:
-	CMP   $0x00, R5
-	BLE   sequenceDecs_decodeSync_amd64_fill_check_overread
-	CMP   $0x07, R3
-	BLE   sequenceDecs_decodeSync_amd64_fill_end
-	LSL   $0x08, R2, R2
-	SUB   $0x01, R12, R12
-	SUB   $0x01, R5, R5
-	SUB   $0x08, R3, R3
-	MOVBU (R12), R0
-	ORR   R0, R2, R2
-	JMP   sequenceDecs_decodeSync_amd64_fill_byte_by_byte
+sequenceDecs_decodeSync_bmi2_fill_byte_by_byte:
+	CMP   $0x00, R3
+	BLE   sequenceDecs_decodeSync_bmi2_fill_check_overread
+	CMP   $0x07, R2
+	BLE   sequenceDecs_decodeSync_bmi2_fill_end
+	LSL   $0x08, R0, R0
+	SUB   $0x01, R11, R11
+	SUB   $0x01, R3, R3
+	SUB   $0x08, R2, R2
+	MOVBU (R11), R1
+	ORR   R1, R0, R0
+	JMP   sequenceDecs_decodeSync_bmi2_fill_byte_by_byte
 
-sequenceDecs_decodeSync_amd64_fill_check_overread:
-	CMP $0x40, R3
+sequenceDecs_decodeSync_bmi2_fill_check_overread:
+	CMP $0x40, R2
 	BHI error_overread
 
-sequenceDecs_decodeSync_amd64_fill_end:
+sequenceDecs_decodeSync_bmi2_fill_end:
 	// Update offset
-	MOVD R8, R0
-	MOVD R3, R1
-	MOVD R2, R13
-	LSL  R1, R13, R13
-	UBFX $8, R0, $8, R1
-	LSR  $0x20, R0, R0
-	TST  R1, R1
-	BEQ  sequenceDecs_decodeSync_amd64_of_update_zero
-	ADD  R1, R3, R3
-	CMP  $0x40, R3
-	BHI  sequenceDecs_decodeSync_amd64_of_update_zero
-	CMP  $0x40, R1
-	BHS  sequenceDecs_decodeSync_amd64_of_update_zero
-	NEG  R1, R1
-	LSR  R1, R13, R13
-	ADD  R13, R0, R0
-
-sequenceDecs_decodeSync_amd64_of_update_zero:
-	MOVD R0, 8(RSP)
+	MOVD $0x00000808, R1
+	UBFX $0, R1, $8, R16
+	UBFX $8, R1, $8, R15
+	LSR  R16, R7, R12
+	MOVD $1, R16
+	LSL  R15, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R12, R12
+	MOVD R0, R13
+	ADD  R12, R2, R1
+	NEG  R1, R16
+	ROR  R16, R13, R13
+	MOVD $1, R16
+	LSL  R12, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R13, R13
+	MOVD R1, R2
+	MOVD R7, R1
+	LSR  $0x20, R1, R1
+	ADD  R13, R1, R1
+	MOVD R1, 8(RSP)
 
 	// Update match length
-	MOVD R7, R0
-	MOVD R3, R1
-	MOVD R2, R13
-	LSL  R1, R13, R13
-	UBFX $8, R0, $8, R1
-	LSR  $0x20, R0, R0
-	TST  R1, R1
-	BEQ  sequenceDecs_decodeSync_amd64_ml_update_zero
-	ADD  R1, R3, R3
-	CMP  $0x40, R3
-	BHI  sequenceDecs_decodeSync_amd64_ml_update_zero
-	CMP  $0x40, R1
-	BHS  sequenceDecs_decodeSync_amd64_ml_update_zero
-	NEG  R1, R1
-	LSR  R1, R13, R13
-	ADD  R13, R0, R0
-
-sequenceDecs_decodeSync_amd64_ml_update_zero:
-	MOVD R0, 16(RSP)
+	MOVD $0x00000808, R1
+	UBFX $0, R1, $8, R16
+	UBFX $8, R1, $8, R15
+	LSR  R16, R6, R12
+	MOVD $1, R16
+	LSL  R15, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R12, R12
+	MOVD R0, R13
+	ADD  R12, R2, R1
+	NEG  R1, R16
+	ROR  R16, R13, R13
+	MOVD $1, R16
+	LSL  R12, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R13, R13
+	MOVD R1, R2
+	MOVD R6, R1
+	LSR  $0x20, R1, R1
+	ADD  R13, R1, R1
+	MOVD R1, 16(RSP)
 
 	// Fill bitreader to have enough for the remaining
-	CMP  $0x08, R5
-	BLT  sequenceDecs_decodeSync_amd64_fill_2_byte_by_byte
-	MOVD R3, R0
-	LSR  $0x03, R0, R0
-	SUB  R0, R12, R12
-	MOVD (R12), R2
-	SUB  R0, R5, R5
-	AND  $0x07, R3, R3
-	JMP  sequenceDecs_decodeSync_amd64_fill_2_end
+	CMP  $0x08, R3
+	BLT  sequenceDecs_decodeSync_bmi2_fill_2_byte_by_byte
+	MOVD R2, R1
+	LSR  $0x03, R1, R1
+	SUB  R1, R11, R11
+	MOVD (R11), R0
+	SUB  R1, R3, R3
+	AND  $0x07, R2, R2
+	JMP  sequenceDecs_decodeSync_bmi2_fill_2_end
 
-sequenceDecs_decodeSync_amd64_fill_2_byte_by_byte:
-	CMP   $0x00, R5
-	BLE   sequenceDecs_decodeSync_amd64_fill_2_check_overread
-	CMP   $0x07, R3
-	BLE   sequenceDecs_decodeSync_amd64_fill_2_end
-	LSL   $0x08, R2, R2
-	SUB   $0x01, R12, R12
-	SUB   $0x01, R5, R5
-	SUB   $0x08, R3, R3
-	MOVBU (R12), R0
-	ORR   R0, R2, R2
-	JMP   sequenceDecs_decodeSync_amd64_fill_2_byte_by_byte
+sequenceDecs_decodeSync_bmi2_fill_2_byte_by_byte:
+	CMP   $0x00, R3
+	BLE   sequenceDecs_decodeSync_bmi2_fill_2_check_overread
+	CMP   $0x07, R2
+	BLE   sequenceDecs_decodeSync_bmi2_fill_2_end
+	LSL   $0x08, R0, R0
+	SUB   $0x01, R11, R11
+	SUB   $0x01, R3, R3
+	SUB   $0x08, R2, R2
+	MOVBU (R11), R1
+	ORR   R1, R0, R0
+	JMP   sequenceDecs_decodeSync_bmi2_fill_2_byte_by_byte
 
-sequenceDecs_decodeSync_amd64_fill_2_check_overread:
-	CMP $0x40, R3
+sequenceDecs_decodeSync_bmi2_fill_2_check_overread:
+	CMP $0x40, R2
 	BHI error_overread
 
-sequenceDecs_decodeSync_amd64_fill_2_end:
+sequenceDecs_decodeSync_bmi2_fill_2_end:
 	// Update literal length
-	MOVD R6, R0
-	MOVD R3, R1
-	MOVD R2, R13
-	LSL  R1, R13, R13
-	UBFX $8, R0, $8, R1
-	LSR  $0x20, R0, R0
-	TST  R1, R1
-	BEQ  sequenceDecs_decodeSync_amd64_ll_update_zero
-	ADD  R1, R3, R3
-	CMP  $0x40, R3
-	BHI  sequenceDecs_decodeSync_amd64_ll_update_zero
-	CMP  $0x40, R1
-	BHS  sequenceDecs_decodeSync_amd64_ll_update_zero
-	NEG  R1, R1
-	LSR  R1, R13, R13
-	ADD  R13, R0, R0
-
-sequenceDecs_decodeSync_amd64_ll_update_zero:
-	MOVD R0, 24(RSP)
+	MOVD $0x00000808, R1
+	UBFX $0, R1, $8, R16
+	UBFX $8, R1, $8, R15
+	LSR  R16, R5, R12
+	MOVD $1, R16
+	LSL  R15, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R12, R12
+	MOVD R0, R13
+	ADD  R12, R2, R1
+	NEG  R1, R16
+	ROR  R16, R13, R13
+	MOVD $1, R16
+	LSL  R12, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R13, R13
+	MOVD R1, R2
+	MOVD R5, R1
+	LSR  $0x20, R1, R1
+	ADD  R13, R1, R1
+	MOVD R1, 24(RSP)
 
 	// Fill bitreader for state updates
-	MOVD  R12, (RSP)
-	MOVD  R8, R0
-	LSR   $0x08, R0, R0
-	MOVBU R0, R0
+	MOVD  R11, (RSP)
+	MOVD  $0x00000808, R1
+	UBFX  $0, R1, $8, R16
+	UBFX  $8, R1, $8, R15
+	LSR   R16, R7, R11
+	MOVD  $1, R16
+	LSL   R15, R16, R16
+	SUB   $1, R16, R16
+	AND   R16, R11, R11
 	MOVD  ctx+16(FP), R1
 	MOVD  96(R1), R16
 	CMP   $0x00, R16
-	BEQ   sequenceDecs_decodeSync_amd64_skip_update
-
-	// Update Literal Length State
-	MOVBU R6, R12
-	LSRW  $0x10, R6, R6
-	ADD   R12, R3, R1
-	MOVD  R2, R13
-	MOVD  R1, R3
+	BEQ   sequenceDecs_decodeSync_bmi2_skip_update
+	ADD   R6, R5, R12
+	ADD   R7, R12, R12
+	MOVBU R12, R12
+	ADD   R12, R2, R1
+	MOVD  R0, R13
+	MOVD  R1, R2
 	NEG   R1, R16
 	ROR   R16, R13, R13
-	MOVD  $0x00000001, R14
-	MOVB  R12, R1
-	LSLW  R1, R14, R14
-	SUBW  $1, R14, R14
-	AND   R14, R13, R13
-	ADD   R13, R6, R6
-
-	// Load ctx.llTable
-	MOVD ctx+16(FP), R1
-	MOVD (R1), R1
-	ADD  R6<<3, R1, R15
-	MOVD (R15), R6
-
-	// Update Match Length State
-	MOVBU R7, R12
-	LSRW  $0x10, R7, R7
-	ADD   R12, R3, R1
-	MOVD  R2, R13
-	MOVD  R1, R3
-	NEG   R1, R16
-	ROR   R16, R13, R13
-	MOVD  $0x00000001, R14
-	MOVB  R12, R1
-	LSLW  R1, R14, R14
-	SUBW  $1, R14, R14
-	AND   R14, R13, R13
-	ADD   R13, R7, R7
-
-	// Load ctx.mlTable
-	MOVD ctx+16(FP), R1
-	MOVD 24(R1), R1
-	ADD  R7<<3, R1, R15
-	MOVD (R15), R7
+	MOVD  $1, R16
+	LSL   R12, R16, R16
+	SUB   $1, R16, R16
+	AND   R16, R13, R13
 
 	// Update Offset State
-	MOVBU R8, R12
-	LSRW  $0x10, R8, R8
-	ADD   R12, R3, R1
-	MOVD  R2, R13
-	MOVD  R1, R3
-	NEG   R1, R16
-	ROR   R16, R13, R13
-	MOVD  $0x00000001, R14
-	MOVB  R12, R1
-	LSLW  R1, R14, R14
-	SUBW  $1, R14, R14
-	AND   R14, R13, R13
-	ADD   R13, R8, R8
+	MOVD $1, R16
+	LSL  R7, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R13, R1
+	LSR  R7, R13, R13
+	LSRW $0x10, R7, R7
+	ADD  R1, R7, R7
 
 	// Load ctx.ofTable
 	MOVD ctx+16(FP), R1
 	MOVD 48(R1), R1
-	ADD  R8<<3, R1, R15
-	MOVD (R15), R8
+	ADD  R7<<3, R1, R15
+	MOVD (R15), R7
 
-sequenceDecs_decodeSync_amd64_skip_update:
+	// Update Match Length State
+	MOVD $1, R16
+	LSL  R6, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R13, R1
+	LSR  R6, R13, R13
+	LSRW $0x10, R6, R6
+	ADD  R1, R6, R6
+
+	// Load ctx.mlTable
+	MOVD ctx+16(FP), R1
+	MOVD 24(R1), R1
+	ADD  R6<<3, R1, R15
+	MOVD (R15), R6
+
+	// Update Literal Length State
+	MOVD $1, R16
+	LSL  R5, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R13, R1
+	LSRW $0x10, R5, R5
+	ADD  R1, R5, R5
+
+	// Load ctx.llTable
+	MOVD ctx+16(FP), R1
+	MOVD (R1), R1
+	ADD  R5<<3, R1, R15
+	MOVD (R15), R5
+
+sequenceDecs_decodeSync_bmi2_skip_update:
 	// Adjust offset
 	MOVD s+0(FP), R1
 	MOVD 8(RSP), R12
-	CMP  $0x01, R0
-	BLS  sequenceDecs_decodeSync_amd64_adjust_offsetB_1_or_0
+	CMP  $0x01, R11
+	BLS  sequenceDecs_decodeSync_bmi2_adjust_offsetB_1_or_0
 	ADD  $144, R1, R15
 	VLD1 (R15), [V0.B16]
 	MOVD R12, 144(R1)
 	ADD  $152, R1, R15
 	VST1 [V0.B16], (R15)
-	JMP  sequenceDecs_decodeSync_amd64_after_adjust
+	JMP  sequenceDecs_decodeSync_bmi2_after_adjust
 
-sequenceDecs_decodeSync_amd64_adjust_offsetB_1_or_0:
+sequenceDecs_decodeSync_bmi2_adjust_offsetB_1_or_0:
 	MOVD 24(RSP), R16
 	CMP  $0x00000000, R16
-	BNE  sequenceDecs_decodeSync_amd64_adjust_offset_maybezero
+	BNE  sequenceDecs_decodeSync_bmi2_adjust_offset_maybezero
 	ADD  $1, R12, R12
-	JMP  sequenceDecs_decodeSync_amd64_adjust_offset_nonzero
+	JMP  sequenceDecs_decodeSync_bmi2_adjust_offset_nonzero
 
-sequenceDecs_decodeSync_amd64_adjust_offset_maybezero:
+sequenceDecs_decodeSync_bmi2_adjust_offset_maybezero:
 	TST  R12, R12
-	BNE  sequenceDecs_decodeSync_amd64_adjust_offset_nonzero
+	BNE  sequenceDecs_decodeSync_bmi2_adjust_offset_nonzero
 	MOVD 144(R1), R12
-	JMP  sequenceDecs_decodeSync_amd64_after_adjust
+	JMP  sequenceDecs_decodeSync_bmi2_after_adjust
 
-sequenceDecs_decodeSync_amd64_adjust_offset_nonzero:
-	MOVD R12, R0
+sequenceDecs_decodeSync_bmi2_adjust_offset_nonzero:
+	MOVD R12, R11
 	MOVD $0, R13
 	MOVD $-1, R14
 	CMP  $0x03, R12
-	CSEL EQ, R13, R0, R0
+	CSEL EQ, R13, R11, R11
 	CSEL EQ, R14, R13, R13
-	ADD  R0<<3, R1, R15
+	ADD  R11<<3, R1, R15
 	MOVD 144(R15), R16
 	ADDS R16, R13, R13
-	BNE  sequenceDecs_decodeSync_amd64_adjust_temp_valid
+	BNE  sequenceDecs_decodeSync_bmi2_adjust_temp_valid
 	MOVD $0x00000001, R13
 
-sequenceDecs_decodeSync_amd64_adjust_temp_valid:
+sequenceDecs_decodeSync_bmi2_adjust_temp_valid:
 	CMP  $0x01, R12
-	BEQ  sequenceDecs_decodeSync_amd64_adjust_skip
-	MOVD 152(R1), R0
-	MOVD R0, 160(R1)
+	BEQ  sequenceDecs_decodeSync_bmi2_adjust_skip
+	MOVD 152(R1), R11
+	MOVD R11, 160(R1)
 
-sequenceDecs_decodeSync_amd64_adjust_skip:
-	MOVD 144(R1), R0
-	MOVD R0, 152(R1)
+sequenceDecs_decodeSync_bmi2_adjust_skip:
+	MOVD 144(R1), R11
+	MOVD R11, 152(R1)
 	MOVD R13, 144(R1)
 	MOVD R13, R12
 
-sequenceDecs_decodeSync_amd64_after_adjust:
+sequenceDecs_decodeSync_bmi2_after_adjust:
 	MOVD R12, 8(RSP)
 
 	// Check values
-	MOVD 16(RSP), R0
-	MOVD 24(RSP), R1
-	ADD  R1, R0, R13
+	MOVD 16(RSP), R1
+	MOVD 24(RSP), R11
+	ADD  R11, R1, R13
 	MOVD s+0(FP), R14
 	MOVD 256(R14), R16
 	ADD  R13, R16, R16
 	MOVD R16, 256(R14)
 	MOVD ctx+16(FP), R13
 	MOVD 104(R13), R16
-	SUBS R1, R16, R16
+	SUBS R11, R16, R16
 	MOVD R16, 104(R13)
 	BMI  error_not_enough_literals
-	CMP  $0x00020002, R0
-	BHI  sequenceDecs_decodeSync_amd64_error_match_len_too_big
+	CMP  $0x00020002, R1
+	BHI  sequenceDecs_decodeSync_bmi2_error_match_len_too_big
 	TST  R12, R12
-	BNE  sequenceDecs_decodeSync_amd64_match_len_ofs_ok
-	TST  R0, R0
-	BNE  sequenceDecs_decodeSync_amd64_error_match_len_ofs_mismatch
+	BNE  sequenceDecs_decodeSync_bmi2_match_len_ofs_ok
+	TST  R1, R1
+	BNE  sequenceDecs_decodeSync_bmi2_error_match_len_ofs_mismatch
 
-sequenceDecs_decodeSync_amd64_match_len_ofs_ok:
-	MOVD 24(RSP), R0
-	MOVD 8(RSP), R1
+sequenceDecs_decodeSync_bmi2_match_len_ofs_ok:
+	MOVD 24(RSP), R1
+	MOVD 8(RSP), R11
 	MOVD 16(RSP), R12
 
 	// Check if we have enough space in s.out
-	ADD  R12, R0, R13
-	ADD  R9, R13, R13
+	ADD  R12, R1, R13
+	ADD  R8, R13, R13
 	MOVD 32(RSP), R16
 	CMP  R16, R13
 	BHI  error_not_enough_space
 
 	// Copy literals
-	TST  R0, R0
+	TST  R1, R1
 	BEQ  check_offset
 	MOVD $0, R13
 
 copy_1:
-	ADD  R13, R10, R15
-	VLD1 (R15), [V0.B16]
 	ADD  R13, R9, R15
+	VLD1 (R15), [V0.B16]
+	ADD  R13, R8, R15
 	VST1 [V0.B16], (R15)
 	ADD  $0x10, R13, R13
-	CMP  R0, R13
+	CMP  R1, R13
 	BLO  copy_1
-	ADD  R0, R10, R10
-	ADD  R0, R9, R9
-	ADD  R0, R11, R11
+	ADD  R1, R9, R9
+	ADD  R1, R8, R8
+	ADD  R1, R10, R10
 
 	// Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)
 check_offset:
-	MOVD R11, R0
+	MOVD R10, R1
 	MOVD 40(RSP), R16
-	ADD  R16, R0, R0
-	CMP  R0, R1
+	ADD  R16, R1, R1
+	CMP  R1, R11
 	BGT  error_match_off_too_big
 	MOVD 56(RSP), R16
-	CMP  R16, R1
+	CMP  R16, R11
 	BGT  error_match_off_too_big
 
 	// Copy match from history
-	MOVD R1, R0
-	SUBS R11, R0, R0
+	MOVD R11, R1
+	SUBS R10, R1, R1
 	BLS  copy_match
 	MOVD 48(RSP), R13
-	SUB  R0, R13, R13
-	CMP  R0, R12
+	SUB  R1, R13, R13
+	CMP  R1, R12
 	BGT  copy_all_from_history
-	MOVD R12, R0
-	SUBS $0x10, R0, R0
+	MOVD R12, R1
+	SUBS $0x10, R1, R1
 	BLO  copy_4_small
 
 copy_4_loop:
 	VLD1 (R13), [V0.B16]
-	VST1 [V0.B16], (R9)
+	VST1 [V0.B16], (R8)
 	ADD  $0x10, R13, R13
-	ADD  $0x10, R9, R9
-	SUBS $0x10, R0, R0
+	ADD  $0x10, R8, R8
+	SUBS $0x10, R1, R1
 	BHS  copy_4_loop
-	ADD  R0, R13, R13
+	ADD  R1, R13, R13
 	ADD  $16, R13, R13
-	ADD  R0, R9, R9
-	ADD  $16, R9, R9
+	ADD  R1, R8, R8
+	ADD  $16, R8, R8
 	ADD  $-16, R13, R15
 	VLD1 (R15), [V0.B16]
-	ADD  $-16, R9, R15
+	ADD  $-16, R8, R15
 	VST1 [V0.B16], (R15)
 	JMP  copy_4_end
 
@@ -1742,169 +1753,169 @@ copy_4_small:
 	JMP copy_4_move_8through16
 
 copy_4_move_3:
-	MOVH (R13), R0
-	MOVB 2(R13), R1
-	MOVH R0, (R9)
-	MOVB R1, 2(R9)
+	MOVH (R13), R1
+	MOVB 2(R13), R11
+	MOVH R1, (R8)
+	MOVB R11, 2(R8)
 	ADD  R12, R13, R13
-	ADD  R12, R9, R9
+	ADD  R12, R8, R8
 	JMP  copy_4_end
 
 copy_4_move_4through7:
-	MOVWU (R13), R0
+	MOVWU (R13), R1
 	ADD   R12, R13, R15
-	MOVWU -4(R15), R1
-	MOVW  R0, (R9)
-	ADD   R12, R9, R15
-	MOVW  R1, -4(R15)
+	MOVWU -4(R15), R11
+	MOVW  R1, (R8)
+	ADD   R12, R8, R15
+	MOVW  R11, -4(R15)
 	ADD   R12, R13, R13
-	ADD   R12, R9, R9
+	ADD   R12, R8, R8
 	JMP   copy_4_end
 
 copy_4_move_8through16:
-	MOVD (R13), R0
+	MOVD (R13), R1
 	ADD  R12, R13, R15
-	MOVD -8(R15), R1
-	MOVD R0, (R9)
-	ADD  R12, R9, R15
-	MOVD R1, -8(R15)
+	MOVD -8(R15), R11
+	MOVD R1, (R8)
+	ADD  R12, R8, R15
+	MOVD R11, -8(R15)
 	ADD  R12, R13, R13
-	ADD  R12, R9, R9
+	ADD  R12, R8, R8
 
 copy_4_end:
-	ADD R12, R11, R11
+	ADD R12, R10, R10
 	JMP handle_loop
 	JMP loop_finished
 
 copy_all_from_history:
-	MOVD R0, R14
+	MOVD R1, R14
 	SUBS $0x10, R14, R14
 	BLO  copy_5_small
 
 copy_5_loop:
 	VLD1 (R13), [V0.B16]
-	VST1 [V0.B16], (R9)
+	VST1 [V0.B16], (R8)
 	ADD  $0x10, R13, R13
-	ADD  $0x10, R9, R9
+	ADD  $0x10, R8, R8
 	SUBS $0x10, R14, R14
 	BHS  copy_5_loop
 	ADD  R14, R13, R13
 	ADD  $16, R13, R13
-	ADD  R14, R9, R9
-	ADD  $16, R9, R9
+	ADD  R14, R8, R8
+	ADD  $16, R8, R8
 	ADD  $-16, R13, R15
 	VLD1 (R15), [V0.B16]
-	ADD  $-16, R9, R15
+	ADD  $-16, R8, R15
 	VST1 [V0.B16], (R15)
 	JMP  copy_5_end
 
 copy_5_small:
-	CMP $0x03, R0
+	CMP $0x03, R1
 	BEQ copy_5_move_3
 	BLO copy_5_move_1or2
-	CMP $0x08, R0
+	CMP $0x08, R1
 	BLO copy_5_move_4through7
 	JMP copy_5_move_8through16
 
 copy_5_move_1or2:
 	MOVB (R13), R14
-	ADD  R0, R13, R15
+	ADD  R1, R13, R15
 	MOVB -1(R15), R4
-	MOVB R14, (R9)
-	ADD  R0, R9, R15
+	MOVB R14, (R8)
+	ADD  R1, R8, R15
 	MOVB R4, -1(R15)
-	ADD  R0, R13, R13
-	ADD  R0, R9, R9
+	ADD  R1, R13, R13
+	ADD  R1, R8, R8
 	JMP  copy_5_end
 
 copy_5_move_3:
 	MOVH (R13), R14
 	MOVB 2(R13), R4
-	MOVH R14, (R9)
-	MOVB R4, 2(R9)
-	ADD  R0, R13, R13
-	ADD  R0, R9, R9
+	MOVH R14, (R8)
+	MOVB R4, 2(R8)
+	ADD  R1, R13, R13
+	ADD  R1, R8, R8
 	JMP  copy_5_end
 
 copy_5_move_4through7:
 	MOVWU (R13), R14
-	ADD   R0, R13, R15
+	ADD   R1, R13, R15
 	MOVWU -4(R15), R4
-	MOVW  R14, (R9)
-	ADD   R0, R9, R15
+	MOVW  R14, (R8)
+	ADD   R1, R8, R15
 	MOVW  R4, -4(R15)
-	ADD   R0, R13, R13
-	ADD   R0, R9, R9
+	ADD   R1, R13, R13
+	ADD   R1, R8, R8
 	JMP   copy_5_end
 
 copy_5_move_8through16:
 	MOVD (R13), R14
-	ADD  R0, R13, R15
+	ADD  R1, R13, R15
 	MOVD -8(R15), R4
-	MOVD R14, (R9)
-	ADD  R0, R9, R15
+	MOVD R14, (R8)
+	ADD  R1, R8, R15
 	MOVD R4, -8(R15)
-	ADD  R0, R13, R13
-	ADD  R0, R9, R9
+	ADD  R1, R13, R13
+	ADD  R1, R8, R8
 
 copy_5_end:
-	ADD R0, R11, R11
-	SUB R0, R12, R12
+	ADD R1, R10, R10
+	SUB R1, R12, R12
 
 	// Copy match from the current buffer
 copy_match:
-	MOVD R9, R0
-	SUB  R1, R0, R0
+	MOVD R8, R1
+	SUB  R11, R1, R1
 
 	// ml <= mo
-	CMP R1, R12
+	CMP R11, R12
 	BHI copy_overlapping_match
 
 	// Copy non-overlapping match
-	ADD  R12, R11, R11
-	MOVD R9, R1
-	ADD  R12, R9, R9
+	ADD  R12, R10, R10
+	MOVD R8, R11
+	ADD  R12, R8, R8
 
 copy_2:
-	VLD1 (R0), [V0.B16]
-	VST1 [V0.B16], (R1)
-	ADD  $0x10, R0, R0
+	VLD1 (R1), [V0.B16]
+	VST1 [V0.B16], (R11)
 	ADD  $0x10, R1, R1
+	ADD  $0x10, R11, R11
 	SUBS $0x10, R12, R12
 	BHI  copy_2
 	JMP  handle_loop
 
 	// Copy overlapping match
 copy_overlapping_match:
-	ADD R12, R11, R11
+	ADD R12, R10, R10
 
 copy_slow_3:
-	MOVB (R0), R1
-	MOVB R1, (R9)
-	ADD  $1, R0, R0
-	ADD  $1, R9, R9
+	MOVB (R1), R11
+	MOVB R11, (R8)
+	ADD  $1, R1, R1
+	ADD  $1, R8, R8
 	SUBS $1, R12, R12
 	BNE  copy_slow_3
 
 handle_loop:
-	MOVD ctx+16(FP), R0
-	MOVD 96(R0), R16
+	MOVD ctx+16(FP), R1
+	MOVD 96(R1), R16
 	SUBS $1, R16, R16
-	MOVD R16, 96(R0)
-	BPL  sequenceDecs_decodeSync_amd64_main_loop
+	MOVD R16, 96(R1)
+	BPL  sequenceDecs_decodeSync_bmi2_main_loop
 
 loop_finished:
-	MOVD br+8(FP), R0
-	MOVD R2, 24(R0)
-	MOVB R3, 40(R0)
-	MOVD R5, 32(R0)
+	MOVD br+8(FP), R1
+	MOVD R0, 24(R1)
+	MOVB R2, 40(R1)
+	MOVD R3, 32(R1)
 
 	// Update the context
 	MOVD ctx+16(FP), R0
-	MOVD R11, 136(R0)
+	MOVD R10, 136(R0)
 	MOVD 144(R0), R1
-	SUB  R1, R10, R10
-	MOVD R10, 168(R0)
+	SUB  R1, R9, R9
+	MOVD R9, 168(R0)
 
 	// Return success
 	MOVD $0x00000000, R16
@@ -1912,7 +1923,7 @@ loop_finished:
 	RET
 
 	// Return with match length error
-sequenceDecs_decodeSync_amd64_error_match_len_ofs_mismatch:
+sequenceDecs_decodeSync_bmi2_error_match_len_ofs_mismatch:
 	MOVD 16(RSP), R0
 	MOVD ctx+16(FP), R1
 	MOVD R0, 216(R1)
@@ -1921,7 +1932,7 @@ sequenceDecs_decodeSync_amd64_error_match_len_ofs_mismatch:
 	RET
 
 	// Return with match too long error
-sequenceDecs_decodeSync_amd64_error_match_len_too_big:
+sequenceDecs_decodeSync_bmi2_error_match_len_too_big:
 	MOVD ctx+16(FP), R0
 	MOVD 16(RSP), R1
 	MOVD R1, 216(R0)
@@ -1934,7 +1945,7 @@ error_match_off_too_big:
 	MOVD ctx+16(FP), R0
 	MOVD 8(RSP), R1
 	MOVD R1, 224(R0)
-	MOVD R11, 136(R0)
+	MOVD R10, 136(R0)
 	MOVD $0x00000003, R16
 	MOVD R16, ret+24(FP)
 	RET
@@ -1961,451 +1972,454 @@ error_not_enough_space:
 	MOVD R1, 208(R0)
 	MOVD 16(RSP), R1
 	MOVD R1, 216(R0)
-	MOVD R11, 136(R0)
+	MOVD R10, 136(R0)
 	MOVD $0x00000005, R16
 	MOVD R16, ret+24(FP)
 	RET
 
-// skipped sequenceDecs_decodeSync_bmi2 (BMI2 not available on arm64)
+// skipped sequenceDecs_decodeSync_safe_amd64 (BMI2 twin preferred on arm64)
 
-// func sequenceDecs_decodeSync_safe_amd64(s *sequenceDecs, br *bitReader, ctx *decodeSyncAsmContext) int
-// Requires: CMOV, SSE
+// func sequenceDecs_decodeSync_safe_bmi2(s *sequenceDecs, br *bitReader, ctx *decodeSyncAsmContext) int
 TEXT ·sequenceDecs_decodeSync_safe_arm64(SB), $64-32
-	MOVD  br+8(FP), R1
-	MOVD  24(R1), R2
-	MOVBU 40(R1), R3
-	MOVD  (R1), R0
-	MOVD  32(R1), R5
-	ADD   R5, R0, R0
-	MOVD  R0, (RSP)
-	MOVD  ctx+16(FP), R0
-	MOVD  72(R0), R6
-	MOVD  80(R0), R7
-	MOVD  88(R0), R8
-	MOVD  $0, R1
-	MOVD  R1, 8(RSP)
-	MOVD  R1, 16(RSP)
-	MOVD  R1, 24(RSP)
-	MOVD  112(R0), R9
-	MOVD  128(R0), R1
-	MOVD  R1, 32(RSP)
-	MOVD  144(R0), R10
-	MOVD  136(R0), R11
-	MOVD  200(R0), R1
-	MOVD  R1, 56(RSP)
-	MOVD  176(R0), R1
-	MOVD  R1, 48(RSP)
-	MOVD  184(R0), R0
-	MOVD  R0, 40(RSP)
-	MOVD  40(RSP), R0
+	MOVD  br+8(FP), R3
+	MOVD  24(R3), R0
+	MOVBU 40(R3), R2
+	MOVD  (R3), R1
+	MOVD  32(R3), R3
+	ADD   R3, R1, R1
+	MOVD  R1, (RSP)
+	MOVD  ctx+16(FP), R1
+	MOVD  72(R1), R5
+	MOVD  80(R1), R6
+	MOVD  88(R1), R7
+	MOVD  $0, R8
+	MOVD  R8, 8(RSP)
+	MOVD  R8, 16(RSP)
+	MOVD  R8, 24(RSP)
+	MOVD  112(R1), R8
+	MOVD  128(R1), R9
+	MOVD  R9, 32(RSP)
+	MOVD  144(R1), R9
+	MOVD  136(R1), R10
+	MOVD  200(R1), R11
+	MOVD  R11, 56(RSP)
+	MOVD  176(R1), R11
+	MOVD  R11, 48(RSP)
+	MOVD  184(R1), R1
+	MOVD  R1, 40(RSP)
+	MOVD  40(RSP), R1
 	MOVD  48(RSP), R16
-	ADD   R0, R16, R16
+	ADD   R1, R16, R16
 	MOVD  R16, 48(RSP)
 
 	// Calculate pointer to s.out[cap(s.out)] (a past-end pointer)
 	MOVD 32(RSP), R16
-	ADD  R9, R16, R16
+	ADD  R8, R16, R16
 	MOVD R16, 32(RSP)
 
 	// outBase += outPosition
-	ADD R11, R9, R9
+	ADD R10, R8, R8
 
-sequenceDecs_decodeSync_safe_amd64_main_loop:
-	MOVD (RSP), R12
+sequenceDecs_decodeSync_safe_bmi2_main_loop:
+	MOVD (RSP), R11
 
 	// Fill bitreader to have enough for the offset and match length.
-	CMP  $0x08, R5
-	BLT  sequenceDecs_decodeSync_safe_amd64_fill_byte_by_byte
-	MOVD R3, R0
-	LSR  $0x03, R0, R0
-	SUB  R0, R12, R12
-	MOVD (R12), R2
-	SUB  R0, R5, R5
-	AND  $0x07, R3, R3
-	JMP  sequenceDecs_decodeSync_safe_amd64_fill_end
+	CMP  $0x08, R3
+	BLT  sequenceDecs_decodeSync_safe_bmi2_fill_byte_by_byte
+	MOVD R2, R1
+	LSR  $0x03, R1, R1
+	SUB  R1, R11, R11
+	MOVD (R11), R0
+	SUB  R1, R3, R3
+	AND  $0x07, R2, R2
+	JMP  sequenceDecs_decodeSync_safe_bmi2_fill_end
 
-sequenceDecs_decodeSync_safe_amd64_fill_byte_by_byte:
-	CMP   $0x00, R5
-	BLE   sequenceDecs_decodeSync_safe_amd64_fill_check_overread
-	CMP   $0x07, R3
-	BLE   sequenceDecs_decodeSync_safe_amd64_fill_end
-	LSL   $0x08, R2, R2
-	SUB   $0x01, R12, R12
-	SUB   $0x01, R5, R5
-	SUB   $0x08, R3, R3
-	MOVBU (R12), R0
-	ORR   R0, R2, R2
-	JMP   sequenceDecs_decodeSync_safe_amd64_fill_byte_by_byte
+sequenceDecs_decodeSync_safe_bmi2_fill_byte_by_byte:
+	CMP   $0x00, R3
+	BLE   sequenceDecs_decodeSync_safe_bmi2_fill_check_overread
+	CMP   $0x07, R2
+	BLE   sequenceDecs_decodeSync_safe_bmi2_fill_end
+	LSL   $0x08, R0, R0
+	SUB   $0x01, R11, R11
+	SUB   $0x01, R3, R3
+	SUB   $0x08, R2, R2
+	MOVBU (R11), R1
+	ORR   R1, R0, R0
+	JMP   sequenceDecs_decodeSync_safe_bmi2_fill_byte_by_byte
 
-sequenceDecs_decodeSync_safe_amd64_fill_check_overread:
-	CMP $0x40, R3
+sequenceDecs_decodeSync_safe_bmi2_fill_check_overread:
+	CMP $0x40, R2
 	BHI error_overread
 
-sequenceDecs_decodeSync_safe_amd64_fill_end:
+sequenceDecs_decodeSync_safe_bmi2_fill_end:
 	// Update offset
-	MOVD R8, R0
-	MOVD R3, R1
-	MOVD R2, R13
-	LSL  R1, R13, R13
-	UBFX $8, R0, $8, R1
-	LSR  $0x20, R0, R0
-	TST  R1, R1
-	BEQ  sequenceDecs_decodeSync_safe_amd64_of_update_zero
-	ADD  R1, R3, R3
-	CMP  $0x40, R3
-	BHI  sequenceDecs_decodeSync_safe_amd64_of_update_zero
-	CMP  $0x40, R1
-	BHS  sequenceDecs_decodeSync_safe_amd64_of_update_zero
-	NEG  R1, R1
-	LSR  R1, R13, R13
-	ADD  R13, R0, R0
-
-sequenceDecs_decodeSync_safe_amd64_of_update_zero:
-	MOVD R0, 8(RSP)
+	MOVD $0x00000808, R1
+	UBFX $0, R1, $8, R16
+	UBFX $8, R1, $8, R15
+	LSR  R16, R7, R12
+	MOVD $1, R16
+	LSL  R15, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R12, R12
+	MOVD R0, R13
+	ADD  R12, R2, R1
+	NEG  R1, R16
+	ROR  R16, R13, R13
+	MOVD $1, R16
+	LSL  R12, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R13, R13
+	MOVD R1, R2
+	MOVD R7, R1
+	LSR  $0x20, R1, R1
+	ADD  R13, R1, R1
+	MOVD R1, 8(RSP)
 
 	// Update match length
-	MOVD R7, R0
-	MOVD R3, R1
-	MOVD R2, R13
-	LSL  R1, R13, R13
-	UBFX $8, R0, $8, R1
-	LSR  $0x20, R0, R0
-	TST  R1, R1
-	BEQ  sequenceDecs_decodeSync_safe_amd64_ml_update_zero
-	ADD  R1, R3, R3
-	CMP  $0x40, R3
-	BHI  sequenceDecs_decodeSync_safe_amd64_ml_update_zero
-	CMP  $0x40, R1
-	BHS  sequenceDecs_decodeSync_safe_amd64_ml_update_zero
-	NEG  R1, R1
-	LSR  R1, R13, R13
-	ADD  R13, R0, R0
-
-sequenceDecs_decodeSync_safe_amd64_ml_update_zero:
-	MOVD R0, 16(RSP)
+	MOVD $0x00000808, R1
+	UBFX $0, R1, $8, R16
+	UBFX $8, R1, $8, R15
+	LSR  R16, R6, R12
+	MOVD $1, R16
+	LSL  R15, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R12, R12
+	MOVD R0, R13
+	ADD  R12, R2, R1
+	NEG  R1, R16
+	ROR  R16, R13, R13
+	MOVD $1, R16
+	LSL  R12, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R13, R13
+	MOVD R1, R2
+	MOVD R6, R1
+	LSR  $0x20, R1, R1
+	ADD  R13, R1, R1
+	MOVD R1, 16(RSP)
 
 	// Fill bitreader to have enough for the remaining
-	CMP  $0x08, R5
-	BLT  sequenceDecs_decodeSync_safe_amd64_fill_2_byte_by_byte
-	MOVD R3, R0
-	LSR  $0x03, R0, R0
-	SUB  R0, R12, R12
-	MOVD (R12), R2
-	SUB  R0, R5, R5
-	AND  $0x07, R3, R3
-	JMP  sequenceDecs_decodeSync_safe_amd64_fill_2_end
+	CMP  $0x08, R3
+	BLT  sequenceDecs_decodeSync_safe_bmi2_fill_2_byte_by_byte
+	MOVD R2, R1
+	LSR  $0x03, R1, R1
+	SUB  R1, R11, R11
+	MOVD (R11), R0
+	SUB  R1, R3, R3
+	AND  $0x07, R2, R2
+	JMP  sequenceDecs_decodeSync_safe_bmi2_fill_2_end
 
-sequenceDecs_decodeSync_safe_amd64_fill_2_byte_by_byte:
-	CMP   $0x00, R5
-	BLE   sequenceDecs_decodeSync_safe_amd64_fill_2_check_overread
-	CMP   $0x07, R3
-	BLE   sequenceDecs_decodeSync_safe_amd64_fill_2_end
-	LSL   $0x08, R2, R2
-	SUB   $0x01, R12, R12
-	SUB   $0x01, R5, R5
-	SUB   $0x08, R3, R3
-	MOVBU (R12), R0
-	ORR   R0, R2, R2
-	JMP   sequenceDecs_decodeSync_safe_amd64_fill_2_byte_by_byte
+sequenceDecs_decodeSync_safe_bmi2_fill_2_byte_by_byte:
+	CMP   $0x00, R3
+	BLE   sequenceDecs_decodeSync_safe_bmi2_fill_2_check_overread
+	CMP   $0x07, R2
+	BLE   sequenceDecs_decodeSync_safe_bmi2_fill_2_end
+	LSL   $0x08, R0, R0
+	SUB   $0x01, R11, R11
+	SUB   $0x01, R3, R3
+	SUB   $0x08, R2, R2
+	MOVBU (R11), R1
+	ORR   R1, R0, R0
+	JMP   sequenceDecs_decodeSync_safe_bmi2_fill_2_byte_by_byte
 
-sequenceDecs_decodeSync_safe_amd64_fill_2_check_overread:
-	CMP $0x40, R3
+sequenceDecs_decodeSync_safe_bmi2_fill_2_check_overread:
+	CMP $0x40, R2
 	BHI error_overread
 
-sequenceDecs_decodeSync_safe_amd64_fill_2_end:
+sequenceDecs_decodeSync_safe_bmi2_fill_2_end:
 	// Update literal length
-	MOVD R6, R0
-	MOVD R3, R1
-	MOVD R2, R13
-	LSL  R1, R13, R13
-	UBFX $8, R0, $8, R1
-	LSR  $0x20, R0, R0
-	TST  R1, R1
-	BEQ  sequenceDecs_decodeSync_safe_amd64_ll_update_zero
-	ADD  R1, R3, R3
-	CMP  $0x40, R3
-	BHI  sequenceDecs_decodeSync_safe_amd64_ll_update_zero
-	CMP  $0x40, R1
-	BHS  sequenceDecs_decodeSync_safe_amd64_ll_update_zero
-	NEG  R1, R1
-	LSR  R1, R13, R13
-	ADD  R13, R0, R0
-
-sequenceDecs_decodeSync_safe_amd64_ll_update_zero:
-	MOVD R0, 24(RSP)
+	MOVD $0x00000808, R1
+	UBFX $0, R1, $8, R16
+	UBFX $8, R1, $8, R15
+	LSR  R16, R5, R12
+	MOVD $1, R16
+	LSL  R15, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R12, R12
+	MOVD R0, R13
+	ADD  R12, R2, R1
+	NEG  R1, R16
+	ROR  R16, R13, R13
+	MOVD $1, R16
+	LSL  R12, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R13, R13
+	MOVD R1, R2
+	MOVD R5, R1
+	LSR  $0x20, R1, R1
+	ADD  R13, R1, R1
+	MOVD R1, 24(RSP)
 
 	// Fill bitreader for state updates
-	MOVD  R12, (RSP)
-	MOVD  R8, R0
-	LSR   $0x08, R0, R0
-	MOVBU R0, R0
+	MOVD  R11, (RSP)
+	MOVD  $0x00000808, R1
+	UBFX  $0, R1, $8, R16
+	UBFX  $8, R1, $8, R15
+	LSR   R16, R7, R11
+	MOVD  $1, R16
+	LSL   R15, R16, R16
+	SUB   $1, R16, R16
+	AND   R16, R11, R11
 	MOVD  ctx+16(FP), R1
 	MOVD  96(R1), R16
 	CMP   $0x00, R16
-	BEQ   sequenceDecs_decodeSync_safe_amd64_skip_update
-
-	// Update Literal Length State
-	MOVBU R6, R12
-	LSRW  $0x10, R6, R6
-	ADD   R12, R3, R1
-	MOVD  R2, R13
-	MOVD  R1, R3
+	BEQ   sequenceDecs_decodeSync_safe_bmi2_skip_update
+	ADD   R6, R5, R12
+	ADD   R7, R12, R12
+	MOVBU R12, R12
+	ADD   R12, R2, R1
+	MOVD  R0, R13
+	MOVD  R1, R2
 	NEG   R1, R16
 	ROR   R16, R13, R13
-	MOVD  $0x00000001, R14
-	MOVB  R12, R1
-	LSLW  R1, R14, R14
-	SUBW  $1, R14, R14
-	AND   R14, R13, R13
-	ADD   R13, R6, R6
-
-	// Load ctx.llTable
-	MOVD ctx+16(FP), R1
-	MOVD (R1), R1
-	ADD  R6<<3, R1, R15
-	MOVD (R15), R6
-
-	// Update Match Length State
-	MOVBU R7, R12
-	LSRW  $0x10, R7, R7
-	ADD   R12, R3, R1
-	MOVD  R2, R13
-	MOVD  R1, R3
-	NEG   R1, R16
-	ROR   R16, R13, R13
-	MOVD  $0x00000001, R14
-	MOVB  R12, R1
-	LSLW  R1, R14, R14
-	SUBW  $1, R14, R14
-	AND   R14, R13, R13
-	ADD   R13, R7, R7
-
-	// Load ctx.mlTable
-	MOVD ctx+16(FP), R1
-	MOVD 24(R1), R1
-	ADD  R7<<3, R1, R15
-	MOVD (R15), R7
+	MOVD  $1, R16
+	LSL   R12, R16, R16
+	SUB   $1, R16, R16
+	AND   R16, R13, R13
 
 	// Update Offset State
-	MOVBU R8, R12
-	LSRW  $0x10, R8, R8
-	ADD   R12, R3, R1
-	MOVD  R2, R13
-	MOVD  R1, R3
-	NEG   R1, R16
-	ROR   R16, R13, R13
-	MOVD  $0x00000001, R14
-	MOVB  R12, R1
-	LSLW  R1, R14, R14
-	SUBW  $1, R14, R14
-	AND   R14, R13, R13
-	ADD   R13, R8, R8
+	MOVD $1, R16
+	LSL  R7, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R13, R1
+	LSR  R7, R13, R13
+	LSRW $0x10, R7, R7
+	ADD  R1, R7, R7
 
 	// Load ctx.ofTable
 	MOVD ctx+16(FP), R1
 	MOVD 48(R1), R1
-	ADD  R8<<3, R1, R15
-	MOVD (R15), R8
+	ADD  R7<<3, R1, R15
+	MOVD (R15), R7
 
-sequenceDecs_decodeSync_safe_amd64_skip_update:
+	// Update Match Length State
+	MOVD $1, R16
+	LSL  R6, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R13, R1
+	LSR  R6, R13, R13
+	LSRW $0x10, R6, R6
+	ADD  R1, R6, R6
+
+	// Load ctx.mlTable
+	MOVD ctx+16(FP), R1
+	MOVD 24(R1), R1
+	ADD  R6<<3, R1, R15
+	MOVD (R15), R6
+
+	// Update Literal Length State
+	MOVD $1, R16
+	LSL  R5, R16, R16
+	SUB  $1, R16, R16
+	AND  R16, R13, R1
+	LSRW $0x10, R5, R5
+	ADD  R1, R5, R5
+
+	// Load ctx.llTable
+	MOVD ctx+16(FP), R1
+	MOVD (R1), R1
+	ADD  R5<<3, R1, R15
+	MOVD (R15), R5
+
+sequenceDecs_decodeSync_safe_bmi2_skip_update:
 	// Adjust offset
 	MOVD s+0(FP), R1
 	MOVD 8(RSP), R12
-	CMP  $0x01, R0
-	BLS  sequenceDecs_decodeSync_safe_amd64_adjust_offsetB_1_or_0
+	CMP  $0x01, R11
+	BLS  sequenceDecs_decodeSync_safe_bmi2_adjust_offsetB_1_or_0
 	ADD  $144, R1, R15
 	VLD1 (R15), [V0.B16]
 	MOVD R12, 144(R1)
 	ADD  $152, R1, R15
 	VST1 [V0.B16], (R15)
-	JMP  sequenceDecs_decodeSync_safe_amd64_after_adjust
+	JMP  sequenceDecs_decodeSync_safe_bmi2_after_adjust
 
-sequenceDecs_decodeSync_safe_amd64_adjust_offsetB_1_or_0:
+sequenceDecs_decodeSync_safe_bmi2_adjust_offsetB_1_or_0:
 	MOVD 24(RSP), R16
 	CMP  $0x00000000, R16
-	BNE  sequenceDecs_decodeSync_safe_amd64_adjust_offset_maybezero
+	BNE  sequenceDecs_decodeSync_safe_bmi2_adjust_offset_maybezero
 	ADD  $1, R12, R12
-	JMP  sequenceDecs_decodeSync_safe_amd64_adjust_offset_nonzero
+	JMP  sequenceDecs_decodeSync_safe_bmi2_adjust_offset_nonzero
 
-sequenceDecs_decodeSync_safe_amd64_adjust_offset_maybezero:
+sequenceDecs_decodeSync_safe_bmi2_adjust_offset_maybezero:
 	TST  R12, R12
-	BNE  sequenceDecs_decodeSync_safe_amd64_adjust_offset_nonzero
+	BNE  sequenceDecs_decodeSync_safe_bmi2_adjust_offset_nonzero
 	MOVD 144(R1), R12
-	JMP  sequenceDecs_decodeSync_safe_amd64_after_adjust
+	JMP  sequenceDecs_decodeSync_safe_bmi2_after_adjust
 
-sequenceDecs_decodeSync_safe_amd64_adjust_offset_nonzero:
-	MOVD R12, R0
+sequenceDecs_decodeSync_safe_bmi2_adjust_offset_nonzero:
+	MOVD R12, R11
 	MOVD $0, R13
 	MOVD $-1, R14
 	CMP  $0x03, R12
-	CSEL EQ, R13, R0, R0
+	CSEL EQ, R13, R11, R11
 	CSEL EQ, R14, R13, R13
-	ADD  R0<<3, R1, R15
+	ADD  R11<<3, R1, R15
 	MOVD 144(R15), R16
 	ADDS R16, R13, R13
-	BNE  sequenceDecs_decodeSync_safe_amd64_adjust_temp_valid
+	BNE  sequenceDecs_decodeSync_safe_bmi2_adjust_temp_valid
 	MOVD $0x00000001, R13
 
-sequenceDecs_decodeSync_safe_amd64_adjust_temp_valid:
+sequenceDecs_decodeSync_safe_bmi2_adjust_temp_valid:
 	CMP  $0x01, R12
-	BEQ  sequenceDecs_decodeSync_safe_amd64_adjust_skip
-	MOVD 152(R1), R0
-	MOVD R0, 160(R1)
+	BEQ  sequenceDecs_decodeSync_safe_bmi2_adjust_skip
+	MOVD 152(R1), R11
+	MOVD R11, 160(R1)
 
-sequenceDecs_decodeSync_safe_amd64_adjust_skip:
-	MOVD 144(R1), R0
-	MOVD R0, 152(R1)
+sequenceDecs_decodeSync_safe_bmi2_adjust_skip:
+	MOVD 144(R1), R11
+	MOVD R11, 152(R1)
 	MOVD R13, 144(R1)
 	MOVD R13, R12
 
-sequenceDecs_decodeSync_safe_amd64_after_adjust:
+sequenceDecs_decodeSync_safe_bmi2_after_adjust:
 	MOVD R12, 8(RSP)
 
 	// Check values
-	MOVD 16(RSP), R0
-	MOVD 24(RSP), R1
-	ADD  R1, R0, R13
+	MOVD 16(RSP), R1
+	MOVD 24(RSP), R11
+	ADD  R11, R1, R13
 	MOVD s+0(FP), R14
 	MOVD 256(R14), R16
 	ADD  R13, R16, R16
 	MOVD R16, 256(R14)
 	MOVD ctx+16(FP), R13
 	MOVD 104(R13), R16
-	SUBS R1, R16, R16
+	SUBS R11, R16, R16
 	MOVD R16, 104(R13)
 	BMI  error_not_enough_literals
-	CMP  $0x00020002, R0
-	BHI  sequenceDecs_decodeSync_safe_amd64_error_match_len_too_big
+	CMP  $0x00020002, R1
+	BHI  sequenceDecs_decodeSync_safe_bmi2_error_match_len_too_big
 	TST  R12, R12
-	BNE  sequenceDecs_decodeSync_safe_amd64_match_len_ofs_ok
-	TST  R0, R0
-	BNE  sequenceDecs_decodeSync_safe_amd64_error_match_len_ofs_mismatch
+	BNE  sequenceDecs_decodeSync_safe_bmi2_match_len_ofs_ok
+	TST  R1, R1
+	BNE  sequenceDecs_decodeSync_safe_bmi2_error_match_len_ofs_mismatch
 
-sequenceDecs_decodeSync_safe_amd64_match_len_ofs_ok:
-	MOVD 24(RSP), R0
-	MOVD 8(RSP), R1
+sequenceDecs_decodeSync_safe_bmi2_match_len_ofs_ok:
+	MOVD 24(RSP), R1
+	MOVD 8(RSP), R11
 	MOVD 16(RSP), R12
 
 	// Check if we have enough space in s.out
-	ADD  R12, R0, R13
-	ADD  R9, R13, R13
+	ADD  R12, R1, R13
+	ADD  R8, R13, R13
 	MOVD 32(RSP), R16
 	CMP  R16, R13
 	BHI  error_not_enough_space
 
 	// Copy literals
-	TST  R0, R0
+	TST  R1, R1
 	BEQ  check_offset
-	MOVD R0, R13
+	MOVD R1, R13
 	SUBS $0x10, R13, R13
 	BLO  copy_1_small
 
 copy_1_loop:
-	VLD1 (R10), [V0.B16]
-	VST1 [V0.B16], (R9)
-	ADD  $0x10, R10, R10
+	VLD1 (R9), [V0.B16]
+	VST1 [V0.B16], (R8)
 	ADD  $0x10, R9, R9
+	ADD  $0x10, R8, R8
 	SUBS $0x10, R13, R13
 	BHS  copy_1_loop
-	ADD  R13, R10, R10
-	ADD  $16, R10, R10
 	ADD  R13, R9, R9
 	ADD  $16, R9, R9
-	ADD  $-16, R10, R15
-	VLD1 (R15), [V0.B16]
+	ADD  R13, R8, R8
+	ADD  $16, R8, R8
 	ADD  $-16, R9, R15
+	VLD1 (R15), [V0.B16]
+	ADD  $-16, R8, R15
 	VST1 [V0.B16], (R15)
 	JMP  copy_1_end
 
 copy_1_small:
-	CMP $0x03, R0
+	CMP $0x03, R1
 	BEQ copy_1_move_3
 	BLO copy_1_move_1or2
-	CMP $0x08, R0
+	CMP $0x08, R1
 	BLO copy_1_move_4through7
 	JMP copy_1_move_8through16
 
 copy_1_move_1or2:
-	MOVB (R10), R13
-	ADD  R0, R10, R15
+	MOVB (R9), R13
+	ADD  R1, R9, R15
 	MOVB -1(R15), R14
-	MOVB R13, (R9)
-	ADD  R0, R9, R15
+	MOVB R13, (R8)
+	ADD  R1, R8, R15
 	MOVB R14, -1(R15)
-	ADD  R0, R10, R10
-	ADD  R0, R9, R9
+	ADD  R1, R9, R9
+	ADD  R1, R8, R8
 	JMP  copy_1_end
 
 copy_1_move_3:
-	MOVH (R10), R13
-	MOVB 2(R10), R14
-	MOVH R13, (R9)
-	MOVB R14, 2(R9)
-	ADD  R0, R10, R10
-	ADD  R0, R9, R9
+	MOVH (R9), R13
+	MOVB 2(R9), R14
+	MOVH R13, (R8)
+	MOVB R14, 2(R8)
+	ADD  R1, R9, R9
+	ADD  R1, R8, R8
 	JMP  copy_1_end
 
 copy_1_move_4through7:
-	MOVWU (R10), R13
-	ADD   R0, R10, R15
+	MOVWU (R9), R13
+	ADD   R1, R9, R15
 	MOVWU -4(R15), R14
-	MOVW  R13, (R9)
-	ADD   R0, R9, R15
+	MOVW  R13, (R8)
+	ADD   R1, R8, R15
 	MOVW  R14, -4(R15)
-	ADD   R0, R10, R10
-	ADD   R0, R9, R9
+	ADD   R1, R9, R9
+	ADD   R1, R8, R8
 	JMP   copy_1_end
 
 copy_1_move_8through16:
-	MOVD (R10), R13
-	ADD  R0, R10, R15
+	MOVD (R9), R13
+	ADD  R1, R9, R15
 	MOVD -8(R15), R14
-	MOVD R13, (R9)
-	ADD  R0, R9, R15
+	MOVD R13, (R8)
+	ADD  R1, R8, R15
 	MOVD R14, -8(R15)
-	ADD  R0, R10, R10
-	ADD  R0, R9, R9
+	ADD  R1, R9, R9
+	ADD  R1, R8, R8
 
 copy_1_end:
-	ADD R0, R11, R11
+	ADD R1, R10, R10
 
 	// Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)
 check_offset:
-	MOVD R11, R0
+	MOVD R10, R1
 	MOVD 40(RSP), R16
-	ADD  R16, R0, R0
-	CMP  R0, R1
+	ADD  R16, R1, R1
+	CMP  R1, R11
 	BGT  error_match_off_too_big
 	MOVD 56(RSP), R16
-	CMP  R16, R1
+	CMP  R16, R11
 	BGT  error_match_off_too_big
 
 	// Copy match from history
-	MOVD R1, R0
-	SUBS R11, R0, R0
+	MOVD R11, R1
+	SUBS R10, R1, R1
 	BLS  copy_match
 	MOVD 48(RSP), R13
-	SUB  R0, R13, R13
-	CMP  R0, R12
+	SUB  R1, R13, R13
+	CMP  R1, R12
 	BGT  copy_all_from_history
-	MOVD R12, R0
-	SUBS $0x10, R0, R0
+	MOVD R12, R1
+	SUBS $0x10, R1, R1
 	BLO  copy_4_small
 
 copy_4_loop:
 	VLD1 (R13), [V0.B16]
-	VST1 [V0.B16], (R9)
+	VST1 [V0.B16], (R8)
 	ADD  $0x10, R13, R13
-	ADD  $0x10, R9, R9
-	SUBS $0x10, R0, R0
+	ADD  $0x10, R8, R8
+	SUBS $0x10, R1, R1
 	BHS  copy_4_loop
-	ADD  R0, R13, R13
+	ADD  R1, R13, R13
 	ADD  $16, R13, R13
-	ADD  R0, R9, R9
-	ADD  $16, R9, R9
+	ADD  R1, R8, R8
+	ADD  $16, R8, R8
 	ADD  $-16, R13, R15
 	VLD1 (R15), [V0.B16]
-	ADD  $-16, R9, R15
+	ADD  $-16, R8, R15
 	VST1 [V0.B16], (R15)
 	JMP  copy_4_end
 
@@ -2417,144 +2431,144 @@ copy_4_small:
 	JMP copy_4_move_8through16
 
 copy_4_move_3:
-	MOVH (R13), R0
-	MOVB 2(R13), R1
-	MOVH R0, (R9)
-	MOVB R1, 2(R9)
+	MOVH (R13), R1
+	MOVB 2(R13), R11
+	MOVH R1, (R8)
+	MOVB R11, 2(R8)
 	ADD  R12, R13, R13
-	ADD  R12, R9, R9
+	ADD  R12, R8, R8
 	JMP  copy_4_end
 
 copy_4_move_4through7:
-	MOVWU (R13), R0
+	MOVWU (R13), R1
 	ADD   R12, R13, R15
-	MOVWU -4(R15), R1
-	MOVW  R0, (R9)
-	ADD   R12, R9, R15
-	MOVW  R1, -4(R15)
+	MOVWU -4(R15), R11
+	MOVW  R1, (R8)
+	ADD   R12, R8, R15
+	MOVW  R11, -4(R15)
 	ADD   R12, R13, R13
-	ADD   R12, R9, R9
+	ADD   R12, R8, R8
 	JMP   copy_4_end
 
 copy_4_move_8through16:
-	MOVD (R13), R0
+	MOVD (R13), R1
 	ADD  R12, R13, R15
-	MOVD -8(R15), R1
-	MOVD R0, (R9)
-	ADD  R12, R9, R15
-	MOVD R1, -8(R15)
+	MOVD -8(R15), R11
+	MOVD R1, (R8)
+	ADD  R12, R8, R15
+	MOVD R11, -8(R15)
 	ADD  R12, R13, R13
-	ADD  R12, R9, R9
+	ADD  R12, R8, R8
 
 copy_4_end:
-	ADD R12, R11, R11
+	ADD R12, R10, R10
 	JMP handle_loop
 	JMP loop_finished
 
 copy_all_from_history:
-	MOVD R0, R14
+	MOVD R1, R14
 	SUBS $0x10, R14, R14
 	BLO  copy_5_small
 
 copy_5_loop:
 	VLD1 (R13), [V0.B16]
-	VST1 [V0.B16], (R9)
+	VST1 [V0.B16], (R8)
 	ADD  $0x10, R13, R13
-	ADD  $0x10, R9, R9
+	ADD  $0x10, R8, R8
 	SUBS $0x10, R14, R14
 	BHS  copy_5_loop
 	ADD  R14, R13, R13
 	ADD  $16, R13, R13
-	ADD  R14, R9, R9
-	ADD  $16, R9, R9
+	ADD  R14, R8, R8
+	ADD  $16, R8, R8
 	ADD  $-16, R13, R15
 	VLD1 (R15), [V0.B16]
-	ADD  $-16, R9, R15
+	ADD  $-16, R8, R15
 	VST1 [V0.B16], (R15)
 	JMP  copy_5_end
 
 copy_5_small:
-	CMP $0x03, R0
+	CMP $0x03, R1
 	BEQ copy_5_move_3
 	BLO copy_5_move_1or2
-	CMP $0x08, R0
+	CMP $0x08, R1
 	BLO copy_5_move_4through7
 	JMP copy_5_move_8through16
 
 copy_5_move_1or2:
 	MOVB (R13), R14
-	ADD  R0, R13, R15
+	ADD  R1, R13, R15
 	MOVB -1(R15), R4
-	MOVB R14, (R9)
-	ADD  R0, R9, R15
+	MOVB R14, (R8)
+	ADD  R1, R8, R15
 	MOVB R4, -1(R15)
-	ADD  R0, R13, R13
-	ADD  R0, R9, R9
+	ADD  R1, R13, R13
+	ADD  R1, R8, R8
 	JMP  copy_5_end
 
 copy_5_move_3:
 	MOVH (R13), R14
 	MOVB 2(R13), R4
-	MOVH R14, (R9)
-	MOVB R4, 2(R9)
-	ADD  R0, R13, R13
-	ADD  R0, R9, R9
+	MOVH R14, (R8)
+	MOVB R4, 2(R8)
+	ADD  R1, R13, R13
+	ADD  R1, R8, R8
 	JMP  copy_5_end
 
 copy_5_move_4through7:
 	MOVWU (R13), R14
-	ADD   R0, R13, R15
+	ADD   R1, R13, R15
 	MOVWU -4(R15), R4
-	MOVW  R14, (R9)
-	ADD   R0, R9, R15
+	MOVW  R14, (R8)
+	ADD   R1, R8, R15
 	MOVW  R4, -4(R15)
-	ADD   R0, R13, R13
-	ADD   R0, R9, R9
+	ADD   R1, R13, R13
+	ADD   R1, R8, R8
 	JMP   copy_5_end
 
 copy_5_move_8through16:
 	MOVD (R13), R14
-	ADD  R0, R13, R15
+	ADD  R1, R13, R15
 	MOVD -8(R15), R4
-	MOVD R14, (R9)
-	ADD  R0, R9, R15
+	MOVD R14, (R8)
+	ADD  R1, R8, R15
 	MOVD R4, -8(R15)
-	ADD  R0, R13, R13
-	ADD  R0, R9, R9
+	ADD  R1, R13, R13
+	ADD  R1, R8, R8
 
 copy_5_end:
-	ADD R0, R11, R11
-	SUB R0, R12, R12
+	ADD R1, R10, R10
+	SUB R1, R12, R12
 
 	// Copy match from the current buffer
 copy_match:
-	MOVD R9, R0
-	SUB  R1, R0, R0
+	MOVD R8, R1
+	SUB  R11, R1, R1
 
 	// ml <= mo
-	CMP R1, R12
+	CMP R11, R12
 	BHI copy_overlapping_match
 
 	// Copy non-overlapping match
-	ADD  R12, R11, R11
-	MOVD R12, R1
-	SUBS $0x10, R1, R1
+	ADD  R12, R10, R10
+	MOVD R12, R11
+	SUBS $0x10, R11, R11
 	BLO  copy_2_small
 
 copy_2_loop:
-	VLD1 (R0), [V0.B16]
-	VST1 [V0.B16], (R9)
-	ADD  $0x10, R0, R0
-	ADD  $0x10, R9, R9
-	SUBS $0x10, R1, R1
+	VLD1 (R1), [V0.B16]
+	VST1 [V0.B16], (R8)
+	ADD  $0x10, R1, R1
+	ADD  $0x10, R8, R8
+	SUBS $0x10, R11, R11
 	BHS  copy_2_loop
-	ADD  R1, R0, R0
-	ADD  $16, R0, R0
-	ADD  R1, R9, R9
-	ADD  $16, R9, R9
-	ADD  $-16, R0, R15
+	ADD  R11, R1, R1
+	ADD  $16, R1, R1
+	ADD  R11, R8, R8
+	ADD  $16, R8, R8
+	ADD  $-16, R1, R15
 	VLD1 (R15), [V0.B16]
-	ADD  $-16, R9, R15
+	ADD  $-16, R8, R15
 	VST1 [V0.B16], (R15)
 	JMP  copy_2_end
 
@@ -2567,80 +2581,80 @@ copy_2_small:
 	JMP copy_2_move_8through16
 
 copy_2_move_1or2:
-	MOVB (R0), R1
-	ADD  R12, R0, R15
+	MOVB (R1), R11
+	ADD  R12, R1, R15
 	MOVB -1(R15), R13
-	MOVB R1, (R9)
-	ADD  R12, R9, R15
+	MOVB R11, (R8)
+	ADD  R12, R8, R15
 	MOVB R13, -1(R15)
-	ADD  R12, R0, R0
-	ADD  R12, R9, R9
+	ADD  R12, R1, R1
+	ADD  R12, R8, R8
 	JMP  copy_2_end
 
 copy_2_move_3:
-	MOVH (R0), R1
-	MOVB 2(R0), R13
-	MOVH R1, (R9)
-	MOVB R13, 2(R9)
-	ADD  R12, R0, R0
-	ADD  R12, R9, R9
+	MOVH (R1), R11
+	MOVB 2(R1), R13
+	MOVH R11, (R8)
+	MOVB R13, 2(R8)
+	ADD  R12, R1, R1
+	ADD  R12, R8, R8
 	JMP  copy_2_end
 
 copy_2_move_4through7:
-	MOVWU (R0), R1
-	ADD   R12, R0, R15
+	MOVWU (R1), R11
+	ADD   R12, R1, R15
 	MOVWU -4(R15), R13
-	MOVW  R1, (R9)
-	ADD   R12, R9, R15
+	MOVW  R11, (R8)
+	ADD   R12, R8, R15
 	MOVW  R13, -4(R15)
-	ADD   R12, R0, R0
-	ADD   R12, R9, R9
+	ADD   R12, R1, R1
+	ADD   R12, R8, R8
 	JMP   copy_2_end
 
 copy_2_move_8through16:
-	MOVD (R0), R1
-	ADD  R12, R0, R15
+	MOVD (R1), R11
+	ADD  R12, R1, R15
 	MOVD -8(R15), R13
-	MOVD R1, (R9)
-	ADD  R12, R9, R15
+	MOVD R11, (R8)
+	ADD  R12, R8, R15
 	MOVD R13, -8(R15)
-	ADD  R12, R0, R0
-	ADD  R12, R9, R9
+	ADD  R12, R1, R1
+	ADD  R12, R8, R8
 
 copy_2_end:
 	JMP handle_loop
 
 	// Copy overlapping match
 copy_overlapping_match:
-	ADD R12, R11, R11
+	ADD R12, R10, R10
 
 copy_slow_3:
-	MOVB (R0), R1
-	MOVB R1, (R9)
-	ADD  $1, R0, R0
-	ADD  $1, R9, R9
+	MOVB (R1), R11
+	MOVB R11, (R8)
+	ADD  $1, R1, R1
+	ADD  $1, R8, R8
 	SUBS $1, R12, R12
 	BNE  copy_slow_3
 
 handle_loop:
-	MOVD ctx+16(FP), R0
-	MOVD 96(R0), R16
+	MOVD ctx+16(FP), R1
+	MOVD 96(R1), R16
 	SUBS $1, R16, R16
-	MOVD R16, 96(R0)
-	BPL  sequenceDecs_decodeSync_safe_amd64_main_loop
+	MOVD R16, 96(R1)
+	BPL  sequenceDecs_decodeSync_safe_bmi2_main_loop
 
 loop_finished:
-	MOVD br+8(FP), R0
-	MOVD R2, 24(R0)
-	MOVB R3, 40(R0)
-	MOVD R5, 32(R0)
+	MOVD br+8(FP), R1
+	MOVD R0, 24(R1)
+	MOVB R2, 40(R1)
+	MOVD R3, 32(R1)
 
 	// Update the context
 	MOVD ctx+16(FP), R0
-	MOVD R11, 136(R0)
+	MOVD R10, 136(R0)
 	MOVD 144(R0), R1
-	SUB  R1, R10, R10
-	MOVD R10, 168(R0)
+	SUB  R1, R9, R9
+	MOVD R9, 168(R0)
 
 	// Return success
 	MOVD $0x00000000, R16
@@ -2648,7 +2662,7 @@ loop_finished:
 	RET
 
 	// Return with match length error
-sequenceDecs_decodeSync_safe_amd64_error_match_len_ofs_mismatch:
+sequenceDecs_decodeSync_safe_bmi2_error_match_len_ofs_mismatch:
 	MOVD 16(RSP), R0
 	MOVD ctx+16(FP), R1
 	MOVD R0, 216(R1)
@@ -2657,7 +2671,7 @@ sequenceDecs_decodeSync_safe_amd64_error_match_len_ofs_mismatch:
 	RET
 
 	// Return with match too long error
-sequenceDecs_decodeSync_safe_amd64_error_match_len_too_big:
+sequenceDecs_decodeSync_safe_bmi2_error_match_len_too_big:
 	MOVD ctx+16(FP), R0
 	MOVD 16(RSP), R1
 	MOVD R1, 216(R0)
@@ -2670,7 +2684,7 @@ error_match_off_too_big:
 	MOVD ctx+16(FP), R0
 	MOVD 8(RSP), R1
 	MOVD R1, 224(R0)
-	MOVD R11, 136(R0)
+	MOVD R10, 136(R0)
 	MOVD $0x00000003, R16
 	MOVD R16, ret+24(FP)
 	RET
@@ -2697,9 +2711,7 @@ error_not_enough_space:
 	MOVD R1, 208(R0)
 	MOVD 16(RSP), R1
 	MOVD R1, 216(R0)
-	MOVD R11, 136(R0)
+	MOVD R10, 136(R0)
 	MOVD $0x00000005, R16
 	MOVD R16, ret+24(FP)
 	RET
-
-// skipped sequenceDecs_decodeSync_safe_bmi2 (BMI2 not available on arm64)
