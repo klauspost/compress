@@ -6,7 +6,7 @@ toolchain go1.24.2
 
 require (
 	github.com/klauspost/compress v1.15.15
-	github.com/mmcloughlin/avo v0.6.1-0.20260708232202-5b138c40e254
+	github.com/mmcloughlin/avo v0.6.1-0.20260709170202-520357590ac6
 )
 
 require (
@@ -17,4 +17,4 @@ require (
 
 replace github.com/klauspost/compress => ../..
 
-replace github.com/mmcloughlin/avo => github.com/honeycombio/avo v0.6.1-0.20260708232202-5b138c40e254
+replace github.com/mmcloughlin/avo => github.com/honeycombio/avo v0.6.1-0.20260709170202-520357590ac6
