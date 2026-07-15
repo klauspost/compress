@@ -49,7 +49,7 @@ func (f *decompressor) $FUNCNAME$() {
 	// but is smart enough to keep local variables in registers, so use nb and b,
 	// inline call to moreBits and reassign b,nb back to f on return.
 	fnb, fb, dict := f.nb, f.b, &f.dict
-
+$PEEKTOP$
 	switch f.stepState {
 	case stateInit:
 		goto readLiteral
@@ -70,12 +70,9 @@ readLiteral:
 			n := uint(f.hl.maxRead)
 			for {
 				for fnb < n {
-					c, err := fr.ReadByte()
-					if err != nil {
-						f.b, f.nb = fb, fnb
+					$GETBYTE_S$
 						f.err = noEOF(err)
-						return
-					}
+$GETBYTE_E$
 					f.roffset++
 					fb |= uint32(c) << (fnb & regSizeMaskUint32)
 					fnb += 8
@@ -88,7 +85,7 @@ readLiteral:
 				}
 				if n <= fnb {
 					if n == 0 {
-						f.b, f.nb = fb, fnb
+$DISCARD$						f.b, f.nb = fb, fnb
 						if debugDecode {
 							fmt.Println("huffsym: n==0")
 						}
@@ -108,7 +105,7 @@ readLiteral:
 		case v < 256:
 			dict.writeByte(byte(v))
 			if dict.availWrite() == 0 {
-				f.toRead = dict.readFlush()
+$DISCARD$				f.toRead = dict.readFlush()
 				f.step = $FUNCNAME$
 				f.stepState = stateInit
 				f.b, f.nb = fb, fnb
@@ -116,7 +113,7 @@ readLiteral:
 			}
 			goto readLiteral
 		case v == 256:
-			f.b, f.nb = fb, fnb
+$DISCARD$			f.b, f.nb = fb, fnb
 			f.finishBlock()
 			return
 		// otherwise, reference to older data
@@ -127,15 +124,12 @@ readLiteral:
 			length = int(val.length) + 3
 			n := uint(val.extra)
 			for fnb < n {
-				c, err := fr.ReadByte()
-				if err != nil {
-					f.b, f.nb = fb, fnb
+				$GETBYTE_S$
 					if debugDecode {
 						fmt.Println("morebits n>0:", err)
 					}
 					f.err = err
-					return
-				}
+$GETBYTE_E$
 				f.roffset++
 				fb |= uint32(c) << (fnb&regSizeMaskUint32)
 				fnb += 8	
@@ -144,7 +138,7 @@ readLiteral:
 			fb >>= n & regSizeMaskUint32
 			fnb -= n
 		default:
-			if debugDecode {
+$DISCARD$			if debugDecode {
 				fmt.Println(v, ">= maxNumLit")
 			}
 			f.err = CorruptInputError(f.roffset)
@@ -155,15 +149,12 @@ readLiteral:
 		var dist uint32
 		if f.hd == nil {
 			for fnb < 5 {
-				c, err := fr.ReadByte()
-				if err != nil {
-					f.b, f.nb = fb, fnb
+				$GETBYTE_S$
 					if debugDecode {
 						fmt.Println("morebits f.nb<5:", err)
 					}
 					f.err = err
-					return
-				}
+$GETBYTE_E$
 				f.roffset++
 				fb |= uint32(c) << (fnb&regSizeMaskUint32)
 				fnb += 8
@@ -182,12 +173,9 @@ readLiteral:
 			// inline call to moreBits and reassign b,nb back to f on return.
 			for {
 				for fnb < n {
-					c, err := fr.ReadByte()
-					if err != nil {
-						f.b, f.nb = fb, fnb
+					$GETBYTE_S$
 						f.err = noEOF(err)
-						return
-					}
+$GETBYTE_E$
 					f.roffset++
 					fb |= uint32(c) << (fnb & regSizeMaskUint32)
 					fnb += 8
@@ -200,7 +188,7 @@ readLiteral:
 				}
 				if n <= fnb {
 					if n == 0 {
-						f.b, f.nb = fb, fnb
+$DISCARD$						f.b, f.nb = fb, fnb
 						if debugDecode {
 							fmt.Println("huffsym: n==0")
 						}
@@ -223,15 +211,12 @@ readLiteral:
 			// have 1 bit in bottom of dist, need nb more.
 			extra := (dist & 1) << (nb & regSizeMaskUint32)
 			for fnb < nb {
-				c, err := fr.ReadByte()
-				if err != nil {
-					f.b, f.nb = fb, fnb
+				$GETBYTE_S$
 					if debugDecode {
 						fmt.Println("morebits f.nb<nb:", err)
 					}
 					f.err = err
-					return
-				}
+$GETBYTE_E$
 				f.roffset++
 				fb |= uint32(c) << (fnb&regSizeMaskUint32)
 				fnb += 8
@@ -242,7 +227,7 @@ readLiteral:
 			dist = 1<<((nb+1)&regSizeMaskUint32) + 1 + extra
 			// slower: dist = bitMask32[nb+1] + 2 + extra
 		default:
-			f.b, f.nb = fb, fnb
+$DISCARD$			f.b, f.nb = fb, fnb
 			if debugDecode {
 				fmt.Println("dist too big:", dist, maxNumDist)
 			}
@@ -252,7 +237,7 @@ readLiteral:
 
 		// No check on length; encoding can be prescient.
 		if dist > uint32(dict.histSize()) {
-			f.b, f.nb = fb, fnb
+$DISCARD$			f.b, f.nb = fb, fnb
 			if debugDecode {
 				fmt.Println("dist > dict.histSize():", dist, dict.histSize())
 			}
@@ -274,7 +259,7 @@ copyHistory:
 		f.copyLen -= cnt
 
 		if dict.availWrite() == 0 || f.copyLen > 0 {
-			f.toRead = dict.readFlush()
+$DISCARD$			f.toRead = dict.readFlush()
 			f.step = $FUNCNAME$ // We need to continue this work
 			f.stepState = stateDict
 			f.b, f.nb = fb, fnb
@@ -286,11 +271,67 @@ copyHistory:
 }
 
 `
-	for i, t := range types {
-		s := strings.Replace(template, "$FUNCNAME$", "huffman"+names[i], -1)
-		s = strings.Replace(s, "$TYPE$", t, -1)
-		f.WriteString(s)
+
+	f.WriteString(`
+func peekBufio(fr *bufio.Reader) ([]byte, error) {
+	if fr.Buffered() == 0 {
+		if _, err := fr.Peek(1); err != nil && fr.Buffered() == 0 {
+			return nil, err
+		}
 	}
+	return fr.Peek(fr.Buffered())
+}
+
+`)
+	// Each variant pulls the next input byte differently. The default reads via
+	// fr.ReadByte(). The *bufio.Reader variant reads from a Peek window so the
+	// per-byte fill inlines as a slice index; since Peek only views the buffer and
+	// Discard advances it, it must Discard consumed bytes before every return.
+	// getS/getE wrap each read site around that site's own EOF handling:
+	//     <getS> <site-specific error body> <getE>
+	// (output indentation is normalized by the go fmt step, so these need not be
+	// pre-indented).
+	type readImpl struct{ top, getS, getE, discard string }
+
+	readByte := readImpl{
+		getS: `c, err := fr.ReadByte()
+if err != nil {
+f.b, f.nb = fb, fnb`,
+		getE: `return
+}`,
+	}
+	peek := readImpl{
+		top: "pbuf, _ := fr.Peek(fr.Buffered())\npos := 0\n",
+		getS: `if pos >= len(pbuf) {
+fr.Discard(pos)
+var err error
+pbuf, err = peekBufio(fr)
+pos = 0
+if len(pbuf) == 0 {
+f.b, f.nb = fb, fnb`,
+		getE: `return
+}
+}
+c := pbuf[pos]
+pos++`,
+		discard: "fr.Discard(pos)\n",
+	}
+
+	for i, t := range types {
+		r := readByte
+		if t == "*bufio.Reader" {
+			r = peek
+		}
+		f.WriteString(strings.NewReplacer(
+			"$FUNCNAME$", "huffman"+names[i],
+			"$TYPE$", t,
+			"$PEEKTOP$", r.top,
+			"$GETBYTE_S$", r.getS,
+			"$GETBYTE_E$", r.getE,
+			"$DISCARD$", r.discard,
+		).Replace(template))
+	}
+
 	f.WriteString("func (f *decompressor) huffmanBlockDecoder() {\n")
 	f.WriteString("\tswitch f.r.(type) {\n")
 	for i, t := range types {
