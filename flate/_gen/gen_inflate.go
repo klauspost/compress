@@ -297,8 +297,7 @@ func peekBufio(fr *bufio.Reader) ([]byte, error) {
 		getS: `c, err := fr.ReadByte()
 if err != nil {
 f.b, f.nb = fb, fnb`,
-		getE: `
-return
+		getE: `return
 }`,
 	}
 	peek := readImpl{
@@ -310,8 +309,7 @@ pbuf, err = peekBufio(fr)
 pos = 0
 if len(pbuf) == 0 {
 f.b, f.nb = fb, fnb`,
-		getE: `
-return
+		getE: `return
 }
 }
 c := pbuf[pos]

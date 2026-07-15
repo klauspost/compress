@@ -59,7 +59,6 @@ readLiteral:
 					if err != nil {
 						f.b, f.nb = fb, fnb
 						f.err = noEOF(err)
-
 						return
 					}
 					f.roffset++
@@ -120,7 +119,6 @@ readLiteral:
 						fmt.Println("morebits n>0:", err)
 					}
 					f.err = err
-
 					return
 				}
 				f.roffset++
@@ -149,7 +147,6 @@ readLiteral:
 						fmt.Println("morebits f.nb<5:", err)
 					}
 					f.err = err
-
 					return
 				}
 				f.roffset++
@@ -174,7 +171,6 @@ readLiteral:
 					if err != nil {
 						f.b, f.nb = fb, fnb
 						f.err = noEOF(err)
-
 						return
 					}
 					f.roffset++
@@ -219,7 +215,6 @@ readLiteral:
 						fmt.Println("morebits f.nb<nb:", err)
 					}
 					f.err = err
-
 					return
 				}
 				f.roffset++
@@ -315,7 +310,6 @@ readLiteral:
 					if err != nil {
 						f.b, f.nb = fb, fnb
 						f.err = noEOF(err)
-
 						return
 					}
 					f.roffset++
@@ -376,7 +370,6 @@ readLiteral:
 						fmt.Println("morebits n>0:", err)
 					}
 					f.err = err
-
 					return
 				}
 				f.roffset++
@@ -405,7 +398,6 @@ readLiteral:
 						fmt.Println("morebits f.nb<5:", err)
 					}
 					f.err = err
-
 					return
 				}
 				f.roffset++
@@ -430,7 +422,6 @@ readLiteral:
 					if err != nil {
 						f.b, f.nb = fb, fnb
 						f.err = noEOF(err)
-
 						return
 					}
 					f.roffset++
@@ -475,7 +466,6 @@ readLiteral:
 						fmt.Println("morebits f.nb<nb:", err)
 					}
 					f.err = err
-
 					return
 				}
 				f.roffset++
@@ -577,7 +567,6 @@ readLiteral:
 						if len(pbuf) == 0 {
 							f.b, f.nb = fb, fnb
 							f.err = noEOF(err)
-
 							return
 						}
 					}
@@ -648,7 +637,6 @@ readLiteral:
 							fmt.Println("morebits n>0:", err)
 						}
 						f.err = err
-
 						return
 					}
 				}
@@ -685,7 +673,6 @@ readLiteral:
 							fmt.Println("morebits f.nb<5:", err)
 						}
 						f.err = err
-
 						return
 					}
 				}
@@ -717,7 +704,6 @@ readLiteral:
 						if len(pbuf) == 0 {
 							f.b, f.nb = fb, fnb
 							f.err = noEOF(err)
-
 							return
 						}
 					}
@@ -770,7 +756,6 @@ readLiteral:
 							fmt.Println("morebits f.nb<nb:", err)
 						}
 						f.err = err
-
 						return
 					}
 				}
@@ -872,7 +857,6 @@ readLiteral:
 					if err != nil {
 						f.b, f.nb = fb, fnb
 						f.err = noEOF(err)
-
 						return
 					}
 					f.roffset++
@@ -933,7 +917,6 @@ readLiteral:
 						fmt.Println("morebits n>0:", err)
 					}
 					f.err = err
-
 					return
 				}
 				f.roffset++
@@ -962,7 +945,6 @@ readLiteral:
 						fmt.Println("morebits f.nb<5:", err)
 					}
 					f.err = err
-
 					return
 				}
 				f.roffset++
@@ -987,7 +969,6 @@ readLiteral:
 					if err != nil {
 						f.b, f.nb = fb, fnb
 						f.err = noEOF(err)
-
 						return
 					}
 					f.roffset++
@@ -1032,7 +1013,6 @@ readLiteral:
 						fmt.Println("morebits f.nb<nb:", err)
 					}
 					f.err = err
-
 					return
 				}
 				f.roffset++
@@ -1128,7 +1108,6 @@ readLiteral:
 					if err != nil {
 						f.b, f.nb = fb, fnb
 						f.err = noEOF(err)
-
 						return
 					}
 					f.roffset++
@@ -1189,7 +1168,6 @@ readLiteral:
 						fmt.Println("morebits n>0:", err)
 					}
 					f.err = err
-
 					return
 				}
 				f.roffset++
@@ -1218,7 +1196,6 @@ readLiteral:
 						fmt.Println("morebits f.nb<5:", err)
 					}
 					f.err = err
-
 					return
 				}
 				f.roffset++
@@ -1243,7 +1220,6 @@ readLiteral:
 					if err != nil {
 						f.b, f.nb = fb, fnb
 						f.err = noEOF(err)
-
 						return
 					}
 					f.roffset++
@@ -1288,7 +1264,6 @@ readLiteral:
 						fmt.Println("morebits f.nb<nb:", err)
 					}
 					f.err = err
-
 					return
 				}
 				f.roffset++
