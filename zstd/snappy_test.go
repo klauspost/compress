@@ -210,6 +210,46 @@ func TestSnappy_ConvertEnwik9(t *testing.T) {
 	t.Log("Encoded content matched")
 }
 
+// TestSnappy_ConvertMalformedLiteralStale verifies that a malformed compressed
+// chunk declaring a literal longer than the bytes present in the chunk is
+// rejected as corrupt, instead of reading stale bytes from the reused r.buf.
+func TestSnappy_ConvertMalformedLiteralStale(t *testing.T) {
+	framedCompressedBlock := func(payload []byte) []byte {
+		stream := []byte{0xff, 0x06, 0x00, 0x00, 's', 'N', 'a', 'P', 'p', 'Y'}
+		chunkLen := snappyChecksumSize + len(payload)
+		stream = append(stream, 0x00, byte(chunkLen), byte(chunkLen>>8), byte(chunkLen>>16))
+		stream = append(stream, 0x00, 0x00, 0x00, 0x00) // checksum, not verified for compressed chunks
+		return append(stream, payload...)
+	}
+	convert := func(conv *SnappyConverter, stream []byte) ([]byte, error) {
+		var comp bytes.Buffer
+		if _, err := conv.Convert(bytes.NewReader(stream), &comp); err != nil && err != io.EOF {
+			return nil, err
+		}
+		dec, err := NewReader(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer dec.Close()
+		return dec.DecodeAll(comp.Bytes(), nil)
+	}
+
+	var conv SnappyConverter
+
+	// Valid block: decoded length 4, 4-byte literal "PREV".
+	first := []byte{0x04, 0x0c, 'P', 'R', 'E', 'V'}
+	if _, err := convert(&conv, framedCompressedBlock(first)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Malformed block: declares a 4-byte literal but supplies none.
+	// Must be rejected instead of returning "PREV" from the reused buffer.
+	malformed := []byte{0x04, 0x0c}
+	if _, err := convert(&conv, framedCompressedBlock(malformed)); err != ErrSnappyCorrupt {
+		t.Fatalf("expected ErrSnappyCorrupt, got %v", err)
+	}
+}
+
 func BenchmarkSnappy_ConvertXML(b *testing.B) {
 	f, err := os.Open("testdata/xml.zst")
 	if err != nil {
