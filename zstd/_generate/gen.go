@@ -39,6 +39,11 @@ const errorOverread = 6
 
 const maxMatchLen = 131074
 
+// compressedBlockOverAlloc mirrors the constant of the same name in the zstd
+// package: the number of extra bytes callers over-allocate so the extended
+// (16-byte-block) copies may overrun a run by up to this many bytes minus one.
+const compressedBlockOverAlloc = 16
+
 // size of struct seqVals
 const seqValsSize = 24
 
@@ -1119,6 +1124,14 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 			baseAfterCopy := GP64()
 			LEAQ(Mem{Base: ll, Index: ml, Scale: 1}, baseAfterCopy)
 			ADDQ(c.outBase, baseAfterCopy)
+			if !e.safeMem {
+				// The extended copies below write in 16-byte blocks and overrun
+				// the logical end by up to compressedBlockOverAlloc-1 bytes.
+				// Reserve that margin so the overrun stays within cap(s.out);
+				// otherwise a stream whose decoded length lands inside the
+				// over-allocation slack passes this check yet writes past cap.
+				ADDQ(U8(compressedBlockOverAlloc), baseAfterCopy)
+			}
 			CMPQ(baseAfterCopy, c.outEndPtr)
 			JA(LabelRef("error_not_enough_space"))
 		}
