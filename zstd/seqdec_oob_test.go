@@ -96,6 +96,14 @@ func TestDecodeSyncUnsafeOOB(t *testing.T) {
 			s.out = backing[:0:capOut]
 			s.maxSyncLen = uint64(maxSyncLen)
 
+			// The whole point of this test is the unsafe (extended-copy)
+			// variant; fail loudly if the buffer geometry would make
+			// decodeSyncSimple select the safe copies instead.
+			if s.useSafeDecodeSync() {
+				t.Fatalf("%s k=%d: buffer sizing selects the safe copy variant; the unsafe path is not exercised",
+					tt.Name, k)
+			}
+
 			// A well-formed decode into this buffer must either succeed or fail
 			// cleanly; either way it must never write past cap(s.out).
 			supported, _ := s.decodeSyncSimple(hist)
