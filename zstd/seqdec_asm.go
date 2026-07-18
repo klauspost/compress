@@ -86,9 +86,29 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 		return false, nil
 	}
 
-	// FIXME: Using unsafe memory copies leads to rare, random crashes
-	// with fuzz testing. It is therefore disabled for now.
-	const useSafe = true
+	// When the output and literal buffers have compressedBlockOverAlloc (16)
+	// bytes of slack past their logical use, the assembly may use extended
+	// memory copies that read and write in 16-byte blocks, overrunning the end
+	// of a literal run or match by up to 15 bytes. Otherwise it must use the
+	// bounds-exact ("safe") copies. This mirrors the analogous, always-dynamic
+	// selection in executeSimple below.
+	//
+	// The unsafe copies were disabled in #644 (2022) as a mitigation for a
+	// crash, but that crash's root cause — an unguarded bitReader overread that
+	// produced out-of-range match offsets/lengths — was fixed three days later
+	// in #645, which also added the fuzz corpus that has guarded this path since.
+	// See #1168. An asan-instrumented fuzz job (see .github/workflows/go.yml)
+	// covers the extended-copy path, which -race and plain fuzzing cannot.
+	useSafe := false
+	if s.maxSyncLen == 0 && cap(s.out)-len(s.out) < maxCompressedBlockSizeAlloc {
+		useSafe = true
+	}
+	if s.maxSyncLen > 0 && cap(s.out)-len(s.out)-compressedBlockOverAlloc < int(s.maxSyncLen) {
+		useSafe = true
+	}
+	if cap(s.literals) < len(s.literals)+compressedBlockOverAlloc {
+		useSafe = true
+	}
 
 	br := s.br
 
