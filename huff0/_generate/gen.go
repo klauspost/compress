@@ -1,6 +1,6 @@
 package main
 
-//go:generate go run gen.go -out ../decompress.s -arch amd64,arm64 -pkg=huff0
+//go:generate go run gen.go -out ../decompress.s -arch amd64,arm64 -pkg=huff0 -arm64-promote-stack-slots
 //go:generate gofmt -w ../decompress_amd64.go
 
 import (

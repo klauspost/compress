@@ -1,6 +1,6 @@
 package main
 
-//go:generate go run gen.go -out ../seqdec.s -arch amd64,arm64 -pkg=zstd
+//go:generate go run gen.go -out ../seqdec.s -arch amd64,arm64 -pkg=zstd -arm64-promote-stack-slots
 
 import (
 	"flag"
