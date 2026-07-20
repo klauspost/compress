@@ -1120,18 +1120,21 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 	if !e.useSeqs {
 		Comment("Check if we have enough space in s.out")
 		{
-			// baseAfterCopy = ll + ml + c.outBase
-			baseAfterCopy := GP64()
-			LEAQ(Mem{Base: ll, Index: ml, Scale: 1}, baseAfterCopy)
-			ADDQ(c.outBase, baseAfterCopy)
+			// baseAfterCopy = ll + ml + c.outBase (+ compressedBlockOverAlloc
+			// on the unsafe path, folded into the LEAQ displacement below).
+			//
+			// The extended copies below write in 16-byte blocks and overrun
+			// the logical end by up to compressedBlockOverAlloc-1 bytes.
+			// Reserve that margin so the overrun stays within cap(s.out);
+			// otherwise a stream whose decoded length lands inside the
+			// over-allocation slack passes this check yet writes past cap.
+			addMargin := 0
 			if !e.safeMem {
-				// The extended copies below write in 16-byte blocks and overrun
-				// the logical end by up to compressedBlockOverAlloc-1 bytes.
-				// Reserve that margin so the overrun stays within cap(s.out);
-				// otherwise a stream whose decoded length lands inside the
-				// over-allocation slack passes this check yet writes past cap.
-				ADDQ(U8(compressedBlockOverAlloc), baseAfterCopy)
+				addMargin = compressedBlockOverAlloc
 			}
+			baseAfterCopy := GP64()
+			LEAQ(Mem{Base: ll, Index: ml, Scale: 1, Disp: addMargin}, baseAfterCopy)
+			ADDQ(c.outBase, baseAfterCopy)
 			CMPQ(baseAfterCopy, c.outEndPtr)
 			JA(LabelRef("error_not_enough_space"))
 		}
