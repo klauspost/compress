@@ -1,6 +1,6 @@
 package main
 
-//go:generate go run gen.go -out ../decompress_amd64.s -pkg=huff0
+//go:generate go run gen.go -out ../decompress.s -arch amd64,arm64 -pkg=huff0
 //go:generate gofmt -w ../decompress_amd64.go
 
 import (
@@ -19,7 +19,7 @@ import (
 func main() {
 	flag.Parse()
 
-	ConstraintExpr("amd64,!appengine,!noasm,gc")
+	ConstraintExpr("!appengine,!noasm,gc")
 
 	{
 		decompress := decompress4x{}

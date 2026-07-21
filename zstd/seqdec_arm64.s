@@ -60,7 +60,8 @@ sequenceDecs_decode_amd64_fill_end:
 	MOVD R3, R1
 	MOVD R2, R14
 	LSL  R1, R14, R14
-	UBFX $8, R0, $8, R1
+	UBFX $8, R0, $8, R16
+	BFI  $0, R16, $8, R1
 	LSR  $0x20, R0, R0
 	TST  R1, R1
 	BEQ  sequenceDecs_decode_amd64_of_update_zero
@@ -81,7 +82,8 @@ sequenceDecs_decode_amd64_of_update_zero:
 	MOVD R3, R1
 	MOVD R2, R14
 	LSL  R1, R14, R14
-	UBFX $8, R0, $8, R1
+	UBFX $8, R0, $8, R16
+	BFI  $0, R16, $8, R1
 	LSR  $0x20, R0, R0
 	TST  R1, R1
 	BEQ  sequenceDecs_decode_amd64_ml_update_zero
@@ -131,7 +133,8 @@ sequenceDecs_decode_amd64_fill_2_end:
 	MOVD R3, R1
 	MOVD R2, R14
 	LSL  R1, R14, R14
-	UBFX $8, R0, $8, R1
+	UBFX $8, R0, $8, R16
+	BFI  $0, R16, $8, R1
 	LSR  $0x20, R0, R0
 	TST  R1, R1
 	BEQ  sequenceDecs_decode_amd64_ll_update_zero
@@ -166,7 +169,7 @@ sequenceDecs_decode_amd64_ll_update_zero:
 	NEG   R1, R16
 	ROR   R16, R14, R14
 	MOVD  $0x00000001, R4
-	MOVB  R13, R1
+	BFI   $0, R13, $8, R1
 	LSLW  R1, R4, R4
 	SUBW  $1, R4, R4
 	AND   R4, R14, R14
@@ -187,7 +190,7 @@ sequenceDecs_decode_amd64_ll_update_zero:
 	NEG   R1, R16
 	ROR   R16, R14, R14
 	MOVD  $0x00000001, R4
-	MOVB  R13, R1
+	BFI   $0, R13, $8, R1
 	LSLW  R1, R4, R4
 	SUBW  $1, R4, R4
 	AND   R4, R14, R14
@@ -208,7 +211,7 @@ sequenceDecs_decode_amd64_ll_update_zero:
 	NEG   R1, R16
 	ROR   R16, R14, R14
 	MOVD  $0x00000001, R4
-	MOVB  R13, R1
+	BFI   $0, R13, $8, R1
 	LSLW  R1, R4, R4
 	SUBW  $1, R4, R4
 	AND   R4, R14, R14
@@ -408,7 +411,8 @@ sequenceDecs_decode_56_amd64_fill_end:
 	MOVD R3, R1
 	MOVD R2, R14
 	LSL  R1, R14, R14
-	UBFX $8, R0, $8, R1
+	UBFX $8, R0, $8, R16
+	BFI  $0, R16, $8, R1
 	LSR  $0x20, R0, R0
 	TST  R1, R1
 	BEQ  sequenceDecs_decode_56_amd64_of_update_zero
@@ -429,7 +433,8 @@ sequenceDecs_decode_56_amd64_of_update_zero:
 	MOVD R3, R1
 	MOVD R2, R14
 	LSL  R1, R14, R14
-	UBFX $8, R0, $8, R1
+	UBFX $8, R0, $8, R16
+	BFI  $0, R16, $8, R1
 	LSR  $0x20, R0, R0
 	TST  R1, R1
 	BEQ  sequenceDecs_decode_56_amd64_ml_update_zero
@@ -450,7 +455,8 @@ sequenceDecs_decode_56_amd64_ml_update_zero:
 	MOVD R3, R1
 	MOVD R2, R14
 	LSL  R1, R14, R14
-	UBFX $8, R0, $8, R1
+	UBFX $8, R0, $8, R16
+	BFI  $0, R16, $8, R1
 	LSR  $0x20, R0, R0
 	TST  R1, R1
 	BEQ  sequenceDecs_decode_56_amd64_ll_update_zero
@@ -485,7 +491,7 @@ sequenceDecs_decode_56_amd64_ll_update_zero:
 	NEG   R1, R16
 	ROR   R16, R14, R14
 	MOVD  $0x00000001, R4
-	MOVB  R13, R1
+	BFI   $0, R13, $8, R1
 	LSLW  R1, R4, R4
 	SUBW  $1, R4, R4
 	AND   R4, R14, R14
@@ -506,7 +512,7 @@ sequenceDecs_decode_56_amd64_ll_update_zero:
 	NEG   R1, R16
 	ROR   R16, R14, R14
 	MOVD  $0x00000001, R4
-	MOVB  R13, R1
+	BFI   $0, R13, $8, R1
 	LSLW  R1, R4, R4
 	SUBW  $1, R4, R4
 	AND   R4, R14, R14
@@ -527,7 +533,7 @@ sequenceDecs_decode_56_amd64_ll_update_zero:
 	NEG   R1, R16
 	ROR   R16, R14, R14
 	MOVD  $0x00000001, R4
-	MOVB  R13, R1
+	BFI   $0, R13, $8, R1
 	LSLW  R1, R4, R4
 	SUBW  $1, R4, R4
 	AND   R4, R14, R14
@@ -766,13 +772,14 @@ copy_4_small:
 	JMP copy_4_move_8through16
 
 copy_4_move_3:
-	MOVH (R13), R10
-	MOVB 2(R13), R11
-	MOVH R10, (R3)
-	MOVB R11, 2(R3)
-	ADD  R12, R13, R13
-	ADD  R12, R3, R3
-	JMP  copy_4_end
+	MOVHU (R13), R10
+	MOVBU 2(R13), R16
+	BFI   $0, R16, $8, R11
+	MOVH  R10, (R3)
+	MOVB  R11, 2(R3)
+	ADD   R12, R13, R13
+	ADD   R12, R3, R3
+	JMP   copy_4_end
 
 copy_4_move_4through7:
 	MOVWU (R13), R10
@@ -834,24 +841,27 @@ copy_5_small:
 	JMP copy_5_move_8through16
 
 copy_5_move_1or2:
-	MOVB (R13), R14
-	ADD  R10, R13, R15
-	MOVB -1(R15), R4
-	MOVB R14, (R3)
-	ADD  R10, R3, R15
-	MOVB R4, -1(R15)
-	ADD  R10, R13, R13
-	ADD  R10, R3, R3
-	JMP  copy_5_end
+	MOVBU (R13), R16
+	BFI   $0, R16, $8, R14
+	ADD   R10, R13, R15
+	MOVBU -1(R15), R16
+	BFI   $0, R16, $8, R4
+	MOVB  R14, (R3)
+	ADD   R10, R3, R15
+	MOVB  R4, -1(R15)
+	ADD   R10, R13, R13
+	ADD   R10, R3, R3
+	JMP   copy_5_end
 
 copy_5_move_3:
-	MOVH (R13), R14
-	MOVB 2(R13), R4
-	MOVH R14, (R3)
-	MOVB R4, 2(R3)
-	ADD  R10, R13, R13
-	ADD  R10, R3, R3
-	JMP  copy_5_end
+	MOVHU (R13), R14
+	MOVBU 2(R13), R16
+	BFI   $0, R16, $8, R4
+	MOVH  R14, (R3)
+	MOVB  R4, 2(R3)
+	ADD   R10, R13, R13
+	ADD   R10, R3, R3
+	JMP   copy_5_end
 
 copy_5_move_4through7:
 	MOVWU (R13), R14
@@ -906,12 +916,13 @@ copy_overlapping_match:
 	ADD R12, R6, R6
 
 copy_slow_3:
-	MOVB (R10), R11
-	MOVB R11, (R3)
-	ADD  $1, R10, R10
-	ADD  $1, R3, R3
-	SUBS $1, R12, R12
-	BNE  copy_slow_3
+	MOVBU (R10), R16
+	BFI   $0, R16, $8, R11
+	MOVB  R11, (R3)
+	ADD   $1, R10, R10
+	ADD   $1, R3, R3
+	SUBS  $1, R12, R12
+	BNE   copy_slow_3
 
 handle_loop:
 	ADD $0x18, R0, R0
@@ -1016,24 +1027,27 @@ copy_1_small:
 	JMP copy_1_move_8through16
 
 copy_1_move_1or2:
-	MOVB (R5), R13
-	ADD  R10, R5, R15
-	MOVB -1(R15), R14
-	MOVB R13, (R3)
-	ADD  R10, R3, R15
-	MOVB R14, -1(R15)
-	ADD  R10, R5, R5
-	ADD  R10, R3, R3
-	JMP  copy_1_end
+	MOVBU (R5), R16
+	BFI   $0, R16, $8, R13
+	ADD   R10, R5, R15
+	MOVBU -1(R15), R16
+	BFI   $0, R16, $8, R14
+	MOVB  R13, (R3)
+	ADD   R10, R3, R15
+	MOVB  R14, -1(R15)
+	ADD   R10, R5, R5
+	ADD   R10, R3, R3
+	JMP   copy_1_end
 
 copy_1_move_3:
-	MOVH (R5), R13
-	MOVB 2(R5), R14
-	MOVH R13, (R3)
-	MOVB R14, 2(R3)
-	ADD  R10, R5, R5
-	ADD  R10, R3, R3
-	JMP  copy_1_end
+	MOVHU (R5), R13
+	MOVBU 2(R5), R16
+	BFI   $0, R16, $8, R14
+	MOVH  R13, (R3)
+	MOVB  R14, 2(R3)
+	ADD   R10, R5, R5
+	ADD   R10, R3, R3
+	JMP   copy_1_end
 
 copy_1_move_4through7:
 	MOVWU (R5), R13
@@ -1104,13 +1118,14 @@ copy_4_small:
 	JMP copy_4_move_8through16
 
 copy_4_move_3:
-	MOVH (R13), R10
-	MOVB 2(R13), R11
-	MOVH R10, (R3)
-	MOVB R11, 2(R3)
-	ADD  R12, R13, R13
-	ADD  R12, R3, R3
-	JMP  copy_4_end
+	MOVHU (R13), R10
+	MOVBU 2(R13), R16
+	BFI   $0, R16, $8, R11
+	MOVH  R10, (R3)
+	MOVB  R11, 2(R3)
+	ADD   R12, R13, R13
+	ADD   R12, R3, R3
+	JMP   copy_4_end
 
 copy_4_move_4through7:
 	MOVWU (R13), R10
@@ -1172,24 +1187,27 @@ copy_5_small:
 	JMP copy_5_move_8through16
 
 copy_5_move_1or2:
-	MOVB (R13), R14
-	ADD  R10, R13, R15
-	MOVB -1(R15), R4
-	MOVB R14, (R3)
-	ADD  R10, R3, R15
-	MOVB R4, -1(R15)
-	ADD  R10, R13, R13
-	ADD  R10, R3, R3
-	JMP  copy_5_end
+	MOVBU (R13), R16
+	BFI   $0, R16, $8, R14
+	ADD   R10, R13, R15
+	MOVBU -1(R15), R16
+	BFI   $0, R16, $8, R4
+	MOVB  R14, (R3)
+	ADD   R10, R3, R15
+	MOVB  R4, -1(R15)
+	ADD   R10, R13, R13
+	ADD   R10, R3, R3
+	JMP   copy_5_end
 
 copy_5_move_3:
-	MOVH (R13), R14
-	MOVB 2(R13), R4
-	MOVH R14, (R3)
-	MOVB R4, 2(R3)
-	ADD  R10, R13, R13
-	ADD  R10, R3, R3
-	JMP  copy_5_end
+	MOVHU (R13), R14
+	MOVBU 2(R13), R16
+	BFI   $0, R16, $8, R4
+	MOVH  R14, (R3)
+	MOVB  R4, 2(R3)
+	ADD   R10, R13, R13
+	ADD   R10, R3, R3
+	JMP   copy_5_end
 
 copy_5_move_4through7:
 	MOVWU (R13), R14
@@ -1257,24 +1275,27 @@ copy_2_small:
 	JMP copy_2_move_8through16
 
 copy_2_move_1or2:
-	MOVB (R10), R11
-	ADD  R12, R10, R15
-	MOVB -1(R15), R13
-	MOVB R11, (R3)
-	ADD  R12, R3, R15
-	MOVB R13, -1(R15)
-	ADD  R12, R10, R10
-	ADD  R12, R3, R3
-	JMP  copy_2_end
+	MOVBU (R10), R16
+	BFI   $0, R16, $8, R11
+	ADD   R12, R10, R15
+	MOVBU -1(R15), R16
+	BFI   $0, R16, $8, R13
+	MOVB  R11, (R3)
+	ADD   R12, R3, R15
+	MOVB  R13, -1(R15)
+	ADD   R12, R10, R10
+	ADD   R12, R3, R3
+	JMP   copy_2_end
 
 copy_2_move_3:
-	MOVH (R10), R11
-	MOVB 2(R10), R13
-	MOVH R11, (R3)
-	MOVB R13, 2(R3)
-	ADD  R12, R10, R10
-	ADD  R12, R3, R3
-	JMP  copy_2_end
+	MOVHU (R10), R11
+	MOVBU 2(R10), R16
+	BFI   $0, R16, $8, R13
+	MOVH  R11, (R3)
+	MOVB  R13, 2(R3)
+	ADD   R12, R10, R10
+	ADD   R12, R3, R3
+	JMP   copy_2_end
 
 copy_2_move_4through7:
 	MOVWU (R10), R11
@@ -1305,12 +1326,13 @@ copy_overlapping_match:
 	ADD R12, R6, R6
 
 copy_slow_3:
-	MOVB (R10), R11
-	MOVB R11, (R3)
-	ADD  $1, R10, R10
-	ADD  $1, R3, R3
-	SUBS $1, R12, R12
-	BNE  copy_slow_3
+	MOVBU (R10), R16
+	BFI   $0, R16, $8, R11
+	MOVB  R11, (R3)
+	ADD   $1, R10, R10
+	ADD   $1, R3, R3
+	SUBS  $1, R12, R12
+	BNE   copy_slow_3
 
 handle_loop:
 	ADD $0x18, R0, R0
@@ -1431,7 +1453,8 @@ sequenceDecs_decodeSync_amd64_fill_end:
 	MOVD R3, R1
 	MOVD R2, R13
 	LSL  R1, R13, R13
-	UBFX $8, R0, $8, R1
+	UBFX $8, R0, $8, R16
+	BFI  $0, R16, $8, R1
 	LSR  $0x20, R0, R0
 	TST  R1, R1
 	BEQ  sequenceDecs_decodeSync_amd64_of_update_zero
@@ -1452,7 +1475,8 @@ sequenceDecs_decodeSync_amd64_of_update_zero:
 	MOVD R3, R1
 	MOVD R2, R13
 	LSL  R1, R13, R13
-	UBFX $8, R0, $8, R1
+	UBFX $8, R0, $8, R16
+	BFI  $0, R16, $8, R1
 	LSR  $0x20, R0, R0
 	TST  R1, R1
 	BEQ  sequenceDecs_decodeSync_amd64_ml_update_zero
@@ -1502,7 +1526,8 @@ sequenceDecs_decodeSync_amd64_fill_2_end:
 	MOVD R3, R1
 	MOVD R2, R13
 	LSL  R1, R13, R13
-	UBFX $8, R0, $8, R1
+	UBFX $8, R0, $8, R16
+	BFI  $0, R16, $8, R1
 	LSR  $0x20, R0, R0
 	TST  R1, R1
 	BEQ  sequenceDecs_decodeSync_amd64_ll_update_zero
@@ -1537,7 +1562,7 @@ sequenceDecs_decodeSync_amd64_ll_update_zero:
 	NEG   R1, R16
 	ROR   R16, R13, R13
 	MOVD  $0x00000001, R14
-	MOVB  R12, R1
+	BFI   $0, R12, $8, R1
 	LSLW  R1, R14, R14
 	SUBW  $1, R14, R14
 	AND   R14, R13, R13
@@ -1558,7 +1583,7 @@ sequenceDecs_decodeSync_amd64_ll_update_zero:
 	NEG   R1, R16
 	ROR   R16, R13, R13
 	MOVD  $0x00000001, R14
-	MOVB  R12, R1
+	BFI   $0, R12, $8, R1
 	LSLW  R1, R14, R14
 	SUBW  $1, R14, R14
 	AND   R14, R13, R13
@@ -1579,7 +1604,7 @@ sequenceDecs_decodeSync_amd64_ll_update_zero:
 	NEG   R1, R16
 	ROR   R16, R13, R13
 	MOVD  $0x00000001, R14
-	MOVB  R12, R1
+	BFI   $0, R12, $8, R1
 	LSLW  R1, R14, R14
 	SUBW  $1, R14, R14
 	AND   R14, R13, R13
@@ -1743,13 +1768,14 @@ copy_4_small:
 	JMP copy_4_move_8through16
 
 copy_4_move_3:
-	MOVH (R13), R0
-	MOVB 2(R13), R1
-	MOVH R0, (R9)
-	MOVB R1, 2(R9)
-	ADD  R12, R13, R13
-	ADD  R12, R9, R9
-	JMP  copy_4_end
+	MOVHU (R13), R0
+	MOVBU 2(R13), R16
+	BFI   $0, R16, $8, R1
+	MOVH  R0, (R9)
+	MOVB  R1, 2(R9)
+	ADD   R12, R13, R13
+	ADD   R12, R9, R9
+	JMP   copy_4_end
 
 copy_4_move_4through7:
 	MOVWU (R13), R0
@@ -1808,24 +1834,27 @@ copy_5_small:
 	JMP copy_5_move_8through16
 
 copy_5_move_1or2:
-	MOVB (R13), R14
-	ADD  R0, R13, R15
-	MOVB -1(R15), R4
-	MOVB R14, (R9)
-	ADD  R0, R9, R15
-	MOVB R4, -1(R15)
-	ADD  R0, R13, R13
-	ADD  R0, R9, R9
-	JMP  copy_5_end
+	MOVBU (R13), R16
+	BFI   $0, R16, $8, R14
+	ADD   R0, R13, R15
+	MOVBU -1(R15), R16
+	BFI   $0, R16, $8, R4
+	MOVB  R14, (R9)
+	ADD   R0, R9, R15
+	MOVB  R4, -1(R15)
+	ADD   R0, R13, R13
+	ADD   R0, R9, R9
+	JMP   copy_5_end
 
 copy_5_move_3:
-	MOVH (R13), R14
-	MOVB 2(R13), R4
-	MOVH R14, (R9)
-	MOVB R4, 2(R9)
-	ADD  R0, R13, R13
-	ADD  R0, R9, R9
-	JMP  copy_5_end
+	MOVHU (R13), R14
+	MOVBU 2(R13), R16
+	BFI   $0, R16, $8, R4
+	MOVH  R14, (R9)
+	MOVB  R4, 2(R9)
+	ADD   R0, R13, R13
+	ADD   R0, R9, R9
+	JMP   copy_5_end
 
 copy_5_move_4through7:
 	MOVWU (R13), R14
@@ -1880,12 +1909,13 @@ copy_overlapping_match:
 	ADD R12, R11, R11
 
 copy_slow_3:
-	MOVB (R0), R1
-	MOVB R1, (R9)
-	ADD  $1, R0, R0
-	ADD  $1, R9, R9
-	SUBS $1, R12, R12
-	BNE  copy_slow_3
+	MOVBU (R0), R16
+	BFI   $0, R16, $8, R1
+	MOVB  R1, (R9)
+	ADD   $1, R0, R0
+	ADD   $1, R9, R9
+	SUBS  $1, R12, R12
+	BNE   copy_slow_3
 
 handle_loop:
 	MOVD ctx+16(FP), R0
@@ -2048,7 +2078,8 @@ sequenceDecs_decodeSync_safe_amd64_fill_end:
 	MOVD R3, R1
 	MOVD R2, R13
 	LSL  R1, R13, R13
-	UBFX $8, R0, $8, R1
+	UBFX $8, R0, $8, R16
+	BFI  $0, R16, $8, R1
 	LSR  $0x20, R0, R0
 	TST  R1, R1
 	BEQ  sequenceDecs_decodeSync_safe_amd64_of_update_zero
@@ -2069,7 +2100,8 @@ sequenceDecs_decodeSync_safe_amd64_of_update_zero:
 	MOVD R3, R1
 	MOVD R2, R13
 	LSL  R1, R13, R13
-	UBFX $8, R0, $8, R1
+	UBFX $8, R0, $8, R16
+	BFI  $0, R16, $8, R1
 	LSR  $0x20, R0, R0
 	TST  R1, R1
 	BEQ  sequenceDecs_decodeSync_safe_amd64_ml_update_zero
@@ -2119,7 +2151,8 @@ sequenceDecs_decodeSync_safe_amd64_fill_2_end:
 	MOVD R3, R1
 	MOVD R2, R13
 	LSL  R1, R13, R13
-	UBFX $8, R0, $8, R1
+	UBFX $8, R0, $8, R16
+	BFI  $0, R16, $8, R1
 	LSR  $0x20, R0, R0
 	TST  R1, R1
 	BEQ  sequenceDecs_decodeSync_safe_amd64_ll_update_zero
@@ -2154,7 +2187,7 @@ sequenceDecs_decodeSync_safe_amd64_ll_update_zero:
 	NEG   R1, R16
 	ROR   R16, R13, R13
 	MOVD  $0x00000001, R14
-	MOVB  R12, R1
+	BFI   $0, R12, $8, R1
 	LSLW  R1, R14, R14
 	SUBW  $1, R14, R14
 	AND   R14, R13, R13
@@ -2175,7 +2208,7 @@ sequenceDecs_decodeSync_safe_amd64_ll_update_zero:
 	NEG   R1, R16
 	ROR   R16, R13, R13
 	MOVD  $0x00000001, R14
-	MOVB  R12, R1
+	BFI   $0, R12, $8, R1
 	LSLW  R1, R14, R14
 	SUBW  $1, R14, R14
 	AND   R14, R13, R13
@@ -2196,7 +2229,7 @@ sequenceDecs_decodeSync_safe_amd64_ll_update_zero:
 	NEG   R1, R16
 	ROR   R16, R13, R13
 	MOVD  $0x00000001, R14
-	MOVB  R12, R1
+	BFI   $0, R12, $8, R1
 	LSLW  R1, R14, R14
 	SUBW  $1, R14, R14
 	AND   R14, R13, R13
@@ -2327,24 +2360,27 @@ copy_1_small:
 	JMP copy_1_move_8through16
 
 copy_1_move_1or2:
-	MOVB (R10), R13
-	ADD  R0, R10, R15
-	MOVB -1(R15), R14
-	MOVB R13, (R9)
-	ADD  R0, R9, R15
-	MOVB R14, -1(R15)
-	ADD  R0, R10, R10
-	ADD  R0, R9, R9
-	JMP  copy_1_end
+	MOVBU (R10), R16
+	BFI   $0, R16, $8, R13
+	ADD   R0, R10, R15
+	MOVBU -1(R15), R16
+	BFI   $0, R16, $8, R14
+	MOVB  R13, (R9)
+	ADD   R0, R9, R15
+	MOVB  R14, -1(R15)
+	ADD   R0, R10, R10
+	ADD   R0, R9, R9
+	JMP   copy_1_end
 
 copy_1_move_3:
-	MOVH (R10), R13
-	MOVB 2(R10), R14
-	MOVH R13, (R9)
-	MOVB R14, 2(R9)
-	ADD  R0, R10, R10
-	ADD  R0, R9, R9
-	JMP  copy_1_end
+	MOVHU (R10), R13
+	MOVBU 2(R10), R16
+	BFI   $0, R16, $8, R14
+	MOVH  R13, (R9)
+	MOVB  R14, 2(R9)
+	ADD   R0, R10, R10
+	ADD   R0, R9, R9
+	JMP   copy_1_end
 
 copy_1_move_4through7:
 	MOVWU (R10), R13
@@ -2418,13 +2454,14 @@ copy_4_small:
 	JMP copy_4_move_8through16
 
 copy_4_move_3:
-	MOVH (R13), R0
-	MOVB 2(R13), R1
-	MOVH R0, (R9)
-	MOVB R1, 2(R9)
-	ADD  R12, R13, R13
-	ADD  R12, R9, R9
-	JMP  copy_4_end
+	MOVHU (R13), R0
+	MOVBU 2(R13), R16
+	BFI   $0, R16, $8, R1
+	MOVH  R0, (R9)
+	MOVB  R1, 2(R9)
+	ADD   R12, R13, R13
+	ADD   R12, R9, R9
+	JMP   copy_4_end
 
 copy_4_move_4through7:
 	MOVWU (R13), R0
@@ -2483,24 +2520,27 @@ copy_5_small:
 	JMP copy_5_move_8through16
 
 copy_5_move_1or2:
-	MOVB (R13), R14
-	ADD  R0, R13, R15
-	MOVB -1(R15), R4
-	MOVB R14, (R9)
-	ADD  R0, R9, R15
-	MOVB R4, -1(R15)
-	ADD  R0, R13, R13
-	ADD  R0, R9, R9
-	JMP  copy_5_end
+	MOVBU (R13), R16
+	BFI   $0, R16, $8, R14
+	ADD   R0, R13, R15
+	MOVBU -1(R15), R16
+	BFI   $0, R16, $8, R4
+	MOVB  R14, (R9)
+	ADD   R0, R9, R15
+	MOVB  R4, -1(R15)
+	ADD   R0, R13, R13
+	ADD   R0, R9, R9
+	JMP   copy_5_end
 
 copy_5_move_3:
-	MOVH (R13), R14
-	MOVB 2(R13), R4
-	MOVH R14, (R9)
-	MOVB R4, 2(R9)
-	ADD  R0, R13, R13
-	ADD  R0, R9, R9
-	JMP  copy_5_end
+	MOVHU (R13), R14
+	MOVBU 2(R13), R16
+	BFI   $0, R16, $8, R4
+	MOVH  R14, (R9)
+	MOVB  R4, 2(R9)
+	ADD   R0, R13, R13
+	ADD   R0, R9, R9
+	JMP   copy_5_end
 
 copy_5_move_4through7:
 	MOVWU (R13), R14
@@ -2568,24 +2608,27 @@ copy_2_small:
 	JMP copy_2_move_8through16
 
 copy_2_move_1or2:
-	MOVB (R0), R1
-	ADD  R12, R0, R15
-	MOVB -1(R15), R13
-	MOVB R1, (R9)
-	ADD  R12, R9, R15
-	MOVB R13, -1(R15)
-	ADD  R12, R0, R0
-	ADD  R12, R9, R9
-	JMP  copy_2_end
+	MOVBU (R0), R16
+	BFI   $0, R16, $8, R1
+	ADD   R12, R0, R15
+	MOVBU -1(R15), R16
+	BFI   $0, R16, $8, R13
+	MOVB  R1, (R9)
+	ADD   R12, R9, R15
+	MOVB  R13, -1(R15)
+	ADD   R12, R0, R0
+	ADD   R12, R9, R9
+	JMP   copy_2_end
 
 copy_2_move_3:
-	MOVH (R0), R1
-	MOVB 2(R0), R13
-	MOVH R1, (R9)
-	MOVB R13, 2(R9)
-	ADD  R12, R0, R0
-	ADD  R12, R9, R9
-	JMP  copy_2_end
+	MOVHU (R0), R1
+	MOVBU 2(R0), R16
+	BFI   $0, R16, $8, R13
+	MOVH  R1, (R9)
+	MOVB  R13, 2(R9)
+	ADD   R12, R0, R0
+	ADD   R12, R9, R9
+	JMP   copy_2_end
 
 copy_2_move_4through7:
 	MOVWU (R0), R1
@@ -2616,12 +2659,13 @@ copy_overlapping_match:
 	ADD R12, R11, R11
 
 copy_slow_3:
-	MOVB (R0), R1
-	MOVB R1, (R9)
-	ADD  $1, R0, R0
-	ADD  $1, R9, R9
-	SUBS $1, R12, R12
-	BNE  copy_slow_3
+	MOVBU (R0), R16
+	BFI   $0, R16, $8, R1
+	MOVB  R1, (R9)
+	ADD   $1, R0, R0
+	ADD   $1, R9, R9
+	SUBS  $1, R12, R12
+	BNE   copy_slow_3
 
 handle_loop:
 	MOVD ctx+16(FP), R0
