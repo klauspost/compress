@@ -1697,6 +1697,7 @@ sequenceDecs_decodeSync_amd64_match_len_ofs_ok:
 
 	// Check if we have enough space in s.out
 	ADD  R12, R0, R13
+	ADD  $16, R13, R13
 	ADD  R9, R13, R13
 	MOVD 32(RSP), R16
 	CMP  R16, R13
