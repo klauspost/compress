@@ -1,8 +1,8 @@
 package main
 
-//go:generate go run gen.go -out ../encodeblock_amd64.s -stubs ../encodeblock_amd64.go -pkg=s2
-//go:generate gofmt -w ../encodeblock_amd64.go
-//go:generate go run cleanup.go ../encodeblock_amd64.s
+//go:generate go run gen.go -out ../encodeblock.s -arch amd64,arm64 -stubs ../encodeblock_asm.go -pkg=s2
+//go:generate gofmt -w ../encodeblock_asm.go
+//go:generate go run cleanup.go ../encodeblock_amd64.s ../encodeblock_arm64.s
 
 import (
 	"flag"
@@ -33,6 +33,7 @@ const (
 
 func main() {
 	flag.Parse()
+	Constraint(buildtags.Any(buildtags.Term("amd64"), buildtags.Term("arm64")))
 	Constraint(buildtags.Not("appengine").ToConstraint())
 	Constraint(buildtags.Not("noasm").ToConstraint())
 	Constraint(buildtags.Term("gc").ToConstraint())
