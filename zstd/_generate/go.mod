@@ -17,4 +17,4 @@ require (
 
 replace github.com/klauspost/compress => ../..
 
-replace github.com/mmcloughlin/avo => github.com/honeycombio/avo v0.6.1-0.20260725062631-cb60efe68476
+replace github.com/mmcloughlin/avo => github.com/honeycombio/avo v0.6.1-0.20260725071008-19f99f2c85b3
