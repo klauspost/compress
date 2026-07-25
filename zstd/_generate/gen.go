@@ -1394,7 +1394,7 @@ func (e executeSimple) copyMemoryPrecise(suffix string, src, dst, length reg.GPV
 		}
 
 		Label(name + "move_3")
-		MOVW(Mem{Base: src}, AX.As16())
+		MOVWQZX(Mem{Base: src}, AX.As64())
 		MOVB(Mem{Base: src, Disp: 2}, CX.As8())
 		MOVW(AX.As16(), Mem{Base: dst})
 		MOVB(CX.As8(), Mem{Base: dst, Disp: 2})

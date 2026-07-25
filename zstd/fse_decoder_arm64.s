@@ -26,8 +26,7 @@ TEXT ·buildDtable_asm(SB), $0-24
 	JMP  init_main_loop_condition
 
 init_main_loop:
-	ADD  R8<<1, R1, R15
-	MOVH (R15), R9
+	MOVH (R1)(R8<<1), R9
 	MOVD $-1, R16
 	AND  $0xffff, R16, R16
 	AND  $0xffff, R9, R15
@@ -63,8 +62,7 @@ init_main_loop_condition:
 
 spread_main_loop:
 	MOVD $0, R12
-	ADD  R11<<1, R1, R15
-	MOVH (R15), R13
+	MOVH (R1)(R11<<1), R13
 	JMP  spread_inner_loop_condition
 
 spread_inner_loop:
@@ -101,8 +99,7 @@ spread_check_ok:
 build_table_main_table:
 	ADD   R6<<3, R5, R15
 	MOVBU 1(R15), R1
-	ADD   R1<<1, R3, R15
-	MOVHU (R15), R7
+	MOVHU (R3)(R1<<1), R7
 	ADD   $1, R7, R8
 	MOVH  R8, (R3)(R1<<1)
 	MOVD  R7, R8
@@ -113,7 +110,6 @@ build_table_main_table:
 	SUB   R8, R1, R1
 	LSL   R1, R7, R7
 	SUB   R0, R7, R7
-	ADD   R6<<3, R5, R15
 	MOVB  R1, (R15)
 	MOVH  R7, 2(R15)
 	CMP   R0, R7
