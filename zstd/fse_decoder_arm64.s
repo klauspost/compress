@@ -110,7 +110,9 @@ build_table_main_table:
 	SUB   R8, R1, R1
 	LSL   R1, R7, R7
 	SUB   R0, R7, R7
+	ADD   R6<<3, R5, R15
 	MOVB  R1, (R15)
+	ADD   R6<<3, R5, R15
 	MOVH  R7, 2(R15)
 	CMP   R0, R7
 	BLE   build_table_check1_ok
