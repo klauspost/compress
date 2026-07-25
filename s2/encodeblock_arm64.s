@@ -7,11 +7,6 @@
 
 // func _dummy_()
 TEXT ·_dummy_(SB), $0
-#ifdef GOAMD64_v4
-#ifndef GOAMD64_v3
-#define GOAMD64_v3
-#endif
-#endif
 	RET
 
 // func encodeBlockAsm(dst []byte, src []byte, tmp *[65536]byte) int
@@ -227,13 +222,11 @@ emit_lit_memmove_repeat_emit_encodeBlockAsm_memmove_move_33through64:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_repeat_emit_encodeBlockAsm:
@@ -248,7 +241,6 @@ memmove_long_repeat_emit_encodeBlockAsm:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R11
 	LSR   $0x05, R11, R11
@@ -277,11 +269,9 @@ emit_lit_memmove_long_repeat_emit_encodeBlockAsmlarge_big_loop_back:
 emit_lit_memmove_long_repeat_emit_encodeBlockAsmlarge_forward_sse_loop_32:
 	ADD   R12, R9, R15
 	FMOVQ -32(R15), F4
-	ADD   R12, R9, R15
 	FMOVQ -16(R15), F5
 	ADD   R12, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R12, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R12, R12
 	CMP   R12, R8
@@ -290,7 +280,6 @@ emit_lit_memmove_long_repeat_emit_encodeBlockAsmlarge_forward_sse_loop_32:
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -329,15 +318,8 @@ matchlen_loopback_16_repeat_extend_encodeBlockAsm:
 	JMP   matchlen_loopback_16_repeat_extend_encodeBlockAsm
 
 matchlen_bsf_16repeat_extend_encodeBlockAsm:
-#ifdef GOAMD64_v3
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#else
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#endif
+	RBIT  R12, R12
+	CLZ   R12, R12
 	ASR   $0x03, R12, R12
 	ADD   R12, R11, R11
 	ADD   $8, R11, R11
@@ -359,15 +341,8 @@ matchlen_match8_repeat_extend_encodeBlockAsm:
 	JMP   matchlen_match4_repeat_extend_encodeBlockAsm
 
 matchlen_bsf_8_repeat_extend_encodeBlockAsm:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R11, R11
 	MOVWU R11, R11
@@ -975,13 +950,11 @@ emit_lit_memmove_match_emit_encodeBlockAsm_memmove_move_33through64:
 	FMOVQ 16(R6), F1
 	ADD   R8, R6, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R6, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_encodeBlockAsm:
@@ -996,7 +969,6 @@ memmove_long_match_emit_encodeBlockAsm:
 	FMOVQ 16(R6), F1
 	ADD   R8, R6, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R6, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R10
 	LSR   $0x05, R10, R10
@@ -1025,11 +997,9 @@ emit_lit_memmove_long_match_emit_encodeBlockAsmlarge_big_loop_back:
 emit_lit_memmove_long_match_emit_encodeBlockAsmlarge_forward_sse_loop_32:
 	ADD   R11, R6, R15
 	FMOVQ -32(R15), F4
-	ADD   R11, R6, R15
 	FMOVQ -16(R15), F5
 	ADD   R11, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R11, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R11, R11
 	CMP   R11, R8
@@ -1038,7 +1008,6 @@ emit_lit_memmove_long_match_emit_encodeBlockAsmlarge_forward_sse_loop_32:
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R7, R1
 
@@ -1079,15 +1048,8 @@ matchlen_loopback_16_match_nolit_encodeBlockAsm:
 	JMP   matchlen_loopback_16_match_nolit_encodeBlockAsm
 
 matchlen_bsf_16match_nolit_encodeBlockAsm:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R9, R9
 	ADD   $8, R9, R9
@@ -1109,15 +1071,8 @@ matchlen_match8_match_nolit_encodeBlockAsm:
 	JMP   matchlen_match4_match_nolit_encodeBlockAsm
 
 matchlen_bsf_8_match_nolit_encodeBlockAsm:
-#ifdef GOAMD64_v3
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#else
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#endif
+	RBIT  R8, R8
+	CLZ   R8, R8
 	ASR   $0x03, R8, R8
 	ADD   R8, R9, R9
 	MOVWU R9, R9
@@ -1651,13 +1606,11 @@ emit_lit_memmove_emit_remainder_encodeBlockAsm_memmove_move_33through64:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_emit_remainder_encodeBlockAsm:
@@ -1673,7 +1626,6 @@ memmove_long_emit_remainder_encodeBlockAsm:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	MOVD  R3, R6
 	LSR   $0x05, R6, R6
@@ -1702,11 +1654,9 @@ emit_lit_memmove_long_emit_remainder_encodeBlockAsmlarge_big_loop_back:
 emit_lit_memmove_long_emit_remainder_encodeBlockAsmlarge_forward_sse_loop_32:
 	ADD   R7, R0, R15
 	FMOVQ -32(R15), F4
-	ADD   R7, R0, R15
 	FMOVQ -16(R15), F5
 	ADD   R7, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R7, R7
 	CMP   R7, R3
@@ -1715,7 +1665,6 @@ emit_lit_memmove_long_emit_remainder_encodeBlockAsmlarge_forward_sse_loop_32:
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R2, R1
 
@@ -1929,13 +1878,11 @@ emit_lit_memmove_repeat_emit_encodeBlockAsm4MB_memmove_move_33through64:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_repeat_emit_encodeBlockAsm4MB:
@@ -1950,7 +1897,6 @@ memmove_long_repeat_emit_encodeBlockAsm4MB:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R11
 	LSR   $0x05, R11, R11
@@ -1979,11 +1925,9 @@ emit_lit_memmove_long_repeat_emit_encodeBlockAsm4MBlarge_big_loop_back:
 emit_lit_memmove_long_repeat_emit_encodeBlockAsm4MBlarge_forward_sse_loop_32:
 	ADD   R12, R9, R15
 	FMOVQ -32(R15), F4
-	ADD   R12, R9, R15
 	FMOVQ -16(R15), F5
 	ADD   R12, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R12, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R12, R12
 	CMP   R12, R8
@@ -1992,7 +1936,6 @@ emit_lit_memmove_long_repeat_emit_encodeBlockAsm4MBlarge_forward_sse_loop_32:
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -2031,15 +1974,8 @@ matchlen_loopback_16_repeat_extend_encodeBlockAsm4MB:
 	JMP   matchlen_loopback_16_repeat_extend_encodeBlockAsm4MB
 
 matchlen_bsf_16repeat_extend_encodeBlockAsm4MB:
-#ifdef GOAMD64_v3
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#else
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#endif
+	RBIT  R12, R12
+	CLZ   R12, R12
 	ASR   $0x03, R12, R12
 	ADD   R12, R11, R11
 	ADD   $8, R11, R11
@@ -2061,15 +1997,8 @@ matchlen_match8_repeat_extend_encodeBlockAsm4MB:
 	JMP   matchlen_match4_repeat_extend_encodeBlockAsm4MB
 
 matchlen_bsf_8_repeat_extend_encodeBlockAsm4MB:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R11, R11
 	MOVWU R11, R11
@@ -2614,13 +2543,11 @@ emit_lit_memmove_match_emit_encodeBlockAsm4MB_memmove_move_33through64:
 	FMOVQ 16(R6), F1
 	ADD   R8, R6, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R6, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_encodeBlockAsm4MB:
@@ -2635,7 +2562,6 @@ memmove_long_match_emit_encodeBlockAsm4MB:
 	FMOVQ 16(R6), F1
 	ADD   R8, R6, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R6, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R10
 	LSR   $0x05, R10, R10
@@ -2664,11 +2590,9 @@ emit_lit_memmove_long_match_emit_encodeBlockAsm4MBlarge_big_loop_back:
 emit_lit_memmove_long_match_emit_encodeBlockAsm4MBlarge_forward_sse_loop_32:
 	ADD   R11, R6, R15
 	FMOVQ -32(R15), F4
-	ADD   R11, R6, R15
 	FMOVQ -16(R15), F5
 	ADD   R11, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R11, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R11, R11
 	CMP   R11, R8
@@ -2677,7 +2601,6 @@ emit_lit_memmove_long_match_emit_encodeBlockAsm4MBlarge_forward_sse_loop_32:
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R7, R1
 
@@ -2718,15 +2641,8 @@ matchlen_loopback_16_match_nolit_encodeBlockAsm4MB:
 	JMP   matchlen_loopback_16_match_nolit_encodeBlockAsm4MB
 
 matchlen_bsf_16match_nolit_encodeBlockAsm4MB:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R9, R9
 	ADD   $8, R9, R9
@@ -2748,15 +2664,8 @@ matchlen_match8_match_nolit_encodeBlockAsm4MB:
 	JMP   matchlen_match4_match_nolit_encodeBlockAsm4MB
 
 matchlen_bsf_8_match_nolit_encodeBlockAsm4MB:
-#ifdef GOAMD64_v3
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#else
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#endif
+	RBIT  R8, R8
+	CLZ   R8, R8
 	ASR   $0x03, R8, R8
 	ADD   R8, R9, R9
 	MOVWU R9, R9
@@ -3240,13 +3149,11 @@ emit_lit_memmove_emit_remainder_encodeBlockAsm4MB_memmove_move_33through64:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_emit_remainder_encodeBlockAsm4MB:
@@ -3262,7 +3169,6 @@ memmove_long_emit_remainder_encodeBlockAsm4MB:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	MOVD  R3, R6
 	LSR   $0x05, R6, R6
@@ -3291,11 +3197,9 @@ emit_lit_memmove_long_emit_remainder_encodeBlockAsm4MBlarge_big_loop_back:
 emit_lit_memmove_long_emit_remainder_encodeBlockAsm4MBlarge_forward_sse_loop_32:
 	ADD   R7, R0, R15
 	FMOVQ -32(R15), F4
-	ADD   R7, R0, R15
 	FMOVQ -16(R15), F5
 	ADD   R7, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R7, R7
 	CMP   R7, R3
@@ -3304,7 +3208,6 @@ emit_lit_memmove_long_emit_remainder_encodeBlockAsm4MBlarge_forward_sse_loop_32:
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R2, R1
 
@@ -3509,13 +3412,11 @@ emit_lit_memmove_repeat_emit_encodeBlockAsm12B_memmove_move_33through64:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_repeat_emit_encodeBlockAsm12B:
@@ -3530,7 +3431,6 @@ memmove_long_repeat_emit_encodeBlockAsm12B:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R11
 	LSR   $0x05, R11, R11
@@ -3559,11 +3459,9 @@ emit_lit_memmove_long_repeat_emit_encodeBlockAsm12Blarge_big_loop_back:
 emit_lit_memmove_long_repeat_emit_encodeBlockAsm12Blarge_forward_sse_loop_32:
 	ADD   R12, R9, R15
 	FMOVQ -32(R15), F4
-	ADD   R12, R9, R15
 	FMOVQ -16(R15), F5
 	ADD   R12, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R12, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R12, R12
 	CMP   R12, R8
@@ -3572,7 +3470,6 @@ emit_lit_memmove_long_repeat_emit_encodeBlockAsm12Blarge_forward_sse_loop_32:
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -3611,15 +3508,8 @@ matchlen_loopback_16_repeat_extend_encodeBlockAsm12B:
 	JMP   matchlen_loopback_16_repeat_extend_encodeBlockAsm12B
 
 matchlen_bsf_16repeat_extend_encodeBlockAsm12B:
-#ifdef GOAMD64_v3
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#else
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#endif
+	RBIT  R12, R12
+	CLZ   R12, R12
 	ASR   $0x03, R12, R12
 	ADD   R12, R11, R11
 	ADD   $8, R11, R11
@@ -3641,15 +3531,8 @@ matchlen_match8_repeat_extend_encodeBlockAsm12B:
 	JMP   matchlen_match4_repeat_extend_encodeBlockAsm12B
 
 matchlen_bsf_8_repeat_extend_encodeBlockAsm12B:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R11, R11
 	MOVWU R11, R11
@@ -4052,13 +3935,11 @@ emit_lit_memmove_match_emit_encodeBlockAsm12B_memmove_move_33through64:
 	FMOVQ 16(R6), F1
 	ADD   R8, R6, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R6, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_encodeBlockAsm12B:
@@ -4073,7 +3954,6 @@ memmove_long_match_emit_encodeBlockAsm12B:
 	FMOVQ 16(R6), F1
 	ADD   R8, R6, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R6, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R10
 	LSR   $0x05, R10, R10
@@ -4102,11 +3982,9 @@ emit_lit_memmove_long_match_emit_encodeBlockAsm12Blarge_big_loop_back:
 emit_lit_memmove_long_match_emit_encodeBlockAsm12Blarge_forward_sse_loop_32:
 	ADD   R11, R6, R15
 	FMOVQ -32(R15), F4
-	ADD   R11, R6, R15
 	FMOVQ -16(R15), F5
 	ADD   R11, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R11, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R11, R11
 	CMP   R11, R8
@@ -4115,7 +3993,6 @@ emit_lit_memmove_long_match_emit_encodeBlockAsm12Blarge_forward_sse_loop_32:
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R7, R1
 
@@ -4156,15 +4033,8 @@ matchlen_loopback_16_match_nolit_encodeBlockAsm12B:
 	JMP   matchlen_loopback_16_match_nolit_encodeBlockAsm12B
 
 matchlen_bsf_16match_nolit_encodeBlockAsm12B:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R9, R9
 	ADD   $8, R9, R9
@@ -4186,15 +4056,8 @@ matchlen_match8_match_nolit_encodeBlockAsm12B:
 	JMP   matchlen_match4_match_nolit_encodeBlockAsm12B
 
 matchlen_bsf_8_match_nolit_encodeBlockAsm12B:
-#ifdef GOAMD64_v3
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#else
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#endif
+	RBIT  R8, R8
+	CLZ   R8, R8
 	ASR   $0x03, R8, R8
 	ADD   R8, R9, R9
 	MOVWU R9, R9
@@ -4550,13 +4413,11 @@ emit_lit_memmove_emit_remainder_encodeBlockAsm12B_memmove_move_33through64:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_emit_remainder_encodeBlockAsm12B:
@@ -4572,7 +4433,6 @@ memmove_long_emit_remainder_encodeBlockAsm12B:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	MOVD  R3, R6
 	LSR   $0x05, R6, R6
@@ -4601,11 +4461,9 @@ emit_lit_memmove_long_emit_remainder_encodeBlockAsm12Blarge_big_loop_back:
 emit_lit_memmove_long_emit_remainder_encodeBlockAsm12Blarge_forward_sse_loop_32:
 	ADD   R7, R0, R15
 	FMOVQ -32(R15), F4
-	ADD   R7, R0, R15
 	FMOVQ -16(R15), F5
 	ADD   R7, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R7, R7
 	CMP   R7, R3
@@ -4614,7 +4472,6 @@ emit_lit_memmove_long_emit_remainder_encodeBlockAsm12Blarge_forward_sse_loop_32:
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R2, R1
 
@@ -4819,13 +4676,11 @@ emit_lit_memmove_repeat_emit_encodeBlockAsm10B_memmove_move_33through64:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_repeat_emit_encodeBlockAsm10B:
@@ -4840,7 +4695,6 @@ memmove_long_repeat_emit_encodeBlockAsm10B:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R11
 	LSR   $0x05, R11, R11
@@ -4869,11 +4723,9 @@ emit_lit_memmove_long_repeat_emit_encodeBlockAsm10Blarge_big_loop_back:
 emit_lit_memmove_long_repeat_emit_encodeBlockAsm10Blarge_forward_sse_loop_32:
 	ADD   R12, R9, R15
 	FMOVQ -32(R15), F4
-	ADD   R12, R9, R15
 	FMOVQ -16(R15), F5
 	ADD   R12, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R12, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R12, R12
 	CMP   R12, R8
@@ -4882,7 +4734,6 @@ emit_lit_memmove_long_repeat_emit_encodeBlockAsm10Blarge_forward_sse_loop_32:
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -4921,15 +4772,8 @@ matchlen_loopback_16_repeat_extend_encodeBlockAsm10B:
 	JMP   matchlen_loopback_16_repeat_extend_encodeBlockAsm10B
 
 matchlen_bsf_16repeat_extend_encodeBlockAsm10B:
-#ifdef GOAMD64_v3
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#else
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#endif
+	RBIT  R12, R12
+	CLZ   R12, R12
 	ASR   $0x03, R12, R12
 	ADD   R12, R11, R11
 	ADD   $8, R11, R11
@@ -4951,15 +4795,8 @@ matchlen_match8_repeat_extend_encodeBlockAsm10B:
 	JMP   matchlen_match4_repeat_extend_encodeBlockAsm10B
 
 matchlen_bsf_8_repeat_extend_encodeBlockAsm10B:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R11, R11
 	MOVWU R11, R11
@@ -5362,13 +5199,11 @@ emit_lit_memmove_match_emit_encodeBlockAsm10B_memmove_move_33through64:
 	FMOVQ 16(R6), F1
 	ADD   R8, R6, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R6, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_encodeBlockAsm10B:
@@ -5383,7 +5218,6 @@ memmove_long_match_emit_encodeBlockAsm10B:
 	FMOVQ 16(R6), F1
 	ADD   R8, R6, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R6, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R10
 	LSR   $0x05, R10, R10
@@ -5412,11 +5246,9 @@ emit_lit_memmove_long_match_emit_encodeBlockAsm10Blarge_big_loop_back:
 emit_lit_memmove_long_match_emit_encodeBlockAsm10Blarge_forward_sse_loop_32:
 	ADD   R11, R6, R15
 	FMOVQ -32(R15), F4
-	ADD   R11, R6, R15
 	FMOVQ -16(R15), F5
 	ADD   R11, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R11, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R11, R11
 	CMP   R11, R8
@@ -5425,7 +5257,6 @@ emit_lit_memmove_long_match_emit_encodeBlockAsm10Blarge_forward_sse_loop_32:
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R7, R1
 
@@ -5466,15 +5297,8 @@ matchlen_loopback_16_match_nolit_encodeBlockAsm10B:
 	JMP   matchlen_loopback_16_match_nolit_encodeBlockAsm10B
 
 matchlen_bsf_16match_nolit_encodeBlockAsm10B:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R9, R9
 	ADD   $8, R9, R9
@@ -5496,15 +5320,8 @@ matchlen_match8_match_nolit_encodeBlockAsm10B:
 	JMP   matchlen_match4_match_nolit_encodeBlockAsm10B
 
 matchlen_bsf_8_match_nolit_encodeBlockAsm10B:
-#ifdef GOAMD64_v3
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#else
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#endif
+	RBIT  R8, R8
+	CLZ   R8, R8
 	ASR   $0x03, R8, R8
 	ADD   R8, R9, R9
 	MOVWU R9, R9
@@ -5860,13 +5677,11 @@ emit_lit_memmove_emit_remainder_encodeBlockAsm10B_memmove_move_33through64:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_emit_remainder_encodeBlockAsm10B:
@@ -5882,7 +5697,6 @@ memmove_long_emit_remainder_encodeBlockAsm10B:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	MOVD  R3, R6
 	LSR   $0x05, R6, R6
@@ -5911,11 +5725,9 @@ emit_lit_memmove_long_emit_remainder_encodeBlockAsm10Blarge_big_loop_back:
 emit_lit_memmove_long_emit_remainder_encodeBlockAsm10Blarge_forward_sse_loop_32:
 	ADD   R7, R0, R15
 	FMOVQ -32(R15), F4
-	ADD   R7, R0, R15
 	FMOVQ -16(R15), F5
 	ADD   R7, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R7, R7
 	CMP   R7, R3
@@ -5924,7 +5736,6 @@ emit_lit_memmove_long_emit_remainder_encodeBlockAsm10Blarge_forward_sse_loop_32:
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R2, R1
 
@@ -6129,13 +5940,11 @@ emit_lit_memmove_repeat_emit_encodeBlockAsm8B_memmove_move_33through64:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_repeat_emit_encodeBlockAsm8B:
@@ -6150,7 +5959,6 @@ memmove_long_repeat_emit_encodeBlockAsm8B:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R11
 	LSR   $0x05, R11, R11
@@ -6179,11 +5987,9 @@ emit_lit_memmove_long_repeat_emit_encodeBlockAsm8Blarge_big_loop_back:
 emit_lit_memmove_long_repeat_emit_encodeBlockAsm8Blarge_forward_sse_loop_32:
 	ADD   R12, R9, R15
 	FMOVQ -32(R15), F4
-	ADD   R12, R9, R15
 	FMOVQ -16(R15), F5
 	ADD   R12, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R12, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R12, R12
 	CMP   R12, R8
@@ -6192,7 +5998,6 @@ emit_lit_memmove_long_repeat_emit_encodeBlockAsm8Blarge_forward_sse_loop_32:
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -6231,15 +6036,8 @@ matchlen_loopback_16_repeat_extend_encodeBlockAsm8B:
 	JMP   matchlen_loopback_16_repeat_extend_encodeBlockAsm8B
 
 matchlen_bsf_16repeat_extend_encodeBlockAsm8B:
-#ifdef GOAMD64_v3
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#else
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#endif
+	RBIT  R12, R12
+	CLZ   R12, R12
 	ASR   $0x03, R12, R12
 	ADD   R12, R11, R11
 	ADD   $8, R11, R11
@@ -6261,15 +6059,8 @@ matchlen_match8_repeat_extend_encodeBlockAsm8B:
 	JMP   matchlen_match4_repeat_extend_encodeBlockAsm8B
 
 matchlen_bsf_8_repeat_extend_encodeBlockAsm8B:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R11, R11
 	MOVWU R11, R11
@@ -6658,13 +6449,11 @@ emit_lit_memmove_match_emit_encodeBlockAsm8B_memmove_move_33through64:
 	FMOVQ 16(R6), F1
 	ADD   R8, R6, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R6, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_encodeBlockAsm8B:
@@ -6679,7 +6468,6 @@ memmove_long_match_emit_encodeBlockAsm8B:
 	FMOVQ 16(R6), F1
 	ADD   R8, R6, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R6, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R10
 	LSR   $0x05, R10, R10
@@ -6708,11 +6496,9 @@ emit_lit_memmove_long_match_emit_encodeBlockAsm8Blarge_big_loop_back:
 emit_lit_memmove_long_match_emit_encodeBlockAsm8Blarge_forward_sse_loop_32:
 	ADD   R11, R6, R15
 	FMOVQ -32(R15), F4
-	ADD   R11, R6, R15
 	FMOVQ -16(R15), F5
 	ADD   R11, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R11, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R11, R11
 	CMP   R11, R8
@@ -6721,7 +6507,6 @@ emit_lit_memmove_long_match_emit_encodeBlockAsm8Blarge_forward_sse_loop_32:
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R7, R1
 
@@ -6762,15 +6547,8 @@ matchlen_loopback_16_match_nolit_encodeBlockAsm8B:
 	JMP   matchlen_loopback_16_match_nolit_encodeBlockAsm8B
 
 matchlen_bsf_16match_nolit_encodeBlockAsm8B:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R9, R9
 	ADD   $8, R9, R9
@@ -6792,15 +6570,8 @@ matchlen_match8_match_nolit_encodeBlockAsm8B:
 	JMP   matchlen_match4_match_nolit_encodeBlockAsm8B
 
 matchlen_bsf_8_match_nolit_encodeBlockAsm8B:
-#ifdef GOAMD64_v3
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#else
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#endif
+	RBIT  R8, R8
+	CLZ   R8, R8
 	ASR   $0x03, R8, R8
 	ADD   R8, R9, R9
 	MOVWU R9, R9
@@ -7146,13 +6917,11 @@ emit_lit_memmove_emit_remainder_encodeBlockAsm8B_memmove_move_33through64:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_emit_remainder_encodeBlockAsm8B:
@@ -7168,7 +6937,6 @@ memmove_long_emit_remainder_encodeBlockAsm8B:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	MOVD  R3, R6
 	LSR   $0x05, R6, R6
@@ -7197,11 +6965,9 @@ emit_lit_memmove_long_emit_remainder_encodeBlockAsm8Blarge_big_loop_back:
 emit_lit_memmove_long_emit_remainder_encodeBlockAsm8Blarge_forward_sse_loop_32:
 	ADD   R7, R0, R15
 	FMOVQ -32(R15), F4
-	ADD   R7, R0, R15
 	FMOVQ -16(R15), F5
 	ADD   R7, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R7, R7
 	CMP   R7, R3
@@ -7210,7 +6976,6 @@ emit_lit_memmove_long_emit_remainder_encodeBlockAsm8Blarge_forward_sse_loop_32:
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R2, R1
 
@@ -7292,7 +7057,6 @@ check_maxskip_cont_encodeBetterBlockAsm:
 	ADD   R10<<2, R0, R15
 	MOVWU 524288(R15), R7
 	MOVW  R2, (R0)(R9<<2)
-	ADD   R10<<2, R0, R15
 	MOVW  R2, 524288(R15)
 	MOVD  (R3)(R5), R9
 	MOVD  (R3)(R7), R10
@@ -7397,15 +7161,8 @@ matchlen_loopback_16_match_nolit_encodeBetterBlockAsm:
 	JMP   matchlen_loopback_16_match_nolit_encodeBetterBlockAsm
 
 matchlen_bsf_16match_nolit_encodeBetterBlockAsm:
-#ifdef GOAMD64_v3
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#else
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#endif
+	RBIT  R12, R12
+	CLZ   R12, R12
 	ASR   $0x03, R12, R12
 	ADD   R12, R11, R11
 	ADD   $8, R11, R11
@@ -7427,15 +7184,8 @@ matchlen_match8_match_nolit_encodeBetterBlockAsm:
 	JMP   matchlen_match4_match_nolit_encodeBetterBlockAsm
 
 matchlen_bsf_8_match_nolit_encodeBetterBlockAsm:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R11, R11
 	MOVWU R11, R11
@@ -7601,13 +7351,11 @@ emit_lit_memmove_match_emit_encodeBetterBlockAsm_memmove_move_33through64:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_encodeBetterBlockAsm:
@@ -7622,7 +7370,6 @@ memmove_long_match_emit_encodeBetterBlockAsm:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R12
 	LSR   $0x05, R12, R12
@@ -7651,11 +7398,9 @@ emit_lit_memmove_long_match_emit_encodeBetterBlockAsmlarge_big_loop_back:
 emit_lit_memmove_long_match_emit_encodeBetterBlockAsmlarge_forward_sse_loop_32:
 	ADD   R13, R9, R15
 	FMOVQ -32(R15), F4
-	ADD   R13, R9, R15
 	FMOVQ -16(R15), F5
 	ADD   R13, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R13, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R13, R13
 	CMP   R13, R8
@@ -7664,7 +7409,6 @@ emit_lit_memmove_long_match_emit_encodeBetterBlockAsmlarge_forward_sse_loop_32:
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -8094,13 +7838,11 @@ emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm_memmove_move_33through64
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_repeat_encodeBetterBlockAsm:
@@ -8115,7 +7857,6 @@ memmove_long_match_emit_repeat_encodeBetterBlockAsm:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R12
 	LSR   $0x05, R12, R12
@@ -8144,11 +7885,9 @@ emit_lit_memmove_long_match_emit_repeat_encodeBetterBlockAsmlarge_big_loop_back:
 emit_lit_memmove_long_match_emit_repeat_encodeBetterBlockAsmlarge_forward_sse_loop_32:
 	ADD   R13, R9, R15
 	FMOVQ -32(R15), F4
-	ADD   R13, R9, R15
 	FMOVQ -16(R15), F5
 	ADD   R13, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R13, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R13, R13
 	CMP   R13, R8
@@ -8157,7 +7896,6 @@ emit_lit_memmove_long_match_emit_repeat_encodeBetterBlockAsmlarge_forward_sse_lo
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -8445,13 +8183,11 @@ emit_lit_memmove_emit_remainder_encodeBetterBlockAsm_memmove_move_33through64:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_emit_remainder_encodeBetterBlockAsm:
@@ -8467,7 +8203,6 @@ memmove_long_emit_remainder_encodeBetterBlockAsm:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	MOVD  R3, R6
 	LSR   $0x05, R6, R6
@@ -8496,11 +8231,9 @@ emit_lit_memmove_long_emit_remainder_encodeBetterBlockAsmlarge_big_loop_back:
 emit_lit_memmove_long_emit_remainder_encodeBetterBlockAsmlarge_forward_sse_loop_32:
 	ADD   R7, R0, R15
 	FMOVQ -32(R15), F4
-	ADD   R7, R0, R15
 	FMOVQ -16(R15), F5
 	ADD   R7, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R7, R7
 	CMP   R7, R3
@@ -8509,7 +8242,6 @@ emit_lit_memmove_long_emit_remainder_encodeBetterBlockAsmlarge_forward_sse_loop_
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R2, R1
 
@@ -8591,7 +8323,6 @@ check_maxskip_cont_encodeBetterBlockAsm4MB:
 	ADD   R10<<2, R0, R15
 	MOVWU 524288(R15), R7
 	MOVW  R2, (R0)(R9<<2)
-	ADD   R10<<2, R0, R15
 	MOVW  R2, 524288(R15)
 	MOVD  (R3)(R5), R9
 	MOVD  (R3)(R7), R10
@@ -8696,15 +8427,8 @@ matchlen_loopback_16_match_nolit_encodeBetterBlockAsm4MB:
 	JMP   matchlen_loopback_16_match_nolit_encodeBetterBlockAsm4MB
 
 matchlen_bsf_16match_nolit_encodeBetterBlockAsm4MB:
-#ifdef GOAMD64_v3
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#else
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#endif
+	RBIT  R12, R12
+	CLZ   R12, R12
 	ASR   $0x03, R12, R12
 	ADD   R12, R11, R11
 	ADD   $8, R11, R11
@@ -8726,15 +8450,8 @@ matchlen_match8_match_nolit_encodeBetterBlockAsm4MB:
 	JMP   matchlen_match4_match_nolit_encodeBetterBlockAsm4MB
 
 matchlen_bsf_8_match_nolit_encodeBetterBlockAsm4MB:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R11, R11
 	MOVWU R11, R11
@@ -8891,13 +8608,11 @@ emit_lit_memmove_match_emit_encodeBetterBlockAsm4MB_memmove_move_33through64:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_encodeBetterBlockAsm4MB:
@@ -8912,7 +8627,6 @@ memmove_long_match_emit_encodeBetterBlockAsm4MB:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R12
 	LSR   $0x05, R12, R12
@@ -8941,11 +8655,9 @@ emit_lit_memmove_long_match_emit_encodeBetterBlockAsm4MBlarge_big_loop_back:
 emit_lit_memmove_long_match_emit_encodeBetterBlockAsm4MBlarge_forward_sse_loop_32:
 	ADD   R13, R9, R15
 	FMOVQ -32(R15), F4
-	ADD   R13, R9, R15
 	FMOVQ -16(R15), F5
 	ADD   R13, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R13, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R13, R13
 	CMP   R13, R8
@@ -8954,7 +8666,6 @@ emit_lit_memmove_long_match_emit_encodeBetterBlockAsm4MBlarge_forward_sse_loop_3
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -9334,13 +9045,11 @@ emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm4MB_memmove_move_33throug
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_repeat_encodeBetterBlockAsm4MB:
@@ -9355,7 +9064,6 @@ memmove_long_match_emit_repeat_encodeBetterBlockAsm4MB:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R12
 	LSR   $0x05, R12, R12
@@ -9384,11 +9092,9 @@ emit_lit_memmove_long_match_emit_repeat_encodeBetterBlockAsm4MBlarge_big_loop_ba
 emit_lit_memmove_long_match_emit_repeat_encodeBetterBlockAsm4MBlarge_forward_sse_loop_32:
 	ADD   R13, R9, R15
 	FMOVQ -32(R15), F4
-	ADD   R13, R9, R15
 	FMOVQ -16(R15), F5
 	ADD   R13, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R13, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R13, R13
 	CMP   R13, R8
@@ -9397,7 +9103,6 @@ emit_lit_memmove_long_match_emit_repeat_encodeBetterBlockAsm4MBlarge_forward_sse
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -9663,13 +9368,11 @@ emit_lit_memmove_emit_remainder_encodeBetterBlockAsm4MB_memmove_move_33through64
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_emit_remainder_encodeBetterBlockAsm4MB:
@@ -9685,7 +9388,6 @@ memmove_long_emit_remainder_encodeBetterBlockAsm4MB:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	MOVD  R3, R6
 	LSR   $0x05, R6, R6
@@ -9714,11 +9416,9 @@ emit_lit_memmove_long_emit_remainder_encodeBetterBlockAsm4MBlarge_big_loop_back:
 emit_lit_memmove_long_emit_remainder_encodeBetterBlockAsm4MBlarge_forward_sse_loop_32:
 	ADD   R7, R0, R15
 	FMOVQ -32(R15), F4
-	ADD   R7, R0, R15
 	FMOVQ -16(R15), F5
 	ADD   R7, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R7, R7
 	CMP   R7, R3
@@ -9727,7 +9427,6 @@ emit_lit_memmove_long_emit_remainder_encodeBetterBlockAsm4MBlarge_forward_sse_lo
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R2, R1
 
@@ -9800,7 +9499,6 @@ search_loop_encodeBetterBlockAsm12B:
 	ADD   R10<<2, R0, R15
 	MOVWU 65536(R15), R7
 	MOVW  R2, (R0)(R9<<2)
-	ADD   R10<<2, R0, R15
 	MOVW  R2, 65536(R15)
 	MOVD  (R3)(R5), R9
 	MOVD  (R3)(R7), R10
@@ -9905,15 +9603,8 @@ matchlen_loopback_16_match_nolit_encodeBetterBlockAsm12B:
 	JMP   matchlen_loopback_16_match_nolit_encodeBetterBlockAsm12B
 
 matchlen_bsf_16match_nolit_encodeBetterBlockAsm12B:
-#ifdef GOAMD64_v3
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#else
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#endif
+	RBIT  R12, R12
+	CLZ   R12, R12
 	ASR   $0x03, R12, R12
 	ADD   R12, R11, R11
 	ADD   $8, R11, R11
@@ -9935,15 +9626,8 @@ matchlen_match8_match_nolit_encodeBetterBlockAsm12B:
 	JMP   matchlen_match4_match_nolit_encodeBetterBlockAsm12B
 
 matchlen_bsf_8_match_nolit_encodeBetterBlockAsm12B:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R11, R11
 	MOVWU R11, R11
@@ -10082,13 +9766,11 @@ emit_lit_memmove_match_emit_encodeBetterBlockAsm12B_memmove_move_33through64:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_encodeBetterBlockAsm12B:
@@ -10103,7 +9785,6 @@ memmove_long_match_emit_encodeBetterBlockAsm12B:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R12
 	LSR   $0x05, R12, R12
@@ -10132,11 +9813,9 @@ emit_lit_memmove_long_match_emit_encodeBetterBlockAsm12Blarge_big_loop_back:
 emit_lit_memmove_long_match_emit_encodeBetterBlockAsm12Blarge_forward_sse_loop_32:
 	ADD   R13, R9, R15
 	FMOVQ -32(R15), F4
-	ADD   R13, R9, R15
 	FMOVQ -16(R15), F5
 	ADD   R13, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R13, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R13, R13
 	CMP   R13, R8
@@ -10145,7 +9824,6 @@ emit_lit_memmove_long_match_emit_encodeBetterBlockAsm12Blarge_forward_sse_loop_3
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -10397,13 +10075,11 @@ emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm12B_memmove_move_33throug
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_repeat_encodeBetterBlockAsm12B:
@@ -10418,7 +10094,6 @@ memmove_long_match_emit_repeat_encodeBetterBlockAsm12B:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R12
 	LSR   $0x05, R12, R12
@@ -10447,11 +10122,9 @@ emit_lit_memmove_long_match_emit_repeat_encodeBetterBlockAsm12Blarge_big_loop_ba
 emit_lit_memmove_long_match_emit_repeat_encodeBetterBlockAsm12Blarge_forward_sse_loop_32:
 	ADD   R13, R9, R15
 	FMOVQ -32(R15), F4
-	ADD   R13, R9, R15
 	FMOVQ -16(R15), F5
 	ADD   R13, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R13, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R13, R13
 	CMP   R13, R8
@@ -10460,7 +10133,6 @@ emit_lit_memmove_long_match_emit_repeat_encodeBetterBlockAsm12Blarge_forward_sse
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -10703,13 +10375,11 @@ emit_lit_memmove_emit_remainder_encodeBetterBlockAsm12B_memmove_move_33through64
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_emit_remainder_encodeBetterBlockAsm12B:
@@ -10725,7 +10395,6 @@ memmove_long_emit_remainder_encodeBetterBlockAsm12B:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	MOVD  R3, R6
 	LSR   $0x05, R6, R6
@@ -10754,11 +10423,9 @@ emit_lit_memmove_long_emit_remainder_encodeBetterBlockAsm12Blarge_big_loop_back:
 emit_lit_memmove_long_emit_remainder_encodeBetterBlockAsm12Blarge_forward_sse_loop_32:
 	ADD   R7, R0, R15
 	FMOVQ -32(R15), F4
-	ADD   R7, R0, R15
 	FMOVQ -16(R15), F5
 	ADD   R7, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R7, R7
 	CMP   R7, R3
@@ -10767,7 +10434,6 @@ emit_lit_memmove_long_emit_remainder_encodeBetterBlockAsm12Blarge_forward_sse_lo
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R2, R1
 
@@ -10840,7 +10506,6 @@ search_loop_encodeBetterBlockAsm10B:
 	ADD   R10<<2, R0, R15
 	MOVWU 16384(R15), R7
 	MOVW  R2, (R0)(R9<<2)
-	ADD   R10<<2, R0, R15
 	MOVW  R2, 16384(R15)
 	MOVD  (R3)(R5), R9
 	MOVD  (R3)(R7), R10
@@ -10945,15 +10610,8 @@ matchlen_loopback_16_match_nolit_encodeBetterBlockAsm10B:
 	JMP   matchlen_loopback_16_match_nolit_encodeBetterBlockAsm10B
 
 matchlen_bsf_16match_nolit_encodeBetterBlockAsm10B:
-#ifdef GOAMD64_v3
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#else
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#endif
+	RBIT  R12, R12
+	CLZ   R12, R12
 	ASR   $0x03, R12, R12
 	ADD   R12, R11, R11
 	ADD   $8, R11, R11
@@ -10975,15 +10633,8 @@ matchlen_match8_match_nolit_encodeBetterBlockAsm10B:
 	JMP   matchlen_match4_match_nolit_encodeBetterBlockAsm10B
 
 matchlen_bsf_8_match_nolit_encodeBetterBlockAsm10B:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R11, R11
 	MOVWU R11, R11
@@ -11122,13 +10773,11 @@ emit_lit_memmove_match_emit_encodeBetterBlockAsm10B_memmove_move_33through64:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_encodeBetterBlockAsm10B:
@@ -11143,7 +10792,6 @@ memmove_long_match_emit_encodeBetterBlockAsm10B:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R12
 	LSR   $0x05, R12, R12
@@ -11172,11 +10820,9 @@ emit_lit_memmove_long_match_emit_encodeBetterBlockAsm10Blarge_big_loop_back:
 emit_lit_memmove_long_match_emit_encodeBetterBlockAsm10Blarge_forward_sse_loop_32:
 	ADD   R13, R9, R15
 	FMOVQ -32(R15), F4
-	ADD   R13, R9, R15
 	FMOVQ -16(R15), F5
 	ADD   R13, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R13, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R13, R13
 	CMP   R13, R8
@@ -11185,7 +10831,6 @@ emit_lit_memmove_long_match_emit_encodeBetterBlockAsm10Blarge_forward_sse_loop_3
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -11437,13 +11082,11 @@ emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm10B_memmove_move_33throug
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_repeat_encodeBetterBlockAsm10B:
@@ -11458,7 +11101,6 @@ memmove_long_match_emit_repeat_encodeBetterBlockAsm10B:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R12
 	LSR   $0x05, R12, R12
@@ -11487,11 +11129,9 @@ emit_lit_memmove_long_match_emit_repeat_encodeBetterBlockAsm10Blarge_big_loop_ba
 emit_lit_memmove_long_match_emit_repeat_encodeBetterBlockAsm10Blarge_forward_sse_loop_32:
 	ADD   R13, R9, R15
 	FMOVQ -32(R15), F4
-	ADD   R13, R9, R15
 	FMOVQ -16(R15), F5
 	ADD   R13, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R13, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R13, R13
 	CMP   R13, R8
@@ -11500,7 +11140,6 @@ emit_lit_memmove_long_match_emit_repeat_encodeBetterBlockAsm10Blarge_forward_sse
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -11743,13 +11382,11 @@ emit_lit_memmove_emit_remainder_encodeBetterBlockAsm10B_memmove_move_33through64
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_emit_remainder_encodeBetterBlockAsm10B:
@@ -11765,7 +11402,6 @@ memmove_long_emit_remainder_encodeBetterBlockAsm10B:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	MOVD  R3, R6
 	LSR   $0x05, R6, R6
@@ -11794,11 +11430,9 @@ emit_lit_memmove_long_emit_remainder_encodeBetterBlockAsm10Blarge_big_loop_back:
 emit_lit_memmove_long_emit_remainder_encodeBetterBlockAsm10Blarge_forward_sse_loop_32:
 	ADD   R7, R0, R15
 	FMOVQ -32(R15), F4
-	ADD   R7, R0, R15
 	FMOVQ -16(R15), F5
 	ADD   R7, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R7, R7
 	CMP   R7, R3
@@ -11807,7 +11441,6 @@ emit_lit_memmove_long_emit_remainder_encodeBetterBlockAsm10Blarge_forward_sse_lo
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R2, R1
 
@@ -11880,7 +11513,6 @@ search_loop_encodeBetterBlockAsm8B:
 	ADD   R10<<2, R0, R15
 	MOVWU 4096(R15), R7
 	MOVW  R2, (R0)(R9<<2)
-	ADD   R10<<2, R0, R15
 	MOVW  R2, 4096(R15)
 	MOVD  (R3)(R5), R9
 	MOVD  (R3)(R7), R10
@@ -11985,15 +11617,8 @@ matchlen_loopback_16_match_nolit_encodeBetterBlockAsm8B:
 	JMP   matchlen_loopback_16_match_nolit_encodeBetterBlockAsm8B
 
 matchlen_bsf_16match_nolit_encodeBetterBlockAsm8B:
-#ifdef GOAMD64_v3
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#else
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#endif
+	RBIT  R12, R12
+	CLZ   R12, R12
 	ASR   $0x03, R12, R12
 	ADD   R12, R11, R11
 	ADD   $8, R11, R11
@@ -12015,15 +11640,8 @@ matchlen_match8_match_nolit_encodeBetterBlockAsm8B:
 	JMP   matchlen_match4_match_nolit_encodeBetterBlockAsm8B
 
 matchlen_bsf_8_match_nolit_encodeBetterBlockAsm8B:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R11, R11
 	MOVWU R11, R11
@@ -12162,13 +11780,11 @@ emit_lit_memmove_match_emit_encodeBetterBlockAsm8B_memmove_move_33through64:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_encodeBetterBlockAsm8B:
@@ -12183,7 +11799,6 @@ memmove_long_match_emit_encodeBetterBlockAsm8B:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R12
 	LSR   $0x05, R12, R12
@@ -12212,11 +11827,9 @@ emit_lit_memmove_long_match_emit_encodeBetterBlockAsm8Blarge_big_loop_back:
 emit_lit_memmove_long_match_emit_encodeBetterBlockAsm8Blarge_forward_sse_loop_32:
 	ADD   R13, R9, R15
 	FMOVQ -32(R15), F4
-	ADD   R13, R9, R15
 	FMOVQ -16(R15), F5
 	ADD   R13, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R13, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R13, R13
 	CMP   R13, R8
@@ -12225,7 +11838,6 @@ emit_lit_memmove_long_match_emit_encodeBetterBlockAsm8Blarge_forward_sse_loop_32
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -12467,13 +12079,11 @@ emit_lit_memmove_match_emit_repeat_encodeBetterBlockAsm8B_memmove_move_33through
 	FMOVQ 16(R8), F1
 	ADD   R7, R8, R15
 	FMOVQ -32(R15), F2
-	ADD   R7, R8, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R7, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_repeat_encodeBetterBlockAsm8B:
@@ -12488,7 +12098,6 @@ memmove_long_match_emit_repeat_encodeBetterBlockAsm8B:
 	FMOVQ 16(R8), F1
 	ADD   R7, R8, R15
 	FMOVQ -32(R15), F2
-	ADD   R7, R8, R15
 	FMOVQ -16(R15), F3
 	MOVD  R7, R10
 	LSR   $0x05, R10, R10
@@ -12517,11 +12126,9 @@ emit_lit_memmove_long_match_emit_repeat_encodeBetterBlockAsm8Blarge_big_loop_bac
 emit_lit_memmove_long_match_emit_repeat_encodeBetterBlockAsm8Blarge_forward_sse_loop_32:
 	ADD   R12, R8, R15
 	FMOVQ -32(R15), F4
-	ADD   R12, R8, R15
 	FMOVQ -16(R15), F5
 	ADD   R12, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R12, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R12, R12
 	CMP   R12, R7
@@ -12530,7 +12137,6 @@ emit_lit_memmove_long_match_emit_repeat_encodeBetterBlockAsm8Blarge_forward_sse_
 	FMOVQ F1, 16(R1)
 	ADD   R7, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -12769,13 +12375,11 @@ emit_lit_memmove_emit_remainder_encodeBetterBlockAsm8B_memmove_move_33through64:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_emit_remainder_encodeBetterBlockAsm8B:
@@ -12791,7 +12395,6 @@ memmove_long_emit_remainder_encodeBetterBlockAsm8B:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	MOVD  R3, R6
 	LSR   $0x05, R6, R6
@@ -12820,11 +12423,9 @@ emit_lit_memmove_long_emit_remainder_encodeBetterBlockAsm8Blarge_big_loop_back:
 emit_lit_memmove_long_emit_remainder_encodeBetterBlockAsm8Blarge_forward_sse_loop_32:
 	ADD   R7, R0, R15
 	FMOVQ -32(R15), F4
-	ADD   R7, R0, R15
 	FMOVQ -16(R15), F5
 	ADD   R7, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R7, R7
 	CMP   R7, R3
@@ -12833,7 +12434,6 @@ emit_lit_memmove_long_emit_remainder_encodeBetterBlockAsm8Blarge_forward_sse_loo
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R2, R1
 
@@ -13056,13 +12656,11 @@ emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm_memmove_move_33through64:
 	FMOVQ 16(R8), F1
 	ADD   R7, R8, R15
 	FMOVQ -32(R15), F2
-	ADD   R7, R8, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R7, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_repeat_emit_encodeSnappyBlockAsm:
@@ -13077,7 +12675,6 @@ memmove_long_repeat_emit_encodeSnappyBlockAsm:
 	FMOVQ 16(R8), F1
 	ADD   R7, R8, R15
 	FMOVQ -32(R15), F2
-	ADD   R7, R8, R15
 	FMOVQ -16(R15), F3
 	MOVD  R7, R10
 	LSR   $0x05, R10, R10
@@ -13106,11 +12703,9 @@ emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsmlarge_big_loop_back:
 emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsmlarge_forward_sse_loop_32:
 	ADD   R11, R8, R15
 	FMOVQ -32(R15), F4
-	ADD   R11, R8, R15
 	FMOVQ -16(R15), F5
 	ADD   R11, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R11, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R11, R11
 	CMP   R11, R7
@@ -13119,7 +12714,6 @@ emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsmlarge_forward_sse_loop_32:
 	FMOVQ F1, 16(R1)
 	ADD   R7, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -13158,15 +12752,8 @@ matchlen_loopback_16_repeat_extend_encodeSnappyBlockAsm:
 	JMP   matchlen_loopback_16_repeat_extend_encodeSnappyBlockAsm
 
 matchlen_bsf_16repeat_extend_encodeSnappyBlockAsm:
-#ifdef GOAMD64_v3
-	RBIT R11, R11
-	CLZ  R11, R11
-
-#else
-	RBIT R11, R11
-	CLZ  R11, R11
-
-#endif
+	RBIT  R11, R11
+	CLZ   R11, R11
 	ASR   $0x03, R11, R11
 	ADD   R11, R10, R10
 	ADD   $8, R10, R10
@@ -13188,15 +12775,8 @@ matchlen_match8_repeat_extend_encodeSnappyBlockAsm:
 	JMP   matchlen_match4_repeat_extend_encodeSnappyBlockAsm
 
 matchlen_bsf_8_repeat_extend_encodeSnappyBlockAsm:
-#ifdef GOAMD64_v3
-	RBIT R9, R9
-	CLZ  R9, R9
-
-#else
-	RBIT R9, R9
-	CLZ  R9, R9
-
-#endif
+	RBIT  R9, R9
+	CLZ   R9, R9
 	ASR   $0x03, R9, R9
 	ADD   R9, R10, R10
 	MOVWU R10, R10
@@ -13474,13 +13054,11 @@ emit_lit_memmove_match_emit_encodeSnappyBlockAsm_memmove_move_33through64:
 	FMOVQ 16(R6), F1
 	ADD   R8, R6, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R6, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_encodeSnappyBlockAsm:
@@ -13495,7 +13073,6 @@ memmove_long_match_emit_encodeSnappyBlockAsm:
 	FMOVQ 16(R6), F1
 	ADD   R8, R6, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R6, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R10
 	LSR   $0x05, R10, R10
@@ -13524,11 +13101,9 @@ emit_lit_memmove_long_match_emit_encodeSnappyBlockAsmlarge_big_loop_back:
 emit_lit_memmove_long_match_emit_encodeSnappyBlockAsmlarge_forward_sse_loop_32:
 	ADD   R11, R6, R15
 	FMOVQ -32(R15), F4
-	ADD   R11, R6, R15
 	FMOVQ -16(R15), F5
 	ADD   R11, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R11, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R11, R11
 	CMP   R11, R8
@@ -13537,7 +13112,6 @@ emit_lit_memmove_long_match_emit_encodeSnappyBlockAsmlarge_forward_sse_loop_32:
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R7, R1
 
@@ -13578,15 +13152,8 @@ matchlen_loopback_16_match_nolit_encodeSnappyBlockAsm:
 	JMP   matchlen_loopback_16_match_nolit_encodeSnappyBlockAsm
 
 matchlen_bsf_16match_nolit_encodeSnappyBlockAsm:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R9, R9
 	ADD   $8, R9, R9
@@ -13608,15 +13175,8 @@ matchlen_match8_match_nolit_encodeSnappyBlockAsm:
 	JMP   matchlen_match4_match_nolit_encodeSnappyBlockAsm
 
 matchlen_bsf_8_match_nolit_encodeSnappyBlockAsm:
-#ifdef GOAMD64_v3
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#else
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#endif
+	RBIT  R8, R8
+	CLZ   R8, R8
 	ASR   $0x03, R8, R8
 	ADD   R8, R9, R9
 	MOVWU R9, R9
@@ -13901,13 +13461,11 @@ emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm_memmove_move_33through64:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_emit_remainder_encodeSnappyBlockAsm:
@@ -13923,7 +13481,6 @@ memmove_long_emit_remainder_encodeSnappyBlockAsm:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	MOVD  R3, R6
 	LSR   $0x05, R6, R6
@@ -13952,11 +13509,9 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsmlarge_big_loop_back:
 emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsmlarge_forward_sse_loop_32:
 	ADD   R7, R0, R15
 	FMOVQ -32(R15), F4
-	ADD   R7, R0, R15
 	FMOVQ -16(R15), F5
 	ADD   R7, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R7, R7
 	CMP   R7, R3
@@ -13965,7 +13520,6 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsmlarge_forward_sse_loop_
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R2, R1
 
@@ -14170,13 +13724,11 @@ emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm64K_memmove_move_33through64:
 	FMOVQ 16(R8), F1
 	ADD   R7, R8, R15
 	FMOVQ -32(R15), F2
-	ADD   R7, R8, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R7, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_repeat_emit_encodeSnappyBlockAsm64K:
@@ -14191,7 +13743,6 @@ memmove_long_repeat_emit_encodeSnappyBlockAsm64K:
 	FMOVQ 16(R8), F1
 	ADD   R7, R8, R15
 	FMOVQ -32(R15), F2
-	ADD   R7, R8, R15
 	FMOVQ -16(R15), F3
 	MOVD  R7, R10
 	LSR   $0x05, R10, R10
@@ -14220,11 +13771,9 @@ emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm64Klarge_big_loop_back:
 emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm64Klarge_forward_sse_loop_32:
 	ADD   R11, R8, R15
 	FMOVQ -32(R15), F4
-	ADD   R11, R8, R15
 	FMOVQ -16(R15), F5
 	ADD   R11, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R11, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R11, R11
 	CMP   R11, R7
@@ -14233,7 +13782,6 @@ emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm64Klarge_forward_sse_loop_
 	FMOVQ F1, 16(R1)
 	ADD   R7, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -14272,15 +13820,8 @@ matchlen_loopback_16_repeat_extend_encodeSnappyBlockAsm64K:
 	JMP   matchlen_loopback_16_repeat_extend_encodeSnappyBlockAsm64K
 
 matchlen_bsf_16repeat_extend_encodeSnappyBlockAsm64K:
-#ifdef GOAMD64_v3
-	RBIT R11, R11
-	CLZ  R11, R11
-
-#else
-	RBIT R11, R11
-	CLZ  R11, R11
-
-#endif
+	RBIT  R11, R11
+	CLZ   R11, R11
 	ASR   $0x03, R11, R11
 	ADD   R11, R10, R10
 	ADD   $8, R10, R10
@@ -14302,15 +13843,8 @@ matchlen_match8_repeat_extend_encodeSnappyBlockAsm64K:
 	JMP   matchlen_match4_repeat_extend_encodeSnappyBlockAsm64K
 
 matchlen_bsf_8_repeat_extend_encodeSnappyBlockAsm64K:
-#ifdef GOAMD64_v3
-	RBIT R9, R9
-	CLZ  R9, R9
-
-#else
-	RBIT R9, R9
-	CLZ  R9, R9
-
-#endif
+	RBIT  R9, R9
+	CLZ   R9, R9
 	ASR   $0x03, R9, R9
 	ADD   R9, R10, R10
 	MOVWU R10, R10
@@ -14542,13 +14076,11 @@ emit_lit_memmove_match_emit_encodeSnappyBlockAsm64K_memmove_move_33through64:
 	FMOVQ 16(R6), F1
 	ADD   R8, R6, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R6, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_encodeSnappyBlockAsm64K:
@@ -14563,7 +14095,6 @@ memmove_long_match_emit_encodeSnappyBlockAsm64K:
 	FMOVQ 16(R6), F1
 	ADD   R8, R6, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R6, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R10
 	LSR   $0x05, R10, R10
@@ -14592,11 +14123,9 @@ emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm64Klarge_big_loop_back:
 emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm64Klarge_forward_sse_loop_32:
 	ADD   R11, R6, R15
 	FMOVQ -32(R15), F4
-	ADD   R11, R6, R15
 	FMOVQ -16(R15), F5
 	ADD   R11, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R11, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R11, R11
 	CMP   R11, R8
@@ -14605,7 +14134,6 @@ emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm64Klarge_forward_sse_loop_3
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R7, R1
 
@@ -14646,15 +14174,8 @@ matchlen_loopback_16_match_nolit_encodeSnappyBlockAsm64K:
 	JMP   matchlen_loopback_16_match_nolit_encodeSnappyBlockAsm64K
 
 matchlen_bsf_16match_nolit_encodeSnappyBlockAsm64K:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R9, R9
 	ADD   $8, R9, R9
@@ -14676,15 +14197,8 @@ matchlen_match8_match_nolit_encodeSnappyBlockAsm64K:
 	JMP   matchlen_match4_match_nolit_encodeSnappyBlockAsm64K
 
 matchlen_bsf_8_match_nolit_encodeSnappyBlockAsm64K:
-#ifdef GOAMD64_v3
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#else
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#endif
+	RBIT  R8, R8
+	CLZ   R8, R8
 	ASR   $0x03, R8, R8
 	ADD   R8, R9, R9
 	MOVWU R9, R9
@@ -14923,13 +14437,11 @@ emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm64K_memmove_move_33through64
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_emit_remainder_encodeSnappyBlockAsm64K:
@@ -14945,7 +14457,6 @@ memmove_long_emit_remainder_encodeSnappyBlockAsm64K:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	MOVD  R3, R6
 	LSR   $0x05, R6, R6
@@ -14974,11 +14485,9 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm64Klarge_big_loop_back:
 emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm64Klarge_forward_sse_loop_32:
 	ADD   R7, R0, R15
 	FMOVQ -32(R15), F4
-	ADD   R7, R0, R15
 	FMOVQ -16(R15), F5
 	ADD   R7, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R7, R7
 	CMP   R7, R3
@@ -14987,7 +14496,6 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm64Klarge_forward_sse_lo
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R2, R1
 
@@ -15192,13 +14700,11 @@ emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm12B_memmove_move_33through64:
 	FMOVQ 16(R8), F1
 	ADD   R7, R8, R15
 	FMOVQ -32(R15), F2
-	ADD   R7, R8, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R7, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_repeat_emit_encodeSnappyBlockAsm12B:
@@ -15213,7 +14719,6 @@ memmove_long_repeat_emit_encodeSnappyBlockAsm12B:
 	FMOVQ 16(R8), F1
 	ADD   R7, R8, R15
 	FMOVQ -32(R15), F2
-	ADD   R7, R8, R15
 	FMOVQ -16(R15), F3
 	MOVD  R7, R10
 	LSR   $0x05, R10, R10
@@ -15242,11 +14747,9 @@ emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm12Blarge_big_loop_back:
 emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm12Blarge_forward_sse_loop_32:
 	ADD   R11, R8, R15
 	FMOVQ -32(R15), F4
-	ADD   R11, R8, R15
 	FMOVQ -16(R15), F5
 	ADD   R11, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R11, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R11, R11
 	CMP   R11, R7
@@ -15255,7 +14758,6 @@ emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm12Blarge_forward_sse_loop_
 	FMOVQ F1, 16(R1)
 	ADD   R7, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -15294,15 +14796,8 @@ matchlen_loopback_16_repeat_extend_encodeSnappyBlockAsm12B:
 	JMP   matchlen_loopback_16_repeat_extend_encodeSnappyBlockAsm12B
 
 matchlen_bsf_16repeat_extend_encodeSnappyBlockAsm12B:
-#ifdef GOAMD64_v3
-	RBIT R11, R11
-	CLZ  R11, R11
-
-#else
-	RBIT R11, R11
-	CLZ  R11, R11
-
-#endif
+	RBIT  R11, R11
+	CLZ   R11, R11
 	ASR   $0x03, R11, R11
 	ADD   R11, R10, R10
 	ADD   $8, R10, R10
@@ -15324,15 +14819,8 @@ matchlen_match8_repeat_extend_encodeSnappyBlockAsm12B:
 	JMP   matchlen_match4_repeat_extend_encodeSnappyBlockAsm12B
 
 matchlen_bsf_8_repeat_extend_encodeSnappyBlockAsm12B:
-#ifdef GOAMD64_v3
-	RBIT R9, R9
-	CLZ  R9, R9
-
-#else
-	RBIT R9, R9
-	CLZ  R9, R9
-
-#endif
+	RBIT  R9, R9
+	CLZ   R9, R9
 	ASR   $0x03, R9, R9
 	ADD   R9, R10, R10
 	MOVWU R10, R10
@@ -15564,13 +15052,11 @@ emit_lit_memmove_match_emit_encodeSnappyBlockAsm12B_memmove_move_33through64:
 	FMOVQ 16(R6), F1
 	ADD   R8, R6, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R6, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_encodeSnappyBlockAsm12B:
@@ -15585,7 +15071,6 @@ memmove_long_match_emit_encodeSnappyBlockAsm12B:
 	FMOVQ 16(R6), F1
 	ADD   R8, R6, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R6, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R10
 	LSR   $0x05, R10, R10
@@ -15614,11 +15099,9 @@ emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm12Blarge_big_loop_back:
 emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm12Blarge_forward_sse_loop_32:
 	ADD   R11, R6, R15
 	FMOVQ -32(R15), F4
-	ADD   R11, R6, R15
 	FMOVQ -16(R15), F5
 	ADD   R11, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R11, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R11, R11
 	CMP   R11, R8
@@ -15627,7 +15110,6 @@ emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm12Blarge_forward_sse_loop_3
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R7, R1
 
@@ -15668,15 +15150,8 @@ matchlen_loopback_16_match_nolit_encodeSnappyBlockAsm12B:
 	JMP   matchlen_loopback_16_match_nolit_encodeSnappyBlockAsm12B
 
 matchlen_bsf_16match_nolit_encodeSnappyBlockAsm12B:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R9, R9
 	ADD   $8, R9, R9
@@ -15698,15 +15173,8 @@ matchlen_match8_match_nolit_encodeSnappyBlockAsm12B:
 	JMP   matchlen_match4_match_nolit_encodeSnappyBlockAsm12B
 
 matchlen_bsf_8_match_nolit_encodeSnappyBlockAsm12B:
-#ifdef GOAMD64_v3
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#else
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#endif
+	RBIT  R8, R8
+	CLZ   R8, R8
 	ASR   $0x03, R8, R8
 	ADD   R8, R9, R9
 	MOVWU R9, R9
@@ -15945,13 +15413,11 @@ emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm12B_memmove_move_33through64
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_emit_remainder_encodeSnappyBlockAsm12B:
@@ -15967,7 +15433,6 @@ memmove_long_emit_remainder_encodeSnappyBlockAsm12B:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	MOVD  R3, R6
 	LSR   $0x05, R6, R6
@@ -15996,11 +15461,9 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm12Blarge_big_loop_back:
 emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm12Blarge_forward_sse_loop_32:
 	ADD   R7, R0, R15
 	FMOVQ -32(R15), F4
-	ADD   R7, R0, R15
 	FMOVQ -16(R15), F5
 	ADD   R7, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R7, R7
 	CMP   R7, R3
@@ -16009,7 +15472,6 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm12Blarge_forward_sse_lo
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R2, R1
 
@@ -16214,13 +15676,11 @@ emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm10B_memmove_move_33through64:
 	FMOVQ 16(R8), F1
 	ADD   R7, R8, R15
 	FMOVQ -32(R15), F2
-	ADD   R7, R8, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R7, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_repeat_emit_encodeSnappyBlockAsm10B:
@@ -16235,7 +15695,6 @@ memmove_long_repeat_emit_encodeSnappyBlockAsm10B:
 	FMOVQ 16(R8), F1
 	ADD   R7, R8, R15
 	FMOVQ -32(R15), F2
-	ADD   R7, R8, R15
 	FMOVQ -16(R15), F3
 	MOVD  R7, R10
 	LSR   $0x05, R10, R10
@@ -16264,11 +15723,9 @@ emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm10Blarge_big_loop_back:
 emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm10Blarge_forward_sse_loop_32:
 	ADD   R11, R8, R15
 	FMOVQ -32(R15), F4
-	ADD   R11, R8, R15
 	FMOVQ -16(R15), F5
 	ADD   R11, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R11, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R11, R11
 	CMP   R11, R7
@@ -16277,7 +15734,6 @@ emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm10Blarge_forward_sse_loop_
 	FMOVQ F1, 16(R1)
 	ADD   R7, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -16316,15 +15772,8 @@ matchlen_loopback_16_repeat_extend_encodeSnappyBlockAsm10B:
 	JMP   matchlen_loopback_16_repeat_extend_encodeSnappyBlockAsm10B
 
 matchlen_bsf_16repeat_extend_encodeSnappyBlockAsm10B:
-#ifdef GOAMD64_v3
-	RBIT R11, R11
-	CLZ  R11, R11
-
-#else
-	RBIT R11, R11
-	CLZ  R11, R11
-
-#endif
+	RBIT  R11, R11
+	CLZ   R11, R11
 	ASR   $0x03, R11, R11
 	ADD   R11, R10, R10
 	ADD   $8, R10, R10
@@ -16346,15 +15795,8 @@ matchlen_match8_repeat_extend_encodeSnappyBlockAsm10B:
 	JMP   matchlen_match4_repeat_extend_encodeSnappyBlockAsm10B
 
 matchlen_bsf_8_repeat_extend_encodeSnappyBlockAsm10B:
-#ifdef GOAMD64_v3
-	RBIT R9, R9
-	CLZ  R9, R9
-
-#else
-	RBIT R9, R9
-	CLZ  R9, R9
-
-#endif
+	RBIT  R9, R9
+	CLZ   R9, R9
 	ASR   $0x03, R9, R9
 	ADD   R9, R10, R10
 	MOVWU R10, R10
@@ -16586,13 +16028,11 @@ emit_lit_memmove_match_emit_encodeSnappyBlockAsm10B_memmove_move_33through64:
 	FMOVQ 16(R6), F1
 	ADD   R8, R6, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R6, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_encodeSnappyBlockAsm10B:
@@ -16607,7 +16047,6 @@ memmove_long_match_emit_encodeSnappyBlockAsm10B:
 	FMOVQ 16(R6), F1
 	ADD   R8, R6, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R6, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R10
 	LSR   $0x05, R10, R10
@@ -16636,11 +16075,9 @@ emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm10Blarge_big_loop_back:
 emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm10Blarge_forward_sse_loop_32:
 	ADD   R11, R6, R15
 	FMOVQ -32(R15), F4
-	ADD   R11, R6, R15
 	FMOVQ -16(R15), F5
 	ADD   R11, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R11, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R11, R11
 	CMP   R11, R8
@@ -16649,7 +16086,6 @@ emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm10Blarge_forward_sse_loop_3
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R7, R1
 
@@ -16690,15 +16126,8 @@ matchlen_loopback_16_match_nolit_encodeSnappyBlockAsm10B:
 	JMP   matchlen_loopback_16_match_nolit_encodeSnappyBlockAsm10B
 
 matchlen_bsf_16match_nolit_encodeSnappyBlockAsm10B:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R9, R9
 	ADD   $8, R9, R9
@@ -16720,15 +16149,8 @@ matchlen_match8_match_nolit_encodeSnappyBlockAsm10B:
 	JMP   matchlen_match4_match_nolit_encodeSnappyBlockAsm10B
 
 matchlen_bsf_8_match_nolit_encodeSnappyBlockAsm10B:
-#ifdef GOAMD64_v3
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#else
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#endif
+	RBIT  R8, R8
+	CLZ   R8, R8
 	ASR   $0x03, R8, R8
 	ADD   R8, R9, R9
 	MOVWU R9, R9
@@ -16967,13 +16389,11 @@ emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm10B_memmove_move_33through64
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_emit_remainder_encodeSnappyBlockAsm10B:
@@ -16989,7 +16409,6 @@ memmove_long_emit_remainder_encodeSnappyBlockAsm10B:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	MOVD  R3, R6
 	LSR   $0x05, R6, R6
@@ -17018,11 +16437,9 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm10Blarge_big_loop_back:
 emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm10Blarge_forward_sse_loop_32:
 	ADD   R7, R0, R15
 	FMOVQ -32(R15), F4
-	ADD   R7, R0, R15
 	FMOVQ -16(R15), F5
 	ADD   R7, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R7, R7
 	CMP   R7, R3
@@ -17031,7 +16448,6 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm10Blarge_forward_sse_lo
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R2, R1
 
@@ -17236,13 +16652,11 @@ emit_lit_memmove_repeat_emit_encodeSnappyBlockAsm8B_memmove_move_33through64:
 	FMOVQ 16(R8), F1
 	ADD   R7, R8, R15
 	FMOVQ -32(R15), F2
-	ADD   R7, R8, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R7, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_repeat_emit_encodeSnappyBlockAsm8B:
@@ -17257,7 +16671,6 @@ memmove_long_repeat_emit_encodeSnappyBlockAsm8B:
 	FMOVQ 16(R8), F1
 	ADD   R7, R8, R15
 	FMOVQ -32(R15), F2
-	ADD   R7, R8, R15
 	FMOVQ -16(R15), F3
 	MOVD  R7, R10
 	LSR   $0x05, R10, R10
@@ -17286,11 +16699,9 @@ emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm8Blarge_big_loop_back:
 emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm8Blarge_forward_sse_loop_32:
 	ADD   R11, R8, R15
 	FMOVQ -32(R15), F4
-	ADD   R11, R8, R15
 	FMOVQ -16(R15), F5
 	ADD   R11, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R11, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R11, R11
 	CMP   R11, R7
@@ -17299,7 +16710,6 @@ emit_lit_memmove_long_repeat_emit_encodeSnappyBlockAsm8Blarge_forward_sse_loop_3
 	FMOVQ F1, 16(R1)
 	ADD   R7, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -17338,15 +16748,8 @@ matchlen_loopback_16_repeat_extend_encodeSnappyBlockAsm8B:
 	JMP   matchlen_loopback_16_repeat_extend_encodeSnappyBlockAsm8B
 
 matchlen_bsf_16repeat_extend_encodeSnappyBlockAsm8B:
-#ifdef GOAMD64_v3
-	RBIT R11, R11
-	CLZ  R11, R11
-
-#else
-	RBIT R11, R11
-	CLZ  R11, R11
-
-#endif
+	RBIT  R11, R11
+	CLZ   R11, R11
 	ASR   $0x03, R11, R11
 	ADD   R11, R10, R10
 	ADD   $8, R10, R10
@@ -17368,15 +16771,8 @@ matchlen_match8_repeat_extend_encodeSnappyBlockAsm8B:
 	JMP   matchlen_match4_repeat_extend_encodeSnappyBlockAsm8B
 
 matchlen_bsf_8_repeat_extend_encodeSnappyBlockAsm8B:
-#ifdef GOAMD64_v3
-	RBIT R9, R9
-	CLZ  R9, R9
-
-#else
-	RBIT R9, R9
-	CLZ  R9, R9
-
-#endif
+	RBIT  R9, R9
+	CLZ   R9, R9
 	ASR   $0x03, R9, R9
 	ADD   R9, R10, R10
 	MOVWU R10, R10
@@ -17606,13 +17002,11 @@ emit_lit_memmove_match_emit_encodeSnappyBlockAsm8B_memmove_move_33through64:
 	FMOVQ 16(R6), F1
 	ADD   R8, R6, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R6, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_encodeSnappyBlockAsm8B:
@@ -17627,7 +17021,6 @@ memmove_long_match_emit_encodeSnappyBlockAsm8B:
 	FMOVQ 16(R6), F1
 	ADD   R8, R6, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R6, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R10
 	LSR   $0x05, R10, R10
@@ -17656,11 +17049,9 @@ emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm8Blarge_big_loop_back:
 emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm8Blarge_forward_sse_loop_32:
 	ADD   R11, R6, R15
 	FMOVQ -32(R15), F4
-	ADD   R11, R6, R15
 	FMOVQ -16(R15), F5
 	ADD   R11, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R11, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R11, R11
 	CMP   R11, R8
@@ -17669,7 +17060,6 @@ emit_lit_memmove_long_match_emit_encodeSnappyBlockAsm8Blarge_forward_sse_loop_32
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R7, R1
 
@@ -17710,15 +17100,8 @@ matchlen_loopback_16_match_nolit_encodeSnappyBlockAsm8B:
 	JMP   matchlen_loopback_16_match_nolit_encodeSnappyBlockAsm8B
 
 matchlen_bsf_16match_nolit_encodeSnappyBlockAsm8B:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R9, R9
 	ADD   $8, R9, R9
@@ -17740,15 +17123,8 @@ matchlen_match8_match_nolit_encodeSnappyBlockAsm8B:
 	JMP   matchlen_match4_match_nolit_encodeSnappyBlockAsm8B
 
 matchlen_bsf_8_match_nolit_encodeSnappyBlockAsm8B:
-#ifdef GOAMD64_v3
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#else
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#endif
+	RBIT  R8, R8
+	CLZ   R8, R8
 	ASR   $0x03, R8, R8
 	ADD   R8, R9, R9
 	MOVWU R9, R9
@@ -17985,13 +17361,11 @@ emit_lit_memmove_emit_remainder_encodeSnappyBlockAsm8B_memmove_move_33through64:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_emit_remainder_encodeSnappyBlockAsm8B:
@@ -18007,7 +17381,6 @@ memmove_long_emit_remainder_encodeSnappyBlockAsm8B:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	MOVD  R3, R6
 	LSR   $0x05, R6, R6
@@ -18036,11 +17409,9 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm8Blarge_big_loop_back:
 emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm8Blarge_forward_sse_loop_32:
 	ADD   R7, R0, R15
 	FMOVQ -32(R15), F4
-	ADD   R7, R0, R15
 	FMOVQ -16(R15), F5
 	ADD   R7, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R7, R7
 	CMP   R7, R3
@@ -18049,7 +17420,6 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBlockAsm8Blarge_forward_sse_loo
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R2, R1
 
@@ -18131,7 +17501,6 @@ check_maxskip_cont_encodeSnappyBetterBlockAsm:
 	ADD   R10<<2, R0, R15
 	MOVWU 524288(R15), R7
 	MOVW  R2, (R0)(R9<<2)
-	ADD   R10<<2, R0, R15
 	MOVW  R2, 524288(R15)
 	MOVD  (R3)(R5), R9
 	MOVD  (R3)(R7), R10
@@ -18236,15 +17605,8 @@ matchlen_loopback_16_match_nolit_encodeSnappyBetterBlockAsm:
 	JMP   matchlen_loopback_16_match_nolit_encodeSnappyBetterBlockAsm
 
 matchlen_bsf_16match_nolit_encodeSnappyBetterBlockAsm:
-#ifdef GOAMD64_v3
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#else
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#endif
+	RBIT  R12, R12
+	CLZ   R12, R12
 	ASR   $0x03, R12, R12
 	ADD   R12, R11, R11
 	ADD   $8, R11, R11
@@ -18266,15 +17628,8 @@ matchlen_match8_match_nolit_encodeSnappyBetterBlockAsm:
 	JMP   matchlen_match4_match_nolit_encodeSnappyBetterBlockAsm
 
 matchlen_bsf_8_match_nolit_encodeSnappyBetterBlockAsm:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R11, R11
 	MOVWU R11, R11
@@ -18426,13 +17781,11 @@ emit_lit_memmove_match_emit_encodeSnappyBetterBlockAsm_memmove_move_33through64:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_encodeSnappyBetterBlockAsm:
@@ -18447,7 +17800,6 @@ memmove_long_match_emit_encodeSnappyBetterBlockAsm:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R12
 	LSR   $0x05, R12, R12
@@ -18476,11 +17828,9 @@ emit_lit_memmove_long_match_emit_encodeSnappyBetterBlockAsmlarge_big_loop_back:
 emit_lit_memmove_long_match_emit_encodeSnappyBetterBlockAsmlarge_forward_sse_loop_32:
 	ADD   R13, R9, R15
 	FMOVQ -32(R15), F4
-	ADD   R13, R9, R15
 	FMOVQ -16(R15), F5
 	ADD   R13, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R13, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R13, R13
 	CMP   R13, R8
@@ -18489,7 +17839,6 @@ emit_lit_memmove_long_match_emit_encodeSnappyBetterBlockAsmlarge_forward_sse_loo
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -18764,13 +18113,11 @@ emit_lit_memmove_emit_remainder_encodeSnappyBetterBlockAsm_memmove_move_33throug
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_emit_remainder_encodeSnappyBetterBlockAsm:
@@ -18786,7 +18133,6 @@ memmove_long_emit_remainder_encodeSnappyBetterBlockAsm:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	MOVD  R3, R6
 	LSR   $0x05, R6, R6
@@ -18815,11 +18161,9 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBetterBlockAsmlarge_big_loop_ba
 emit_lit_memmove_long_emit_remainder_encodeSnappyBetterBlockAsmlarge_forward_sse_loop_32:
 	ADD   R7, R0, R15
 	FMOVQ -32(R15), F4
-	ADD   R7, R0, R15
 	FMOVQ -16(R15), F5
 	ADD   R7, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R7, R7
 	CMP   R7, R3
@@ -18828,7 +18172,6 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBetterBlockAsmlarge_forward_sse
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R2, R1
 
@@ -18901,7 +18244,6 @@ search_loop_encodeSnappyBetterBlockAsm64K:
 	ADD   R10<<2, R0, R15
 	MOVWU 262144(R15), R7
 	MOVW  R2, (R0)(R9<<2)
-	ADD   R10<<2, R0, R15
 	MOVW  R2, 262144(R15)
 	MOVD  (R3)(R5), R9
 	MOVD  (R3)(R7), R10
@@ -19006,15 +18348,8 @@ matchlen_loopback_16_match_nolit_encodeSnappyBetterBlockAsm64K:
 	JMP   matchlen_loopback_16_match_nolit_encodeSnappyBetterBlockAsm64K
 
 matchlen_bsf_16match_nolit_encodeSnappyBetterBlockAsm64K:
-#ifdef GOAMD64_v3
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#else
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#endif
+	RBIT  R12, R12
+	CLZ   R12, R12
 	ASR   $0x03, R12, R12
 	ADD   R12, R11, R11
 	ADD   $8, R11, R11
@@ -19036,15 +18371,8 @@ matchlen_match8_match_nolit_encodeSnappyBetterBlockAsm64K:
 	JMP   matchlen_match4_match_nolit_encodeSnappyBetterBlockAsm64K
 
 matchlen_bsf_8_match_nolit_encodeSnappyBetterBlockAsm64K:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R11, R11
 	MOVWU R11, R11
@@ -19169,13 +18497,11 @@ emit_lit_memmove_match_emit_encodeSnappyBetterBlockAsm64K_memmove_move_33through
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_encodeSnappyBetterBlockAsm64K:
@@ -19190,7 +18516,6 @@ memmove_long_match_emit_encodeSnappyBetterBlockAsm64K:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R12
 	LSR   $0x05, R12, R12
@@ -19219,11 +18544,9 @@ emit_lit_memmove_long_match_emit_encodeSnappyBetterBlockAsm64Klarge_big_loop_bac
 emit_lit_memmove_long_match_emit_encodeSnappyBetterBlockAsm64Klarge_forward_sse_loop_32:
 	ADD   R13, R9, R15
 	FMOVQ -32(R15), F4
-	ADD   R13, R9, R15
 	FMOVQ -16(R15), F5
 	ADD   R13, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R13, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R13, R13
 	CMP   R13, R8
@@ -19232,7 +18555,6 @@ emit_lit_memmove_long_match_emit_encodeSnappyBetterBlockAsm64Klarge_forward_sse_
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -19461,13 +18783,11 @@ emit_lit_memmove_emit_remainder_encodeSnappyBetterBlockAsm64K_memmove_move_33thr
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_emit_remainder_encodeSnappyBetterBlockAsm64K:
@@ -19483,7 +18803,6 @@ memmove_long_emit_remainder_encodeSnappyBetterBlockAsm64K:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	MOVD  R3, R6
 	LSR   $0x05, R6, R6
@@ -19512,11 +18831,9 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBetterBlockAsm64Klarge_big_loop
 emit_lit_memmove_long_emit_remainder_encodeSnappyBetterBlockAsm64Klarge_forward_sse_loop_32:
 	ADD   R7, R0, R15
 	FMOVQ -32(R15), F4
-	ADD   R7, R0, R15
 	FMOVQ -16(R15), F5
 	ADD   R7, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R7, R7
 	CMP   R7, R3
@@ -19525,7 +18842,6 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBetterBlockAsm64Klarge_forward_
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R2, R1
 
@@ -19598,7 +18914,6 @@ search_loop_encodeSnappyBetterBlockAsm12B:
 	ADD   R10<<2, R0, R15
 	MOVWU 65536(R15), R7
 	MOVW  R2, (R0)(R9<<2)
-	ADD   R10<<2, R0, R15
 	MOVW  R2, 65536(R15)
 	MOVD  (R3)(R5), R9
 	MOVD  (R3)(R7), R10
@@ -19703,15 +19018,8 @@ matchlen_loopback_16_match_nolit_encodeSnappyBetterBlockAsm12B:
 	JMP   matchlen_loopback_16_match_nolit_encodeSnappyBetterBlockAsm12B
 
 matchlen_bsf_16match_nolit_encodeSnappyBetterBlockAsm12B:
-#ifdef GOAMD64_v3
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#else
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#endif
+	RBIT  R12, R12
+	CLZ   R12, R12
 	ASR   $0x03, R12, R12
 	ADD   R12, R11, R11
 	ADD   $8, R11, R11
@@ -19733,15 +19041,8 @@ matchlen_match8_match_nolit_encodeSnappyBetterBlockAsm12B:
 	JMP   matchlen_match4_match_nolit_encodeSnappyBetterBlockAsm12B
 
 matchlen_bsf_8_match_nolit_encodeSnappyBetterBlockAsm12B:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R11, R11
 	MOVWU R11, R11
@@ -19866,13 +19167,11 @@ emit_lit_memmove_match_emit_encodeSnappyBetterBlockAsm12B_memmove_move_33through
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_encodeSnappyBetterBlockAsm12B:
@@ -19887,7 +19186,6 @@ memmove_long_match_emit_encodeSnappyBetterBlockAsm12B:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R12
 	LSR   $0x05, R12, R12
@@ -19916,11 +19214,9 @@ emit_lit_memmove_long_match_emit_encodeSnappyBetterBlockAsm12Blarge_big_loop_bac
 emit_lit_memmove_long_match_emit_encodeSnappyBetterBlockAsm12Blarge_forward_sse_loop_32:
 	ADD   R13, R9, R15
 	FMOVQ -32(R15), F4
-	ADD   R13, R9, R15
 	FMOVQ -16(R15), F5
 	ADD   R13, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R13, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R13, R13
 	CMP   R13, R8
@@ -19929,7 +19225,6 @@ emit_lit_memmove_long_match_emit_encodeSnappyBetterBlockAsm12Blarge_forward_sse_
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -20158,13 +19453,11 @@ emit_lit_memmove_emit_remainder_encodeSnappyBetterBlockAsm12B_memmove_move_33thr
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_emit_remainder_encodeSnappyBetterBlockAsm12B:
@@ -20180,7 +19473,6 @@ memmove_long_emit_remainder_encodeSnappyBetterBlockAsm12B:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	MOVD  R3, R6
 	LSR   $0x05, R6, R6
@@ -20209,11 +19501,9 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBetterBlockAsm12Blarge_big_loop
 emit_lit_memmove_long_emit_remainder_encodeSnappyBetterBlockAsm12Blarge_forward_sse_loop_32:
 	ADD   R7, R0, R15
 	FMOVQ -32(R15), F4
-	ADD   R7, R0, R15
 	FMOVQ -16(R15), F5
 	ADD   R7, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R7, R7
 	CMP   R7, R3
@@ -20222,7 +19512,6 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBetterBlockAsm12Blarge_forward_
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R2, R1
 
@@ -20295,7 +19584,6 @@ search_loop_encodeSnappyBetterBlockAsm10B:
 	ADD   R10<<2, R0, R15
 	MOVWU 16384(R15), R7
 	MOVW  R2, (R0)(R9<<2)
-	ADD   R10<<2, R0, R15
 	MOVW  R2, 16384(R15)
 	MOVD  (R3)(R5), R9
 	MOVD  (R3)(R7), R10
@@ -20400,15 +19688,8 @@ matchlen_loopback_16_match_nolit_encodeSnappyBetterBlockAsm10B:
 	JMP   matchlen_loopback_16_match_nolit_encodeSnappyBetterBlockAsm10B
 
 matchlen_bsf_16match_nolit_encodeSnappyBetterBlockAsm10B:
-#ifdef GOAMD64_v3
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#else
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#endif
+	RBIT  R12, R12
+	CLZ   R12, R12
 	ASR   $0x03, R12, R12
 	ADD   R12, R11, R11
 	ADD   $8, R11, R11
@@ -20430,15 +19711,8 @@ matchlen_match8_match_nolit_encodeSnappyBetterBlockAsm10B:
 	JMP   matchlen_match4_match_nolit_encodeSnappyBetterBlockAsm10B
 
 matchlen_bsf_8_match_nolit_encodeSnappyBetterBlockAsm10B:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R11, R11
 	MOVWU R11, R11
@@ -20563,13 +19837,11 @@ emit_lit_memmove_match_emit_encodeSnappyBetterBlockAsm10B_memmove_move_33through
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_encodeSnappyBetterBlockAsm10B:
@@ -20584,7 +19856,6 @@ memmove_long_match_emit_encodeSnappyBetterBlockAsm10B:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R12
 	LSR   $0x05, R12, R12
@@ -20613,11 +19884,9 @@ emit_lit_memmove_long_match_emit_encodeSnappyBetterBlockAsm10Blarge_big_loop_bac
 emit_lit_memmove_long_match_emit_encodeSnappyBetterBlockAsm10Blarge_forward_sse_loop_32:
 	ADD   R13, R9, R15
 	FMOVQ -32(R15), F4
-	ADD   R13, R9, R15
 	FMOVQ -16(R15), F5
 	ADD   R13, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R13, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R13, R13
 	CMP   R13, R8
@@ -20626,7 +19895,6 @@ emit_lit_memmove_long_match_emit_encodeSnappyBetterBlockAsm10Blarge_forward_sse_
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -20855,13 +20123,11 @@ emit_lit_memmove_emit_remainder_encodeSnappyBetterBlockAsm10B_memmove_move_33thr
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_emit_remainder_encodeSnappyBetterBlockAsm10B:
@@ -20877,7 +20143,6 @@ memmove_long_emit_remainder_encodeSnappyBetterBlockAsm10B:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	MOVD  R3, R6
 	LSR   $0x05, R6, R6
@@ -20906,11 +20171,9 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBetterBlockAsm10Blarge_big_loop
 emit_lit_memmove_long_emit_remainder_encodeSnappyBetterBlockAsm10Blarge_forward_sse_loop_32:
 	ADD   R7, R0, R15
 	FMOVQ -32(R15), F4
-	ADD   R7, R0, R15
 	FMOVQ -16(R15), F5
 	ADD   R7, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R7, R7
 	CMP   R7, R3
@@ -20919,7 +20182,6 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBetterBlockAsm10Blarge_forward_
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R2, R1
 
@@ -20992,7 +20254,6 @@ search_loop_encodeSnappyBetterBlockAsm8B:
 	ADD   R10<<2, R0, R15
 	MOVWU 4096(R15), R7
 	MOVW  R2, (R0)(R9<<2)
-	ADD   R10<<2, R0, R15
 	MOVW  R2, 4096(R15)
 	MOVD  (R3)(R5), R9
 	MOVD  (R3)(R7), R10
@@ -21097,15 +20358,8 @@ matchlen_loopback_16_match_nolit_encodeSnappyBetterBlockAsm8B:
 	JMP   matchlen_loopback_16_match_nolit_encodeSnappyBetterBlockAsm8B
 
 matchlen_bsf_16match_nolit_encodeSnappyBetterBlockAsm8B:
-#ifdef GOAMD64_v3
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#else
-	RBIT R12, R12
-	CLZ  R12, R12
-
-#endif
+	RBIT  R12, R12
+	CLZ   R12, R12
 	ASR   $0x03, R12, R12
 	ADD   R12, R11, R11
 	ADD   $8, R11, R11
@@ -21127,15 +20381,8 @@ matchlen_match8_match_nolit_encodeSnappyBetterBlockAsm8B:
 	JMP   matchlen_match4_match_nolit_encodeSnappyBetterBlockAsm8B
 
 matchlen_bsf_8_match_nolit_encodeSnappyBetterBlockAsm8B:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R11, R11
 	MOVWU R11, R11
@@ -21260,13 +20507,11 @@ emit_lit_memmove_match_emit_encodeSnappyBetterBlockAsm8B_memmove_move_33through6
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_match_emit_encodeSnappyBetterBlockAsm8B:
@@ -21281,7 +20526,6 @@ memmove_long_match_emit_encodeSnappyBetterBlockAsm8B:
 	FMOVQ 16(R9), F1
 	ADD   R8, R9, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R9, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R12
 	LSR   $0x05, R12, R12
@@ -21310,11 +20554,9 @@ emit_lit_memmove_long_match_emit_encodeSnappyBetterBlockAsm8Blarge_big_loop_back
 emit_lit_memmove_long_match_emit_encodeSnappyBetterBlockAsm8Blarge_forward_sse_loop_32:
 	ADD   R13, R9, R15
 	FMOVQ -32(R15), F4
-	ADD   R13, R9, R15
 	FMOVQ -16(R15), F5
 	ADD   R13, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R13, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R13, R13
 	CMP   R13, R8
@@ -21323,7 +20565,6 @@ emit_lit_memmove_long_match_emit_encodeSnappyBetterBlockAsm8Blarge_forward_sse_l
 	FMOVQ F1, 16(R1)
 	ADD   R8, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R5, R1
 
@@ -21550,13 +20791,11 @@ emit_lit_memmove_emit_remainder_encodeSnappyBetterBlockAsm8B_memmove_move_33thro
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R1)
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_emit_remainder_encodeSnappyBetterBlockAsm8B:
@@ -21572,7 +20811,6 @@ memmove_long_emit_remainder_encodeSnappyBetterBlockAsm8B:
 	FMOVQ 16(R0), F1
 	ADD   R3, R0, R15
 	FMOVQ -32(R15), F2
-	ADD   R3, R0, R15
 	FMOVQ -16(R15), F3
 	MOVD  R3, R6
 	LSR   $0x05, R6, R6
@@ -21601,11 +20839,9 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBetterBlockAsm8Blarge_big_loop_
 emit_lit_memmove_long_emit_remainder_encodeSnappyBetterBlockAsm8Blarge_forward_sse_loop_32:
 	ADD   R7, R0, R15
 	FMOVQ -32(R15), F4
-	ADD   R7, R0, R15
 	FMOVQ -16(R15), F5
 	ADD   R7, R1, R15
 	FMOVQ F4, -32(R15)
-	ADD   R7, R1, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R7, R7
 	CMP   R7, R3
@@ -21614,7 +20850,6 @@ emit_lit_memmove_long_emit_remainder_encodeSnappyBetterBlockAsm8Blarge_forward_s
 	FMOVQ F1, 16(R1)
 	ADD   R3, R1, R15
 	FMOVQ F2, -32(R15)
-	ADD   R3, R1, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R2, R1
 
@@ -21821,15 +21056,8 @@ matchlen_loopback_16_repeat_extend_calcBlockSize:
 	JMP   matchlen_loopback_16_repeat_extend_calcBlockSize
 
 matchlen_bsf_16repeat_extend_calcBlockSize:
-#ifdef GOAMD64_v3
-	RBIT R11, R11
-	CLZ  R11, R11
-
-#else
-	RBIT R11, R11
-	CLZ  R11, R11
-
-#endif
+	RBIT  R11, R11
+	CLZ   R11, R11
 	ASR   $0x03, R11, R11
 	ADD   R11, R10, R10
 	ADD   $8, R10, R10
@@ -21851,15 +21079,8 @@ matchlen_match8_repeat_extend_calcBlockSize:
 	JMP   matchlen_match4_repeat_extend_calcBlockSize
 
 matchlen_bsf_8_repeat_extend_calcBlockSize:
-#ifdef GOAMD64_v3
-	RBIT R9, R9
-	CLZ  R9, R9
-
-#else
-	RBIT R9, R9
-	CLZ  R9, R9
-
-#endif
+	RBIT  R9, R9
+	CLZ   R9, R9
 	ASR   $0x03, R9, R9
 	ADD   R9, R10, R10
 	MOVWU R10, R10
@@ -22101,15 +21322,8 @@ matchlen_loopback_16_match_nolit_calcBlockSize:
 	JMP   matchlen_loopback_16_match_nolit_calcBlockSize
 
 matchlen_bsf_16match_nolit_calcBlockSize:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R9, R9
 	ADD   $8, R9, R9
@@ -22131,15 +21345,8 @@ matchlen_match8_match_nolit_calcBlockSize:
 	JMP   matchlen_match4_match_nolit_calcBlockSize
 
 matchlen_bsf_8_match_nolit_calcBlockSize:
-#ifdef GOAMD64_v3
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#else
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#endif
+	RBIT  R8, R8
+	CLZ   R8, R8
 	ASR   $0x03, R8, R8
 	ADD   R8, R9, R9
 	MOVWU R9, R9
@@ -22518,15 +21725,8 @@ matchlen_loopback_16_repeat_extend_calcBlockSizeSmall:
 	JMP   matchlen_loopback_16_repeat_extend_calcBlockSizeSmall
 
 matchlen_bsf_16repeat_extend_calcBlockSizeSmall:
-#ifdef GOAMD64_v3
-	RBIT R11, R11
-	CLZ  R11, R11
-
-#else
-	RBIT R11, R11
-	CLZ  R11, R11
-
-#endif
+	RBIT  R11, R11
+	CLZ   R11, R11
 	ASR   $0x03, R11, R11
 	ADD   R11, R10, R10
 	ADD   $8, R10, R10
@@ -22548,15 +21748,8 @@ matchlen_match8_repeat_extend_calcBlockSizeSmall:
 	JMP   matchlen_match4_repeat_extend_calcBlockSizeSmall
 
 matchlen_bsf_8_repeat_extend_calcBlockSizeSmall:
-#ifdef GOAMD64_v3
-	RBIT R9, R9
-	CLZ  R9, R9
-
-#else
-	RBIT R9, R9
-	CLZ  R9, R9
-
-#endif
+	RBIT  R9, R9
+	CLZ   R9, R9
 	ASR   $0x03, R9, R9
 	ADD   R9, R10, R10
 	MOVWU R10, R10
@@ -22767,15 +21960,8 @@ matchlen_loopback_16_match_nolit_calcBlockSizeSmall:
 	JMP   matchlen_loopback_16_match_nolit_calcBlockSizeSmall
 
 matchlen_bsf_16match_nolit_calcBlockSizeSmall:
-#ifdef GOAMD64_v3
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#else
-	RBIT R10, R10
-	CLZ  R10, R10
-
-#endif
+	RBIT  R10, R10
+	CLZ   R10, R10
 	ASR   $0x03, R10, R10
 	ADD   R10, R9, R9
 	ADD   $8, R9, R9
@@ -22797,15 +21983,8 @@ matchlen_match8_match_nolit_calcBlockSizeSmall:
 	JMP   matchlen_match4_match_nolit_calcBlockSizeSmall
 
 matchlen_bsf_8_match_nolit_calcBlockSizeSmall:
-#ifdef GOAMD64_v3
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#else
-	RBIT R8, R8
-	CLZ  R8, R8
-
-#endif
+	RBIT  R8, R8
+	CLZ   R8, R8
 	ASR   $0x03, R8, R8
 	ADD   R8, R9, R9
 	MOVWU R9, R9
@@ -23091,13 +22270,11 @@ emit_lit_memmove_standalone_memmove_move_33through64:
 	FMOVQ 16(R1), F1
 	ADD   R2, R1, R15
 	FMOVQ -32(R15), F2
-	ADD   R2, R1, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R0)
 	FMOVQ F1, 16(R0)
 	ADD   R2, R0, R15
 	FMOVQ F2, -32(R15)
-	ADD   R2, R0, R15
 	FMOVQ F3, -16(R15)
 	JMP   emit_literal_end_standalone
 	JMP emit_literal_end_standalone
@@ -23108,7 +22285,6 @@ memmove_long_standalone:
 	FMOVQ 16(R1), F1
 	ADD   R2, R1, R15
 	FMOVQ -32(R15), F2
-	ADD   R2, R1, R15
 	FMOVQ -16(R15), F3
 	MOVD  R2, R6
 	LSR   $0x05, R6, R6
@@ -23137,11 +22313,9 @@ emit_lit_memmove_long_standalonelarge_big_loop_back:
 emit_lit_memmove_long_standalonelarge_forward_sse_loop_32:
 	ADD   R7, R1, R15
 	FMOVQ -32(R15), F4
-	ADD   R7, R1, R15
 	FMOVQ -16(R15), F5
 	ADD   R7, R0, R15
 	FMOVQ F4, -32(R15)
-	ADD   R7, R0, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R7, R7
 	CMP   R7, R2
@@ -23150,7 +22324,6 @@ emit_lit_memmove_long_standalonelarge_forward_sse_loop_32:
 	FMOVQ F1, 16(R0)
 	ADD   R2, R0, R15
 	FMOVQ F2, -32(R15)
-	ADD   R2, R0, R15
 	FMOVQ F3, -16(R15)
 	JMP   emit_literal_end_standalone
 	JMP emit_literal_end_standalone
@@ -23716,15 +22889,8 @@ matchlen_loopback_16_standalone:
 	JMP   matchlen_loopback_16_standalone
 
 matchlen_bsf_16standalone:
-#ifdef GOAMD64_v3
-	RBIT R6, R6
-	CLZ  R6, R6
-
-#else
-	RBIT R6, R6
-	CLZ  R6, R6
-
-#endif
+	RBIT  R6, R6
+	CLZ   R6, R6
 	ASR   $0x03, R6, R6
 	ADD   R6, R5, R5
 	ADD   $8, R5, R5
@@ -23746,15 +22912,8 @@ matchlen_match8_standalone:
 	JMP   matchlen_match4_standalone
 
 matchlen_bsf_8_standalone:
-#ifdef GOAMD64_v3
-	RBIT R3, R3
-	CLZ  R3, R3
-
-#else
-	RBIT R3, R3
-	CLZ  R3, R3
-
-#endif
+	RBIT  R3, R3
+	CLZ   R3, R3
 	ASR   $0x03, R3, R3
 	ADD   R3, R5, R5
 	MOVWU R5, R5
@@ -23936,13 +23095,11 @@ emit_lit_memmove_lz4_s2_memmove_move_33through64:
 	FMOVQ 16(R2), F1
 	ADD   R8, R2, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R2, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R0)
 	FMOVQ F1, 16(R0)
 	ADD   R8, R0, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R0, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_lz4_s2:
@@ -23957,7 +23114,6 @@ memmove_long_lz4_s2:
 	FMOVQ 16(R2), F1
 	ADD   R8, R2, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R2, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R12
 	LSR   $0x05, R12, R12
@@ -23986,11 +23142,9 @@ emit_lit_memmove_long_lz4_s2large_big_loop_back:
 emit_lit_memmove_long_lz4_s2large_forward_sse_loop_32:
 	ADD   R13, R2, R15
 	FMOVQ -32(R15), F4
-	ADD   R13, R2, R15
 	FMOVQ -16(R15), F5
 	ADD   R13, R0, R15
 	FMOVQ F4, -32(R15)
-	ADD   R13, R0, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R13, R13
 	CMP   R13, R8
@@ -23999,7 +23153,6 @@ emit_lit_memmove_long_lz4_s2large_forward_sse_loop_32:
 	FMOVQ F1, 16(R0)
 	ADD   R8, R0, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R0, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R10, R0
 
@@ -24486,13 +23639,11 @@ emit_lit_memmove_lz4s_s2_memmove_move_33through64:
 	FMOVQ 16(R2), F1
 	ADD   R8, R2, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R2, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R0)
 	FMOVQ F1, 16(R0)
 	ADD   R8, R0, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R0, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_lz4s_s2:
@@ -24507,7 +23658,6 @@ memmove_long_lz4s_s2:
 	FMOVQ 16(R2), F1
 	ADD   R8, R2, R15
 	FMOVQ -32(R15), F2
-	ADD   R8, R2, R15
 	FMOVQ -16(R15), F3
 	MOVD  R8, R12
 	LSR   $0x05, R12, R12
@@ -24536,11 +23686,9 @@ emit_lit_memmove_long_lz4s_s2large_big_loop_back:
 emit_lit_memmove_long_lz4s_s2large_forward_sse_loop_32:
 	ADD   R13, R2, R15
 	FMOVQ -32(R15), F4
-	ADD   R13, R2, R15
 	FMOVQ -16(R15), F5
 	ADD   R13, R0, R15
 	FMOVQ F4, -32(R15)
-	ADD   R13, R0, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R13, R13
 	CMP   R13, R8
@@ -24549,7 +23697,6 @@ emit_lit_memmove_long_lz4s_s2large_forward_sse_loop_32:
 	FMOVQ F1, 16(R0)
 	ADD   R8, R0, R15
 	FMOVQ F2, -32(R15)
-	ADD   R8, R0, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R10, R0
 
@@ -25037,13 +24184,11 @@ emit_lit_memmove_lz4_snappy_memmove_move_33through64:
 	FMOVQ 16(R2), F1
 	ADD   R7, R2, R15
 	FMOVQ -32(R15), F2
-	ADD   R7, R2, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R0)
 	FMOVQ F1, 16(R0)
 	ADD   R7, R0, R15
 	FMOVQ F2, -32(R15)
-	ADD   R7, R0, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_lz4_snappy:
@@ -25058,7 +24203,6 @@ memmove_long_lz4_snappy:
 	FMOVQ 16(R2), F1
 	ADD   R7, R2, R15
 	FMOVQ -32(R15), F2
-	ADD   R7, R2, R15
 	FMOVQ -16(R15), F3
 	MOVD  R7, R11
 	LSR   $0x05, R11, R11
@@ -25087,11 +24231,9 @@ emit_lit_memmove_long_lz4_snappylarge_big_loop_back:
 emit_lit_memmove_long_lz4_snappylarge_forward_sse_loop_32:
 	ADD   R12, R2, R15
 	FMOVQ -32(R15), F4
-	ADD   R12, R2, R15
 	FMOVQ -16(R15), F5
 	ADD   R12, R0, R15
 	FMOVQ F4, -32(R15)
-	ADD   R12, R0, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R12, R12
 	CMP   R12, R7
@@ -25100,7 +24242,6 @@ emit_lit_memmove_long_lz4_snappylarge_forward_sse_loop_32:
 	FMOVQ F1, 16(R0)
 	ADD   R7, R0, R15
 	FMOVQ F2, -32(R15)
-	ADD   R7, R0, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R9, R0
 
@@ -25332,13 +24473,11 @@ emit_lit_memmove_lz4s_snappy_memmove_move_33through64:
 	FMOVQ 16(R2), F1
 	ADD   R7, R2, R15
 	FMOVQ -32(R15), F2
-	ADD   R7, R2, R15
 	FMOVQ -16(R15), F3
 	FMOVQ F0, (R0)
 	FMOVQ F1, 16(R0)
 	ADD   R7, R0, R15
 	FMOVQ F2, -32(R15)
-	ADD   R7, R0, R15
 	FMOVQ F3, -16(R15)
 
 memmove_end_copy_lz4s_snappy:
@@ -25353,7 +24492,6 @@ memmove_long_lz4s_snappy:
 	FMOVQ 16(R2), F1
 	ADD   R7, R2, R15
 	FMOVQ -32(R15), F2
-	ADD   R7, R2, R15
 	FMOVQ -16(R15), F3
 	MOVD  R7, R11
 	LSR   $0x05, R11, R11
@@ -25382,11 +24520,9 @@ emit_lit_memmove_long_lz4s_snappylarge_big_loop_back:
 emit_lit_memmove_long_lz4s_snappylarge_forward_sse_loop_32:
 	ADD   R12, R2, R15
 	FMOVQ -32(R15), F4
-	ADD   R12, R2, R15
 	FMOVQ -16(R15), F5
 	ADD   R12, R0, R15
 	FMOVQ F4, -32(R15)
-	ADD   R12, R0, R15
 	FMOVQ F5, -16(R15)
 	ADD   $0x20, R12, R12
 	CMP   R12, R7
@@ -25395,7 +24531,6 @@ emit_lit_memmove_long_lz4s_snappylarge_forward_sse_loop_32:
 	FMOVQ F1, 16(R0)
 	ADD   R7, R0, R15
 	FMOVQ F2, -32(R15)
-	ADD   R7, R0, R15
 	FMOVQ F3, -16(R15)
 	MOVD  R9, R0
 
