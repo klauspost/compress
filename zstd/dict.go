@@ -378,6 +378,9 @@ func BuildDict(o BuildDictOptions) ([]byte, error) {
 	if nUsed == 0 || seqs == 0 {
 		return nil, fmt.Errorf("%d blocks, %d sequences found", nUsed, seqs)
 	}
+	if litTotal == 0 {
+		return nil, errors.New("0 literals found")
+	}
 	if debug {
 		println("Sequences:", seqs, "Blocks:", nUsed, "Literals:", litTotal)
 	}

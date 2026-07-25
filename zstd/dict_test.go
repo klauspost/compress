@@ -166,6 +166,34 @@ func TestBuildDictHomogeneousCorpusValidOffsets(t *testing.T) {
 	}
 }
 
+func TestBuildDictFullyMatchableCorpusReturnsError(t *testing.T) {
+	block := bytes.Repeat([]byte("ABCDABCDABCDABCD"), 64)
+	var contents [][]byte
+	var history []byte
+	for range 32 {
+		contents = append(contents, block)
+		history = append(history, block...)
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("BuildDict panicked for fully matchable corpus: %v", r)
+		}
+	}()
+	_, err := BuildDict(BuildDictOptions{
+		ID:       1,
+		Contents: contents,
+		History:  history,
+		Level:    SpeedDefault,
+	})
+	if err == nil {
+		t.Fatal("BuildDict succeeded for corpus with no literals; want error")
+	}
+	if !strings.Contains(err.Error(), "0 literals") {
+		t.Fatalf("BuildDict error = %v, want mention 0 literals", err)
+	}
+}
+
 func BenchmarkBuildDictLevelPaths(b *testing.B) {
 	samples, history, _ := buildDictLevelPathFixture()
 	for _, tt := range []struct {
