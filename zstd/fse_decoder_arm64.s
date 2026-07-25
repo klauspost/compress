@@ -28,9 +28,9 @@ TEXT ·buildDtable_asm(SB), $0-24
 init_main_loop:
 	ADD  R8<<1, R1, R15
 	MOVH (R15), R9
-	AND  $0xffff, R9, R15
 	MOVD $-1, R16
 	AND  $0xffff, R16, R16
+	AND  $0xffff, R9, R15
 	CMP  R16, R15
 	BNE  do_not_update_high_threshold
 	ADD  R7<<3, R5, R15
@@ -39,8 +39,7 @@ init_main_loop:
 	MOVD $0x0000000000000001, R9
 
 do_not_update_high_threshold:
-	ADD  R8<<1, R3, R15
-	MOVH R9, (R15)
+	MOVH R9, (R3)(R8<<1)
 	ADD  $1, R8, R8
 
 init_main_loop_condition:
@@ -105,8 +104,7 @@ build_table_main_table:
 	ADD   R1<<1, R3, R15
 	MOVHU (R15), R7
 	ADD   $1, R7, R8
-	ADD   R1<<1, R3, R15
-	MOVH  R8, (R15)
+	MOVH  R8, (R3)(R1<<1)
 	MOVD  R7, R8
 	CLZ   R8, R16
 	MOVD  $63, R8
@@ -117,7 +115,6 @@ build_table_main_table:
 	SUB   R0, R7, R7
 	ADD   R6<<3, R5, R15
 	MOVB  R1, (R15)
-	ADD   R6<<3, R5, R15
 	MOVH  R7, 2(R15)
 	CMP   R0, R7
 	BLE   build_table_check1_ok
@@ -129,12 +126,12 @@ build_table_main_table:
 	RET
 
 build_table_check1_ok:
-	AND  $0xff, R1, R15
 	AND  $0xff, R1, R16
+	AND  $0xff, R1, R15
 	TST  R16, R15
 	BNE  build_table_check2_ok
-	AND  $0xffff, R7, R15
 	AND  $0xffff, R6, R16
+	AND  $0xffff, R7, R15
 	CMP  R16, R15
 	BNE  build_table_check2_ok
 	MOVD ctx+8(FP), R0

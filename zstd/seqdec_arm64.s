@@ -178,8 +178,7 @@ sequenceDecs_decode_amd64_ll_update_zero:
 	// Load ctx.llTable
 	MOVD ctx+16(FP), R1
 	MOVD (R1), R1
-	ADD  R6<<3, R1, R15
-	MOVD (R15), R6
+	MOVD (R1)(R6<<3), R6
 
 	// Update Match Length State
 	MOVBU R7, R13
@@ -199,8 +198,7 @@ sequenceDecs_decode_amd64_ll_update_zero:
 	// Load ctx.mlTable
 	MOVD ctx+16(FP), R1
 	MOVD 24(R1), R1
-	ADD  R7<<3, R1, R15
-	MOVD (R15), R7
+	MOVD (R1)(R7<<3), R7
 
 	// Update Offset State
 	MOVBU R8, R13
@@ -220,8 +218,7 @@ sequenceDecs_decode_amd64_ll_update_zero:
 	// Load ctx.ofTable
 	MOVD ctx+16(FP), R1
 	MOVD 48(R1), R1
-	ADD  R8<<3, R1, R15
-	MOVD (R15), R8
+	MOVD (R1)(R8<<3), R8
 
 sequenceDecs_decode_amd64_skip_update:
 	// Adjust offset
@@ -500,8 +497,7 @@ sequenceDecs_decode_56_amd64_ll_update_zero:
 	// Load ctx.llTable
 	MOVD ctx+16(FP), R1
 	MOVD (R1), R1
-	ADD  R6<<3, R1, R15
-	MOVD (R15), R6
+	MOVD (R1)(R6<<3), R6
 
 	// Update Match Length State
 	MOVBU R7, R13
@@ -521,8 +517,7 @@ sequenceDecs_decode_56_amd64_ll_update_zero:
 	// Load ctx.mlTable
 	MOVD ctx+16(FP), R1
 	MOVD 24(R1), R1
-	ADD  R7<<3, R1, R15
-	MOVD (R15), R7
+	MOVD (R1)(R7<<3), R7
 
 	// Update Offset State
 	MOVBU R8, R13
@@ -542,8 +537,7 @@ sequenceDecs_decode_56_amd64_ll_update_zero:
 	// Load ctx.ofTable
 	MOVD ctx+16(FP), R1
 	MOVD 48(R1), R1
-	ADD  R8<<3, R1, R15
-	MOVD (R15), R8
+	MOVD (R1)(R8<<3), R8
 
 sequenceDecs_decode_56_amd64_skip_update:
 	// Adjust offset
@@ -716,16 +710,16 @@ main_loop:
 	MOVD $0, R13
 
 copy_1:
-	ADD  R13, R5, R15
-	VLD1 (R15), [V0.B16]
-	ADD  R13, R3, R15
-	VST1 [V0.B16], (R15)
-	ADD  $0x10, R13, R13
-	CMP  R10, R13
-	BLO  copy_1
-	ADD  R10, R5, R5
-	ADD  R10, R3, R3
-	ADD  R10, R6, R6
+	ADD   R13, R5, R15
+	FMOVQ (R15), F0
+	ADD   R13, R3, R15
+	FMOVQ F0, (R15)
+	ADD   $0x10, R13, R13
+	CMP   R10, R13
+	BLO   copy_1
+	ADD   R10, R5, R5
+	ADD   R10, R3, R3
+	ADD   R10, R6, R6
 
 	// Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)
 check_offset:
@@ -748,21 +742,19 @@ check_offset:
 	BLO  copy_4_small
 
 copy_4_loop:
-	VLD1 (R13), [V0.B16]
-	VST1 [V0.B16], (R3)
-	ADD  $0x10, R13, R13
-	ADD  $0x10, R3, R3
-	SUBS $0x10, R10, R10
-	BHS  copy_4_loop
-	ADD  R10, R13, R13
-	ADD  $16, R13, R13
-	ADD  R10, R3, R3
-	ADD  $16, R3, R3
-	ADD  $-16, R13, R15
-	VLD1 (R15), [V0.B16]
-	ADD  $-16, R3, R15
-	VST1 [V0.B16], (R15)
-	JMP  copy_4_end
+	FMOVQ (R13), F0
+	FMOVQ F0, (R3)
+	ADD   $0x10, R13, R13
+	ADD   $0x10, R3, R3
+	SUBS  $0x10, R10, R10
+	BHS   copy_4_loop
+	ADD   R10, R13, R13
+	ADD   $16, R13, R13
+	ADD   R10, R3, R3
+	ADD   $16, R3, R3
+	FMOVQ -16(R13), F0
+	FMOVQ F0, -16(R3)
+	JMP   copy_4_end
 
 copy_4_small:
 	CMP $0x03, R12
@@ -816,21 +808,19 @@ copy_all_from_history:
 	BLO  copy_5_small
 
 copy_5_loop:
-	VLD1 (R13), [V0.B16]
-	VST1 [V0.B16], (R3)
-	ADD  $0x10, R13, R13
-	ADD  $0x10, R3, R3
-	SUBS $0x10, R14, R14
-	BHS  copy_5_loop
-	ADD  R14, R13, R13
-	ADD  $16, R13, R13
-	ADD  R14, R3, R3
-	ADD  $16, R3, R3
-	ADD  $-16, R13, R15
-	VLD1 (R15), [V0.B16]
-	ADD  $-16, R3, R15
-	VST1 [V0.B16], (R15)
-	JMP  copy_5_end
+	FMOVQ (R13), F0
+	FMOVQ F0, (R3)
+	ADD   $0x10, R13, R13
+	ADD   $0x10, R3, R3
+	SUBS  $0x10, R14, R14
+	BHS   copy_5_loop
+	ADD   R14, R13, R13
+	ADD   $16, R13, R13
+	ADD   R14, R3, R3
+	ADD   $16, R3, R3
+	FMOVQ -16(R13), F0
+	FMOVQ F0, -16(R3)
+	JMP   copy_5_end
 
 copy_5_small:
 	CMP $0x03, R10
@@ -903,13 +893,13 @@ copy_match:
 	ADD  R12, R3, R3
 
 copy_2:
-	VLD1 (R10), [V0.B16]
-	VST1 [V0.B16], (R11)
-	ADD  $0x10, R10, R10
-	ADD  $0x10, R11, R11
-	SUBS $0x10, R12, R12
-	BHI  copy_2
-	JMP  handle_loop
+	FMOVQ (R10), F0
+	FMOVQ F0, (R11)
+	ADD   $0x10, R10, R10
+	ADD   $0x10, R11, R11
+	SUBS  $0x10, R12, R12
+	BHI   copy_2
+	JMP   handle_loop
 
 	// Copy overlapping match
 copy_overlapping_match:
@@ -1002,21 +992,19 @@ main_loop:
 	BLO  copy_1_small
 
 copy_1_loop:
-	VLD1 (R5), [V0.B16]
-	VST1 [V0.B16], (R3)
-	ADD  $0x10, R5, R5
-	ADD  $0x10, R3, R3
-	SUBS $0x10, R13, R13
-	BHS  copy_1_loop
-	ADD  R13, R5, R5
-	ADD  $16, R5, R5
-	ADD  R13, R3, R3
-	ADD  $16, R3, R3
-	ADD  $-16, R5, R15
-	VLD1 (R15), [V0.B16]
-	ADD  $-16, R3, R15
-	VST1 [V0.B16], (R15)
-	JMP  copy_1_end
+	FMOVQ (R5), F0
+	FMOVQ F0, (R3)
+	ADD   $0x10, R5, R5
+	ADD   $0x10, R3, R3
+	SUBS  $0x10, R13, R13
+	BHS   copy_1_loop
+	ADD   R13, R5, R5
+	ADD   $16, R5, R5
+	ADD   R13, R3, R3
+	ADD   $16, R3, R3
+	FMOVQ -16(R5), F0
+	FMOVQ F0, -16(R3)
+	JMP   copy_1_end
 
 copy_1_small:
 	CMP $0x03, R10
@@ -1094,21 +1082,19 @@ check_offset:
 	BLO  copy_4_small
 
 copy_4_loop:
-	VLD1 (R13), [V0.B16]
-	VST1 [V0.B16], (R3)
-	ADD  $0x10, R13, R13
-	ADD  $0x10, R3, R3
-	SUBS $0x10, R10, R10
-	BHS  copy_4_loop
-	ADD  R10, R13, R13
-	ADD  $16, R13, R13
-	ADD  R10, R3, R3
-	ADD  $16, R3, R3
-	ADD  $-16, R13, R15
-	VLD1 (R15), [V0.B16]
-	ADD  $-16, R3, R15
-	VST1 [V0.B16], (R15)
-	JMP  copy_4_end
+	FMOVQ (R13), F0
+	FMOVQ F0, (R3)
+	ADD   $0x10, R13, R13
+	ADD   $0x10, R3, R3
+	SUBS  $0x10, R10, R10
+	BHS   copy_4_loop
+	ADD   R10, R13, R13
+	ADD   $16, R13, R13
+	ADD   R10, R3, R3
+	ADD   $16, R3, R3
+	FMOVQ -16(R13), F0
+	FMOVQ F0, -16(R3)
+	JMP   copy_4_end
 
 copy_4_small:
 	CMP $0x03, R12
@@ -1162,21 +1148,19 @@ copy_all_from_history:
 	BLO  copy_5_small
 
 copy_5_loop:
-	VLD1 (R13), [V0.B16]
-	VST1 [V0.B16], (R3)
-	ADD  $0x10, R13, R13
-	ADD  $0x10, R3, R3
-	SUBS $0x10, R14, R14
-	BHS  copy_5_loop
-	ADD  R14, R13, R13
-	ADD  $16, R13, R13
-	ADD  R14, R3, R3
-	ADD  $16, R3, R3
-	ADD  $-16, R13, R15
-	VLD1 (R15), [V0.B16]
-	ADD  $-16, R3, R15
-	VST1 [V0.B16], (R15)
-	JMP  copy_5_end
+	FMOVQ (R13), F0
+	FMOVQ F0, (R3)
+	ADD   $0x10, R13, R13
+	ADD   $0x10, R3, R3
+	SUBS  $0x10, R14, R14
+	BHS   copy_5_loop
+	ADD   R14, R13, R13
+	ADD   $16, R13, R13
+	ADD   R14, R3, R3
+	ADD   $16, R3, R3
+	FMOVQ -16(R13), F0
+	FMOVQ F0, -16(R3)
+	JMP   copy_5_end
 
 copy_5_small:
 	CMP $0x03, R10
@@ -1250,21 +1234,19 @@ copy_match:
 	BLO  copy_2_small
 
 copy_2_loop:
-	VLD1 (R10), [V0.B16]
-	VST1 [V0.B16], (R3)
-	ADD  $0x10, R10, R10
-	ADD  $0x10, R3, R3
-	SUBS $0x10, R11, R11
-	BHS  copy_2_loop
-	ADD  R11, R10, R10
-	ADD  $16, R10, R10
-	ADD  R11, R3, R3
-	ADD  $16, R3, R3
-	ADD  $-16, R10, R15
-	VLD1 (R15), [V0.B16]
-	ADD  $-16, R3, R15
-	VST1 [V0.B16], (R15)
-	JMP  copy_2_end
+	FMOVQ (R10), F0
+	FMOVQ F0, (R3)
+	ADD   $0x10, R10, R10
+	ADD   $0x10, R3, R3
+	SUBS  $0x10, R11, R11
+	BHS   copy_2_loop
+	ADD   R11, R10, R10
+	ADD   $16, R10, R10
+	ADD   R11, R3, R3
+	ADD   $16, R3, R3
+	FMOVQ -16(R10), F0
+	FMOVQ F0, -16(R3)
+	JMP   copy_2_end
 
 copy_2_small:
 	CMP $0x03, R12
@@ -1571,8 +1553,7 @@ sequenceDecs_decodeSync_amd64_ll_update_zero:
 	// Load ctx.llTable
 	MOVD ctx+16(FP), R1
 	MOVD (R1), R1
-	ADD  R6<<3, R1, R15
-	MOVD (R15), R6
+	MOVD (R1)(R6<<3), R6
 
 	// Update Match Length State
 	MOVBU R7, R12
@@ -1592,8 +1573,7 @@ sequenceDecs_decodeSync_amd64_ll_update_zero:
 	// Load ctx.mlTable
 	MOVD ctx+16(FP), R1
 	MOVD 24(R1), R1
-	ADD  R7<<3, R1, R15
-	MOVD (R15), R7
+	MOVD (R1)(R7<<3), R7
 
 	// Update Offset State
 	MOVBU R8, R12
@@ -1613,21 +1593,18 @@ sequenceDecs_decodeSync_amd64_ll_update_zero:
 	// Load ctx.ofTable
 	MOVD ctx+16(FP), R1
 	MOVD 48(R1), R1
-	ADD  R8<<3, R1, R15
-	MOVD (R15), R8
+	MOVD (R1)(R8<<3), R8
 
 sequenceDecs_decodeSync_amd64_skip_update:
 	// Adjust offset
-	MOVD s+0(FP), R1
-	MOVD 16(RSP), R12
-	CMP  $0x01, R0
-	BLS  sequenceDecs_decodeSync_amd64_adjust_offsetB_1_or_0
-	ADD  $144, R1, R15
-	VLD1 (R15), [V0.B16]
-	MOVD R12, 144(R1)
-	ADD  $152, R1, R15
-	VST1 [V0.B16], (R15)
-	JMP  sequenceDecs_decodeSync_amd64_after_adjust
+	MOVD  s+0(FP), R1
+	MOVD  16(RSP), R12
+	CMP   $0x01, R0
+	BLS   sequenceDecs_decodeSync_amd64_adjust_offsetB_1_or_0
+	FMOVQ 144(R1), F0
+	MOVD  R12, 144(R1)
+	FMOVQ F0, 152(R1)
+	JMP   sequenceDecs_decodeSync_amd64_after_adjust
 
 sequenceDecs_decodeSync_amd64_adjust_offsetB_1_or_0:
 	MOVD 32(RSP), R16
@@ -1709,16 +1686,16 @@ sequenceDecs_decodeSync_amd64_match_len_ofs_ok:
 	MOVD $0, R13
 
 copy_1:
-	ADD  R13, R10, R15
-	VLD1 (R15), [V0.B16]
-	ADD  R13, R9, R15
-	VST1 [V0.B16], (R15)
-	ADD  $0x10, R13, R13
-	CMP  R0, R13
-	BLO  copy_1
-	ADD  R0, R10, R10
-	ADD  R0, R9, R9
-	ADD  R0, R11, R11
+	ADD   R13, R10, R15
+	FMOVQ (R15), F0
+	ADD   R13, R9, R15
+	FMOVQ F0, (R15)
+	ADD   $0x10, R13, R13
+	CMP   R0, R13
+	BLO   copy_1
+	ADD   R0, R10, R10
+	ADD   R0, R9, R9
+	ADD   R0, R11, R11
 
 	// Malformed input if seq.mo > t+len(hist) || seq.mo > s.windowSize)
 check_offset:
@@ -1744,21 +1721,19 @@ check_offset:
 	BLO  copy_4_small
 
 copy_4_loop:
-	VLD1 (R13), [V0.B16]
-	VST1 [V0.B16], (R9)
-	ADD  $0x10, R13, R13
-	ADD  $0x10, R9, R9
-	SUBS $0x10, R0, R0
-	BHS  copy_4_loop
-	ADD  R0, R13, R13
-	ADD  $16, R13, R13
-	ADD  R0, R9, R9
-	ADD  $16, R9, R9
-	ADD  $-16, R13, R15
-	VLD1 (R15), [V0.B16]
-	ADD  $-16, R9, R15
-	VST1 [V0.B16], (R15)
-	JMP  copy_4_end
+	FMOVQ (R13), F0
+	FMOVQ F0, (R9)
+	ADD   $0x10, R13, R13
+	ADD   $0x10, R9, R9
+	SUBS  $0x10, R0, R0
+	BHS   copy_4_loop
+	ADD   R0, R13, R13
+	ADD   $16, R13, R13
+	ADD   R0, R9, R9
+	ADD   $16, R9, R9
+	FMOVQ -16(R13), F0
+	FMOVQ F0, -16(R9)
+	JMP   copy_4_end
 
 copy_4_small:
 	CMP $0x03, R12
@@ -1809,21 +1784,19 @@ copy_all_from_history:
 	BLO  copy_5_small
 
 copy_5_loop:
-	VLD1 (R13), [V0.B16]
-	VST1 [V0.B16], (R9)
-	ADD  $0x10, R13, R13
-	ADD  $0x10, R9, R9
-	SUBS $0x10, R14, R14
-	BHS  copy_5_loop
-	ADD  R14, R13, R13
-	ADD  $16, R13, R13
-	ADD  R14, R9, R9
-	ADD  $16, R9, R9
-	ADD  $-16, R13, R15
-	VLD1 (R15), [V0.B16]
-	ADD  $-16, R9, R15
-	VST1 [V0.B16], (R15)
-	JMP  copy_5_end
+	FMOVQ (R13), F0
+	FMOVQ F0, (R9)
+	ADD   $0x10, R13, R13
+	ADD   $0x10, R9, R9
+	SUBS  $0x10, R14, R14
+	BHS   copy_5_loop
+	ADD   R14, R13, R13
+	ADD   $16, R13, R13
+	ADD   R14, R9, R9
+	ADD   $16, R9, R9
+	FMOVQ -16(R13), F0
+	FMOVQ F0, -16(R9)
+	JMP   copy_5_end
 
 copy_5_small:
 	CMP $0x03, R0
@@ -1896,13 +1869,13 @@ copy_match:
 	ADD  R12, R9, R9
 
 copy_2:
-	VLD1 (R0), [V0.B16]
-	VST1 [V0.B16], (R1)
-	ADD  $0x10, R0, R0
-	ADD  $0x10, R1, R1
-	SUBS $0x10, R12, R12
-	BHI  copy_2
-	JMP  handle_loop
+	FMOVQ (R0), F0
+	FMOVQ F0, (R1)
+	ADD   $0x10, R0, R0
+	ADD   $0x10, R1, R1
+	SUBS  $0x10, R12, R12
+	BHI   copy_2
+	JMP   handle_loop
 
 	// Copy overlapping match
 copy_overlapping_match:
@@ -2196,8 +2169,7 @@ sequenceDecs_decodeSync_safe_amd64_ll_update_zero:
 	// Load ctx.llTable
 	MOVD ctx+16(FP), R1
 	MOVD (R1), R1
-	ADD  R6<<3, R1, R15
-	MOVD (R15), R6
+	MOVD (R1)(R6<<3), R6
 
 	// Update Match Length State
 	MOVBU R7, R12
@@ -2217,8 +2189,7 @@ sequenceDecs_decodeSync_safe_amd64_ll_update_zero:
 	// Load ctx.mlTable
 	MOVD ctx+16(FP), R1
 	MOVD 24(R1), R1
-	ADD  R7<<3, R1, R15
-	MOVD (R15), R7
+	MOVD (R1)(R7<<3), R7
 
 	// Update Offset State
 	MOVBU R8, R12
@@ -2238,21 +2209,18 @@ sequenceDecs_decodeSync_safe_amd64_ll_update_zero:
 	// Load ctx.ofTable
 	MOVD ctx+16(FP), R1
 	MOVD 48(R1), R1
-	ADD  R8<<3, R1, R15
-	MOVD (R15), R8
+	MOVD (R1)(R8<<3), R8
 
 sequenceDecs_decodeSync_safe_amd64_skip_update:
 	// Adjust offset
-	MOVD s+0(FP), R1
-	MOVD 16(RSP), R12
-	CMP  $0x01, R0
-	BLS  sequenceDecs_decodeSync_safe_amd64_adjust_offsetB_1_or_0
-	ADD  $144, R1, R15
-	VLD1 (R15), [V0.B16]
-	MOVD R12, 144(R1)
-	ADD  $152, R1, R15
-	VST1 [V0.B16], (R15)
-	JMP  sequenceDecs_decodeSync_safe_amd64_after_adjust
+	MOVD  s+0(FP), R1
+	MOVD  16(RSP), R12
+	CMP   $0x01, R0
+	BLS   sequenceDecs_decodeSync_safe_amd64_adjust_offsetB_1_or_0
+	FMOVQ 144(R1), F0
+	MOVD  R12, 144(R1)
+	FMOVQ F0, 152(R1)
+	JMP   sequenceDecs_decodeSync_safe_amd64_after_adjust
 
 sequenceDecs_decodeSync_safe_amd64_adjust_offsetB_1_or_0:
 	MOVD 32(RSP), R16
@@ -2335,21 +2303,19 @@ sequenceDecs_decodeSync_safe_amd64_match_len_ofs_ok:
 	BLO  copy_1_small
 
 copy_1_loop:
-	VLD1 (R10), [V0.B16]
-	VST1 [V0.B16], (R9)
-	ADD  $0x10, R10, R10
-	ADD  $0x10, R9, R9
-	SUBS $0x10, R13, R13
-	BHS  copy_1_loop
-	ADD  R13, R10, R10
-	ADD  $16, R10, R10
-	ADD  R13, R9, R9
-	ADD  $16, R9, R9
-	ADD  $-16, R10, R15
-	VLD1 (R15), [V0.B16]
-	ADD  $-16, R9, R15
-	VST1 [V0.B16], (R15)
-	JMP  copy_1_end
+	FMOVQ (R10), F0
+	FMOVQ F0, (R9)
+	ADD   $0x10, R10, R10
+	ADD   $0x10, R9, R9
+	SUBS  $0x10, R13, R13
+	BHS   copy_1_loop
+	ADD   R13, R10, R10
+	ADD   $16, R10, R10
+	ADD   R13, R9, R9
+	ADD   $16, R9, R9
+	FMOVQ -16(R10), F0
+	FMOVQ F0, -16(R9)
+	JMP   copy_1_end
 
 copy_1_small:
 	CMP $0x03, R0
@@ -2430,21 +2396,19 @@ check_offset:
 	BLO  copy_4_small
 
 copy_4_loop:
-	VLD1 (R13), [V0.B16]
-	VST1 [V0.B16], (R9)
-	ADD  $0x10, R13, R13
-	ADD  $0x10, R9, R9
-	SUBS $0x10, R0, R0
-	BHS  copy_4_loop
-	ADD  R0, R13, R13
-	ADD  $16, R13, R13
-	ADD  R0, R9, R9
-	ADD  $16, R9, R9
-	ADD  $-16, R13, R15
-	VLD1 (R15), [V0.B16]
-	ADD  $-16, R9, R15
-	VST1 [V0.B16], (R15)
-	JMP  copy_4_end
+	FMOVQ (R13), F0
+	FMOVQ F0, (R9)
+	ADD   $0x10, R13, R13
+	ADD   $0x10, R9, R9
+	SUBS  $0x10, R0, R0
+	BHS   copy_4_loop
+	ADD   R0, R13, R13
+	ADD   $16, R13, R13
+	ADD   R0, R9, R9
+	ADD   $16, R9, R9
+	FMOVQ -16(R13), F0
+	FMOVQ F0, -16(R9)
+	JMP   copy_4_end
 
 copy_4_small:
 	CMP $0x03, R12
@@ -2495,21 +2459,19 @@ copy_all_from_history:
 	BLO  copy_5_small
 
 copy_5_loop:
-	VLD1 (R13), [V0.B16]
-	VST1 [V0.B16], (R9)
-	ADD  $0x10, R13, R13
-	ADD  $0x10, R9, R9
-	SUBS $0x10, R14, R14
-	BHS  copy_5_loop
-	ADD  R14, R13, R13
-	ADD  $16, R13, R13
-	ADD  R14, R9, R9
-	ADD  $16, R9, R9
-	ADD  $-16, R13, R15
-	VLD1 (R15), [V0.B16]
-	ADD  $-16, R9, R15
-	VST1 [V0.B16], (R15)
-	JMP  copy_5_end
+	FMOVQ (R13), F0
+	FMOVQ F0, (R9)
+	ADD   $0x10, R13, R13
+	ADD   $0x10, R9, R9
+	SUBS  $0x10, R14, R14
+	BHS   copy_5_loop
+	ADD   R14, R13, R13
+	ADD   $16, R13, R13
+	ADD   R14, R9, R9
+	ADD   $16, R9, R9
+	FMOVQ -16(R13), F0
+	FMOVQ F0, -16(R9)
+	JMP   copy_5_end
 
 copy_5_small:
 	CMP $0x03, R0
@@ -2583,21 +2545,19 @@ copy_match:
 	BLO  copy_2_small
 
 copy_2_loop:
-	VLD1 (R0), [V0.B16]
-	VST1 [V0.B16], (R9)
-	ADD  $0x10, R0, R0
-	ADD  $0x10, R9, R9
-	SUBS $0x10, R1, R1
-	BHS  copy_2_loop
-	ADD  R1, R0, R0
-	ADD  $16, R0, R0
-	ADD  R1, R9, R9
-	ADD  $16, R9, R9
-	ADD  $-16, R0, R15
-	VLD1 (R15), [V0.B16]
-	ADD  $-16, R9, R15
-	VST1 [V0.B16], (R15)
-	JMP  copy_2_end
+	FMOVQ (R0), F0
+	FMOVQ F0, (R9)
+	ADD   $0x10, R0, R0
+	ADD   $0x10, R9, R9
+	SUBS  $0x10, R1, R1
+	BHS   copy_2_loop
+	ADD   R1, R0, R0
+	ADD   $16, R0, R0
+	ADD   R1, R9, R9
+	ADD   $16, R9, R9
+	FMOVQ -16(R0), F0
+	FMOVQ F0, -16(R9)
+	JMP   copy_2_end
 
 copy_2_small:
 	CMP $0x03, R12
