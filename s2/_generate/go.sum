@@ -1,5 +1,7 @@
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
+github.com/honeycombio/avo v0.6.1-0.20260803051754-a8af1dad818d h1:qjwinLa2tIBcMJj6sBrO7G7wX9C4pisOrYcn6KgA/K0=
+github.com/honeycombio/avo v0.6.1-0.20260803051754-a8af1dad818d/go.mod h1:+Pk+j3KceMwAIGb32HZSCvkMCzJvxy6xCRk+urz7iPw=
 github.com/klauspost/asmfmt v1.3.2 h1:4Ri7ox3EwapiOjCki+hw14RyKk201CN4rzyCJRFLpK4=
 github.com/klauspost/asmfmt v1.3.2/go.mod h1:AG8TuvYojzulgDAMCnYn50l/5QV3Bs/tp6j0HLHbNSE=
 golang.org/x/mod v0.27.0 h1:kb+q2PyFnEADO2IEF935ehFUXlWiNjJWtRNgBLSfbxQ=

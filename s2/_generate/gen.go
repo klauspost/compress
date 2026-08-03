@@ -1,6 +1,7 @@
 package main
 
-//go:generate go run gen.go -out ../encodeblock.s -arch amd64,arm64 -stubs ../encodeblock_asm.go -pkg=s2
+//go:generate go run gen.go -out ../encodeblock_amd64.s -stubs ../encodeblock_asm.go -pkg=s2
+//go:generate go run gen.go -out ../encodeblock.s -arch arm64 -arm64gen -pkg=s2
 //go:generate gofmt -w ../encodeblock_asm.go
 //go:generate go run cleanup.go ../encodeblock_amd64.s ../encodeblock_arm64.s
 
@@ -21,6 +22,31 @@ import (
 // insert extra checks here and there.
 const debug = false
 
+// genArm64 emits the arm64 half. It is a separate run rather than a second
+// -arch on the amd64 one because the two differ in the assembler directives
+// they need: the GOAMD64 blocks below are meaningless on arm64, and the arm64
+// lowering refuses directives outright rather than trying to interpret them.
+// Keeping the amd64 pass unchanged is also what keeps its output identical.
+var genArm64 = flag.Bool("arm64gen", false, "emit the arm64 half, without the GOAMD64 directive blocks")
+
+// tzcnt emits a count-trailing-zeros over a value already known to be nonzero.
+// On amd64 the choice is made by the assembler: TZCNT where GOAMD64_v3 allows
+// it, BSF otherwise. arm64 has neither the directive nor a reason for one --
+// TZCNTQ lowers to RBIT+CLZ, which is exact even for a zero input.
+func tzcnt(r reg.GPVirtual) {
+	if *genArm64 {
+		TZCNTQ(r, r)
+		return
+	}
+	Comment("#ifdef GOAMD64_v3")
+	// 2016 BMI                 :TZCNT r64, r64                        L:   0.57ns=  2.0c  T:   0.29ns=  1.00c
+	//  315 AMD64               :BSF r64, r64                          L:   0.88ns=  3.1c  T:   0.86ns=  3.00c
+	TZCNTQ(r, r)
+	Comment("#else")
+	BSFQ(r, r)
+	Comment("#endif")
+}
+
 const (
 	limit14B = math.MaxUint32
 	// Use 12 bit table when no more than...
@@ -39,14 +65,19 @@ func main() {
 	Constraint(buildtags.Term("gc").ToConstraint())
 	Constraint(buildtags.Not("noasm").ToConstraint())
 
-	// We need a function to add comments.
-	TEXT("_dummy_", 0, "func()")
-	Comment("#ifdef GOAMD64_v4")
-	Comment("#ifndef GOAMD64_v3")
-	Comment("#define GOAMD64_v3")
-	Comment("#endif")
-	Comment("#endif")
-	RET()
+	if !*genArm64 {
+		// We need a function to add comments.
+		// Promoting v4 to v3 is an amd64 assembler concern; on arm64 the
+		// block is not just unnecessary, it is refused, since the lowering
+		// declines to interpret preprocessor directives at all.
+		TEXT("_dummy_", 0, "func()")
+		Comment("#ifdef GOAMD64_v4")
+		Comment("#ifndef GOAMD64_v3")
+		Comment("#define GOAMD64_v3")
+		Comment("#endif")
+		Comment("#endif")
+		RET()
+	}
 
 	o := options{
 		bmi1:         false,
@@ -2520,6 +2551,44 @@ func (o options) genMemMoveLong(name string, dst, src, length reg.GPVirtual, end
 		JAE(ok)
 	})
 
+	if *genArm64 {
+		// Same 32 bytes per iteration, without the flag trick. The loop below
+		// branches on JA after a DECQ, reading the carry that the SUBQ two
+		// instructions earlier left: x86 DECQ deliberately preserves CF, and
+		// the arm64 SUBS it lowers to does not. Here the branch reads a CMPQ
+		// that immediately precedes it.
+		//
+		// Dropping the destination-alignment attempt takes the head/tail
+		// snapshot with it, which is only safe because every caller that
+		// reaches this copies literals between two distinct buffers. The
+		// alignment was tuned for x86 write buffers in any case.
+		srcPos, dstPos, remain := GP64(), GP64(), GP64()
+		Xa, Xb := XMM(), XMM()
+		MOVQ(src, srcPos)
+		MOVQ(dst, dstPos)
+		MOVQ(length, remain)
+
+		Label(name + "big_loop_back")
+		MOVOU(Mem{Base: srcPos}, Xa)
+		MOVOU(Mem{Base: srcPos, Disp: 16}, Xb)
+		MOVOU(Xa, Mem{Base: dstPos})
+		MOVOU(Xb, Mem{Base: dstPos, Disp: 16})
+		ADDQ(U8(32), srcPos)
+		ADDQ(U8(32), dstPos)
+		SUBQ(U8(32), remain)
+		CMPQ(remain, U8(32))
+		JAE(LabelRef(name + "big_loop_back"))
+
+		// Under 32 bytes are left; lay the final 32 over what the loop wrote.
+		// length >= 64, so this stays in bounds.
+		MOVOU(Mem{Base: src, Disp: -32, Index: length, Scale: 1}, Xa)
+		MOVOU(Mem{Base: src, Disp: -16, Index: length, Scale: 1}, Xb)
+		MOVOU(Xa, Mem{Base: dst, Disp: -32, Index: length, Scale: 1})
+		MOVOU(Xb, Mem{Base: dst, Disp: -16, Index: length, Scale: 1})
+		JMP(end)
+		return
+	}
+
 	// These are disabled.
 	// AVX is ever so slightly faster, but it is disabled for simplicity.
 	const branchLoops = false
@@ -2803,13 +2872,7 @@ func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) re
 
 	Label("matchlen_bsf_16" + name)
 	// Not all match.
-	Comment("#ifdef GOAMD64_v3")
-	// 2016 BMI                 :TZCNT r64, r64                        L:   0.57ns=  2.0c  T:   0.29ns=  1.00c
-	//  315 AMD64               :BSF r64, r64                          L:   0.88ns=  3.1c  T:   0.86ns=  3.00c
-	TZCNTQ(tmp2, tmp2)
-	Comment("#else")
-	BSFQ(tmp2, tmp2)
-	Comment("#endif")
+	tzcnt(tmp2)
 
 	SARQ(U8(3), tmp2)
 	LEAL(Mem{Base: matched, Index: tmp2, Scale: 1, Disp: 8}, matched)
@@ -2828,13 +2891,7 @@ func (o options) matchLen(name string, a, b, len reg.GPVirtual, end LabelRef) re
 	Label("matchlen_bsf_8_" + name)
 
 	// Not all match.
-	Comment("#ifdef GOAMD64_v3")
-	// 2016 BMI                 :TZCNT r64, r64                        L:   0.57ns=  2.0c  T:   0.29ns=  1.00c
-	//  315 AMD64               :BSF r64, r64                          L:   0.88ns=  3.1c  T:   0.86ns=  3.00c
-	TZCNTQ(tmp, tmp)
-	Comment("#else")
-	BSFQ(tmp, tmp)
-	Comment("#endif")
+	tzcnt(tmp)
 
 	SARQ(U8(3), tmp)
 	LEAL(Mem{Base: matched, Index: tmp, Scale: 1}, matched)
