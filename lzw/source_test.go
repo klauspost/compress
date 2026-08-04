@@ -114,7 +114,7 @@ func TestSourceMatchesStd(t *testing.T) {
 		comp := lzwEncode(t, raw, LSB, 8)
 		streams = append(streams, comp, comp[:len(comp)/2])
 	}
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		streams = append(streams, randBytes(rng, rng.Intn(200)))
 	}
 	for i, in := range streams {

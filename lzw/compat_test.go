@@ -140,7 +140,7 @@ func runs(rng *rand.Rand, n int) []byte {
 // TestStdCompatCorrupt feeds arbitrary bytes to both decoders.
 func TestStdCompatCorrupt(t *testing.T) {
 	rng := rand.New(rand.NewSource(2))
-	for i := 0; i < 2000; i++ {
+	for i := range 2000 {
 		in := randBytes(rng, rng.Intn(300))
 		for _, order := range []Order{LSB, MSB} {
 			for _, litWidth := range []int{2, 5, 8} {

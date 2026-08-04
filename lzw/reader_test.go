@@ -179,7 +179,7 @@ func TestHiCodeDoesNotOverflow(t *testing.T) {
 	d := r.(*Reader)
 	buf := make([]byte, 1024)
 	oldHi := uint16(0)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		if _, err := io.ReadFull(r, buf); err != nil {
 			t.Fatalf("i=%d: %v", i, err)
 		}

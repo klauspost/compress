@@ -80,7 +80,7 @@ func testFile(t *testing.T, fn string, order Order, litWidth int) {
 		t.Errorf("%s (order=%d litWidth=%d): length mismatch %d != %d", fn, order, litWidth, len(b1), len(b0))
 		return
 	}
-	for i := 0; i < len(b0); i++ {
+	for i := range b0 {
 		if b1[i] != b0[i] {
 			t.Errorf("%s (order=%d litWidth=%d): mismatch at %d, 0x%02x != 0x%02x\n", fn, order, litWidth, i, b1[i], b0[i])
 			return

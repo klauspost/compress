@@ -236,7 +236,7 @@ func TestAldusSurvivesReset(t *testing.T) {
 
 	r := lzw.NewReader(bytes.NewReader(in), lzw.MSB, 8).(*lzw.Reader)
 	r.SetAldusCompatible(true)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		r.Reset(bytes.NewReader(in), lzw.MSB, 8)
 		got, err := drainAll(r)
 		if err != io.EOF || !bytes.Equal(got, raw) {
@@ -313,7 +313,7 @@ func TestAldusMaxWidthCode(t *testing.T) {
 	// 254 + 512 + 1024 + 2048 codes take hi from 257 to 4095, the point at which
 	// the table is full.
 	codes := []uint32{256}
-	for i := 0; i < 254+512+1024+2048; i++ {
+	for range 254 + 512 + 1024 + 2048 {
 		codes = append(codes, 0)
 	}
 	codes = append(codes, 4095, 257)
