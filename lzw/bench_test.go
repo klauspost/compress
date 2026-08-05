@@ -85,28 +85,38 @@ func makeSrc(kind srcKind, br *bytes.Reader) io.Reader {
 	return br
 }
 
+// resetSrc rewinds the source between iterations. The wrapper itself is reused so
+// that allocating it is not measured.
+func resetSrc(src io.Reader, br *bytes.Reader, comp []byte) {
+	br.Reset(comp)
+	if bufr, ok := src.(*bufio.Reader); ok {
+		bufr.Reset(br)
+	}
+}
+
 func benchDecode(b *testing.B, comp []byte, rawLen int, order Order, litWidth int, kind srcKind, std bool) {
 	dst := make([]byte, 64<<10)
 	br := bytes.NewReader(comp)
+	src := makeSrc(kind, br)
 	b.SetBytes(int64(rawLen))
 	b.ReportAllocs()
 	b.ResetTimer()
 
 	if std {
-		r := stdlzw.NewReader(makeSrc(kind, br), stdlzw.Order(order), litWidth).(*stdlzw.Reader)
+		r := stdlzw.NewReader(src, stdlzw.Order(order), litWidth).(*stdlzw.Reader)
 		for i := 0; i < b.N; i++ {
-			br.Reset(comp)
-			r.Reset(makeSrc(kind, br), stdlzw.Order(order), litWidth)
+			resetSrc(src, br, comp)
+			r.Reset(src, stdlzw.Order(order), litWidth)
 			if got := drain(b, r, dst); got != rawLen {
 				b.Fatalf("got %d bytes, want %d", got, rawLen)
 			}
 		}
 		return
 	}
-	var r resetter = newReader(makeSrc(kind, br), order, litWidth)
+	var r resetter = newReader(src, order, litWidth)
 	for i := 0; i < b.N; i++ {
-		br.Reset(comp)
-		r.Reset(makeSrc(kind, br), order, litWidth)
+		resetSrc(src, br, comp)
+		r.Reset(src, order, litWidth)
 		if got := drain(b, r, dst); got != rawLen {
 			b.Fatalf("got %d bytes, want %d", got, rawLen)
 		}

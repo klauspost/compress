@@ -132,24 +132,32 @@ type Reader struct {
 
 // Read implements io.Reader, reading uncompressed bytes from its underlying reader.
 func (r *Reader) Read(b []byte) (int, error) {
-	for {
+	// Decoding stops a whole maximal expansion short of the end of the buffer,
+	// so returning after one pass would hand back all but the last few KB of a
+	// large read. Keep going instead, and go short only once the stream itself
+	// has ended: a caller that does not loop then fails loudly rather than
+	// quietly losing the tail of every read.
+	n := 0
+	for n < len(b) {
 		if len(r.toRead) > 0 {
-			n := copy(b, r.toRead)
-			r.toRead = r.toRead[n:]
-			return n, nil
+			m := copy(b[n:], r.toRead)
+			r.toRead, n = r.toRead[m:], n+m
+			continue
 		}
 		if r.err != nil {
-			return 0, r.err
+			break
 		}
-		if len(b) >= 2*maxCodes {
+		if len(b)-n >= 2*maxCodes {
 			// There is room to expand any code, so skip the output buffer.
-			if n := r.decodeAny(b); n > 0 {
-				return n, nil
-			}
+			n += r.decodeAny(b[n:])
 			continue
 		}
 		r.toRead = r.output[:r.decodeAny(r.output[:])]
 	}
+	if n > 0 || len(r.toRead) > 0 {
+		return n, nil
+	}
+	return 0, r.err
 }
 
 func (r *Reader) decodeAny(dst []byte) int {

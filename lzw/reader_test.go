@@ -293,7 +293,10 @@ func BenchmarkDecoder(b *testing.B) {
 			runtime.GC()
 			b.StartTimer()
 			for i := 0; i < b.N; i++ {
-				io.Copy(io.Discard, NewReader(bytes.NewReader(buf1), LSB, 8))
+				got, err := io.Copy(io.Discard, NewReader(bytes.NewReader(buf1), LSB, 8))
+				if err != nil || got != int64(n) {
+					b.Fatalf("got %d bytes, %v; want %d", got, err, n)
+				}
 			}
 		})
 		b.Run(fmt.Sprint("1e-Reuse", e), func(b *testing.B) {
@@ -304,7 +307,10 @@ func BenchmarkDecoder(b *testing.B) {
 			b.StartTimer()
 			r := NewReader(bytes.NewReader(buf1), LSB, 8)
 			for i := 0; i < b.N; i++ {
-				io.Copy(io.Discard, r)
+				got, err := io.Copy(io.Discard, r)
+				if err != nil || got != int64(n) {
+					b.Fatalf("got %d bytes, %v; want %d", got, err, n)
+				}
 				r.Close()
 				r.(*Reader).Reset(bytes.NewReader(buf1), LSB, 8)
 			}

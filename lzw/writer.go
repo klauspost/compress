@@ -138,16 +138,14 @@ func (w *Writer) incHi() error {
 // sendClear sends a clear code and resets the writer state. It always returns
 // an error, errOutOfCodes if the clear code was sent successfully.
 func (w *Writer) sendClear() error {
-	clear := uint32(1) << w.litWidth
-	if err := w.emit(clear); err != nil {
+	clearCode := uint32(1) << w.litWidth
+	if err := w.emit(clearCode); err != nil {
 		return err
 	}
 	w.width = w.litWidth + 1
-	w.hi = clear + 1
-	w.overflow = clear << 1
-	for i := range w.table {
-		w.table[i] = invalidEntry
-	}
+	w.hi = clearCode + 1
+	w.overflow = clearCode << 1
+	clear(w.table[:])
 	return errOutOfCodes
 }
 

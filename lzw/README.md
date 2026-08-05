@@ -1,10 +1,11 @@
 # lzw
 
 This is a drop-in replacement for the standard library [`compress/lzw`](https://pkg.go.dev/compress/lzw) package,
-with a **decompressor that is typically 3-4x faster** and a **compressor that is 1.4-2.7x faster**.
+with a **decompressor 1.4-4x faster** and a **compressor 1.1-2.7x faster**, depending on the data. See the
+[measurements](#performance) for where in those ranges a given kind of input falls.
 
-Both are exactly compatible: decoding produces byte for byte identical output and reports the same errors for
-corrupt or truncated input, and encoding produces byte for byte identical compressed streams, so the
+Both are exactly compatible: decoding produces byte-for-byte identical output and reports the same errors for
+corrupt or truncated input, and encoding produces byte-for-byte identical compressed streams, so the
 compression ratio is unchanged.
 
 One difference to be aware of: `Read` writes codes out eight bytes at a time, so it may modify up to seven

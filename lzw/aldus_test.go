@@ -351,6 +351,39 @@ func FuzzAldus(f *testing.F) {
 	})
 }
 
+// TestReadFillsBuffer checks that a Read given room to decode into directly
+// hands back a full buffer while the stream still holds that much. An io.Reader
+// is not obliged to, but decoding stops a whole maximal expansion short of the
+// end of the buffer, so returning that count would leave a caller that does not
+// loop with all but the last few KB of its data — right enough to pass a glance
+// and wrong at the tail. Buffers too small to decode into directly are excluded:
+// they are served from the output buffer, and a short read there is as plain as
+// the one compress/lzw returns.
+func TestReadFillsBuffer(t *testing.T) {
+	raw := mask(testFiles(t)["Mark.Twain-Tom.Sawyer.txt"], 8)
+	for _, aldus := range []bool{false, true} {
+		in := refEncode(raw, lzw.MSB, 8, aldus)
+		for _, size := range []int{8192, 1 << 15, 100000, len(raw) + 1000} {
+			r := ourReader(in, lzw.MSB, 8, aldus)
+			buf := make([]byte, size)
+			for off := 0; off < len(raw); {
+				n, err := r.Read(buf)
+				if want := min(size, len(raw)-off); n != want {
+					t.Fatalf("aldus=%v size=%d off=%d: read %d bytes (%v), want %d",
+						aldus, size, off, n, err, want)
+				}
+				if !bytes.Equal(buf[:n], raw[off:off+n]) {
+					t.Fatalf("aldus=%v size=%d off=%d: wrong bytes", aldus, size, off)
+				}
+				off += n
+				if err != nil {
+					break
+				}
+			}
+		}
+	}
+}
+
 func errText(err error) string {
 	if err == nil {
 		return ""
@@ -387,10 +420,19 @@ func BenchmarkDecodeAldus(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				src.Reset(in)
 				r.Reset(src, lzw.MSB, 8)
+				total := 0
 				for {
-					if _, err := r.Read(dst); err != nil {
+					got, err := r.Read(dst)
+					total += got
+					if err != nil {
+						if err != io.EOF {
+							b.Fatal(err)
+						}
 						break
 					}
+				}
+				if total != len(raw) {
+					b.Fatalf("decoded %d bytes, want %d", total, len(raw))
 				}
 			}
 		})
