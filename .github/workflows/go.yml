@@ -19,12 +19,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
     - name: Set up Go
-      uses: actions/setup-go@v6.5.0
+      uses: actions/setup-go@v7.0.0
       with:
         go-version: ${{ matrix.go-version }}
 
     - name: Checkout code
-      uses: actions/checkout@v7.0.0
+      uses: actions/checkout@v7.0.1
 
     - name: Vet
       run: go vet ./...
@@ -58,12 +58,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Set up Go
-      uses: actions/setup-go@v6.5.0
+      uses: actions/setup-go@v7.0.0
       with:
         go-version: 1.26.x
 
     - name: Checkout code
-      uses: actions/checkout@v7.0.0
+      uses: actions/checkout@v7.0.1
 
     - name: Generate
       working-directory: ${{ matrix.pkg }}/_generate
@@ -80,12 +80,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Set up Go
-      uses: actions/setup-go@v6.5.0
+      uses: actions/setup-go@v7.0.0
       with:
         go-version: 1.26.x
 
     - name: Checkout code
-      uses: actions/checkout@v7.0.0
+      uses: actions/checkout@v7.0.1
 
     - name: fmt
       run: diff <(gofmt -d .) <(printf "")
@@ -126,12 +126,12 @@ jobs:
         tags: [ 'nounsafe', '"noasm,nounsafe"' ]
     steps:
       - name: Set up Go
-        uses: actions/setup-go@v6.5.0
+        uses: actions/setup-go@v7.0.0
         with:
           go-version: 1.26.x
 
       - name: Checkout code
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
 
       - name: S2/FuzzDictBlocks/${{ matrix.tags }}
         run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzDictBlocks -fuzztime=100000x -test.fuzzminimizetime=10ms ./s2/.
@@ -153,12 +153,12 @@ jobs:
         tags: [ 'nounsafe', '"noasm,nounsafe"' ]
     steps:
       - name: Set up Go
-        uses: actions/setup-go@v6.5.0
+        uses: actions/setup-go@v7.0.0
         with:
           go-version: 1.25.x
 
       - name: Checkout code
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
 
       - name: zstd/FuzzDecodeAll/${{ matrix.tags }}
         run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzDecodeAll -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
@@ -192,12 +192,12 @@ jobs:
         os: [ ubuntu-latest, ubuntu-24.04-arm ]
     steps:
       - name: Set up Go
-        uses: actions/setup-go@v6.5.0
+        uses: actions/setup-go@v7.0.0
         with:
           go-version: 1.25.x
 
       - name: Checkout code
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
 
       - name: zstd/FuzzDecodeAll (asan)
         run: go test -asan -run=none -fuzz=FuzzDecodeAll -fuzztime=100000x -test.fuzzminimizetime=10ms ./zstd/.
@@ -214,11 +214,11 @@ jobs:
         tags: [ 'nounsafe', '"noasm,nounsafe"' ]
     steps:
       - name: Set up Go
-        uses: actions/setup-go@v6.5.0
+        uses: actions/setup-go@v7.0.0
         with:
           go-version: 1.25.x
       - name: Checkout code
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
 
       - name: flate/FuzzEncoding/${{ matrix.tags }}
         run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzEncoding -fuzztime=100000x -test.fuzzminimizetime=10ms ./flate/.
