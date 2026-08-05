@@ -27,7 +27,7 @@ func TestDecoderDictReuseAfterLargeStream(t *testing.T) {
 	// that decoded history exceeds the window while compressed blocks are still
 	// being executed.
 	var payload []byte
-	for i := 0; i < 301; i++ {
+	for range 301 {
 		payload = append(payload, dictContent...)
 	}
 
@@ -44,7 +44,7 @@ func TestDecoderDictReuseAfterLargeStream(t *testing.T) {
 	}
 	defer dec.Close()
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if err := dec.Reset(hideLen{bytes.NewReader(frame)}); err != nil {
 			t.Fatalf("reset %d: %v", i, err)
 		}
