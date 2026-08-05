@@ -30,21 +30,27 @@ const debug = false
 var genArm64 = flag.Bool("arm64gen", false, "emit the arm64 half, without the GOAMD64 directive blocks")
 
 // tzcnt emits a count-trailing-zeros over a value already known to be nonzero.
-// On amd64 the choice is made by the assembler: TZCNT where GOAMD64_v3 allows
-// it, BSF otherwise. arm64 has neither the directive nor a reason for one --
-// TZCNTQ lowers to RBIT+CLZ, which is exact even for a zero input.
+//
+// TZCNT needs no GOAMD64 guard. Its encoding is BSF's with an F3 prefix, and
+// processors without the instruction ignore the prefix and execute BSF -- so
+// one encoding is correct everywhere, and the assembler-level choice this used
+// to make was never needed.
+//
+// The two differ only on a zero input, which cannot reach here: every caller
+// has already established that the value is nonzero. They also set flags
+// differently -- TZCNT takes ZF from the result and defines CF, BSF takes ZF
+// from the source -- which is unobservable here because all seventy call sites
+// are followed immediately by SARQ, which overwrites the flags without reading
+// them.
+//
+// On arm64 TZCNTQ lowers to RBIT+CLZ, exact even for a zero input.
+//
+// Relative cost, from the table this replaces:
+//
+//	2016 BMI   :TZCNT r64, r64   L: 0.57ns= 2.0c  T: 0.29ns= 1.00c
+//	 315 AMD64 :BSF   r64, r64   L: 0.88ns= 3.1c  T: 0.86ns= 3.00c
 func tzcnt(r reg.GPVirtual) {
-	if *genArm64 {
-		TZCNTQ(r, r)
-		return
-	}
-	Comment("#ifdef GOAMD64_v3")
-	// 2016 BMI                 :TZCNT r64, r64                        L:   0.57ns=  2.0c  T:   0.29ns=  1.00c
-	//  315 AMD64               :BSF r64, r64                          L:   0.88ns=  3.1c  T:   0.86ns=  3.00c
 	TZCNTQ(r, r)
-	Comment("#else")
-	BSFQ(r, r)
-	Comment("#endif")
 }
 
 const (
