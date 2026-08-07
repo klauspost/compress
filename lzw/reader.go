@@ -118,10 +118,6 @@ type Reader struct {
 	// fewer are written to the output with a single store from here, so the
 	// link chain only has to be walked for the bytes past the first eight.
 	first8 [maxCodes]uint64
-	// litInit is the number of literal entries of link and first8 that have
-	// been filled in. They only depend on the code, so a Reset need not redo
-	// them.
-	litInit int
 
 	// output is the temporary output buffer, used when Read is called with a
 	// buffer too small to decode into directly. It is flushed once it holds
@@ -178,30 +174,25 @@ func (r *Reader) decodeAny(dst []byte) int {
 // PDF streams have no need of its speed.
 func (r *Reader) decodeAldus(dst []byte) int {
 	limit := len(dst) - reserve
-	bits, nBits, width := r.bits, r.nBits, r.width
-	clear := r.clear
-	hi, last, lastLen := r.hi, r.last, r.lastLen
-	buf, pos := r.buf, r.pos
+	bits := r.bits
 	msb := r.order == MSB
-	mask := uint16(1)<<width - 1
+	mask := uint16(1)<<r.width - 1
 	o := 0
 
 loop:
 	for {
-		if nBits < width {
-			if pos+8 <= len(buf) {
+		if r.nBits < r.width {
+			if r.pos+8 <= len(r.buf) {
 				if msb {
-					bits |= binary.BigEndian.Uint64(buf[pos:]) >> (nBits & regmask.Shift64ByUint)
+					bits |= binary.BigEndian.Uint64(r.buf[r.pos:]) >> (r.nBits & regmask.Shift64ByUint)
 				} else {
-					bits |= binary.LittleEndian.Uint64(buf[pos:]) << (nBits & regmask.Shift64ByUint)
+					bits |= binary.LittleEndian.Uint64(r.buf[r.pos:]) << (r.nBits & regmask.Shift64ByUint)
 				}
-				pos += int(63-nBits) >> 3
-				nBits |= 56
+				r.pos += int(63-r.nBits) >> 3
+				r.nBits |= 56
 			} else {
 				var ok bool
-				r.pos = pos
-				bits, nBits, ok = r.fillSlow(bits, nBits, width)
-				buf, pos = r.buf, r.pos
+				bits, r.nBits, ok = r.fillSlow(bits, r.nBits, r.width)
 				if !ok {
 					break loop
 				}
@@ -209,48 +200,48 @@ loop:
 		}
 		var code uint16
 		if msb {
-			code = uint16(bits >> ((64 - width) & regmask.Shift64ByUint))
-			bits <<= width & regmask.Shift64ByUint
+			code = uint16(bits >> ((64 - r.width) & regmask.Shift64ByUint))
+			bits <<= r.width & regmask.Shift64ByUint
 		} else {
 			code = uint16(bits) & mask
-			bits >>= width & regmask.Shift64ByUint
+			bits >>= r.width & regmask.Shift64ByUint
 		}
-		nBits -= width
+		r.nBits -= r.width
 
-		if code-clear <= 1 {
-			if code != clear {
+		if code-r.clear <= 1 {
+			if code != r.clear {
 				r.err = io.EOF
 				break loop
 			}
-			width = 1 + r.litWidth
-			mask = uint16(1)<<width - 1
-			hi, last, lastLen = clear+1, decoderInvalidCode, 0
+			r.width = 1 + r.litWidth
+			mask = uint16(1)<<r.width - 1
+			r.hi, r.last, r.lastLen = r.clear+1, decoderInvalidCode, 0
 			continue
-		} else if code > hi {
+		} else if code > r.hi {
 			r.err = errInvalidCode
 			break loop
 		}
 
 		// Write the expansion right to left, ending at its first byte.
 		c, n := code, 0
-		kwkwk := code == hi && last != decoderInvalidCode
+		kwkwk := code == r.hi && r.last != decoderInvalidCode
 		if kwkwk {
 			// code == hi expands to the last expansion followed by its head.
-			c, n = last, lastLen+1
+			c, n = r.last, r.lastLen+1
 		} else {
 			n = int(r.link[code&codeMask]>>8&codeMask) + 1
 		}
 		out := dst[o : o+n]
 		i := n
 		if kwkwk {
-			h := last
-			for h >= clear {
+			h := r.last
+			for h >= r.clear {
 				h = uint16(r.link[h&codeMask] >> 20)
 			}
 			i--
 			out[i] = uint8(h)
 		}
-		for c >= clear {
+		for c >= r.clear {
 			e := r.link[c&codeMask]
 			i--
 			out[i] = uint8(e)
@@ -259,20 +250,20 @@ loop:
 		out[0] = uint8(c)
 		o += n
 
-		if last != decoderInvalidCode {
+		if r.last != decoderInvalidCode {
 			// Save what the hi code expands to. first8 is not maintained: this
 			// decoder never reads it, and a Reset redefines every entry before
 			// any of them can be read again.
-			r.link[hi&codeMask] = uint32(c) | uint32(lastLen)<<8 | uint32(last)<<20
+			r.link[r.hi&codeMask] = uint32(c) | uint32(r.lastLen)<<8 | uint32(r.last)<<20
 		}
-		last, lastLen = code, n
-		hi++
-		if hi >= mask { // one code earlier than decode
-			if width == maxWidth {
-				last = decoderInvalidCode
-				hi--
+		r.last, r.lastLen = code, n
+		r.hi++
+		if r.hi >= mask { // one code earlier than decode
+			if r.width == maxWidth {
+				r.last = decoderInvalidCode
+				r.hi--
 			} else {
-				width++
+				r.width++
 				mask = mask<<1 | 1
 			}
 		}
@@ -281,9 +272,7 @@ loop:
 		}
 	}
 
-	r.bits, r.nBits, r.width = bits, nBits, width
-	r.hi, r.last, r.lastLen = hi, last, lastLen
-	r.pos = pos
+	r.bits = bits
 	r.release()
 	return o
 }
@@ -292,35 +281,34 @@ loop:
 // written. len(dst) must be greater than reserve.
 func (r *Reader) decode(dst []byte) int {
 	limit := len(dst) - reserve
-	bits, nBits, width := r.bits, r.nBits, r.width
-	clear := r.clear
-	hi, last, lastLen, lastF8 := r.hi, r.last, r.lastLen, r.lastF8
-	buf, pos := r.buf, r.pos
+	// Only the bit accumulator and the byte order are worth a local. The loop
+	// needs too many values live at once for the rest to stay in registers too,
+	// and the spill code the compiler then emits costs more than reading them
+	// back out of r: hoisting all of them is around 15% slower on text.
+	bits := r.bits
 	msb := r.order == MSB
-	// mask holds 1<<width - 1. Keeping it rather than deriving it from width
+	// mask holds 1<<width - 1. Keeping it rather than deriving it from the width
 	// each time round the loop saves both the shift and the guard the compiler
 	// would need against it overshifting. Every shift below is masked for the
 	// same reason: all of them are provably shorter than a word. It also stands
 	// in for the code at which hi overflows the width, which is mask+1.
-	mask := uint16(1)<<width - 1
+	mask := uint16(1)<<r.width - 1
 	o := 0
 
 loop:
 	for {
-		if nBits < width {
-			if pos+8 <= len(buf) {
+		if r.nBits < r.width {
+			if r.pos+8 <= len(r.buf) {
 				if msb {
-					bits |= binary.BigEndian.Uint64(buf[pos:]) >> (nBits & regmask.Shift64ByUint)
+					bits |= binary.BigEndian.Uint64(r.buf[r.pos:]) >> (r.nBits & regmask.Shift64ByUint)
 				} else {
-					bits |= binary.LittleEndian.Uint64(buf[pos:]) << (nBits & regmask.Shift64ByUint)
+					bits |= binary.LittleEndian.Uint64(r.buf[r.pos:]) << (r.nBits & regmask.Shift64ByUint)
 				}
-				pos += int(63-nBits) >> 3
-				nBits |= 56
+				r.pos += int(63-r.nBits) >> 3
+				r.nBits |= 56
 			} else {
 				var ok bool
-				r.pos = pos
-				bits, nBits, ok = r.fillSlow(bits, nBits, width)
-				buf, pos = r.buf, r.pos
+				bits, r.nBits, ok = r.fillSlow(bits, r.nBits, r.width)
 				if !ok {
 					break loop
 				}
@@ -328,13 +316,13 @@ loop:
 		}
 		var code uint16
 		if msb {
-			code = uint16(bits >> ((64 - width) & regmask.Shift64ByUint))
-			bits <<= width & regmask.Shift64ByUint
+			code = uint16(bits >> ((64 - r.width) & regmask.Shift64ByUint))
+			bits <<= r.width & regmask.Shift64ByUint
 		} else {
 			code = uint16(bits) & mask
-			bits >>= width & regmask.Shift64ByUint
+			bits >>= r.width & regmask.Shift64ByUint
 		}
-		nBits -= width
+		r.nBits -= r.width
 
 		// f8 is the first8 entry of code, that is the first eight bytes of its
 		// expansion, and n is the length of the expansion. Literal codes have
@@ -343,39 +331,39 @@ loop:
 		// almost always false and so costs next to nothing.
 		var f8 uint64
 		var n int
-		if code-clear <= 1 {
-			if code != clear {
+		if code-r.clear <= 1 {
+			if code != r.clear {
 				r.err = io.EOF
 				break loop
 			}
-			width = 1 + r.litWidth
-			mask = uint16(1)<<width - 1
-			hi, last, lastLen = clear+1, decoderInvalidCode, 0
+			r.width = 1 + r.litWidth
+			mask = uint16(1)<<r.width - 1
+			r.hi, r.last, r.lastLen = r.clear+1, decoderInvalidCode, 0
 			continue
-		} else if code > hi {
+		} else if code > r.hi {
 			r.err = errInvalidCode
 			break loop
-		} else if code == hi && last != decoderInvalidCode {
+		} else if code == r.hi && r.last != decoderInvalidCode {
 			// code == hi is a special case which expands to the last expansion
 			// followed by the head of the last expansion.
-			n = lastLen + 1
+			n = r.lastLen + 1
 			if n <= 8 {
-				f8 = lastF8 | (lastF8&0xff)<<(8*uint(lastLen))
+				f8 = r.lastF8 | (r.lastF8&0xff)<<(8*uint(r.lastLen))
 				binary.LittleEndian.PutUint64(dst[o:], f8)
-			} else if o >= lastLen {
+			} else if o >= r.lastLen {
 				// The last expansion is still right there in the output.
-				copy(dst[o:o+lastLen], dst[o-lastLen:o])
-				dst[o+lastLen] = uint8(lastF8)
-				f8 = lastF8
+				copy(dst[o:o+r.lastLen], dst[o-r.lastLen:o])
+				dst[o+r.lastLen] = uint8(r.lastF8)
+				f8 = r.lastF8
 			} else {
 				out := dst[o : o+n]
-				out[n-1] = uint8(lastF8)
-				e := r.link[last&codeMask]
+				out[n-1] = uint8(r.lastF8)
+				e := r.link[r.last&codeMask]
 				for i := n - 1; i > 8; i-- {
 					out[i-1] = uint8(e)
 					e = r.link[e>>20&codeMask]
 				}
-				f8 = lastF8
+				f8 = r.lastF8
 				binary.LittleEndian.PutUint64(out, f8)
 			}
 		} else {
@@ -384,11 +372,11 @@ loop:
 			f8 = r.first8[code&codeMask]
 			if n <= 8 {
 				binary.LittleEndian.PutUint64(dst[o:], f8)
-			} else if e>>20 == uint32(last) && o >= lastLen {
+			} else if e>>20 == uint32(r.last) && o >= r.lastLen {
 				// This code extends the last one by a byte, and the last
 				// expansion is still right there in the output.
-				copy(dst[o:o+lastLen], dst[o-lastLen:o])
-				dst[o+lastLen] = uint8(e)
+				copy(dst[o:o+r.lastLen], dst[o-r.lastLen:o])
+				dst[o+r.lastLen] = uint8(e)
 			} else {
 				// Walk the link chain writing suffixes right to left, until
 				// only the first eight bytes are left to write.
@@ -402,23 +390,23 @@ loop:
 		}
 		o += n
 
-		if last != decoderInvalidCode {
+		if r.last != decoderInvalidCode {
 			// Save what the hi code expands to: the last expansion followed by
 			// the first byte of this one.
-			r.link[hi&codeMask] = uint32(f8&0xff) | uint32(lastLen)<<8 | uint32(last)<<20
-			r.first8[hi&codeMask] = lastF8 | (f8&0xff)<<(8*uint(lastLen))
+			r.link[r.hi&codeMask] = uint32(f8&0xff) | uint32(r.lastLen)<<8 | uint32(r.last)<<20
+			r.first8[r.hi&codeMask] = r.lastF8 | (f8&0xff)<<(8*uint(r.lastLen))
 		}
-		last, lastLen, lastF8 = code, n, f8
-		hi++
-		if hi > mask {
-			if width == maxWidth {
-				last = decoderInvalidCode
+		r.last, r.lastLen, r.lastF8 = code, n, f8
+		r.hi++
+		if r.hi > mask {
+			if r.width == maxWidth {
+				r.last = decoderInvalidCode
 				// Undo the hi++ a few lines above, so that (1) we maintain
 				// the invariant that hi < 1<<width, and (2) hi does not
 				// eventually overflow a uint16.
-				hi--
+				r.hi--
 			} else {
-				width++
+				r.width++
 				mask = mask<<1 | 1
 			}
 		}
@@ -427,10 +415,7 @@ loop:
 		}
 	}
 
-	r.bits, r.nBits, r.width = bits, nBits, width
-	r.hi, r.last = hi, last
-	r.lastLen, r.lastF8 = lastLen, lastF8
-	r.pos = pos
+	r.bits = bits
 	r.release()
 	return o
 }
@@ -626,17 +611,22 @@ func (r *Reader) init(src io.Reader, order Order, litWidth int) {
 
 	r.order = order
 	lw := uint(litWidth)
+	sameLit := r.litWidth == lw
 	r.litWidth = lw
 	r.width = 1 + lw
 	r.clear = uint16(1) << lw
 	r.eof, r.hi = r.clear+1, r.clear+1
 	r.last = decoderInvalidCode
 	r.lastLen, r.lastF8 = 0, 0
-	for c := r.litInit; c < int(r.clear); c++ {
-		r.link[c] = uint32(c)
-		r.first8[c] = uint64(c)
-	}
-	if int(r.clear) > r.litInit {
-		r.litInit = int(r.clear)
+	// The literal entries only depend on the code, so a stream of the same
+	// litWidth as the last one finds them already there: the codes a stream
+	// defines start at clear+2, past its own literal range. A narrower stream
+	// defines codes inside a wider one's literal range, though, so a change of
+	// litWidth means redoing them.
+	if !sameLit {
+		for c := 0; c < int(r.clear); c++ {
+			r.link[c] = uint32(c)
+			r.first8[c] = uint64(c)
+		}
 	}
 }

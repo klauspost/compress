@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/rand"
 	"os"
 	"runtime"
 	"strconv"
@@ -163,6 +164,80 @@ func TestReaderReset(t *testing.T) {
 		}
 		if !bytes.Equal(b1, b2) {
 			t.Errorf("bytes read were not the same")
+		}
+	}
+}
+
+// A stream with a narrow litWidth defines codes that fall inside a wider
+// stream's literal range, so a Reader reset from wide to narrow and back must
+// not carry its literal table entries over.
+func TestReaderResetLitWidthShrinkGrow(t *testing.T) {
+	narrow := make([]byte, 4096)
+	for i := range narrow {
+		narrow[i] = byte((i*7 + i/3) & 3)
+	}
+	wide := make([]byte, 512)
+	for i := range wide {
+		wide[i] = byte(6 + i%20)
+	}
+
+	for _, order := range []Order{LSB, MSB} {
+		cn := lzwEncode(t, narrow, order, 2)
+		cw := lzwEncode(t, wide, order, 8)
+
+		r := newReader(bytes.NewReader(cw), order, 8)
+		if got, err := io.ReadAll(r); err != nil || !bytes.Equal(got, wide) {
+			t.Fatalf("order %v: first wide read: %v", order, err)
+		}
+		r.Reset(bytes.NewReader(cn), order, 2)
+		if got, err := io.ReadAll(r); err != nil || !bytes.Equal(got, narrow) {
+			t.Fatalf("order %v: narrow read: %v", order, err)
+		}
+		r.Reset(bytes.NewReader(cw), order, 8)
+		got, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatalf("order %v: second wide read: %v", order, err)
+		}
+		if !bytes.Equal(got, wide) {
+			t.Fatalf("order %v: got %d bytes %v, want %d bytes %v",
+				order, len(got), got[:min(len(got), 16)], len(wide), wide[:16])
+		}
+	}
+}
+
+// A long run of resets with mixed litWidths and orders must decode every
+// stream as a fresh Reader would.
+func TestReaderResetLitWidthSequence(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	type stream struct {
+		raw, comp []byte
+		order     Order
+		litWidth  int
+	}
+	streams := make([]stream, 200)
+	for i := range streams {
+		s := &streams[i]
+		s.litWidth = 2 + rng.Intn(7)
+		s.order = Order(rng.Intn(2))
+		s.raw = make([]byte, 1+rng.Intn(8192))
+		mask := byte(1<<s.litWidth - 1)
+		for j := range s.raw {
+			// Repetitive enough to allocate a good spread of codes.
+			s.raw[j] = byte(rng.Intn(4+j/64)) & mask
+		}
+		s.comp = lzwEncode(t, s.raw, s.order, s.litWidth)
+	}
+
+	r := new(Reader)
+	for i, s := range streams {
+		r.Reset(bytes.NewReader(s.comp), s.order, s.litWidth)
+		got, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatalf("stream %d (litWidth %d, order %v): %v", i, s.litWidth, s.order, err)
+		}
+		if !bytes.Equal(got, s.raw) {
+			t.Fatalf("stream %d (litWidth %d, order %v): got %d bytes, want %d",
+				i, s.litWidth, s.order, len(got), len(s.raw))
 		}
 	}
 }
