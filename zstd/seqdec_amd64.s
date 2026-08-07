@@ -1258,13 +1258,13 @@ copy_4_small:
 	JMP  copy_4_move_8through16
 
 copy_4_move_3:
-	MOVW (R14), R11
-	MOVB 2(R14), R12
-	MOVW R11, (BX)
-	MOVB R12, 2(BX)
-	ADDQ R13, R14
-	ADDQ R13, BX
-	JMP  copy_4_end
+	MOVWQZX (R14), R11
+	MOVB    2(R14), R12
+	MOVW    R11, (BX)
+	MOVB    R12, 2(BX)
+	ADDQ    R13, R14
+	ADDQ    R13, BX
+	JMP     copy_4_end
 
 copy_4_move_4through7:
 	MOVL (R14), R11
@@ -1327,13 +1327,13 @@ copy_5_move_1or2:
 	JMP  copy_5_end
 
 copy_5_move_3:
-	MOVW (R14), R15
-	MOVB 2(R14), BP
-	MOVW R15, (BX)
-	MOVB BP, 2(BX)
-	ADDQ R11, R14
-	ADDQ R11, BX
-	JMP  copy_5_end
+	MOVWQZX (R14), R15
+	MOVB    2(R14), BP
+	MOVW    R15, (BX)
+	MOVB    BP, 2(BX)
+	ADDQ    R11, R14
+	ADDQ    R11, BX
+	JMP     copy_5_end
 
 copy_5_move_4through7:
 	MOVL (R14), R15
@@ -1494,13 +1494,13 @@ copy_1_move_1or2:
 	JMP  copy_1_end
 
 copy_1_move_3:
-	MOVW (SI), R14
-	MOVB 2(SI), R15
-	MOVW R14, (BX)
-	MOVB R15, 2(BX)
-	ADDQ R11, SI
-	ADDQ R11, BX
-	JMP  copy_1_end
+	MOVWQZX (SI), R14
+	MOVB    2(SI), R15
+	MOVW    R14, (BX)
+	MOVB    R15, 2(BX)
+	ADDQ    R11, SI
+	ADDQ    R11, BX
+	JMP     copy_1_end
 
 copy_1_move_4through7:
 	MOVL (SI), R14
@@ -1563,13 +1563,13 @@ copy_4_small:
 	JMP  copy_4_move_8through16
 
 copy_4_move_3:
-	MOVW (R14), R11
-	MOVB 2(R14), R12
-	MOVW R11, (BX)
-	MOVB R12, 2(BX)
-	ADDQ R13, R14
-	ADDQ R13, BX
-	JMP  copy_4_end
+	MOVWQZX (R14), R11
+	MOVB    2(R14), R12
+	MOVW    R11, (BX)
+	MOVB    R12, 2(BX)
+	ADDQ    R13, R14
+	ADDQ    R13, BX
+	JMP     copy_4_end
 
 copy_4_move_4through7:
 	MOVL (R14), R11
@@ -1632,13 +1632,13 @@ copy_5_move_1or2:
 	JMP  copy_5_end
 
 copy_5_move_3:
-	MOVW (R14), R15
-	MOVB 2(R14), BP
-	MOVW R15, (BX)
-	MOVB BP, 2(BX)
-	ADDQ R11, R14
-	ADDQ R11, BX
-	JMP  copy_5_end
+	MOVWQZX (R14), R15
+	MOVB    2(R14), BP
+	MOVW    R15, (BX)
+	MOVB    BP, 2(BX)
+	ADDQ    R11, R14
+	ADDQ    R11, BX
+	JMP     copy_5_end
 
 copy_5_move_4through7:
 	MOVL (R14), R15
@@ -1707,13 +1707,13 @@ copy_2_move_1or2:
 	JMP  copy_2_end
 
 copy_2_move_3:
-	MOVW (R11), R12
-	MOVB 2(R11), R14
-	MOVW R12, (BX)
-	MOVB R14, 2(BX)
-	ADDQ R13, R11
-	ADDQ R13, BX
-	JMP  copy_2_end
+	MOVWQZX (R11), R12
+	MOVB    2(R11), R14
+	MOVW    R12, (BX)
+	MOVB    R14, 2(BX)
+	ADDQ    R13, R11
+	ADDQ    R13, BX
+	JMP     copy_2_end
 
 copy_2_move_4through7:
 	MOVL (R11), R12
@@ -2143,13 +2143,13 @@ copy_4_small:
 	JMP  copy_4_move_8through16
 
 copy_4_move_3:
-	MOVW (R14), AX
-	MOVB 2(R14), CL
-	MOVW AX, (R10)
-	MOVB CL, 2(R10)
-	ADDQ R13, R14
-	ADDQ R13, R10
-	JMP  copy_4_end
+	MOVWQZX (R14), AX
+	MOVB    2(R14), CL
+	MOVW    AX, (R10)
+	MOVB    CL, 2(R10)
+	ADDQ    R13, R14
+	ADDQ    R13, R10
+	JMP     copy_4_end
 
 copy_4_move_4through7:
 	MOVL (R14), AX
@@ -2209,13 +2209,13 @@ copy_5_move_1or2:
 	JMP  copy_5_end
 
 copy_5_move_3:
-	MOVW (R14), R15
-	MOVB 2(R14), BP
-	MOVW R15, (R10)
-	MOVB BP, 2(R10)
-	ADDQ AX, R14
-	ADDQ AX, R10
-	JMP  copy_5_end
+	MOVWQZX (R14), R15
+	MOVB    2(R14), BP
+	MOVW    R15, (R10)
+	MOVB    BP, 2(R10)
+	ADDQ    AX, R14
+	ADDQ    AX, R10
+	JMP     copy_5_end
 
 copy_5_move_4through7:
 	MOVL (R14), R15
@@ -2663,13 +2663,13 @@ copy_4_small:
 	JMP  copy_4_move_8through16
 
 copy_4_move_3:
-	MOVW (R14), CX
-	MOVB 2(R14), R12
-	MOVW CX, (R9)
-	MOVB R12, 2(R9)
-	ADDQ R13, R14
-	ADDQ R13, R9
-	JMP  copy_4_end
+	MOVWQZX (R14), CX
+	MOVB    2(R14), R12
+	MOVW    CX, (R9)
+	MOVB    R12, 2(R9)
+	ADDQ    R13, R14
+	ADDQ    R13, R9
+	JMP     copy_4_end
 
 copy_4_move_4through7:
 	MOVL (R14), CX
@@ -2729,13 +2729,13 @@ copy_5_move_1or2:
 	JMP  copy_5_end
 
 copy_5_move_3:
-	MOVW (R14), R15
-	MOVB 2(R14), BP
-	MOVW R15, (R9)
-	MOVB BP, 2(R9)
-	ADDQ CX, R14
-	ADDQ CX, R9
-	JMP  copy_5_end
+	MOVWQZX (R14), R15
+	MOVB    2(R14), BP
+	MOVW    R15, (R9)
+	MOVB    BP, 2(R9)
+	ADDQ    CX, R14
+	ADDQ    CX, R9
+	JMP     copy_5_end
 
 copy_5_move_4through7:
 	MOVL (R14), R15
@@ -3206,13 +3206,13 @@ copy_1_move_1or2:
 	JMP  copy_1_end
 
 copy_1_move_3:
-	MOVW (R11), R14
-	MOVB 2(R11), R15
-	MOVW R14, (R10)
-	MOVB R15, 2(R10)
-	ADDQ AX, R11
-	ADDQ AX, R10
-	JMP  copy_1_end
+	MOVWQZX (R11), R14
+	MOVB    2(R11), R15
+	MOVW    R14, (R10)
+	MOVB    R15, 2(R10)
+	ADDQ    AX, R11
+	ADDQ    AX, R10
+	JMP     copy_1_end
 
 copy_1_move_4through7:
 	MOVL (R11), R14
@@ -3276,13 +3276,13 @@ copy_4_small:
 	JMP  copy_4_move_8through16
 
 copy_4_move_3:
-	MOVW (R14), AX
-	MOVB 2(R14), CL
-	MOVW AX, (R10)
-	MOVB CL, 2(R10)
-	ADDQ R13, R14
-	ADDQ R13, R10
-	JMP  copy_4_end
+	MOVWQZX (R14), AX
+	MOVB    2(R14), CL
+	MOVW    AX, (R10)
+	MOVB    CL, 2(R10)
+	ADDQ    R13, R14
+	ADDQ    R13, R10
+	JMP     copy_4_end
 
 copy_4_move_4through7:
 	MOVL (R14), AX
@@ -3342,13 +3342,13 @@ copy_5_move_1or2:
 	JMP  copy_5_end
 
 copy_5_move_3:
-	MOVW (R14), R15
-	MOVB 2(R14), BP
-	MOVW R15, (R10)
-	MOVB BP, 2(R10)
-	ADDQ AX, R14
-	ADDQ AX, R10
-	JMP  copy_5_end
+	MOVWQZX (R14), R15
+	MOVB    2(R14), BP
+	MOVW    R15, (R10)
+	MOVB    BP, 2(R10)
+	ADDQ    AX, R14
+	ADDQ    AX, R10
+	JMP     copy_5_end
 
 copy_5_move_4through7:
 	MOVL (R14), R15
@@ -3417,13 +3417,13 @@ copy_2_move_1or2:
 	JMP  copy_2_end
 
 copy_2_move_3:
-	MOVW (AX), CX
-	MOVB 2(AX), R14
-	MOVW CX, (R10)
-	MOVB R14, 2(R10)
-	ADDQ R13, AX
-	ADDQ R13, R10
-	JMP  copy_2_end
+	MOVWQZX (AX), CX
+	MOVB    2(AX), R14
+	MOVW    CX, (R10)
+	MOVB    R14, 2(R10)
+	ADDQ    R13, AX
+	ADDQ    R13, R10
+	JMP     copy_2_end
 
 copy_2_move_4through7:
 	MOVL (AX), CX
@@ -3828,13 +3828,13 @@ copy_1_move_1or2:
 	JMP  copy_1_end
 
 copy_1_move_3:
-	MOVW (R10), R14
-	MOVB 2(R10), R15
-	MOVW R14, (R9)
-	MOVB R15, 2(R9)
-	ADDQ CX, R10
-	ADDQ CX, R9
-	JMP  copy_1_end
+	MOVWQZX (R10), R14
+	MOVB    2(R10), R15
+	MOVW    R14, (R9)
+	MOVB    R15, 2(R9)
+	ADDQ    CX, R10
+	ADDQ    CX, R9
+	JMP     copy_1_end
 
 copy_1_move_4through7:
 	MOVL (R10), R14
@@ -3898,13 +3898,13 @@ copy_4_small:
 	JMP  copy_4_move_8through16
 
 copy_4_move_3:
-	MOVW (R14), CX
-	MOVB 2(R14), R12
-	MOVW CX, (R9)
-	MOVB R12, 2(R9)
-	ADDQ R13, R14
-	ADDQ R13, R9
-	JMP  copy_4_end
+	MOVWQZX (R14), CX
+	MOVB    2(R14), R12
+	MOVW    CX, (R9)
+	MOVB    R12, 2(R9)
+	ADDQ    R13, R14
+	ADDQ    R13, R9
+	JMP     copy_4_end
 
 copy_4_move_4through7:
 	MOVL (R14), CX
@@ -3964,13 +3964,13 @@ copy_5_move_1or2:
 	JMP  copy_5_end
 
 copy_5_move_3:
-	MOVW (R14), R15
-	MOVB 2(R14), BP
-	MOVW R15, (R9)
-	MOVB BP, 2(R9)
-	ADDQ CX, R14
-	ADDQ CX, R9
-	JMP  copy_5_end
+	MOVWQZX (R14), R15
+	MOVB    2(R14), BP
+	MOVW    R15, (R9)
+	MOVB    BP, 2(R9)
+	ADDQ    CX, R14
+	ADDQ    CX, R9
+	JMP     copy_5_end
 
 copy_5_move_4through7:
 	MOVL (R14), R15
@@ -4039,13 +4039,13 @@ copy_2_move_1or2:
 	JMP  copy_2_end
 
 copy_2_move_3:
-	MOVW (CX), R12
-	MOVB 2(CX), R14
-	MOVW R12, (R9)
-	MOVB R14, 2(R9)
-	ADDQ R13, CX
-	ADDQ R13, R9
-	JMP  copy_2_end
+	MOVWQZX (CX), R12
+	MOVB    2(CX), R14
+	MOVW    R12, (R9)
+	MOVB    R14, 2(R9)
+	ADDQ    R13, CX
+	ADDQ    R13, R9
+	JMP     copy_2_end
 
 copy_2_move_4through7:
 	MOVL (CX), R12

@@ -47,7 +47,7 @@ skip_fill0:
 	SHRQ CL, R13
 
 	// v0 := table[val0&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br0.advance(uint8(v0.entry)
 	MOVB CH, AL
@@ -60,7 +60,7 @@ skip_fill0:
 	SHRQ CL, R13
 
 	// v1 := table[val1&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br0.advance(uint8(v1.entry))
 	MOVB CH, AH
@@ -104,7 +104,7 @@ skip_fill1:
 	SHRQ CL, R13
 
 	// v0 := table[val0&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br1.advance(uint8(v0.entry)
 	MOVB CH, AL
@@ -117,7 +117,7 @@ skip_fill1:
 	SHRQ CL, R13
 
 	// v1 := table[val1&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br1.advance(uint8(v1.entry))
 	MOVB CH, AH
@@ -161,7 +161,7 @@ skip_fill2:
 	SHRQ CL, R13
 
 	// v0 := table[val0&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br2.advance(uint8(v0.entry)
 	MOVB CH, AL
@@ -174,7 +174,7 @@ skip_fill2:
 	SHRQ CL, R13
 
 	// v1 := table[val1&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br2.advance(uint8(v1.entry))
 	MOVB CH, AH
@@ -218,7 +218,7 @@ skip_fill3:
 	SHRQ CL, R13
 
 	// v0 := table[val0&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br3.advance(uint8(v0.entry)
 	MOVB CH, AL
@@ -231,7 +231,7 @@ skip_fill3:
 	SHRQ CL, R13
 
 	// v1 := table[val1&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br3.advance(uint8(v1.entry))
 	MOVB CH, AH
@@ -301,7 +301,7 @@ skip_fill0:
 	SHRQ CL, R13
 
 	// v0 := table[val0&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br0.advance(uint8(v0.entry)
 	MOVB CH, AL
@@ -314,7 +314,7 @@ skip_fill0:
 	SHRQ CL, R13
 
 	// v1 := table[val0&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br0.advance(uint8(v1.entry)
 	MOVB   CH, AH
@@ -328,7 +328,7 @@ skip_fill0:
 	SHRQ CL, R13
 
 	// v2 := table[val0&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br0.advance(uint8(v2.entry)
 	MOVB CH, AH
@@ -341,7 +341,7 @@ skip_fill0:
 	SHRQ CL, R13
 
 	// v3 := table[val0&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br0.advance(uint8(v3.entry)
 	MOVB   CH, AL
@@ -388,7 +388,7 @@ skip_fill1:
 	SHRQ CL, R13
 
 	// v0 := table[val0&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br1.advance(uint8(v0.entry)
 	MOVB CH, AL
@@ -401,7 +401,7 @@ skip_fill1:
 	SHRQ CL, R13
 
 	// v1 := table[val0&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br1.advance(uint8(v1.entry)
 	MOVB   CH, AH
@@ -415,7 +415,7 @@ skip_fill1:
 	SHRQ CL, R13
 
 	// v2 := table[val0&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br1.advance(uint8(v2.entry)
 	MOVB CH, AH
@@ -428,7 +428,7 @@ skip_fill1:
 	SHRQ CL, R13
 
 	// v3 := table[val0&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br1.advance(uint8(v3.entry)
 	MOVB   CH, AL
@@ -475,7 +475,7 @@ skip_fill2:
 	SHRQ CL, R13
 
 	// v0 := table[val0&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br2.advance(uint8(v0.entry)
 	MOVB CH, AL
@@ -488,7 +488,7 @@ skip_fill2:
 	SHRQ CL, R13
 
 	// v1 := table[val0&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br2.advance(uint8(v1.entry)
 	MOVB   CH, AH
@@ -502,7 +502,7 @@ skip_fill2:
 	SHRQ CL, R13
 
 	// v2 := table[val0&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br2.advance(uint8(v2.entry)
 	MOVB CH, AH
@@ -515,7 +515,7 @@ skip_fill2:
 	SHRQ CL, R13
 
 	// v3 := table[val0&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br2.advance(uint8(v3.entry)
 	MOVB   CH, AL
@@ -562,7 +562,7 @@ skip_fill3:
 	SHRQ CL, R13
 
 	// v0 := table[val0&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br3.advance(uint8(v0.entry)
 	MOVB CH, AL
@@ -575,7 +575,7 @@ skip_fill3:
 	SHRQ CL, R13
 
 	// v1 := table[val0&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br3.advance(uint8(v1.entry)
 	MOVB   CH, AH
@@ -589,7 +589,7 @@ skip_fill3:
 	SHRQ CL, R13
 
 	// v2 := table[val0&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br3.advance(uint8(v2.entry)
 	MOVB CH, AH
@@ -602,7 +602,7 @@ skip_fill3:
 	SHRQ CL, R13
 
 	// v3 := table[val0&mask]
-	MOVW (R9)(R13*2), CX
+	MOVWQZX (R9)(R13*2), CX
 
 	// br3.advance(uint8(v3.entry)
 	MOVB   CH, AL
@@ -667,7 +667,7 @@ bitReader_fillFast_1_end:
 	MOVQ    DI, CX
 	MOVQ    R10, R12
 	SHRQ    CL, R12
-	MOVW    (SI)(R12*2), CX
+	MOVWQZX (SI)(R12*2), CX
 	MOVB    CH, AL
 	MOVBQZX CL, CX
 	ADDQ    CX, R11
@@ -675,7 +675,7 @@ bitReader_fillFast_1_end:
 	MOVQ    DI, CX
 	MOVQ    R10, R12
 	SHRQ    CL, R12
-	MOVW    (SI)(R12*2), CX
+	MOVWQZX (SI)(R12*2), CX
 	MOVB    CH, AH
 	MOVBQZX CL, CX
 	ADDQ    CX, R11
@@ -694,7 +694,7 @@ bitReader_fillFast_2_end:
 	MOVQ    DI, CX
 	MOVQ    R10, R12
 	SHRQ    CL, R12
-	MOVW    (SI)(R12*2), CX
+	MOVWQZX (SI)(R12*2), CX
 	MOVB    CH, AH
 	MOVBQZX CL, CX
 	ADDQ    CX, R11
@@ -702,7 +702,7 @@ bitReader_fillFast_2_end:
 	MOVQ    DI, CX
 	MOVQ    R10, R12
 	SHRQ    CL, R12
-	MOVW    (SI)(R12*2), CX
+	MOVWQZX (SI)(R12*2), CX
 	MOVB    CH, AL
 	MOVBQZX CL, CX
 	ADDQ    CX, R11
@@ -769,13 +769,13 @@ main_loop:
 
 bitReader_fillFast_1_end:
 	SHRXQ   DI, R10, CX
-	MOVW    (SI)(CX*2), CX
+	MOVWQZX (SI)(CX*2), CX
 	MOVB    CH, AL
 	MOVBQZX CL, CX
 	ADDQ    CX, R11
 	SHLXQ   CX, R10, R10
 	SHRXQ   DI, R10, CX
-	MOVW    (SI)(CX*2), CX
+	MOVWQZX (SI)(CX*2), CX
 	MOVB    CH, AH
 	MOVBQZX CL, CX
 	ADDQ    CX, R11
@@ -791,13 +791,13 @@ bitReader_fillFast_1_end:
 
 bitReader_fillFast_2_end:
 	SHRXQ   DI, R10, CX
-	MOVW    (SI)(CX*2), CX
+	MOVWQZX (SI)(CX*2), CX
 	MOVB    CH, AH
 	MOVBQZX CL, CX
 	ADDQ    CX, R11
 	SHLXQ   CX, R10, R10
 	SHRXQ   DI, R10, CX
-	MOVW    (SI)(CX*2), CX
+	MOVWQZX (SI)(CX*2), CX
 	MOVB    CH, AL
 	MOVBQZX CL, CX
 	ADDQ    CX, R11

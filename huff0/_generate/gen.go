@@ -119,7 +119,7 @@ func (d decompress4x) decodeTwoValues(id int, br, peekBits, table, buffer, dstEv
 	SHRQ(CX, val.As64()) // val = (value >> peek_bits) & mask
 
 	Comment("v0 := table[val0&mask]")
-	MOVW(Mem{Base: table, Index: val.As64(), Scale: 2}, CX.As16())
+	MOVWQZX(Mem{Base: table, Index: val.As64(), Scale: 2}, CX.As64())
 
 	Commentf("br%d.advance(uint8(v0.entry)", id)
 	out := reg.RAX             // Fixed since we need 8H
@@ -134,7 +134,7 @@ func (d decompress4x) decodeTwoValues(id int, br, peekBits, table, buffer, dstEv
 	SHRQ(CX, val.As64()) // val = (value >> peek_bits) & mask
 
 	Comment("v1 := table[val1&mask]")
-	MOVW(Mem{Base: table, Index: val.As64(), Scale: 2}, CX.As16()) // tmp - v1
+	MOVWQZX(Mem{Base: table, Index: val.As64(), Scale: 2}, CX.As64()) // tmp - v1
 
 	Commentf("br%d.advance(uint8(v1.entry))", id)
 	MOVB(CX.As8H(), out.As8H())      // AH = uint8(v0.entry >> 8)
@@ -222,7 +222,7 @@ func (d decompress4x) decodeFourValues(id int, br, peekBits, table, buffer, dstE
 		SHRQ(CX, val.As64()) // val = (value >> peek_bits) & mask
 
 		Commentf("v%d := table[val0&mask]", valID)
-		MOVW(Mem{Base: table, Index: val.As64(), Scale: 2}, CX.As16())
+		MOVWQZX(Mem{Base: table, Index: val.As64(), Scale: 2}, CX.As64())
 
 		Commentf("br%d.advance(uint8(v%d.entry)", id, valID)
 		MOVB(CX.As8H(), outByte) // outByte = uint8(v0.entry >> 8)
@@ -495,7 +495,7 @@ func (d decompress1x) decompress(id int, br *bitReader, peekBits, dt reg.GPVirtu
 	// v := dt[br.peekBitsFast(d.actualTableLog)&tlMask]
 	k := br.peekTopBits(peekBits)
 	v := reg.RCX // Fixed, as we need 8H part
-	MOVW(Mem{Base: dt, Index: k, Scale: 2}, v.As16())
+	MOVWQZX(Mem{Base: dt, Index: k, Scale: 2}, v.As64())
 
 	// buf[id] = uint8(v.entry >> 8)
 	MOVB(v.As8H(), out)
