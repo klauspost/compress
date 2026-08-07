@@ -166,6 +166,34 @@ func TestBuildDictHomogeneousCorpusValidOffsets(t *testing.T) {
 	}
 }
 
+func TestBuildDictFullyMatchableCorpusReturnsError(t *testing.T) {
+	block := bytes.Repeat([]byte("ABCDABCDABCDABCD"), 64)
+	var contents [][]byte
+	var history []byte
+	for range 32 {
+		contents = append(contents, block)
+		history = append(history, block...)
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("BuildDict panicked for fully matchable corpus: %v", r)
+		}
+	}()
+	_, err := BuildDict(BuildDictOptions{
+		ID:       1,
+		Contents: contents,
+		History:  history,
+		Level:    SpeedDefault,
+	})
+	if err == nil {
+		t.Fatal("BuildDict succeeded for corpus with no literals; want error")
+	}
+	if !strings.Contains(err.Error(), "0 literals") {
+		t.Fatalf("BuildDict error = %v, want mention 0 literals", err)
+	}
+}
+
 func BenchmarkBuildDictLevelPaths(b *testing.B) {
 	samples, history, _ := buildDictLevelPathFixture()
 	for _, tt := range []struct {
@@ -1027,4 +1055,52 @@ func TestSharedDecoderTrainedDictRace(t *testing.T) {
 		}(g + 1)
 	}
 	wg.Wait()
+}
+
+// hideLen wraps a reader so the decoder cannot detect a *bytes.Reader and take
+// the small-buffer sync path; this forces the concurrent streaming decode path.
+type hideLen struct{ r io.Reader }
+
+func (h hideLen) Read(p []byte) (int, error) { return h.r.Read(p) }
+
+// TestDecoderDictReuseAfterLargeStream verifies that streaming-decoding a
+// dictionary-compressed frame whose output exceeds the window does not corrupt
+// the registered dictionary for later decodes on the same decoder.
+func TestDecoderDictReuseAfterLargeStream(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	dictContent := make([]byte, 8<<10)
+	rng.Read(dictContent)
+	const dictID = 12345
+	const windowSize = 256 << 10
+
+	// The payload starts with the dictionary content (so the encoder emits a
+	// match into the dictionary) and is long enough that decoded history
+	// exceeds the window while compressed blocks are still being executed.
+	payload := bytes.Repeat(dictContent, 2*windowSize/len(dictContent))
+
+	enc, err := NewWriter(nil, WithEncoderDictRaw(dictID, dictContent), WithWindowSize(windowSize))
+	if err != nil {
+		t.Fatal(err)
+	}
+	frame := enc.EncodeAll(payload, nil)
+	enc.Close()
+
+	dec, err := NewReader(nil, WithDecoderDictRaw(dictID, dictContent))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+
+	for i := range 3 {
+		if err := dec.Reset(hideLen{bytes.NewReader(frame)}); err != nil {
+			t.Fatalf("reset %d: %v", i, err)
+		}
+		got, err := io.ReadAll(dec)
+		if err != nil {
+			t.Fatalf("decode %d of a valid dictionary frame failed: %v", i, err)
+		}
+		if !bytes.Equal(got, payload) {
+			t.Fatalf("decode %d: output mismatch: got %d bytes, want %d", i, len(got), len(payload))
+		}
+	}
 }

@@ -674,10 +674,6 @@ func (b *blockDec) executeSequences(hist *history) error {
 	hbytes := hist.b
 	if len(hbytes) > hist.windowSize {
 		hbytes = hbytes[len(hbytes)-hist.windowSize:]
-		// We do not need history anymore.
-		if hist.dict != nil {
-			hist.dict.content = nil
-		}
 	}
 	hist.decoders.windowSize = hist.windowSize
 	hist.decoders.out = b.dst[:0]
