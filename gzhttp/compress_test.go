@@ -1344,7 +1344,7 @@ func TestRandomJitterBufferWriteSizeIndependent(t *testing.T) {
 			// Mutating within jitterBuffer should change padding (usually).
 			payload3 := bytes.Clone(payload)
 			changed := false
-			for i := 0; i < jitterBuf; i++ {
+			for i := range jitterBuf {
 				payload3[i]++
 				mutIn := serve(func(w http.ResponseWriter) {
 					w.Write(payload3)
