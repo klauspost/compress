@@ -1271,6 +1271,96 @@ func TestRandomJitter(t *testing.T) {
 	}
 }
 
+// TestRandomJitterBufferWriteSizeIndependent verifies that when jitterBuffer is
+// smaller than the internal write buffer (wantBuf = max(minSize, 512)), the
+// padding seed only hashes the first jitterBuffer bytes — not the entire
+// internal buffer — so output does not depend on Write() chunking (#1191).
+func TestRandomJitterBufferWriteSizeIndependent(t *testing.T) {
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Set("Accept-Encoding", "gzip")
+
+	rng := rand.New(rand.NewSource(1))
+	payload := make([]byte, 4096)
+	if _, err := io.ReadFull(rng, payload); err != nil {
+		t.Fatal(err)
+	}
+
+	// jitterBuffer=64 << wantBuf (max(minSize,512)=512). Before the fix, a
+	// single large Write hashed all 512 buffered bytes while byte-at-a-time
+	// Writes hashed only 64, producing different padding.
+	const jitterBuf = 64
+	for _, paranoid := range []bool{false, true} {
+		t.Run(fmt.Sprintf("paranoid=%v", paranoid), func(t *testing.T) {
+			wrapper, err := NewWrapper(RandomJitter(256, jitterBuf, paranoid), MinSize(10))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			serve := func(write func(http.ResponseWriter)) int {
+				h := wrapper(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					write(w)
+				}))
+				rec := httptest.NewRecorder()
+				h.ServeHTTP(rec, r)
+				body, err := io.ReadAll(rec.Result().Body)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return len(body)
+			}
+
+			oneShot := serve(func(w http.ResponseWriter) {
+				w.Write(payload)
+			})
+			chunked := serve(func(w http.ResponseWriter) {
+				for i := range payload {
+					w.Write([]byte{payload[i]})
+				}
+			})
+			// Large first chunk past jitterBuffer, then rest.
+			chunkedLarge := serve(func(w http.ResponseWriter) {
+				w.Write(payload[:1024])
+				w.Write(payload[1024:])
+			})
+
+			if oneShot != chunked {
+				t.Errorf("one-shot Write len %d != byte-at-a-time len %d", oneShot, chunked)
+			}
+			if oneShot != chunkedLarge {
+				t.Errorf("one-shot Write len %d != large-then-rest len %d", oneShot, chunkedLarge)
+			}
+
+			// Mutating only past jitterBuffer must not change padding length.
+			payload2 := bytes.Clone(payload)
+			payload2[jitterBuf]++
+			payload2[jitterBuf+100]++
+			mutated := serve(func(w http.ResponseWriter) {
+				w.Write(payload2)
+			})
+			if mutated != oneShot {
+				t.Errorf("mutating after jitterBuffer changed length: got %d, want %d", mutated, oneShot)
+			}
+
+			// Mutating within jitterBuffer should change padding (usually).
+			payload3 := bytes.Clone(payload)
+			changed := false
+			for i := 0; i < jitterBuf; i++ {
+				payload3[i]++
+				mutIn := serve(func(w http.ResponseWriter) {
+					w.Write(payload3)
+				})
+				if mutIn != oneShot {
+					changed = true
+					break
+				}
+			}
+			if !changed {
+				t.Error("mutating within jitterBuffer never changed padding length")
+			}
+		})
+	}
+}
+
 func TestRandomJitterParanoid(t *testing.T) {
 	r := httptest.NewRequest("GET", "/", nil)
 	r.Header.Set("Accept-Encoding", "gzip")
