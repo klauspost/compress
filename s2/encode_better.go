@@ -97,7 +97,7 @@ func encodeBlockBetterGo(dst, src []byte) (d int) {
 		nextS := 0
 		for {
 			// Next src position to check
-			nextS = min(s+(s-nextEmit)>>7+1, s+maxSkip)
+			nextS = s + min((s-nextEmit)>>7+1, maxSkip)
 			if nextS > sLimit {
 				goto emitRemainder
 			}
