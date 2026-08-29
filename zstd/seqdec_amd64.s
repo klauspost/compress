@@ -55,43 +55,43 @@ sequenceDecs_decode_amd64_fill_check_overread:
 
 sequenceDecs_decode_amd64_fill_end:
 	// Update offset
-	MOVQ  R9, AX
-	MOVQ  BX, CX
-	MOVQ  DX, R15
-	SHLQ  CL, R15
-	MOVB  AH, CL
-	SHRQ  $0x20, AX
-	TESTQ CX, CX
-	JZ    sequenceDecs_decode_amd64_of_update_zero
-	ADDQ  CX, BX
-	CMPQ  BX, $0x40
-	JA    sequenceDecs_decode_amd64_of_update_zero
-	CMPQ  CX, $0x40
-	JAE   sequenceDecs_decode_amd64_of_update_zero
-	NEGQ  CX
-	SHRQ  CL, R15
-	ADDQ  R15, AX
+	MOVQ    R9, AX
+	MOVQ    BX, CX
+	MOVQ    DX, R15
+	SHLQ    CL, R15
+	MOVBLZX AH, CX
+	SHRQ    $0x20, AX
+	TESTQ   CX, CX
+	JZ      sequenceDecs_decode_amd64_of_update_zero
+	ADDQ    CX, BX
+	CMPQ    BX, $0x40
+	JA      sequenceDecs_decode_amd64_of_update_zero
+	CMPQ    CX, $0x40
+	JAE     sequenceDecs_decode_amd64_of_update_zero
+	NEGQ    CX
+	SHRQ    CL, R15
+	ADDQ    R15, AX
 
 sequenceDecs_decode_amd64_of_update_zero:
 	MOVQ AX, 16(R10)
 
 	// Update match length
-	MOVQ  R8, AX
-	MOVQ  BX, CX
-	MOVQ  DX, R15
-	SHLQ  CL, R15
-	MOVB  AH, CL
-	SHRQ  $0x20, AX
-	TESTQ CX, CX
-	JZ    sequenceDecs_decode_amd64_ml_update_zero
-	ADDQ  CX, BX
-	CMPQ  BX, $0x40
-	JA    sequenceDecs_decode_amd64_ml_update_zero
-	CMPQ  CX, $0x40
-	JAE   sequenceDecs_decode_amd64_ml_update_zero
-	NEGQ  CX
-	SHRQ  CL, R15
-	ADDQ  R15, AX
+	MOVQ    R8, AX
+	MOVQ    BX, CX
+	MOVQ    DX, R15
+	SHLQ    CL, R15
+	MOVBLZX AH, CX
+	SHRQ    $0x20, AX
+	TESTQ   CX, CX
+	JZ      sequenceDecs_decode_amd64_ml_update_zero
+	ADDQ    CX, BX
+	CMPQ    BX, $0x40
+	JA      sequenceDecs_decode_amd64_ml_update_zero
+	CMPQ    CX, $0x40
+	JAE     sequenceDecs_decode_amd64_ml_update_zero
+	NEGQ    CX
+	SHRQ    CL, R15
+	ADDQ    R15, AX
 
 sequenceDecs_decode_amd64_ml_update_zero:
 	MOVQ AX, 8(R10)
@@ -126,22 +126,22 @@ sequenceDecs_decode_amd64_fill_2_check_overread:
 
 sequenceDecs_decode_amd64_fill_2_end:
 	// Update literal length
-	MOVQ  DI, AX
-	MOVQ  BX, CX
-	MOVQ  DX, R15
-	SHLQ  CL, R15
-	MOVB  AH, CL
-	SHRQ  $0x20, AX
-	TESTQ CX, CX
-	JZ    sequenceDecs_decode_amd64_ll_update_zero
-	ADDQ  CX, BX
-	CMPQ  BX, $0x40
-	JA    sequenceDecs_decode_amd64_ll_update_zero
-	CMPQ  CX, $0x40
-	JAE   sequenceDecs_decode_amd64_ll_update_zero
-	NEGQ  CX
-	SHRQ  CL, R15
-	ADDQ  R15, AX
+	MOVQ    DI, AX
+	MOVQ    BX, CX
+	MOVQ    DX, R15
+	SHLQ    CL, R15
+	MOVBLZX AH, CX
+	SHRQ    $0x20, AX
+	TESTQ   CX, CX
+	JZ      sequenceDecs_decode_amd64_ll_update_zero
+	ADDQ    CX, BX
+	CMPQ    BX, $0x40
+	JA      sequenceDecs_decode_amd64_ll_update_zero
+	CMPQ    CX, $0x40
+	JAE     sequenceDecs_decode_amd64_ll_update_zero
+	NEGQ    CX
+	SHRQ    CL, R15
+	ADDQ    R15, AX
 
 sequenceDecs_decode_amd64_ll_update_zero:
 	MOVQ AX, (R10)
@@ -163,7 +163,7 @@ sequenceDecs_decode_amd64_ll_update_zero:
 	MOVQ    CX, BX
 	ROLQ    CL, R15
 	MOVL    $0x00000001, BP
-	MOVB    R14, CL
+	MOVBLZX R14, CX
 	SHLL    CL, BP
 	DECL    BP
 	ANDQ    BP, R15
@@ -182,7 +182,7 @@ sequenceDecs_decode_amd64_ll_update_zero:
 	MOVQ    CX, BX
 	ROLQ    CL, R15
 	MOVL    $0x00000001, BP
-	MOVB    R14, CL
+	MOVBLZX R14, CX
 	SHLL    CL, BP
 	DECL    BP
 	ANDQ    BP, R15
@@ -201,7 +201,7 @@ sequenceDecs_decode_amd64_ll_update_zero:
 	MOVQ    CX, BX
 	ROLQ    CL, R15
 	MOVL    $0x00000001, BP
-	MOVB    R14, CL
+	MOVBLZX R14, CX
 	SHLL    CL, BP
 	DECL    BP
 	ANDQ    BP, R15
@@ -383,64 +383,64 @@ sequenceDecs_decode_56_amd64_fill_check_overread:
 
 sequenceDecs_decode_56_amd64_fill_end:
 	// Update offset
-	MOVQ  R9, AX
-	MOVQ  BX, CX
-	MOVQ  DX, R15
-	SHLQ  CL, R15
-	MOVB  AH, CL
-	SHRQ  $0x20, AX
-	TESTQ CX, CX
-	JZ    sequenceDecs_decode_56_amd64_of_update_zero
-	ADDQ  CX, BX
-	CMPQ  BX, $0x40
-	JA    sequenceDecs_decode_56_amd64_of_update_zero
-	CMPQ  CX, $0x40
-	JAE   sequenceDecs_decode_56_amd64_of_update_zero
-	NEGQ  CX
-	SHRQ  CL, R15
-	ADDQ  R15, AX
+	MOVQ    R9, AX
+	MOVQ    BX, CX
+	MOVQ    DX, R15
+	SHLQ    CL, R15
+	MOVBLZX AH, CX
+	SHRQ    $0x20, AX
+	TESTQ   CX, CX
+	JZ      sequenceDecs_decode_56_amd64_of_update_zero
+	ADDQ    CX, BX
+	CMPQ    BX, $0x40
+	JA      sequenceDecs_decode_56_amd64_of_update_zero
+	CMPQ    CX, $0x40
+	JAE     sequenceDecs_decode_56_amd64_of_update_zero
+	NEGQ    CX
+	SHRQ    CL, R15
+	ADDQ    R15, AX
 
 sequenceDecs_decode_56_amd64_of_update_zero:
 	MOVQ AX, 16(R10)
 
 	// Update match length
-	MOVQ  R8, AX
-	MOVQ  BX, CX
-	MOVQ  DX, R15
-	SHLQ  CL, R15
-	MOVB  AH, CL
-	SHRQ  $0x20, AX
-	TESTQ CX, CX
-	JZ    sequenceDecs_decode_56_amd64_ml_update_zero
-	ADDQ  CX, BX
-	CMPQ  BX, $0x40
-	JA    sequenceDecs_decode_56_amd64_ml_update_zero
-	CMPQ  CX, $0x40
-	JAE   sequenceDecs_decode_56_amd64_ml_update_zero
-	NEGQ  CX
-	SHRQ  CL, R15
-	ADDQ  R15, AX
+	MOVQ    R8, AX
+	MOVQ    BX, CX
+	MOVQ    DX, R15
+	SHLQ    CL, R15
+	MOVBLZX AH, CX
+	SHRQ    $0x20, AX
+	TESTQ   CX, CX
+	JZ      sequenceDecs_decode_56_amd64_ml_update_zero
+	ADDQ    CX, BX
+	CMPQ    BX, $0x40
+	JA      sequenceDecs_decode_56_amd64_ml_update_zero
+	CMPQ    CX, $0x40
+	JAE     sequenceDecs_decode_56_amd64_ml_update_zero
+	NEGQ    CX
+	SHRQ    CL, R15
+	ADDQ    R15, AX
 
 sequenceDecs_decode_56_amd64_ml_update_zero:
 	MOVQ AX, 8(R10)
 
 	// Update literal length
-	MOVQ  DI, AX
-	MOVQ  BX, CX
-	MOVQ  DX, R15
-	SHLQ  CL, R15
-	MOVB  AH, CL
-	SHRQ  $0x20, AX
-	TESTQ CX, CX
-	JZ    sequenceDecs_decode_56_amd64_ll_update_zero
-	ADDQ  CX, BX
-	CMPQ  BX, $0x40
-	JA    sequenceDecs_decode_56_amd64_ll_update_zero
-	CMPQ  CX, $0x40
-	JAE   sequenceDecs_decode_56_amd64_ll_update_zero
-	NEGQ  CX
-	SHRQ  CL, R15
-	ADDQ  R15, AX
+	MOVQ    DI, AX
+	MOVQ    BX, CX
+	MOVQ    DX, R15
+	SHLQ    CL, R15
+	MOVBLZX AH, CX
+	SHRQ    $0x20, AX
+	TESTQ   CX, CX
+	JZ      sequenceDecs_decode_56_amd64_ll_update_zero
+	ADDQ    CX, BX
+	CMPQ    BX, $0x40
+	JA      sequenceDecs_decode_56_amd64_ll_update_zero
+	CMPQ    CX, $0x40
+	JAE     sequenceDecs_decode_56_amd64_ll_update_zero
+	NEGQ    CX
+	SHRQ    CL, R15
+	ADDQ    R15, AX
 
 sequenceDecs_decode_56_amd64_ll_update_zero:
 	MOVQ AX, (R10)
@@ -462,7 +462,7 @@ sequenceDecs_decode_56_amd64_ll_update_zero:
 	MOVQ    CX, BX
 	ROLQ    CL, R15
 	MOVL    $0x00000001, BP
-	MOVB    R14, CL
+	MOVBLZX R14, CX
 	SHLL    CL, BP
 	DECL    BP
 	ANDQ    BP, R15
@@ -481,7 +481,7 @@ sequenceDecs_decode_56_amd64_ll_update_zero:
 	MOVQ    CX, BX
 	ROLQ    CL, R15
 	MOVL    $0x00000001, BP
-	MOVB    R14, CL
+	MOVBLZX R14, CX
 	SHLL    CL, BP
 	DECL    BP
 	ANDQ    BP, R15
@@ -500,7 +500,7 @@ sequenceDecs_decode_56_amd64_ll_update_zero:
 	MOVQ    CX, BX
 	ROLQ    CL, R15
 	MOVL    $0x00000001, BP
-	MOVB    R14, CL
+	MOVBLZX R14, CX
 	SHLL    CL, BP
 	DECL    BP
 	ANDQ    BP, R15
@@ -1853,43 +1853,43 @@ sequenceDecs_decodeSync_amd64_fill_check_overread:
 
 sequenceDecs_decodeSync_amd64_fill_end:
 	// Update offset
-	MOVQ  R9, AX
-	MOVQ  BX, CX
-	MOVQ  DX, R14
-	SHLQ  CL, R14
-	MOVB  AH, CL
-	SHRQ  $0x20, AX
-	TESTQ CX, CX
-	JZ    sequenceDecs_decodeSync_amd64_of_update_zero
-	ADDQ  CX, BX
-	CMPQ  BX, $0x40
-	JA    sequenceDecs_decodeSync_amd64_of_update_zero
-	CMPQ  CX, $0x40
-	JAE   sequenceDecs_decodeSync_amd64_of_update_zero
-	NEGQ  CX
-	SHRQ  CL, R14
-	ADDQ  R14, AX
+	MOVQ    R9, AX
+	MOVQ    BX, CX
+	MOVQ    DX, R14
+	SHLQ    CL, R14
+	MOVBLZX AH, CX
+	SHRQ    $0x20, AX
+	TESTQ   CX, CX
+	JZ      sequenceDecs_decodeSync_amd64_of_update_zero
+	ADDQ    CX, BX
+	CMPQ    BX, $0x40
+	JA      sequenceDecs_decodeSync_amd64_of_update_zero
+	CMPQ    CX, $0x40
+	JAE     sequenceDecs_decodeSync_amd64_of_update_zero
+	NEGQ    CX
+	SHRQ    CL, R14
+	ADDQ    R14, AX
 
 sequenceDecs_decodeSync_amd64_of_update_zero:
 	MOVQ AX, 8(SP)
 
 	// Update match length
-	MOVQ  R8, AX
-	MOVQ  BX, CX
-	MOVQ  DX, R14
-	SHLQ  CL, R14
-	MOVB  AH, CL
-	SHRQ  $0x20, AX
-	TESTQ CX, CX
-	JZ    sequenceDecs_decodeSync_amd64_ml_update_zero
-	ADDQ  CX, BX
-	CMPQ  BX, $0x40
-	JA    sequenceDecs_decodeSync_amd64_ml_update_zero
-	CMPQ  CX, $0x40
-	JAE   sequenceDecs_decodeSync_amd64_ml_update_zero
-	NEGQ  CX
-	SHRQ  CL, R14
-	ADDQ  R14, AX
+	MOVQ    R8, AX
+	MOVQ    BX, CX
+	MOVQ    DX, R14
+	SHLQ    CL, R14
+	MOVBLZX AH, CX
+	SHRQ    $0x20, AX
+	TESTQ   CX, CX
+	JZ      sequenceDecs_decodeSync_amd64_ml_update_zero
+	ADDQ    CX, BX
+	CMPQ    BX, $0x40
+	JA      sequenceDecs_decodeSync_amd64_ml_update_zero
+	CMPQ    CX, $0x40
+	JAE     sequenceDecs_decodeSync_amd64_ml_update_zero
+	NEGQ    CX
+	SHRQ    CL, R14
+	ADDQ    R14, AX
 
 sequenceDecs_decodeSync_amd64_ml_update_zero:
 	MOVQ AX, 16(SP)
@@ -1924,22 +1924,22 @@ sequenceDecs_decodeSync_amd64_fill_2_check_overread:
 
 sequenceDecs_decodeSync_amd64_fill_2_end:
 	// Update literal length
-	MOVQ  DI, AX
-	MOVQ  BX, CX
-	MOVQ  DX, R14
-	SHLQ  CL, R14
-	MOVB  AH, CL
-	SHRQ  $0x20, AX
-	TESTQ CX, CX
-	JZ    sequenceDecs_decodeSync_amd64_ll_update_zero
-	ADDQ  CX, BX
-	CMPQ  BX, $0x40
-	JA    sequenceDecs_decodeSync_amd64_ll_update_zero
-	CMPQ  CX, $0x40
-	JAE   sequenceDecs_decodeSync_amd64_ll_update_zero
-	NEGQ  CX
-	SHRQ  CL, R14
-	ADDQ  R14, AX
+	MOVQ    DI, AX
+	MOVQ    BX, CX
+	MOVQ    DX, R14
+	SHLQ    CL, R14
+	MOVBLZX AH, CX
+	SHRQ    $0x20, AX
+	TESTQ   CX, CX
+	JZ      sequenceDecs_decodeSync_amd64_ll_update_zero
+	ADDQ    CX, BX
+	CMPQ    BX, $0x40
+	JA      sequenceDecs_decodeSync_amd64_ll_update_zero
+	CMPQ    CX, $0x40
+	JAE     sequenceDecs_decodeSync_amd64_ll_update_zero
+	NEGQ    CX
+	SHRQ    CL, R14
+	ADDQ    R14, AX
 
 sequenceDecs_decodeSync_amd64_ll_update_zero:
 	MOVQ AX, 24(SP)
@@ -1961,7 +1961,7 @@ sequenceDecs_decodeSync_amd64_ll_update_zero:
 	MOVQ    CX, BX
 	ROLQ    CL, R14
 	MOVL    $0x00000001, R15
-	MOVB    R13, CL
+	MOVBLZX R13, CX
 	SHLL    CL, R15
 	DECL    R15
 	ANDQ    R15, R14
@@ -1980,7 +1980,7 @@ sequenceDecs_decodeSync_amd64_ll_update_zero:
 	MOVQ    CX, BX
 	ROLQ    CL, R14
 	MOVL    $0x00000001, R15
-	MOVB    R13, CL
+	MOVBLZX R13, CX
 	SHLL    CL, R15
 	DECL    R15
 	ANDQ    R15, R14
@@ -1999,7 +1999,7 @@ sequenceDecs_decodeSync_amd64_ll_update_zero:
 	MOVQ    CX, BX
 	ROLQ    CL, R14
 	MOVL    $0x00000001, R15
-	MOVB    R13, CL
+	MOVBLZX R13, CX
 	SHLL    CL, R15
 	DECL    R15
 	ANDQ    R15, R14
@@ -2935,43 +2935,43 @@ sequenceDecs_decodeSync_safe_amd64_fill_check_overread:
 
 sequenceDecs_decodeSync_safe_amd64_fill_end:
 	// Update offset
-	MOVQ  R9, AX
-	MOVQ  BX, CX
-	MOVQ  DX, R14
-	SHLQ  CL, R14
-	MOVB  AH, CL
-	SHRQ  $0x20, AX
-	TESTQ CX, CX
-	JZ    sequenceDecs_decodeSync_safe_amd64_of_update_zero
-	ADDQ  CX, BX
-	CMPQ  BX, $0x40
-	JA    sequenceDecs_decodeSync_safe_amd64_of_update_zero
-	CMPQ  CX, $0x40
-	JAE   sequenceDecs_decodeSync_safe_amd64_of_update_zero
-	NEGQ  CX
-	SHRQ  CL, R14
-	ADDQ  R14, AX
+	MOVQ    R9, AX
+	MOVQ    BX, CX
+	MOVQ    DX, R14
+	SHLQ    CL, R14
+	MOVBLZX AH, CX
+	SHRQ    $0x20, AX
+	TESTQ   CX, CX
+	JZ      sequenceDecs_decodeSync_safe_amd64_of_update_zero
+	ADDQ    CX, BX
+	CMPQ    BX, $0x40
+	JA      sequenceDecs_decodeSync_safe_amd64_of_update_zero
+	CMPQ    CX, $0x40
+	JAE     sequenceDecs_decodeSync_safe_amd64_of_update_zero
+	NEGQ    CX
+	SHRQ    CL, R14
+	ADDQ    R14, AX
 
 sequenceDecs_decodeSync_safe_amd64_of_update_zero:
 	MOVQ AX, 8(SP)
 
 	// Update match length
-	MOVQ  R8, AX
-	MOVQ  BX, CX
-	MOVQ  DX, R14
-	SHLQ  CL, R14
-	MOVB  AH, CL
-	SHRQ  $0x20, AX
-	TESTQ CX, CX
-	JZ    sequenceDecs_decodeSync_safe_amd64_ml_update_zero
-	ADDQ  CX, BX
-	CMPQ  BX, $0x40
-	JA    sequenceDecs_decodeSync_safe_amd64_ml_update_zero
-	CMPQ  CX, $0x40
-	JAE   sequenceDecs_decodeSync_safe_amd64_ml_update_zero
-	NEGQ  CX
-	SHRQ  CL, R14
-	ADDQ  R14, AX
+	MOVQ    R8, AX
+	MOVQ    BX, CX
+	MOVQ    DX, R14
+	SHLQ    CL, R14
+	MOVBLZX AH, CX
+	SHRQ    $0x20, AX
+	TESTQ   CX, CX
+	JZ      sequenceDecs_decodeSync_safe_amd64_ml_update_zero
+	ADDQ    CX, BX
+	CMPQ    BX, $0x40
+	JA      sequenceDecs_decodeSync_safe_amd64_ml_update_zero
+	CMPQ    CX, $0x40
+	JAE     sequenceDecs_decodeSync_safe_amd64_ml_update_zero
+	NEGQ    CX
+	SHRQ    CL, R14
+	ADDQ    R14, AX
 
 sequenceDecs_decodeSync_safe_amd64_ml_update_zero:
 	MOVQ AX, 16(SP)
@@ -3006,22 +3006,22 @@ sequenceDecs_decodeSync_safe_amd64_fill_2_check_overread:
 
 sequenceDecs_decodeSync_safe_amd64_fill_2_end:
 	// Update literal length
-	MOVQ  DI, AX
-	MOVQ  BX, CX
-	MOVQ  DX, R14
-	SHLQ  CL, R14
-	MOVB  AH, CL
-	SHRQ  $0x20, AX
-	TESTQ CX, CX
-	JZ    sequenceDecs_decodeSync_safe_amd64_ll_update_zero
-	ADDQ  CX, BX
-	CMPQ  BX, $0x40
-	JA    sequenceDecs_decodeSync_safe_amd64_ll_update_zero
-	CMPQ  CX, $0x40
-	JAE   sequenceDecs_decodeSync_safe_amd64_ll_update_zero
-	NEGQ  CX
-	SHRQ  CL, R14
-	ADDQ  R14, AX
+	MOVQ    DI, AX
+	MOVQ    BX, CX
+	MOVQ    DX, R14
+	SHLQ    CL, R14
+	MOVBLZX AH, CX
+	SHRQ    $0x20, AX
+	TESTQ   CX, CX
+	JZ      sequenceDecs_decodeSync_safe_amd64_ll_update_zero
+	ADDQ    CX, BX
+	CMPQ    BX, $0x40
+	JA      sequenceDecs_decodeSync_safe_amd64_ll_update_zero
+	CMPQ    CX, $0x40
+	JAE     sequenceDecs_decodeSync_safe_amd64_ll_update_zero
+	NEGQ    CX
+	SHRQ    CL, R14
+	ADDQ    R14, AX
 
 sequenceDecs_decodeSync_safe_amd64_ll_update_zero:
 	MOVQ AX, 24(SP)
@@ -3043,7 +3043,7 @@ sequenceDecs_decodeSync_safe_amd64_ll_update_zero:
 	MOVQ    CX, BX
 	ROLQ    CL, R14
 	MOVL    $0x00000001, R15
-	MOVB    R13, CL
+	MOVBLZX R13, CX
 	SHLL    CL, R15
 	DECL    R15
 	ANDQ    R15, R14
@@ -3062,7 +3062,7 @@ sequenceDecs_decodeSync_safe_amd64_ll_update_zero:
 	MOVQ    CX, BX
 	ROLQ    CL, R14
 	MOVL    $0x00000001, R15
-	MOVB    R13, CL
+	MOVBLZX R13, CX
 	SHLL    CL, R15
 	DECL    R15
 	ANDQ    R15, R14
@@ -3081,7 +3081,7 @@ sequenceDecs_decodeSync_safe_amd64_ll_update_zero:
 	MOVQ    CX, BX
 	ROLQ    CL, R14
 	MOVL    $0x00000001, R15
-	MOVB    R13, CL
+	MOVBLZX R13, CX
 	SHLL    CL, R15
 	DECL    R15
 	ANDQ    R15, R14

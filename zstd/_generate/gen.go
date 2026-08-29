@@ -613,8 +613,12 @@ func (o options) updateLength(name string, brValue, brBitsRead, state reg.GPVirt
 		MOVQ(state, AX.As64()) // So we can grab high bytes.
 		MOVQ(brBitsRead, CX.As64())
 		MOVQ(brValue, BX)
-		SHLQ(CX, BX)               // BX = br.value << br.bitsRead (part of getBits)
-		MOVB(AX.As8H(), CX.As8L()) // CX = moB  (ofState.addBits(), that is byte #1 of moState)
+		SHLQ(CX, BX) // BX = br.value << br.bitsRead (part of getBits)
+		// Zero-extending write: the full CX must equal addBits below, which a
+		// MOVB into CL only achieves because brBitsRead <= 64 leaves the upper
+		// bits zero. MOVBLZX is unconditionally correct, avoids the
+		// partial-register merge, and lowers to a single fresh UBFX on arm64.
+		MOVBLZX(AX.As8H(), CX.As32()) // CX = moB  (ofState.addBits(), that is byte #1 of moState)
 		SHRQ(U8(32), AX)           // AX = mo (ofState.baselineInt(), that's the higher dword of moState)
 		// If addBits == 0, skip
 		TESTQ(CX.As64(), CX.As64())
@@ -720,7 +724,11 @@ func (o options) getBits(nBits, brValue, brBitsRead reg.GPVirtual) reg.GPVirtual
 	} else {
 		mask := GP32()
 		MOVL(U32(1), mask)
-		MOVB(nBits.As8(), CX)
+		// Zero-extending write rather than a MOVB into CL: SHLL only reads CL,
+		// but the partial write would merge into the stale RCX (the bitsRead
+		// sum from the LEAQ above) and lower to a UBFX+BFI read-modify-write
+		// pair on arm64; MOVBLZX is a fresh def on both.
+		MOVBLZX(nBits.As8(), CX.As32())
 		SHLL(CX, mask)
 		DECL(mask)
 		ANDQ(mask.As64(), BX)
