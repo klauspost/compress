@@ -27,8 +27,12 @@ func ExampleNewWriter() {
 	if err != nil {
 		panic(err)
 	}
-	io.Copy(os.Stdout, r)
-	r.Close()
+	if _, err := io.Copy(os.Stdout, r); err != nil {
+		panic(err)
+	}
+	if err := r.Close(); err != nil {
+		panic(err)
+	}
 	// Output: hello, world
 }
 
