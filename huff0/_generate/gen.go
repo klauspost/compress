@@ -122,8 +122,12 @@ func (d decompress4x) decodeTwoValues(id int, br, peekBits, table, buffer, dstEv
 	MOVWQZX(Mem{Base: table, Index: val.As64(), Scale: 2}, CX.As64())
 
 	Commentf("br%d.advance(uint8(v0.entry)", id)
-	out := reg.RAX             // Fixed since we need 8H
-	MOVB(CX.As8H(), out.As8()) // AL = uint8(v0.entry >> 8)
+	out := reg.RAX // Fixed since we need 8H
+	// The first byte must be a zero-extending write: MOVB into AL would
+	// merge into RAX and carry a false dependency on the previous stream's
+	// value, serializing the four otherwise-independent streams through one
+	// register (on arm64 the lowered BFI chains the same way).
+	MOVBLZX(CX.As8H(), out.As32()) // AX = uint8(v0.entry >> 8)
 
 	SHLQ(CX, brValue)                // value <<= n
 	ADDB(CX.As8(), brBitsRead.As8()) // bits_read += n
@@ -213,7 +217,7 @@ func (d decompress4x) generateProcedure4x8bit(name string) {
 func (d decompress4x) decodeFourValues(id int, br, peekBits, table, buffer, dstEvery, exhausted reg.GPVirtual) {
 	brValue, brBitsRead := d.fillFast32(id, 32, br, exhausted)
 
-	decompress := func(valID int, outByte reg.Register) {
+	decompress := func(valID int, outByte reg.Register, fresh bool) {
 		CX := reg.CL
 		val := GP64()
 		Commentf("val%d := br%d.peekTopBits(peekBits)", valID, id)
@@ -225,18 +229,27 @@ func (d decompress4x) decodeFourValues(id int, br, peekBits, table, buffer, dstE
 		MOVWQZX(Mem{Base: table, Index: val.As64(), Scale: 2}, CX.As64())
 
 		Commentf("br%d.advance(uint8(v%d.entry)", id, valID)
-		MOVB(CX.As8H(), outByte) // outByte = uint8(v0.entry >> 8)
+		if fresh {
+			// The first byte must be a zero-extending write: MOVB into AL
+			// would merge into RAX and carry a false dependency on the
+			// previous stream's value, serializing the four otherwise-
+			// independent streams through one register (on arm64 the
+			// lowered BFI chains the same way).
+			MOVBLZX(CX.As8H(), reg.EAX) // outByte = uint8(v0.entry >> 8)
+		} else {
+			MOVB(CX.As8H(), outByte) // outByte = uint8(v0.entry >> 8)
+		}
 
 		SHLQ(CX, brValue)          // value <<= n
 		ADDB(CX, brBitsRead.As8()) // bits_read += n
 	}
 
 	out := reg.RAX // Fixed since we need 8H
-	decompress(0, out.As8L())
-	decompress(1, out.As8H())
+	decompress(0, out.As8L(), true)
+	decompress(1, out.As8H(), false)
 	BSWAPL(out.As32())
-	decompress(2, out.As8H())
-	decompress(3, out.As8L())
+	decompress(2, out.As8H(), false)
+	decompress(3, out.As8L(), false)
 	BSWAPL(out.As32())
 
 	Comment("these four writes get coalesced")

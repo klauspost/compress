@@ -50,9 +50,9 @@ skip_fill0:
 	MOVWQZX (R9)(R13*2), CX
 
 	// br0.advance(uint8(v0.entry)
-	MOVB CH, AL
-	SHLQ CL, R11
-	ADDB CL, R12
+	MOVBLZX CH, AX
+	SHLQ    CL, R11
+	ADDB    CL, R12
 
 	// val1 := br0.peekTopBits(peekBits)
 	MOVQ DI, CX
@@ -107,9 +107,9 @@ skip_fill1:
 	MOVWQZX (R9)(R13*2), CX
 
 	// br1.advance(uint8(v0.entry)
-	MOVB CH, AL
-	SHLQ CL, R11
-	ADDB CL, R12
+	MOVBLZX CH, AX
+	SHLQ    CL, R11
+	ADDB    CL, R12
 
 	// val1 := br1.peekTopBits(peekBits)
 	MOVQ DI, CX
@@ -164,9 +164,9 @@ skip_fill2:
 	MOVWQZX (R9)(R13*2), CX
 
 	// br2.advance(uint8(v0.entry)
-	MOVB CH, AL
-	SHLQ CL, R11
-	ADDB CL, R12
+	MOVBLZX CH, AX
+	SHLQ    CL, R11
+	ADDB    CL, R12
 
 	// val1 := br2.peekTopBits(peekBits)
 	MOVQ DI, CX
@@ -221,9 +221,9 @@ skip_fill3:
 	MOVWQZX (R9)(R13*2), CX
 
 	// br3.advance(uint8(v0.entry)
-	MOVB CH, AL
-	SHLQ CL, R11
-	ADDB CL, R12
+	MOVBLZX CH, AX
+	SHLQ    CL, R11
+	ADDB    CL, R12
 
 	// val1 := br3.peekTopBits(peekBits)
 	MOVQ DI, CX
@@ -259,13 +259,13 @@ skip_fill3:
 // func decompress4x_8b_main_loop_amd64(ctx *decompress4xContext)
 TEXT ·decompress4x_8b_main_loop_amd64(SB), $0-8
 	// Preload values
-	MOVQ    ctx+0(FP), CX
-	MOVBQZX 8(CX), DI
-	MOVQ    16(CX), BX
-	MOVQ    48(CX), SI
-	MOVQ    24(CX), R8
-	MOVQ    32(CX), R9
-	MOVQ    (CX), R10
+	MOVQ    ctx+0(FP), AX
+	MOVBQZX 8(AX), DI
+	MOVQ    16(AX), BX
+	MOVQ    48(AX), SI
+	MOVQ    24(AX), R8
+	MOVQ    32(AX), R9
+	MOVQ    (AX), R10
 
 	// Main loop
 main_loop:
@@ -278,35 +278,35 @@ main_loop:
 	MOVBQZX 40(R10), R12
 	CMPQ    R12, $0x20
 	JBE     skip_fill0
-	MOVQ    24(R10), R13
+	MOVQ    24(R10), AX
 	SUBQ    $0x20, R12
-	SUBQ    $0x04, R13
-	MOVQ    (R10), R14
+	SUBQ    $0x04, AX
+	MOVQ    (R10), R13
 
 	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVL (R13)(R14*1), R14
+	MOVL (AX)(R13*1), R13
 	MOVQ R12, CX
-	SHLQ CL, R14
-	MOVQ R13, 24(R10)
-	ORQ  R14, R11
+	SHLQ CL, R13
+	MOVQ AX, 24(R10)
+	ORQ  R13, R11
 
 	// exhausted += (br0.off < 4)
-	CMPQ R13, $0x04
+	CMPQ AX, $0x04
 	ADCB $+0, DL
 
 skip_fill0:
 	// val0 := br0.peekTopBits(peekBits)
-	MOVQ R11, R13
+	MOVQ R11, AX
 	MOVQ DI, CX
-	SHRQ CL, R13
+	SHRQ CL, AX
 
 	// v0 := table[val0&mask]
-	MOVWQZX (R9)(R13*2), CX
+	MOVWQZX (R9)(AX*2), CX
 
 	// br0.advance(uint8(v0.entry)
-	MOVB CH, AL
-	SHLQ CL, R11
-	ADDB CL, R12
+	MOVBLZX CH, AX
+	SHLQ    CL, R11
+	ADDB    CL, R12
 
 	// val1 := br0.peekTopBits(peekBits)
 	MOVQ R11, R13
@@ -365,35 +365,35 @@ skip_fill0:
 	MOVBQZX 88(R10), R12
 	CMPQ    R12, $0x20
 	JBE     skip_fill1
-	MOVQ    72(R10), R13
+	MOVQ    72(R10), AX
 	SUBQ    $0x20, R12
-	SUBQ    $0x04, R13
-	MOVQ    48(R10), R14
+	SUBQ    $0x04, AX
+	MOVQ    48(R10), R13
 
 	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVL (R13)(R14*1), R14
+	MOVL (AX)(R13*1), R13
 	MOVQ R12, CX
-	SHLQ CL, R14
-	MOVQ R13, 72(R10)
-	ORQ  R14, R11
+	SHLQ CL, R13
+	MOVQ AX, 72(R10)
+	ORQ  R13, R11
 
 	// exhausted += (br1.off < 4)
-	CMPQ R13, $0x04
+	CMPQ AX, $0x04
 	ADCB $+0, DL
 
 skip_fill1:
 	// val0 := br1.peekTopBits(peekBits)
-	MOVQ R11, R13
+	MOVQ R11, AX
 	MOVQ DI, CX
-	SHRQ CL, R13
+	SHRQ CL, AX
 
 	// v0 := table[val0&mask]
-	MOVWQZX (R9)(R13*2), CX
+	MOVWQZX (R9)(AX*2), CX
 
 	// br1.advance(uint8(v0.entry)
-	MOVB CH, AL
-	SHLQ CL, R11
-	ADDB CL, R12
+	MOVBLZX CH, AX
+	SHLQ    CL, R11
+	ADDB    CL, R12
 
 	// val1 := br1.peekTopBits(peekBits)
 	MOVQ R11, R13
@@ -452,35 +452,35 @@ skip_fill1:
 	MOVBQZX 136(R10), R12
 	CMPQ    R12, $0x20
 	JBE     skip_fill2
-	MOVQ    120(R10), R13
+	MOVQ    120(R10), AX
 	SUBQ    $0x20, R12
-	SUBQ    $0x04, R13
-	MOVQ    96(R10), R14
+	SUBQ    $0x04, AX
+	MOVQ    96(R10), R13
 
 	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVL (R13)(R14*1), R14
+	MOVL (AX)(R13*1), R13
 	MOVQ R12, CX
-	SHLQ CL, R14
-	MOVQ R13, 120(R10)
-	ORQ  R14, R11
+	SHLQ CL, R13
+	MOVQ AX, 120(R10)
+	ORQ  R13, R11
 
 	// exhausted += (br2.off < 4)
-	CMPQ R13, $0x04
+	CMPQ AX, $0x04
 	ADCB $+0, DL
 
 skip_fill2:
 	// val0 := br2.peekTopBits(peekBits)
-	MOVQ R11, R13
+	MOVQ R11, AX
 	MOVQ DI, CX
-	SHRQ CL, R13
+	SHRQ CL, AX
 
 	// v0 := table[val0&mask]
-	MOVWQZX (R9)(R13*2), CX
+	MOVWQZX (R9)(AX*2), CX
 
 	// br2.advance(uint8(v0.entry)
-	MOVB CH, AL
-	SHLQ CL, R11
-	ADDB CL, R12
+	MOVBLZX CH, AX
+	SHLQ    CL, R11
+	ADDB    CL, R12
 
 	// val1 := br2.peekTopBits(peekBits)
 	MOVQ R11, R13
@@ -539,35 +539,35 @@ skip_fill2:
 	MOVBQZX 184(R10), R12
 	CMPQ    R12, $0x20
 	JBE     skip_fill3
-	MOVQ    168(R10), R13
+	MOVQ    168(R10), AX
 	SUBQ    $0x20, R12
-	SUBQ    $0x04, R13
-	MOVQ    144(R10), R14
+	SUBQ    $0x04, AX
+	MOVQ    144(R10), R13
 
 	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVL (R13)(R14*1), R14
+	MOVL (AX)(R13*1), R13
 	MOVQ R12, CX
-	SHLQ CL, R14
-	MOVQ R13, 168(R10)
-	ORQ  R14, R11
+	SHLQ CL, R13
+	MOVQ AX, 168(R10)
+	ORQ  R13, R11
 
 	// exhausted += (br3.off < 4)
-	CMPQ R13, $0x04
+	CMPQ AX, $0x04
 	ADCB $+0, DL
 
 skip_fill3:
 	// val0 := br3.peekTopBits(peekBits)
-	MOVQ R11, R13
+	MOVQ R11, AX
 	MOVQ DI, CX
-	SHRQ CL, R13
+	SHRQ CL, AX
 
 	// v0 := table[val0&mask]
-	MOVWQZX (R9)(R13*2), CX
+	MOVWQZX (R9)(AX*2), CX
 
 	// br3.advance(uint8(v0.entry)
-	MOVB CH, AL
-	SHLQ CL, R11
-	ADDB CL, R12
+	MOVBLZX CH, AX
+	SHLQ    CL, R11
+	ADDB    CL, R12
 
 	// val1 := br3.peekTopBits(peekBits)
 	MOVQ R11, R13
