@@ -619,7 +619,7 @@ func (o options) updateLength(name string, brValue, brBitsRead, state reg.GPVirt
 		// bits zero. MOVBLZX is unconditionally correct, avoids the
 		// partial-register merge, and lowers to a single fresh UBFX on arm64.
 		MOVBLZX(AX.As8H(), CX.As32()) // CX = moB  (ofState.addBits(), that is byte #1 of moState)
-		SHRQ(U8(32), AX)           // AX = mo (ofState.baselineInt(), that's the higher dword of moState)
+		SHRQ(U8(32), AX)              // AX = mo (ofState.baselineInt(), that's the higher dword of moState)
 		// If addBits == 0, skip
 		TESTQ(CX.As64(), CX.As64())
 		JZ(LabelRef(name + "_zero"))
