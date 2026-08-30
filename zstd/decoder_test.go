@@ -1071,11 +1071,9 @@ func testDecoderFile(t *testing.T, fn string, newDec func() (*Decoder, error)) {
 			var got []byte
 			var gotError error
 			var wg sync.WaitGroup
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				got, gotError = io.ReadAll(dec)
-				wg.Done()
-			}()
+			})
 
 			// This decode should not interfere with the stream...
 			gotDecAll, err := dec.DecodeAll(data, nil)

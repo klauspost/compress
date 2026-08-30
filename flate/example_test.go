@@ -166,9 +166,7 @@ func Example_synchronization() {
 	rp, wp := io.Pipe()
 
 	// Start a goroutine to act as the transmitter.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		defer wp.Close()
 
 		zw, err := flate.NewWriter(wp, flate.BestSpeed)
@@ -195,12 +193,10 @@ func Example_synchronization() {
 		if err := zw.Close(); err != nil {
 			log.Fatal(err)
 		}
-	}()
+	})
 
 	// Start a goroutine to act as the receiver.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 
 		zr := flate.NewReader(rp)
 
@@ -229,7 +225,7 @@ func Example_synchronization() {
 		if err := zr.Close(); err != nil {
 			log.Fatal(err)
 		}
-	}()
+	})
 
 	// Output:
 	// Received 1 bytes: A

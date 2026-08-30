@@ -845,25 +845,21 @@ func TestConcurrentBlocks_EncodeAllAlongside(t *testing.T) {
 	var streamBuf bytes.Buffer
 	var streamErr error
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		enc.Reset(&streamBuf)
 		_, streamErr = enc.Write(streamInput)
 		if streamErr != nil {
 			return
 		}
 		streamErr = enc.Close()
-	}()
+	})
 
 	// Concurrent EncodeAll calls.
 	var encAllWg sync.WaitGroup
 	for range 20 {
 		in := streamInput[rng.Intn(len(streamInput)/2):]
 		in = in[:rng.Intn(len(in)/4+1)]
-		encAllWg.Add(1)
-		go func() {
-			defer encAllWg.Done()
+		encAllWg.Go(func() {
 			dst := enc.EncodeAll(in, nil)
 			decoded, err := dec.DecodeAll(dst, nil)
 			if err != nil {
@@ -873,7 +869,7 @@ func TestConcurrentBlocks_EncodeAllAlongside(t *testing.T) {
 			if !bytes.Equal(decoded, in) {
 				t.Error("EncodeAll mismatch")
 			}
-		}()
+		})
 	}
 
 	encAllWg.Wait()
