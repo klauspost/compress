@@ -1438,7 +1438,7 @@ func (e executeSimple) copyOverlappedMemory(suffix string, src, dst, length reg.
 	tmp := GP64()
 
 	Label(label)
-	MOVB(Mem{Base: src}, tmp.As8())
+	MOVBQZX(Mem{Base: src}, tmp) // fresh full-register def; avoids a false RMW dependency on tmp's stale upper bits across iterations
 	MOVB(tmp.As8(), Mem{Base: dst})
 	INCQ(src)
 	INCQ(dst)

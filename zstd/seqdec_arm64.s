@@ -900,8 +900,7 @@ copy_overlapping_match:
 	ADD R12, R6, R6
 
 copy_slow_3:
-	MOVBU (R10), R16
-	BFI   $0, R16, $8, R11
+	MOVBU (R10), R11
 	MOVB  R11, (R3)
 	ADD   $1, R10, R10
 	ADD   $1, R3, R3
@@ -1302,8 +1301,7 @@ copy_overlapping_match:
 	ADD R12, R6, R6
 
 copy_slow_3:
-	MOVBU (R10), R16
-	BFI   $0, R16, $8, R11
+	MOVBU (R10), R11
 	MOVB  R11, (R3)
 	ADD   $1, R10, R10
 	ADD   $1, R3, R3
@@ -1873,8 +1871,7 @@ copy_overlapping_match:
 	ADD R12, R11, R11
 
 copy_slow_3:
-	MOVBU (R0), R16
-	BFI   $0, R16, $8, R1
+	MOVBU (R0), R1
 	MOVB  R1, (R9)
 	ADD   $1, R0, R0
 	ADD   $1, R9, R9
@@ -2607,8 +2604,7 @@ copy_overlapping_match:
 	ADD R12, R11, R11
 
 copy_slow_3:
-	MOVBU (R0), R16
-	BFI   $0, R16, $8, R1
+	MOVBU (R0), R1
 	MOVB  R1, (R9)
 	ADD   $1, R0, R0
 	ADD   $1, R9, R9
