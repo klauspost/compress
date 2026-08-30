@@ -270,9 +270,7 @@ skip_fill3:
 	MOVD R10, 176(R9)
 	MOVB R11, 184(R9)
 	ADD  $0x02, R3, R3
-	AND  $0xff, R2, R16
-	AND  $0xff, R2, R15
-	TST  R16, R15
+	TST  $0xff, R2
 	BEQ  main_loop
 	MOVD ctx+0(FP), R0
 	MOVD 16(R0), R16
@@ -685,9 +683,7 @@ skip_fill3:
 	MOVD R10, 176(R9)
 	MOVB R11, 184(R9)
 	ADD  $0x04, R3, R3
-	AND  $0xff, R2, R16
-	AND  $0xff, R2, R15
-	TST  R16, R15
+	TST  $0xff, R2
 	BEQ  main_loop
 	MOVD ctx+0(FP), R0
 	MOVD 16(R0), R16
