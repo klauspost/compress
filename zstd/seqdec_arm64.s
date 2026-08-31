@@ -151,14 +151,12 @@ sequenceDecs_decode_amd64_ll_update_zero:
 	MOVD R0, (R9)
 
 	// Fill bitreader for state updates
-	MOVD  R13, 8(RSP)
-	MOVD  R8, R0
-	LSR   $0x08, R0, R0
-	MOVBU R0, R0
-	MOVD  ctx+16(FP), R1
-	MOVD  96(R1), R16
-	CMP   $0x00, R16
-	BEQ   sequenceDecs_decode_amd64_skip_update
+	MOVD R13, 8(RSP)
+	UBFX $8, R8, $8, R0
+	MOVD ctx+16(FP), R1
+	MOVD 96(R1), R16
+	CMP  $0x00, R16
+	BEQ  sequenceDecs_decode_amd64_skip_update
 
 	// Update Literal Length State
 	MOVBU R6, R13
@@ -470,14 +468,12 @@ sequenceDecs_decode_56_amd64_ll_update_zero:
 	MOVD R0, (R9)
 
 	// Fill bitreader for state updates
-	MOVD  R13, 8(RSP)
-	MOVD  R8, R0
-	LSR   $0x08, R0, R0
-	MOVBU R0, R0
-	MOVD  ctx+16(FP), R1
-	MOVD  96(R1), R16
-	CMP   $0x00, R16
-	BEQ   sequenceDecs_decode_56_amd64_skip_update
+	MOVD R13, 8(RSP)
+	UBFX $8, R8, $8, R0
+	MOVD ctx+16(FP), R1
+	MOVD 96(R1), R16
+	CMP  $0x00, R16
+	BEQ  sequenceDecs_decode_56_amd64_skip_update
 
 	// Update Literal Length State
 	MOVBU R6, R13
@@ -1526,14 +1522,12 @@ sequenceDecs_decodeSync_amd64_ll_update_zero:
 	MOVD R0, 32(RSP)
 
 	// Fill bitreader for state updates
-	MOVD  R12, 8(RSP)
-	MOVD  R8, R0
-	LSR   $0x08, R0, R0
-	MOVBU R0, R0
-	MOVD  ctx+16(FP), R1
-	MOVD  96(R1), R16
-	CMP   $0x00, R16
-	BEQ   sequenceDecs_decodeSync_amd64_skip_update
+	MOVD R12, 8(RSP)
+	UBFX $8, R8, $8, R0
+	MOVD ctx+16(FP), R1
+	MOVD 96(R1), R16
+	CMP  $0x00, R16
+	BEQ  sequenceDecs_decodeSync_amd64_skip_update
 
 	// Update Literal Length State
 	MOVBU R6, R12
@@ -2142,14 +2136,12 @@ sequenceDecs_decodeSync_safe_amd64_ll_update_zero:
 	MOVD R0, 32(RSP)
 
 	// Fill bitreader for state updates
-	MOVD  R12, 8(RSP)
-	MOVD  R8, R0
-	LSR   $0x08, R0, R0
-	MOVBU R0, R0
-	MOVD  ctx+16(FP), R1
-	MOVD  96(R1), R16
-	CMP   $0x00, R16
-	BEQ   sequenceDecs_decodeSync_safe_amd64_skip_update
+	MOVD R12, 8(RSP)
+	UBFX $8, R8, $8, R0
+	MOVD ctx+16(FP), R1
+	MOVD 96(R1), R16
+	CMP  $0x00, R16
+	BEQ  sequenceDecs_decodeSync_safe_amd64_skip_update
 
 	// Update Literal Length State
 	MOVBU R6, R12

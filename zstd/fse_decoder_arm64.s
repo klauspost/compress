@@ -124,9 +124,7 @@ build_table_main_table:
 	RET
 
 build_table_check1_ok:
-	AND  $0xff, R1, R16
-	AND  $0xff, R1, R15
-	TST  R16, R15
+	TST  $0xff, R1
 	BNE  build_table_check2_ok
 	AND  $0xffff, R6, R16
 	AND  $0xffff, R7, R15
