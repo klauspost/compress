@@ -1,8 +1,6 @@
 module github.com/klauspost/compress/zstd/_generate
 
-go 1.24
-
-toolchain go1.24.2
+go 1.25
 
 require (
 	github.com/klauspost/compress v1.15.15
