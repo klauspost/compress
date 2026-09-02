@@ -19,6 +19,7 @@ var fuzzEndF = flag.Int("end", BestCompression, "End fuzzing at this level (incl
 var fuzzMaxF = flag.Int("max", 1<<20, "Maximum input size")
 var fuzzSLF = flag.Bool("sl", true, "Include stateless encodes")
 var fuzzWindow = flag.Bool("windows", true, "Include windowed encodes")
+var fuzzDict = flag.Bool("dict", false, "Only run dictionary encodes")
 
 func TestMain(m *testing.M) {
 	flag.Parse()
@@ -35,6 +36,12 @@ func FuzzEncoding(f *testing.F) {
 	maxSize := *fuzzMaxF
 	stateless := *fuzzSLF
 	fuzzWindow := *fuzzWindow
+	fuzzDict := *fuzzDict
+	if fuzzDict {
+		// Dictionary encodes are 4 roundtrips per level, so keep inputs small
+		// enough that the fuzzing worker isn't considered hung.
+		maxSize = min(maxSize, 256<<10)
+	}
 
 	decoder := NewReader(nil)
 	buf := new(bytes.Buffer)
@@ -49,6 +56,43 @@ func FuzzEncoding(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > maxSize {
+			return
+		}
+		if fuzzDict {
+			// One dictionary that is unlikely to match the input and one that matches.
+			for di, dict := range [][]byte{[]byte("0123456789abcdefghij"), data[len(data)/2:]} {
+				for level := startFuzz; level <= endFuzz; level++ {
+					fw := encs[level-startFuzz]
+					// Second round tests that Reset re-applies the dictionary.
+					for _, reset := range []bool{false, true} {
+						msg := "dict " + strconv.Itoa(di) + " level " + strconv.Itoa(level) + " reset " + strconv.FormatBool(reset) + ":"
+						buf.Reset()
+						if reset {
+							fw.Reset(buf)
+						} else {
+							fw.ResetDict(buf, dict)
+						}
+						n, err := fw.Write(data)
+						if n != len(data) {
+							t.Fatal(msg + "short write")
+						}
+						if err != nil {
+							t.Fatal(msg + err.Error())
+						}
+						if err := fw.Close(); err != nil {
+							t.Fatal(msg + err.Error())
+						}
+						decoder.(Resetter).Reset(buf, dict)
+						data2, err := io.ReadAll(decoder)
+						if err != nil {
+							t.Fatal(msg + err.Error())
+						}
+						if !bytes.Equal(data, data2) {
+							t.Fatal(msg + "not equal")
+						}
+					}
+				}
+			}
 			return
 		}
 		for level := startFuzz; level <= endFuzz; level++ {
