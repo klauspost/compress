@@ -233,6 +233,27 @@ func (s *sequenceDecs) decodeSync(hist []byte) error {
 	out := s.out
 	maxBlockSize := min(s.windowSize, maxCompressedBlockSize)
 
+	var estimatedSize int
+	if seqs > 0 {
+		avgLitPerSeq := len(s.literals) / seqs
+		avgBytesPerSeq := avgLitPerSeq * 3
+		estimatedSize = len(s.literals) + (seqs * avgBytesPerSeq)
+	}
+
+	// Preallocate buffer to avoid multiple allocations done by runtime.growSlice
+	if estimatedSize > maxBlockSize {
+		if needed := len(out) + maxBlockSize; needed > cap(out) {
+			newCap := needed
+			if newCap < cap(out)*2 {
+				newCap = cap(out) * 2
+			}
+			newOut := make([]byte, len(out), newCap)
+			copy(newOut, out)
+			out = newOut
+			s.out = out
+		}
+	}
+
 	if debugDecoder {
 		println("decodeSync: decoding", seqs, "sequences", br.remain(), "bits remain on stream")
 	}
