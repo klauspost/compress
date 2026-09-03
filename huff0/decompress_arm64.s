@@ -38,8 +38,7 @@ main_loop:
 
 	// exhausted += (br0.off < 4)
 	CMP   $0x04, R0
-	CSINC HS, R2, R2, R16
-	BFI   $0, R16, $8, R2
+	CSINC HS, R2, R2, R2
 
 skip_fill0:
 	// val0 := br0.peekTopBits(peekBits)
@@ -95,8 +94,7 @@ skip_fill0:
 
 	// exhausted += (br1.off < 4)
 	CMP   $0x04, R0
-	CSINC HS, R2, R2, R16
-	BFI   $0, R16, $8, R2
+	CSINC HS, R2, R2, R2
 
 skip_fill1:
 	// val0 := br1.peekTopBits(peekBits)
@@ -152,8 +150,7 @@ skip_fill1:
 
 	// exhausted += (br2.off < 4)
 	CMP   $0x04, R0
-	CSINC HS, R2, R2, R16
-	BFI   $0, R16, $8, R2
+	CSINC HS, R2, R2, R2
 
 skip_fill2:
 	// val0 := br2.peekTopBits(peekBits)
@@ -209,8 +206,7 @@ skip_fill2:
 
 	// exhausted += (br3.off < 4)
 	CMP   $0x04, R0
-	CSINC HS, R2, R2, R16
-	BFI   $0, R16, $8, R2
+	CSINC HS, R2, R2, R2
 
 skip_fill3:
 	// val0 := br3.peekTopBits(peekBits)
@@ -248,7 +244,7 @@ skip_fill3:
 	MOVD R10, 176(R9)
 	MOVB R11, 184(R9)
 	ADD  $0x02, R3, R3
-	TST  $0xff, R2
+	TST  R2, R2
 	BEQ  main_loop
 	MOVD ctx+0(FP), R0
 	MOVD 16(R0), R16
@@ -292,8 +288,7 @@ main_loop:
 
 	// exhausted += (br0.off < 4)
 	CMP   $0x04, R0
-	CSINC HS, R2, R2, R16
-	BFI   $0, R16, $8, R2
+	CSINC HS, R2, R2, R2
 
 skip_fill0:
 	// val0 := br0.peekTopBits(peekBits)
@@ -379,8 +374,7 @@ skip_fill0:
 
 	// exhausted += (br1.off < 4)
 	CMP   $0x04, R0
-	CSINC HS, R2, R2, R16
-	BFI   $0, R16, $8, R2
+	CSINC HS, R2, R2, R2
 
 skip_fill1:
 	// val0 := br1.peekTopBits(peekBits)
@@ -466,8 +460,7 @@ skip_fill1:
 
 	// exhausted += (br2.off < 4)
 	CMP   $0x04, R0
-	CSINC HS, R2, R2, R16
-	BFI   $0, R16, $8, R2
+	CSINC HS, R2, R2, R2
 
 skip_fill2:
 	// val0 := br2.peekTopBits(peekBits)
@@ -554,8 +547,7 @@ skip_fill2:
 
 	// exhausted += (br3.off < 4)
 	CMP   $0x04, R0
-	CSINC HS, R2, R2, R16
-	BFI   $0, R16, $8, R2
+	CSINC HS, R2, R2, R2
 
 skip_fill3:
 	// val0 := br3.peekTopBits(peekBits)
@@ -623,7 +615,7 @@ skip_fill3:
 	MOVD R10, 176(R9)
 	MOVB R11, 184(R9)
 	ADD  $0x04, R3, R3
-	TST  $0xff, R2
+	TST  R2, R2
 	BEQ  main_loop
 	MOVD ctx+0(FP), R0
 	MOVD 16(R0), R16

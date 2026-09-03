@@ -47,7 +47,12 @@ func (d decompress4x) generateProcedure(name string) {
 	Doc(name+" is an x86 assembler implementation of Decompress4X when tablelog > 8.decodes a sequence", "")
 	Pragma("noescape")
 
-	exhausted := GP8()
+	// exhausted counts streams whose input ran dry, at most 4 per iteration,
+	// so the full register is as good as a byte. Full-width ops avoid x86
+	// partial-register merges, and on arm64 the zeroing plus SETGE lowers to
+	// one CSET and each carry add to one CSINC, where byte-lane ops need a
+	// bit-field insert after every one.
+	exhausted := GP64()
 	buffer := GP64()
 	limit := GP64()
 
@@ -74,7 +79,7 @@ func (d decompress4x) generateProcedure(name string) {
 	// Check if we have space. We could zero exhausted outside the loop,
 	// but doing it here is a hint to the CPU that there's no dependency
 	// on the previous iteration's value.
-	XORL(exhausted.As32(), exhausted.As32())
+	XORQ(exhausted, exhausted)
 	CMPQ(buffer, limit)
 	SETGE(exhausted.As8())
 	d.decodeTwoValues(0, br, peekBits, table, buffer, dstEvery, exhausted)
@@ -84,7 +89,7 @@ func (d decompress4x) generateProcedure(name string) {
 
 	ADDQ(U8(2), buffer) // off += 2
 
-	TESTB(exhausted, exhausted) // any br[i].ofs < 4?
+	TESTQ(exhausted, exhausted) // any br[i].ofs < 4?
 	JZ(LabelRef("main_loop"))
 
 	{
@@ -162,7 +167,12 @@ func (d decompress4x) generateProcedure4x8bit(name string) {
 	Doc(name+" is an x86 assembler implementation of Decompress4X when tablelog > 8.decodes a sequence", "")
 	Pragma("noescape")
 
-	exhausted := GP8()
+	// exhausted counts streams whose input ran dry, at most 4 per iteration,
+	// so the full register is as good as a byte. Full-width ops avoid x86
+	// partial-register merges, and on arm64 the zeroing plus SETGE lowers to
+	// one CSET and each carry add to one CSINC, where byte-lane ops need a
+	// bit-field insert after every one.
+	exhausted := GP64()
 	buffer := GP64()
 	limit := GP64()
 
@@ -189,9 +199,9 @@ func (d decompress4x) generateProcedure4x8bit(name string) {
 	// Check if we have space. We could zero exhausted outside the loop,
 	// but doing it here is a hint to the CPU that there's no dependency
 	// on the previous iteration's value.
-	XORL(exhausted.As32(), exhausted.As32())
+	XORQ(exhausted, exhausted)
 	CMPQ(buffer, limit)
-	SETGE(exhausted)
+	SETGE(exhausted.As8())
 	d.decodeFourValues(0, br, peekBits, table, buffer, dstEvery, exhausted)
 	d.decodeFourValues(1, br, peekBits, table, buffer, dstEvery, exhausted)
 	d.decodeFourValues(2, br, peekBits, table, buffer, dstEvery, exhausted)
@@ -199,7 +209,7 @@ func (d decompress4x) generateProcedure4x8bit(name string) {
 
 	ADDQ(U8(4), buffer) // off += 4
 
-	TESTB(exhausted, exhausted) // any br[i].ofs < 4?
+	TESTQ(exhausted, exhausted) // any br[i].ofs < 4?
 	JZ(LabelRef("main_loop"))
 
 	{
@@ -319,8 +329,8 @@ func (d decompress4x) fillFast32(id, atLeast int, br, exhausted reg.GPVirtual) (
 		Commentf("exhausted += (br%d.off < 4)", id)
 		CMPQ(brOffset, U8(4))
 		// Add carry from brOffset-4. We do this at most four times per iteration,
-		// and every iteration resets exhausted's lower byte, so it doesn't overflow.
-		ADCB(I8(0), exhausted)
+		// and every iteration resets exhausted, so it doesn't overflow.
+		ADCQ(I8(0), exhausted)
 	}
 
 	Label("skip_fill" + strconv.Itoa(id))

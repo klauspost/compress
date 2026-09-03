@@ -15,7 +15,7 @@ TEXT ·decompress4x_main_loop_amd64(SB), $0-8
 
 	// Main loop
 main_loop:
-	XORL  DX, DX
+	XORQ  DX, DX
 	CMPQ  BX, SI
 	SETGE DL
 
@@ -38,7 +38,7 @@ main_loop:
 
 	// exhausted += (br0.off < 4)
 	CMPQ AX, $0x04
-	ADCB $+0, DL
+	ADCQ $+0, DX
 
 skip_fill0:
 	// val0 := br0.peekTopBits(peekBits)
@@ -95,7 +95,7 @@ skip_fill0:
 
 	// exhausted += (br1.off < 4)
 	CMPQ AX, $0x04
-	ADCB $+0, DL
+	ADCQ $+0, DX
 
 skip_fill1:
 	// val0 := br1.peekTopBits(peekBits)
@@ -152,7 +152,7 @@ skip_fill1:
 
 	// exhausted += (br2.off < 4)
 	CMPQ AX, $0x04
-	ADCB $+0, DL
+	ADCQ $+0, DX
 
 skip_fill2:
 	// val0 := br2.peekTopBits(peekBits)
@@ -209,7 +209,7 @@ skip_fill2:
 
 	// exhausted += (br3.off < 4)
 	CMPQ AX, $0x04
-	ADCB $+0, DL
+	ADCQ $+0, DX
 
 skip_fill3:
 	// val0 := br3.peekTopBits(peekBits)
@@ -248,7 +248,7 @@ skip_fill3:
 	MOVQ  R11, 176(R10)
 	MOVB  R12, 184(R10)
 	ADDQ  $0x02, BX
-	TESTB DL, DL
+	TESTQ DX, DX
 	JZ    main_loop
 	MOVQ  ctx+0(FP), AX
 	SUBQ  16(AX), BX
@@ -269,7 +269,7 @@ TEXT ·decompress4x_8b_main_loop_amd64(SB), $0-8
 
 	// Main loop
 main_loop:
-	XORL  DX, DX
+	XORQ  DX, DX
 	CMPQ  BX, SI
 	SETGE DL
 
@@ -292,7 +292,7 @@ main_loop:
 
 	// exhausted += (br0.off < 4)
 	CMPQ AX, $0x04
-	ADCB $+0, DL
+	ADCQ $+0, DX
 
 skip_fill0:
 	// val0 := br0.peekTopBits(peekBits)
@@ -379,7 +379,7 @@ skip_fill0:
 
 	// exhausted += (br1.off < 4)
 	CMPQ AX, $0x04
-	ADCB $+0, DL
+	ADCQ $+0, DX
 
 skip_fill1:
 	// val0 := br1.peekTopBits(peekBits)
@@ -466,7 +466,7 @@ skip_fill1:
 
 	// exhausted += (br2.off < 4)
 	CMPQ AX, $0x04
-	ADCB $+0, DL
+	ADCQ $+0, DX
 
 skip_fill2:
 	// val0 := br2.peekTopBits(peekBits)
@@ -553,7 +553,7 @@ skip_fill2:
 
 	// exhausted += (br3.off < 4)
 	CMPQ AX, $0x04
-	ADCB $+0, DL
+	ADCQ $+0, DX
 
 skip_fill3:
 	// val0 := br3.peekTopBits(peekBits)
@@ -622,7 +622,7 @@ skip_fill3:
 	MOVQ  R11, 176(R10)
 	MOVB  R12, 184(R10)
 	ADDQ  $0x04, BX
-	TESTB DL, DL
+	TESTQ DX, DX
 	JZ    main_loop
 	MOVQ  ctx+0(FP), AX
 	SUBQ  16(AX), BX
