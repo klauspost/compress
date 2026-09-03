@@ -128,6 +128,10 @@ type options struct {
 	bmi2     bool
 	fiftysix bool // Less than max 56 bits/loop
 	useSeqs  bool // Generate code that uses the `seqs` auxiliary table
+
+	// Set by generateBody once the frame is laid out.
+	tableSlot map[string]Mem // ctx.<table> base pointers, copied to locals at entry
+	iterSlot  Mem            // ctx.iteration, kept in a local for the whole call
 }
 
 func (o options) genDecodeSeqAsm(name string) {
@@ -177,6 +181,27 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 		Load(ctx.Field("llState"), llState)
 		Load(ctx.Field("mlState"), mlState)
 		Load(ctx.Field("ofState"), ofState)
+
+		// The table base pointers and the iteration counter live in ctx, and
+		// the loop cannot spare registers for them. Reading them through ctx
+		// costs a dependent pair of loads (ctx from the frame, then the field)
+		// at every use -- three tables plus two counter accesses per
+		// sequence. A local slot is one load. The counter is written back to
+		// ctx on every exit where the caller reads it (see returnWithCode).
+		o.tableSlot = make(map[string]Mem)
+		for _, table := range []string{"llTable", "mlTable", "ofTable"} {
+			tmp := GP64()
+			Load(ctx.Field(table).Base(), tmp)
+			slot := AllocLocal(8)
+			MOVQ(tmp, slot)
+			o.tableSlot[table] = slot
+		}
+		{
+			tmp := GP64()
+			Load(ctx.Field("iteration"), tmp)
+			o.iterSlot = AllocLocal(8)
+			MOVQ(tmp, o.iterSlot)
+		}
 
 		if o.useSeqs {
 			seqBase = GP64()
@@ -292,14 +317,8 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 		MOVBQZX(R14.As8(), R14)
 	}
 
-	// Reload ctx
-	ctx := Dereference(Param("ctx"))
-	iteration, err := ctx.Field("iteration").Resolve()
-	if err != nil {
-		panic(err)
-	}
 	// if ctx.iteration != 0, do update
-	CMPQ(iteration.Addr, U8(0))
+	CMPQ(o.iterSlot, U8(0))
 	JZ(LabelRef(name + "_skip_update"))
 
 	// Update states, max tablelog 28
@@ -369,7 +388,7 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 	MOVQ(llP, ll)
 
 	// Update length
-	{
+	if o.useSeqs {
 		length := GP64()
 		LEAQ(Mem{Base: ml, Index: ll, Scale: 1}, length)
 		s := Dereference(Param("s"))
@@ -379,9 +398,13 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 		}
 		ADDQ(length, seqSizeP.Addr) // s.seqSize += ml + ll
 	}
+	// Otherwise every sequence advances outPosition by exactly ll + ml, so
+	// the sum is recovered once at loop_finished from the position delta
+	// instead of a load/add/store on s.seqSize per sequence. The caller reads
+	// seqSize only on success.
 
 	// Reload ctx
-	ctx = Dereference(Param("ctx"))
+	ctx := Dereference(Param("ctx"))
 	litRemainP, err := ctx.Field("litRemain").Resolve()
 	if err != nil {
 		panic(err)
@@ -412,6 +435,9 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 			JMP(LabelRef("handle_loop"))
 		}
 
+		// The checks above already hold ll, mo and ml in registers; hand
+		// them over rather than reloading the three stack slots.
+		ec.ll, ec.mo, ec.ml = ll, offset, ml
 		executeSingleTriple(&ec, handleLoop)
 	}
 
@@ -419,13 +445,8 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 	if o.useSeqs {
 		ADDQ(U8(seqValsSize), seqBase)
 	}
-	ctx = Dereference(Param("ctx"))
-	iterationP, err := ctx.Field("iteration").Resolve()
-	if err != nil {
-		panic(err)
-	}
 
-	DECQ(iterationP.Addr)
+	DECQ(o.iterSlot)
 	JNS(LabelRef(name + "_main_loop"))
 
 	Label("loop_finished")
@@ -446,6 +467,24 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 	Store(brOffset, br.Field("cursor"))
 
 	if !o.useSeqs {
+		Comment("s.seqSize += outPosition - ctx.outPosition")
+		{
+			ctx := Dereference(Param("ctx"))
+			outPositionP, err := ctx.Field("outPosition").Resolve()
+			if err != nil {
+				panic(err)
+			}
+			s := Dereference(Param("s"))
+			seqSizeP, err := s.Field("seqSize").Resolve()
+			if err != nil {
+				panic(err)
+			}
+			tmp := GP64()
+			MOVQ(ec.outPosition, tmp)
+			SUBQ(outPositionP.Addr, tmp) // ctx.outPosition is still the entry value
+			ADDQ(tmp, seqSizeP.Addr)
+		}
+
 		Comment("Update the context")
 		ctx := Dereference(Param("ctx"))
 		Store(ec.outPosition, ctx.Field("outPosition"))
@@ -535,6 +574,13 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 }
 
 func (o options) returnWithCode(returnCode uint32) {
+	if o.useSeqs {
+		// decode() locates the failing sequence from ctx.iteration.
+		tmp := GP64()
+		MOVQ(o.iterSlot, tmp)
+		ctx := Dereference(Param("ctx"))
+		Store(tmp, ctx.Field("iteration"))
+	}
 	a, err := ReturnIndex(0).Resolve()
 	if err != nil {
 		panic(err)
@@ -607,36 +653,32 @@ func (o options) updateLength(name string, brValue, brBitsRead, state reg.GPVirt
 		ADDQ(BX, res)     // AX - mo + br.getBits(moB)
 		MOVQ(res, out)
 	} else {
+		// Branch-free: the same value as bitReader.getBits for every n the
+		// tables can hold (addBits is at most 30, see fseDecoder.transform),
+		// including n == 0, which yields 0. Reading n bits from the top of
+		// value<<bitsRead is a right shift by 64-n; splitting one bit off
+		// into a fixed shift makes the variable shift 63-n, which stays in
+		// range for n == 0 instead of degenerating to a shift by 64 that x86
+		// and arm64 both mask to 0. The BMI2 twin never checked for overread
+		// here either: the fill preceding each group of reads guarantees the
+		// bits, and a stream that runs dry is reported at the next fill.
 		BX := GP64()
 		CX := reg.CL
 		AX := reg.RAX
 		MOVQ(state, AX.As64()) // So we can grab high bytes.
 		MOVQ(brBitsRead, CX.As64())
 		MOVQ(brValue, BX)
-		SHLQ(CX, BX) // BX = br.value << br.bitsRead (part of getBits)
-		// Zero-extending write: the full CX must equal addBits below, which a
-		// MOVB into CL only achieves because brBitsRead <= 64 leaves the upper
-		// bits zero. MOVBLZX is unconditionally correct, avoids the
+		SHLQ(CX, BX)    // BX = br.value << br.bitsRead
+		SHRQ(U8(1), BX) // one bit of the 64-n shift, so the rest is 63-n
+		// Zero-extending write: MOVBLZX is unconditionally correct, avoids the
 		// partial-register merge, and lowers to a single fresh UBFX on arm64.
-		MOVBLZX(AX.As8H(), CX.As32()) // CX = moB  (ofState.addBits(), that is byte #1 of moState)
-		SHRQ(U8(32), AX)              // AX = mo (ofState.baselineInt(), that's the higher dword of moState)
-		// If addBits == 0, skip
-		TESTQ(CX.As64(), CX.As64())
-		JZ(LabelRef(name + "_zero"))
-
-		ADDQ(CX.As64(), brBitsRead) // br.bitsRead += n (part of getBits)
-		// If overread, skip
-		CMPQ(brBitsRead, U8(64))
-		JA(LabelRef(name + "_zero"))
-		CMPQ(CX.As64(), U8(64))
-		JAE(LabelRef(name + "_zero"))
-
-		NEGQ(CX.As64()) // CX = 64 - n
-		SHRQ(CX, BX)    // BX = (br.value << br.bitsRead) >> (64 - n) -- getBits() result
-		ADDQ(BX, AX)    // AX - mo + br.getBits(moB)
-
-		Label(name + "_zero")
-		MOVQ(AX, out) // Store result
+		MOVBLZX(AX.As8H(), CX.As32()) // CX = n = addBits (byte #1 of the state)
+		SHRQ(U8(32), AX)              // AX = baseline (the higher dword of the state)
+		ADDQ(CX.As64(), brBitsRead)   // br.bitsRead += n
+		XORQ(U8(63), CX.As64())       // CX = 63 - n
+		SHRQ(CX, BX)                  // BX = br.getBits(n)
+		ADDQ(BX, AX)                  // AX = baseline + br.getBits(n)
+		MOVQ(AX, out)                 // Store result
 	}
 }
 
@@ -666,12 +708,7 @@ func (o options) updateState(state, brValue, brBitsRead reg.GPVirtual, table str
 	// Load table pointer
 	tablePtr := GP64()
 	Comment("Load ctx." + table)
-	ctx := Dereference(Param("ctx"))
-	tableA, err := ctx.Field(table).Base().Resolve()
-	if err != nil {
-		panic(err)
-	}
-	MOVQ(tableA.Addr, tablePtr)
+	MOVQ(o.tableSlot[table], tablePtr)
 
 	// Check if below tablelog
 	assert(func(ok LabelRef) {
@@ -692,12 +729,7 @@ func (o options) nextState(state, lowBits reg.GPVirtual, table string) {
 	// Load table pointer
 	tablePtr := GP64()
 	Comment("Load ctx." + table)
-	ctx := Dereference(Param("ctx"))
-	tableA, err := ctx.Field(table).Base().Resolve()
-	if err != nil {
-		panic(err)
-	}
-	MOVQ(tableA.Addr, tablePtr)
+	MOVQ(o.tableSlot[table], tablePtr)
 
 	// Check if below tablelog
 	assert(func(ok LabelRef) {
@@ -708,30 +740,31 @@ func (o options) nextState(state, lowBits reg.GPVirtual, table string) {
 	MOVQ(Mem{Base: tablePtr, Index: DX, Scale: 8}, state)
 }
 
-// getBits will return nbits bits from brValue.
+// getBits will return nbits bits from brValue. nBits must be below 64.
+// The generic path clobbers nBits.
 func (o options) getBits(nBits, brValue, brBitsRead reg.GPVirtual) reg.GPVirtual {
 	BX := GP64()
 	CX := reg.CL
 
-	LEAQ(Mem{Base: brBitsRead, Index: nBits, Scale: 1}, CX.As64())
-	MOVQ(brValue, BX)
-	MOVQ(CX.As64(), brBitsRead)
-	ROLQ(CX, BX)
-
-	// BX &= (1<<nBits) - 1
 	if o.bmi2 {
-		BZHIQ(nBits, BX, BX)
+		LEAQ(Mem{Base: brBitsRead, Index: nBits, Scale: 1}, CX.As64())
+		MOVQ(brValue, BX)
+		MOVQ(CX.As64(), brBitsRead)
+		ROLQ(CX, BX)
+		BZHIQ(nBits, BX, BX) // BX &= (1<<nBits) - 1
 	} else {
-		mask := GP32()
-		MOVL(U32(1), mask)
-		// Zero-extending write rather than a MOVB into CL: SHLL only reads CL,
-		// but the partial write would merge into the stale RCX (the bitsRead
-		// sum from the LEAQ above) and lower to a UBFX+BFI read-modify-write
-		// pair on arm64; MOVBLZX is a fresh def on both.
-		MOVBLZX(nBits.As8(), CX.As32())
-		SHLL(CX, mask)
-		DECL(mask)
-		ANDQ(mask.As64(), BX)
+		// Same shape as updateLength: shift the wanted bits to the top, then
+		// down by 64-n as a fixed 1 plus a variable 63-n, which is in range
+		// for n == 0. That replaces the rotate and the (1<<n)-1 mask build,
+		// and on arm64 lowers to plain three-operand shifts.
+		MOVQ(brBitsRead, CX.As64())
+		MOVQ(brValue, BX)
+		SHLQ(CX, BX)
+		SHRQ(U8(1), BX)
+		ADDQ(nBits, brBitsRead)
+		XORQ(U8(63), nBits) // 63 - n
+		MOVQ(nBits, CX.As64())
+		SHRQ(CX, BX)
 	}
 	return BX
 }
@@ -1103,6 +1136,10 @@ type executeSingleTripleContext struct {
 	outBase     reg.GPVirtual
 	outPosition reg.GPVirtual
 
+	// ll, mo and ml, when the caller already holds them in registers;
+	// otherwise nil and loaded from the pointers above.
+	ll, mo, ml reg.GPVirtual
+
 	// values used when useSeqs is true
 	histBase   reg.GPVirtual
 	histLen    reg.GPVirtual
@@ -1118,12 +1155,19 @@ type executeSingleTripleContext struct {
 // executeSingleTriple performs copy from literals and history according
 // to the decoded values ll, mo and ml.
 func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handleLoop func()) {
-	ll := GP64()
-	MOVQ(c.llPtr, ll)
-	mo := GP64()
-	MOVQ(c.moPtr, mo)
-	ml := GP64()
-	MOVQ(c.mlPtr, ml)
+	ll, mo, ml := c.ll, c.mo, c.ml
+	if ll == nil {
+		ll = GP64()
+		MOVQ(c.llPtr, ll)
+	}
+	if mo == nil {
+		mo = GP64()
+		MOVQ(c.moPtr, mo)
+	}
+	if ml == nil {
+		ml = GP64()
+		MOVQ(c.mlPtr, ml)
+	}
 
 	if !e.useSeqs {
 		Comment("Check if we have enough space in s.out")
