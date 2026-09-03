@@ -16,10 +16,8 @@ TEXT ·decompress4x_main_loop_arm64(SB), $0-8
 
 	// Main loop
 main_loop:
-	MOVD $0, R2
 	CMP  R5, R3
-	CSET GE, R16
-	BFI  $0, R16, $8, R2
+	CSET GE, R2
 
 	// br0.fillFast32()
 	MOVD  32(R9), R10
@@ -45,9 +43,7 @@ main_loop:
 
 skip_fill0:
 	// val0 := br0.peekTopBits(peekBits)
-	MOVD R10, R12
-	MOVD R6, R1
-	LSR  R1, R12, R12
+	LSR R6, R10, R12
 
 	// v0 := table[val0&mask]
 	MOVHU (R8)(R12<<1), R1
@@ -59,9 +55,7 @@ skip_fill0:
 	BFI  $0, R15, $8, R11
 
 	// val1 := br0.peekTopBits(peekBits)
-	MOVD R6, R1
-	MOVD R10, R12
-	LSR  R1, R12, R12
+	LSR R6, R10, R12
 
 	// v1 := table[val1&mask]
 	MOVHU (R8)(R12<<1), R1
@@ -106,9 +100,7 @@ skip_fill0:
 
 skip_fill1:
 	// val0 := br1.peekTopBits(peekBits)
-	MOVD R10, R12
-	MOVD R6, R1
-	LSR  R1, R12, R12
+	LSR R6, R10, R12
 
 	// v0 := table[val0&mask]
 	MOVHU (R8)(R12<<1), R1
@@ -120,9 +112,7 @@ skip_fill1:
 	BFI  $0, R15, $8, R11
 
 	// val1 := br1.peekTopBits(peekBits)
-	MOVD R6, R1
-	MOVD R10, R12
-	LSR  R1, R12, R12
+	LSR R6, R10, R12
 
 	// v1 := table[val1&mask]
 	MOVHU (R8)(R12<<1), R1
@@ -167,9 +157,7 @@ skip_fill1:
 
 skip_fill2:
 	// val0 := br2.peekTopBits(peekBits)
-	MOVD R10, R12
-	MOVD R6, R1
-	LSR  R1, R12, R12
+	LSR R6, R10, R12
 
 	// v0 := table[val0&mask]
 	MOVHU (R8)(R12<<1), R1
@@ -181,9 +169,7 @@ skip_fill2:
 	BFI  $0, R15, $8, R11
 
 	// val1 := br2.peekTopBits(peekBits)
-	MOVD R6, R1
-	MOVD R10, R12
-	LSR  R1, R12, R12
+	LSR R6, R10, R12
 
 	// v1 := table[val1&mask]
 	MOVHU (R8)(R12<<1), R1
@@ -228,9 +214,7 @@ skip_fill2:
 
 skip_fill3:
 	// val0 := br3.peekTopBits(peekBits)
-	MOVD R10, R12
-	MOVD R6, R1
-	LSR  R1, R12, R12
+	LSR R6, R10, R12
 
 	// v0 := table[val0&mask]
 	MOVHU (R8)(R12<<1), R1
@@ -242,9 +226,7 @@ skip_fill3:
 	BFI  $0, R15, $8, R11
 
 	// val1 := br3.peekTopBits(peekBits)
-	MOVD R6, R1
-	MOVD R10, R12
-	LSR  R1, R12, R12
+	LSR R6, R10, R12
 
 	// v1 := table[val1&mask]
 	MOVHU (R8)(R12<<1), R1
@@ -288,10 +270,8 @@ TEXT ·decompress4x_8b_main_loop_arm64(SB), $0-8
 
 	// Main loop
 main_loop:
-	MOVD $0, R2
 	CMP  R5, R3
-	CSET GE, R16
-	BFI  $0, R16, $8, R2
+	CSET GE, R2
 
 	// br0.fillFast32()
 	MOVD  32(R9), R10
@@ -317,9 +297,7 @@ main_loop:
 
 skip_fill0:
 	// val0 := br0.peekTopBits(peekBits)
-	MOVD R10, R0
-	MOVD R6, R1
-	LSR  R1, R0, R0
+	LSR R6, R10, R0
 
 	// v0 := table[val0&mask]
 	MOVHU (R8)(R0<<1), R1
@@ -331,9 +309,7 @@ skip_fill0:
 	BFI  $0, R15, $8, R11
 
 	// val1 := br0.peekTopBits(peekBits)
-	MOVD R10, R12
-	MOVD R6, R1
-	LSR  R1, R12, R12
+	LSR R6, R10, R12
 
 	// v1 := table[val0&mask]
 	MOVHU (R8)(R12<<1), R1
@@ -347,9 +323,7 @@ skip_fill0:
 	REVW R0, R0
 
 	// val2 := br0.peekTopBits(peekBits)
-	MOVD R10, R12
-	MOVD R6, R1
-	LSR  R1, R12, R12
+	LSR R6, R10, R12
 
 	// v2 := table[val0&mask]
 	MOVHU (R8)(R12<<1), R1
@@ -362,9 +336,7 @@ skip_fill0:
 	BFI  $0, R15, $8, R11
 
 	// val3 := br0.peekTopBits(peekBits)
-	MOVD R10, R12
-	MOVD R6, R1
-	LSR  R1, R12, R12
+	LSR R6, R10, R12
 
 	// v3 := table[val0&mask]
 	MOVHU (R8)(R12<<1), R1
@@ -412,9 +384,7 @@ skip_fill0:
 
 skip_fill1:
 	// val0 := br1.peekTopBits(peekBits)
-	MOVD R10, R0
-	MOVD R6, R1
-	LSR  R1, R0, R0
+	LSR R6, R10, R0
 
 	// v0 := table[val0&mask]
 	MOVHU (R8)(R0<<1), R1
@@ -426,9 +396,7 @@ skip_fill1:
 	BFI  $0, R15, $8, R11
 
 	// val1 := br1.peekTopBits(peekBits)
-	MOVD R10, R12
-	MOVD R6, R1
-	LSR  R1, R12, R12
+	LSR R6, R10, R12
 
 	// v1 := table[val0&mask]
 	MOVHU (R8)(R12<<1), R1
@@ -442,9 +410,7 @@ skip_fill1:
 	REVW R0, R0
 
 	// val2 := br1.peekTopBits(peekBits)
-	MOVD R10, R12
-	MOVD R6, R1
-	LSR  R1, R12, R12
+	LSR R6, R10, R12
 
 	// v2 := table[val0&mask]
 	MOVHU (R8)(R12<<1), R1
@@ -457,9 +423,7 @@ skip_fill1:
 	BFI  $0, R15, $8, R11
 
 	// val3 := br1.peekTopBits(peekBits)
-	MOVD R10, R12
-	MOVD R6, R1
-	LSR  R1, R12, R12
+	LSR R6, R10, R12
 
 	// v3 := table[val0&mask]
 	MOVHU (R8)(R12<<1), R1
@@ -507,9 +471,7 @@ skip_fill1:
 
 skip_fill2:
 	// val0 := br2.peekTopBits(peekBits)
-	MOVD R10, R0
-	MOVD R6, R1
-	LSR  R1, R0, R0
+	LSR R6, R10, R0
 
 	// v0 := table[val0&mask]
 	MOVHU (R8)(R0<<1), R1
@@ -521,9 +483,7 @@ skip_fill2:
 	BFI  $0, R15, $8, R11
 
 	// val1 := br2.peekTopBits(peekBits)
-	MOVD R10, R12
-	MOVD R6, R1
-	LSR  R1, R12, R12
+	LSR R6, R10, R12
 
 	// v1 := table[val0&mask]
 	MOVHU (R8)(R12<<1), R1
@@ -537,9 +497,7 @@ skip_fill2:
 	REVW R0, R0
 
 	// val2 := br2.peekTopBits(peekBits)
-	MOVD R10, R12
-	MOVD R6, R1
-	LSR  R1, R12, R12
+	LSR R6, R10, R12
 
 	// v2 := table[val0&mask]
 	MOVHU (R8)(R12<<1), R1
@@ -552,9 +510,7 @@ skip_fill2:
 	BFI  $0, R15, $8, R11
 
 	// val3 := br2.peekTopBits(peekBits)
-	MOVD R10, R12
-	MOVD R6, R1
-	LSR  R1, R12, R12
+	LSR R6, R10, R12
 
 	// v3 := table[val0&mask]
 	MOVHU (R8)(R12<<1), R1
@@ -603,9 +559,7 @@ skip_fill2:
 
 skip_fill3:
 	// val0 := br3.peekTopBits(peekBits)
-	MOVD R10, R0
-	MOVD R6, R1
-	LSR  R1, R0, R0
+	LSR R6, R10, R0
 
 	// v0 := table[val0&mask]
 	MOVHU (R8)(R0<<1), R1
@@ -617,9 +571,7 @@ skip_fill3:
 	BFI  $0, R15, $8, R11
 
 	// val1 := br3.peekTopBits(peekBits)
-	MOVD R10, R12
-	MOVD R6, R1
-	LSR  R1, R12, R12
+	LSR R6, R10, R12
 
 	// v1 := table[val0&mask]
 	MOVHU (R8)(R12<<1), R1
@@ -633,9 +585,7 @@ skip_fill3:
 	REVW R0, R0
 
 	// val2 := br3.peekTopBits(peekBits)
-	MOVD R10, R12
-	MOVD R6, R1
-	LSR  R1, R12, R12
+	LSR R6, R10, R12
 
 	// v2 := table[val0&mask]
 	MOVHU (R8)(R12<<1), R1
@@ -648,9 +598,7 @@ skip_fill3:
 	BFI  $0, R15, $8, R11
 
 	// val3 := br3.peekTopBits(peekBits)
-	MOVD R10, R12
-	MOVD R6, R1
-	LSR  R1, R12, R12
+	LSR R6, R10, R12
 
 	// v3 := table[val0&mask]
 	MOVHU (R8)(R12<<1), R1
@@ -718,18 +666,14 @@ main_loop:
 	ORR   R11, R9, R9
 
 bitReader_fillFast_1_end:
-	MOVD  R6, R1
-	MOVD  R9, R11
-	LSR   R1, R11, R11
+	LSR   R6, R9, R11
 	MOVHU (R5)(R11<<1), R1
 	UBFX  $8, R1, $8, R16
 	BFI   $0, R16, $8, R0
 	MOVBU R1, R1
 	ADD   R1, R10, R10
 	LSL   R1, R9, R9
-	MOVD  R6, R1
-	MOVD  R9, R11
-	LSR   R1, R11, R11
+	LSR   R6, R9, R11
 	MOVHU (R5)(R11<<1), R1
 	UBFX  $8, R1, $8, R16
 	BFI   $8, R16, $8, R0
@@ -747,18 +691,14 @@ bitReader_fillFast_1_end:
 	ORR   R11, R9, R9
 
 bitReader_fillFast_2_end:
-	MOVD  R6, R1
-	MOVD  R9, R11
-	LSR   R1, R11, R11
+	LSR   R6, R9, R11
 	MOVHU (R5)(R11<<1), R1
 	UBFX  $8, R1, $8, R16
 	BFI   $8, R16, $8, R0
 	MOVBU R1, R1
 	ADD   R1, R10, R10
 	LSL   R1, R9, R9
-	MOVD  R6, R1
-	MOVD  R9, R11
-	LSR   R1, R11, R11
+	LSR   R6, R9, R11
 	MOVHU (R5)(R11<<1), R1
 	UBFX  $8, R1, $8, R16
 	BFI   $0, R16, $8, R0

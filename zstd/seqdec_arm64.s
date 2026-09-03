@@ -37,8 +37,7 @@ sequenceDecs_decode_amd64_main_loop:
 	// Fill bitreader to have enough for the offset and match length.
 	CMP  $0x08, R5
 	BLT  sequenceDecs_decode_amd64_fill_byte_by_byte
-	MOVD R3, R0
-	LSR  $0x03, R0, R0
+	LSR  $0x03, R3, R0
 	SUB  R0, R13, R13
 	MOVD (R13), R2
 	SUB  R0, R5, R5
@@ -65,9 +64,7 @@ sequenceDecs_decode_amd64_fill_check_overread:
 sequenceDecs_decode_amd64_fill_end:
 	// Update offset
 	MOVD R8, R0
-	MOVD R3, R1
-	MOVD R2, R14
-	LSL  R1, R14, R14
+	LSL  R3, R2, R14
 	LSR  $0x01, R14, R14
 	UBFX $8, R0, $8, R1
 	LSR  $0x20, R0, R0
@@ -79,9 +76,7 @@ sequenceDecs_decode_amd64_fill_end:
 
 	// Update match length
 	MOVD R7, R0
-	MOVD R3, R1
-	MOVD R2, R14
-	LSL  R1, R14, R14
+	LSL  R3, R2, R14
 	LSR  $0x01, R14, R14
 	UBFX $8, R0, $8, R1
 	LSR  $0x20, R0, R0
@@ -94,8 +89,7 @@ sequenceDecs_decode_amd64_fill_end:
 	// Fill bitreader to have enough for the remaining
 	CMP  $0x08, R5
 	BLT  sequenceDecs_decode_amd64_fill_2_byte_by_byte
-	MOVD R3, R0
-	LSR  $0x03, R0, R0
+	LSR  $0x03, R3, R0
 	SUB  R0, R13, R13
 	MOVD (R13), R2
 	SUB  R0, R5, R5
@@ -122,9 +116,7 @@ sequenceDecs_decode_amd64_fill_2_check_overread:
 sequenceDecs_decode_amd64_fill_2_end:
 	// Update literal length
 	MOVD R6, R0
-	MOVD R3, R1
-	MOVD R2, R14
-	LSL  R1, R14, R14
+	LSL  R3, R2, R14
 	LSR  $0x01, R14, R14
 	UBFX $8, R0, $8, R1
 	LSR  $0x20, R0, R0
@@ -144,14 +136,11 @@ sequenceDecs_decode_amd64_fill_2_end:
 	// Update Literal Length State
 	MOVBU R6, R13
 	LSRW  $0x10, R6, R6
-	MOVD  R3, R1
-	MOVD  R2, R14
-	LSL   R1, R14, R14
+	LSL   R3, R2, R14
 	LSR   $0x01, R14, R14
 	ADD   R13, R3, R3
 	EOR   $0x3f, R13, R13
-	MOVD  R13, R1
-	LSR   R1, R14, R14
+	LSR   R13, R14, R14
 	ADD   R14, R6, R6
 
 	// Load ctx.llTable
@@ -161,14 +150,11 @@ sequenceDecs_decode_amd64_fill_2_end:
 	// Update Match Length State
 	MOVBU R7, R13
 	LSRW  $0x10, R7, R7
-	MOVD  R3, R1
-	MOVD  R2, R14
-	LSL   R1, R14, R14
+	LSL   R3, R2, R14
 	LSR   $0x01, R14, R14
 	ADD   R13, R3, R3
 	EOR   $0x3f, R13, R13
-	MOVD  R13, R1
-	LSR   R1, R14, R14
+	LSR   R13, R14, R14
 	ADD   R14, R7, R7
 
 	// Load ctx.mlTable
@@ -178,14 +164,11 @@ sequenceDecs_decode_amd64_fill_2_end:
 	// Update Offset State
 	MOVBU R8, R13
 	LSRW  $0x10, R8, R8
-	MOVD  R3, R1
-	MOVD  R2, R14
-	LSL   R1, R14, R14
+	LSL   R3, R2, R14
 	LSR   $0x01, R14, R14
 	ADD   R13, R3, R3
 	EOR   $0x3f, R13, R13
-	MOVD  R13, R1
-	LSR   R1, R14, R14
+	LSR   R13, R14, R14
 	ADD   R14, R8, R8
 
 	// Load ctx.ofTable
@@ -374,8 +357,7 @@ sequenceDecs_decode_56_amd64_main_loop:
 	// Fill bitreader to have enough for the offset and match length.
 	CMP  $0x08, R5
 	BLT  sequenceDecs_decode_56_amd64_fill_byte_by_byte
-	MOVD R3, R0
-	LSR  $0x03, R0, R0
+	LSR  $0x03, R3, R0
 	SUB  R0, R13, R13
 	MOVD (R13), R2
 	SUB  R0, R5, R5
@@ -402,9 +384,7 @@ sequenceDecs_decode_56_amd64_fill_check_overread:
 sequenceDecs_decode_56_amd64_fill_end:
 	// Update offset
 	MOVD R8, R0
-	MOVD R3, R1
-	MOVD R2, R14
-	LSL  R1, R14, R14
+	LSL  R3, R2, R14
 	LSR  $0x01, R14, R14
 	UBFX $8, R0, $8, R1
 	LSR  $0x20, R0, R0
@@ -416,9 +396,7 @@ sequenceDecs_decode_56_amd64_fill_end:
 
 	// Update match length
 	MOVD R7, R0
-	MOVD R3, R1
-	MOVD R2, R14
-	LSL  R1, R14, R14
+	LSL  R3, R2, R14
 	LSR  $0x01, R14, R14
 	UBFX $8, R0, $8, R1
 	LSR  $0x20, R0, R0
@@ -430,9 +408,7 @@ sequenceDecs_decode_56_amd64_fill_end:
 
 	// Update literal length
 	MOVD R6, R0
-	MOVD R3, R1
-	MOVD R2, R14
-	LSL  R1, R14, R14
+	LSL  R3, R2, R14
 	LSR  $0x01, R14, R14
 	UBFX $8, R0, $8, R1
 	LSR  $0x20, R0, R0
@@ -452,14 +428,11 @@ sequenceDecs_decode_56_amd64_fill_end:
 	// Update Literal Length State
 	MOVBU R6, R13
 	LSRW  $0x10, R6, R6
-	MOVD  R3, R1
-	MOVD  R2, R14
-	LSL   R1, R14, R14
+	LSL   R3, R2, R14
 	LSR   $0x01, R14, R14
 	ADD   R13, R3, R3
 	EOR   $0x3f, R13, R13
-	MOVD  R13, R1
-	LSR   R1, R14, R14
+	LSR   R13, R14, R14
 	ADD   R14, R6, R6
 
 	// Load ctx.llTable
@@ -469,14 +442,11 @@ sequenceDecs_decode_56_amd64_fill_end:
 	// Update Match Length State
 	MOVBU R7, R13
 	LSRW  $0x10, R7, R7
-	MOVD  R3, R1
-	MOVD  R2, R14
-	LSL   R1, R14, R14
+	LSL   R3, R2, R14
 	LSR   $0x01, R14, R14
 	ADD   R13, R3, R3
 	EOR   $0x3f, R13, R13
-	MOVD  R13, R1
-	LSR   R1, R14, R14
+	LSR   R13, R14, R14
 	ADD   R14, R7, R7
 
 	// Load ctx.mlTable
@@ -486,14 +456,11 @@ sequenceDecs_decode_56_amd64_fill_end:
 	// Update Offset State
 	MOVBU R8, R13
 	LSRW  $0x10, R8, R8
-	MOVD  R3, R1
-	MOVD  R2, R14
-	LSL   R1, R14, R14
+	LSL   R3, R2, R14
 	LSR   $0x01, R14, R14
 	ADD   R13, R3, R3
 	EOR   $0x3f, R13, R13
-	MOVD  R13, R1
-	LSR   R1, R14, R14
+	LSR   R13, R14, R14
 	ADD   R14, R8, R8
 
 	// Load ctx.ofTable
@@ -1388,8 +1355,7 @@ sequenceDecs_decodeSync_amd64_main_loop:
 	// Fill bitreader to have enough for the offset and match length.
 	CMP  $0x08, R5
 	BLT  sequenceDecs_decodeSync_amd64_fill_byte_by_byte
-	MOVD R3, R0
-	LSR  $0x03, R0, R0
+	LSR  $0x03, R3, R0
 	SUB  R0, R12, R12
 	MOVD (R12), R2
 	SUB  R0, R5, R5
@@ -1416,9 +1382,7 @@ sequenceDecs_decodeSync_amd64_fill_check_overread:
 sequenceDecs_decodeSync_amd64_fill_end:
 	// Update offset
 	MOVD R8, R0
-	MOVD R3, R1
-	MOVD R2, R13
-	LSL  R1, R13, R13
+	LSL  R3, R2, R13
 	LSR  $0x01, R13, R13
 	UBFX $8, R0, $8, R1
 	LSR  $0x20, R0, R0
@@ -1430,9 +1394,7 @@ sequenceDecs_decodeSync_amd64_fill_end:
 
 	// Update match length
 	MOVD R7, R0
-	MOVD R3, R1
-	MOVD R2, R13
-	LSL  R1, R13, R13
+	LSL  R3, R2, R13
 	LSR  $0x01, R13, R13
 	UBFX $8, R0, $8, R1
 	LSR  $0x20, R0, R0
@@ -1445,8 +1407,7 @@ sequenceDecs_decodeSync_amd64_fill_end:
 	// Fill bitreader to have enough for the remaining
 	CMP  $0x08, R5
 	BLT  sequenceDecs_decodeSync_amd64_fill_2_byte_by_byte
-	MOVD R3, R0
-	LSR  $0x03, R0, R0
+	LSR  $0x03, R3, R0
 	SUB  R0, R12, R12
 	MOVD (R12), R2
 	SUB  R0, R5, R5
@@ -1473,9 +1434,7 @@ sequenceDecs_decodeSync_amd64_fill_2_check_overread:
 sequenceDecs_decodeSync_amd64_fill_2_end:
 	// Update literal length
 	MOVD R6, R0
-	MOVD R3, R1
-	MOVD R2, R13
-	LSL  R1, R13, R13
+	LSL  R3, R2, R13
 	LSR  $0x01, R13, R13
 	UBFX $8, R0, $8, R1
 	LSR  $0x20, R0, R0
@@ -1495,14 +1454,11 @@ sequenceDecs_decodeSync_amd64_fill_2_end:
 	// Update Literal Length State
 	MOVBU R6, R12
 	LSRW  $0x10, R6, R6
-	MOVD  R3, R1
-	MOVD  R2, R13
-	LSL   R1, R13, R13
+	LSL   R3, R2, R13
 	LSR   $0x01, R13, R13
 	ADD   R12, R3, R3
 	EOR   $0x3f, R12, R12
-	MOVD  R12, R1
-	LSR   R1, R13, R13
+	LSR   R12, R13, R13
 	ADD   R13, R6, R6
 
 	// Load ctx.llTable
@@ -1512,14 +1468,11 @@ sequenceDecs_decodeSync_amd64_fill_2_end:
 	// Update Match Length State
 	MOVBU R7, R12
 	LSRW  $0x10, R7, R7
-	MOVD  R3, R1
-	MOVD  R2, R13
-	LSL   R1, R13, R13
+	LSL   R3, R2, R13
 	LSR   $0x01, R13, R13
 	ADD   R12, R3, R3
 	EOR   $0x3f, R12, R12
-	MOVD  R12, R1
-	LSR   R1, R13, R13
+	LSR   R12, R13, R13
 	ADD   R13, R7, R7
 
 	// Load ctx.mlTable
@@ -1529,14 +1482,11 @@ sequenceDecs_decodeSync_amd64_fill_2_end:
 	// Update Offset State
 	MOVBU R8, R12
 	LSRW  $0x10, R8, R8
-	MOVD  R3, R1
-	MOVD  R2, R13
-	LSL   R1, R13, R13
+	LSL   R3, R2, R13
 	LSR   $0x01, R13, R13
 	ADD   R12, R3, R3
 	EOR   $0x3f, R12, R12
-	MOVD  R12, R1
-	LSR   R1, R13, R13
+	LSR   R12, R13, R13
 	ADD   R13, R8, R8
 
 	// Load ctx.ofTable
@@ -1975,8 +1925,7 @@ sequenceDecs_decodeSync_safe_amd64_main_loop:
 	// Fill bitreader to have enough for the offset and match length.
 	CMP  $0x08, R5
 	BLT  sequenceDecs_decodeSync_safe_amd64_fill_byte_by_byte
-	MOVD R3, R0
-	LSR  $0x03, R0, R0
+	LSR  $0x03, R3, R0
 	SUB  R0, R12, R12
 	MOVD (R12), R2
 	SUB  R0, R5, R5
@@ -2003,9 +1952,7 @@ sequenceDecs_decodeSync_safe_amd64_fill_check_overread:
 sequenceDecs_decodeSync_safe_amd64_fill_end:
 	// Update offset
 	MOVD R8, R0
-	MOVD R3, R1
-	MOVD R2, R13
-	LSL  R1, R13, R13
+	LSL  R3, R2, R13
 	LSR  $0x01, R13, R13
 	UBFX $8, R0, $8, R1
 	LSR  $0x20, R0, R0
@@ -2017,9 +1964,7 @@ sequenceDecs_decodeSync_safe_amd64_fill_end:
 
 	// Update match length
 	MOVD R7, R0
-	MOVD R3, R1
-	MOVD R2, R13
-	LSL  R1, R13, R13
+	LSL  R3, R2, R13
 	LSR  $0x01, R13, R13
 	UBFX $8, R0, $8, R1
 	LSR  $0x20, R0, R0
@@ -2032,8 +1977,7 @@ sequenceDecs_decodeSync_safe_amd64_fill_end:
 	// Fill bitreader to have enough for the remaining
 	CMP  $0x08, R5
 	BLT  sequenceDecs_decodeSync_safe_amd64_fill_2_byte_by_byte
-	MOVD R3, R0
-	LSR  $0x03, R0, R0
+	LSR  $0x03, R3, R0
 	SUB  R0, R12, R12
 	MOVD (R12), R2
 	SUB  R0, R5, R5
@@ -2060,9 +2004,7 @@ sequenceDecs_decodeSync_safe_amd64_fill_2_check_overread:
 sequenceDecs_decodeSync_safe_amd64_fill_2_end:
 	// Update literal length
 	MOVD R6, R0
-	MOVD R3, R1
-	MOVD R2, R13
-	LSL  R1, R13, R13
+	LSL  R3, R2, R13
 	LSR  $0x01, R13, R13
 	UBFX $8, R0, $8, R1
 	LSR  $0x20, R0, R0
@@ -2082,14 +2024,11 @@ sequenceDecs_decodeSync_safe_amd64_fill_2_end:
 	// Update Literal Length State
 	MOVBU R6, R12
 	LSRW  $0x10, R6, R6
-	MOVD  R3, R1
-	MOVD  R2, R13
-	LSL   R1, R13, R13
+	LSL   R3, R2, R13
 	LSR   $0x01, R13, R13
 	ADD   R12, R3, R3
 	EOR   $0x3f, R12, R12
-	MOVD  R12, R1
-	LSR   R1, R13, R13
+	LSR   R12, R13, R13
 	ADD   R13, R6, R6
 
 	// Load ctx.llTable
@@ -2099,14 +2038,11 @@ sequenceDecs_decodeSync_safe_amd64_fill_2_end:
 	// Update Match Length State
 	MOVBU R7, R12
 	LSRW  $0x10, R7, R7
-	MOVD  R3, R1
-	MOVD  R2, R13
-	LSL   R1, R13, R13
+	LSL   R3, R2, R13
 	LSR   $0x01, R13, R13
 	ADD   R12, R3, R3
 	EOR   $0x3f, R12, R12
-	MOVD  R12, R1
-	LSR   R1, R13, R13
+	LSR   R12, R13, R13
 	ADD   R13, R7, R7
 
 	// Load ctx.mlTable
@@ -2116,14 +2052,11 @@ sequenceDecs_decodeSync_safe_amd64_fill_2_end:
 	// Update Offset State
 	MOVBU R8, R12
 	LSRW  $0x10, R8, R8
-	MOVD  R3, R1
-	MOVD  R2, R13
-	LSL   R1, R13, R13
+	LSL   R3, R2, R13
 	LSR   $0x01, R13, R13
 	ADD   R12, R3, R3
 	EOR   $0x3f, R12, R12
-	MOVD  R12, R1
-	LSR   R1, R13, R13
+	LSR   R12, R13, R13
 	ADD   R13, R8, R8
 
 	// Load ctx.ofTable
