@@ -384,17 +384,39 @@ func Test_seqdec_decodeSync(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			fatalIf(s.br.init(buf.Bytes()))
-			fatalIf(s.litLengths.init(s.br))
-			fatalIf(s.offsets.init(s.br))
-			fatalIf(s.matchLengths.init(s.br))
-			s.literals = lits
-			if len(s.out) > 0 {
-				s.out = s.out[:0]
+			// decodeSyncSimple picks the implementation from the output
+			// buffer geometry: below a block of capacity it declines and the
+			// pure-Go loop runs; at exactly a block the assembly runs with
+			// bounds-exact copies; with compressedBlockOverAlloc slack on top
+			// it runs with the extended 16-byte-block copies. Run all three
+			// and require identical output, so the Go loop is the reference
+			// for both assembly variants. On builds without the assembly all
+			// three take the Go loop.
+			variants := []struct {
+				name   string
+				outCap int
+			}{
+				{"go", 0},
+				{"asm-safe", maxCompressedBlockSize},
+				{"asm-unsafe", maxCompressedBlockSizeAlloc},
 			}
-			err := s.decodeSync(hist)
-			if err != nil {
-				t.Fatal(err)
+			var want []byte
+			for _, v := range variants {
+				fatalIf(s.br.init(buf.Bytes()))
+				fatalIf(s.litLengths.init(s.br))
+				fatalIf(s.offsets.init(s.br))
+				fatalIf(s.matchLengths.init(s.br))
+				s.literals = lits
+				s.prevOffset = ref.prevOffsets
+				s.out = make([]byte, 0, v.outCap)
+				if err := s.decodeSync(hist); err != nil {
+					t.Fatalf("%s: %v", v.name, err)
+				}
+				if want == nil {
+					want = append([]byte(nil), s.out...)
+				} else if !bytes.Equal(s.out, want) {
+					t.Errorf("%s: output differs from the go path (%d vs %d bytes)", v.name, len(s.out), len(want))
+				}
 			}
 		})
 	}
@@ -536,6 +558,12 @@ func Benchmark_seqdec_decodeSync(b *testing.B) {
 
 		lits := s.literals
 		hist := make([]byte, ref.win)
+		// Give the output the geometry the decoder sees in production, a
+		// block of capacity plus compressedBlockOverAlloc slack, so
+		// decodeSyncSimple takes the assembly path with the extended copies.
+		// With no capacity it declines and the pure-Go loop is what gets
+		// timed.
+		s.out = make([]byte, 0, maxCompressedBlockSizeAlloc)
 		b.Run(tt.Name, func(b *testing.B) {
 			fatalIf := func(err error) {
 				if err != nil {
@@ -553,9 +581,8 @@ func Benchmark_seqdec_decodeSync(b *testing.B) {
 				fatalIf(s.offsets.init(s.br))
 				fatalIf(s.matchLengths.init(s.br))
 				s.literals = lits
-				if len(s.out) > 0 {
-					s.out = s.out[:0]
-				}
+				s.prevOffset = ref.prevOffsets
+				s.out = s.out[:0]
 				err := s.decodeSync(hist)
 				if err != nil {
 					b.Fatal(err)
