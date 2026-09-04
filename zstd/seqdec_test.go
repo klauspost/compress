@@ -390,18 +390,21 @@ func Test_seqdec_decodeSync(t *testing.T) {
 			// bounds-exact copies; with compressedBlockOverAlloc slack on top
 			// it runs with the extended 16-byte-block copies. Run all three
 			// and require identical output, so the Go loop is the reference
-			// for both assembly variants. On builds without the assembly all
-			// three take the Go loop.
+			// for both assembly variants. The selector is asked directly, so
+			// a geometry that does not select what the variant claims fails
+			// here instead of silently running the Go loop three times. On
+			// builds without the assembly all three take the Go loop.
 			variants := []struct {
-				name   string
-				outCap int
+				name     string
+				outCap   int
+				wantSafe bool
 			}{
-				{"go", 0},
-				{"asm-safe", maxCompressedBlockSize},
-				{"asm-unsafe", maxCompressedBlockSizeAlloc},
+				{"go", 0, true},
+				{"asm-safe", maxCompressedBlockSize, true},
+				{"asm-unsafe", maxCompressedBlockSizeAlloc, false},
 			}
 			var want []byte
-			for _, v := range variants {
+			for i, v := range variants {
 				fatalIf(s.br.init(buf.Bytes()))
 				fatalIf(s.litLengths.init(s.br))
 				fatalIf(s.offsets.init(s.br))
@@ -409,10 +412,25 @@ func Test_seqdec_decodeSync(t *testing.T) {
 				s.literals = lits
 				s.prevOffset = ref.prevOffsets
 				s.out = make([]byte, 0, v.outCap)
-				if err := s.decodeSync(hist); err != nil {
+				usesSafe := decodeSyncUsesSafe(&s)
+				supported, err := s.decodeSyncSimple(hist)
+				switch {
+				case v.name == "go":
+					if supported {
+						t.Fatalf("%s: decodeSyncSimple accepted a buffer of capacity %d", v.name, v.outCap)
+					}
+					err = s.decodeSync(hist)
+				case !supported && !haveSeqdecAsm:
+					err = s.decodeSync(hist)
+				case !supported:
+					t.Fatalf("%s: decodeSyncSimple declined a buffer of capacity %d", v.name, v.outCap)
+				case usesSafe != v.wantSafe:
+					t.Fatalf("%s: safe copies = %v, want %v", v.name, usesSafe, v.wantSafe)
+				}
+				if err != nil {
 					t.Fatalf("%s: %v", v.name, err)
 				}
-				if want == nil {
+				if i == 0 {
 					want = append([]byte(nil), s.out...)
 				} else if !bytes.Equal(s.out, want) {
 					t.Errorf("%s: output differs from the go path (%d vs %d bytes)", v.name, len(s.out), len(want))
