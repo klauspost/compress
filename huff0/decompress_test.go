@@ -7,6 +7,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/klauspost/compress/internal/cpuinfo"
+	"github.com/klauspost/compress/internal/le"
 	"github.com/klauspost/compress/zip"
 )
 
@@ -100,6 +102,101 @@ func TestDecompress1X(t *testing.T) {
 	}
 }
 
+// TestBitReaderShiftedRestoreFromAsm covers the conversion from the state
+// the Decompress4X asm loops leave behind (sentinel container, signed
+// distance from the stream start) back to the Go bit reader invariant.
+func TestBitReaderShiftedRestoreFromAsm(t *testing.T) {
+	in := make([]byte, 24)
+	for i := range in {
+		in[i] = byte(0x10 * (i + 1))
+	}
+	window := func(off int) uint64 { return le.Load64(in, off) }
+	tests := []struct {
+		name         string
+		off          int
+		consumed     uint // sentinel position in the container
+		wantOff      uint
+		wantBitsRead uint8
+		wantValue    uint64
+		wantErr      bool
+	}{
+		{name: "in stream, no bits consumed", off: 5, consumed: 0, wantOff: 5, wantBitsRead: 0, wantValue: window(5)},
+		{name: "in stream, 13 bits consumed", off: 9, consumed: 13, wantOff: 9, wantBitsRead: 13, wantValue: window(9) << 13},
+		{name: "at stream start, 62 bits consumed", off: 0, consumed: 62, wantOff: 0, wantBitsRead: 62, wantValue: window(0) << 62},
+		{name: "window 3 bytes below start", off: -3, consumed: 10, wantOff: 0, wantBitsRead: 34, wantValue: window(0) << 34},
+		{name: "window 7 bytes below start, exactly drained", off: -7, consumed: 8, wantOff: 0, wantBitsRead: 64, wantValue: 0},
+		{name: "window 7 bytes below start, one bit too many", off: -7, consumed: 9, wantErr: true},
+		{name: "window 8 bytes below start", off: -8, consumed: 0, wantErr: true},
+		{name: "window past the end of the stream", off: 17, consumed: 0, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// The container's data bits are deliberately garbage: only the
+			// sentinel position may be trusted, the window is re-read.
+			b := bitReaderShifted{in: in, off: uint(tt.off), value: 0xdeadbeefcafef00d<<(tt.consumed+1) | 1<<tt.consumed}
+			err := b.restoreFromAsm()
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("got off=%d bitsRead=%d value=%#x, want error", b.off, b.bitsRead, b.value)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if b.off != tt.wantOff || b.bitsRead != tt.wantBitsRead || b.value != tt.wantValue {
+				t.Errorf("got off=%d bitsRead=%d value=%#x, want off=%d bitsRead=%d value=%#x",
+					b.off, b.bitsRead, b.value, tt.wantOff, tt.wantBitsRead, tt.wantValue)
+			}
+			if tt.wantOff == 0 && tt.wantBitsRead == 64 && b.remaining() != 0 {
+				t.Errorf("remaining() = %d, want 0", b.remaining())
+			}
+		})
+	}
+}
+
+// TestBitReaderShiftedPrepareForAsm covers the entry normalization: a
+// stream ending in 0x01 starts with a whole byte consumed, which the asm
+// loops cannot take, and short streams are refused.
+func TestBitReaderShiftedPrepareForAsm(t *testing.T) {
+	tests := []struct {
+		name         string
+		in           []byte
+		wantOK       bool
+		wantOff      uint
+		wantBitsRead uint8
+	}{
+		{name: "marker in top bit", in: append(make([]byte, 20), 0x80), wantOK: true, wantOff: 13, wantBitsRead: 1},
+		{name: "marker in bit 3", in: append(make([]byte, 20), 0x08), wantOK: true, wantOff: 13, wantBitsRead: 5},
+		{name: "marker in bit 0 slides the window", in: append(make([]byte, 20), 0x01), wantOK: true, wantOff: 12, wantBitsRead: 0},
+		{name: "too short", in: append(make([]byte, 10), 0x80), wantOK: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var b bitReaderShifted
+			if err := b.init(tt.in); err != nil {
+				t.Fatal(err)
+			}
+			before := b.remaining()
+			if ok := b.prepareForAsm(); ok != tt.wantOK {
+				t.Fatalf("prepareForAsm() = %v, want %v", ok, tt.wantOK)
+			}
+			if !tt.wantOK {
+				return
+			}
+			if b.off != tt.wantOff || b.bitsRead != tt.wantBitsRead {
+				t.Errorf("got off=%d bitsRead=%d, want off=%d bitsRead=%d", b.off, b.bitsRead, tt.wantOff, tt.wantBitsRead)
+			}
+			if b.remaining() != before {
+				t.Errorf("remaining changed from %d to %d", before, b.remaining())
+			}
+			if want := le.Load64(tt.in, b.off) << b.bitsRead; b.value != want {
+				t.Errorf("value = %#x, want %#x", b.value, want)
+			}
+		})
+	}
+}
+
 func TestDecompress1XRegression(t *testing.T) {
 	data, err := os.ReadFile("testdata/decompress1x_regression.zip")
 	if err != nil {
@@ -138,6 +235,17 @@ func TestDecompress1XRegression(t *testing.T) {
 }
 
 func TestDecompress4X(t *testing.T) {
+	testDecompress4X(t)
+}
+
+// TestDecompress4XNoBMI2 runs the same roundtrips through the generic asm
+// twin on amd64 (a no-op elsewhere).
+func TestDecompress4XNoBMI2(t *testing.T) {
+	defer cpuinfo.DisableBMI2()()
+	testDecompress4X(t)
+}
+
+func testDecompress4X(t *testing.T) {
 	for _, test := range testfiles {
 		t.Run(test.name, func(t *testing.T) {
 			for _, tl := range []uint8{0, 5, 6, 7, 8, 9, 10, 11} {

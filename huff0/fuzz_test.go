@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/klauspost/compress/internal/cpuinfo"
 	"github.com/klauspost/compress/internal/fuzz"
 )
 
@@ -72,6 +73,17 @@ func FuzzCompress(f *testing.F) {
 		if !bytes.Equal(out, buf0) {
 			t.Fatal(fmt.Sprintln("FuzzCompressX4 output mismatch: ", len(out), ", org: ", len(buf0)))
 		}
+		// Decompress4X has a BMI2 twin on amd64; cover the generic one too.
+		func() {
+			defer cpuinfo.DisableBMI2()()
+			out, err := dec.Decompress4X(remain, len(buf0))
+			if err != nil {
+				t.Fatal("FuzzCompressX4 no-BMI2 decode failed:", err)
+			}
+			if !bytes.Equal(out, buf0) {
+				t.Fatal(fmt.Sprintln("FuzzCompressX4 no-BMI2 output mismatch: ", len(out), ", org: ", len(buf0)))
+			}
+		}()
 	})
 }
 

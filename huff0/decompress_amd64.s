@@ -3,631 +3,1359 @@
 //go:build !appengine && !noasm && gc
 
 // func decompress4x_main_loop_amd64(ctx *decompress4xContext)
+// Requires: BMI, CMOV
 TEXT ·decompress4x_main_loop_amd64(SB), $0-8
 	// Preload values
-	MOVQ    ctx+0(FP), AX
-	MOVBQZX 8(AX), DI
-	MOVQ    16(AX), BX
-	MOVQ    48(AX), SI
-	MOVQ    24(AX), R8
-	MOVQ    32(AX), R9
-	MOVQ    (AX), R10
+	MOVQ    ctx+0(FP), CX
+	MOVQ    (CX), AX
+	MOVBQZX 8(CX), DX
+	MOVQ    32(CX), BX
+	MOVQ    16(CX), SI
+	MOVQ    24(CX), CX
+	LEAQ    (SI)(CX*1), R8
+	LEAQ    (SI)(CX*2), R10
+	LEAQ    (CX)(CX*2), R12
+	ADDQ    SI, R12
 
-	// Main loop
-main_loop:
-	XORQ  DX, DX
-	CMPQ  BX, SI
-	SETGE DL
+	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead.
+	// The off slot holds the absolute input pointer while the loop runs.
+	MOVQ    32(AX), DI
+	MOVBQZX 40(AX), CX
+	BTSQ    CX, DI
+	MOVQ    (AX), CX
+	ADDQ    CX, 24(AX)
+	MOVQ    80(AX), R9
+	MOVBQZX 88(AX), CX
+	BTSQ    CX, R9
+	MOVQ    48(AX), CX
+	ADDQ    CX, 72(AX)
+	MOVQ    128(AX), R11
+	MOVBQZX 136(AX), CX
+	BTSQ    CX, R11
+	MOVQ    96(AX), CX
+	ADDQ    CX, 120(AX)
+	MOVQ    176(AX), R13
+	MOVBQZX 184(AX), CX
+	BTSQ    CX, R13
+	MOVQ    144(AX), CX
+	ADDQ    CX, 168(AX)
 
-	// br0.fillFast32()
-	MOVQ    32(R10), R11
-	MOVBQZX 40(R10), R12
-	CMPQ    R12, $0x20
-	JBE     skip_fill0
-	MOVQ    24(R10), AX
-	SUBQ    $0x20, R12
-	SUBQ    $0x04, AX
-	MOVQ    (R10), R13
+outer_loop:
+	// Iterations allowed by the output.
+	MOVQ ctx+0(FP), CX
+	MOVQ 48(CX), CX
+	SUBQ SI, CX
+	JLE  done
+	SHRQ $0x03, CX
 
-	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVL (AX)(R13*1), R13
-	MOVQ R12, CX
-	SHLQ CL, R13
-	MOVQ AX, 24(R10)
-	ORQ  R13, R11
+	// Iterations allowed by the input: each reload backs a pointer up by at most 7 bytes,
+	// and every read stays inside the block while the lowest pointer stays above stream 0's start.
+	MOVQ    24(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, CX
+	CMOVQCS R14, CX
+	MOVQ    72(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, CX
+	CMOVQCS R14, CX
+	MOVQ    120(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, CX
+	CMOVQCS R14, CX
+	MOVQ    168(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, CX
+	CMOVQCS R14, CX
+	TESTQ   CX, CX
+	JZ      done
+	IMUL3Q  $0x05, CX, CX
+	ADDQ    SI, CX
+	MOVQ    ctx+0(FP), R14
+	MOVQ    CX, 56(R14)
 
-	// exhausted += (br0.off < 4)
-	CMPQ AX, $0x04
-	ADCQ $+0, DX
+inner_loop:
+	// stream 0, symbol 0
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, (SI)
 
-skip_fill0:
-	// val0 := br0.peekTopBits(peekBits)
-	MOVQ R11, R13
-	MOVQ DI, CX
-	SHRQ CL, R13
+	// stream 1, symbol 0
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, (R8)
 
-	// v0 := table[val0&mask]
-	MOVWQZX (R9)(R13*2), CX
-
-	// br0.advance(uint8(v0.entry)
-	MOVBLZX CH, AX
+	// stream 2, symbol 0
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
 	SHLQ    CL, R11
-	ADDB    CL, R12
+	SHRQ    $0x08, CX
+	MOVB    CL, (R10)
 
-	// val1 := br0.peekTopBits(peekBits)
-	MOVQ DI, CX
-	MOVQ R11, R13
-	SHRQ CL, R13
+	// stream 3, symbol 0
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, (R12)
 
-	// v1 := table[val1&mask]
-	MOVWQZX (R9)(R13*2), CX
+	// stream 0, symbol 1
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, 1(SI)
 
-	// br0.advance(uint8(v1.entry))
-	MOVB CH, AH
-	SHLQ CL, R11
-	ADDB CL, R12
+	// stream 1, symbol 1
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, 1(R8)
 
-	// these two writes get coalesced
-	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
-	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
-	MOVW AX, (BX)
-
-	// update the bitreader structure
-	MOVQ R11, 32(R10)
-	MOVB R12, 40(R10)
-
-	// br1.fillFast32()
-	MOVQ    80(R10), R11
-	MOVBQZX 88(R10), R12
-	CMPQ    R12, $0x20
-	JBE     skip_fill1
-	MOVQ    72(R10), AX
-	SUBQ    $0x20, R12
-	SUBQ    $0x04, AX
-	MOVQ    48(R10), R13
-
-	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVL (AX)(R13*1), R13
-	MOVQ R12, CX
-	SHLQ CL, R13
-	MOVQ AX, 72(R10)
-	ORQ  R13, R11
-
-	// exhausted += (br1.off < 4)
-	CMPQ AX, $0x04
-	ADCQ $+0, DX
-
-skip_fill1:
-	// val0 := br1.peekTopBits(peekBits)
-	MOVQ R11, R13
-	MOVQ DI, CX
-	SHRQ CL, R13
-
-	// v0 := table[val0&mask]
-	MOVWQZX (R9)(R13*2), CX
-
-	// br1.advance(uint8(v0.entry)
-	MOVBLZX CH, AX
+	// stream 2, symbol 1
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
 	SHLQ    CL, R11
-	ADDB    CL, R12
+	SHRQ    $0x08, CX
+	MOVB    CL, 1(R10)
 
-	// val1 := br1.peekTopBits(peekBits)
-	MOVQ DI, CX
-	MOVQ R11, R13
-	SHRQ CL, R13
+	// stream 3, symbol 1
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, 1(R12)
 
-	// v1 := table[val1&mask]
-	MOVWQZX (R9)(R13*2), CX
+	// stream 0, symbol 2
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, 2(SI)
 
-	// br1.advance(uint8(v1.entry))
-	MOVB CH, AH
-	SHLQ CL, R11
-	ADDB CL, R12
+	// stream 1, symbol 2
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, 2(R8)
 
-	// these two writes get coalesced
-	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
-	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
-	MOVW AX, (BX)(R8*1)
-
-	// update the bitreader structure
-	MOVQ R11, 80(R10)
-	MOVB R12, 88(R10)
-
-	// br2.fillFast32()
-	MOVQ    128(R10), R11
-	MOVBQZX 136(R10), R12
-	CMPQ    R12, $0x20
-	JBE     skip_fill2
-	MOVQ    120(R10), AX
-	SUBQ    $0x20, R12
-	SUBQ    $0x04, AX
-	MOVQ    96(R10), R13
-
-	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVL (AX)(R13*1), R13
-	MOVQ R12, CX
-	SHLQ CL, R13
-	MOVQ AX, 120(R10)
-	ORQ  R13, R11
-
-	// exhausted += (br2.off < 4)
-	CMPQ AX, $0x04
-	ADCQ $+0, DX
-
-skip_fill2:
-	// val0 := br2.peekTopBits(peekBits)
-	MOVQ R11, R13
-	MOVQ DI, CX
-	SHRQ CL, R13
-
-	// v0 := table[val0&mask]
-	MOVWQZX (R9)(R13*2), CX
-
-	// br2.advance(uint8(v0.entry)
-	MOVBLZX CH, AX
+	// stream 2, symbol 2
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
 	SHLQ    CL, R11
-	ADDB    CL, R12
+	SHRQ    $0x08, CX
+	MOVB    CL, 2(R10)
 
-	// val1 := br2.peekTopBits(peekBits)
-	MOVQ DI, CX
-	MOVQ R11, R13
-	SHRQ CL, R13
+	// stream 3, symbol 2
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, 2(R12)
 
-	// v1 := table[val1&mask]
-	MOVWQZX (R9)(R13*2), CX
+	// stream 0, symbol 3
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, 3(SI)
 
-	// br2.advance(uint8(v1.entry))
-	MOVB CH, AH
-	SHLQ CL, R11
-	ADDB CL, R12
+	// stream 1, symbol 3
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, 3(R8)
 
-	// these two writes get coalesced
-	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
-	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
-	MOVW AX, (BX)(R8*2)
-
-	// update the bitreader structure
-	MOVQ R11, 128(R10)
-	MOVB R12, 136(R10)
-
-	// br3.fillFast32()
-	MOVQ    176(R10), R11
-	MOVBQZX 184(R10), R12
-	CMPQ    R12, $0x20
-	JBE     skip_fill3
-	MOVQ    168(R10), AX
-	SUBQ    $0x20, R12
-	SUBQ    $0x04, AX
-	MOVQ    144(R10), R13
-
-	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVL (AX)(R13*1), R13
-	MOVQ R12, CX
-	SHLQ CL, R13
-	MOVQ AX, 168(R10)
-	ORQ  R13, R11
-
-	// exhausted += (br3.off < 4)
-	CMPQ AX, $0x04
-	ADCQ $+0, DX
-
-skip_fill3:
-	// val0 := br3.peekTopBits(peekBits)
-	MOVQ R11, R13
-	MOVQ DI, CX
-	SHRQ CL, R13
-
-	// v0 := table[val0&mask]
-	MOVWQZX (R9)(R13*2), CX
-
-	// br3.advance(uint8(v0.entry)
-	MOVBLZX CH, AX
+	// stream 2, symbol 3
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
 	SHLQ    CL, R11
-	ADDB    CL, R12
+	SHRQ    $0x08, CX
+	MOVB    CL, 3(R10)
 
-	// val1 := br3.peekTopBits(peekBits)
-	MOVQ DI, CX
-	MOVQ R11, R13
-	SHRQ CL, R13
+	// stream 3, symbol 3
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, 3(R12)
 
-	// v1 := table[val1&mask]
-	MOVWQZX (R9)(R13*2), CX
+	// stream 0, symbol 4
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, 4(SI)
 
-	// br3.advance(uint8(v1.entry))
-	MOVB CH, AH
-	SHLQ CL, R11
-	ADDB CL, R12
+	// stream 1, symbol 4
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, 4(R8)
 
-	// these two writes get coalesced
-	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
-	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
-	LEAQ (R8)(R8*2), CX
-	MOVW AX, (BX)(CX*1)
+	// stream 2, symbol 4
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 4(R10)
 
-	// update the bitreader structure
-	MOVQ  R11, 176(R10)
-	MOVB  R12, 184(R10)
-	ADDQ  $0x02, BX
-	TESTQ DX, DX
-	JZ    main_loop
-	MOVQ  ctx+0(FP), AX
-	SUBQ  16(AX), BX
-	SHLQ  $0x02, BX
-	MOVQ  BX, 40(AX)
+	// stream 3, symbol 4
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, 4(R12)
+
+	// Reload the four bit containers
+	TZCNTQ DI, R14
+	MOVQ   R14, CX
+	ANDQ   $0x07, CX
+	SHRQ   $0x03, R14
+	MOVQ   24(AX), DI
+	SUBQ   R14, DI
+	MOVQ   DI, 24(AX)
+	MOVQ   (DI), DI
+	ORQ    $0x01, DI
+	SHLQ   CL, DI
+	TZCNTQ R9, R14
+	MOVQ   R14, CX
+	ANDQ   $0x07, CX
+	SHRQ   $0x03, R14
+	MOVQ   72(AX), R9
+	SUBQ   R14, R9
+	MOVQ   R9, 72(AX)
+	MOVQ   (R9), R9
+	ORQ    $0x01, R9
+	SHLQ   CL, R9
+	TZCNTQ R11, R14
+	MOVQ   R14, CX
+	ANDQ   $0x07, CX
+	SHRQ   $0x03, R14
+	MOVQ   120(AX), R11
+	SUBQ   R14, R11
+	MOVQ   R11, 120(AX)
+	MOVQ   (R11), R11
+	ORQ    $0x01, R11
+	SHLQ   CL, R11
+	TZCNTQ R13, R14
+	MOVQ   R14, CX
+	ANDQ   $0x07, CX
+	SHRQ   $0x03, R14
+	MOVQ   168(AX), R13
+	SUBQ   R14, R13
+	MOVQ   R13, 168(AX)
+	MOVQ   (R13), R13
+	ORQ    $0x01, R13
+	SHLQ   CL, R13
+	ADDQ   $0x05, SI
+	ADDQ   $0x05, R8
+	ADDQ   $0x05, R10
+	ADDQ   $0x05, R12
+	MOVQ   ctx+0(FP), CX
+	CMPQ   SI, 56(CX)
+	JB     inner_loop
+	JMP    outer_loop
+
+done:
+	// Hand the state back: off = ip - in (negative when the window reached into the previous stream),
+	// value = the sentinel-form container. bitReaderShifted.restoreFromAsm normalizes both.
+	MOVQ (AX), CX
+	SUBQ CX, 24(AX)
+	MOVQ DI, 32(AX)
+	MOVQ 48(AX), CX
+	SUBQ CX, 72(AX)
+	MOVQ R9, 80(AX)
+	MOVQ 96(AX), CX
+	SUBQ CX, 120(AX)
+	MOVQ R11, 128(AX)
+	MOVQ 144(AX), CX
+	SUBQ CX, 168(AX)
+	MOVQ R13, 176(AX)
+	MOVQ ctx+0(FP), AX
+	SUBQ 16(AX), SI
+	SHLQ $0x02, SI
+	MOVQ SI, 40(AX)
 	RET
 
 // func decompress4x_8b_main_loop_amd64(ctx *decompress4xContext)
+// Requires: BMI, CMOV
 TEXT ·decompress4x_8b_main_loop_amd64(SB), $0-8
 	// Preload values
-	MOVQ    ctx+0(FP), AX
-	MOVBQZX 8(AX), DI
-	MOVQ    16(AX), BX
-	MOVQ    48(AX), SI
-	MOVQ    24(AX), R8
-	MOVQ    32(AX), R9
-	MOVQ    (AX), R10
+	MOVQ    ctx+0(FP), CX
+	MOVQ    (CX), AX
+	MOVBQZX 8(CX), DX
+	MOVQ    32(CX), BX
+	MOVQ    16(CX), SI
+	MOVQ    24(CX), CX
+	LEAQ    (SI)(CX*1), R8
+	LEAQ    (SI)(CX*2), R10
+	LEAQ    (CX)(CX*2), R12
+	ADDQ    SI, R12
 
-	// Main loop
-main_loop:
-	XORQ  DX, DX
-	CMPQ  BX, SI
-	SETGE DL
+	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead.
+	// The off slot holds the absolute input pointer while the loop runs.
+	MOVQ    32(AX), DI
+	MOVBQZX 40(AX), CX
+	BTSQ    CX, DI
+	MOVQ    (AX), CX
+	ADDQ    CX, 24(AX)
+	MOVQ    80(AX), R9
+	MOVBQZX 88(AX), CX
+	BTSQ    CX, R9
+	MOVQ    48(AX), CX
+	ADDQ    CX, 72(AX)
+	MOVQ    128(AX), R11
+	MOVBQZX 136(AX), CX
+	BTSQ    CX, R11
+	MOVQ    96(AX), CX
+	ADDQ    CX, 120(AX)
+	MOVQ    176(AX), R13
+	MOVBQZX 184(AX), CX
+	BTSQ    CX, R13
+	MOVQ    144(AX), CX
+	ADDQ    CX, 168(AX)
 
-	// br0.fillFast32()
-	MOVQ    32(R10), R11
-	MOVBQZX 40(R10), R12
-	CMPQ    R12, $0x20
-	JBE     skip_fill0
-	MOVQ    24(R10), AX
-	SUBQ    $0x20, R12
-	SUBQ    $0x04, AX
-	MOVQ    (R10), R13
+outer_loop:
+	// Iterations allowed by the output.
+	MOVQ ctx+0(FP), CX
+	MOVQ 48(CX), CX
+	SUBQ SI, CX
+	JLE  done
+	SHRQ $0x03, CX
 
-	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVL (AX)(R13*1), R13
-	MOVQ R12, CX
-	SHLQ CL, R13
-	MOVQ AX, 24(R10)
-	ORQ  R13, R11
+	// Iterations allowed by the input: each reload backs a pointer up by at most 7 bytes,
+	// and every read stays inside the block while the lowest pointer stays above stream 0's start.
+	MOVQ    24(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, CX
+	CMOVQCS R14, CX
+	MOVQ    72(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, CX
+	CMOVQCS R14, CX
+	MOVQ    120(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, CX
+	CMOVQCS R14, CX
+	MOVQ    168(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, CX
+	CMOVQCS R14, CX
+	TESTQ   CX, CX
+	JZ      done
+	IMUL3Q  $0x07, CX, CX
+	ADDQ    SI, CX
+	MOVQ    ctx+0(FP), R14
+	MOVQ    CX, 56(R14)
 
-	// exhausted += (br0.off < 4)
-	CMPQ AX, $0x04
-	ADCQ $+0, DX
+inner_loop:
+	// stream 0, symbol 0
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, (SI)
 
-skip_fill0:
-	// val0 := br0.peekTopBits(peekBits)
-	MOVQ R11, AX
-	MOVQ DI, CX
-	SHRQ CL, AX
+	// stream 1, symbol 0
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, (R8)
 
-	// v0 := table[val0&mask]
-	MOVWQZX (R9)(AX*2), CX
-
-	// br0.advance(uint8(v0.entry)
-	MOVBLZX CH, AX
+	// stream 2, symbol 0
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
 	SHLQ    CL, R11
-	ADDB    CL, R12
+	SHRQ    $0x08, CX
+	MOVB    CL, (R10)
 
-	// val1 := br0.peekTopBits(peekBits)
-	MOVQ R11, R13
-	MOVQ DI, CX
-	SHRQ CL, R13
+	// stream 3, symbol 0
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, (R12)
 
-	// v1 := table[val0&mask]
-	MOVWQZX (R9)(R13*2), CX
+	// stream 0, symbol 1
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, 1(SI)
 
-	// br0.advance(uint8(v1.entry)
-	MOVB   CH, AH
-	SHLQ   CL, R11
-	ADDB   CL, R12
-	BSWAPL AX
+	// stream 1, symbol 1
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, 1(R8)
 
-	// val2 := br0.peekTopBits(peekBits)
-	MOVQ R11, R13
-	MOVQ DI, CX
-	SHRQ CL, R13
-
-	// v2 := table[val0&mask]
-	MOVWQZX (R9)(R13*2), CX
-
-	// br0.advance(uint8(v2.entry)
-	MOVB CH, AH
-	SHLQ CL, R11
-	ADDB CL, R12
-
-	// val3 := br0.peekTopBits(peekBits)
-	MOVQ R11, R13
-	MOVQ DI, CX
-	SHRQ CL, R13
-
-	// v3 := table[val0&mask]
-	MOVWQZX (R9)(R13*2), CX
-
-	// br0.advance(uint8(v3.entry)
-	MOVB   CH, AL
-	SHLQ   CL, R11
-	ADDB   CL, R12
-	BSWAPL AX
-
-	// these four writes get coalesced
-	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
-	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
-	// out[id * dstEvery + 3] = uint8(v2.entry >> 8)
-	// out[id * dstEvery + 4] = uint8(v3.entry >> 8)
-	MOVL AX, (BX)
-
-	// update the bitreader structure
-	MOVQ R11, 32(R10)
-	MOVB R12, 40(R10)
-
-	// br1.fillFast32()
-	MOVQ    80(R10), R11
-	MOVBQZX 88(R10), R12
-	CMPQ    R12, $0x20
-	JBE     skip_fill1
-	MOVQ    72(R10), AX
-	SUBQ    $0x20, R12
-	SUBQ    $0x04, AX
-	MOVQ    48(R10), R13
-
-	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVL (AX)(R13*1), R13
-	MOVQ R12, CX
-	SHLQ CL, R13
-	MOVQ AX, 72(R10)
-	ORQ  R13, R11
-
-	// exhausted += (br1.off < 4)
-	CMPQ AX, $0x04
-	ADCQ $+0, DX
-
-skip_fill1:
-	// val0 := br1.peekTopBits(peekBits)
-	MOVQ R11, AX
-	MOVQ DI, CX
-	SHRQ CL, AX
-
-	// v0 := table[val0&mask]
-	MOVWQZX (R9)(AX*2), CX
-
-	// br1.advance(uint8(v0.entry)
-	MOVBLZX CH, AX
+	// stream 2, symbol 1
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
 	SHLQ    CL, R11
-	ADDB    CL, R12
+	SHRQ    $0x08, CX
+	MOVB    CL, 1(R10)
 
-	// val1 := br1.peekTopBits(peekBits)
-	MOVQ R11, R13
-	MOVQ DI, CX
-	SHRQ CL, R13
+	// stream 3, symbol 1
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, 1(R12)
 
-	// v1 := table[val0&mask]
-	MOVWQZX (R9)(R13*2), CX
+	// stream 0, symbol 2
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, 2(SI)
 
-	// br1.advance(uint8(v1.entry)
-	MOVB   CH, AH
-	SHLQ   CL, R11
-	ADDB   CL, R12
-	BSWAPL AX
+	// stream 1, symbol 2
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, 2(R8)
 
-	// val2 := br1.peekTopBits(peekBits)
-	MOVQ R11, R13
-	MOVQ DI, CX
-	SHRQ CL, R13
-
-	// v2 := table[val0&mask]
-	MOVWQZX (R9)(R13*2), CX
-
-	// br1.advance(uint8(v2.entry)
-	MOVB CH, AH
-	SHLQ CL, R11
-	ADDB CL, R12
-
-	// val3 := br1.peekTopBits(peekBits)
-	MOVQ R11, R13
-	MOVQ DI, CX
-	SHRQ CL, R13
-
-	// v3 := table[val0&mask]
-	MOVWQZX (R9)(R13*2), CX
-
-	// br1.advance(uint8(v3.entry)
-	MOVB   CH, AL
-	SHLQ   CL, R11
-	ADDB   CL, R12
-	BSWAPL AX
-
-	// these four writes get coalesced
-	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
-	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
-	// out[id * dstEvery + 3] = uint8(v2.entry >> 8)
-	// out[id * dstEvery + 4] = uint8(v3.entry >> 8)
-	MOVL AX, (BX)(R8*1)
-
-	// update the bitreader structure
-	MOVQ R11, 80(R10)
-	MOVB R12, 88(R10)
-
-	// br2.fillFast32()
-	MOVQ    128(R10), R11
-	MOVBQZX 136(R10), R12
-	CMPQ    R12, $0x20
-	JBE     skip_fill2
-	MOVQ    120(R10), AX
-	SUBQ    $0x20, R12
-	SUBQ    $0x04, AX
-	MOVQ    96(R10), R13
-
-	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVL (AX)(R13*1), R13
-	MOVQ R12, CX
-	SHLQ CL, R13
-	MOVQ AX, 120(R10)
-	ORQ  R13, R11
-
-	// exhausted += (br2.off < 4)
-	CMPQ AX, $0x04
-	ADCQ $+0, DX
-
-skip_fill2:
-	// val0 := br2.peekTopBits(peekBits)
-	MOVQ R11, AX
-	MOVQ DI, CX
-	SHRQ CL, AX
-
-	// v0 := table[val0&mask]
-	MOVWQZX (R9)(AX*2), CX
-
-	// br2.advance(uint8(v0.entry)
-	MOVBLZX CH, AX
+	// stream 2, symbol 2
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
 	SHLQ    CL, R11
-	ADDB    CL, R12
+	SHRQ    $0x08, CX
+	MOVB    CL, 2(R10)
 
-	// val1 := br2.peekTopBits(peekBits)
-	MOVQ R11, R13
-	MOVQ DI, CX
-	SHRQ CL, R13
+	// stream 3, symbol 2
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, 2(R12)
 
-	// v1 := table[val0&mask]
-	MOVWQZX (R9)(R13*2), CX
+	// stream 0, symbol 3
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, 3(SI)
 
-	// br2.advance(uint8(v1.entry)
-	MOVB   CH, AH
-	SHLQ   CL, R11
-	ADDB   CL, R12
-	BSWAPL AX
+	// stream 1, symbol 3
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, 3(R8)
 
-	// val2 := br2.peekTopBits(peekBits)
-	MOVQ R11, R13
-	MOVQ DI, CX
-	SHRQ CL, R13
-
-	// v2 := table[val0&mask]
-	MOVWQZX (R9)(R13*2), CX
-
-	// br2.advance(uint8(v2.entry)
-	MOVB CH, AH
-	SHLQ CL, R11
-	ADDB CL, R12
-
-	// val3 := br2.peekTopBits(peekBits)
-	MOVQ R11, R13
-	MOVQ DI, CX
-	SHRQ CL, R13
-
-	// v3 := table[val0&mask]
-	MOVWQZX (R9)(R13*2), CX
-
-	// br2.advance(uint8(v3.entry)
-	MOVB   CH, AL
-	SHLQ   CL, R11
-	ADDB   CL, R12
-	BSWAPL AX
-
-	// these four writes get coalesced
-	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
-	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
-	// out[id * dstEvery + 3] = uint8(v2.entry >> 8)
-	// out[id * dstEvery + 4] = uint8(v3.entry >> 8)
-	MOVL AX, (BX)(R8*2)
-
-	// update the bitreader structure
-	MOVQ R11, 128(R10)
-	MOVB R12, 136(R10)
-
-	// br3.fillFast32()
-	MOVQ    176(R10), R11
-	MOVBQZX 184(R10), R12
-	CMPQ    R12, $0x20
-	JBE     skip_fill3
-	MOVQ    168(R10), AX
-	SUBQ    $0x20, R12
-	SUBQ    $0x04, AX
-	MOVQ    144(R10), R13
-
-	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVL (AX)(R13*1), R13
-	MOVQ R12, CX
-	SHLQ CL, R13
-	MOVQ AX, 168(R10)
-	ORQ  R13, R11
-
-	// exhausted += (br3.off < 4)
-	CMPQ AX, $0x04
-	ADCQ $+0, DX
-
-skip_fill3:
-	// val0 := br3.peekTopBits(peekBits)
-	MOVQ R11, AX
-	MOVQ DI, CX
-	SHRQ CL, AX
-
-	// v0 := table[val0&mask]
-	MOVWQZX (R9)(AX*2), CX
-
-	// br3.advance(uint8(v0.entry)
-	MOVBLZX CH, AX
+	// stream 2, symbol 3
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
 	SHLQ    CL, R11
-	ADDB    CL, R12
+	SHRQ    $0x08, CX
+	MOVB    CL, 3(R10)
 
-	// val1 := br3.peekTopBits(peekBits)
-	MOVQ R11, R13
-	MOVQ DI, CX
-	SHRQ CL, R13
+	// stream 3, symbol 3
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, 3(R12)
 
-	// v1 := table[val0&mask]
-	MOVWQZX (R9)(R13*2), CX
+	// stream 0, symbol 4
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, 4(SI)
 
-	// br3.advance(uint8(v1.entry)
-	MOVB   CH, AH
+	// stream 1, symbol 4
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, 4(R8)
+
+	// stream 2, symbol 4
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 4(R10)
+
+	// stream 3, symbol 4
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, 4(R12)
+
+	// stream 0, symbol 5
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, 5(SI)
+
+	// stream 1, symbol 5
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, 5(R8)
+
+	// stream 2, symbol 5
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 5(R10)
+
+	// stream 3, symbol 5
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, 5(R12)
+
+	// stream 0, symbol 6
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, 6(SI)
+
+	// stream 1, symbol 6
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, 6(R8)
+
+	// stream 2, symbol 6
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 6(R10)
+
+	// stream 3, symbol 6
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, 6(R12)
+
+	// Reload the four bit containers
+	TZCNTQ DI, R14
+	MOVQ   R14, CX
+	ANDQ   $0x07, CX
+	SHRQ   $0x03, R14
+	MOVQ   24(AX), DI
+	SUBQ   R14, DI
+	MOVQ   DI, 24(AX)
+	MOVQ   (DI), DI
+	ORQ    $0x01, DI
+	SHLQ   CL, DI
+	TZCNTQ R9, R14
+	MOVQ   R14, CX
+	ANDQ   $0x07, CX
+	SHRQ   $0x03, R14
+	MOVQ   72(AX), R9
+	SUBQ   R14, R9
+	MOVQ   R9, 72(AX)
+	MOVQ   (R9), R9
+	ORQ    $0x01, R9
+	SHLQ   CL, R9
+	TZCNTQ R11, R14
+	MOVQ   R14, CX
+	ANDQ   $0x07, CX
+	SHRQ   $0x03, R14
+	MOVQ   120(AX), R11
+	SUBQ   R14, R11
+	MOVQ   R11, 120(AX)
+	MOVQ   (R11), R11
+	ORQ    $0x01, R11
 	SHLQ   CL, R11
-	ADDB   CL, R12
-	BSWAPL AX
+	TZCNTQ R13, R14
+	MOVQ   R14, CX
+	ANDQ   $0x07, CX
+	SHRQ   $0x03, R14
+	MOVQ   168(AX), R13
+	SUBQ   R14, R13
+	MOVQ   R13, 168(AX)
+	MOVQ   (R13), R13
+	ORQ    $0x01, R13
+	SHLQ   CL, R13
+	ADDQ   $0x07, SI
+	ADDQ   $0x07, R8
+	ADDQ   $0x07, R10
+	ADDQ   $0x07, R12
+	MOVQ   ctx+0(FP), CX
+	CMPQ   SI, 56(CX)
+	JB     inner_loop
+	JMP    outer_loop
 
-	// val2 := br3.peekTopBits(peekBits)
-	MOVQ R11, R13
-	MOVQ DI, CX
-	SHRQ CL, R13
+done:
+	// Hand the state back: off = ip - in (negative when the window reached into the previous stream),
+	// value = the sentinel-form container. bitReaderShifted.restoreFromAsm normalizes both.
+	MOVQ (AX), CX
+	SUBQ CX, 24(AX)
+	MOVQ DI, 32(AX)
+	MOVQ 48(AX), CX
+	SUBQ CX, 72(AX)
+	MOVQ R9, 80(AX)
+	MOVQ 96(AX), CX
+	SUBQ CX, 120(AX)
+	MOVQ R11, 128(AX)
+	MOVQ 144(AX), CX
+	SUBQ CX, 168(AX)
+	MOVQ R13, 176(AX)
+	MOVQ ctx+0(FP), AX
+	SUBQ 16(AX), SI
+	SHLQ $0x02, SI
+	MOVQ SI, 40(AX)
+	RET
 
-	// v2 := table[val0&mask]
-	MOVWQZX (R9)(R13*2), CX
+// func decompress4x_main_loop_bmi2(ctx *decompress4xContext)
+// Requires: BMI, BMI2, CMOV
+TEXT ·decompress4x_main_loop_bmi2(SB), $0-8
+	// Preload values
+	MOVQ    ctx+0(FP), SI
+	MOVQ    (SI), AX
+	MOVBQZX 8(SI), CX
+	MOVQ    32(SI), DX
+	MOVQ    16(SI), BX
+	MOVQ    24(SI), SI
+	LEAQ    (BX)(SI*1), DI
+	LEAQ    (BX)(SI*2), R9
+	LEAQ    (SI)(SI*2), R11
+	ADDQ    BX, R11
 
-	// br3.advance(uint8(v2.entry)
-	MOVB CH, AH
-	SHLQ CL, R11
-	ADDB CL, R12
+	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead.
+	// The off slot holds the absolute input pointer while the loop runs.
+	MOVQ    32(AX), SI
+	MOVBQZX 40(AX), R8
+	BTSQ    R8, SI
+	MOVQ    (AX), R8
+	ADDQ    R8, 24(AX)
+	MOVQ    80(AX), R8
+	MOVBQZX 88(AX), R10
+	BTSQ    R10, R8
+	MOVQ    48(AX), R10
+	ADDQ    R10, 72(AX)
+	MOVQ    128(AX), R10
+	MOVBQZX 136(AX), R12
+	BTSQ    R12, R10
+	MOVQ    96(AX), R12
+	ADDQ    R12, 120(AX)
+	MOVQ    176(AX), R12
+	MOVBQZX 184(AX), R13
+	BTSQ    R13, R12
+	MOVQ    144(AX), R13
+	ADDQ    R13, 168(AX)
 
-	// val3 := br3.peekTopBits(peekBits)
-	MOVQ R11, R13
-	MOVQ DI, CX
-	SHRQ CL, R13
+outer_loop:
+	// Iterations allowed by the output.
+	MOVQ ctx+0(FP), R13
+	MOVQ 48(R13), R13
+	SUBQ BX, R13
+	JLE  done
+	SHRQ $0x03, R13
 
-	// v3 := table[val0&mask]
-	MOVWQZX (R9)(R13*2), CX
+	// Iterations allowed by the input: each reload backs a pointer up by at most 7 bytes,
+	// and every read stays inside the block while the lowest pointer stays above stream 0's start.
+	MOVQ    24(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, R13
+	CMOVQCS R14, R13
+	MOVQ    72(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, R13
+	CMOVQCS R14, R13
+	MOVQ    120(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, R13
+	CMOVQCS R14, R13
+	MOVQ    168(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, R13
+	CMOVQCS R14, R13
+	TESTQ   R13, R13
+	JZ      done
+	IMUL3Q  $0x05, R13, R13
+	ADDQ    BX, R13
+	MOVQ    ctx+0(FP), R14
+	MOVQ    R13, 56(R14)
 
-	// br3.advance(uint8(v3.entry)
-	MOVB   CH, AL
-	SHLQ   CL, R11
-	ADDB   CL, R12
-	BSWAPL AX
+inner_loop:
+	// stream 0, symbol 0
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, (BX)
 
-	// these four writes get coalesced
-	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
-	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
-	// out[id * dstEvery + 3] = uint8(v2.entry >> 8)
-	// out[id * dstEvery + 4] = uint8(v3.entry >> 8)
-	LEAQ (R8)(R8*2), CX
-	MOVL AX, (BX)(CX*1)
+	// stream 1, symbol 0
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, (DI)
 
-	// update the bitreader structure
-	MOVQ  R11, 176(R10)
-	MOVB  R12, 184(R10)
-	ADDQ  $0x04, BX
-	TESTQ DX, DX
-	JZ    main_loop
-	MOVQ  ctx+0(FP), AX
-	SUBQ  16(AX), BX
-	SHLQ  $0x02, BX
-	MOVQ  BX, 40(AX)
+	// stream 2, symbol 0
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, (R9)
+
+	// stream 3, symbol 0
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, (R11)
+
+	// stream 0, symbol 1
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, 1(BX)
+
+	// stream 1, symbol 1
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, 1(DI)
+
+	// stream 2, symbol 1
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, 1(R9)
+
+	// stream 3, symbol 1
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, 1(R11)
+
+	// stream 0, symbol 2
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, 2(BX)
+
+	// stream 1, symbol 2
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, 2(DI)
+
+	// stream 2, symbol 2
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, 2(R9)
+
+	// stream 3, symbol 2
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, 2(R11)
+
+	// stream 0, symbol 3
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, 3(BX)
+
+	// stream 1, symbol 3
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, 3(DI)
+
+	// stream 2, symbol 3
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, 3(R9)
+
+	// stream 3, symbol 3
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, 3(R11)
+
+	// stream 0, symbol 4
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, 4(BX)
+
+	// stream 1, symbol 4
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, 4(DI)
+
+	// stream 2, symbol 4
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, 4(R9)
+
+	// stream 3, symbol 4
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, 4(R11)
+
+	// Reload the four bit containers
+	TZCNTQ SI, R13
+	MOVQ   R13, R14
+	ANDQ   $0x07, R14
+	SHRQ   $0x03, R13
+	MOVQ   24(AX), SI
+	SUBQ   R13, SI
+	MOVQ   SI, 24(AX)
+	MOVQ   (SI), SI
+	ORQ    $0x01, SI
+	SHLXQ  R14, SI, SI
+	TZCNTQ R8, R13
+	MOVQ   R13, R14
+	ANDQ   $0x07, R14
+	SHRQ   $0x03, R13
+	MOVQ   72(AX), R8
+	SUBQ   R13, R8
+	MOVQ   R8, 72(AX)
+	MOVQ   (R8), R8
+	ORQ    $0x01, R8
+	SHLXQ  R14, R8, R8
+	TZCNTQ R10, R13
+	MOVQ   R13, R14
+	ANDQ   $0x07, R14
+	SHRQ   $0x03, R13
+	MOVQ   120(AX), R10
+	SUBQ   R13, R10
+	MOVQ   R10, 120(AX)
+	MOVQ   (R10), R10
+	ORQ    $0x01, R10
+	SHLXQ  R14, R10, R10
+	TZCNTQ R12, R13
+	MOVQ   R13, R14
+	ANDQ   $0x07, R14
+	SHRQ   $0x03, R13
+	MOVQ   168(AX), R12
+	SUBQ   R13, R12
+	MOVQ   R12, 168(AX)
+	MOVQ   (R12), R12
+	ORQ    $0x01, R12
+	SHLXQ  R14, R12, R12
+	ADDQ   $0x05, BX
+	ADDQ   $0x05, DI
+	ADDQ   $0x05, R9
+	ADDQ   $0x05, R11
+	MOVQ   ctx+0(FP), R13
+	CMPQ   BX, 56(R13)
+	JB     inner_loop
+	JMP    outer_loop
+
+done:
+	// Hand the state back: off = ip - in (negative when the window reached into the previous stream),
+	// value = the sentinel-form container. bitReaderShifted.restoreFromAsm normalizes both.
+	MOVQ (AX), CX
+	SUBQ CX, 24(AX)
+	MOVQ SI, 32(AX)
+	MOVQ 48(AX), CX
+	SUBQ CX, 72(AX)
+	MOVQ R8, 80(AX)
+	MOVQ 96(AX), CX
+	SUBQ CX, 120(AX)
+	MOVQ R10, 128(AX)
+	MOVQ 144(AX), CX
+	SUBQ CX, 168(AX)
+	MOVQ R12, 176(AX)
+	MOVQ ctx+0(FP), AX
+	SUBQ 16(AX), BX
+	SHLQ $0x02, BX
+	MOVQ BX, 40(AX)
+	RET
+
+// func decompress4x_8b_main_loop_bmi2(ctx *decompress4xContext)
+// Requires: BMI, BMI2, CMOV
+TEXT ·decompress4x_8b_main_loop_bmi2(SB), $0-8
+	// Preload values
+	MOVQ    ctx+0(FP), SI
+	MOVQ    (SI), AX
+	MOVBQZX 8(SI), CX
+	MOVQ    32(SI), DX
+	MOVQ    16(SI), BX
+	MOVQ    24(SI), SI
+	LEAQ    (BX)(SI*1), DI
+	LEAQ    (BX)(SI*2), R9
+	LEAQ    (SI)(SI*2), R11
+	ADDQ    BX, R11
+
+	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead.
+	// The off slot holds the absolute input pointer while the loop runs.
+	MOVQ    32(AX), SI
+	MOVBQZX 40(AX), R8
+	BTSQ    R8, SI
+	MOVQ    (AX), R8
+	ADDQ    R8, 24(AX)
+	MOVQ    80(AX), R8
+	MOVBQZX 88(AX), R10
+	BTSQ    R10, R8
+	MOVQ    48(AX), R10
+	ADDQ    R10, 72(AX)
+	MOVQ    128(AX), R10
+	MOVBQZX 136(AX), R12
+	BTSQ    R12, R10
+	MOVQ    96(AX), R12
+	ADDQ    R12, 120(AX)
+	MOVQ    176(AX), R12
+	MOVBQZX 184(AX), R13
+	BTSQ    R13, R12
+	MOVQ    144(AX), R13
+	ADDQ    R13, 168(AX)
+
+outer_loop:
+	// Iterations allowed by the output.
+	MOVQ ctx+0(FP), R13
+	MOVQ 48(R13), R13
+	SUBQ BX, R13
+	JLE  done
+	SHRQ $0x03, R13
+
+	// Iterations allowed by the input: each reload backs a pointer up by at most 7 bytes,
+	// and every read stays inside the block while the lowest pointer stays above stream 0's start.
+	MOVQ    24(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, R13
+	CMOVQCS R14, R13
+	MOVQ    72(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, R13
+	CMOVQCS R14, R13
+	MOVQ    120(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, R13
+	CMOVQCS R14, R13
+	MOVQ    168(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, R13
+	CMOVQCS R14, R13
+	TESTQ   R13, R13
+	JZ      done
+	IMUL3Q  $0x07, R13, R13
+	ADDQ    BX, R13
+	MOVQ    ctx+0(FP), R14
+	MOVQ    R13, 56(R14)
+
+inner_loop:
+	// stream 0, symbol 0
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, (BX)
+
+	// stream 1, symbol 0
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, (DI)
+
+	// stream 2, symbol 0
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, (R9)
+
+	// stream 3, symbol 0
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, (R11)
+
+	// stream 0, symbol 1
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, 1(BX)
+
+	// stream 1, symbol 1
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, 1(DI)
+
+	// stream 2, symbol 1
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, 1(R9)
+
+	// stream 3, symbol 1
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, 1(R11)
+
+	// stream 0, symbol 2
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, 2(BX)
+
+	// stream 1, symbol 2
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, 2(DI)
+
+	// stream 2, symbol 2
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, 2(R9)
+
+	// stream 3, symbol 2
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, 2(R11)
+
+	// stream 0, symbol 3
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, 3(BX)
+
+	// stream 1, symbol 3
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, 3(DI)
+
+	// stream 2, symbol 3
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, 3(R9)
+
+	// stream 3, symbol 3
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, 3(R11)
+
+	// stream 0, symbol 4
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, 4(BX)
+
+	// stream 1, symbol 4
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, 4(DI)
+
+	// stream 2, symbol 4
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, 4(R9)
+
+	// stream 3, symbol 4
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, 4(R11)
+
+	// stream 0, symbol 5
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, 5(BX)
+
+	// stream 1, symbol 5
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, 5(DI)
+
+	// stream 2, symbol 5
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, 5(R9)
+
+	// stream 3, symbol 5
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, 5(R11)
+
+	// stream 0, symbol 6
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, 6(BX)
+
+	// stream 1, symbol 6
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, 6(DI)
+
+	// stream 2, symbol 6
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, 6(R9)
+
+	// stream 3, symbol 6
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, 6(R11)
+
+	// Reload the four bit containers
+	TZCNTQ SI, R13
+	MOVQ   R13, R14
+	ANDQ   $0x07, R14
+	SHRQ   $0x03, R13
+	MOVQ   24(AX), SI
+	SUBQ   R13, SI
+	MOVQ   SI, 24(AX)
+	MOVQ   (SI), SI
+	ORQ    $0x01, SI
+	SHLXQ  R14, SI, SI
+	TZCNTQ R8, R13
+	MOVQ   R13, R14
+	ANDQ   $0x07, R14
+	SHRQ   $0x03, R13
+	MOVQ   72(AX), R8
+	SUBQ   R13, R8
+	MOVQ   R8, 72(AX)
+	MOVQ   (R8), R8
+	ORQ    $0x01, R8
+	SHLXQ  R14, R8, R8
+	TZCNTQ R10, R13
+	MOVQ   R13, R14
+	ANDQ   $0x07, R14
+	SHRQ   $0x03, R13
+	MOVQ   120(AX), R10
+	SUBQ   R13, R10
+	MOVQ   R10, 120(AX)
+	MOVQ   (R10), R10
+	ORQ    $0x01, R10
+	SHLXQ  R14, R10, R10
+	TZCNTQ R12, R13
+	MOVQ   R13, R14
+	ANDQ   $0x07, R14
+	SHRQ   $0x03, R13
+	MOVQ   168(AX), R12
+	SUBQ   R13, R12
+	MOVQ   R12, 168(AX)
+	MOVQ   (R12), R12
+	ORQ    $0x01, R12
+	SHLXQ  R14, R12, R12
+	ADDQ   $0x07, BX
+	ADDQ   $0x07, DI
+	ADDQ   $0x07, R9
+	ADDQ   $0x07, R11
+	MOVQ   ctx+0(FP), R13
+	CMPQ   BX, 56(R13)
+	JB     inner_loop
+	JMP    outer_loop
+
+done:
+	// Hand the state back: off = ip - in (negative when the window reached into the previous stream),
+	// value = the sentinel-form container. bitReaderShifted.restoreFromAsm normalizes both.
+	MOVQ (AX), CX
+	SUBQ CX, 24(AX)
+	MOVQ SI, 32(AX)
+	MOVQ 48(AX), CX
+	SUBQ CX, 72(AX)
+	MOVQ R8, 80(AX)
+	MOVQ 96(AX), CX
+	SUBQ CX, 120(AX)
+	MOVQ R10, 128(AX)
+	MOVQ 144(AX), CX
+	SUBQ CX, 168(AX)
+	MOVQ R12, 176(AX)
+	MOVQ ctx+0(FP), AX
+	SUBQ 16(AX), BX
+	SHLQ $0x02, BX
+	MOVQ BX, 40(AX)
 	RET
 
 // func decompress1x_main_loop_amd64(ctx *decompress1xContext)

@@ -6,14 +6,15 @@
 package huff0
 
 // decompress4x_main_loop_arm64 is an arm64 assembler implementation
-// of Decompress4X when tablelog > 8.
+// of Decompress4X when tablelog > 8, decoding fast4XSymbols symbols per
+// stream between bit container reloads.
 //
 //go:noescape
 func decompress4x_main_loop_arm64(ctx *decompress4xContext)
 
 // decompress4x_8b_main_loop_arm64 is an arm64 assembler implementation
-// of Decompress4X when tablelog <= 8 which decodes 4 entries
-// per loop.
+// of Decompress4X when tablelog <= 8, decoding fast4X8bSymbols symbols
+// per stream between bit container reloads.
 //
 //go:noescape
 func decompress4x_8b_main_loop_arm64(ctx *decompress4xContext)

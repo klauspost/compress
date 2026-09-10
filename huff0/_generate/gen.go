@@ -23,8 +23,12 @@ func main() {
 
 	{
 		decompress := decompress4x{}
-		decompress.generateProcedure("decompress4x_main_loop_amd64")
-		decompress.generateProcedure4x8bit("decompress4x_8b_main_loop_amd64")
+		decompress.generateProcedure("decompress4x_main_loop_amd64", fast4XSymbols)
+		decompress.generateProcedure("decompress4x_8b_main_loop_amd64", fast4X8bSymbols)
+
+		decompress.bmi2 = true
+		decompress.generateProcedure("decompress4x_main_loop_bmi2", fast4XSymbols)
+		decompress.generateProcedure("decompress4x_8b_main_loop_bmi2", fast4X8bSymbols)
 	}
 
 	{
@@ -39,70 +43,7 @@ func main() {
 }
 
 type decompress4x struct {
-}
-
-func (d decompress4x) generateProcedure(name string) {
-	Package("github.com/klauspost/compress/huff0")
-	TEXT(name, 0, "func(ctx* decompress4xContext)")
-	Doc(name+" is an x86 assembler implementation of Decompress4X when tablelog > 8.decodes a sequence", "")
-	Pragma("noescape")
-
-	// exhausted counts streams whose input ran dry, at most 4 per iteration,
-	// so the full register is as good as a byte. Full-width ops avoid x86
-	// partial-register merges, and on arm64 the zeroing plus SETGE lowers to
-	// one CSET and each carry add to one CSINC, where byte-lane ops need a
-	// bit-field insert after every one.
-	exhausted := GP64()
-	buffer := GP64()
-	limit := GP64()
-
-	peekBits := GP64()
-	dstEvery := GP64()
-	table := GP64()
-
-	br := GP64()
-
-	Comment("Preload values")
-	{
-		ctx := Dereference(Param("ctx"))
-		Load(ctx.Field("peekBits"), peekBits)
-		Load(ctx.Field("out"), buffer)
-		Load(ctx.Field("limit"), limit)
-		Load(ctx.Field("dstEvery"), dstEvery)
-		Load(ctx.Field("tbl"), table)
-		Load(ctx.Field("pbr"), br)
-	}
-
-	Comment("Main loop")
-	Label("main_loop")
-
-	// Check if we have space. We could zero exhausted outside the loop,
-	// but doing it here is a hint to the CPU that there's no dependency
-	// on the previous iteration's value.
-	XORQ(exhausted, exhausted)
-	CMPQ(buffer, limit)
-	SETGE(exhausted.As8())
-	d.decodeTwoValues(0, br, peekBits, table, buffer, dstEvery, exhausted)
-	d.decodeTwoValues(1, br, peekBits, table, buffer, dstEvery, exhausted)
-	d.decodeTwoValues(2, br, peekBits, table, buffer, dstEvery, exhausted)
-	d.decodeTwoValues(3, br, peekBits, table, buffer, dstEvery, exhausted)
-
-	ADDQ(U8(2), buffer) // off += 2
-
-	TESTQ(exhausted, exhausted) // any br[i].ofs < 4?
-	JZ(LabelRef("main_loop"))
-
-	{
-		ctx := Dereference(Param("ctx"))
-		ctxout, _ := ctx.Field("out").Resolve()
-		decoded := buffer
-		SUBQ(ctxout.Addr, decoded)
-		SHLQ(U8(2), decoded) // decoded *= 4
-
-		Store(decoded, ctx.Field("decoded"))
-	}
-
-	RET()
+	bmi2 bool
 }
 
 // TODO [wmu]: I believe it's doable in avo, but can't figure out how to deal
@@ -113,228 +54,204 @@ const bitReader_value = bitReader_off + 8
 const bitReader_bitsRead = bitReader_value + 8
 const bitReader__size = bitReader_bitsRead + 8
 
-func (d decompress4x) decodeTwoValues(id int, br, peekBits, table, buffer, dstEvery, exhausted reg.GPVirtual) {
-	brValue, brBitsRead := d.fillFast32(id, 32, br, exhausted)
+// Symbols decoded from each stream between reloads. The bit container holds
+// a sentinel bit just below the unread bits, so the consumed count is its
+// trailing zero count and no separate bitsRead register is needed. A reload
+// leaves at most 7 consumed bits, so n symbols of at most b bits each need
+// 7+n*b <= 63 for the sentinel to survive and 64-(7+(n-1)*b) >= b valid bits
+// ahead of the last symbol: n*b <= 56.
+const (
+	fast4XSymbols   = 5 // tablelog 9..11: 5*11 = 55
+	fast4X8bSymbols = 7 // tablelog <= 8: 7*8 = 56
+)
 
-	val := GP64()
-	Commentf("val0 := br%d.peekTopBits(peekBits)", id)
-	CX := reg.CL
-	MOVQ(brValue, val.As64())
-	MOVQ(peekBits, CX.As64())
-	SHRQ(CX, val.As64()) // val = (value >> peek_bits) & mask
-
-	Comment("v0 := table[val0&mask]")
-	MOVWQZX(Mem{Base: table, Index: val.As64(), Scale: 2}, CX.As64())
-
-	Commentf("br%d.advance(uint8(v0.entry)", id)
-	out := reg.RAX // Fixed since we need 8H
-	// The first byte must be a zero-extending write: MOVB into AL would
-	// merge into RAX and carry a false dependency on the previous stream's
-	// value, serializing the four otherwise-independent streams through one
-	// register (on arm64 the lowered BFI chains the same way).
-	MOVBLZX(CX.As8H(), out.As32()) // AX = uint8(v0.entry >> 8)
-
-	SHLQ(CX, brValue)                // value <<= n
-	ADDB(CX.As8(), brBitsRead.As8()) // bits_read += n
-
-	Commentf("val1 := br%d.peekTopBits(peekBits)", id)
-	MOVQ(peekBits, CX.As64())
-	MOVQ(brValue, val.As64())
-	SHRQ(CX, val.As64()) // val = (value >> peek_bits) & mask
-
-	Comment("v1 := table[val1&mask]")
-	MOVWQZX(Mem{Base: table, Index: val.As64(), Scale: 2}, CX.As64()) // tmp - v1
-
-	Commentf("br%d.advance(uint8(v1.entry))", id)
-	MOVB(CX.As8H(), out.As8H())      // AH = uint8(v0.entry >> 8)
-	SHLQ(CX, brValue)                // value <<= n
-	ADDB(CX.As8(), brBitsRead.As8()) // bits_read += n
-
-	Comment("these two writes get coalesced")
-	Comment("out[id * dstEvery + 0] = uint8(v0.entry >> 8)")
-	Comment("out[id * dstEvery + 1] = uint8(v1.entry >> 8)")
-	MOVW(out.As16(), bufferIndex(id, buffer, dstEvery))
-
-	Comment("update the bitreader structure")
-	offset := id * bitReader__size
-	MOVQ(brValue, Mem{Base: br, Disp: offset + bitReader_value})
-	MOVB(brBitsRead.As8(), Mem{Base: br, Disp: offset + bitReader_bitsRead})
-}
-
-func (d decompress4x) generateProcedure4x8bit(name string) {
+// generateProcedure emits the Decompress4X main loop. The four streams are
+// decoded in lockstep, nSyms symbols per stream per iteration, with every
+// stream's bit container and output pointer held in registers. Only the
+// input pointers live in memory (in the bitReaderShifted off slot), touched
+// once per reload. This is the same shape as zstd's HUF_decompress4X1 fast
+// loop: no per-symbol fill branch, no byte-lane packing of the output, and
+// bounds checks hoisted to an outer loop.
+//
+// Register budget: 4 containers + 4 output pointers + table, peekBits and
+// the reader base are live throughout (11), so every helper below keeps its
+// temporaries to two.
+func (d decompress4x) generateProcedure(name string, nSyms int) {
 	Package("github.com/klauspost/compress/huff0")
 	TEXT(name, 0, "func(ctx* decompress4xContext)")
-	Doc(name+" is an x86 assembler implementation of Decompress4X when tablelog > 8.decodes a sequence", "")
+	Doc(fmt.Sprintf("%s decodes %d symbols per stream per reload from four interleaved huff0 streams.", name, nSyms), "")
 	Pragma("noescape")
 
-	// exhausted counts streams whose input ran dry, at most 4 per iteration,
-	// so the full register is as good as a byte. Full-width ops avoid x86
-	// partial-register merges, and on arm64 the zeroing plus SETGE lowers to
-	// one CSET and each carry add to one CSINC, where byte-lane ops need a
-	// bit-field insert after every one.
-	exhausted := GP64()
-	buffer := GP64()
-	limit := GP64()
-
-	peekBits := GP64()
-	dstEvery := GP64()
-	table := GP64()
-
 	br := GP64()
+	peekBits := GP64()
+	table := GP64()
+	var op, bits [4]reg.GPVirtual
+	for i := range op {
+		op[i] = GP64()
+		bits[i] = GP64()
+	}
 
 	Comment("Preload values")
 	{
 		ctx := Dereference(Param("ctx"))
-		Load(ctx.Field("peekBits"), peekBits)
-		Load(ctx.Field("out"), buffer)
-		Load(ctx.Field("limit"), limit)
-		Load(ctx.Field("dstEvery"), dstEvery)
-		Load(ctx.Field("tbl"), table)
 		Load(ctx.Field("pbr"), br)
+		Load(ctx.Field("peekBits"), peekBits)
+		Load(ctx.Field("tbl"), table)
+		Load(ctx.Field("out"), op[0])
+		dstEvery := GP64()
+		Load(ctx.Field("dstEvery"), dstEvery)
+		LEAQ(Mem{Base: op[0], Index: dstEvery, Scale: 1}, op[1])
+		LEAQ(Mem{Base: op[0], Index: dstEvery, Scale: 2}, op[2])
+		LEAQ(Mem{Base: dstEvery, Index: dstEvery, Scale: 2}, op[3])
+		ADDQ(op[0], op[3])
 	}
 
-	Comment("Main loop")
-	Label("main_loop")
+	Comment("Convert each bit reader to sentinel form: bits = value | 1<<bitsRead.")
+	Comment("The off slot holds the absolute input pointer while the loop runs.")
+	for i := range 4 {
+		off := i * bitReader__size
+		tmp := GP64()
+		MOVQ(Mem{Base: br, Disp: off + bitReader_value}, bits[i])
+		MOVBQZX(Mem{Base: br, Disp: off + bitReader_bitsRead}, tmp)
+		BTSQ(tmp, bits[i])
+		MOVQ(Mem{Base: br, Disp: off + bitReader_in}, tmp)
+		ADDQ(tmp, Mem{Base: br, Disp: off + bitReader_off})
+	}
 
-	// Check if we have space. We could zero exhausted outside the loop,
-	// but doing it here is a hint to the CPU that there's no dependency
-	// on the previous iteration's value.
-	XORQ(exhausted, exhausted)
-	CMPQ(buffer, limit)
-	SETGE(exhausted.As8())
-	d.decodeFourValues(0, br, peekBits, table, buffer, dstEvery, exhausted)
-	d.decodeFourValues(1, br, peekBits, table, buffer, dstEvery, exhausted)
-	d.decodeFourValues(2, br, peekBits, table, buffer, dstEvery, exhausted)
-	d.decodeFourValues(3, br, peekBits, table, buffer, dstEvery, exhausted)
+	Label("outer_loop")
+	{
+		Comment("Iterations allowed by the output.")
+		iters := GP64()
+		{
+			ctx := Dereference(Param("ctx"))
+			Load(ctx.Field("limit"), iters)
+		}
+		SUBQ(op[0], iters)
+		JLE(LabelRef("done"))
+		SHRQ(U8(3), iters)
 
-	ADDQ(U8(4), buffer) // off += 4
+		Comment("Iterations allowed by the input: each reload backs a pointer up by at most 7 bytes,")
+		Comment("and every read stays inside the block while the lowest pointer stays above stream 0's start.")
+		for i := range 4 {
+			t := GP64()
+			MOVQ(Mem{Base: br, Disp: i*bitReader__size + bitReader_off}, t)
+			SUBQ(Mem{Base: br, Disp: bitReader_in}, t)
+			SHRQ(U8(3), t)
+			CMPQ(t, iters)
+			CMOVQCS(t, iters)
+		}
+		TESTQ(iters, iters)
+		JZ(LabelRef("done"))
+		IMUL3Q(Imm(uint64(nSyms)), iters, iters)
+		ADDQ(op[0], iters)
+		{
+			ctx := Dereference(Param("ctx"))
+			Store(iters, ctx.Field("inner"))
+		}
+	}
 
-	TESTQ(exhausted, exhausted) // any br[i].ofs < 4?
-	JZ(LabelRef("main_loop"))
+	Label("inner_loop")
+	for k := range nSyms {
+		for i := range 4 {
+			Commentf("stream %d, symbol %d", i, k)
+			d.decodeSymbol(k, bits[i], op[i], peekBits, table)
+		}
+	}
+	Comment("Reload the four bit containers")
+	for i := range 4 {
+		d.reload(i, bits[i], br)
+	}
+	for i := range 4 {
+		ADDQ(U8(nSyms), op[i])
+	}
+	{
+		ctx := Dereference(Param("ctx"))
+		inner, _ := ctx.Field("inner").Resolve()
+		CMPQ(op[0], inner.Addr)
+		JB(LabelRef("inner_loop"))
+	}
+	JMP(LabelRef("outer_loop"))
 
+	Label("done")
+	Comment("Hand the state back: off = ip - in (negative when the window reached into the previous stream),")
+	Comment("value = the sentinel-form container. bitReaderShifted.restoreFromAsm normalizes both.")
+	for i := range 4 {
+		off := i * bitReader__size
+		in := GP64()
+		MOVQ(Mem{Base: br, Disp: off + bitReader_in}, in)
+		SUBQ(in, Mem{Base: br, Disp: off + bitReader_off})
+		MOVQ(bits[i], Mem{Base: br, Disp: off + bitReader_value})
+	}
 	{
 		ctx := Dereference(Param("ctx"))
 		ctxout, _ := ctx.Field("out").Resolve()
-		decoded := buffer
+		decoded := op[0]
 		SUBQ(ctxout.Addr, decoded)
 		SHLQ(U8(2), decoded) // decoded *= 4
-
 		Store(decoded, ctx.Field("decoded"))
 	}
 	RET()
 }
 
-func (d decompress4x) decodeFourValues(id int, br, peekBits, table, buffer, dstEvery, exhausted reg.GPVirtual) {
-	brValue, brBitsRead := d.fillFast32(id, 32, br, exhausted)
-
-	decompress := func(valID int, outByte reg.Register, fresh bool) {
-		CX := reg.CL
-		val := GP64()
-		Commentf("val%d := br%d.peekTopBits(peekBits)", valID, id)
-		MOVQ(brValue, val.As64())
-		MOVQ(peekBits, CX.As64())
-		SHRQ(CX, val.As64()) // val = (value >> peek_bits) & mask
-
-		Commentf("v%d := table[val0&mask]", valID)
-		MOVWQZX(Mem{Base: table, Index: val.As64(), Scale: 2}, CX.As64())
-
-		Commentf("br%d.advance(uint8(v%d.entry)", id, valID)
-		if fresh {
-			// The first byte must be a zero-extending write: MOVB into AL
-			// would merge into RAX and carry a false dependency on the
-			// previous stream's value, serializing the four otherwise-
-			// independent streams through one register (on arm64 the
-			// lowered BFI chains the same way).
-			MOVBLZX(CX.As8H(), reg.EAX) // outByte = uint8(v0.entry >> 8)
-		} else {
-			MOVB(CX.As8H(), outByte) // outByte = uint8(v0.entry >> 8)
-		}
-
-		SHLQ(CX, brValue)          // value <<= n
-		ADDB(CX, brBitsRead.As8()) // bits_read += n
+// decodeSymbol decodes one symbol from bits into op[k].
+func (d decompress4x) decodeSymbol(k int, bits, op, peekBits, table reg.GPVirtual) {
+	val := GP64()
+	if d.bmi2 {
+		SHRXQ(peekBits, bits, val)
+		MOVWQZX(Mem{Base: table, Index: val, Scale: 2}, val)
+		SHLXQ(val, bits, bits) // bits <<= nbBits (low byte of the entry)
+		SHRQ(U8(8), val)
+		MOVB(val.As8(), Mem{Base: op, Disp: k})
+		return
 	}
-
-	out := reg.RAX // Fixed since we need 8H
-	decompress(0, out.As8L(), true)
-	decompress(1, out.As8H(), false)
-	BSWAPL(out.As32())
-	decompress(2, out.As8H(), false)
-	decompress(3, out.As8L(), false)
-	BSWAPL(out.As32())
-
-	Comment("these four writes get coalesced")
-	Comment("out[id * dstEvery + 0] = uint8(v0.entry >> 8)")
-	Comment("out[id * dstEvery + 1] = uint8(v1.entry >> 8)")
-	Comment("out[id * dstEvery + 3] = uint8(v2.entry >> 8)")
-	Comment("out[id * dstEvery + 4] = uint8(v3.entry >> 8)")
-	MOVL(out.As32(), bufferIndex(id, buffer, dstEvery))
-
-	Comment("update the bitreader structure")
-	offset := id * bitReader__size
-	MOVQ(brValue, Mem{Base: br, Disp: offset + bitReader_value})
-	MOVB(brBitsRead.As8(), Mem{Base: br, Disp: offset + bitReader_bitsRead})
+	cx, cl := d.countReg()
+	MOVQ(peekBits, cx)
+	MOVQ(bits, val)
+	SHRQ(cl, val)
+	MOVWQZX(Mem{Base: table, Index: val, Scale: 2}, cx)
+	SHLQ(cl, bits) // bits <<= nbBits (low byte of the entry)
+	SHRQ(U8(8), cx)
+	MOVB(cl, Mem{Base: op, Disp: k})
 }
 
-func bufferIndex(id int, buffer, dstEvery reg.GPVirtual) Mem {
-	switch id {
-	case 0:
-		return Mem{Base: buffer}
-	case 1, 2:
-		return Mem{Base: buffer, Index: dstEvery, Scale: byte(id)}
-	case 3:
-		stride3 := GP64() // stride3 := 3*dstEvery
-		LEAQ(Mem{Base: dstEvery, Index: dstEvery, Scale: 2}, stride3)
-		return Mem{Base: buffer, Index: stride3, Scale: 1}
-	default:
-		panic("id must be >=0, <4")
-	}
+// countReg returns the shift-count register for the generic twin as its
+// 64-bit and low-byte views: x86 variable shifts take their count in CL.
+func (d decompress4x) countReg() (reg.Register, reg.Register) {
+	return reg.RCX, reg.CL
 }
 
-func (d decompress4x) fillFast32(id, atLeast int, br, exhausted reg.GPVirtual) (brValue, brBitsRead reg.GPVirtual) {
-	if atLeast > 32 {
-		panic(fmt.Sprintf("at least (%d) cannot be >32", atLeast))
+// reload tops up one bit container: the trailing zero count is the number
+// of consumed bits, whole bytes move the input pointer back, and the
+// remaining 0-7 bits are re-applied as a shift after the fresh 8-byte load.
+func (d decompress4x) reload(i int, bits, br reg.GPVirtual) {
+	off := Mem{Base: br, Disp: i*bitReader__size + bitReader_off}
+	consumed := GP64()
+	// TZCNT rather than BSF in both twins: the sentinel guarantees a set
+	// bit, for which pre-BMI1 CPUs execute TZCNT (REP BSF) as BSF with the
+	// same result, and unlike BSF its destination is write-only, so it does
+	// not become a loop-carried register.
+	TZCNTQ(bits, consumed)
+	var nb, nb8 reg.Register
+	if d.bmi2 {
+		nb = GP64()
+	} else {
+		nb, nb8 = d.countReg()
 	}
-	Commentf("br%d.fillFast32()", id)
-	brValue = GP64()
-	brBitsRead = GP64()
-	offset := bitReader__size * id
-	MOVQ(Mem{Base: br, Disp: offset + bitReader_value}, brValue)
-	MOVBQZX(Mem{Base: br, Disp: offset + bitReader_bitsRead}, brBitsRead)
-
-	// We must have at least 2 * max tablelog left
-	CMPQ(brBitsRead, U8(64-atLeast))
-	JBE(LabelRef("skip_fill" + strconv.Itoa(id)))
-	brOffset := GP64()
-	MOVQ(Mem{Base: br, Disp: offset + bitReader_off}, brOffset)
-
-	SUBQ(U8(32), brBitsRead) // b.bitsRead -= 32
-	SUBQ(U8(4), brOffset)    // b.off -= 4
-
-	// v := b.in[b.off-4 : b.off]
-	// v = v[:4]
-	// low := (uint32(v[0])) | (uint32(v[1]) << 8) | (uint32(v[2]) << 16) | (uint32(v[3]) << 24)
-	tmp := GP64()
-	MOVQ(Mem{Base: br, Disp: offset + bitReader_in}, tmp)
-
-	Comment("b.value |= uint64(low) << (b.bitsRead & 63)")
-	addr := Mem{Base: brOffset, Index: tmp.As64(), Scale: 1}
-	CX := reg.CL
-	MOVL(addr, tmp.As32()) // tmp = uint32(b.in[b.off:b.off+4])
-	MOVQ(brBitsRead, CX.As64())
-	SHLQ(CX, tmp.As64())
-
-	MOVQ(brOffset, Mem{Base: br, Disp: offset + bitReader_off})
-	ORQ(tmp.As64(), brValue)
-	{
-		Commentf("exhausted += (br%d.off < 4)", id)
-		CMPQ(brOffset, U8(4))
-		// Add carry from brOffset-4. We do this at most four times per iteration,
-		// and every iteration resets exhausted, so it doesn't overflow.
-		ADCQ(I8(0), exhausted)
+	MOVQ(consumed, nb)
+	ANDQ(U8(7), nb)
+	SHRQ(U8(3), consumed)
+	// The old container is dead once its zero count is taken, so it doubles
+	// as the input pointer register until the fresh load overwrites it.
+	MOVQ(off, bits)
+	SUBQ(consumed, bits)
+	MOVQ(bits, off)
+	MOVQ(Mem{Base: bits}, bits)
+	ORQ(U8(1), bits)
+	if d.bmi2 {
+		SHLXQ(nb, bits, bits)
+	} else {
+		SHLQ(nb8, bits)
 	}
-
-	Label("skip_fill" + strconv.Itoa(id))
-	return
 }
 
 type bitReader struct {

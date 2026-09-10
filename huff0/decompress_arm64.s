@@ -4,625 +4,708 @@
 //go:build arm64 && (!appengine && !noasm && gc)
 
 // func decompress4x_main_loop_amd64(ctx *decompress4xContext)
+// Requires: BMI, CMOV
 TEXT ·decompress4x_main_loop_arm64(SB), $0-8
 	// Preload values
-	MOVD  ctx+0(FP), R0
-	MOVBU 8(R0), R6
-	MOVD  16(R0), R3
-	MOVD  48(R0), R5
-	MOVD  24(R0), R7
-	MOVD  32(R0), R8
-	MOVD  (R0), R9
+	MOVD  ctx+0(FP), R1
+	MOVD  (R1), R0
+	MOVBU 8(R1), R2
+	MOVD  32(R1), R3
+	MOVD  16(R1), R5
+	MOVD  24(R1), R1
+	ADD   R1, R5, R7
+	ADD   R1<<1, R5, R9
+	ADD   R1<<1, R1, R11
+	ADD   R5, R11, R11
 
-	// Main loop
-main_loop:
-	CMP  R5, R3
-	CSET GE, R2
+	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead.
+	// The off slot holds the absolute input pointer while the loop runs.
+	MOVD  32(R0), R6
+	MOVBU 40(R0), R1
+	MOVD  $1, R16
+	LSL   R1, R16, R16
+	ORR   R16, R6, R6
+	MOVD  (R0), R1
+	MOVD  24(R0), R16
+	ADD   R1, R16, R16
+	MOVD  R16, 24(R0)
+	MOVD  80(R0), R8
+	MOVBU 88(R0), R1
+	MOVD  $1, R16
+	LSL   R1, R16, R16
+	ORR   R16, R8, R8
+	MOVD  48(R0), R1
+	MOVD  72(R0), R16
+	ADD   R1, R16, R16
+	MOVD  R16, 72(R0)
+	MOVD  128(R0), R10
+	MOVBU 136(R0), R1
+	MOVD  $1, R16
+	LSL   R1, R16, R16
+	ORR   R16, R10, R10
+	MOVD  96(R0), R1
+	MOVD  120(R0), R16
+	ADD   R1, R16, R16
+	MOVD  R16, 120(R0)
+	MOVD  176(R0), R12
+	MOVBU 184(R0), R1
+	MOVD  $1, R16
+	LSL   R1, R16, R16
+	ORR   R16, R12, R12
+	MOVD  144(R0), R1
+	MOVD  168(R0), R16
+	ADD   R1, R16, R16
+	MOVD  R16, 168(R0)
 
-	// br0.fillFast32()
-	MOVD  32(R9), R10
-	MOVBU 40(R9), R11
-	CMP   $0x20, R11
-	BLS   skip_fill0
-	MOVD  24(R9), R0
-	SUB   $0x20, R11, R11
-	SUB   $0x04, R0, R0
-	MOVD  (R9), R12
+outer_loop:
+	// Iterations allowed by the output.
+	MOVD ctx+0(FP), R1
+	MOVD 48(R1), R1
+	SUBS R5, R1, R1
+	BLE  done
+	LSR  $0x03, R1, R1
 
-	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVWU (R0)(R12), R12
-	MOVD  R11, R1
+	// Iterations allowed by the input: each reload backs a pointer up by at most 7 bytes,
+	// and every read stays inside the block while the lowest pointer stays above stream 0's start.
+	MOVD 24(R0), R13
+	MOVD (R0), R16
+	SUB  R16, R13, R13
+	LSR  $0x03, R13, R13
+	CMP  R1, R13
+	CSEL LO, R13, R1, R1
+	MOVD 72(R0), R13
+	MOVD (R0), R16
+	SUB  R16, R13, R13
+	LSR  $0x03, R13, R13
+	CMP  R1, R13
+	CSEL LO, R13, R1, R1
+	MOVD 120(R0), R13
+	MOVD (R0), R16
+	SUB  R16, R13, R13
+	LSR  $0x03, R13, R13
+	CMP  R1, R13
+	CSEL LO, R13, R1, R1
+	MOVD 168(R0), R13
+	MOVD (R0), R16
+	SUB  R16, R13, R13
+	LSR  $0x03, R13, R13
+	CMP  R1, R13
+	CSEL LO, R13, R1, R1
+	TST  R1, R1
+	BEQ  done
+	MOVD $5, R16
+	MUL  R16, R1, R1
+	ADD  R5, R1, R1
+	MOVD ctx+0(FP), R13
+	MOVD R1, 56(R13)
+
+inner_loop:
+	// stream 0, symbol 0
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, (R5)
+
+	// stream 1, symbol 0
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, (R7)
+
+	// stream 2, symbol 0
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, (R9)
+
+	// stream 3, symbol 0
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
 	LSL   R1, R12, R12
-	MOVD  R0, 24(R9)
-	ORR   R12, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, (R11)
 
-	// exhausted += (br0.off < 4)
-	CMP   $0x04, R0
-	CSINC HS, R2, R2, R2
+	// stream 0, symbol 1
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, 1(R5)
 
-skip_fill0:
-	// val0 := br0.peekTopBits(peekBits)
-	LSR R6, R10, R12
+	// stream 1, symbol 1
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, 1(R7)
 
-	// v0 := table[val0&mask]
-	MOVHU (R8)(R12<<1), R1
+	// stream 2, symbol 1
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 1(R9)
 
-	// br0.advance(uint8(v0.entry)
-	UBFX $8, R1, $8, R0
-	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
-
-	// val1 := br0.peekTopBits(peekBits)
-	LSR R6, R10, R12
-
-	// v1 := table[val1&mask]
-	MOVHU (R8)(R12<<1), R1
-
-	// br0.advance(uint8(v1.entry))
-	UBFX $8, R1, $8, R16
-	BFI  $8, R16, $8, R0
-	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
-
-	// these two writes get coalesced
-	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
-	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
-	MOVH R0, (R3)
-
-	// update the bitreader structure
-	MOVD R10, 32(R9)
-	MOVB R11, 40(R9)
-
-	// br1.fillFast32()
-	MOVD  80(R9), R10
-	MOVBU 88(R9), R11
-	CMP   $0x20, R11
-	BLS   skip_fill1
-	MOVD  72(R9), R0
-	SUB   $0x20, R11, R11
-	SUB   $0x04, R0, R0
-	MOVD  48(R9), R12
-
-	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVWU (R0)(R12), R12
-	MOVD  R11, R1
+	// stream 3, symbol 1
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
 	LSL   R1, R12, R12
-	MOVD  R0, 72(R9)
-	ORR   R12, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 1(R11)
 
-	// exhausted += (br1.off < 4)
-	CMP   $0x04, R0
-	CSINC HS, R2, R2, R2
+	// stream 0, symbol 2
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, 2(R5)
 
-skip_fill1:
-	// val0 := br1.peekTopBits(peekBits)
-	LSR R6, R10, R12
+	// stream 1, symbol 2
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, 2(R7)
 
-	// v0 := table[val0&mask]
-	MOVHU (R8)(R12<<1), R1
+	// stream 2, symbol 2
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 2(R9)
 
-	// br1.advance(uint8(v0.entry)
-	UBFX $8, R1, $8, R0
-	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
-
-	// val1 := br1.peekTopBits(peekBits)
-	LSR R6, R10, R12
-
-	// v1 := table[val1&mask]
-	MOVHU (R8)(R12<<1), R1
-
-	// br1.advance(uint8(v1.entry))
-	UBFX $8, R1, $8, R16
-	BFI  $8, R16, $8, R0
-	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
-
-	// these two writes get coalesced
-	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
-	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
-	MOVH R0, (R3)(R7)
-
-	// update the bitreader structure
-	MOVD R10, 80(R9)
-	MOVB R11, 88(R9)
-
-	// br2.fillFast32()
-	MOVD  128(R9), R10
-	MOVBU 136(R9), R11
-	CMP   $0x20, R11
-	BLS   skip_fill2
-	MOVD  120(R9), R0
-	SUB   $0x20, R11, R11
-	SUB   $0x04, R0, R0
-	MOVD  96(R9), R12
-
-	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVWU (R0)(R12), R12
-	MOVD  R11, R1
+	// stream 3, symbol 2
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
 	LSL   R1, R12, R12
-	MOVD  R0, 120(R9)
-	ORR   R12, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 2(R11)
 
-	// exhausted += (br2.off < 4)
-	CMP   $0x04, R0
-	CSINC HS, R2, R2, R2
+	// stream 0, symbol 3
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, 3(R5)
 
-skip_fill2:
-	// val0 := br2.peekTopBits(peekBits)
-	LSR R6, R10, R12
+	// stream 1, symbol 3
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, 3(R7)
 
-	// v0 := table[val0&mask]
-	MOVHU (R8)(R12<<1), R1
+	// stream 2, symbol 3
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 3(R9)
 
-	// br2.advance(uint8(v0.entry)
-	UBFX $8, R1, $8, R0
-	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
-
-	// val1 := br2.peekTopBits(peekBits)
-	LSR R6, R10, R12
-
-	// v1 := table[val1&mask]
-	MOVHU (R8)(R12<<1), R1
-
-	// br2.advance(uint8(v1.entry))
-	UBFX $8, R1, $8, R16
-	BFI  $8, R16, $8, R0
-	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
-
-	// these two writes get coalesced
-	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
-	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
-	MOVH R0, (R3)(R7<<1)
-
-	// update the bitreader structure
-	MOVD R10, 128(R9)
-	MOVB R11, 136(R9)
-
-	// br3.fillFast32()
-	MOVD  176(R9), R10
-	MOVBU 184(R9), R11
-	CMP   $0x20, R11
-	BLS   skip_fill3
-	MOVD  168(R9), R0
-	SUB   $0x20, R11, R11
-	SUB   $0x04, R0, R0
-	MOVD  144(R9), R12
-
-	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVWU (R0)(R12), R12
-	MOVD  R11, R1
+	// stream 3, symbol 3
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
 	LSL   R1, R12, R12
-	MOVD  R0, 168(R9)
-	ORR   R12, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 3(R11)
 
-	// exhausted += (br3.off < 4)
-	CMP   $0x04, R0
-	CSINC HS, R2, R2, R2
+	// stream 0, symbol 4
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, 4(R5)
 
-skip_fill3:
-	// val0 := br3.peekTopBits(peekBits)
-	LSR R6, R10, R12
+	// stream 1, symbol 4
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, 4(R7)
 
-	// v0 := table[val0&mask]
-	MOVHU (R8)(R12<<1), R1
+	// stream 2, symbol 4
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 4(R9)
 
-	// br3.advance(uint8(v0.entry)
-	UBFX $8, R1, $8, R0
+	// stream 3, symbol 4
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R12, R12
+	LSR   $0x08, R1, R1
+	MOVB  R1, 4(R11)
+
+	// Reload the four bit containers
+	RBIT R6, R13
+	CLZ  R13, R13
+	MOVD R13, R1
+	AND  $0x07, R1, R1
+	LSR  $0x03, R13, R13
+	MOVD 24(R0), R6
+	SUB  R13, R6, R6
+	MOVD R6, 24(R0)
+	MOVD (R6), R6
+	ORR  $0x01, R6, R6
+	LSL  R1, R6, R6
+	RBIT R8, R13
+	CLZ  R13, R13
+	MOVD R13, R1
+	AND  $0x07, R1, R1
+	LSR  $0x03, R13, R13
+	MOVD 72(R0), R8
+	SUB  R13, R8, R8
+	MOVD R8, 72(R0)
+	MOVD (R8), R8
+	ORR  $0x01, R8, R8
+	LSL  R1, R8, R8
+	RBIT R10, R13
+	CLZ  R13, R13
+	MOVD R13, R1
+	AND  $0x07, R1, R1
+	LSR  $0x03, R13, R13
+	MOVD 120(R0), R10
+	SUB  R13, R10, R10
+	MOVD R10, 120(R0)
+	MOVD (R10), R10
+	ORR  $0x01, R10, R10
 	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
+	RBIT R12, R13
+	CLZ  R13, R13
+	MOVD R13, R1
+	AND  $0x07, R1, R1
+	LSR  $0x03, R13, R13
+	MOVD 168(R0), R12
+	SUB  R13, R12, R12
+	MOVD R12, 168(R0)
+	MOVD (R12), R12
+	ORR  $0x01, R12, R12
+	LSL  R1, R12, R12
+	ADD  $0x05, R5, R5
+	ADD  $0x05, R7, R7
+	ADD  $0x05, R9, R9
+	ADD  $0x05, R11, R11
+	MOVD ctx+0(FP), R1
+	MOVD 56(R1), R16
+	CMP  R16, R5
+	BLO  inner_loop
+	JMP  outer_loop
 
-	// val1 := br3.peekTopBits(peekBits)
-	LSR R6, R10, R12
-
-	// v1 := table[val1&mask]
-	MOVHU (R8)(R12<<1), R1
-
-	// br3.advance(uint8(v1.entry))
-	UBFX $8, R1, $8, R16
-	BFI  $8, R16, $8, R0
-	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
-
-	// these two writes get coalesced
-	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
-	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
-	ADD  R7<<1, R7, R1
-	MOVH R0, (R3)(R1)
-
-	// update the bitreader structure
-	MOVD R10, 176(R9)
-	MOVB R11, 184(R9)
-	ADD  $0x02, R3, R3
-	TST  R2, R2
-	BEQ  main_loop
+done:
+	// Hand the state back: off = ip - in (negative when the window reached into the previous stream),
+	// value = the sentinel-form container. bitReaderShifted.restoreFromAsm normalizes both.
+	MOVD (R0), R1
+	MOVD 24(R0), R16
+	SUB  R1, R16, R16
+	MOVD R16, 24(R0)
+	MOVD R6, 32(R0)
+	MOVD 48(R0), R1
+	MOVD 72(R0), R16
+	SUB  R1, R16, R16
+	MOVD R16, 72(R0)
+	MOVD R8, 80(R0)
+	MOVD 96(R0), R1
+	MOVD 120(R0), R16
+	SUB  R1, R16, R16
+	MOVD R16, 120(R0)
+	MOVD R10, 128(R0)
+	MOVD 144(R0), R1
+	MOVD 168(R0), R16
+	SUB  R1, R16, R16
+	MOVD R16, 168(R0)
+	MOVD R12, 176(R0)
 	MOVD ctx+0(FP), R0
 	MOVD 16(R0), R16
-	SUB  R16, R3, R3
-	LSL  $0x02, R3, R3
-	MOVD R3, 40(R0)
+	SUB  R16, R5, R5
+	LSL  $0x02, R5, R5
+	MOVD R5, 40(R0)
 	RET
 
 // func decompress4x_8b_main_loop_amd64(ctx *decompress4xContext)
+// Requires: BMI, CMOV
 TEXT ·decompress4x_8b_main_loop_arm64(SB), $0-8
 	// Preload values
-	MOVD  ctx+0(FP), R0
-	MOVBU 8(R0), R6
-	MOVD  16(R0), R3
-	MOVD  48(R0), R5
-	MOVD  24(R0), R7
-	MOVD  32(R0), R8
-	MOVD  (R0), R9
+	MOVD  ctx+0(FP), R1
+	MOVD  (R1), R0
+	MOVBU 8(R1), R2
+	MOVD  32(R1), R3
+	MOVD  16(R1), R5
+	MOVD  24(R1), R1
+	ADD   R1, R5, R7
+	ADD   R1<<1, R5, R9
+	ADD   R1<<1, R1, R11
+	ADD   R5, R11, R11
 
-	// Main loop
-main_loop:
-	CMP  R5, R3
-	CSET GE, R2
+	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead.
+	// The off slot holds the absolute input pointer while the loop runs.
+	MOVD  32(R0), R6
+	MOVBU 40(R0), R1
+	MOVD  $1, R16
+	LSL   R1, R16, R16
+	ORR   R16, R6, R6
+	MOVD  (R0), R1
+	MOVD  24(R0), R16
+	ADD   R1, R16, R16
+	MOVD  R16, 24(R0)
+	MOVD  80(R0), R8
+	MOVBU 88(R0), R1
+	MOVD  $1, R16
+	LSL   R1, R16, R16
+	ORR   R16, R8, R8
+	MOVD  48(R0), R1
+	MOVD  72(R0), R16
+	ADD   R1, R16, R16
+	MOVD  R16, 72(R0)
+	MOVD  128(R0), R10
+	MOVBU 136(R0), R1
+	MOVD  $1, R16
+	LSL   R1, R16, R16
+	ORR   R16, R10, R10
+	MOVD  96(R0), R1
+	MOVD  120(R0), R16
+	ADD   R1, R16, R16
+	MOVD  R16, 120(R0)
+	MOVD  176(R0), R12
+	MOVBU 184(R0), R1
+	MOVD  $1, R16
+	LSL   R1, R16, R16
+	ORR   R16, R12, R12
+	MOVD  144(R0), R1
+	MOVD  168(R0), R16
+	ADD   R1, R16, R16
+	MOVD  R16, 168(R0)
 
-	// br0.fillFast32()
-	MOVD  32(R9), R10
-	MOVBU 40(R9), R11
-	CMP   $0x20, R11
-	BLS   skip_fill0
-	MOVD  24(R9), R0
-	SUB   $0x20, R11, R11
-	SUB   $0x04, R0, R0
-	MOVD  (R9), R12
+outer_loop:
+	// Iterations allowed by the output.
+	MOVD ctx+0(FP), R1
+	MOVD 48(R1), R1
+	SUBS R5, R1, R1
+	BLE  done
+	LSR  $0x03, R1, R1
 
-	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVWU (R0)(R12), R12
-	MOVD  R11, R1
+	// Iterations allowed by the input: each reload backs a pointer up by at most 7 bytes,
+	// and every read stays inside the block while the lowest pointer stays above stream 0's start.
+	MOVD 24(R0), R13
+	MOVD (R0), R16
+	SUB  R16, R13, R13
+	LSR  $0x03, R13, R13
+	CMP  R1, R13
+	CSEL LO, R13, R1, R1
+	MOVD 72(R0), R13
+	MOVD (R0), R16
+	SUB  R16, R13, R13
+	LSR  $0x03, R13, R13
+	CMP  R1, R13
+	CSEL LO, R13, R1, R1
+	MOVD 120(R0), R13
+	MOVD (R0), R16
+	SUB  R16, R13, R13
+	LSR  $0x03, R13, R13
+	CMP  R1, R13
+	CSEL LO, R13, R1, R1
+	MOVD 168(R0), R13
+	MOVD (R0), R16
+	SUB  R16, R13, R13
+	LSR  $0x03, R13, R13
+	CMP  R1, R13
+	CSEL LO, R13, R1, R1
+	TST  R1, R1
+	BEQ  done
+	MOVD $7, R16
+	MUL  R16, R1, R1
+	ADD  R5, R1, R1
+	MOVD ctx+0(FP), R13
+	MOVD R1, 56(R13)
+
+inner_loop:
+	// stream 0, symbol 0
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, (R5)
+
+	// stream 1, symbol 0
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, (R7)
+
+	// stream 2, symbol 0
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, (R9)
+
+	// stream 3, symbol 0
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
 	LSL   R1, R12, R12
-	MOVD  R0, 24(R9)
-	ORR   R12, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, (R11)
 
-	// exhausted += (br0.off < 4)
-	CMP   $0x04, R0
-	CSINC HS, R2, R2, R2
+	// stream 0, symbol 1
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, 1(R5)
 
-skip_fill0:
-	// val0 := br0.peekTopBits(peekBits)
-	LSR R6, R10, R0
+	// stream 1, symbol 1
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, 1(R7)
 
-	// v0 := table[val0&mask]
-	MOVHU (R8)(R0<<1), R1
+	// stream 2, symbol 1
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 1(R9)
 
-	// br0.advance(uint8(v0.entry)
-	UBFX $8, R1, $8, R0
-	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
-
-	// val1 := br0.peekTopBits(peekBits)
-	LSR R6, R10, R12
-
-	// v1 := table[val0&mask]
-	MOVHU (R8)(R12<<1), R1
-
-	// br0.advance(uint8(v1.entry)
-	UBFX $8, R1, $8, R16
-	BFI  $8, R16, $8, R0
-	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
-	REVW R0, R0
-
-	// val2 := br0.peekTopBits(peekBits)
-	LSR R6, R10, R12
-
-	// v2 := table[val0&mask]
-	MOVHU (R8)(R12<<1), R1
-
-	// br0.advance(uint8(v2.entry)
-	UBFX $8, R1, $8, R16
-	BFI  $8, R16, $8, R0
-	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
-
-	// val3 := br0.peekTopBits(peekBits)
-	LSR R6, R10, R12
-
-	// v3 := table[val0&mask]
-	MOVHU (R8)(R12<<1), R1
-
-	// br0.advance(uint8(v3.entry)
-	UBFX $8, R1, $8, R16
-	BFI  $0, R16, $8, R0
-	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
-	REVW R0, R0
-
-	// these four writes get coalesced
-	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
-	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
-	// out[id * dstEvery + 3] = uint8(v2.entry >> 8)
-	// out[id * dstEvery + 4] = uint8(v3.entry >> 8)
-	MOVW R0, (R3)
-
-	// update the bitreader structure
-	MOVD R10, 32(R9)
-	MOVB R11, 40(R9)
-
-	// br1.fillFast32()
-	MOVD  80(R9), R10
-	MOVBU 88(R9), R11
-	CMP   $0x20, R11
-	BLS   skip_fill1
-	MOVD  72(R9), R0
-	SUB   $0x20, R11, R11
-	SUB   $0x04, R0, R0
-	MOVD  48(R9), R12
-
-	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVWU (R0)(R12), R12
-	MOVD  R11, R1
+	// stream 3, symbol 1
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
 	LSL   R1, R12, R12
-	MOVD  R0, 72(R9)
-	ORR   R12, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 1(R11)
 
-	// exhausted += (br1.off < 4)
-	CMP   $0x04, R0
-	CSINC HS, R2, R2, R2
+	// stream 0, symbol 2
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, 2(R5)
 
-skip_fill1:
-	// val0 := br1.peekTopBits(peekBits)
-	LSR R6, R10, R0
+	// stream 1, symbol 2
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, 2(R7)
 
-	// v0 := table[val0&mask]
-	MOVHU (R8)(R0<<1), R1
+	// stream 2, symbol 2
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 2(R9)
 
-	// br1.advance(uint8(v0.entry)
-	UBFX $8, R1, $8, R0
-	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
-
-	// val1 := br1.peekTopBits(peekBits)
-	LSR R6, R10, R12
-
-	// v1 := table[val0&mask]
-	MOVHU (R8)(R12<<1), R1
-
-	// br1.advance(uint8(v1.entry)
-	UBFX $8, R1, $8, R16
-	BFI  $8, R16, $8, R0
-	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
-	REVW R0, R0
-
-	// val2 := br1.peekTopBits(peekBits)
-	LSR R6, R10, R12
-
-	// v2 := table[val0&mask]
-	MOVHU (R8)(R12<<1), R1
-
-	// br1.advance(uint8(v2.entry)
-	UBFX $8, R1, $8, R16
-	BFI  $8, R16, $8, R0
-	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
-
-	// val3 := br1.peekTopBits(peekBits)
-	LSR R6, R10, R12
-
-	// v3 := table[val0&mask]
-	MOVHU (R8)(R12<<1), R1
-
-	// br1.advance(uint8(v3.entry)
-	UBFX $8, R1, $8, R16
-	BFI  $0, R16, $8, R0
-	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
-	REVW R0, R0
-
-	// these four writes get coalesced
-	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
-	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
-	// out[id * dstEvery + 3] = uint8(v2.entry >> 8)
-	// out[id * dstEvery + 4] = uint8(v3.entry >> 8)
-	MOVW R0, (R3)(R7)
-
-	// update the bitreader structure
-	MOVD R10, 80(R9)
-	MOVB R11, 88(R9)
-
-	// br2.fillFast32()
-	MOVD  128(R9), R10
-	MOVBU 136(R9), R11
-	CMP   $0x20, R11
-	BLS   skip_fill2
-	MOVD  120(R9), R0
-	SUB   $0x20, R11, R11
-	SUB   $0x04, R0, R0
-	MOVD  96(R9), R12
-
-	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVWU (R0)(R12), R12
-	MOVD  R11, R1
+	// stream 3, symbol 2
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
 	LSL   R1, R12, R12
-	MOVD  R0, 120(R9)
-	ORR   R12, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 2(R11)
 
-	// exhausted += (br2.off < 4)
-	CMP   $0x04, R0
-	CSINC HS, R2, R2, R2
+	// stream 0, symbol 3
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, 3(R5)
 
-skip_fill2:
-	// val0 := br2.peekTopBits(peekBits)
-	LSR R6, R10, R0
+	// stream 1, symbol 3
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, 3(R7)
 
-	// v0 := table[val0&mask]
-	MOVHU (R8)(R0<<1), R1
+	// stream 2, symbol 3
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 3(R9)
 
-	// br2.advance(uint8(v0.entry)
-	UBFX $8, R1, $8, R0
-	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
-
-	// val1 := br2.peekTopBits(peekBits)
-	LSR R6, R10, R12
-
-	// v1 := table[val0&mask]
-	MOVHU (R8)(R12<<1), R1
-
-	// br2.advance(uint8(v1.entry)
-	UBFX $8, R1, $8, R16
-	BFI  $8, R16, $8, R0
-	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
-	REVW R0, R0
-
-	// val2 := br2.peekTopBits(peekBits)
-	LSR R6, R10, R12
-
-	// v2 := table[val0&mask]
-	MOVHU (R8)(R12<<1), R1
-
-	// br2.advance(uint8(v2.entry)
-	UBFX $8, R1, $8, R16
-	BFI  $8, R16, $8, R0
-	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
-
-	// val3 := br2.peekTopBits(peekBits)
-	LSR R6, R10, R12
-
-	// v3 := table[val0&mask]
-	MOVHU (R8)(R12<<1), R1
-
-	// br2.advance(uint8(v3.entry)
-	UBFX $8, R1, $8, R16
-	BFI  $0, R16, $8, R0
-	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
-	REVW R0, R0
-
-	// these four writes get coalesced
-	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
-	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
-	// out[id * dstEvery + 3] = uint8(v2.entry >> 8)
-	// out[id * dstEvery + 4] = uint8(v3.entry >> 8)
-	ADD  R7<<1, R3, R15
-	MOVW R0, (R15)
-
-	// update the bitreader structure
-	MOVD R10, 128(R9)
-	MOVB R11, 136(R9)
-
-	// br3.fillFast32()
-	MOVD  176(R9), R10
-	MOVBU 184(R9), R11
-	CMP   $0x20, R11
-	BLS   skip_fill3
-	MOVD  168(R9), R0
-	SUB   $0x20, R11, R11
-	SUB   $0x04, R0, R0
-	MOVD  144(R9), R12
-
-	// b.value |= uint64(low) << (b.bitsRead & 63)
-	MOVWU (R0)(R12), R12
-	MOVD  R11, R1
+	// stream 3, symbol 3
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
 	LSL   R1, R12, R12
-	MOVD  R0, 168(R9)
-	ORR   R12, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 3(R11)
 
-	// exhausted += (br3.off < 4)
-	CMP   $0x04, R0
-	CSINC HS, R2, R2, R2
+	// stream 0, symbol 4
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, 4(R5)
 
-skip_fill3:
-	// val0 := br3.peekTopBits(peekBits)
-	LSR R6, R10, R0
+	// stream 1, symbol 4
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, 4(R7)
 
-	// v0 := table[val0&mask]
-	MOVHU (R8)(R0<<1), R1
+	// stream 2, symbol 4
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 4(R9)
 
-	// br3.advance(uint8(v0.entry)
-	UBFX $8, R1, $8, R0
+	// stream 3, symbol 4
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R12, R12
+	LSR   $0x08, R1, R1
+	MOVB  R1, 4(R11)
+
+	// stream 0, symbol 5
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, 5(R5)
+
+	// stream 1, symbol 5
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, 5(R7)
+
+	// stream 2, symbol 5
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 5(R9)
+
+	// stream 3, symbol 5
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R12, R12
+	LSR   $0x08, R1, R1
+	MOVB  R1, 5(R11)
+
+	// stream 0, symbol 6
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, 6(R5)
+
+	// stream 1, symbol 6
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, 6(R7)
+
+	// stream 2, symbol 6
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 6(R9)
+
+	// stream 3, symbol 6
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R12, R12
+	LSR   $0x08, R1, R1
+	MOVB  R1, 6(R11)
+
+	// Reload the four bit containers
+	RBIT R6, R13
+	CLZ  R13, R13
+	MOVD R13, R1
+	AND  $0x07, R1, R1
+	LSR  $0x03, R13, R13
+	MOVD 24(R0), R6
+	SUB  R13, R6, R6
+	MOVD R6, 24(R0)
+	MOVD (R6), R6
+	ORR  $0x01, R6, R6
+	LSL  R1, R6, R6
+	RBIT R8, R13
+	CLZ  R13, R13
+	MOVD R13, R1
+	AND  $0x07, R1, R1
+	LSR  $0x03, R13, R13
+	MOVD 72(R0), R8
+	SUB  R13, R8, R8
+	MOVD R8, 72(R0)
+	MOVD (R8), R8
+	ORR  $0x01, R8, R8
+	LSL  R1, R8, R8
+	RBIT R10, R13
+	CLZ  R13, R13
+	MOVD R13, R1
+	AND  $0x07, R1, R1
+	LSR  $0x03, R13, R13
+	MOVD 120(R0), R10
+	SUB  R13, R10, R10
+	MOVD R10, 120(R0)
+	MOVD (R10), R10
+	ORR  $0x01, R10, R10
 	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
+	RBIT R12, R13
+	CLZ  R13, R13
+	MOVD R13, R1
+	AND  $0x07, R1, R1
+	LSR  $0x03, R13, R13
+	MOVD 168(R0), R12
+	SUB  R13, R12, R12
+	MOVD R12, 168(R0)
+	MOVD (R12), R12
+	ORR  $0x01, R12, R12
+	LSL  R1, R12, R12
+	ADD  $0x07, R5, R5
+	ADD  $0x07, R7, R7
+	ADD  $0x07, R9, R9
+	ADD  $0x07, R11, R11
+	MOVD ctx+0(FP), R1
+	MOVD 56(R1), R16
+	CMP  R16, R5
+	BLO  inner_loop
+	JMP  outer_loop
 
-	// val1 := br3.peekTopBits(peekBits)
-	LSR R6, R10, R12
-
-	// v1 := table[val0&mask]
-	MOVHU (R8)(R12<<1), R1
-
-	// br3.advance(uint8(v1.entry)
-	UBFX $8, R1, $8, R16
-	BFI  $8, R16, $8, R0
-	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
-	REVW R0, R0
-
-	// val2 := br3.peekTopBits(peekBits)
-	LSR R6, R10, R12
-
-	// v2 := table[val0&mask]
-	MOVHU (R8)(R12<<1), R1
-
-	// br3.advance(uint8(v2.entry)
-	UBFX $8, R1, $8, R16
-	BFI  $8, R16, $8, R0
-	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
-
-	// val3 := br3.peekTopBits(peekBits)
-	LSR R6, R10, R12
-
-	// v3 := table[val0&mask]
-	MOVHU (R8)(R12<<1), R1
-
-	// br3.advance(uint8(v3.entry)
-	UBFX $8, R1, $8, R16
-	BFI  $0, R16, $8, R0
-	LSL  R1, R10, R10
-	ADD  R1, R11, R15
-	BFI  $0, R15, $8, R11
-	REVW R0, R0
-
-	// these four writes get coalesced
-	// out[id * dstEvery + 0] = uint8(v0.entry >> 8)
-	// out[id * dstEvery + 1] = uint8(v1.entry >> 8)
-	// out[id * dstEvery + 3] = uint8(v2.entry >> 8)
-	// out[id * dstEvery + 4] = uint8(v3.entry >> 8)
-	ADD  R7<<1, R7, R1
-	MOVW R0, (R3)(R1)
-
-	// update the bitreader structure
-	MOVD R10, 176(R9)
-	MOVB R11, 184(R9)
-	ADD  $0x04, R3, R3
-	TST  R2, R2
-	BEQ  main_loop
+done:
+	// Hand the state back: off = ip - in (negative when the window reached into the previous stream),
+	// value = the sentinel-form container. bitReaderShifted.restoreFromAsm normalizes both.
+	MOVD (R0), R1
+	MOVD 24(R0), R16
+	SUB  R1, R16, R16
+	MOVD R16, 24(R0)
+	MOVD R6, 32(R0)
+	MOVD 48(R0), R1
+	MOVD 72(R0), R16
+	SUB  R1, R16, R16
+	MOVD R16, 72(R0)
+	MOVD R8, 80(R0)
+	MOVD 96(R0), R1
+	MOVD 120(R0), R16
+	SUB  R1, R16, R16
+	MOVD R16, 120(R0)
+	MOVD R10, 128(R0)
+	MOVD 144(R0), R1
+	MOVD 168(R0), R16
+	SUB  R1, R16, R16
+	MOVD R16, 168(R0)
+	MOVD R12, 176(R0)
 	MOVD ctx+0(FP), R0
 	MOVD 16(R0), R16
-	SUB  R16, R3, R3
-	LSL  $0x02, R3, R3
-	MOVD R3, 40(R0)
+	SUB  R16, R5, R5
+	LSL  $0x02, R5, R5
+	MOVD R5, 40(R0)
 	RET
+
+// skipped decompress4x_main_loop_bmi2 (generic twin preferred on arm64)
+
+// skipped decompress4x_8b_main_loop_bmi2 (generic twin preferred on arm64)
 
 // func decompress1x_main_loop_amd64(ctx *decompress1xContext)
 TEXT ·decompress1x_main_loop_arm64(SB), $0-8
