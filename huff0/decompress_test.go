@@ -238,6 +238,105 @@ func TestDecompress4X(t *testing.T) {
 	testDecompress4X(t)
 }
 
+// TestDecompress4XCorruptStaysInBounds feeds Decompress4X streams that
+// never drain (random bits under a valid table) into buffers with guard
+// bytes after the declared capacity. The decoder must report corruption
+// without writing past the capacity, for every table size the asm loops
+// specialize on. This is the scenario that the output-iteration bound of
+// the asm loops exists for: a stream whose read pointer sits high keeps the
+// input bound large, so only the output bound stops the loop.
+func TestDecompress4XCorruptStaysInBounds(t *testing.T) {
+	testDecompress4XCorruptStaysInBounds(t)
+}
+
+// TestDecompress4XCorruptStaysInBoundsNoBMI2 is the same through the
+// generic asm twin on amd64 (a no-op elsewhere).
+func TestDecompress4XCorruptStaysInBoundsNoBMI2(t *testing.T) {
+	defer cpuinfo.DisableBMI2()()
+	testDecompress4XCorruptStaysInBounds(t)
+}
+
+func testDecompress4XCorruptStaysInBounds(t *testing.T) {
+	// A uniform alphabet of 2^k symbols yields exactly k-bit codes; the
+	// skewed 256-symbol sample yields codes up to the maximum length.
+	tables := []struct {
+		name           string
+		symbols        int
+		skewed         bool
+		minLog, maxLog uint8
+	}{
+		{name: "tablelog-2", symbols: 4, minLog: 2, maxLog: 4},
+		{name: "tablelog-4", symbols: 16, minLog: 4, maxLog: 4},
+		{name: "tablelog-6", symbols: 64, minLog: 5, maxLog: 8},
+		{name: "tablelog-7", symbols: 128, minLog: 7, maxLog: 8},
+		{name: "tablelog-11", symbols: 256, skewed: true, minLog: 9, maxLog: 11},
+	}
+	sizes := []int{800, 801, 1000, 4096, 65536, 262143}
+	const guard = 4096
+	seed := uint32(0x12345678)
+	next := func() byte {
+		seed = seed*1664525 + 1013904223
+		return byte(seed >> 24)
+	}
+	for _, tt := range tables {
+		t.Run(tt.name, func(t *testing.T) {
+			sample := make([]byte, 1<<16)
+			for i := range sample {
+				v := int(next())
+				if tt.skewed {
+					v = v * int(next()) * int(next()) / (256 * 256)
+				}
+				sample[i] = byte(v % tt.symbols)
+			}
+			s := &Scratch{}
+			if tt.skewed {
+				s.TableLog = tt.maxLog
+			}
+			b, _, err := Compress4X(sample, s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			dec, _, err := ReadTable(b, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if dec.actualTableLog < tt.minLog || dec.actualTableLog > tt.maxLog {
+				t.Fatalf("table log %d, want %d..%d", dec.actualTableLog, tt.minLog, tt.maxLog)
+			}
+			for _, size := range sizes {
+				// Four equal streams of size bytes each: far more bits than
+				// the output can hold, every byte random, marker in the top
+				// bit of the last byte.
+				stream := size
+				src := make([]byte, 6+4*stream)
+				for i := range 3 {
+					src[i*2] = byte(stream)
+					src[i*2+1] = byte(stream >> 8)
+				}
+				for i := 6; i < len(src); i++ {
+					src[i] = next()
+				}
+				for i := range 4 {
+					src[6+(i+1)*stream-1] |= 0x80
+				}
+				buf := make([]byte, size+guard)
+				for i := size; i < len(buf); i++ {
+					buf[i] = 0xAA
+				}
+				_, err := dec.Decoder().Decompress4X(buf[:0:size], src)
+				if err == nil {
+					t.Errorf("size %d: expected a corruption error", size)
+				}
+				for i := size; i < len(buf); i++ {
+					if buf[i] != 0xAA {
+						t.Fatalf("size %d: wrote past the output capacity at +%d", size, i-size)
+					}
+				}
+			}
+		})
+	}
+}
+
 // TestDecompress4XNoBMI2 runs the same roundtrips through the generic asm
 // twin on amd64 (a no-op elsewhere).
 func TestDecompress4XNoBMI2(t *testing.T) {

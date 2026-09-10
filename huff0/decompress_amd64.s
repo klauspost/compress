@@ -33,14 +33,15 @@ TEXT ·decompress4x_main_loop_amd64(SB), $0-8
 	BTSQ    CX, R13
 
 outer_loop:
-	// Iterations allowed by the output.
+	// Iterations allowed by the output: (limit - op0) / 8
 	MOVQ 48(AX), CX
 	SUBQ SI, CX
 	JLE  done
 	SHRQ $0x03, CX
 
-	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes,
-	// so every read stays inside the block while the lowest pointer stays above ilowest.
+	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes
+	// (whatever nSyms is), so every read stays inside the block while the lowest
+	// pointer stays above ilowest.
 	MOVQ    64(AX), R14
 	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
@@ -353,14 +354,15 @@ TEXT ·decompress4x_8b_main_loop_amd64(SB), $0-8
 	BTSQ    CX, R13
 
 outer_loop:
-	// Iterations allowed by the output.
+	// Iterations allowed by the output: (limit - op0) / 8
 	MOVQ 48(AX), CX
 	SUBQ SI, CX
 	JLE  done
 	SHRQ $0x03, CX
 
-	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes,
-	// so every read stays inside the block while the lowest pointer stays above ilowest.
+	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes
+	// (whatever nSyms is), so every read stays inside the block while the lowest
+	// pointer stays above ilowest.
 	MOVQ    64(AX), R14
 	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
@@ -745,14 +747,15 @@ TEXT ·decompress4x_4b_main_loop_amd64(SB), $0-8
 	BTSQ    CX, R13
 
 outer_loop:
-	// Iterations allowed by the output.
+	// Iterations allowed by the output: (limit - op0) / 16
 	MOVQ 48(AX), CX
 	SUBQ SI, CX
 	JLE  done
-	SHRQ $0x03, CX
+	SHRQ $0x04, CX
 
-	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes,
-	// so every read stays inside the block while the lowest pointer stays above ilowest.
+	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes
+	// (whatever nSyms is), so every read stays inside the block while the lowest
+	// pointer stays above ilowest.
 	MOVQ    64(AX), R14
 	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
@@ -1389,14 +1392,15 @@ TEXT ·decompress4x_main_loop_bmi2(SB), $0-8
 	BTSQ    R13, R12
 
 outer_loop:
-	// Iterations allowed by the output.
+	// Iterations allowed by the output: (limit - op0) / 8
 	MOVQ 48(AX), R13
 	SUBQ BX, R13
 	JLE  done
 	SHRQ $0x03, R13
 
-	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes,
-	// so every read stays inside the block while the lowest pointer stays above ilowest.
+	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes
+	// (whatever nSyms is), so every read stays inside the block while the lowest
+	// pointer stays above ilowest.
 	MOVQ    64(AX), R14
 	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
@@ -1669,14 +1673,15 @@ TEXT ·decompress4x_8b_main_loop_bmi2(SB), $0-8
 	BTSQ    R13, R12
 
 outer_loop:
-	// Iterations allowed by the output.
+	// Iterations allowed by the output: (limit - op0) / 8
 	MOVQ 48(AX), R13
 	SUBQ BX, R13
 	JLE  done
 	SHRQ $0x03, R13
 
-	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes,
-	// so every read stays inside the block while the lowest pointer stays above ilowest.
+	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes
+	// (whatever nSyms is), so every read stays inside the block while the lowest
+	// pointer stays above ilowest.
 	MOVQ    64(AX), R14
 	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
@@ -2005,14 +2010,15 @@ TEXT ·decompress4x_4b_main_loop_bmi2(SB), $0-8
 	BTSQ    R13, R12
 
 outer_loop:
-	// Iterations allowed by the output.
+	// Iterations allowed by the output: (limit - op0) / 16
 	MOVQ 48(AX), R13
 	SUBQ BX, R13
 	JLE  done
-	SHRQ $0x03, R13
+	SHRQ $0x04, R13
 
-	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes,
-	// so every read stays inside the block while the lowest pointer stays above ilowest.
+	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes
+	// (whatever nSyms is), so every read stays inside the block while the lowest
+	// pointer stays above ilowest.
 	MOVQ    64(AX), R14
 	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14

@@ -6,6 +6,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	mbits "math/bits"
 	"strconv"
 
 	_ "github.com/klauspost/compress"
@@ -142,15 +143,25 @@ func (d decompress4x) generateProcedure(name string, nSyms int) {
 
 	Label("outer_loop")
 	{
-		Comment("Iterations allowed by the output.")
+		// The outer loop only re-checks bounds after a whole batch of
+		// iterations, and each iteration writes nSyms bytes per stream, so
+		// the batch must satisfy iters*nSyms <= limit-op0. Dividing the byte
+		// budget by the next power of two at or above nSyms is a cheap
+		// conservative bound (5 and 7 -> 8, 14 -> 16).
+		outShift := mbits.Len(uint(nSyms - 1))
+		if nSyms > 1<<outShift {
+			panic("output bound does not cover nSyms")
+		}
+		Commentf("Iterations allowed by the output: (limit - op0) / %d", 1<<outShift)
 		iters := GP64()
 		Load(ctx.Field("limit"), iters)
 		SUBQ(op[0], iters)
 		JLE(LabelRef("done"))
-		SHRQ(U8(3), iters)
+		SHRQ(U8(outShift), iters)
 
-		Comment("Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes,")
-		Comment("so every read stays inside the block while the lowest pointer stays above ilowest.")
+		Comment("Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes")
+		Comment("(whatever nSyms is), so every read stays inside the block while the lowest")
+		Comment("pointer stays above ilowest.")
 		ilowest, _ := ctx.Field("ilowest").Resolve()
 		for i := range 4 {
 			t := GP64()

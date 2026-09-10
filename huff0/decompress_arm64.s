@@ -42,14 +42,15 @@ TEXT ·decompress4x_main_loop_arm64(SB), $0-8
 	ORR   R16, R12, R12
 
 outer_loop:
-	// Iterations allowed by the output.
+	// Iterations allowed by the output: (limit - op0) / 8
 	MOVD 48(R0), R1
 	SUBS R5, R1, R1
 	BLE  done
 	LSR  $0x03, R1, R1
 
-	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes,
-	// so every read stays inside the block while the lowest pointer stays above ilowest.
+	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes
+	// (whatever nSyms is), so every read stays inside the block while the lowest
+	// pointer stays above ilowest.
 	MOVD 64(R0), R13
 	MOVD 56(R0), R16
 	SUB  R16, R13, R13
@@ -345,14 +346,15 @@ TEXT ·decompress4x_8b_main_loop_arm64(SB), $0-8
 	ORR   R16, R12, R12
 
 outer_loop:
-	// Iterations allowed by the output.
+	// Iterations allowed by the output: (limit - op0) / 8
 	MOVD 48(R0), R1
 	SUBS R5, R1, R1
 	BLE  done
 	LSR  $0x03, R1, R1
 
-	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes,
-	// so every read stays inside the block while the lowest pointer stays above ilowest.
+	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes
+	// (whatever nSyms is), so every read stays inside the block while the lowest
+	// pointer stays above ilowest.
 	MOVD 64(R0), R13
 	MOVD 56(R0), R16
 	SUB  R16, R13, R13
@@ -704,14 +706,15 @@ TEXT ·decompress4x_4b_main_loop_arm64(SB), $0-8
 	ORR   R16, R12, R12
 
 outer_loop:
-	// Iterations allowed by the output.
+	// Iterations allowed by the output: (limit - op0) / 16
 	MOVD 48(R0), R1
 	SUBS R5, R1, R1
 	BLE  done
-	LSR  $0x03, R1, R1
+	LSR  $0x04, R1, R1
 
-	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes,
-	// so every read stays inside the block while the lowest pointer stays above ilowest.
+	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes
+	// (whatever nSyms is), so every read stays inside the block while the lowest
+	// pointer stays above ilowest.
 	MOVD 64(R0), R13
 	MOVD 56(R0), R16
 	SUB  R16, R13, R13
