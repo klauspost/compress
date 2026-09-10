@@ -26,7 +26,7 @@ type decompress4xContext struct {
 	tbl      *dEntrySingle
 	decoded  int
 	limit    *byte    // stream 0's output pointer must stay below this
-	ilowest  *byte    // start of stream 0's input; no read goes below it
+	ilowest  *byte    // start of the input block; no read goes below it
 	ip       [4]*byte // each stream's 8-byte input window, advanced by the asm
 	inner    *byte    // scratch for the asm: the current inner-loop limit
 }
@@ -105,7 +105,12 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 			dstEvery: dstEvery,
 			tbl:      &single[0],
 			limit:    &out[limit],
-			ilowest:  &br[0].in[0],
+			// The 6-byte jump table sits below stream 0 inside src, so the
+			// lowest window may reach into it; restoreFromAsm accounts for
+			// bytes below a stream's start. Bounding by src rather than by
+			// stream 0 keeps the asm running about six bytes longer, which
+			// matters for streams with very short codes.
+			ilowest: &src[0],
 		}
 		for i := range br {
 			ctx.ip[i] = &br[i].in[br[i].off]
