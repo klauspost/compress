@@ -94,7 +94,11 @@ const (
 func (d decompress4x) generateProcedure(name string, nSyms int) {
 	Package("github.com/klauspost/compress/huff0")
 	TEXT(name, 0, "func(ctx* decompress4xContext)")
-	Doc(fmt.Sprintf("%s decodes %d symbols per stream per reload from four interleaved huff0 streams.", name, nSyms), "")
+	doc := []string{fmt.Sprintf("%s decodes %d symbols per stream per reload from four interleaved huff0 streams.", name, nSyms)}
+	if !d.bmi2 {
+		doc = append(doc, "avo stamps it as requiring BMI because of TZCNT, but it runs as BSF on CPUs without BMI1 (see reload).")
+	}
+	Doc(doc...)
 	Pragma("noescape")
 
 	// ctx stays in one register for the whole function; every memory

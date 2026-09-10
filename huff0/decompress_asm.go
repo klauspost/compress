@@ -93,10 +93,12 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 	} else if use8BitTables {
 		nSyms = fast4X8bSymbols
 	}
-	// The asm writes nSyms bytes per stream per iteration, so stream 0 must
-	// stop early enough that stream 3 (which may be up to 3 bytes shorter
-	// than dstEvery) never writes past the end of out. Every stream needs
-	// a full 8-byte window ahead of its read pointer to enter the loop.
+	// The asm writes nSyms bytes per stream per iteration and only re-checks
+	// its bounds between batches of iterations (the batch size is derived
+	// from limit in _generate/gen.go), so stream 0 must stop early enough
+	// that stream 3 (which may be up to 3 bytes shorter than dstEvery)
+	// never writes past the end of out. Every stream needs a full 8-byte
+	// window ahead of its read pointer to enter the loop.
 	if limit := dstEvery - nSyms - 2; limit > 0 && br[0].prepareForAsm() && br[1].prepareForAsm() && br[2].prepareForAsm() && br[3].prepareForAsm() {
 		ctx := decompress4xContext{
 			pbr:      &br,

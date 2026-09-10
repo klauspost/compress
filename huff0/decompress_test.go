@@ -256,6 +256,27 @@ func TestDecompress4XCorruptStaysInBoundsNoBMI2(t *testing.T) {
 	testDecompress4XCorruptStaysInBounds(t)
 }
 
+// decompress4XGuarded decodes src into a buffer of exactly dstSize bytes of
+// capacity followed by guard bytes, and fails the test if the guard bytes
+// change. This is the only way a Go test can observe an assembly overrun:
+// the allocator rounds small buffers up to a size class, so an overrun of a
+// plain make([]byte, n) lands in slack that nothing checks.
+func decompress4XGuarded(t *testing.T, dec *Decoder, dstSize int, src []byte) ([]byte, error) {
+	t.Helper()
+	const guard = 4096
+	buf := make([]byte, dstSize+guard)
+	for i := dstSize; i < len(buf); i++ {
+		buf[i] = 0xAA
+	}
+	out, err := dec.Decompress4X(buf[:0:dstSize], src)
+	for i := dstSize; i < len(buf); i++ {
+		if buf[i] != 0xAA {
+			t.Fatalf("dstSize %d: wrote past the output capacity at +%d", dstSize, i-dstSize)
+		}
+	}
+	return out, err
+}
+
 func testDecompress4XCorruptStaysInBounds(t *testing.T) {
 	// A uniform alphabet of 2^k symbols yields exactly k-bit codes; the
 	// skewed 256-symbol sample yields codes up to the maximum length.
@@ -272,7 +293,6 @@ func testDecompress4XCorruptStaysInBounds(t *testing.T) {
 		{name: "tablelog-11", symbols: 256, skewed: true, minLog: 9, maxLog: 11},
 	}
 	sizes := []int{800, 801, 1000, 4096, 65536, 262143}
-	const guard = 4096
 	seed := uint32(0x12345678)
 	next := func() byte {
 		seed = seed*1664525 + 1013904223
@@ -304,9 +324,32 @@ func testDecompress4XCorruptStaysInBounds(t *testing.T) {
 				t.Fatalf("table log %d, want %d..%d", dec.actualTableLog, tt.minLog, tt.maxLog)
 			}
 			for _, size := range sizes {
-				// Four equal streams of size bytes each: far more bits than
-				// the output can hold, every byte random, marker in the top
-				// bit of the last byte.
+				// Valid input first: a roundtrip of a fresh sample under the
+				// same table, with the output capacity exactly the size.
+				in := make([]byte, size)
+				for i := range in {
+					in[i] = sample[int(next())|int(next())<<8]
+				}
+				enc := &Scratch{Reuse: ReusePolicyMust}
+				enc.TransferCTable(dec)
+				comp, reused, err := Compress4X(in, enc)
+				if err != nil {
+					t.Fatalf("size %d: %v", size, err)
+				}
+				if !reused {
+					t.Fatalf("size %d: table was not reused", size)
+				}
+				out, err := decompress4XGuarded(t, dec.Decoder(), size, comp)
+				if err != nil {
+					t.Fatalf("size %d: %v", size, err)
+				}
+				if !bytes.Equal(out, in) {
+					t.Fatalf("size %d: roundtrip mismatch", size)
+				}
+
+				// Then corrupt input: four equal streams of size bytes each,
+				// far more bits than the output can hold, every byte random,
+				// marker in the top bit of the last byte.
 				stream := size
 				src := make([]byte, 6+4*stream)
 				for i := range 3 {
@@ -319,21 +362,75 @@ func testDecompress4XCorruptStaysInBounds(t *testing.T) {
 				for i := range 4 {
 					src[6+(i+1)*stream-1] |= 0x80
 				}
-				buf := make([]byte, size+guard)
-				for i := size; i < len(buf); i++ {
-					buf[i] = 0xAA
-				}
-				_, err := dec.Decoder().Decompress4X(buf[:0:size], src)
-				if err == nil {
+				if _, err := decompress4XGuarded(t, dec.Decoder(), size, src); err == nil {
 					t.Errorf("size %d: expected a corruption error", size)
-				}
-				for i := size; i < len(buf); i++ {
-					if buf[i] != 0xAA {
-						t.Fatalf("size %d: wrote past the output capacity at +%d", size, i-size)
-					}
 				}
 			}
 		})
+	}
+}
+
+// TestDecompress4XStreamEndsIn01 finds inputs whose compressed streams end
+// in the byte 0x01 (marker in bit 0, so the reader starts with a whole byte
+// consumed) and roundtrips them through Decompress4X with guard bytes, for
+// tables both above and below 8 bits. This is the end-to-end counterpart of
+// TestBitReaderShiftedPrepareForAsm.
+func TestDecompress4XStreamEndsIn01(t *testing.T) {
+	seed := uint32(0xC0FFEE)
+	next := func() byte {
+		seed = seed*1664525 + 1013904223
+		return byte(seed >> 24)
+	}
+	// Four symbols get 2-bit codes, so 752 symbols per stream (3008 bytes)
+	// end every stream on a byte boundary and the marker lands in bit 0
+	// deterministically. The larger alphabets have variable code lengths,
+	// so those cases search random inputs for streams that end that way.
+	for _, tc := range []struct{ symbols, length int }{{4, 3008}, {64, 3000}, {256, 3000}} {
+		symbols := tc.symbols
+		found := 0
+		for attempt := 0; attempt < 4000 && found < 3; attempt++ {
+			in := make([]byte, tc.length)
+			for i := range in {
+				v := int(next()) * int(next()) / 256
+				in[i] = byte(v % symbols)
+			}
+			s := &Scratch{}
+			comp, _, err := Compress4X(in, s)
+			if err != nil {
+				continue
+			}
+			dec, streams, err := ReadTable(comp, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Walk the jump table to find each stream's final byte.
+			start := 6
+			hit := false
+			for i := range 4 {
+				end := len(streams)
+				if i < 3 {
+					end = start + (int(streams[i*2]) | int(streams[i*2+1])<<8)
+				}
+				if streams[end-1] == 0x01 {
+					hit = true
+				}
+				start = end
+			}
+			if !hit {
+				continue
+			}
+			found++
+			out, err := decompress4XGuarded(t, dec.Decoder(), len(in), streams)
+			if err != nil {
+				t.Fatalf("symbols %d attempt %d: %v", symbols, attempt, err)
+			}
+			if !bytes.Equal(out, in) {
+				t.Fatalf("symbols %d attempt %d: roundtrip mismatch", symbols, attempt)
+			}
+		}
+		if found == 0 {
+			t.Fatalf("symbols %d: no stream ending in 0x01 found", symbols)
+		}
 	}
 }
 
