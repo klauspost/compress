@@ -99,7 +99,10 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 	// that stream 3 (which may be up to 3 bytes shorter than dstEvery)
 	// never writes past the end of out. Every stream needs a full 8-byte
 	// window ahead of its read pointer to enter the loop.
-	if limit := dstEvery - nSyms - 2; limit > 0 && br[0].prepareForAsm() && br[1].prepareForAsm() && br[2].prepareForAsm() && br[3].prepareForAsm() {
+	if limit := dstEvery - nSyms - 2; limit > 0 && br[0].canUseAsm() && br[1].canUseAsm() && br[2].canUseAsm() && br[3].canUseAsm() {
+		for i := range br {
+			br[i].prepareForAsm()
+		}
 		ctx := decompress4xContext{
 			pbr:      &br,
 			peekBits: uint8((64 - d.actualTableLog) & 63), // see: bitReaderShifted.peekBitsFast()

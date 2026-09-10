@@ -211,23 +211,24 @@ func (b *bitReaderShifted) remaining() uint {
 	return b.off*8 + uint(64-b.bitsRead)
 }
 
-// prepareForAsm makes sure the Decompress4X asm loops can take over from
-// this reader: they need the invariant value == load64(in[off:off+8]) <<
-// bitsRead with bitsRead <= 7, so that a full group of symbols can never
-// shift their sentinel bit out of the container. init leaves bitsRead == 8
-// when the final byte of the stream is exactly 0x01; that whole byte is
-// consumed, so the same position is the window one byte lower with nothing
-// consumed. Returns false if the reader has too little input left.
-func (b *bitReaderShifted) prepareForAsm() bool {
-	if b.off < 8 {
-		return false
-	}
+// canUseAsm reports whether the reader has a full 8-byte window ahead of
+// its read pointer, which the Decompress4X asm loops need to take over.
+func (b *bitReaderShifted) canUseAsm() bool {
+	return b.off >= 8
+}
+
+// prepareForAsm establishes the invariant the Decompress4X asm loops rely
+// on: value == load64(in[off:off+8]) << bitsRead with bitsRead <= 7, so
+// that a full group of symbols can never shift their sentinel bit out of
+// the container. init leaves bitsRead == 8 when the final byte of the
+// stream is exactly 0x01; that whole byte is consumed, so the same position
+// is the window one byte lower with nothing consumed. Requires canUseAsm.
+func (b *bitReaderShifted) prepareForAsm() {
 	if b.bitsRead >= 8 {
 		b.off--
 		b.value = le.Load64(b.in, b.off)
 		b.bitsRead -= 8
 	}
-	return true
 }
 
 // restoreFromAsm converts the state left behind by the Decompress4X asm

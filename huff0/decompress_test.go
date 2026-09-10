@@ -157,7 +157,7 @@ func TestBitReaderShiftedRestoreFromAsm(t *testing.T) {
 
 // TestBitReaderShiftedPrepareForAsm covers the entry normalization: a
 // stream ending in 0x01 starts with a whole byte consumed, which the asm
-// loops cannot take, and short streams are refused.
+// loops cannot take, and short streams are refused by canUseAsm.
 func TestBitReaderShiftedPrepareForAsm(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -178,12 +178,13 @@ func TestBitReaderShiftedPrepareForAsm(t *testing.T) {
 				t.Fatal(err)
 			}
 			before := b.remaining()
-			if ok := b.prepareForAsm(); ok != tt.wantOK {
-				t.Fatalf("prepareForAsm() = %v, want %v", ok, tt.wantOK)
+			if ok := b.canUseAsm(); ok != tt.wantOK {
+				t.Fatalf("canUseAsm() = %v, want %v", ok, tt.wantOK)
 			}
 			if !tt.wantOK {
 				return
 			}
+			b.prepareForAsm()
 			if b.off != tt.wantOff || b.bitsRead != tt.wantBitsRead {
 				t.Errorf("got off=%d bitsRead=%d, want off=%d bitsRead=%d", b.off, b.bitsRead, tt.wantOff, tt.wantBitsRead)
 			}
@@ -347,10 +348,10 @@ func testDecompress4XCorruptStaysInBounds(t *testing.T) {
 					t.Fatalf("size %d: roundtrip mismatch", size)
 				}
 
-				// Then corrupt input: four equal streams of size bytes each,
-				// far more bits than the output can hold, every byte random,
-				// marker in the top bit of the last byte.
-				stream := size
+				// Then corrupt input: four equal streams as long as the jump
+				// table can express, far more bits than the output can hold,
+				// every byte random, marker in the top bit of the last byte.
+				stream := min(size, 65535)
 				src := make([]byte, 6+4*stream)
 				for i := range 3 {
 					src[i*2] = byte(stream)
