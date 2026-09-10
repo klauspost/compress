@@ -6,87 +6,70 @@
 // func decompress4x_main_loop_amd64(ctx *decompress4xContext)
 // Requires: BMI, CMOV
 TEXT ·decompress4x_main_loop_arm64(SB), $0-8
+	MOVD ctx+0(FP), R0
+
 	// Preload values
-	MOVD  ctx+0(FP), R1
-	MOVD  (R1), R0
-	MOVBU 8(R1), R2
-	MOVD  32(R1), R3
-	MOVD  16(R1), R5
-	MOVD  24(R1), R1
+	MOVBU 8(R0), R2
+	MOVD  32(R0), R3
+	MOVD  16(R0), R5
+	MOVD  24(R0), R1
 	ADD   R1, R5, R7
 	ADD   R1<<1, R5, R9
 	ADD   R1<<1, R1, R11
 	ADD   R5, R11, R11
 
-	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead.
-	// The off slot holds the absolute input pointer while the loop runs.
-	MOVD  32(R0), R6
-	MOVBU 40(R0), R1
-	MOVD  $1, R16
-	LSL   R1, R16, R16
-	ORR   R16, R6, R6
+	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead
 	MOVD  (R0), R1
-	MOVD  24(R0), R16
-	ADD   R1, R16, R16
-	MOVD  R16, 24(R0)
-	MOVD  80(R0), R8
-	MOVBU 88(R0), R1
+	MOVD  32(R1), R6
+	MOVBU 40(R1), R8
 	MOVD  $1, R16
-	LSL   R1, R16, R16
+	LSL   R8, R16, R16
+	ORR   R16, R6, R6
+	MOVD  80(R1), R8
+	MOVBU 88(R1), R10
+	MOVD  $1, R16
+	LSL   R10, R16, R16
 	ORR   R16, R8, R8
-	MOVD  48(R0), R1
-	MOVD  72(R0), R16
-	ADD   R1, R16, R16
-	MOVD  R16, 72(R0)
-	MOVD  128(R0), R10
-	MOVBU 136(R0), R1
+	MOVD  128(R1), R10
+	MOVBU 136(R1), R12
 	MOVD  $1, R16
-	LSL   R1, R16, R16
+	LSL   R12, R16, R16
 	ORR   R16, R10, R10
-	MOVD  96(R0), R1
-	MOVD  120(R0), R16
-	ADD   R1, R16, R16
-	MOVD  R16, 120(R0)
-	MOVD  176(R0), R12
-	MOVBU 184(R0), R1
+	MOVD  176(R1), R12
+	MOVBU 184(R1), R1
 	MOVD  $1, R16
 	LSL   R1, R16, R16
 	ORR   R16, R12, R12
-	MOVD  144(R0), R1
-	MOVD  168(R0), R16
-	ADD   R1, R16, R16
-	MOVD  R16, 168(R0)
 
 outer_loop:
 	// Iterations allowed by the output.
-	MOVD ctx+0(FP), R1
-	MOVD 48(R1), R1
+	MOVD 48(R0), R1
 	SUBS R5, R1, R1
 	BLE  done
 	LSR  $0x03, R1, R1
 
-	// Iterations allowed by the input: each reload backs a pointer up by at most 7 bytes,
-	// and every read stays inside the block while the lowest pointer stays above stream 0's start.
-	MOVD 24(R0), R13
-	MOVD (R0), R16
+	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes,
+	// so every read stays inside the block while the lowest pointer stays above ilowest.
+	MOVD 64(R0), R13
+	MOVD 56(R0), R16
 	SUB  R16, R13, R13
 	LSR  $0x03, R13, R13
 	CMP  R1, R13
 	CSEL LO, R13, R1, R1
 	MOVD 72(R0), R13
-	MOVD (R0), R16
+	MOVD 56(R0), R16
 	SUB  R16, R13, R13
 	LSR  $0x03, R13, R13
 	CMP  R1, R13
 	CSEL LO, R13, R1, R1
-	MOVD 120(R0), R13
-	MOVD (R0), R16
+	MOVD 80(R0), R13
+	MOVD 56(R0), R16
 	SUB  R16, R13, R13
 	LSR  $0x03, R13, R13
 	CMP  R1, R13
 	CSEL LO, R13, R1, R1
-	MOVD 168(R0), R13
-	MOVD (R0), R16
+	MOVD 88(R0), R13
+	MOVD 56(R0), R16
 	SUB  R16, R13, R13
 	LSR  $0x03, R13, R13
 	CMP  R1, R13
@@ -96,8 +79,7 @@ outer_loop:
 	MOVD $5, R16
 	MUL  R16, R1, R1
 	ADD  R5, R1, R1
-	MOVD ctx+0(FP), R13
-	MOVD R1, 56(R13)
+	MOVD R1, 96(R0)
 
 inner_loop:
 	// stream 0, symbol 0
@@ -246,9 +228,9 @@ inner_loop:
 	MOVD R13, R1
 	AND  $0x07, R1, R1
 	LSR  $0x03, R13, R13
-	MOVD 24(R0), R6
+	MOVD 64(R0), R6
 	SUB  R13, R6, R6
-	MOVD R6, 24(R0)
+	MOVD R6, 64(R0)
 	MOVD (R6), R6
 	ORR  $0x01, R6, R6
 	LSL  R1, R6, R6
@@ -268,9 +250,9 @@ inner_loop:
 	MOVD R13, R1
 	AND  $0x07, R1, R1
 	LSR  $0x03, R13, R13
-	MOVD 120(R0), R10
+	MOVD 80(R0), R10
 	SUB  R13, R10, R10
-	MOVD R10, 120(R0)
+	MOVD R10, 80(R0)
 	MOVD (R10), R10
 	ORR  $0x01, R10, R10
 	LSL  R1, R10, R10
@@ -279,9 +261,9 @@ inner_loop:
 	MOVD R13, R1
 	AND  $0x07, R1, R1
 	LSR  $0x03, R13, R13
-	MOVD 168(R0), R12
+	MOVD 88(R0), R12
 	SUB  R13, R12, R12
-	MOVD R12, 168(R0)
+	MOVD R12, 88(R0)
 	MOVD (R12), R12
 	ORR  $0x01, R12, R12
 	LSL  R1, R12, R12
@@ -289,36 +271,35 @@ inner_loop:
 	ADD  $0x05, R7, R7
 	ADD  $0x05, R9, R9
 	ADD  $0x05, R11, R11
-	MOVD ctx+0(FP), R1
-	MOVD 56(R1), R16
+	MOVD 96(R0), R16
 	CMP  R16, R5
 	BLO  inner_loop
 	JMP  outer_loop
 
 done:
-	// Hand the state back: off = ip - in (negative when the window reached into the previous stream),
+	// Hand the state back: off = ip - in (negative when the window reached below the stream start),
 	// value = the sentinel-form container. bitReaderShifted.restoreFromAsm normalizes both.
 	MOVD (R0), R1
-	MOVD 24(R0), R16
-	SUB  R1, R16, R16
-	MOVD R16, 24(R0)
-	MOVD R6, 32(R0)
-	MOVD 48(R0), R1
-	MOVD 72(R0), R16
-	SUB  R1, R16, R16
-	MOVD R16, 72(R0)
-	MOVD R8, 80(R0)
-	MOVD 96(R0), R1
-	MOVD 120(R0), R16
-	SUB  R1, R16, R16
-	MOVD R16, 120(R0)
-	MOVD R10, 128(R0)
-	MOVD 144(R0), R1
-	MOVD 168(R0), R16
-	SUB  R1, R16, R16
-	MOVD R16, 168(R0)
-	MOVD R12, 176(R0)
-	MOVD ctx+0(FP), R0
+	MOVD 64(R0), R2
+	MOVD (R1), R16
+	SUB  R16, R2, R2
+	MOVD R2, 24(R1)
+	MOVD R6, 32(R1)
+	MOVD 72(R0), R2
+	MOVD 48(R1), R16
+	SUB  R16, R2, R2
+	MOVD R2, 72(R1)
+	MOVD R8, 80(R1)
+	MOVD 80(R0), R2
+	MOVD 96(R1), R16
+	SUB  R16, R2, R2
+	MOVD R2, 120(R1)
+	MOVD R10, 128(R1)
+	MOVD 88(R0), R2
+	MOVD 144(R1), R16
+	SUB  R16, R2, R2
+	MOVD R2, 168(R1)
+	MOVD R12, 176(R1)
 	MOVD 16(R0), R16
 	SUB  R16, R5, R5
 	LSL  $0x02, R5, R5
@@ -328,87 +309,70 @@ done:
 // func decompress4x_8b_main_loop_amd64(ctx *decompress4xContext)
 // Requires: BMI, CMOV
 TEXT ·decompress4x_8b_main_loop_arm64(SB), $0-8
+	MOVD ctx+0(FP), R0
+
 	// Preload values
-	MOVD  ctx+0(FP), R1
-	MOVD  (R1), R0
-	MOVBU 8(R1), R2
-	MOVD  32(R1), R3
-	MOVD  16(R1), R5
-	MOVD  24(R1), R1
+	MOVBU 8(R0), R2
+	MOVD  32(R0), R3
+	MOVD  16(R0), R5
+	MOVD  24(R0), R1
 	ADD   R1, R5, R7
 	ADD   R1<<1, R5, R9
 	ADD   R1<<1, R1, R11
 	ADD   R5, R11, R11
 
-	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead.
-	// The off slot holds the absolute input pointer while the loop runs.
-	MOVD  32(R0), R6
-	MOVBU 40(R0), R1
-	MOVD  $1, R16
-	LSL   R1, R16, R16
-	ORR   R16, R6, R6
+	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead
 	MOVD  (R0), R1
-	MOVD  24(R0), R16
-	ADD   R1, R16, R16
-	MOVD  R16, 24(R0)
-	MOVD  80(R0), R8
-	MOVBU 88(R0), R1
+	MOVD  32(R1), R6
+	MOVBU 40(R1), R8
 	MOVD  $1, R16
-	LSL   R1, R16, R16
+	LSL   R8, R16, R16
+	ORR   R16, R6, R6
+	MOVD  80(R1), R8
+	MOVBU 88(R1), R10
+	MOVD  $1, R16
+	LSL   R10, R16, R16
 	ORR   R16, R8, R8
-	MOVD  48(R0), R1
-	MOVD  72(R0), R16
-	ADD   R1, R16, R16
-	MOVD  R16, 72(R0)
-	MOVD  128(R0), R10
-	MOVBU 136(R0), R1
+	MOVD  128(R1), R10
+	MOVBU 136(R1), R12
 	MOVD  $1, R16
-	LSL   R1, R16, R16
+	LSL   R12, R16, R16
 	ORR   R16, R10, R10
-	MOVD  96(R0), R1
-	MOVD  120(R0), R16
-	ADD   R1, R16, R16
-	MOVD  R16, 120(R0)
-	MOVD  176(R0), R12
-	MOVBU 184(R0), R1
+	MOVD  176(R1), R12
+	MOVBU 184(R1), R1
 	MOVD  $1, R16
 	LSL   R1, R16, R16
 	ORR   R16, R12, R12
-	MOVD  144(R0), R1
-	MOVD  168(R0), R16
-	ADD   R1, R16, R16
-	MOVD  R16, 168(R0)
 
 outer_loop:
 	// Iterations allowed by the output.
-	MOVD ctx+0(FP), R1
-	MOVD 48(R1), R1
+	MOVD 48(R0), R1
 	SUBS R5, R1, R1
 	BLE  done
 	LSR  $0x03, R1, R1
 
-	// Iterations allowed by the input: each reload backs a pointer up by at most 7 bytes,
-	// and every read stays inside the block while the lowest pointer stays above stream 0's start.
-	MOVD 24(R0), R13
-	MOVD (R0), R16
+	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes,
+	// so every read stays inside the block while the lowest pointer stays above ilowest.
+	MOVD 64(R0), R13
+	MOVD 56(R0), R16
 	SUB  R16, R13, R13
 	LSR  $0x03, R13, R13
 	CMP  R1, R13
 	CSEL LO, R13, R1, R1
 	MOVD 72(R0), R13
-	MOVD (R0), R16
+	MOVD 56(R0), R16
 	SUB  R16, R13, R13
 	LSR  $0x03, R13, R13
 	CMP  R1, R13
 	CSEL LO, R13, R1, R1
-	MOVD 120(R0), R13
-	MOVD (R0), R16
+	MOVD 80(R0), R13
+	MOVD 56(R0), R16
 	SUB  R16, R13, R13
 	LSR  $0x03, R13, R13
 	CMP  R1, R13
 	CSEL LO, R13, R1, R1
-	MOVD 168(R0), R13
-	MOVD (R0), R16
+	MOVD 88(R0), R13
+	MOVD 56(R0), R16
 	SUB  R16, R13, R13
 	LSR  $0x03, R13, R13
 	CMP  R1, R13
@@ -418,8 +382,7 @@ outer_loop:
 	MOVD $7, R16
 	MUL  R16, R1, R1
 	ADD  R5, R1, R1
-	MOVD ctx+0(FP), R13
-	MOVD R1, 56(R13)
+	MOVD R1, 96(R0)
 
 inner_loop:
 	// stream 0, symbol 0
@@ -624,9 +587,9 @@ inner_loop:
 	MOVD R13, R1
 	AND  $0x07, R1, R1
 	LSR  $0x03, R13, R13
-	MOVD 24(R0), R6
+	MOVD 64(R0), R6
 	SUB  R13, R6, R6
-	MOVD R6, 24(R0)
+	MOVD R6, 64(R0)
 	MOVD (R6), R6
 	ORR  $0x01, R6, R6
 	LSL  R1, R6, R6
@@ -646,9 +609,9 @@ inner_loop:
 	MOVD R13, R1
 	AND  $0x07, R1, R1
 	LSR  $0x03, R13, R13
-	MOVD 120(R0), R10
+	MOVD 80(R0), R10
 	SUB  R13, R10, R10
-	MOVD R10, 120(R0)
+	MOVD R10, 80(R0)
 	MOVD (R10), R10
 	ORR  $0x01, R10, R10
 	LSL  R1, R10, R10
@@ -657,9 +620,9 @@ inner_loop:
 	MOVD R13, R1
 	AND  $0x07, R1, R1
 	LSR  $0x03, R13, R13
-	MOVD 168(R0), R12
+	MOVD 88(R0), R12
 	SUB  R13, R12, R12
-	MOVD R12, 168(R0)
+	MOVD R12, 88(R0)
 	MOVD (R12), R12
 	ORR  $0x01, R12, R12
 	LSL  R1, R12, R12
@@ -667,36 +630,35 @@ inner_loop:
 	ADD  $0x07, R7, R7
 	ADD  $0x07, R9, R9
 	ADD  $0x07, R11, R11
-	MOVD ctx+0(FP), R1
-	MOVD 56(R1), R16
+	MOVD 96(R0), R16
 	CMP  R16, R5
 	BLO  inner_loop
 	JMP  outer_loop
 
 done:
-	// Hand the state back: off = ip - in (negative when the window reached into the previous stream),
+	// Hand the state back: off = ip - in (negative when the window reached below the stream start),
 	// value = the sentinel-form container. bitReaderShifted.restoreFromAsm normalizes both.
 	MOVD (R0), R1
-	MOVD 24(R0), R16
-	SUB  R1, R16, R16
-	MOVD R16, 24(R0)
-	MOVD R6, 32(R0)
-	MOVD 48(R0), R1
-	MOVD 72(R0), R16
-	SUB  R1, R16, R16
-	MOVD R16, 72(R0)
-	MOVD R8, 80(R0)
-	MOVD 96(R0), R1
-	MOVD 120(R0), R16
-	SUB  R1, R16, R16
-	MOVD R16, 120(R0)
-	MOVD R10, 128(R0)
-	MOVD 144(R0), R1
-	MOVD 168(R0), R16
-	SUB  R1, R16, R16
-	MOVD R16, 168(R0)
-	MOVD R12, 176(R0)
-	MOVD ctx+0(FP), R0
+	MOVD 64(R0), R2
+	MOVD (R1), R16
+	SUB  R16, R2, R2
+	MOVD R2, 24(R1)
+	MOVD R6, 32(R1)
+	MOVD 72(R0), R2
+	MOVD 48(R1), R16
+	SUB  R16, R2, R2
+	MOVD R2, 72(R1)
+	MOVD R8, 80(R1)
+	MOVD 80(R0), R2
+	MOVD 96(R1), R16
+	SUB  R16, R2, R2
+	MOVD R2, 120(R1)
+	MOVD R10, 128(R1)
+	MOVD 88(R0), R2
+	MOVD 144(R1), R16
+	SUB  R16, R2, R2
+	MOVD R2, 168(R1)
+	MOVD R12, 176(R1)
 	MOVD 16(R0), R16
 	SUB  R16, R5, R5
 	LSL  $0x02, R5, R5
@@ -706,87 +668,70 @@ done:
 // func decompress4x_4b_main_loop_amd64(ctx *decompress4xContext)
 // Requires: BMI, CMOV
 TEXT ·decompress4x_4b_main_loop_arm64(SB), $0-8
+	MOVD ctx+0(FP), R0
+
 	// Preload values
-	MOVD  ctx+0(FP), R1
-	MOVD  (R1), R0
-	MOVBU 8(R1), R2
-	MOVD  32(R1), R3
-	MOVD  16(R1), R5
-	MOVD  24(R1), R1
+	MOVBU 8(R0), R2
+	MOVD  32(R0), R3
+	MOVD  16(R0), R5
+	MOVD  24(R0), R1
 	ADD   R1, R5, R7
 	ADD   R1<<1, R5, R9
 	ADD   R1<<1, R1, R11
 	ADD   R5, R11, R11
 
-	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead.
-	// The off slot holds the absolute input pointer while the loop runs.
-	MOVD  32(R0), R6
-	MOVBU 40(R0), R1
-	MOVD  $1, R16
-	LSL   R1, R16, R16
-	ORR   R16, R6, R6
+	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead
 	MOVD  (R0), R1
-	MOVD  24(R0), R16
-	ADD   R1, R16, R16
-	MOVD  R16, 24(R0)
-	MOVD  80(R0), R8
-	MOVBU 88(R0), R1
+	MOVD  32(R1), R6
+	MOVBU 40(R1), R8
 	MOVD  $1, R16
-	LSL   R1, R16, R16
+	LSL   R8, R16, R16
+	ORR   R16, R6, R6
+	MOVD  80(R1), R8
+	MOVBU 88(R1), R10
+	MOVD  $1, R16
+	LSL   R10, R16, R16
 	ORR   R16, R8, R8
-	MOVD  48(R0), R1
-	MOVD  72(R0), R16
-	ADD   R1, R16, R16
-	MOVD  R16, 72(R0)
-	MOVD  128(R0), R10
-	MOVBU 136(R0), R1
+	MOVD  128(R1), R10
+	MOVBU 136(R1), R12
 	MOVD  $1, R16
-	LSL   R1, R16, R16
+	LSL   R12, R16, R16
 	ORR   R16, R10, R10
-	MOVD  96(R0), R1
-	MOVD  120(R0), R16
-	ADD   R1, R16, R16
-	MOVD  R16, 120(R0)
-	MOVD  176(R0), R12
-	MOVBU 184(R0), R1
+	MOVD  176(R1), R12
+	MOVBU 184(R1), R1
 	MOVD  $1, R16
 	LSL   R1, R16, R16
 	ORR   R16, R12, R12
-	MOVD  144(R0), R1
-	MOVD  168(R0), R16
-	ADD   R1, R16, R16
-	MOVD  R16, 168(R0)
 
 outer_loop:
 	// Iterations allowed by the output.
-	MOVD ctx+0(FP), R1
-	MOVD 48(R1), R1
+	MOVD 48(R0), R1
 	SUBS R5, R1, R1
 	BLE  done
 	LSR  $0x03, R1, R1
 
-	// Iterations allowed by the input: each reload backs a pointer up by at most 7 bytes,
-	// and every read stays inside the block while the lowest pointer stays above stream 0's start.
-	MOVD 24(R0), R13
-	MOVD (R0), R16
+	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes,
+	// so every read stays inside the block while the lowest pointer stays above ilowest.
+	MOVD 64(R0), R13
+	MOVD 56(R0), R16
 	SUB  R16, R13, R13
 	LSR  $0x03, R13, R13
 	CMP  R1, R13
 	CSEL LO, R13, R1, R1
 	MOVD 72(R0), R13
-	MOVD (R0), R16
+	MOVD 56(R0), R16
 	SUB  R16, R13, R13
 	LSR  $0x03, R13, R13
 	CMP  R1, R13
 	CSEL LO, R13, R1, R1
-	MOVD 120(R0), R13
-	MOVD (R0), R16
+	MOVD 80(R0), R13
+	MOVD 56(R0), R16
 	SUB  R16, R13, R13
 	LSR  $0x03, R13, R13
 	CMP  R1, R13
 	CSEL LO, R13, R1, R1
-	MOVD 168(R0), R13
-	MOVD (R0), R16
+	MOVD 88(R0), R13
+	MOVD 56(R0), R16
 	SUB  R16, R13, R13
 	LSR  $0x03, R13, R13
 	CMP  R1, R13
@@ -796,8 +741,7 @@ outer_loop:
 	MOVD $14, R16
 	MUL  R16, R1, R1
 	ADD  R5, R1, R1
-	MOVD ctx+0(FP), R13
-	MOVD R1, 56(R13)
+	MOVD R1, 96(R0)
 
 inner_loop:
 	// stream 0, symbol 0
@@ -1198,9 +1142,9 @@ inner_loop:
 	MOVD R13, R1
 	AND  $0x07, R1, R1
 	LSR  $0x03, R13, R13
-	MOVD 24(R0), R6
+	MOVD 64(R0), R6
 	SUB  R13, R6, R6
-	MOVD R6, 24(R0)
+	MOVD R6, 64(R0)
 	MOVD (R6), R6
 	ORR  $0x01, R6, R6
 	LSL  R1, R6, R6
@@ -1220,9 +1164,9 @@ inner_loop:
 	MOVD R13, R1
 	AND  $0x07, R1, R1
 	LSR  $0x03, R13, R13
-	MOVD 120(R0), R10
+	MOVD 80(R0), R10
 	SUB  R13, R10, R10
-	MOVD R10, 120(R0)
+	MOVD R10, 80(R0)
 	MOVD (R10), R10
 	ORR  $0x01, R10, R10
 	LSL  R1, R10, R10
@@ -1231,9 +1175,9 @@ inner_loop:
 	MOVD R13, R1
 	AND  $0x07, R1, R1
 	LSR  $0x03, R13, R13
-	MOVD 168(R0), R12
+	MOVD 88(R0), R12
 	SUB  R13, R12, R12
-	MOVD R12, 168(R0)
+	MOVD R12, 88(R0)
 	MOVD (R12), R12
 	ORR  $0x01, R12, R12
 	LSL  R1, R12, R12
@@ -1241,36 +1185,35 @@ inner_loop:
 	ADD  $0x0e, R7, R7
 	ADD  $0x0e, R9, R9
 	ADD  $0x0e, R11, R11
-	MOVD ctx+0(FP), R1
-	MOVD 56(R1), R16
+	MOVD 96(R0), R16
 	CMP  R16, R5
 	BLO  inner_loop
 	JMP  outer_loop
 
 done:
-	// Hand the state back: off = ip - in (negative when the window reached into the previous stream),
+	// Hand the state back: off = ip - in (negative when the window reached below the stream start),
 	// value = the sentinel-form container. bitReaderShifted.restoreFromAsm normalizes both.
 	MOVD (R0), R1
-	MOVD 24(R0), R16
-	SUB  R1, R16, R16
-	MOVD R16, 24(R0)
-	MOVD R6, 32(R0)
-	MOVD 48(R0), R1
-	MOVD 72(R0), R16
-	SUB  R1, R16, R16
-	MOVD R16, 72(R0)
-	MOVD R8, 80(R0)
-	MOVD 96(R0), R1
-	MOVD 120(R0), R16
-	SUB  R1, R16, R16
-	MOVD R16, 120(R0)
-	MOVD R10, 128(R0)
-	MOVD 144(R0), R1
-	MOVD 168(R0), R16
-	SUB  R1, R16, R16
-	MOVD R16, 168(R0)
-	MOVD R12, 176(R0)
-	MOVD ctx+0(FP), R0
+	MOVD 64(R0), R2
+	MOVD (R1), R16
+	SUB  R16, R2, R2
+	MOVD R2, 24(R1)
+	MOVD R6, 32(R1)
+	MOVD 72(R0), R2
+	MOVD 48(R1), R16
+	SUB  R16, R2, R2
+	MOVD R2, 72(R1)
+	MOVD R8, 80(R1)
+	MOVD 80(R0), R2
+	MOVD 96(R1), R16
+	SUB  R16, R2, R2
+	MOVD R2, 120(R1)
+	MOVD R10, 128(R1)
+	MOVD 88(R0), R2
+	MOVD 144(R1), R16
+	SUB  R16, R2, R2
+	MOVD R2, 168(R1)
+	MOVD R12, 176(R1)
 	MOVD 16(R0), R16
 	SUB  R16, R5, R5
 	LSL  $0x02, R5, R5

@@ -5,68 +5,59 @@
 // func decompress4x_main_loop_amd64(ctx *decompress4xContext)
 // Requires: BMI, CMOV
 TEXT ·decompress4x_main_loop_amd64(SB), $0-8
+	MOVQ ctx+0(FP), AX
+
 	// Preload values
-	MOVQ    ctx+0(FP), CX
-	MOVQ    (CX), AX
-	MOVBQZX 8(CX), DX
-	MOVQ    32(CX), BX
-	MOVQ    16(CX), SI
-	MOVQ    24(CX), CX
+	MOVBQZX 8(AX), DX
+	MOVQ    32(AX), BX
+	MOVQ    16(AX), SI
+	MOVQ    24(AX), CX
 	LEAQ    (SI)(CX*1), R8
 	LEAQ    (SI)(CX*2), R10
 	LEAQ    (CX)(CX*2), R12
 	ADDQ    SI, R12
 
-	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead.
-	// The off slot holds the absolute input pointer while the loop runs.
-	MOVQ    32(AX), DI
-	MOVBQZX 40(AX), CX
-	BTSQ    CX, DI
+	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead
 	MOVQ    (AX), CX
-	ADDQ    CX, 24(AX)
-	MOVQ    80(AX), R9
-	MOVBQZX 88(AX), CX
-	BTSQ    CX, R9
-	MOVQ    48(AX), CX
-	ADDQ    CX, 72(AX)
-	MOVQ    128(AX), R11
-	MOVBQZX 136(AX), CX
-	BTSQ    CX, R11
-	MOVQ    96(AX), CX
-	ADDQ    CX, 120(AX)
-	MOVQ    176(AX), R13
-	MOVBQZX 184(AX), CX
+	MOVQ    32(CX), DI
+	MOVBQZX 40(CX), R9
+	BTSQ    R9, DI
+	MOVQ    80(CX), R9
+	MOVBQZX 88(CX), R11
+	BTSQ    R11, R9
+	MOVQ    128(CX), R11
+	MOVBQZX 136(CX), R13
+	BTSQ    R13, R11
+	MOVQ    176(CX), R13
+	MOVBQZX 184(CX), CX
 	BTSQ    CX, R13
-	MOVQ    144(AX), CX
-	ADDQ    CX, 168(AX)
 
 outer_loop:
 	// Iterations allowed by the output.
-	MOVQ ctx+0(FP), CX
-	MOVQ 48(CX), CX
+	MOVQ 48(AX), CX
 	SUBQ SI, CX
 	JLE  done
 	SHRQ $0x03, CX
 
-	// Iterations allowed by the input: each reload backs a pointer up by at most 7 bytes,
-	// and every read stays inside the block while the lowest pointer stays above stream 0's start.
-	MOVQ    24(AX), R14
-	SUBQ    (AX), R14
+	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes,
+	// so every read stays inside the block while the lowest pointer stays above ilowest.
+	MOVQ    64(AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, CX
 	CMOVQCS R14, CX
 	MOVQ    72(AX), R14
-	SUBQ    (AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, CX
 	CMOVQCS R14, CX
-	MOVQ    120(AX), R14
-	SUBQ    (AX), R14
+	MOVQ    80(AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, CX
 	CMOVQCS R14, CX
-	MOVQ    168(AX), R14
-	SUBQ    (AX), R14
+	MOVQ    88(AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, CX
 	CMOVQCS R14, CX
@@ -74,8 +65,7 @@ outer_loop:
 	JZ      done
 	IMUL3Q  $0x05, CX, CX
 	ADDQ    SI, CX
-	MOVQ    ctx+0(FP), R14
-	MOVQ    CX, 56(R14)
+	MOVQ    CX, 96(AX)
 
 inner_loop:
 	// stream 0, symbol 0
@@ -263,9 +253,9 @@ inner_loop:
 	MOVQ   R14, CX
 	ANDQ   $0x07, CX
 	SHRQ   $0x03, R14
-	MOVQ   24(AX), DI
+	MOVQ   64(AX), DI
 	SUBQ   R14, DI
-	MOVQ   DI, 24(AX)
+	MOVQ   DI, 64(AX)
 	MOVQ   (DI), DI
 	ORQ    $0x01, DI
 	SHLQ   CL, DI
@@ -283,9 +273,9 @@ inner_loop:
 	MOVQ   R14, CX
 	ANDQ   $0x07, CX
 	SHRQ   $0x03, R14
-	MOVQ   120(AX), R11
+	MOVQ   80(AX), R11
 	SUBQ   R14, R11
-	MOVQ   R11, 120(AX)
+	MOVQ   R11, 80(AX)
 	MOVQ   (R11), R11
 	ORQ    $0x01, R11
 	SHLQ   CL, R11
@@ -293,9 +283,9 @@ inner_loop:
 	MOVQ   R14, CX
 	ANDQ   $0x07, CX
 	SHRQ   $0x03, R14
-	MOVQ   168(AX), R13
+	MOVQ   88(AX), R13
 	SUBQ   R14, R13
-	MOVQ   R13, 168(AX)
+	MOVQ   R13, 88(AX)
 	MOVQ   (R13), R13
 	ORQ    $0x01, R13
 	SHLQ   CL, R13
@@ -303,27 +293,30 @@ inner_loop:
 	ADDQ   $0x05, R8
 	ADDQ   $0x05, R10
 	ADDQ   $0x05, R12
-	MOVQ   ctx+0(FP), CX
-	CMPQ   SI, 56(CX)
+	CMPQ   SI, 96(AX)
 	JB     inner_loop
 	JMP    outer_loop
 
 done:
-	// Hand the state back: off = ip - in (negative when the window reached into the previous stream),
+	// Hand the state back: off = ip - in (negative when the window reached below the stream start),
 	// value = the sentinel-form container. bitReaderShifted.restoreFromAsm normalizes both.
 	MOVQ (AX), CX
-	SUBQ CX, 24(AX)
-	MOVQ DI, 32(AX)
-	MOVQ 48(AX), CX
-	SUBQ CX, 72(AX)
-	MOVQ R9, 80(AX)
-	MOVQ 96(AX), CX
-	SUBQ CX, 120(AX)
-	MOVQ R11, 128(AX)
-	MOVQ 144(AX), CX
-	SUBQ CX, 168(AX)
-	MOVQ R13, 176(AX)
-	MOVQ ctx+0(FP), AX
+	MOVQ 64(AX), DX
+	SUBQ (CX), DX
+	MOVQ DX, 24(CX)
+	MOVQ DI, 32(CX)
+	MOVQ 72(AX), DX
+	SUBQ 48(CX), DX
+	MOVQ DX, 72(CX)
+	MOVQ R9, 80(CX)
+	MOVQ 80(AX), DX
+	SUBQ 96(CX), DX
+	MOVQ DX, 120(CX)
+	MOVQ R11, 128(CX)
+	MOVQ 88(AX), DX
+	SUBQ 144(CX), DX
+	MOVQ DX, 168(CX)
+	MOVQ R13, 176(CX)
 	SUBQ 16(AX), SI
 	SHLQ $0x02, SI
 	MOVQ SI, 40(AX)
@@ -332,68 +325,59 @@ done:
 // func decompress4x_8b_main_loop_amd64(ctx *decompress4xContext)
 // Requires: BMI, CMOV
 TEXT ·decompress4x_8b_main_loop_amd64(SB), $0-8
+	MOVQ ctx+0(FP), AX
+
 	// Preload values
-	MOVQ    ctx+0(FP), CX
-	MOVQ    (CX), AX
-	MOVBQZX 8(CX), DX
-	MOVQ    32(CX), BX
-	MOVQ    16(CX), SI
-	MOVQ    24(CX), CX
+	MOVBQZX 8(AX), DX
+	MOVQ    32(AX), BX
+	MOVQ    16(AX), SI
+	MOVQ    24(AX), CX
 	LEAQ    (SI)(CX*1), R8
 	LEAQ    (SI)(CX*2), R10
 	LEAQ    (CX)(CX*2), R12
 	ADDQ    SI, R12
 
-	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead.
-	// The off slot holds the absolute input pointer while the loop runs.
-	MOVQ    32(AX), DI
-	MOVBQZX 40(AX), CX
-	BTSQ    CX, DI
+	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead
 	MOVQ    (AX), CX
-	ADDQ    CX, 24(AX)
-	MOVQ    80(AX), R9
-	MOVBQZX 88(AX), CX
-	BTSQ    CX, R9
-	MOVQ    48(AX), CX
-	ADDQ    CX, 72(AX)
-	MOVQ    128(AX), R11
-	MOVBQZX 136(AX), CX
-	BTSQ    CX, R11
-	MOVQ    96(AX), CX
-	ADDQ    CX, 120(AX)
-	MOVQ    176(AX), R13
-	MOVBQZX 184(AX), CX
+	MOVQ    32(CX), DI
+	MOVBQZX 40(CX), R9
+	BTSQ    R9, DI
+	MOVQ    80(CX), R9
+	MOVBQZX 88(CX), R11
+	BTSQ    R11, R9
+	MOVQ    128(CX), R11
+	MOVBQZX 136(CX), R13
+	BTSQ    R13, R11
+	MOVQ    176(CX), R13
+	MOVBQZX 184(CX), CX
 	BTSQ    CX, R13
-	MOVQ    144(AX), CX
-	ADDQ    CX, 168(AX)
 
 outer_loop:
 	// Iterations allowed by the output.
-	MOVQ ctx+0(FP), CX
-	MOVQ 48(CX), CX
+	MOVQ 48(AX), CX
 	SUBQ SI, CX
 	JLE  done
 	SHRQ $0x03, CX
 
-	// Iterations allowed by the input: each reload backs a pointer up by at most 7 bytes,
-	// and every read stays inside the block while the lowest pointer stays above stream 0's start.
-	MOVQ    24(AX), R14
-	SUBQ    (AX), R14
+	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes,
+	// so every read stays inside the block while the lowest pointer stays above ilowest.
+	MOVQ    64(AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, CX
 	CMOVQCS R14, CX
 	MOVQ    72(AX), R14
-	SUBQ    (AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, CX
 	CMOVQCS R14, CX
-	MOVQ    120(AX), R14
-	SUBQ    (AX), R14
+	MOVQ    80(AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, CX
 	CMOVQCS R14, CX
-	MOVQ    168(AX), R14
-	SUBQ    (AX), R14
+	MOVQ    88(AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, CX
 	CMOVQCS R14, CX
@@ -401,8 +385,7 @@ outer_loop:
 	JZ      done
 	IMUL3Q  $0x07, CX, CX
 	ADDQ    SI, CX
-	MOVQ    ctx+0(FP), R14
-	MOVQ    CX, 56(R14)
+	MOVQ    CX, 96(AX)
 
 inner_loop:
 	// stream 0, symbol 0
@@ -662,9 +645,9 @@ inner_loop:
 	MOVQ   R14, CX
 	ANDQ   $0x07, CX
 	SHRQ   $0x03, R14
-	MOVQ   24(AX), DI
+	MOVQ   64(AX), DI
 	SUBQ   R14, DI
-	MOVQ   DI, 24(AX)
+	MOVQ   DI, 64(AX)
 	MOVQ   (DI), DI
 	ORQ    $0x01, DI
 	SHLQ   CL, DI
@@ -682,9 +665,9 @@ inner_loop:
 	MOVQ   R14, CX
 	ANDQ   $0x07, CX
 	SHRQ   $0x03, R14
-	MOVQ   120(AX), R11
+	MOVQ   80(AX), R11
 	SUBQ   R14, R11
-	MOVQ   R11, 120(AX)
+	MOVQ   R11, 80(AX)
 	MOVQ   (R11), R11
 	ORQ    $0x01, R11
 	SHLQ   CL, R11
@@ -692,9 +675,9 @@ inner_loop:
 	MOVQ   R14, CX
 	ANDQ   $0x07, CX
 	SHRQ   $0x03, R14
-	MOVQ   168(AX), R13
+	MOVQ   88(AX), R13
 	SUBQ   R14, R13
-	MOVQ   R13, 168(AX)
+	MOVQ   R13, 88(AX)
 	MOVQ   (R13), R13
 	ORQ    $0x01, R13
 	SHLQ   CL, R13
@@ -702,27 +685,30 @@ inner_loop:
 	ADDQ   $0x07, R8
 	ADDQ   $0x07, R10
 	ADDQ   $0x07, R12
-	MOVQ   ctx+0(FP), CX
-	CMPQ   SI, 56(CX)
+	CMPQ   SI, 96(AX)
 	JB     inner_loop
 	JMP    outer_loop
 
 done:
-	// Hand the state back: off = ip - in (negative when the window reached into the previous stream),
+	// Hand the state back: off = ip - in (negative when the window reached below the stream start),
 	// value = the sentinel-form container. bitReaderShifted.restoreFromAsm normalizes both.
 	MOVQ (AX), CX
-	SUBQ CX, 24(AX)
-	MOVQ DI, 32(AX)
-	MOVQ 48(AX), CX
-	SUBQ CX, 72(AX)
-	MOVQ R9, 80(AX)
-	MOVQ 96(AX), CX
-	SUBQ CX, 120(AX)
-	MOVQ R11, 128(AX)
-	MOVQ 144(AX), CX
-	SUBQ CX, 168(AX)
-	MOVQ R13, 176(AX)
-	MOVQ ctx+0(FP), AX
+	MOVQ 64(AX), DX
+	SUBQ (CX), DX
+	MOVQ DX, 24(CX)
+	MOVQ DI, 32(CX)
+	MOVQ 72(AX), DX
+	SUBQ 48(CX), DX
+	MOVQ DX, 72(CX)
+	MOVQ R9, 80(CX)
+	MOVQ 80(AX), DX
+	SUBQ 96(CX), DX
+	MOVQ DX, 120(CX)
+	MOVQ R11, 128(CX)
+	MOVQ 88(AX), DX
+	SUBQ 144(CX), DX
+	MOVQ DX, 168(CX)
+	MOVQ R13, 176(CX)
 	SUBQ 16(AX), SI
 	SHLQ $0x02, SI
 	MOVQ SI, 40(AX)
@@ -731,68 +717,59 @@ done:
 // func decompress4x_4b_main_loop_amd64(ctx *decompress4xContext)
 // Requires: BMI, CMOV
 TEXT ·decompress4x_4b_main_loop_amd64(SB), $0-8
+	MOVQ ctx+0(FP), AX
+
 	// Preload values
-	MOVQ    ctx+0(FP), CX
-	MOVQ    (CX), AX
-	MOVBQZX 8(CX), DX
-	MOVQ    32(CX), BX
-	MOVQ    16(CX), SI
-	MOVQ    24(CX), CX
+	MOVBQZX 8(AX), DX
+	MOVQ    32(AX), BX
+	MOVQ    16(AX), SI
+	MOVQ    24(AX), CX
 	LEAQ    (SI)(CX*1), R8
 	LEAQ    (SI)(CX*2), R10
 	LEAQ    (CX)(CX*2), R12
 	ADDQ    SI, R12
 
-	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead.
-	// The off slot holds the absolute input pointer while the loop runs.
-	MOVQ    32(AX), DI
-	MOVBQZX 40(AX), CX
-	BTSQ    CX, DI
+	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead
 	MOVQ    (AX), CX
-	ADDQ    CX, 24(AX)
-	MOVQ    80(AX), R9
-	MOVBQZX 88(AX), CX
-	BTSQ    CX, R9
-	MOVQ    48(AX), CX
-	ADDQ    CX, 72(AX)
-	MOVQ    128(AX), R11
-	MOVBQZX 136(AX), CX
-	BTSQ    CX, R11
-	MOVQ    96(AX), CX
-	ADDQ    CX, 120(AX)
-	MOVQ    176(AX), R13
-	MOVBQZX 184(AX), CX
+	MOVQ    32(CX), DI
+	MOVBQZX 40(CX), R9
+	BTSQ    R9, DI
+	MOVQ    80(CX), R9
+	MOVBQZX 88(CX), R11
+	BTSQ    R11, R9
+	MOVQ    128(CX), R11
+	MOVBQZX 136(CX), R13
+	BTSQ    R13, R11
+	MOVQ    176(CX), R13
+	MOVBQZX 184(CX), CX
 	BTSQ    CX, R13
-	MOVQ    144(AX), CX
-	ADDQ    CX, 168(AX)
 
 outer_loop:
 	// Iterations allowed by the output.
-	MOVQ ctx+0(FP), CX
-	MOVQ 48(CX), CX
+	MOVQ 48(AX), CX
 	SUBQ SI, CX
 	JLE  done
 	SHRQ $0x03, CX
 
-	// Iterations allowed by the input: each reload backs a pointer up by at most 7 bytes,
-	// and every read stays inside the block while the lowest pointer stays above stream 0's start.
-	MOVQ    24(AX), R14
-	SUBQ    (AX), R14
+	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes,
+	// so every read stays inside the block while the lowest pointer stays above ilowest.
+	MOVQ    64(AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, CX
 	CMOVQCS R14, CX
 	MOVQ    72(AX), R14
-	SUBQ    (AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, CX
 	CMOVQCS R14, CX
-	MOVQ    120(AX), R14
-	SUBQ    (AX), R14
+	MOVQ    80(AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, CX
 	CMOVQCS R14, CX
-	MOVQ    168(AX), R14
-	SUBQ    (AX), R14
+	MOVQ    88(AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, CX
 	CMOVQCS R14, CX
@@ -800,8 +777,7 @@ outer_loop:
 	JZ      done
 	IMUL3Q  $0x0e, CX, CX
 	ADDQ    SI, CX
-	MOVQ    ctx+0(FP), R14
-	MOVQ    CX, 56(R14)
+	MOVQ    CX, 96(AX)
 
 inner_loop:
 	// stream 0, symbol 0
@@ -1313,9 +1289,9 @@ inner_loop:
 	MOVQ   R14, CX
 	ANDQ   $0x07, CX
 	SHRQ   $0x03, R14
-	MOVQ   24(AX), DI
+	MOVQ   64(AX), DI
 	SUBQ   R14, DI
-	MOVQ   DI, 24(AX)
+	MOVQ   DI, 64(AX)
 	MOVQ   (DI), DI
 	ORQ    $0x01, DI
 	SHLQ   CL, DI
@@ -1333,9 +1309,9 @@ inner_loop:
 	MOVQ   R14, CX
 	ANDQ   $0x07, CX
 	SHRQ   $0x03, R14
-	MOVQ   120(AX), R11
+	MOVQ   80(AX), R11
 	SUBQ   R14, R11
-	MOVQ   R11, 120(AX)
+	MOVQ   R11, 80(AX)
 	MOVQ   (R11), R11
 	ORQ    $0x01, R11
 	SHLQ   CL, R11
@@ -1343,9 +1319,9 @@ inner_loop:
 	MOVQ   R14, CX
 	ANDQ   $0x07, CX
 	SHRQ   $0x03, R14
-	MOVQ   168(AX), R13
+	MOVQ   88(AX), R13
 	SUBQ   R14, R13
-	MOVQ   R13, 168(AX)
+	MOVQ   R13, 88(AX)
 	MOVQ   (R13), R13
 	ORQ    $0x01, R13
 	SHLQ   CL, R13
@@ -1353,27 +1329,30 @@ inner_loop:
 	ADDQ   $0x0e, R8
 	ADDQ   $0x0e, R10
 	ADDQ   $0x0e, R12
-	MOVQ   ctx+0(FP), CX
-	CMPQ   SI, 56(CX)
+	CMPQ   SI, 96(AX)
 	JB     inner_loop
 	JMP    outer_loop
 
 done:
-	// Hand the state back: off = ip - in (negative when the window reached into the previous stream),
+	// Hand the state back: off = ip - in (negative when the window reached below the stream start),
 	// value = the sentinel-form container. bitReaderShifted.restoreFromAsm normalizes both.
 	MOVQ (AX), CX
-	SUBQ CX, 24(AX)
-	MOVQ DI, 32(AX)
-	MOVQ 48(AX), CX
-	SUBQ CX, 72(AX)
-	MOVQ R9, 80(AX)
-	MOVQ 96(AX), CX
-	SUBQ CX, 120(AX)
-	MOVQ R11, 128(AX)
-	MOVQ 144(AX), CX
-	SUBQ CX, 168(AX)
-	MOVQ R13, 176(AX)
-	MOVQ ctx+0(FP), AX
+	MOVQ 64(AX), DX
+	SUBQ (CX), DX
+	MOVQ DX, 24(CX)
+	MOVQ DI, 32(CX)
+	MOVQ 72(AX), DX
+	SUBQ 48(CX), DX
+	MOVQ DX, 72(CX)
+	MOVQ R9, 80(CX)
+	MOVQ 80(AX), DX
+	SUBQ 96(CX), DX
+	MOVQ DX, 120(CX)
+	MOVQ R11, 128(CX)
+	MOVQ 88(AX), DX
+	SUBQ 144(CX), DX
+	MOVQ DX, 168(CX)
+	MOVQ R13, 176(CX)
 	SUBQ 16(AX), SI
 	SHLQ $0x02, SI
 	MOVQ SI, 40(AX)
@@ -1382,68 +1361,59 @@ done:
 // func decompress4x_main_loop_bmi2(ctx *decompress4xContext)
 // Requires: BMI, BMI2, CMOV
 TEXT ·decompress4x_main_loop_bmi2(SB), $0-8
+	MOVQ ctx+0(FP), AX
+
 	// Preload values
-	MOVQ    ctx+0(FP), SI
-	MOVQ    (SI), AX
-	MOVBQZX 8(SI), CX
-	MOVQ    32(SI), DX
-	MOVQ    16(SI), BX
-	MOVQ    24(SI), SI
+	MOVBQZX 8(AX), CX
+	MOVQ    32(AX), DX
+	MOVQ    16(AX), BX
+	MOVQ    24(AX), SI
 	LEAQ    (BX)(SI*1), DI
 	LEAQ    (BX)(SI*2), R9
 	LEAQ    (SI)(SI*2), R11
 	ADDQ    BX, R11
 
-	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead.
-	// The off slot holds the absolute input pointer while the loop runs.
-	MOVQ    32(AX), SI
-	MOVBQZX 40(AX), R8
+	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead
+	MOVQ    (AX), R13
+	MOVQ    32(R13), SI
+	MOVBQZX 40(R13), R8
 	BTSQ    R8, SI
-	MOVQ    (AX), R8
-	ADDQ    R8, 24(AX)
-	MOVQ    80(AX), R8
-	MOVBQZX 88(AX), R10
+	MOVQ    80(R13), R8
+	MOVBQZX 88(R13), R10
 	BTSQ    R10, R8
-	MOVQ    48(AX), R10
-	ADDQ    R10, 72(AX)
-	MOVQ    128(AX), R10
-	MOVBQZX 136(AX), R12
+	MOVQ    128(R13), R10
+	MOVBQZX 136(R13), R12
 	BTSQ    R12, R10
-	MOVQ    96(AX), R12
-	ADDQ    R12, 120(AX)
-	MOVQ    176(AX), R12
-	MOVBQZX 184(AX), R13
+	MOVQ    176(R13), R12
+	MOVBQZX 184(R13), R13
 	BTSQ    R13, R12
-	MOVQ    144(AX), R13
-	ADDQ    R13, 168(AX)
 
 outer_loop:
 	// Iterations allowed by the output.
-	MOVQ ctx+0(FP), R13
-	MOVQ 48(R13), R13
+	MOVQ 48(AX), R13
 	SUBQ BX, R13
 	JLE  done
 	SHRQ $0x03, R13
 
-	// Iterations allowed by the input: each reload backs a pointer up by at most 7 bytes,
-	// and every read stays inside the block while the lowest pointer stays above stream 0's start.
-	MOVQ    24(AX), R14
-	SUBQ    (AX), R14
+	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes,
+	// so every read stays inside the block while the lowest pointer stays above ilowest.
+	MOVQ    64(AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, R13
 	CMOVQCS R14, R13
 	MOVQ    72(AX), R14
-	SUBQ    (AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, R13
 	CMOVQCS R14, R13
-	MOVQ    120(AX), R14
-	SUBQ    (AX), R14
+	MOVQ    80(AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, R13
 	CMOVQCS R14, R13
-	MOVQ    168(AX), R14
-	SUBQ    (AX), R14
+	MOVQ    88(AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, R13
 	CMOVQCS R14, R13
@@ -1451,8 +1421,7 @@ outer_loop:
 	JZ      done
 	IMUL3Q  $0x05, R13, R13
 	ADDQ    BX, R13
-	MOVQ    ctx+0(FP), R14
-	MOVQ    R13, 56(R14)
+	MOVQ    R13, 96(AX)
 
 inner_loop:
 	// stream 0, symbol 0
@@ -1600,9 +1569,9 @@ inner_loop:
 	MOVQ   R13, R14
 	ANDQ   $0x07, R14
 	SHRQ   $0x03, R13
-	MOVQ   24(AX), SI
+	MOVQ   64(AX), SI
 	SUBQ   R13, SI
-	MOVQ   SI, 24(AX)
+	MOVQ   SI, 64(AX)
 	MOVQ   (SI), SI
 	ORQ    $0x01, SI
 	SHLXQ  R14, SI, SI
@@ -1620,9 +1589,9 @@ inner_loop:
 	MOVQ   R13, R14
 	ANDQ   $0x07, R14
 	SHRQ   $0x03, R13
-	MOVQ   120(AX), R10
+	MOVQ   80(AX), R10
 	SUBQ   R13, R10
-	MOVQ   R10, 120(AX)
+	MOVQ   R10, 80(AX)
 	MOVQ   (R10), R10
 	ORQ    $0x01, R10
 	SHLXQ  R14, R10, R10
@@ -1630,9 +1599,9 @@ inner_loop:
 	MOVQ   R13, R14
 	ANDQ   $0x07, R14
 	SHRQ   $0x03, R13
-	MOVQ   168(AX), R12
+	MOVQ   88(AX), R12
 	SUBQ   R13, R12
-	MOVQ   R12, 168(AX)
+	MOVQ   R12, 88(AX)
 	MOVQ   (R12), R12
 	ORQ    $0x01, R12
 	SHLXQ  R14, R12, R12
@@ -1640,27 +1609,30 @@ inner_loop:
 	ADDQ   $0x05, DI
 	ADDQ   $0x05, R9
 	ADDQ   $0x05, R11
-	MOVQ   ctx+0(FP), R13
-	CMPQ   BX, 56(R13)
+	CMPQ   BX, 96(AX)
 	JB     inner_loop
 	JMP    outer_loop
 
 done:
-	// Hand the state back: off = ip - in (negative when the window reached into the previous stream),
+	// Hand the state back: off = ip - in (negative when the window reached below the stream start),
 	// value = the sentinel-form container. bitReaderShifted.restoreFromAsm normalizes both.
 	MOVQ (AX), CX
-	SUBQ CX, 24(AX)
-	MOVQ SI, 32(AX)
-	MOVQ 48(AX), CX
-	SUBQ CX, 72(AX)
-	MOVQ R8, 80(AX)
-	MOVQ 96(AX), CX
-	SUBQ CX, 120(AX)
-	MOVQ R10, 128(AX)
-	MOVQ 144(AX), CX
-	SUBQ CX, 168(AX)
-	MOVQ R12, 176(AX)
-	MOVQ ctx+0(FP), AX
+	MOVQ 64(AX), DX
+	SUBQ (CX), DX
+	MOVQ DX, 24(CX)
+	MOVQ SI, 32(CX)
+	MOVQ 72(AX), DX
+	SUBQ 48(CX), DX
+	MOVQ DX, 72(CX)
+	MOVQ R8, 80(CX)
+	MOVQ 80(AX), DX
+	SUBQ 96(CX), DX
+	MOVQ DX, 120(CX)
+	MOVQ R10, 128(CX)
+	MOVQ 88(AX), DX
+	SUBQ 144(CX), DX
+	MOVQ DX, 168(CX)
+	MOVQ R12, 176(CX)
 	SUBQ 16(AX), BX
 	SHLQ $0x02, BX
 	MOVQ BX, 40(AX)
@@ -1669,68 +1641,59 @@ done:
 // func decompress4x_8b_main_loop_bmi2(ctx *decompress4xContext)
 // Requires: BMI, BMI2, CMOV
 TEXT ·decompress4x_8b_main_loop_bmi2(SB), $0-8
+	MOVQ ctx+0(FP), AX
+
 	// Preload values
-	MOVQ    ctx+0(FP), SI
-	MOVQ    (SI), AX
-	MOVBQZX 8(SI), CX
-	MOVQ    32(SI), DX
-	MOVQ    16(SI), BX
-	MOVQ    24(SI), SI
+	MOVBQZX 8(AX), CX
+	MOVQ    32(AX), DX
+	MOVQ    16(AX), BX
+	MOVQ    24(AX), SI
 	LEAQ    (BX)(SI*1), DI
 	LEAQ    (BX)(SI*2), R9
 	LEAQ    (SI)(SI*2), R11
 	ADDQ    BX, R11
 
-	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead.
-	// The off slot holds the absolute input pointer while the loop runs.
-	MOVQ    32(AX), SI
-	MOVBQZX 40(AX), R8
+	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead
+	MOVQ    (AX), R13
+	MOVQ    32(R13), SI
+	MOVBQZX 40(R13), R8
 	BTSQ    R8, SI
-	MOVQ    (AX), R8
-	ADDQ    R8, 24(AX)
-	MOVQ    80(AX), R8
-	MOVBQZX 88(AX), R10
+	MOVQ    80(R13), R8
+	MOVBQZX 88(R13), R10
 	BTSQ    R10, R8
-	MOVQ    48(AX), R10
-	ADDQ    R10, 72(AX)
-	MOVQ    128(AX), R10
-	MOVBQZX 136(AX), R12
+	MOVQ    128(R13), R10
+	MOVBQZX 136(R13), R12
 	BTSQ    R12, R10
-	MOVQ    96(AX), R12
-	ADDQ    R12, 120(AX)
-	MOVQ    176(AX), R12
-	MOVBQZX 184(AX), R13
+	MOVQ    176(R13), R12
+	MOVBQZX 184(R13), R13
 	BTSQ    R13, R12
-	MOVQ    144(AX), R13
-	ADDQ    R13, 168(AX)
 
 outer_loop:
 	// Iterations allowed by the output.
-	MOVQ ctx+0(FP), R13
-	MOVQ 48(R13), R13
+	MOVQ 48(AX), R13
 	SUBQ BX, R13
 	JLE  done
 	SHRQ $0x03, R13
 
-	// Iterations allowed by the input: each reload backs a pointer up by at most 7 bytes,
-	// and every read stays inside the block while the lowest pointer stays above stream 0's start.
-	MOVQ    24(AX), R14
-	SUBQ    (AX), R14
+	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes,
+	// so every read stays inside the block while the lowest pointer stays above ilowest.
+	MOVQ    64(AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, R13
 	CMOVQCS R14, R13
 	MOVQ    72(AX), R14
-	SUBQ    (AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, R13
 	CMOVQCS R14, R13
-	MOVQ    120(AX), R14
-	SUBQ    (AX), R14
+	MOVQ    80(AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, R13
 	CMOVQCS R14, R13
-	MOVQ    168(AX), R14
-	SUBQ    (AX), R14
+	MOVQ    88(AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, R13
 	CMOVQCS R14, R13
@@ -1738,8 +1701,7 @@ outer_loop:
 	JZ      done
 	IMUL3Q  $0x07, R13, R13
 	ADDQ    BX, R13
-	MOVQ    ctx+0(FP), R14
-	MOVQ    R13, 56(R14)
+	MOVQ    R13, 96(AX)
 
 inner_loop:
 	// stream 0, symbol 0
@@ -1943,9 +1905,9 @@ inner_loop:
 	MOVQ   R13, R14
 	ANDQ   $0x07, R14
 	SHRQ   $0x03, R13
-	MOVQ   24(AX), SI
+	MOVQ   64(AX), SI
 	SUBQ   R13, SI
-	MOVQ   SI, 24(AX)
+	MOVQ   SI, 64(AX)
 	MOVQ   (SI), SI
 	ORQ    $0x01, SI
 	SHLXQ  R14, SI, SI
@@ -1963,9 +1925,9 @@ inner_loop:
 	MOVQ   R13, R14
 	ANDQ   $0x07, R14
 	SHRQ   $0x03, R13
-	MOVQ   120(AX), R10
+	MOVQ   80(AX), R10
 	SUBQ   R13, R10
-	MOVQ   R10, 120(AX)
+	MOVQ   R10, 80(AX)
 	MOVQ   (R10), R10
 	ORQ    $0x01, R10
 	SHLXQ  R14, R10, R10
@@ -1973,9 +1935,9 @@ inner_loop:
 	MOVQ   R13, R14
 	ANDQ   $0x07, R14
 	SHRQ   $0x03, R13
-	MOVQ   168(AX), R12
+	MOVQ   88(AX), R12
 	SUBQ   R13, R12
-	MOVQ   R12, 168(AX)
+	MOVQ   R12, 88(AX)
 	MOVQ   (R12), R12
 	ORQ    $0x01, R12
 	SHLXQ  R14, R12, R12
@@ -1983,27 +1945,30 @@ inner_loop:
 	ADDQ   $0x07, DI
 	ADDQ   $0x07, R9
 	ADDQ   $0x07, R11
-	MOVQ   ctx+0(FP), R13
-	CMPQ   BX, 56(R13)
+	CMPQ   BX, 96(AX)
 	JB     inner_loop
 	JMP    outer_loop
 
 done:
-	// Hand the state back: off = ip - in (negative when the window reached into the previous stream),
+	// Hand the state back: off = ip - in (negative when the window reached below the stream start),
 	// value = the sentinel-form container. bitReaderShifted.restoreFromAsm normalizes both.
 	MOVQ (AX), CX
-	SUBQ CX, 24(AX)
-	MOVQ SI, 32(AX)
-	MOVQ 48(AX), CX
-	SUBQ CX, 72(AX)
-	MOVQ R8, 80(AX)
-	MOVQ 96(AX), CX
-	SUBQ CX, 120(AX)
-	MOVQ R10, 128(AX)
-	MOVQ 144(AX), CX
-	SUBQ CX, 168(AX)
-	MOVQ R12, 176(AX)
-	MOVQ ctx+0(FP), AX
+	MOVQ 64(AX), DX
+	SUBQ (CX), DX
+	MOVQ DX, 24(CX)
+	MOVQ SI, 32(CX)
+	MOVQ 72(AX), DX
+	SUBQ 48(CX), DX
+	MOVQ DX, 72(CX)
+	MOVQ R8, 80(CX)
+	MOVQ 80(AX), DX
+	SUBQ 96(CX), DX
+	MOVQ DX, 120(CX)
+	MOVQ R10, 128(CX)
+	MOVQ 88(AX), DX
+	SUBQ 144(CX), DX
+	MOVQ DX, 168(CX)
+	MOVQ R12, 176(CX)
 	SUBQ 16(AX), BX
 	SHLQ $0x02, BX
 	MOVQ BX, 40(AX)
@@ -2012,68 +1977,59 @@ done:
 // func decompress4x_4b_main_loop_bmi2(ctx *decompress4xContext)
 // Requires: BMI, BMI2, CMOV
 TEXT ·decompress4x_4b_main_loop_bmi2(SB), $0-8
+	MOVQ ctx+0(FP), AX
+
 	// Preload values
-	MOVQ    ctx+0(FP), SI
-	MOVQ    (SI), AX
-	MOVBQZX 8(SI), CX
-	MOVQ    32(SI), DX
-	MOVQ    16(SI), BX
-	MOVQ    24(SI), SI
+	MOVBQZX 8(AX), CX
+	MOVQ    32(AX), DX
+	MOVQ    16(AX), BX
+	MOVQ    24(AX), SI
 	LEAQ    (BX)(SI*1), DI
 	LEAQ    (BX)(SI*2), R9
 	LEAQ    (SI)(SI*2), R11
 	ADDQ    BX, R11
 
-	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead.
-	// The off slot holds the absolute input pointer while the loop runs.
-	MOVQ    32(AX), SI
-	MOVBQZX 40(AX), R8
+	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead
+	MOVQ    (AX), R13
+	MOVQ    32(R13), SI
+	MOVBQZX 40(R13), R8
 	BTSQ    R8, SI
-	MOVQ    (AX), R8
-	ADDQ    R8, 24(AX)
-	MOVQ    80(AX), R8
-	MOVBQZX 88(AX), R10
+	MOVQ    80(R13), R8
+	MOVBQZX 88(R13), R10
 	BTSQ    R10, R8
-	MOVQ    48(AX), R10
-	ADDQ    R10, 72(AX)
-	MOVQ    128(AX), R10
-	MOVBQZX 136(AX), R12
+	MOVQ    128(R13), R10
+	MOVBQZX 136(R13), R12
 	BTSQ    R12, R10
-	MOVQ    96(AX), R12
-	ADDQ    R12, 120(AX)
-	MOVQ    176(AX), R12
-	MOVBQZX 184(AX), R13
+	MOVQ    176(R13), R12
+	MOVBQZX 184(R13), R13
 	BTSQ    R13, R12
-	MOVQ    144(AX), R13
-	ADDQ    R13, 168(AX)
 
 outer_loop:
 	// Iterations allowed by the output.
-	MOVQ ctx+0(FP), R13
-	MOVQ 48(R13), R13
+	MOVQ 48(AX), R13
 	SUBQ BX, R13
 	JLE  done
 	SHRQ $0x03, R13
 
-	// Iterations allowed by the input: each reload backs a pointer up by at most 7 bytes,
-	// and every read stays inside the block while the lowest pointer stays above stream 0's start.
-	MOVQ    24(AX), R14
-	SUBQ    (AX), R14
+	// Iterations allowed by the input: a reload backs a pointer up by at most 7 bytes,
+	// so every read stays inside the block while the lowest pointer stays above ilowest.
+	MOVQ    64(AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, R13
 	CMOVQCS R14, R13
 	MOVQ    72(AX), R14
-	SUBQ    (AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, R13
 	CMOVQCS R14, R13
-	MOVQ    120(AX), R14
-	SUBQ    (AX), R14
+	MOVQ    80(AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, R13
 	CMOVQCS R14, R13
-	MOVQ    168(AX), R14
-	SUBQ    (AX), R14
+	MOVQ    88(AX), R14
+	SUBQ    56(AX), R14
 	SHRQ    $0x03, R14
 	CMPQ    R14, R13
 	CMOVQCS R14, R13
@@ -2081,8 +2037,7 @@ outer_loop:
 	JZ      done
 	IMUL3Q  $0x0e, R13, R13
 	ADDQ    BX, R13
-	MOVQ    ctx+0(FP), R14
-	MOVQ    R13, 56(R14)
+	MOVQ    R13, 96(AX)
 
 inner_loop:
 	// stream 0, symbol 0
@@ -2482,9 +2437,9 @@ inner_loop:
 	MOVQ   R13, R14
 	ANDQ   $0x07, R14
 	SHRQ   $0x03, R13
-	MOVQ   24(AX), SI
+	MOVQ   64(AX), SI
 	SUBQ   R13, SI
-	MOVQ   SI, 24(AX)
+	MOVQ   SI, 64(AX)
 	MOVQ   (SI), SI
 	ORQ    $0x01, SI
 	SHLXQ  R14, SI, SI
@@ -2502,9 +2457,9 @@ inner_loop:
 	MOVQ   R13, R14
 	ANDQ   $0x07, R14
 	SHRQ   $0x03, R13
-	MOVQ   120(AX), R10
+	MOVQ   80(AX), R10
 	SUBQ   R13, R10
-	MOVQ   R10, 120(AX)
+	MOVQ   R10, 80(AX)
 	MOVQ   (R10), R10
 	ORQ    $0x01, R10
 	SHLXQ  R14, R10, R10
@@ -2512,9 +2467,9 @@ inner_loop:
 	MOVQ   R13, R14
 	ANDQ   $0x07, R14
 	SHRQ   $0x03, R13
-	MOVQ   168(AX), R12
+	MOVQ   88(AX), R12
 	SUBQ   R13, R12
-	MOVQ   R12, 168(AX)
+	MOVQ   R12, 88(AX)
 	MOVQ   (R12), R12
 	ORQ    $0x01, R12
 	SHLXQ  R14, R12, R12
@@ -2522,27 +2477,30 @@ inner_loop:
 	ADDQ   $0x0e, DI
 	ADDQ   $0x0e, R9
 	ADDQ   $0x0e, R11
-	MOVQ   ctx+0(FP), R13
-	CMPQ   BX, 56(R13)
+	CMPQ   BX, 96(AX)
 	JB     inner_loop
 	JMP    outer_loop
 
 done:
-	// Hand the state back: off = ip - in (negative when the window reached into the previous stream),
+	// Hand the state back: off = ip - in (negative when the window reached below the stream start),
 	// value = the sentinel-form container. bitReaderShifted.restoreFromAsm normalizes both.
 	MOVQ (AX), CX
-	SUBQ CX, 24(AX)
-	MOVQ SI, 32(AX)
-	MOVQ 48(AX), CX
-	SUBQ CX, 72(AX)
-	MOVQ R8, 80(AX)
-	MOVQ 96(AX), CX
-	SUBQ CX, 120(AX)
-	MOVQ R10, 128(AX)
-	MOVQ 144(AX), CX
-	SUBQ CX, 168(AX)
-	MOVQ R12, 176(AX)
-	MOVQ ctx+0(FP), AX
+	MOVQ 64(AX), DX
+	SUBQ (CX), DX
+	MOVQ DX, 24(CX)
+	MOVQ SI, 32(CX)
+	MOVQ 72(AX), DX
+	SUBQ 48(CX), DX
+	MOVQ DX, 72(CX)
+	MOVQ R8, 80(CX)
+	MOVQ 80(AX), DX
+	SUBQ 96(CX), DX
+	MOVQ DX, 120(CX)
+	MOVQ R10, 128(CX)
+	MOVQ 88(AX), DX
+	SUBQ 144(CX), DX
+	MOVQ DX, 168(CX)
+	MOVQ R12, 176(CX)
 	SUBQ 16(AX), BX
 	SHLQ $0x02, BX
 	MOVQ BX, 40(AX)

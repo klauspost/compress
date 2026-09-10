@@ -14,6 +14,10 @@ import (
 // fallback8BitSize is the size where using Go version is faster.
 const fallback8BitSize = 800
 
+// decompress4xContext is the argument block of the Decompress4X asm loops.
+// Go fills every field but decoded and inner; the asm advances ip, and on
+// return leaves each bit reader in the form bitReaderShifted.restoreFromAsm
+// expects.
 type decompress4xContext struct {
 	pbr      *[4]bitReaderShifted
 	peekBits uint8
@@ -21,8 +25,10 @@ type decompress4xContext struct {
 	dstEvery int
 	tbl      *dEntrySingle
 	decoded  int
-	limit    *byte // stream 0's output pointer must stay below this
-	inner    *byte // scratch for the asm: the current inner-loop limit
+	limit    *byte    // stream 0's output pointer must stay below this
+	ilowest  *byte    // start of stream 0's input; no read goes below it
+	ip       [4]*byte // each stream's 8-byte input window, advanced by the asm
+	inner    *byte    // scratch for the asm: the current inner-loop limit
 }
 
 // Symbols decoded per stream between reloads by the 4X asm loops; must
@@ -99,6 +105,10 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 			dstEvery: dstEvery,
 			tbl:      &single[0],
 			limit:    &out[limit],
+			ilowest:  &br[0].in[0],
+		}
+		for i := range br {
+			ctx.ip[i] = &br[i].in[br[i].off]
 		}
 		switch nSyms {
 		case fast4X4bSymbols:
