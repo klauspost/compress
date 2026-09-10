@@ -26,10 +26,11 @@ type decompress4xContext struct {
 }
 
 // Symbols decoded per stream between reloads by the 4X asm loops; must
-// match fast4XSymbols/fast4X8bSymbols in _generate/gen.go.
+// match the constants of the same names in _generate/gen.go.
 const (
-	fast4XSymbols   = 5
-	fast4X8bSymbols = 7
+	fast4XSymbols   = 5  // tablelog 9..11
+	fast4X8bSymbols = 7  // tablelog 5..8
+	fast4X4bSymbols = 14 // tablelog <= 4
 )
 
 // Decompress4X will decompress a 4X encoded stream.
@@ -81,7 +82,9 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 	var decoded int
 
 	nSyms := fast4XSymbols
-	if use8BitTables {
+	if d.actualTableLog <= 4 {
+		nSyms = fast4X4bSymbols
+	} else if use8BitTables {
 		nSyms = fast4X8bSymbols
 	}
 	// The asm writes nSyms bytes per stream per iteration, so stream 0 must
@@ -97,9 +100,12 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 			tbl:      &single[0],
 			limit:    &out[limit],
 		}
-		if use8BitTables {
+		switch nSyms {
+		case fast4X4bSymbols:
+			decompress4x_4b_main_loop_asm(&ctx)
+		case fast4X8bSymbols:
 			decompress4x_8b_main_loop_asm(&ctx)
-		} else {
+		default:
 			decompress4x_main_loop_asm(&ctx)
 		}
 

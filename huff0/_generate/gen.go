@@ -25,10 +25,12 @@ func main() {
 		decompress := decompress4x{}
 		decompress.generateProcedure("decompress4x_main_loop_amd64", fast4XSymbols)
 		decompress.generateProcedure("decompress4x_8b_main_loop_amd64", fast4X8bSymbols)
+		decompress.generateProcedure("decompress4x_4b_main_loop_amd64", fast4X4bSymbols)
 
 		decompress.bmi2 = true
 		decompress.generateProcedure("decompress4x_main_loop_bmi2", fast4XSymbols)
 		decompress.generateProcedure("decompress4x_8b_main_loop_bmi2", fast4X8bSymbols)
+		decompress.generateProcedure("decompress4x_4b_main_loop_bmi2", fast4X4bSymbols)
 	}
 
 	{
@@ -61,8 +63,9 @@ const bitReader__size = bitReader_bitsRead + 8
 // 7+n*b <= 63 for the sentinel to survive and 64-(7+(n-1)*b) >= b valid bits
 // ahead of the last symbol: n*b <= 56.
 const (
-	fast4XSymbols   = 5 // tablelog 9..11: 5*11 = 55
-	fast4X8bSymbols = 7 // tablelog <= 8: 7*8 = 56
+	fast4XSymbols   = 5  // tablelog 9..11: 5*11 = 55
+	fast4X8bSymbols = 7  // tablelog 5..8: 7*8 = 56
+	fast4X4bSymbols = 14 // tablelog <= 4: 14*4 = 56
 )
 
 // generateProcedure emits the Decompress4X main loop. The four streams are

@@ -728,6 +728,657 @@ done:
 	MOVQ SI, 40(AX)
 	RET
 
+// func decompress4x_4b_main_loop_amd64(ctx *decompress4xContext)
+// Requires: BMI, CMOV
+TEXT ·decompress4x_4b_main_loop_amd64(SB), $0-8
+	// Preload values
+	MOVQ    ctx+0(FP), CX
+	MOVQ    (CX), AX
+	MOVBQZX 8(CX), DX
+	MOVQ    32(CX), BX
+	MOVQ    16(CX), SI
+	MOVQ    24(CX), CX
+	LEAQ    (SI)(CX*1), R8
+	LEAQ    (SI)(CX*2), R10
+	LEAQ    (CX)(CX*2), R12
+	ADDQ    SI, R12
+
+	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead.
+	// The off slot holds the absolute input pointer while the loop runs.
+	MOVQ    32(AX), DI
+	MOVBQZX 40(AX), CX
+	BTSQ    CX, DI
+	MOVQ    (AX), CX
+	ADDQ    CX, 24(AX)
+	MOVQ    80(AX), R9
+	MOVBQZX 88(AX), CX
+	BTSQ    CX, R9
+	MOVQ    48(AX), CX
+	ADDQ    CX, 72(AX)
+	MOVQ    128(AX), R11
+	MOVBQZX 136(AX), CX
+	BTSQ    CX, R11
+	MOVQ    96(AX), CX
+	ADDQ    CX, 120(AX)
+	MOVQ    176(AX), R13
+	MOVBQZX 184(AX), CX
+	BTSQ    CX, R13
+	MOVQ    144(AX), CX
+	ADDQ    CX, 168(AX)
+
+outer_loop:
+	// Iterations allowed by the output.
+	MOVQ ctx+0(FP), CX
+	MOVQ 48(CX), CX
+	SUBQ SI, CX
+	JLE  done
+	SHRQ $0x03, CX
+
+	// Iterations allowed by the input: each reload backs a pointer up by at most 7 bytes,
+	// and every read stays inside the block while the lowest pointer stays above stream 0's start.
+	MOVQ    24(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, CX
+	CMOVQCS R14, CX
+	MOVQ    72(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, CX
+	CMOVQCS R14, CX
+	MOVQ    120(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, CX
+	CMOVQCS R14, CX
+	MOVQ    168(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, CX
+	CMOVQCS R14, CX
+	TESTQ   CX, CX
+	JZ      done
+	IMUL3Q  $0x0e, CX, CX
+	ADDQ    SI, CX
+	MOVQ    ctx+0(FP), R14
+	MOVQ    CX, 56(R14)
+
+inner_loop:
+	// stream 0, symbol 0
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, (SI)
+
+	// stream 1, symbol 0
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, (R8)
+
+	// stream 2, symbol 0
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, (R10)
+
+	// stream 3, symbol 0
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, (R12)
+
+	// stream 0, symbol 1
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, 1(SI)
+
+	// stream 1, symbol 1
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, 1(R8)
+
+	// stream 2, symbol 1
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 1(R10)
+
+	// stream 3, symbol 1
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, 1(R12)
+
+	// stream 0, symbol 2
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, 2(SI)
+
+	// stream 1, symbol 2
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, 2(R8)
+
+	// stream 2, symbol 2
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 2(R10)
+
+	// stream 3, symbol 2
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, 2(R12)
+
+	// stream 0, symbol 3
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, 3(SI)
+
+	// stream 1, symbol 3
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, 3(R8)
+
+	// stream 2, symbol 3
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 3(R10)
+
+	// stream 3, symbol 3
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, 3(R12)
+
+	// stream 0, symbol 4
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, 4(SI)
+
+	// stream 1, symbol 4
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, 4(R8)
+
+	// stream 2, symbol 4
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 4(R10)
+
+	// stream 3, symbol 4
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, 4(R12)
+
+	// stream 0, symbol 5
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, 5(SI)
+
+	// stream 1, symbol 5
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, 5(R8)
+
+	// stream 2, symbol 5
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 5(R10)
+
+	// stream 3, symbol 5
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, 5(R12)
+
+	// stream 0, symbol 6
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, 6(SI)
+
+	// stream 1, symbol 6
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, 6(R8)
+
+	// stream 2, symbol 6
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 6(R10)
+
+	// stream 3, symbol 6
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, 6(R12)
+
+	// stream 0, symbol 7
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, 7(SI)
+
+	// stream 1, symbol 7
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, 7(R8)
+
+	// stream 2, symbol 7
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 7(R10)
+
+	// stream 3, symbol 7
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, 7(R12)
+
+	// stream 0, symbol 8
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, 8(SI)
+
+	// stream 1, symbol 8
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, 8(R8)
+
+	// stream 2, symbol 8
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 8(R10)
+
+	// stream 3, symbol 8
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, 8(R12)
+
+	// stream 0, symbol 9
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, 9(SI)
+
+	// stream 1, symbol 9
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, 9(R8)
+
+	// stream 2, symbol 9
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 9(R10)
+
+	// stream 3, symbol 9
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, 9(R12)
+
+	// stream 0, symbol 10
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, 10(SI)
+
+	// stream 1, symbol 10
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, 10(R8)
+
+	// stream 2, symbol 10
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 10(R10)
+
+	// stream 3, symbol 10
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, 10(R12)
+
+	// stream 0, symbol 11
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, 11(SI)
+
+	// stream 1, symbol 11
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, 11(R8)
+
+	// stream 2, symbol 11
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 11(R10)
+
+	// stream 3, symbol 11
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, 11(R12)
+
+	// stream 0, symbol 12
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, 12(SI)
+
+	// stream 1, symbol 12
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, 12(R8)
+
+	// stream 2, symbol 12
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 12(R10)
+
+	// stream 3, symbol 12
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, 12(R12)
+
+	// stream 0, symbol 13
+	MOVQ    DX, CX
+	MOVQ    DI, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, DI
+	SHRQ    $0x08, CX
+	MOVB    CL, 13(SI)
+
+	// stream 1, symbol 13
+	MOVQ    DX, CX
+	MOVQ    R9, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R9
+	SHRQ    $0x08, CX
+	MOVB    CL, 13(R8)
+
+	// stream 2, symbol 13
+	MOVQ    DX, CX
+	MOVQ    R11, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 13(R10)
+
+	// stream 3, symbol 13
+	MOVQ    DX, CX
+	MOVQ    R13, R14
+	SHRQ    CL, R14
+	MOVWQZX (BX)(R14*2), CX
+	SHLQ    CL, R13
+	SHRQ    $0x08, CX
+	MOVB    CL, 13(R12)
+
+	// Reload the four bit containers
+	TZCNTQ DI, R14
+	MOVQ   R14, CX
+	ANDQ   $0x07, CX
+	SHRQ   $0x03, R14
+	MOVQ   24(AX), DI
+	SUBQ   R14, DI
+	MOVQ   DI, 24(AX)
+	MOVQ   (DI), DI
+	ORQ    $0x01, DI
+	SHLQ   CL, DI
+	TZCNTQ R9, R14
+	MOVQ   R14, CX
+	ANDQ   $0x07, CX
+	SHRQ   $0x03, R14
+	MOVQ   72(AX), R9
+	SUBQ   R14, R9
+	MOVQ   R9, 72(AX)
+	MOVQ   (R9), R9
+	ORQ    $0x01, R9
+	SHLQ   CL, R9
+	TZCNTQ R11, R14
+	MOVQ   R14, CX
+	ANDQ   $0x07, CX
+	SHRQ   $0x03, R14
+	MOVQ   120(AX), R11
+	SUBQ   R14, R11
+	MOVQ   R11, 120(AX)
+	MOVQ   (R11), R11
+	ORQ    $0x01, R11
+	SHLQ   CL, R11
+	TZCNTQ R13, R14
+	MOVQ   R14, CX
+	ANDQ   $0x07, CX
+	SHRQ   $0x03, R14
+	MOVQ   168(AX), R13
+	SUBQ   R14, R13
+	MOVQ   R13, 168(AX)
+	MOVQ   (R13), R13
+	ORQ    $0x01, R13
+	SHLQ   CL, R13
+	ADDQ   $0x0e, SI
+	ADDQ   $0x0e, R8
+	ADDQ   $0x0e, R10
+	ADDQ   $0x0e, R12
+	MOVQ   ctx+0(FP), CX
+	CMPQ   SI, 56(CX)
+	JB     inner_loop
+	JMP    outer_loop
+
+done:
+	// Hand the state back: off = ip - in (negative when the window reached into the previous stream),
+	// value = the sentinel-form container. bitReaderShifted.restoreFromAsm normalizes both.
+	MOVQ (AX), CX
+	SUBQ CX, 24(AX)
+	MOVQ DI, 32(AX)
+	MOVQ 48(AX), CX
+	SUBQ CX, 72(AX)
+	MOVQ R9, 80(AX)
+	MOVQ 96(AX), CX
+	SUBQ CX, 120(AX)
+	MOVQ R11, 128(AX)
+	MOVQ 144(AX), CX
+	SUBQ CX, 168(AX)
+	MOVQ R13, 176(AX)
+	MOVQ ctx+0(FP), AX
+	SUBQ 16(AX), SI
+	SHLQ $0x02, SI
+	MOVQ SI, 40(AX)
+	RET
+
 // func decompress4x_main_loop_bmi2(ctx *decompress4xContext)
 // Requires: BMI, BMI2, CMOV
 TEXT ·decompress4x_main_loop_bmi2(SB), $0-8
@@ -1332,6 +1983,545 @@ inner_loop:
 	ADDQ   $0x07, DI
 	ADDQ   $0x07, R9
 	ADDQ   $0x07, R11
+	MOVQ   ctx+0(FP), R13
+	CMPQ   BX, 56(R13)
+	JB     inner_loop
+	JMP    outer_loop
+
+done:
+	// Hand the state back: off = ip - in (negative when the window reached into the previous stream),
+	// value = the sentinel-form container. bitReaderShifted.restoreFromAsm normalizes both.
+	MOVQ (AX), CX
+	SUBQ CX, 24(AX)
+	MOVQ SI, 32(AX)
+	MOVQ 48(AX), CX
+	SUBQ CX, 72(AX)
+	MOVQ R8, 80(AX)
+	MOVQ 96(AX), CX
+	SUBQ CX, 120(AX)
+	MOVQ R10, 128(AX)
+	MOVQ 144(AX), CX
+	SUBQ CX, 168(AX)
+	MOVQ R12, 176(AX)
+	MOVQ ctx+0(FP), AX
+	SUBQ 16(AX), BX
+	SHLQ $0x02, BX
+	MOVQ BX, 40(AX)
+	RET
+
+// func decompress4x_4b_main_loop_bmi2(ctx *decompress4xContext)
+// Requires: BMI, BMI2, CMOV
+TEXT ·decompress4x_4b_main_loop_bmi2(SB), $0-8
+	// Preload values
+	MOVQ    ctx+0(FP), SI
+	MOVQ    (SI), AX
+	MOVBQZX 8(SI), CX
+	MOVQ    32(SI), DX
+	MOVQ    16(SI), BX
+	MOVQ    24(SI), SI
+	LEAQ    (BX)(SI*1), DI
+	LEAQ    (BX)(SI*2), R9
+	LEAQ    (SI)(SI*2), R11
+	ADDQ    BX, R11
+
+	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead.
+	// The off slot holds the absolute input pointer while the loop runs.
+	MOVQ    32(AX), SI
+	MOVBQZX 40(AX), R8
+	BTSQ    R8, SI
+	MOVQ    (AX), R8
+	ADDQ    R8, 24(AX)
+	MOVQ    80(AX), R8
+	MOVBQZX 88(AX), R10
+	BTSQ    R10, R8
+	MOVQ    48(AX), R10
+	ADDQ    R10, 72(AX)
+	MOVQ    128(AX), R10
+	MOVBQZX 136(AX), R12
+	BTSQ    R12, R10
+	MOVQ    96(AX), R12
+	ADDQ    R12, 120(AX)
+	MOVQ    176(AX), R12
+	MOVBQZX 184(AX), R13
+	BTSQ    R13, R12
+	MOVQ    144(AX), R13
+	ADDQ    R13, 168(AX)
+
+outer_loop:
+	// Iterations allowed by the output.
+	MOVQ ctx+0(FP), R13
+	MOVQ 48(R13), R13
+	SUBQ BX, R13
+	JLE  done
+	SHRQ $0x03, R13
+
+	// Iterations allowed by the input: each reload backs a pointer up by at most 7 bytes,
+	// and every read stays inside the block while the lowest pointer stays above stream 0's start.
+	MOVQ    24(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, R13
+	CMOVQCS R14, R13
+	MOVQ    72(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, R13
+	CMOVQCS R14, R13
+	MOVQ    120(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, R13
+	CMOVQCS R14, R13
+	MOVQ    168(AX), R14
+	SUBQ    (AX), R14
+	SHRQ    $0x03, R14
+	CMPQ    R14, R13
+	CMOVQCS R14, R13
+	TESTQ   R13, R13
+	JZ      done
+	IMUL3Q  $0x0e, R13, R13
+	ADDQ    BX, R13
+	MOVQ    ctx+0(FP), R14
+	MOVQ    R13, 56(R14)
+
+inner_loop:
+	// stream 0, symbol 0
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, (BX)
+
+	// stream 1, symbol 0
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, (DI)
+
+	// stream 2, symbol 0
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, (R9)
+
+	// stream 3, symbol 0
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, (R11)
+
+	// stream 0, symbol 1
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, 1(BX)
+
+	// stream 1, symbol 1
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, 1(DI)
+
+	// stream 2, symbol 1
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, 1(R9)
+
+	// stream 3, symbol 1
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, 1(R11)
+
+	// stream 0, symbol 2
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, 2(BX)
+
+	// stream 1, symbol 2
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, 2(DI)
+
+	// stream 2, symbol 2
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, 2(R9)
+
+	// stream 3, symbol 2
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, 2(R11)
+
+	// stream 0, symbol 3
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, 3(BX)
+
+	// stream 1, symbol 3
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, 3(DI)
+
+	// stream 2, symbol 3
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, 3(R9)
+
+	// stream 3, symbol 3
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, 3(R11)
+
+	// stream 0, symbol 4
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, 4(BX)
+
+	// stream 1, symbol 4
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, 4(DI)
+
+	// stream 2, symbol 4
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, 4(R9)
+
+	// stream 3, symbol 4
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, 4(R11)
+
+	// stream 0, symbol 5
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, 5(BX)
+
+	// stream 1, symbol 5
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, 5(DI)
+
+	// stream 2, symbol 5
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, 5(R9)
+
+	// stream 3, symbol 5
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, 5(R11)
+
+	// stream 0, symbol 6
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, 6(BX)
+
+	// stream 1, symbol 6
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, 6(DI)
+
+	// stream 2, symbol 6
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, 6(R9)
+
+	// stream 3, symbol 6
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, 6(R11)
+
+	// stream 0, symbol 7
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, 7(BX)
+
+	// stream 1, symbol 7
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, 7(DI)
+
+	// stream 2, symbol 7
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, 7(R9)
+
+	// stream 3, symbol 7
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, 7(R11)
+
+	// stream 0, symbol 8
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, 8(BX)
+
+	// stream 1, symbol 8
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, 8(DI)
+
+	// stream 2, symbol 8
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, 8(R9)
+
+	// stream 3, symbol 8
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, 8(R11)
+
+	// stream 0, symbol 9
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, 9(BX)
+
+	// stream 1, symbol 9
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, 9(DI)
+
+	// stream 2, symbol 9
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, 9(R9)
+
+	// stream 3, symbol 9
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, 9(R11)
+
+	// stream 0, symbol 10
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, 10(BX)
+
+	// stream 1, symbol 10
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, 10(DI)
+
+	// stream 2, symbol 10
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, 10(R9)
+
+	// stream 3, symbol 10
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, 10(R11)
+
+	// stream 0, symbol 11
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, 11(BX)
+
+	// stream 1, symbol 11
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, 11(DI)
+
+	// stream 2, symbol 11
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, 11(R9)
+
+	// stream 3, symbol 11
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, 11(R11)
+
+	// stream 0, symbol 12
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, 12(BX)
+
+	// stream 1, symbol 12
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, 12(DI)
+
+	// stream 2, symbol 12
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, 12(R9)
+
+	// stream 3, symbol 12
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, 12(R11)
+
+	// stream 0, symbol 13
+	SHRXQ   CX, SI, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, SI, SI
+	SHRQ    $0x08, R13
+	MOVB    R13, 13(BX)
+
+	// stream 1, symbol 13
+	SHRXQ   CX, R8, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R8, R8
+	SHRQ    $0x08, R13
+	MOVB    R13, 13(DI)
+
+	// stream 2, symbol 13
+	SHRXQ   CX, R10, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R10, R10
+	SHRQ    $0x08, R13
+	MOVB    R13, 13(R9)
+
+	// stream 3, symbol 13
+	SHRXQ   CX, R12, R13
+	MOVWQZX (DX)(R13*2), R13
+	SHLXQ   R13, R12, R12
+	SHRQ    $0x08, R13
+	MOVB    R13, 13(R11)
+
+	// Reload the four bit containers
+	TZCNTQ SI, R13
+	MOVQ   R13, R14
+	ANDQ   $0x07, R14
+	SHRQ   $0x03, R13
+	MOVQ   24(AX), SI
+	SUBQ   R13, SI
+	MOVQ   SI, 24(AX)
+	MOVQ   (SI), SI
+	ORQ    $0x01, SI
+	SHLXQ  R14, SI, SI
+	TZCNTQ R8, R13
+	MOVQ   R13, R14
+	ANDQ   $0x07, R14
+	SHRQ   $0x03, R13
+	MOVQ   72(AX), R8
+	SUBQ   R13, R8
+	MOVQ   R8, 72(AX)
+	MOVQ   (R8), R8
+	ORQ    $0x01, R8
+	SHLXQ  R14, R8, R8
+	TZCNTQ R10, R13
+	MOVQ   R13, R14
+	ANDQ   $0x07, R14
+	SHRQ   $0x03, R13
+	MOVQ   120(AX), R10
+	SUBQ   R13, R10
+	MOVQ   R10, 120(AX)
+	MOVQ   (R10), R10
+	ORQ    $0x01, R10
+	SHLXQ  R14, R10, R10
+	TZCNTQ R12, R13
+	MOVQ   R13, R14
+	ANDQ   $0x07, R14
+	SHRQ   $0x03, R13
+	MOVQ   168(AX), R12
+	SUBQ   R13, R12
+	MOVQ   R12, 168(AX)
+	MOVQ   (R12), R12
+	ORQ    $0x01, R12
+	SHLXQ  R14, R12, R12
+	ADDQ   $0x0e, BX
+	ADDQ   $0x0e, DI
+	ADDQ   $0x0e, R9
+	ADDQ   $0x0e, R11
 	MOVQ   ctx+0(FP), R13
 	CMPQ   BX, 56(R13)
 	JB     inner_loop

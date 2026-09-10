@@ -21,6 +21,18 @@ func decompress4x_main_loop_amd64(ctx *decompress4xContext)
 //go:noescape
 func decompress4x_8b_main_loop_amd64(ctx *decompress4xContext)
 
+// decompress4x_4b_main_loop_amd64 is an x86 assembler implementation
+// of Decompress4X when tablelog <= 4, decoding fast4X4bSymbols symbols
+// per stream between bit container reloads.
+//
+//go:noescape
+func decompress4x_4b_main_loop_amd64(ctx *decompress4xContext)
+
+// decompress4x_4b_main_loop_bmi2 is the BMI2 twin of decompress4x_4b_main_loop_amd64.
+//
+//go:noescape
+func decompress4x_4b_main_loop_bmi2(ctx *decompress4xContext)
+
 // decompress4x_main_loop_bmi2 is the BMI2 twin of decompress4x_main_loop_amd64.
 //
 //go:noescape
@@ -56,6 +68,14 @@ func decompress4x_8b_main_loop_asm(ctx *decompress4xContext) {
 		decompress4x_8b_main_loop_bmi2(ctx)
 	} else {
 		decompress4x_8b_main_loop_amd64(ctx)
+	}
+}
+
+func decompress4x_4b_main_loop_asm(ctx *decompress4xContext) {
+	if cpuinfo.HasBMI2() {
+		decompress4x_4b_main_loop_bmi2(ctx)
+	} else {
+		decompress4x_4b_main_loop_amd64(ctx)
 	}
 }
 

@@ -19,6 +19,13 @@ func decompress4x_main_loop_arm64(ctx *decompress4xContext)
 //go:noescape
 func decompress4x_8b_main_loop_arm64(ctx *decompress4xContext)
 
+// decompress4x_4b_main_loop_arm64 is an arm64 assembler implementation
+// of Decompress4X when tablelog <= 4, decoding fast4X4bSymbols symbols
+// per stream between bit container reloads.
+//
+//go:noescape
+func decompress4x_4b_main_loop_arm64(ctx *decompress4xContext)
+
 // decompress1x_main_loop_arm64 is an arm64 assembler implementation
 // of Decompress1X when tablelog > 8.
 //
@@ -31,6 +38,10 @@ func decompress4x_main_loop_asm(ctx *decompress4xContext) {
 
 func decompress4x_8b_main_loop_asm(ctx *decompress4xContext) {
 	decompress4x_8b_main_loop_arm64(ctx)
+}
+
+func decompress4x_4b_main_loop_asm(ctx *decompress4xContext) {
+	decompress4x_4b_main_loop_arm64(ctx)
 }
 
 func decompress1x_main_loop_asm(ctx *decompress1xContext) {

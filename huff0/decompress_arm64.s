@@ -703,9 +703,585 @@ done:
 	MOVD R5, 40(R0)
 	RET
 
+// func decompress4x_4b_main_loop_amd64(ctx *decompress4xContext)
+// Requires: BMI, CMOV
+TEXT ·decompress4x_4b_main_loop_arm64(SB), $0-8
+	// Preload values
+	MOVD  ctx+0(FP), R1
+	MOVD  (R1), R0
+	MOVBU 8(R1), R2
+	MOVD  32(R1), R3
+	MOVD  16(R1), R5
+	MOVD  24(R1), R1
+	ADD   R1, R5, R7
+	ADD   R1<<1, R5, R9
+	ADD   R1<<1, R1, R11
+	ADD   R5, R11, R11
+
+	// Convert each bit reader to sentinel form: bits = value | 1<<bitsRead.
+	// The off slot holds the absolute input pointer while the loop runs.
+	MOVD  32(R0), R6
+	MOVBU 40(R0), R1
+	MOVD  $1, R16
+	LSL   R1, R16, R16
+	ORR   R16, R6, R6
+	MOVD  (R0), R1
+	MOVD  24(R0), R16
+	ADD   R1, R16, R16
+	MOVD  R16, 24(R0)
+	MOVD  80(R0), R8
+	MOVBU 88(R0), R1
+	MOVD  $1, R16
+	LSL   R1, R16, R16
+	ORR   R16, R8, R8
+	MOVD  48(R0), R1
+	MOVD  72(R0), R16
+	ADD   R1, R16, R16
+	MOVD  R16, 72(R0)
+	MOVD  128(R0), R10
+	MOVBU 136(R0), R1
+	MOVD  $1, R16
+	LSL   R1, R16, R16
+	ORR   R16, R10, R10
+	MOVD  96(R0), R1
+	MOVD  120(R0), R16
+	ADD   R1, R16, R16
+	MOVD  R16, 120(R0)
+	MOVD  176(R0), R12
+	MOVBU 184(R0), R1
+	MOVD  $1, R16
+	LSL   R1, R16, R16
+	ORR   R16, R12, R12
+	MOVD  144(R0), R1
+	MOVD  168(R0), R16
+	ADD   R1, R16, R16
+	MOVD  R16, 168(R0)
+
+outer_loop:
+	// Iterations allowed by the output.
+	MOVD ctx+0(FP), R1
+	MOVD 48(R1), R1
+	SUBS R5, R1, R1
+	BLE  done
+	LSR  $0x03, R1, R1
+
+	// Iterations allowed by the input: each reload backs a pointer up by at most 7 bytes,
+	// and every read stays inside the block while the lowest pointer stays above stream 0's start.
+	MOVD 24(R0), R13
+	MOVD (R0), R16
+	SUB  R16, R13, R13
+	LSR  $0x03, R13, R13
+	CMP  R1, R13
+	CSEL LO, R13, R1, R1
+	MOVD 72(R0), R13
+	MOVD (R0), R16
+	SUB  R16, R13, R13
+	LSR  $0x03, R13, R13
+	CMP  R1, R13
+	CSEL LO, R13, R1, R1
+	MOVD 120(R0), R13
+	MOVD (R0), R16
+	SUB  R16, R13, R13
+	LSR  $0x03, R13, R13
+	CMP  R1, R13
+	CSEL LO, R13, R1, R1
+	MOVD 168(R0), R13
+	MOVD (R0), R16
+	SUB  R16, R13, R13
+	LSR  $0x03, R13, R13
+	CMP  R1, R13
+	CSEL LO, R13, R1, R1
+	TST  R1, R1
+	BEQ  done
+	MOVD $14, R16
+	MUL  R16, R1, R1
+	ADD  R5, R1, R1
+	MOVD ctx+0(FP), R13
+	MOVD R1, 56(R13)
+
+inner_loop:
+	// stream 0, symbol 0
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, (R5)
+
+	// stream 1, symbol 0
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, (R7)
+
+	// stream 2, symbol 0
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, (R9)
+
+	// stream 3, symbol 0
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R12, R12
+	LSR   $0x08, R1, R1
+	MOVB  R1, (R11)
+
+	// stream 0, symbol 1
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, 1(R5)
+
+	// stream 1, symbol 1
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, 1(R7)
+
+	// stream 2, symbol 1
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 1(R9)
+
+	// stream 3, symbol 1
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R12, R12
+	LSR   $0x08, R1, R1
+	MOVB  R1, 1(R11)
+
+	// stream 0, symbol 2
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, 2(R5)
+
+	// stream 1, symbol 2
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, 2(R7)
+
+	// stream 2, symbol 2
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 2(R9)
+
+	// stream 3, symbol 2
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R12, R12
+	LSR   $0x08, R1, R1
+	MOVB  R1, 2(R11)
+
+	// stream 0, symbol 3
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, 3(R5)
+
+	// stream 1, symbol 3
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, 3(R7)
+
+	// stream 2, symbol 3
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 3(R9)
+
+	// stream 3, symbol 3
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R12, R12
+	LSR   $0x08, R1, R1
+	MOVB  R1, 3(R11)
+
+	// stream 0, symbol 4
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, 4(R5)
+
+	// stream 1, symbol 4
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, 4(R7)
+
+	// stream 2, symbol 4
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 4(R9)
+
+	// stream 3, symbol 4
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R12, R12
+	LSR   $0x08, R1, R1
+	MOVB  R1, 4(R11)
+
+	// stream 0, symbol 5
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, 5(R5)
+
+	// stream 1, symbol 5
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, 5(R7)
+
+	// stream 2, symbol 5
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 5(R9)
+
+	// stream 3, symbol 5
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R12, R12
+	LSR   $0x08, R1, R1
+	MOVB  R1, 5(R11)
+
+	// stream 0, symbol 6
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, 6(R5)
+
+	// stream 1, symbol 6
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, 6(R7)
+
+	// stream 2, symbol 6
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 6(R9)
+
+	// stream 3, symbol 6
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R12, R12
+	LSR   $0x08, R1, R1
+	MOVB  R1, 6(R11)
+
+	// stream 0, symbol 7
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, 7(R5)
+
+	// stream 1, symbol 7
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, 7(R7)
+
+	// stream 2, symbol 7
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 7(R9)
+
+	// stream 3, symbol 7
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R12, R12
+	LSR   $0x08, R1, R1
+	MOVB  R1, 7(R11)
+
+	// stream 0, symbol 8
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, 8(R5)
+
+	// stream 1, symbol 8
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, 8(R7)
+
+	// stream 2, symbol 8
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 8(R9)
+
+	// stream 3, symbol 8
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R12, R12
+	LSR   $0x08, R1, R1
+	MOVB  R1, 8(R11)
+
+	// stream 0, symbol 9
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, 9(R5)
+
+	// stream 1, symbol 9
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, 9(R7)
+
+	// stream 2, symbol 9
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 9(R9)
+
+	// stream 3, symbol 9
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R12, R12
+	LSR   $0x08, R1, R1
+	MOVB  R1, 9(R11)
+
+	// stream 0, symbol 10
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, 10(R5)
+
+	// stream 1, symbol 10
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, 10(R7)
+
+	// stream 2, symbol 10
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 10(R9)
+
+	// stream 3, symbol 10
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R12, R12
+	LSR   $0x08, R1, R1
+	MOVB  R1, 10(R11)
+
+	// stream 0, symbol 11
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, 11(R5)
+
+	// stream 1, symbol 11
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, 11(R7)
+
+	// stream 2, symbol 11
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 11(R9)
+
+	// stream 3, symbol 11
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R12, R12
+	LSR   $0x08, R1, R1
+	MOVB  R1, 11(R11)
+
+	// stream 0, symbol 12
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, 12(R5)
+
+	// stream 1, symbol 12
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, 12(R7)
+
+	// stream 2, symbol 12
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 12(R9)
+
+	// stream 3, symbol 12
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R12, R12
+	LSR   $0x08, R1, R1
+	MOVB  R1, 12(R11)
+
+	// stream 0, symbol 13
+	LSR   R2, R6, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R6, R6
+	LSR   $0x08, R1, R1
+	MOVB  R1, 13(R5)
+
+	// stream 1, symbol 13
+	LSR   R2, R8, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R8, R8
+	LSR   $0x08, R1, R1
+	MOVB  R1, 13(R7)
+
+	// stream 2, symbol 13
+	LSR   R2, R10, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 13(R9)
+
+	// stream 3, symbol 13
+	LSR   R2, R12, R13
+	MOVHU (R3)(R13<<1), R1
+	LSL   R1, R12, R12
+	LSR   $0x08, R1, R1
+	MOVB  R1, 13(R11)
+
+	// Reload the four bit containers
+	RBIT R6, R13
+	CLZ  R13, R13
+	MOVD R13, R1
+	AND  $0x07, R1, R1
+	LSR  $0x03, R13, R13
+	MOVD 24(R0), R6
+	SUB  R13, R6, R6
+	MOVD R6, 24(R0)
+	MOVD (R6), R6
+	ORR  $0x01, R6, R6
+	LSL  R1, R6, R6
+	RBIT R8, R13
+	CLZ  R13, R13
+	MOVD R13, R1
+	AND  $0x07, R1, R1
+	LSR  $0x03, R13, R13
+	MOVD 72(R0), R8
+	SUB  R13, R8, R8
+	MOVD R8, 72(R0)
+	MOVD (R8), R8
+	ORR  $0x01, R8, R8
+	LSL  R1, R8, R8
+	RBIT R10, R13
+	CLZ  R13, R13
+	MOVD R13, R1
+	AND  $0x07, R1, R1
+	LSR  $0x03, R13, R13
+	MOVD 120(R0), R10
+	SUB  R13, R10, R10
+	MOVD R10, 120(R0)
+	MOVD (R10), R10
+	ORR  $0x01, R10, R10
+	LSL  R1, R10, R10
+	RBIT R12, R13
+	CLZ  R13, R13
+	MOVD R13, R1
+	AND  $0x07, R1, R1
+	LSR  $0x03, R13, R13
+	MOVD 168(R0), R12
+	SUB  R13, R12, R12
+	MOVD R12, 168(R0)
+	MOVD (R12), R12
+	ORR  $0x01, R12, R12
+	LSL  R1, R12, R12
+	ADD  $0x0e, R5, R5
+	ADD  $0x0e, R7, R7
+	ADD  $0x0e, R9, R9
+	ADD  $0x0e, R11, R11
+	MOVD ctx+0(FP), R1
+	MOVD 56(R1), R16
+	CMP  R16, R5
+	BLO  inner_loop
+	JMP  outer_loop
+
+done:
+	// Hand the state back: off = ip - in (negative when the window reached into the previous stream),
+	// value = the sentinel-form container. bitReaderShifted.restoreFromAsm normalizes both.
+	MOVD (R0), R1
+	MOVD 24(R0), R16
+	SUB  R1, R16, R16
+	MOVD R16, 24(R0)
+	MOVD R6, 32(R0)
+	MOVD 48(R0), R1
+	MOVD 72(R0), R16
+	SUB  R1, R16, R16
+	MOVD R16, 72(R0)
+	MOVD R8, 80(R0)
+	MOVD 96(R0), R1
+	MOVD 120(R0), R16
+	SUB  R1, R16, R16
+	MOVD R16, 120(R0)
+	MOVD R10, 128(R0)
+	MOVD 144(R0), R1
+	MOVD 168(R0), R16
+	SUB  R1, R16, R16
+	MOVD R16, 168(R0)
+	MOVD R12, 176(R0)
+	MOVD ctx+0(FP), R0
+	MOVD 16(R0), R16
+	SUB  R16, R5, R5
+	LSL  $0x02, R5, R5
+	MOVD R5, 40(R0)
+	RET
+
 // skipped decompress4x_main_loop_bmi2 (generic twin preferred on arm64)
 
 // skipped decompress4x_8b_main_loop_bmi2 (generic twin preferred on arm64)
+
+// skipped decompress4x_4b_main_loop_bmi2 (generic twin preferred on arm64)
 
 // func decompress1x_main_loop_amd64(ctx *decompress1xContext)
 TEXT ·decompress1x_main_loop_arm64(SB), $0-8
