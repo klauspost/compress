@@ -394,24 +394,27 @@ func histogram(b []byte, h []uint16) {
 }
 
 func histogramSplit(b []byte, h []uint16) {
-	// Tested, and slightly faster than 2-way.
-	// Writing to separate arrays and combining is also slightly slower.
-	h = h[:256]
+	// Walk four quarters in parallel, each into its own table.
+	// Tested to be faster than walking halves. Using separate tables
+	// avoids the load/store dependencies that arise when two of the
+	// streams hit the same byte value, which is common for text.
+	var h0, h1, h2, h3 [256]uint16
+	// Make size divisible by 4
 	for len(b)&3 != 0 {
-		h[b[0]]++
+		h0[b[0]]++
 		b = b[1:]
 	}
 	n := len(b) / 4
 	x, y, z, w := b[:n], b[n:], b[n+n:], b[n+n+n:]
 	y, z, w = y[:len(x)], z[:len(x)], w[:len(x)]
 	for i, t := range x {
-		v0 := &h[t]
-		v1 := &h[y[i]]
-		v2 := &h[z[i]]
-		v3 := &h[w[i]]
-		*v0++
-		*v1++
-		*v2++
-		*v3++
+		h0[t]++
+		h1[y[i]]++
+		h2[z[i]]++
+		h3[w[i]]++
+	}
+	h = h[:256]
+	for i := range h {
+		h[i] += h0[i] + h1[i] + h2[i] + h3[i]
 	}
 }
