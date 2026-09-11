@@ -139,14 +139,6 @@ func (h *huffmanEncoder) bitLength(freq []uint16) int {
 	return total
 }
 
-func (h *huffmanEncoder) bitLengthRaw(b []byte) int {
-	var total int
-	for _, f := range b {
-		total += int(h.codes[f].len())
-	}
-	return total
-}
-
 // canReuseBits returns the number of bits or math.MaxInt32 if the encoder cannot be reused.
 func (h *huffmanEncoder) canReuseBits(freq []uint16) int {
 	var total int
