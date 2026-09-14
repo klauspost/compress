@@ -2513,200 +2513,874 @@ done:
 	RET
 
 // func decompress1x_main_loop_amd64(ctx *decompress1xContext)
+// Requires: CMOV
 TEXT ·decompress1x_main_loop_amd64(SB), $0-8
-	MOVQ    ctx+0(FP), CX
-	MOVQ    16(CX), DX
-	MOVQ    24(CX), BX
-	CMPQ    BX, $0x04
-	JB      error_max_decoded_size_exceeded
-	LEAQ    (DX)(BX*1), BX
-	MOVQ    (CX), SI
-	MOVQ    (SI), R8
-	MOVQ    24(SI), R9
-	MOVQ    32(SI), R10
-	MOVBQZX 40(SI), R11
-	MOVQ    32(CX), SI
-	MOVBQZX 8(CX), DI
-	JMP     loop_condition
-
-main_loop:
-	// Check if we have room for 4 bytes in the output buffer
-	LEAQ 4(DX), CX
-	CMPQ CX, BX
-	JGE  error_max_decoded_size_exceeded
-
-	// Decode 4 values
-	CMPQ R11, $0x20
-	JL   bitReader_fillFast_1_end
-	SUBQ $0x20, R11
-	SUBQ $0x04, R9
-	MOVL (R8)(R9*1), R12
-	MOVQ R11, CX
-	SHLQ CL, R12
-	ORQ  R12, R10
-
-bitReader_fillFast_1_end:
-	MOVQ    DI, CX
-	MOVQ    R10, R12
-	SHRQ    CL, R12
-	MOVWQZX (SI)(R12*2), CX
-	MOVB    CH, AL
-	MOVBQZX CL, CX
-	ADDQ    CX, R11
-	SHLQ    CL, R10
-	MOVQ    DI, CX
-	MOVQ    R10, R12
-	SHRQ    CL, R12
-	MOVWQZX (SI)(R12*2), CX
-	MOVB    CH, AH
-	MOVBQZX CL, CX
-	ADDQ    CX, R11
-	SHLQ    CL, R10
-	BSWAPL  AX
-	CMPQ    R11, $0x20
-	JL      bitReader_fillFast_2_end
-	SUBQ    $0x20, R11
-	SUBQ    $0x04, R9
-	MOVL    (R8)(R9*1), R12
-	MOVQ    R11, CX
-	SHLQ    CL, R12
-	ORQ     R12, R10
-
-bitReader_fillFast_2_end:
-	MOVQ    DI, CX
-	MOVQ    R10, R12
-	SHRQ    CL, R12
-	MOVWQZX (SI)(R12*2), CX
-	MOVB    CH, AH
-	MOVBQZX CL, CX
-	ADDQ    CX, R11
-	SHLQ    CL, R10
-	MOVQ    DI, CX
-	MOVQ    R10, R12
-	SHRQ    CL, R12
-	MOVWQZX (SI)(R12*2), CX
-	MOVB    CH, AL
-	MOVBQZX CL, CX
-	ADDQ    CX, R11
-	SHLQ    CL, R10
-	BSWAPL  AX
-
-	// Store the decoded values
-	MOVL AX, (DX)
-	ADDQ $0x04, DX
-
-loop_condition:
-	CMPQ R9, $0x08
-	JGE  main_loop
-
-	// Update ctx structure
 	MOVQ ctx+0(FP), AX
-	SUBQ 16(AX), DX
-	MOVQ DX, 40(AX)
-	MOVQ (AX), AX
-	MOVQ R9, 24(AX)
-	MOVQ R10, 32(AX)
-	MOVB R11, 40(AX)
+
+	// Preload values
+	MOVBQZX 8(AX), DX
+	MOVQ    32(AX), BX
+	MOVQ    16(AX), SI
+	MOVQ    24(AX), DI
+	ADDQ    SI, DI
+	MOVQ    56(AX), R8
+	MOVQ    48(AX), R9
+	MOVQ    (AX), CX
+	MOVQ    32(CX), R10
+	MOVBQZX 40(CX), R11
+
+outer_loop:
+	// Iterations allowed by the output: (limit - op) / 8
+	MOVQ DI, CX
+	SUBQ SI, CX
+	JLE  done
+	SHRQ $0x03, CX
+
+	// Iterations allowed by the input: a refill reads the 8 bytes below the window and
+	// moves it down by at most 7, so every read stays inside the stream while ip stays
+	// at least 8 above ilowest.
+	MOVQ    R8, R12
+	SUBQ    R9, R12
+	SHRQ    $0x03, R12
+	CMPQ    R12, CX
+	CMOVQCS R12, CX
+	TESTQ   CX, CX
+	JZ      done
+	IMUL3Q  $0x05, CX, R12
+	ADDQ    SI, R12
+
+inner_loop:
+	// symbol 0
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, (SI)
+
+	// symbol 1
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 1(SI)
+
+	// symbol 2
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 2(SI)
+
+	// symbol 3
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 3(SI)
+
+	// symbol 4
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 4(SI)
+
+	// Refill the whole bytes consumed from below the window
+	MOVQ R11, R13
+	ANDQ $0x38, R13
+	MOVQ -8(R8), R14
+	SHRQ $0x01, R14
+	ANDQ $0x07, R11
+	MOVQ R13, CX
+	XORQ $0x3f, CX
+	SHRQ CL, R14
+	MOVQ R11, CX
+	SHLQ CL, R14
+	ORQ  R14, R10
+	SHRQ $0x03, R13
+	SUBQ R13, R8
+	ADDQ $0x05, SI
+	CMPQ SI, R12
+	JB   inner_loop
+	JMP  outer_loop
+
+done:
+	// Hand the state back in the Go bit reader's own form: off = ip - in, value, bitsRead.
+	MOVQ (AX), CX
+	SUBQ (CX), R8
+	MOVQ R8, 24(CX)
+	MOVQ R10, 32(CX)
+	MOVB R11, 40(CX)
+	SUBQ 16(AX), SI
+	MOVQ SI, 40(AX)
 	RET
 
-	// Report error
-error_max_decoded_size_exceeded:
+// func decompress1x_8b_main_loop_amd64(ctx *decompress1xContext)
+// Requires: CMOV
+TEXT ·decompress1x_8b_main_loop_amd64(SB), $0-8
 	MOVQ ctx+0(FP), AX
-	MOVQ $-1, CX
-	MOVQ CX, 40(AX)
+
+	// Preload values
+	MOVBQZX 8(AX), DX
+	MOVQ    32(AX), BX
+	MOVQ    16(AX), SI
+	MOVQ    24(AX), DI
+	ADDQ    SI, DI
+	MOVQ    56(AX), R8
+	MOVQ    48(AX), R9
+	MOVQ    (AX), CX
+	MOVQ    32(CX), R10
+	MOVBQZX 40(CX), R11
+
+outer_loop:
+	// Iterations allowed by the output: (limit - op) / 8
+	MOVQ DI, CX
+	SUBQ SI, CX
+	JLE  done
+	SHRQ $0x03, CX
+
+	// Iterations allowed by the input: a refill reads the 8 bytes below the window and
+	// moves it down by at most 7, so every read stays inside the stream while ip stays
+	// at least 8 above ilowest.
+	MOVQ    R8, R12
+	SUBQ    R9, R12
+	SHRQ    $0x03, R12
+	CMPQ    R12, CX
+	CMOVQCS R12, CX
+	TESTQ   CX, CX
+	JZ      done
+	IMUL3Q  $0x07, CX, R12
+	ADDQ    SI, R12
+
+inner_loop:
+	// symbol 0
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, (SI)
+
+	// symbol 1
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 1(SI)
+
+	// symbol 2
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 2(SI)
+
+	// symbol 3
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 3(SI)
+
+	// symbol 4
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 4(SI)
+
+	// symbol 5
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 5(SI)
+
+	// symbol 6
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 6(SI)
+
+	// Refill the whole bytes consumed from below the window
+	MOVQ R11, R13
+	ANDQ $0x38, R13
+	MOVQ -8(R8), R14
+	SHRQ $0x01, R14
+	ANDQ $0x07, R11
+	MOVQ R13, CX
+	XORQ $0x3f, CX
+	SHRQ CL, R14
+	MOVQ R11, CX
+	SHLQ CL, R14
+	ORQ  R14, R10
+	SHRQ $0x03, R13
+	SUBQ R13, R8
+	ADDQ $0x07, SI
+	CMPQ SI, R12
+	JB   inner_loop
+	JMP  outer_loop
+
+done:
+	// Hand the state back in the Go bit reader's own form: off = ip - in, value, bitsRead.
+	MOVQ (AX), CX
+	SUBQ (CX), R8
+	MOVQ R8, 24(CX)
+	MOVQ R10, 32(CX)
+	MOVB R11, 40(CX)
+	SUBQ 16(AX), SI
+	MOVQ SI, 40(AX)
+	RET
+
+// func decompress1x_4b_main_loop_amd64(ctx *decompress1xContext)
+// Requires: CMOV
+TEXT ·decompress1x_4b_main_loop_amd64(SB), $0-8
+	MOVQ ctx+0(FP), AX
+
+	// Preload values
+	MOVBQZX 8(AX), DX
+	MOVQ    32(AX), BX
+	MOVQ    16(AX), SI
+	MOVQ    24(AX), DI
+	ADDQ    SI, DI
+	MOVQ    56(AX), R8
+	MOVQ    48(AX), R9
+	MOVQ    (AX), CX
+	MOVQ    32(CX), R10
+	MOVBQZX 40(CX), R11
+
+outer_loop:
+	// Iterations allowed by the output: (limit - op) / 16
+	MOVQ DI, CX
+	SUBQ SI, CX
+	JLE  done
+	SHRQ $0x04, CX
+
+	// Iterations allowed by the input: a refill reads the 8 bytes below the window and
+	// moves it down by at most 7, so every read stays inside the stream while ip stays
+	// at least 8 above ilowest.
+	MOVQ    R8, R12
+	SUBQ    R9, R12
+	SHRQ    $0x03, R12
+	CMPQ    R12, CX
+	CMOVQCS R12, CX
+	TESTQ   CX, CX
+	JZ      done
+	IMUL3Q  $0x0e, CX, R12
+	ADDQ    SI, R12
+
+inner_loop:
+	// symbol 0
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, (SI)
+
+	// symbol 1
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 1(SI)
+
+	// symbol 2
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 2(SI)
+
+	// symbol 3
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 3(SI)
+
+	// symbol 4
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 4(SI)
+
+	// symbol 5
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 5(SI)
+
+	// symbol 6
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 6(SI)
+
+	// symbol 7
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 7(SI)
+
+	// symbol 8
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 8(SI)
+
+	// symbol 9
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 9(SI)
+
+	// symbol 10
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 10(SI)
+
+	// symbol 11
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 11(SI)
+
+	// symbol 12
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 12(SI)
+
+	// symbol 13
+	MOVQ    DX, CX
+	MOVQ    R10, R13
+	SHRQ    CL, R13
+	MOVWQZX (BX)(R13*2), CX
+	SHLQ    CL, R10
+	ADDQ    CX, R11
+	SHRQ    $0x08, CX
+	MOVB    CL, 13(SI)
+
+	// Refill the whole bytes consumed from below the window
+	MOVQ R11, R13
+	ANDQ $0x38, R13
+	MOVQ -8(R8), R14
+	SHRQ $0x01, R14
+	ANDQ $0x07, R11
+	MOVQ R13, CX
+	XORQ $0x3f, CX
+	SHRQ CL, R14
+	MOVQ R11, CX
+	SHLQ CL, R14
+	ORQ  R14, R10
+	SHRQ $0x03, R13
+	SUBQ R13, R8
+	ADDQ $0x0e, SI
+	CMPQ SI, R12
+	JB   inner_loop
+	JMP  outer_loop
+
+done:
+	// Hand the state back in the Go bit reader's own form: off = ip - in, value, bitsRead.
+	MOVQ (AX), CX
+	SUBQ (CX), R8
+	MOVQ R8, 24(CX)
+	MOVQ R10, 32(CX)
+	MOVB R11, 40(CX)
+	SUBQ 16(AX), SI
+	MOVQ SI, 40(AX)
 	RET
 
 // func decompress1x_main_loop_bmi2(ctx *decompress1xContext)
-// Requires: BMI2
+// Requires: BMI2, CMOV
 TEXT ·decompress1x_main_loop_bmi2(SB), $0-8
-	MOVQ    ctx+0(FP), CX
-	MOVQ    16(CX), DX
-	MOVQ    24(CX), BX
-	CMPQ    BX, $0x04
-	JB      error_max_decoded_size_exceeded
-	LEAQ    (DX)(BX*1), BX
-	MOVQ    (CX), SI
-	MOVQ    (SI), R8
-	MOVQ    24(SI), R9
-	MOVQ    32(SI), R10
-	MOVBQZX 40(SI), R11
-	MOVQ    32(CX), SI
-	MOVBQZX 8(CX), DI
-	JMP     loop_condition
-
-main_loop:
-	// Check if we have room for 4 bytes in the output buffer
-	LEAQ 4(DX), CX
-	CMPQ CX, BX
-	JGE  error_max_decoded_size_exceeded
-
-	// Decode 4 values
-	CMPQ  R11, $0x20
-	JL    bitReader_fillFast_1_end
-	SUBQ  $0x20, R11
-	SUBQ  $0x04, R9
-	MOVL  (R8)(R9*1), CX
-	SHLXQ R11, CX, CX
-	ORQ   CX, R10
-
-bitReader_fillFast_1_end:
-	SHRXQ   DI, R10, CX
-	MOVWQZX (SI)(CX*2), CX
-	MOVB    CH, AL
-	MOVBQZX CL, CX
-	ADDQ    CX, R11
-	SHLXQ   CX, R10, R10
-	SHRXQ   DI, R10, CX
-	MOVWQZX (SI)(CX*2), CX
-	MOVB    CH, AH
-	MOVBQZX CL, CX
-	ADDQ    CX, R11
-	SHLXQ   CX, R10, R10
-	BSWAPL  AX
-	CMPQ    R11, $0x20
-	JL      bitReader_fillFast_2_end
-	SUBQ    $0x20, R11
-	SUBQ    $0x04, R9
-	MOVL    (R8)(R9*1), CX
-	SHLXQ   R11, CX, CX
-	ORQ     CX, R10
-
-bitReader_fillFast_2_end:
-	SHRXQ   DI, R10, CX
-	MOVWQZX (SI)(CX*2), CX
-	MOVB    CH, AH
-	MOVBQZX CL, CX
-	ADDQ    CX, R11
-	SHLXQ   CX, R10, R10
-	SHRXQ   DI, R10, CX
-	MOVWQZX (SI)(CX*2), CX
-	MOVB    CH, AL
-	MOVBQZX CL, CX
-	ADDQ    CX, R11
-	SHLXQ   CX, R10, R10
-	BSWAPL  AX
-
-	// Store the decoded values
-	MOVL AX, (DX)
-	ADDQ $0x04, DX
-
-loop_condition:
-	CMPQ R9, $0x08
-	JGE  main_loop
-
-	// Update ctx structure
 	MOVQ ctx+0(FP), AX
-	SUBQ 16(AX), DX
-	MOVQ DX, 40(AX)
-	MOVQ (AX), AX
-	MOVQ R9, 24(AX)
-	MOVQ R10, 32(AX)
-	MOVB R11, 40(AX)
+
+	// Preload values
+	MOVBQZX 8(AX), CX
+	MOVQ    32(AX), DX
+	MOVQ    16(AX), BX
+	MOVQ    24(AX), SI
+	ADDQ    BX, SI
+	MOVQ    56(AX), DI
+	MOVQ    48(AX), R8
+	MOVQ    (AX), R10
+	MOVQ    32(R10), R9
+	MOVBQZX 40(R10), R10
+
+outer_loop:
+	// Iterations allowed by the output: (limit - op) / 8
+	MOVQ SI, R11
+	SUBQ BX, R11
+	JLE  done
+	SHRQ $0x03, R11
+
+	// Iterations allowed by the input: a refill reads the 8 bytes below the window and
+	// moves it down by at most 7, so every read stays inside the stream while ip stays
+	// at least 8 above ilowest.
+	MOVQ    DI, R12
+	SUBQ    R8, R12
+	SHRQ    $0x03, R12
+	CMPQ    R12, R11
+	CMOVQCS R12, R11
+	TESTQ   R11, R11
+	JZ      done
+	IMUL3Q  $0x05, R11, R11
+	ADDQ    BX, R11
+
+inner_loop:
+	// symbol 0
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, (BX)
+
+	// symbol 1
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, 1(BX)
+
+	// symbol 2
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, 2(BX)
+
+	// symbol 3
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, 3(BX)
+
+	// symbol 4
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, 4(BX)
+
+	// Refill the whole bytes consumed from below the window
+	MOVQ  R10, R12
+	ANDQ  $0x38, R12
+	MOVQ  -8(DI), R13
+	SHRQ  $0x01, R13
+	ANDQ  $0x07, R10
+	MOVQ  R12, R14
+	XORQ  $0x3f, R14
+	SHRXQ R14, R13, R13
+	SHLXQ R10, R13, R13
+	ORQ   R13, R9
+	SHRQ  $0x03, R12
+	SUBQ  R12, DI
+	ADDQ  $0x05, BX
+	CMPQ  BX, R11
+	JB    inner_loop
+	JMP   outer_loop
+
+done:
+	// Hand the state back in the Go bit reader's own form: off = ip - in, value, bitsRead.
+	MOVQ (AX), CX
+	SUBQ (CX), DI
+	MOVQ DI, 24(CX)
+	MOVQ R9, 32(CX)
+	MOVB R10, 40(CX)
+	SUBQ 16(AX), BX
+	MOVQ BX, 40(AX)
 	RET
 
-	// Report error
-error_max_decoded_size_exceeded:
+// func decompress1x_8b_main_loop_bmi2(ctx *decompress1xContext)
+// Requires: BMI2, CMOV
+TEXT ·decompress1x_8b_main_loop_bmi2(SB), $0-8
 	MOVQ ctx+0(FP), AX
-	MOVQ $-1, CX
-	MOVQ CX, 40(AX)
+
+	// Preload values
+	MOVBQZX 8(AX), CX
+	MOVQ    32(AX), DX
+	MOVQ    16(AX), BX
+	MOVQ    24(AX), SI
+	ADDQ    BX, SI
+	MOVQ    56(AX), DI
+	MOVQ    48(AX), R8
+	MOVQ    (AX), R10
+	MOVQ    32(R10), R9
+	MOVBQZX 40(R10), R10
+
+outer_loop:
+	// Iterations allowed by the output: (limit - op) / 8
+	MOVQ SI, R11
+	SUBQ BX, R11
+	JLE  done
+	SHRQ $0x03, R11
+
+	// Iterations allowed by the input: a refill reads the 8 bytes below the window and
+	// moves it down by at most 7, so every read stays inside the stream while ip stays
+	// at least 8 above ilowest.
+	MOVQ    DI, R12
+	SUBQ    R8, R12
+	SHRQ    $0x03, R12
+	CMPQ    R12, R11
+	CMOVQCS R12, R11
+	TESTQ   R11, R11
+	JZ      done
+	IMUL3Q  $0x07, R11, R11
+	ADDQ    BX, R11
+
+inner_loop:
+	// symbol 0
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, (BX)
+
+	// symbol 1
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, 1(BX)
+
+	// symbol 2
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, 2(BX)
+
+	// symbol 3
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, 3(BX)
+
+	// symbol 4
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, 4(BX)
+
+	// symbol 5
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, 5(BX)
+
+	// symbol 6
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, 6(BX)
+
+	// Refill the whole bytes consumed from below the window
+	MOVQ  R10, R12
+	ANDQ  $0x38, R12
+	MOVQ  -8(DI), R13
+	SHRQ  $0x01, R13
+	ANDQ  $0x07, R10
+	MOVQ  R12, R14
+	XORQ  $0x3f, R14
+	SHRXQ R14, R13, R13
+	SHLXQ R10, R13, R13
+	ORQ   R13, R9
+	SHRQ  $0x03, R12
+	SUBQ  R12, DI
+	ADDQ  $0x07, BX
+	CMPQ  BX, R11
+	JB    inner_loop
+	JMP   outer_loop
+
+done:
+	// Hand the state back in the Go bit reader's own form: off = ip - in, value, bitsRead.
+	MOVQ (AX), CX
+	SUBQ (CX), DI
+	MOVQ DI, 24(CX)
+	MOVQ R9, 32(CX)
+	MOVB R10, 40(CX)
+	SUBQ 16(AX), BX
+	MOVQ BX, 40(AX)
+	RET
+
+// func decompress1x_4b_main_loop_bmi2(ctx *decompress1xContext)
+// Requires: BMI2, CMOV
+TEXT ·decompress1x_4b_main_loop_bmi2(SB), $0-8
+	MOVQ ctx+0(FP), AX
+
+	// Preload values
+	MOVBQZX 8(AX), CX
+	MOVQ    32(AX), DX
+	MOVQ    16(AX), BX
+	MOVQ    24(AX), SI
+	ADDQ    BX, SI
+	MOVQ    56(AX), DI
+	MOVQ    48(AX), R8
+	MOVQ    (AX), R10
+	MOVQ    32(R10), R9
+	MOVBQZX 40(R10), R10
+
+outer_loop:
+	// Iterations allowed by the output: (limit - op) / 16
+	MOVQ SI, R11
+	SUBQ BX, R11
+	JLE  done
+	SHRQ $0x04, R11
+
+	// Iterations allowed by the input: a refill reads the 8 bytes below the window and
+	// moves it down by at most 7, so every read stays inside the stream while ip stays
+	// at least 8 above ilowest.
+	MOVQ    DI, R12
+	SUBQ    R8, R12
+	SHRQ    $0x03, R12
+	CMPQ    R12, R11
+	CMOVQCS R12, R11
+	TESTQ   R11, R11
+	JZ      done
+	IMUL3Q  $0x0e, R11, R11
+	ADDQ    BX, R11
+
+inner_loop:
+	// symbol 0
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, (BX)
+
+	// symbol 1
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, 1(BX)
+
+	// symbol 2
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, 2(BX)
+
+	// symbol 3
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, 3(BX)
+
+	// symbol 4
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, 4(BX)
+
+	// symbol 5
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, 5(BX)
+
+	// symbol 6
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, 6(BX)
+
+	// symbol 7
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, 7(BX)
+
+	// symbol 8
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, 8(BX)
+
+	// symbol 9
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, 9(BX)
+
+	// symbol 10
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, 10(BX)
+
+	// symbol 11
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, 11(BX)
+
+	// symbol 12
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, 12(BX)
+
+	// symbol 13
+	SHRXQ   CX, R9, R12
+	MOVWQZX (DX)(R12*2), R12
+	SHLXQ   R12, R9, R9
+	ADDQ    R12, R10
+	SHRQ    $0x08, R12
+	MOVB    R12, 13(BX)
+
+	// Refill the whole bytes consumed from below the window
+	MOVQ  R10, R12
+	ANDQ  $0x38, R12
+	MOVQ  -8(DI), R13
+	SHRQ  $0x01, R13
+	ANDQ  $0x07, R10
+	MOVQ  R12, R14
+	XORQ  $0x3f, R14
+	SHRXQ R14, R13, R13
+	SHLXQ R10, R13, R13
+	ORQ   R13, R9
+	SHRQ  $0x03, R12
+	SUBQ  R12, DI
+	ADDQ  $0x0e, BX
+	CMPQ  BX, R11
+	JB    inner_loop
+	JMP   outer_loop
+
+done:
+	// Hand the state back in the Go bit reader's own form: off = ip - in, value, bitsRead.
+	MOVQ (AX), CX
+	SUBQ (CX), DI
+	MOVQ DI, 24(CX)
+	MOVQ R9, 32(CX)
+	MOVB R10, 40(CX)
+	SUBQ 16(AX), BX
+	MOVQ BX, 40(AX)
 	RET

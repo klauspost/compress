@@ -1230,104 +1230,428 @@ done:
 // skipped decompress4x_4b_main_loop_bmi2 (generic twin preferred on arm64)
 
 // func decompress1x_main_loop_amd64(ctx *decompress1xContext)
+// Requires: CMOV
 TEXT ·decompress1x_main_loop_arm64(SB), $0-8
-	MOVD  ctx+0(FP), R1
-	MOVD  16(R1), R2
-	MOVD  24(R1), R3
-	CMP   $0x04, R3
-	BLO   error_max_decoded_size_exceeded
-	ADD   R3, R2, R3
-	MOVD  (R1), R5
-	MOVD  (R5), R7
-	MOVD  24(R5), R8
-	MOVD  32(R5), R9
-	MOVBU 40(R5), R10
-	MOVD  32(R1), R5
-	MOVBU 8(R1), R6
-	JMP   loop_condition
-
-main_loop:
-	// Check if we have room for 4 bytes in the output buffer
-	ADD $4, R2, R1
-	CMP R3, R1
-	BGE error_max_decoded_size_exceeded
-
-	// Decode 4 values
-	CMP   $0x20, R10
-	BLT   bitReader_fillFast_1_end
-	SUB   $0x20, R10, R10
-	SUB   $0x04, R8, R8
-	MOVWU (R7)(R8), R11
-	MOVD  R10, R1
-	LSL   R1, R11, R11
-	ORR   R11, R9, R9
-
-bitReader_fillFast_1_end:
-	LSR   R6, R9, R11
-	MOVHU (R5)(R11<<1), R1
-	UBFX  $8, R1, $8, R16
-	BFI   $0, R16, $8, R0
-	MOVBU R1, R1
-	ADD   R1, R10, R10
-	LSL   R1, R9, R9
-	LSR   R6, R9, R11
-	MOVHU (R5)(R11<<1), R1
-	UBFX  $8, R1, $8, R16
-	BFI   $8, R16, $8, R0
-	MOVBU R1, R1
-	ADD   R1, R10, R10
-	LSL   R1, R9, R9
-	REVW  R0, R0
-	CMP   $0x20, R10
-	BLT   bitReader_fillFast_2_end
-	SUB   $0x20, R10, R10
-	SUB   $0x04, R8, R8
-	MOVWU (R7)(R8), R11
-	MOVD  R10, R1
-	LSL   R1, R11, R11
-	ORR   R11, R9, R9
-
-bitReader_fillFast_2_end:
-	LSR   R6, R9, R11
-	MOVHU (R5)(R11<<1), R1
-	UBFX  $8, R1, $8, R16
-	BFI   $8, R16, $8, R0
-	MOVBU R1, R1
-	ADD   R1, R10, R10
-	LSL   R1, R9, R9
-	LSR   R6, R9, R11
-	MOVHU (R5)(R11<<1), R1
-	UBFX  $8, R1, $8, R16
-	BFI   $0, R16, $8, R0
-	MOVBU R1, R1
-	ADD   R1, R10, R10
-	LSL   R1, R9, R9
-	REVW  R0, R0
-
-	// Store the decoded values
-	MOVW R0, (R2)
-	ADD  $0x04, R2, R2
-
-loop_condition:
-	CMP $0x08, R8
-	BGE main_loop
-
-	// Update ctx structure
 	MOVD ctx+0(FP), R0
+
+	// Preload values
+	MOVBU 8(R0), R2
+	MOVD  32(R0), R3
+	MOVD  16(R0), R5
+	MOVD  24(R0), R6
+	ADD   R5, R6, R6
+	MOVD  56(R0), R7
+	MOVD  48(R0), R8
+	MOVD  (R0), R1
+	MOVD  32(R1), R9
+	MOVBU 40(R1), R10
+
+outer_loop:
+	// Iterations allowed by the output: (limit - op) / 8
+	MOVD R6, R1
+	SUBS R5, R1, R1
+	BLE  done
+	LSR  $0x03, R1, R1
+
+	// Iterations allowed by the input: a refill reads the 8 bytes below the window and
+	// moves it down by at most 7, so every read stays inside the stream while ip stays
+	// at least 8 above ilowest.
+	MOVD R7, R11
+	SUB  R8, R11, R11
+	LSR  $0x03, R11, R11
+	CMP  R1, R11
+	CSEL LO, R11, R1, R1
+	TST  R1, R1
+	BEQ  done
+	MOVD $5, R16
+	MUL  R16, R1, R11
+	ADD  R5, R11, R11
+
+inner_loop:
+	// symbol 0
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, (R5)
+
+	// symbol 1
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 1(R5)
+
+	// symbol 2
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 2(R5)
+
+	// symbol 3
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 3(R5)
+
+	// symbol 4
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 4(R5)
+
+	// Refill the whole bytes consumed from below the window
+	MOVD R10, R12
+	AND  $0x38, R12, R12
+	MOVD -8(R7), R13
+	LSR  $0x01, R13, R13
+	AND  $0x07, R10, R10
+	MOVD R12, R1
+	EOR  $0x3f, R1, R1
+	LSR  R1, R13, R13
+	MOVD R10, R1
+	LSL  R1, R13, R13
+	ORR  R13, R9, R9
+	LSR  $0x03, R12, R12
+	SUB  R12, R7, R7
+	ADD  $0x05, R5, R5
+	CMP  R11, R5
+	BLO  inner_loop
+	JMP  outer_loop
+
+done:
+	// Hand the state back in the Go bit reader's own form: off = ip - in, value, bitsRead.
+	MOVD (R0), R1
+	MOVD (R1), R16
+	SUB  R16, R7, R7
+	MOVD R7, 24(R1)
+	MOVD R9, 32(R1)
+	MOVB R10, 40(R1)
 	MOVD 16(R0), R16
-	SUB  R16, R2, R2
-	MOVD R2, 40(R0)
-	MOVD (R0), R0
-	MOVD R8, 24(R0)
-	MOVD R9, 32(R0)
-	MOVB R10, 40(R0)
+	SUB  R16, R5, R5
+	MOVD R5, 40(R0)
 	RET
 
-	// Report error
-error_max_decoded_size_exceeded:
+// func decompress1x_8b_main_loop_amd64(ctx *decompress1xContext)
+// Requires: CMOV
+TEXT ·decompress1x_8b_main_loop_arm64(SB), $0-8
 	MOVD ctx+0(FP), R0
-	MOVD $-1, R1
-	MOVD R1, 40(R0)
+
+	// Preload values
+	MOVBU 8(R0), R2
+	MOVD  32(R0), R3
+	MOVD  16(R0), R5
+	MOVD  24(R0), R6
+	ADD   R5, R6, R6
+	MOVD  56(R0), R7
+	MOVD  48(R0), R8
+	MOVD  (R0), R1
+	MOVD  32(R1), R9
+	MOVBU 40(R1), R10
+
+outer_loop:
+	// Iterations allowed by the output: (limit - op) / 8
+	MOVD R6, R1
+	SUBS R5, R1, R1
+	BLE  done
+	LSR  $0x03, R1, R1
+
+	// Iterations allowed by the input: a refill reads the 8 bytes below the window and
+	// moves it down by at most 7, so every read stays inside the stream while ip stays
+	// at least 8 above ilowest.
+	MOVD R7, R11
+	SUB  R8, R11, R11
+	LSR  $0x03, R11, R11
+	CMP  R1, R11
+	CSEL LO, R11, R1, R1
+	TST  R1, R1
+	BEQ  done
+	MOVD $7, R16
+	MUL  R16, R1, R11
+	ADD  R5, R11, R11
+
+inner_loop:
+	// symbol 0
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, (R5)
+
+	// symbol 1
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 1(R5)
+
+	// symbol 2
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 2(R5)
+
+	// symbol 3
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 3(R5)
+
+	// symbol 4
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 4(R5)
+
+	// symbol 5
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 5(R5)
+
+	// symbol 6
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 6(R5)
+
+	// Refill the whole bytes consumed from below the window
+	MOVD R10, R12
+	AND  $0x38, R12, R12
+	MOVD -8(R7), R13
+	LSR  $0x01, R13, R13
+	AND  $0x07, R10, R10
+	MOVD R12, R1
+	EOR  $0x3f, R1, R1
+	LSR  R1, R13, R13
+	MOVD R10, R1
+	LSL  R1, R13, R13
+	ORR  R13, R9, R9
+	LSR  $0x03, R12, R12
+	SUB  R12, R7, R7
+	ADD  $0x07, R5, R5
+	CMP  R11, R5
+	BLO  inner_loop
+	JMP  outer_loop
+
+done:
+	// Hand the state back in the Go bit reader's own form: off = ip - in, value, bitsRead.
+	MOVD (R0), R1
+	MOVD (R1), R16
+	SUB  R16, R7, R7
+	MOVD R7, 24(R1)
+	MOVD R9, 32(R1)
+	MOVB R10, 40(R1)
+	MOVD 16(R0), R16
+	SUB  R16, R5, R5
+	MOVD R5, 40(R0)
+	RET
+
+// func decompress1x_4b_main_loop_amd64(ctx *decompress1xContext)
+// Requires: CMOV
+TEXT ·decompress1x_4b_main_loop_arm64(SB), $0-8
+	MOVD ctx+0(FP), R0
+
+	// Preload values
+	MOVBU 8(R0), R2
+	MOVD  32(R0), R3
+	MOVD  16(R0), R5
+	MOVD  24(R0), R6
+	ADD   R5, R6, R6
+	MOVD  56(R0), R7
+	MOVD  48(R0), R8
+	MOVD  (R0), R1
+	MOVD  32(R1), R9
+	MOVBU 40(R1), R10
+
+outer_loop:
+	// Iterations allowed by the output: (limit - op) / 16
+	MOVD R6, R1
+	SUBS R5, R1, R1
+	BLE  done
+	LSR  $0x04, R1, R1
+
+	// Iterations allowed by the input: a refill reads the 8 bytes below the window and
+	// moves it down by at most 7, so every read stays inside the stream while ip stays
+	// at least 8 above ilowest.
+	MOVD R7, R11
+	SUB  R8, R11, R11
+	LSR  $0x03, R11, R11
+	CMP  R1, R11
+	CSEL LO, R11, R1, R1
+	TST  R1, R1
+	BEQ  done
+	MOVD $14, R16
+	MUL  R16, R1, R11
+	ADD  R5, R11, R11
+
+inner_loop:
+	// symbol 0
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, (R5)
+
+	// symbol 1
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 1(R5)
+
+	// symbol 2
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 2(R5)
+
+	// symbol 3
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 3(R5)
+
+	// symbol 4
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 4(R5)
+
+	// symbol 5
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 5(R5)
+
+	// symbol 6
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 6(R5)
+
+	// symbol 7
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 7(R5)
+
+	// symbol 8
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 8(R5)
+
+	// symbol 9
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 9(R5)
+
+	// symbol 10
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 10(R5)
+
+	// symbol 11
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 11(R5)
+
+	// symbol 12
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 12(R5)
+
+	// symbol 13
+	LSR   R2, R9, R12
+	MOVHU (R3)(R12<<1), R1
+	LSL   R1, R9, R9
+	ADD   R1, R10, R10
+	LSR   $0x08, R1, R1
+	MOVB  R1, 13(R5)
+
+	// Refill the whole bytes consumed from below the window
+	MOVD R10, R12
+	AND  $0x38, R12, R12
+	MOVD -8(R7), R13
+	LSR  $0x01, R13, R13
+	AND  $0x07, R10, R10
+	MOVD R12, R1
+	EOR  $0x3f, R1, R1
+	LSR  R1, R13, R13
+	MOVD R10, R1
+	LSL  R1, R13, R13
+	ORR  R13, R9, R9
+	LSR  $0x03, R12, R12
+	SUB  R12, R7, R7
+	ADD  $0x0e, R5, R5
+	CMP  R11, R5
+	BLO  inner_loop
+	JMP  outer_loop
+
+done:
+	// Hand the state back in the Go bit reader's own form: off = ip - in, value, bitsRead.
+	MOVD (R0), R1
+	MOVD (R1), R16
+	SUB  R16, R7, R7
+	MOVD R7, 24(R1)
+	MOVD R9, 32(R1)
+	MOVB R10, 40(R1)
+	MOVD 16(R0), R16
+	SUB  R16, R5, R5
+	MOVD R5, 40(R0)
 	RET
 
 // skipped decompress1x_main_loop_bmi2 (generic twin preferred on arm64)
+
+// skipped decompress1x_8b_main_loop_bmi2 (generic twin preferred on arm64)
+
+// skipped decompress1x_4b_main_loop_bmi2 (generic twin preferred on arm64)
