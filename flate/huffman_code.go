@@ -38,6 +38,9 @@ type huffmanEncoder struct {
 	// Possible lengths are codegenCodeCount, offsetCodeCount and literalCount.
 	// The largest of these is literalCount, so we allocate for that case.
 	freqcache [literalCount + 1]literalNode
+
+	// sortcache is scratch space for sortByFreq.
+	sortcache [literalCount + 1]literalNode
 }
 
 type literalNode struct {
@@ -309,26 +312,92 @@ func (h *huffmanEncoder) bitCounts(list []literalNode, maxBits int32) []int32 {
 }
 
 // Look at the leaves and assign them a bit count and an encoding as specified
-// in RFC 1951 3.2.2
-func (h *huffmanEncoder) assignEncodingAndSize(bitCount []int32, list []literalNode) {
-	code := uint16(0)
+// in RFC 1951 3.2.2.
+// list must be sorted by increasing frequency and codes must have
+// all entries for literals not in list set to zero.
+func (h *huffmanEncoder) assignEncodingAndSize(bitCount []int32, list []literalNode, codes []hcode) {
+	// The literals list[len(list)-bits] .. list[len(list)-1]
+	// are encoded using "bits" bits. Record the length of each literal
+	// temporarily in codes.
 	for n, bits := range bitCount {
-		code <<= 1
 		if n == 0 || bits == 0 {
 			continue
 		}
-		// The literals list[len(list)-bits] .. list[len(list)-bits]
-		// are encoded using "bits" bits, and get the values
-		// code, code + 1, ....  The code values are
-		// assigned in literal order (not frequency order).
-		chunk := list[len(list)-int(bits):]
-
-		sortByLiteral(chunk)
-		for _, node := range chunk {
-			h.codes[node.literal] = newhcode(reverseBits(code, uint8(n)), uint8(n))
-			code++
+		for _, node := range list[len(list)-int(bits):] {
+			codes[node.literal] = hcode(n)
 		}
 		list = list[0 : len(list)-int(bits)]
+	}
+
+	// Code values are assigned in literal order (not frequency order)
+	// within each code length, starting from the first code of each length.
+	var nextCode [maxBitsLimit]uint16
+	code := uint16(0)
+	for n := 1; n < len(bitCount); n++ {
+		code = (code + uint16(bitCount[n-1])) << 1
+		nextCode[n] = code
+	}
+	for i, c := range codes {
+		if c == 0 {
+			continue
+		}
+		// n is at most maxBitsLimit-1; the mask only elides bounds checks.
+		n := uint8(c)
+		codes[i] = newhcode(reverseBits(nextCode[n&15], n), n)
+		nextCode[n&15]++
+	}
+}
+
+// sortByFreq sorts list by increasing frequency.
+// The sort is stable, so nodes with equal frequencies keep their order.
+func (h *huffmanEncoder) sortByFreq(list []literalNode) {
+	if len(list) <= 32 {
+		// Insertion sort is faster for small lists.
+		for i := 1; i < len(list); i++ {
+			n := list[i]
+			j := i
+			for ; j > 0 && list[j-1].freq > n.freq; j-- {
+				list[j] = list[j-1]
+			}
+			list[j] = n
+		}
+		return
+	}
+
+	// Counting sort on the low byte and then on the high byte
+	// of the frequency. Both passes are stable.
+	tmp := h.sortcache[:len(list)]
+	var count [256]uint16
+	var maxFreq uint16
+	for _, n := range list {
+		count[n.freq&0xff]++
+		maxFreq |= n.freq
+	}
+	var pos uint16
+	for i, c := range count {
+		count[i] = pos
+		pos += c
+	}
+	for _, n := range list {
+		tmp[count[n.freq&0xff]] = n
+		count[n.freq&0xff]++
+	}
+	if maxFreq < 256 {
+		copy(list, tmp)
+		return
+	}
+	count = [256]uint16{}
+	for _, n := range tmp {
+		count[n.freq>>8]++
+	}
+	pos = 0
+	for i, c := range count {
+		count[i] = pos
+		pos += c
+	}
+	for _, n := range tmp {
+		list[count[n.freq>>8]] = n
+		count[n.freq>>8]++
 	}
 }
 
@@ -362,12 +431,14 @@ func (h *huffmanEncoder) generate(freq []uint16, maxBits int32) {
 		}
 		return
 	}
-	sortByFreq(list)
+	// list is in order of increasing literal value, so a stable sort
+	// by frequency orders it by (frequency, literal).
+	h.sortByFreq(list)
 
 	// Get the number of literals for each bit count
 	bitCount := h.bitCounts(list, maxBits)
 	// And do the assignment
-	h.assignEncodingAndSize(bitCount, list)
+	h.assignEncodingAndSize(bitCount, list, codes)
 }
 
 // atLeastOne clamps the result between 1 and 15.
