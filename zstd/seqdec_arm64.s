@@ -620,13 +620,25 @@ error_overread:
 // skipped sequenceDecs_decode_56_bmi2 (generic twin preferred on arm64)
 
 // func sequenceDecs_executeSimple_amd64(ctx *executeAsmContext) bool
-// Requires: SSE
-TEXT ·sequenceDecs_executeSimple_arm64(SB), $8-9
+// Requires: MMX+, SSE
+TEXT ·sequenceDecs_executeSimple_arm64(SB), $32-9
 	MOVD ctx+0(FP), R9
 	MOVD 8(R9), R1
 	TST  R1, R1
 	BEQ  empty_seqs
 	MOVD (R9), R0
+
+	// seqsEnd = seqsBase + 24 * len(seqs) if ctx.prefetch, else seqsBase (prefetch off)
+	MOVD  R0, R2
+	MOVBU 128(R9), R10
+	TST   R10, R10
+	BEQ   prefetch_off
+	ADD   R1<<1, R1, R2
+	LSL   $0x03, R2, R2
+	ADD   R0, R2, R2
+
+prefetch_off:
+	MOVD R2, 8(RSP)
 	MOVD 24(R9), R2
 	MOVD 32(R9), R3
 	MOVD 80(R9), R5
@@ -642,9 +654,233 @@ TEXT ·sequenceDecs_executeSimple_arm64(SB), $8-9
 	ADD R10, R0, R0
 
 	// outBase += outPosition
-	ADD R6, R3, R3
+	ADD  R6, R3, R3
+	MOVD R3, 16(RSP)
+	MOVD R3, R10
+	SUB  R6, R10, R10
+	MOVD R10, 24(RSP)
+	NEG  R10, R10
+	ADD  R8, R10, R10
+	MOVD R10, 32(RSP)
 
+	// Prime the prefetch window
+	MOVD 8(RSP), R10
+	MOVD R0, R11
+	CMP  R10, R11
+	BHS  prefetch_skip_0
+	MOVD 16(RSP), R11
+	MOVD (R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, R12
+	MOVD 16(R0), R10
+	SUB  R10, R12, R12
+	MOVD 24(RSP), R10
+	CMP  R10, R12
+	BHS  prefetch_in_out_0
+	MOVD 32(RSP), R10
+	ADD  R10, R12, R12
+
+prefetch_in_out_0:
+	PRFM (R12), PLDL1KEEP
+	PRFM 64(R12), PLDL1KEEP
+	MOVD 8(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, 16(RSP)
+
+prefetch_skip_0:
+	MOVD 8(RSP), R10
+	ADD  $24, R0, R11
+	CMP  R10, R11
+	BHS  prefetch_skip_1
+	MOVD 16(RSP), R11
+	MOVD 24(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, R12
+	MOVD 40(R0), R10
+	SUB  R10, R12, R12
+	MOVD 24(RSP), R10
+	CMP  R10, R12
+	BHS  prefetch_in_out_1
+	MOVD 32(RSP), R10
+	ADD  R10, R12, R12
+
+prefetch_in_out_1:
+	PRFM (R12), PLDL1KEEP
+	PRFM 64(R12), PLDL1KEEP
+	MOVD 32(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, 16(RSP)
+
+prefetch_skip_1:
+	MOVD 8(RSP), R10
+	ADD  $48, R0, R11
+	CMP  R10, R11
+	BHS  prefetch_skip_2
+	MOVD 16(RSP), R11
+	MOVD 48(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, R12
+	MOVD 64(R0), R10
+	SUB  R10, R12, R12
+	MOVD 24(RSP), R10
+	CMP  R10, R12
+	BHS  prefetch_in_out_2
+	MOVD 32(RSP), R10
+	ADD  R10, R12, R12
+
+prefetch_in_out_2:
+	PRFM (R12), PLDL1KEEP
+	PRFM 64(R12), PLDL1KEEP
+	MOVD 56(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, 16(RSP)
+
+prefetch_skip_2:
+	MOVD 8(RSP), R10
+	ADD  $72, R0, R11
+	CMP  R10, R11
+	BHS  prefetch_skip_3
+	MOVD 16(RSP), R11
+	MOVD 72(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, R12
+	MOVD 88(R0), R10
+	SUB  R10, R12, R12
+	MOVD 24(RSP), R10
+	CMP  R10, R12
+	BHS  prefetch_in_out_3
+	MOVD 32(RSP), R10
+	ADD  R10, R12, R12
+
+prefetch_in_out_3:
+	PRFM (R12), PLDL1KEEP
+	PRFM 64(R12), PLDL1KEEP
+	MOVD 80(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, 16(RSP)
+
+prefetch_skip_3:
+	MOVD 8(RSP), R10
+	ADD  $96, R0, R11
+	CMP  R10, R11
+	BHS  prefetch_skip_4
+	MOVD 16(RSP), R11
+	MOVD 96(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, R12
+	MOVD 112(R0), R10
+	SUB  R10, R12, R12
+	MOVD 24(RSP), R10
+	CMP  R10, R12
+	BHS  prefetch_in_out_4
+	MOVD 32(RSP), R10
+	ADD  R10, R12, R12
+
+prefetch_in_out_4:
+	PRFM (R12), PLDL1KEEP
+	PRFM 64(R12), PLDL1KEEP
+	MOVD 104(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, 16(RSP)
+
+prefetch_skip_4:
+	MOVD 8(RSP), R10
+	ADD  $120, R0, R11
+	CMP  R10, R11
+	BHS  prefetch_skip_5
+	MOVD 16(RSP), R11
+	MOVD 120(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, R12
+	MOVD 136(R0), R10
+	SUB  R10, R12, R12
+	MOVD 24(RSP), R10
+	CMP  R10, R12
+	BHS  prefetch_in_out_5
+	MOVD 32(RSP), R10
+	ADD  R10, R12, R12
+
+prefetch_in_out_5:
+	PRFM (R12), PLDL1KEEP
+	PRFM 64(R12), PLDL1KEEP
+	MOVD 128(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, 16(RSP)
+
+prefetch_skip_5:
+	MOVD 8(RSP), R10
+	ADD  $144, R0, R11
+	CMP  R10, R11
+	BHS  prefetch_skip_6
+	MOVD 16(RSP), R11
+	MOVD 144(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, R12
+	MOVD 160(R0), R10
+	SUB  R10, R12, R12
+	MOVD 24(RSP), R10
+	CMP  R10, R12
+	BHS  prefetch_in_out_6
+	MOVD 32(RSP), R10
+	ADD  R10, R12, R12
+
+prefetch_in_out_6:
+	PRFM (R12), PLDL1KEEP
+	PRFM 64(R12), PLDL1KEEP
+	MOVD 152(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, 16(RSP)
+
+prefetch_skip_6:
+	MOVD 8(RSP), R10
+	ADD  $168, R0, R11
+	CMP  R10, R11
+	BHS  prefetch_skip_7
+	MOVD 16(RSP), R11
+	MOVD 168(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, R12
+	MOVD 184(R0), R10
+	SUB  R10, R12, R12
+	MOVD 24(RSP), R10
+	CMP  R10, R12
+	BHS  prefetch_in_out_7
+	MOVD 32(RSP), R10
+	ADD  R10, R12, R12
+
+prefetch_in_out_7:
+	PRFM (R12), PLDL1KEEP
+	PRFM 64(R12), PLDL1KEEP
+	MOVD 176(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, 16(RSP)
+
+prefetch_skip_7:
 main_loop:
+	MOVD 8(RSP), R10
+	ADD  $192, R0, R11
+	CMP  R10, R11
+	BHS  prefetch_skip_8
+	MOVD 16(RSP), R11
+	MOVD 192(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, R12
+	MOVD 208(R0), R10
+	SUB  R10, R12, R12
+	MOVD 24(RSP), R10
+	CMP  R10, R12
+	BHS  prefetch_in_out_8
+	MOVD 32(RSP), R10
+	ADD  R10, R12, R12
+
+prefetch_in_out_8:
+	PRFM (R12), PLDL1KEEP
+	PRFM 64(R12), PLDL1KEEP
+	MOVD 200(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, 16(RSP)
+
+prefetch_skip_8:
 	MOVD (R0), R10
 	MOVD 16(R0), R11
 	MOVD 8(R0), R12
@@ -912,13 +1148,25 @@ empty_seqs:
 	RET
 
 // func sequenceDecs_executeSimple_safe_amd64(ctx *executeAsmContext) bool
-// Requires: SSE
-TEXT ·sequenceDecs_executeSimple_safe_arm64(SB), $8-9
+// Requires: MMX+, SSE
+TEXT ·sequenceDecs_executeSimple_safe_arm64(SB), $32-9
 	MOVD ctx+0(FP), R9
 	MOVD 8(R9), R1
 	TST  R1, R1
 	BEQ  empty_seqs
 	MOVD (R9), R0
+
+	// seqsEnd = seqsBase + 24 * len(seqs) if ctx.prefetch, else seqsBase (prefetch off)
+	MOVD  R0, R2
+	MOVBU 128(R9), R10
+	TST   R10, R10
+	BEQ   prefetch_off
+	ADD   R1<<1, R1, R2
+	LSL   $0x03, R2, R2
+	ADD   R0, R2, R2
+
+prefetch_off:
+	MOVD R2, 8(RSP)
 	MOVD 24(R9), R2
 	MOVD 32(R9), R3
 	MOVD 80(R9), R5
@@ -934,9 +1182,233 @@ TEXT ·sequenceDecs_executeSimple_safe_arm64(SB), $8-9
 	ADD R10, R0, R0
 
 	// outBase += outPosition
-	ADD R6, R3, R3
+	ADD  R6, R3, R3
+	MOVD R3, 16(RSP)
+	MOVD R3, R10
+	SUB  R6, R10, R10
+	MOVD R10, 24(RSP)
+	NEG  R10, R10
+	ADD  R8, R10, R10
+	MOVD R10, 32(RSP)
 
+	// Prime the prefetch window
+	MOVD 8(RSP), R10
+	MOVD R0, R11
+	CMP  R10, R11
+	BHS  prefetch_skip_0
+	MOVD 16(RSP), R11
+	MOVD (R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, R12
+	MOVD 16(R0), R10
+	SUB  R10, R12, R12
+	MOVD 24(RSP), R10
+	CMP  R10, R12
+	BHS  prefetch_in_out_0
+	MOVD 32(RSP), R10
+	ADD  R10, R12, R12
+
+prefetch_in_out_0:
+	PRFM (R12), PLDL1KEEP
+	PRFM 64(R12), PLDL1KEEP
+	MOVD 8(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, 16(RSP)
+
+prefetch_skip_0:
+	MOVD 8(RSP), R10
+	ADD  $24, R0, R11
+	CMP  R10, R11
+	BHS  prefetch_skip_1
+	MOVD 16(RSP), R11
+	MOVD 24(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, R12
+	MOVD 40(R0), R10
+	SUB  R10, R12, R12
+	MOVD 24(RSP), R10
+	CMP  R10, R12
+	BHS  prefetch_in_out_1
+	MOVD 32(RSP), R10
+	ADD  R10, R12, R12
+
+prefetch_in_out_1:
+	PRFM (R12), PLDL1KEEP
+	PRFM 64(R12), PLDL1KEEP
+	MOVD 32(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, 16(RSP)
+
+prefetch_skip_1:
+	MOVD 8(RSP), R10
+	ADD  $48, R0, R11
+	CMP  R10, R11
+	BHS  prefetch_skip_2
+	MOVD 16(RSP), R11
+	MOVD 48(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, R12
+	MOVD 64(R0), R10
+	SUB  R10, R12, R12
+	MOVD 24(RSP), R10
+	CMP  R10, R12
+	BHS  prefetch_in_out_2
+	MOVD 32(RSP), R10
+	ADD  R10, R12, R12
+
+prefetch_in_out_2:
+	PRFM (R12), PLDL1KEEP
+	PRFM 64(R12), PLDL1KEEP
+	MOVD 56(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, 16(RSP)
+
+prefetch_skip_2:
+	MOVD 8(RSP), R10
+	ADD  $72, R0, R11
+	CMP  R10, R11
+	BHS  prefetch_skip_3
+	MOVD 16(RSP), R11
+	MOVD 72(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, R12
+	MOVD 88(R0), R10
+	SUB  R10, R12, R12
+	MOVD 24(RSP), R10
+	CMP  R10, R12
+	BHS  prefetch_in_out_3
+	MOVD 32(RSP), R10
+	ADD  R10, R12, R12
+
+prefetch_in_out_3:
+	PRFM (R12), PLDL1KEEP
+	PRFM 64(R12), PLDL1KEEP
+	MOVD 80(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, 16(RSP)
+
+prefetch_skip_3:
+	MOVD 8(RSP), R10
+	ADD  $96, R0, R11
+	CMP  R10, R11
+	BHS  prefetch_skip_4
+	MOVD 16(RSP), R11
+	MOVD 96(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, R12
+	MOVD 112(R0), R10
+	SUB  R10, R12, R12
+	MOVD 24(RSP), R10
+	CMP  R10, R12
+	BHS  prefetch_in_out_4
+	MOVD 32(RSP), R10
+	ADD  R10, R12, R12
+
+prefetch_in_out_4:
+	PRFM (R12), PLDL1KEEP
+	PRFM 64(R12), PLDL1KEEP
+	MOVD 104(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, 16(RSP)
+
+prefetch_skip_4:
+	MOVD 8(RSP), R10
+	ADD  $120, R0, R11
+	CMP  R10, R11
+	BHS  prefetch_skip_5
+	MOVD 16(RSP), R11
+	MOVD 120(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, R12
+	MOVD 136(R0), R10
+	SUB  R10, R12, R12
+	MOVD 24(RSP), R10
+	CMP  R10, R12
+	BHS  prefetch_in_out_5
+	MOVD 32(RSP), R10
+	ADD  R10, R12, R12
+
+prefetch_in_out_5:
+	PRFM (R12), PLDL1KEEP
+	PRFM 64(R12), PLDL1KEEP
+	MOVD 128(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, 16(RSP)
+
+prefetch_skip_5:
+	MOVD 8(RSP), R10
+	ADD  $144, R0, R11
+	CMP  R10, R11
+	BHS  prefetch_skip_6
+	MOVD 16(RSP), R11
+	MOVD 144(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, R12
+	MOVD 160(R0), R10
+	SUB  R10, R12, R12
+	MOVD 24(RSP), R10
+	CMP  R10, R12
+	BHS  prefetch_in_out_6
+	MOVD 32(RSP), R10
+	ADD  R10, R12, R12
+
+prefetch_in_out_6:
+	PRFM (R12), PLDL1KEEP
+	PRFM 64(R12), PLDL1KEEP
+	MOVD 152(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, 16(RSP)
+
+prefetch_skip_6:
+	MOVD 8(RSP), R10
+	ADD  $168, R0, R11
+	CMP  R10, R11
+	BHS  prefetch_skip_7
+	MOVD 16(RSP), R11
+	MOVD 168(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, R12
+	MOVD 184(R0), R10
+	SUB  R10, R12, R12
+	MOVD 24(RSP), R10
+	CMP  R10, R12
+	BHS  prefetch_in_out_7
+	MOVD 32(RSP), R10
+	ADD  R10, R12, R12
+
+prefetch_in_out_7:
+	PRFM (R12), PLDL1KEEP
+	PRFM 64(R12), PLDL1KEEP
+	MOVD 176(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, 16(RSP)
+
+prefetch_skip_7:
 main_loop:
+	MOVD 8(RSP), R10
+	ADD  $192, R0, R11
+	CMP  R10, R11
+	BHS  prefetch_skip_8
+	MOVD 16(RSP), R11
+	MOVD 192(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, R12
+	MOVD 208(R0), R10
+	SUB  R10, R12, R12
+	MOVD 24(RSP), R10
+	CMP  R10, R12
+	BHS  prefetch_in_out_8
+	MOVD 32(RSP), R10
+	ADD  R10, R12, R12
+
+prefetch_in_out_8:
+	PRFM (R12), PLDL1KEEP
+	PRFM 64(R12), PLDL1KEEP
+	MOVD 200(R0), R10
+	ADD  R10, R11, R11
+	MOVD R11, 16(RSP)
+
+prefetch_skip_8:
 	MOVD (R0), R10
 	MOVD 16(R0), R11
 	MOVD 8(R0), R12

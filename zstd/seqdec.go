@@ -76,6 +76,23 @@ type sequenceDecs struct {
 	maxSyncLen   uint64
 }
 
+// twoPassFarCode is the offset code from which a match counts as far: 20 is
+// 1 MiB, the distance every measured arm64 core gains from; the Neoverse N1
+// gains from 128 KiB (17) and is detected in seqdec_linux_arm64.go.
+var twoPassFarCode = 20
+
+// useTwoPass reports whether the block is decoded in two passes with the
+// match-source prefetch (seqdec_arm64.go): a window of at least
+// decodeTwoPassMinWindow and, unless the offset table is predefined or
+// RLE, a share of at least twoPassMinFarShare of codes twoPassFarCode+.
+func (s *sequenceDecs) useTwoPass() bool {
+	if s.windowSize < decodeTwoPassMinWindow {
+		return false
+	}
+	share := s.offsets.fse.codeShare(twoPassFarCode)
+	return share < 0 || share >= twoPassMinFarShare
+}
+
 // initialize all 3 decoders from the stream input.
 func (s *sequenceDecs) initialize(br *bitReader, hist *history, out []byte) error {
 	if err := s.litLengths.init(br); err != nil {
