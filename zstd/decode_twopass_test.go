@@ -54,13 +54,12 @@ func forceTwoPass(on bool) func() {
 // of offset table.
 func TestSequenceDecsUseTwoPass(t *testing.T) {
 	defer forceTwoPass(false)()
-	defer func(v int) { twoPassFarCode = v }(twoPassFarCode)
-	decodeTwoPassMinWindow, twoPassMinFarShare, twoPassFarCode = 1<<20, 46, 17
+	decodeTwoPassMinWindow, twoPassMinFarShare = 1<<20, 46
 
-	// fseTable: log-8 table with far slots on codes 17-19 (two of them -1),
+	// fseTable: log-8 table with far slots on codes 20-22 (two of them -1),
 	// the rest on code 3.
 	fseTable := func(far int) *fseDecoder {
-		f := &fseDecoder{actualTableLog: 8, symbolLen: 20}
+		f := &fseDecoder{actualTableLog: 8, symbolLen: twoPassFarCode + 3}
 		f.norm[3] = int16(256 - far)
 		f.norm[twoPassFarCode] = int16(far - 2)
 		f.norm[twoPassFarCode+1] = -1
@@ -83,6 +82,7 @@ func TestSequenceDecsUseTwoPass(t *testing.T) {
 		{"fse below threshold", fseTable(45), 1 << 30, false},
 		{"fse far only", fseTable(256), 1 << 20, true},
 		{"fse none far", fseTable(2), 1 << 30, false},
+		{"fse no far codes in table", &fseDecoder{actualTableLog: 8, symbolLen: twoPassFarCode}, 1 << 20, false},
 		{"rle large window", rle(uint8(twoPassFarCode - 1)), 1 << 20, true},
 		{"rle small window", rle(uint8(twoPassFarCode)), 1<<20 - 1, false},
 		{"predefined small window", predefined, 1<<20 - 1, false},
