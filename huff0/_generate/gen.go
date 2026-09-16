@@ -7,12 +7,10 @@ import (
 	"flag"
 	"fmt"
 	mbits "math/bits"
-	"strconv"
 
 	_ "github.com/klauspost/compress"
 
 	. "github.com/mmcloughlin/avo/build"
-	"github.com/mmcloughlin/avo/gotypes"
 	. "github.com/mmcloughlin/avo/operand"
 	"github.com/mmcloughlin/avo/reg"
 )
@@ -24,22 +22,26 @@ func main() {
 
 	{
 		decompress := decompress4x{}
-		decompress.generateProcedure("decompress4x_main_loop_amd64", fast4XSymbols)
-		decompress.generateProcedure("decompress4x_8b_main_loop_amd64", fast4X8bSymbols)
-		decompress.generateProcedure("decompress4x_4b_main_loop_amd64", fast4X4bSymbols)
+		decompress.generateProcedure("decompress4x_main_loop_amd64", fastSymbols)
+		decompress.generateProcedure("decompress4x_8b_main_loop_amd64", fast8bSymbols)
+		decompress.generateProcedure("decompress4x_4b_main_loop_amd64", fast4bSymbols)
 
 		decompress.bmi2 = true
-		decompress.generateProcedure("decompress4x_main_loop_bmi2", fast4XSymbols)
-		decompress.generateProcedure("decompress4x_8b_main_loop_bmi2", fast4X8bSymbols)
-		decompress.generateProcedure("decompress4x_4b_main_loop_bmi2", fast4X4bSymbols)
+		decompress.generateProcedure("decompress4x_main_loop_bmi2", fastSymbols)
+		decompress.generateProcedure("decompress4x_8b_main_loop_bmi2", fast8bSymbols)
+		decompress.generateProcedure("decompress4x_4b_main_loop_bmi2", fast4bSymbols)
 	}
 
 	{
 		decompress := decompress1x{}
-		decompress.generateProcedure("decompress1x_main_loop_amd64")
+		decompress.generateProcedure("decompress1x_main_loop_amd64", fastSymbols)
+		decompress.generateProcedure("decompress1x_8b_main_loop_amd64", fast8bSymbols)
+		decompress.generateProcedure("decompress1x_4b_main_loop_amd64", fast4bSymbols)
 
 		decompress.bmi2 = true
-		decompress.generateProcedure("decompress1x_main_loop_bmi2")
+		decompress.generateProcedure("decompress1x_main_loop_bmi2", fastSymbols)
+		decompress.generateProcedure("decompress1x_8b_main_loop_bmi2", fast8bSymbols)
+		decompress.generateProcedure("decompress1x_4b_main_loop_bmi2", fast4bSymbols)
 	}
 
 	Generate()
@@ -57,17 +59,30 @@ const bitReader_value = bitReader_off + 8
 const bitReader_bitsRead = bitReader_value + 8
 const bitReader__size = bitReader_bitsRead + 8
 
-// Symbols decoded from each stream between reloads. The bit container holds
+// Symbols decoded from a stream between reloads (4X) or refills (1X). The bit container holds
 // a sentinel bit just below the unread bits, so the consumed count is its
 // trailing zero count and no separate bitsRead register is needed. A reload
 // leaves at most 7 consumed bits, so n symbols of at most b bits each need
 // 7+n*b <= 63 for the sentinel to survive and 64-(7+(n-1)*b) >= b valid bits
 // ahead of the last symbol: n*b <= 56.
 const (
-	fast4XSymbols   = 5  // tablelog 9..11: 5*11 = 55
-	fast4X8bSymbols = 7  // tablelog 5..8: 7*8 = 56
-	fast4X4bSymbols = 14 // tablelog <= 4: 14*4 = 56
+	fastSymbols   = 5  // tablelog 9..11: 5*11 = 55
+	fast8bSymbols = 7  // tablelog 5..8: 7*8 = 56
+	fast4bSymbols = 14 // tablelog <= 4: 14*4 = 56
 )
+
+// outputBoundShift returns the shift that divides an output byte budget by
+// the next power of two at or above nSyms, a cheap conservative bound on
+// the iterations a batch may run (5 and 7 -> 8, 14 -> 16). It panics if
+// the shift would not cover nSyms, since the loops write nSyms bytes per
+// iteration without further checks.
+func outputBoundShift(nSyms int) int {
+	shift := mbits.Len(uint(nSyms - 1))
+	if nSyms > 1<<shift {
+		panic("output bound does not cover nSyms")
+	}
+	return shift
+}
 
 // generateProcedure emits the Decompress4X main loop for one symbols-per-
 // reload count. It follows zstd's HUF_decompress4X1 fast loop.
@@ -149,13 +164,8 @@ func (d decompress4x) generateProcedure(name string, nSyms int) {
 	{
 		// The outer loop only re-checks bounds after a whole batch of
 		// iterations, and each iteration writes nSyms bytes per stream, so
-		// the batch must satisfy iters*nSyms <= limit-op0. Dividing the byte
-		// budget by the next power of two at or above nSyms is a cheap
-		// conservative bound (5 and 7 -> 8, 14 -> 16).
-		outShift := mbits.Len(uint(nSyms - 1))
-		if nSyms > 1<<outShift {
-			panic("output bound does not cover nSyms")
-		}
+		// the batch must satisfy iters*nSyms <= limit-op0.
+		outShift := outputBoundShift(nSyms)
 		Commentf("Iterations allowed by the output: (limit - op0) / %d", 1<<outShift)
 		iters := GP64()
 		Load(ctx.Field("limit"), iters)
@@ -286,193 +296,178 @@ func (d decompress4x) reload(bits reg.GPVirtual, ip Mem) {
 	}
 }
 
-type bitReader struct {
-	in       reg.GPVirtual
-	off      reg.GPVirtual
-	value    reg.GPVirtual
-	bitsRead reg.GPVirtual
-	id       int
-	bmi2     bool
-}
-
-func (b *bitReader) uniqId() string {
-	b.id += 1
-	return strconv.Itoa(b.id)
-}
-
-func (b *bitReader) load(pointer gotypes.Component) {
-	b.in = GP64()
-	b.off = GP64()
-	b.value = GP64()
-	b.bitsRead = GP64()
-
-	Load(pointer.Field("in").Base(), b.in)
-	Load(pointer.Field("off"), b.off)
-	Load(pointer.Field("value"), b.value)
-	Load(pointer.Field("bitsRead"), b.bitsRead)
-}
-
-func (b *bitReader) store(pointer gotypes.Component) {
-	Store(b.off, pointer.Field("off"))
-	Store(b.value, pointer.Field("value"))
-	// Note: explicit As8(), without this avo reports: "could not deduce mov instruction"
-	Store(b.bitsRead.As8(), pointer.Field("bitsRead"))
-}
-
-func (b *bitReader) fillFast() {
-	label := "bitReader_fillFast_" + b.uniqId() + "_end"
-	CMPQ(b.bitsRead, U8(32))
-	JL(LabelRef(label))
-
-	SUBQ(U8(32), b.bitsRead)
-	SUBQ(U8(4), b.off)
-
-	tmp := GP64()
-	MOVL(Mem{Base: b.in, Index: b.off, Scale: 1}, tmp.As32())
-	if b.bmi2 {
-		SHLXQ(b.bitsRead, tmp, tmp)
-	} else {
-		MOVQ(b.bitsRead, reg.RCX)
-		SHLQ(reg.CL, tmp)
-	}
-	ORQ(tmp, b.value)
-	Label(label)
-}
-
-func (b *bitReader) peekTopBits(n reg.GPVirtual) reg.GPVirtual {
-	res := GP64()
-	if b.bmi2 {
-		SHRXQ(n, b.value, res)
-	} else {
-		MOVQ(n, reg.RCX)
-		MOVQ(b.value, res)
-		SHRQ(reg.CL, res)
-	}
-
-	return res
-}
-
-func (b *bitReader) advance(n reg.Register) {
-	ADDQ(n, b.bitsRead)
-	if b.bmi2 {
-		SHLXQ(n, b.value, b.value)
-	} else {
-		MOVQ(n, reg.RCX)
-		SHLQ(reg.CL, b.value)
-	}
-}
-
+// decompress1x emits the Decompress1X main loops. A single stream is one
+// serial dependency chain (peek, table load, shift), so unlike the 4X loop
+// there is no other stream to hide a reload behind: the sentinel reload
+// (trailing zero count, pointer math, load, shift) would sit on that chain
+// once per group. Instead the 1X loop keeps the consumed count in its own
+// register, as the Go bit reader does, and refills by ORing the consumed
+// whole bytes back in from below the window with shift counts computed off
+// the chain, so a refill joins the chain with a single OR. Every value is
+// register resident.
 type decompress1x struct {
 	bmi2 bool
 }
 
-func (d decompress1x) generateProcedure(name string) {
+// generateProcedure emits the Decompress1X main loop for one symbols-per-
+// refill count.
+//
+// Container invariant: bits == load64(in[ip:ip+8]) << bitsRead with the low
+// bitsRead bits zero, which is bitReaderShifted's own invariant, so the
+// state hands back to Go as it is. bitsRead is kept as the low byte of a
+// running sum of table entries (nBits in the low byte, the symbol above it),
+// which saves masking the entry per symbol: the symbol halves never carry
+// into the low byte because a group consumes fewer than 256 bits.
+//
+// Bounds work as in the 4X loop: a batch of inner iterations is bounded by
+// the output capacity (divided by the next power of two at or above nSyms)
+// and by the distance to the stream start (each refill reads the 8 bytes
+// below the window and moves it down by at most 7 bytes).
+func (d decompress1x) generateProcedure(name string, nSyms int) {
 	Package("github.com/klauspost/compress/huff0")
 	TEXT(name, 0, "func(ctx* decompress1xContext)")
-	Doc(name+" is an x86 assembler implementation of Decompress1X", "")
+	Doc(fmt.Sprintf("%s decodes %d symbols per refill from one huff0 stream.", name, nSyms))
 	Pragma("noescape")
 
-	br := bitReader{}
-	br.bmi2 = d.bmi2
-
-	buffer := GP64()
-	bufferEnd := GP64() // the past-end address of buffer
-	dt := GP64()
+	ctx := Dereference(Param("ctx"))
 	peekBits := GP64()
+	table := GP64()
+	op := GP64()
+	limit := GP64()
+	ip := GP64()
+	ilowest := GP64()
+	bits := GP64()
+	bitsRead := GP64()
 
+	Comment("Preload values")
+	Load(ctx.Field("peekBits"), peekBits)
+	Load(ctx.Field("tbl"), table)
+	Load(ctx.Field("out"), op)
+	Load(ctx.Field("outCap"), limit)
+	ADDQ(op, limit)
+	Load(ctx.Field("ip"), ip)
+	Load(ctx.Field("ilowest"), ilowest)
 	{
-		ctx := Dereference(Param("ctx"))
-		Load(ctx.Field("out"), buffer)
-
-		outCap := GP64()
-		Load(ctx.Field("outCap"), outCap)
-		CMPQ(outCap, U8(4))
-		JB(LabelRef("error_max_decoded_size_exceeded"))
-
-		LEAQ(Mem{Base: buffer, Index: outCap, Scale: 1}, bufferEnd)
-
-		// load bitReader struct
-		pbr := Dereference(ctx.Field("pbr"))
-		br.load(pbr)
-
-		Load(ctx.Field("tbl"), dt)
-		Load(ctx.Field("peekBits"), peekBits)
+		br := GP64()
+		Load(ctx.Field("pbr"), br)
+		MOVQ(Mem{Base: br, Disp: bitReader_value}, bits)
+		MOVBQZX(Mem{Base: br, Disp: bitReader_bitsRead}, bitsRead)
 	}
 
-	JMP(LabelRef("loop_condition"))
-
-	Label("main_loop")
-
-	out := reg.AX // Fixed, as we need an 8H part
-
-	Comment("Check if we have room for 4 bytes in the output buffer")
+	inner := GP64()
+	Label("outer_loop")
 	{
-		tmp := GP64()
-		LEAQ(Mem{Base: buffer, Disp: 4}, tmp)
-		CMPQ(tmp, bufferEnd)
-		JGE(LabelRef("error_max_decoded_size_exceeded"))
+		outShift := outputBoundShift(nSyms)
+		Commentf("Iterations allowed by the output: (limit - op) / %d", 1<<outShift)
+		iters := GP64()
+		MOVQ(limit, iters)
+		SUBQ(op, iters)
+		JLE(LabelRef("done"))
+		SHRQ(U8(outShift), iters)
+
+		Comment("Iterations allowed by the input: a refill reads the 8 bytes below the window and")
+		Comment("moves it down by at most 7, so every read stays inside the stream while ip stays")
+		Comment("at least 8 above ilowest.")
+		t := GP64()
+		MOVQ(ip, t)
+		SUBQ(ilowest, t)
+		SHRQ(U8(3), t)
+		CMPQ(t, iters)
+		CMOVQCS(t, iters)
+		TESTQ(iters, iters)
+		JZ(LabelRef("done"))
+		IMUL3Q(Imm(uint64(nSyms)), iters, inner)
+		ADDQ(op, inner)
 	}
 
-	decompress := func(id int, out reg.Register) {
-		d.decompress(id, &br, peekBits, dt, out)
+	Label("inner_loop")
+	for k := range nSyms {
+		Commentf("symbol %d", k)
+		d.decodeSymbol(k, bits, bitsRead, op, peekBits, table)
 	}
+	Comment("Refill the whole bytes consumed from below the window")
+	d.refill(bits, bitsRead, ip)
+	ADDQ(U8(nSyms), op)
+	CMPQ(op, inner)
+	JB(LabelRef("inner_loop"))
+	JMP(LabelRef("outer_loop"))
 
-	Comment("Decode 4 values")
-	br.fillFast()
-	decompress(0, out.As8L())
-	decompress(1, out.As8H())
-	BSWAPL(out.As32())
-
-	br.fillFast()
-	decompress(2, out.As8H())
-	decompress(3, out.As8L())
-	BSWAPL(out.As32())
-
-	Comment("Store the decoded values")
-	MOVL(out.As32(), Mem{Base: buffer})
-	ADDQ(U8(4), buffer)
-
-	Label("loop_condition")
-	CMPQ(br.off, U8(8))
-	JGE(LabelRef("main_loop"))
-
-	Comment("Update ctx structure")
+	Label("done")
+	Comment("Hand the state back in the Go bit reader's own form: off = ip - in, value, bitsRead.")
 	{
-		// calculate decoded as current `out` - initial `out`
-		ctx := Dereference(Param("ctx"))
+		br := GP64()
+		Load(ctx.Field("pbr"), br)
+		SUBQ(Mem{Base: br, Disp: bitReader_in}, ip)
+		MOVQ(ip, Mem{Base: br, Disp: bitReader_off})
+		MOVQ(bits, Mem{Base: br, Disp: bitReader_value})
+		MOVB(bitsRead.As8(), Mem{Base: br, Disp: bitReader_bitsRead})
+	}
+	{
 		ctxout, _ := ctx.Field("out").Resolve()
-		decoded := buffer
-		SUBQ(ctxout.Addr, decoded)
-		Store(decoded, ctx.Field("decoded"))
-
-		pbr := Dereference(ctx.Field("pbr"))
-		br.store(pbr)
+		SUBQ(ctxout.Addr, op)
+		Store(op, ctx.Field("decoded"))
 	}
-
-	RET()
-
-	Comment("Report error")
-	Label("error_max_decoded_size_exceeded")
-	{
-		ctx := Dereference(Param("ctx"))
-		tmp := GP64()
-		MOVQ(I64(-1), tmp)
-		Store(tmp, ctx.Field("decoded"))
-	}
-
 	RET()
 }
 
-func (d decompress1x) decompress(id int, br *bitReader, peekBits, dt reg.GPVirtual, out reg.Register) {
-	// v := dt[br.peekBitsFast(d.actualTableLog)&tlMask]
-	k := br.peekTopBits(peekBits)
-	v := reg.RCX // Fixed, as we need 8H part
-	MOVWQZX(Mem{Base: dt, Index: k, Scale: 2}, v.As64())
+// decodeSymbol decodes one symbol from bits into op[k]: peek the top
+// peekBits bits, look the entry up, shift the container by the entry's low
+// byte (its bit length; a shift count is taken mod 64, so the symbol half is
+// harmless), add the whole entry to the running consumed count and store
+// the entry's high byte (the symbol).
+func (d decompress1x) decodeSymbol(k int, bits, bitsRead, op, peekBits, table reg.GPVirtual) {
+	val := GP64()
+	if d.bmi2 {
+		SHRXQ(peekBits, bits, val)
+		MOVWQZX(Mem{Base: table, Index: val, Scale: 2}, val)
+		SHLXQ(val, bits, bits)
+		ADDQ(val, bitsRead)
+		SHRQ(U8(8), val)
+		MOVB(val.As8(), Mem{Base: op, Disp: k})
+		return
+	}
+	// x86 variable shifts take their count in CL, so the generic twin
+	// routes both counts through RCX.
+	MOVQ(peekBits, reg.RCX)
+	MOVQ(bits, val)
+	SHRQ(reg.CL, val)
+	MOVWQZX(Mem{Base: table, Index: val, Scale: 2}, reg.RCX)
+	SHLQ(reg.CL, bits)
+	ADDQ(reg.RCX, bitsRead)
+	SHRQ(U8(8), reg.RCX)
+	MOVB(reg.CL, Mem{Base: op, Disp: k})
+}
 
-	// buf[id] = uint8(v.entry >> 8)
-	MOVB(v.As8H(), out)
-
-	// br.advance(uint8(v.entry))
-	MOVBQZX(v.As8L(), v)
-	br.advance(v)
+// refill ORs the r = bitsRead&^7 consumed whole-byte bits back into the
+// container from the 8 bytes below the window: their top r bits, shifted
+// down to bit 0 and back up to sit just below the unread bits, which is
+// bitsRead&7. The window then moves down by r/8 bytes and bitsRead drops to
+// bitsRead&7. The right shift by 64-r is done as two shifts (1, then 63-r)
+// so that r == 0 contributes nothing; 63-r is 63^r because r is a multiple
+// of 8. Only the final OR depends on the container, so the refill costs the
+// serial chain one instruction.
+func (d decompress1x) refill(bits, bitsRead, ip reg.GPVirtual) {
+	r := GP64()
+	t := GP64()
+	MOVQ(bitsRead, r)
+	ANDQ(U8(56), r)
+	MOVQ(Mem{Base: ip, Disp: -8}, t)
+	SHRQ(U8(1), t)
+	ANDQ(U8(7), bitsRead)
+	if d.bmi2 {
+		s := GP64()
+		MOVQ(r, s)
+		XORQ(U8(63), s)
+		SHRXQ(s, t, t)
+		SHLXQ(bitsRead, t, t)
+	} else {
+		MOVQ(r, reg.RCX)
+		XORQ(U8(63), reg.RCX)
+		SHRQ(reg.CL, t)
+		MOVQ(bitsRead, reg.RCX)
+		SHLQ(reg.CL, t)
+	}
+	ORQ(t, bits)
+	SHRQ(U8(3), r)
+	SUBQ(r, ip)
 }

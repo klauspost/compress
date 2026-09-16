@@ -247,29 +247,42 @@ func TestDecompress4X(t *testing.T) {
 // the asm loops exists for: a stream whose read pointer sits high keeps the
 // input bound large, so only the output bound stops the loop.
 func TestDecompress4XCorruptStaysInBounds(t *testing.T) {
-	testDecompress4XCorruptStaysInBounds(t)
+	testDecompressCorruptStaysInBounds(t, true)
 }
 
 // TestDecompress4XCorruptStaysInBoundsNoBMI2 is the same through the
 // generic asm twin on amd64 (a no-op elsewhere).
 func TestDecompress4XCorruptStaysInBoundsNoBMI2(t *testing.T) {
 	defer cpuinfo.DisableBMI2()()
-	testDecompress4XCorruptStaysInBounds(t)
+	testDecompressCorruptStaysInBounds(t, true)
 }
 
-// decompress4XGuarded decodes src into a buffer of exactly dstSize bytes of
-// capacity followed by guard bytes, and fails the test if the guard bytes
-// change. This is the only way a Go test can observe an assembly overrun:
-// the allocator rounds small buffers up to a size class, so an overrun of a
+// TestDecompress1XCorruptStaysInBounds is TestDecompress4XCorruptStaysInBounds
+// for the single-stream loops, which have the same batch bound.
+func TestDecompress1XCorruptStaysInBounds(t *testing.T) {
+	testDecompressCorruptStaysInBounds(t, false)
+}
+
+// TestDecompress1XCorruptStaysInBoundsNoBMI2 is the same through the
+// generic asm twin on amd64 (a no-op elsewhere).
+func TestDecompress1XCorruptStaysInBoundsNoBMI2(t *testing.T) {
+	defer cpuinfo.DisableBMI2()()
+	testDecompressCorruptStaysInBounds(t, false)
+}
+
+// decodeGuarded decodes into a buffer of exactly dstSize bytes of capacity
+// followed by guard bytes, and fails the test if the guard bytes change.
+// This is the only way a Go test can observe an assembly overrun: the
+// allocator rounds small buffers up to a size class, so an overrun of a
 // plain make([]byte, n) lands in slack that nothing checks.
-func decompress4XGuarded(t *testing.T, dec *Decoder, dstSize int, src []byte) ([]byte, error) {
+func decodeGuarded(t *testing.T, dstSize int, decode func(dst []byte) ([]byte, error)) ([]byte, error) {
 	t.Helper()
 	const guard = 4096
 	buf := make([]byte, dstSize+guard)
 	for i := dstSize; i < len(buf); i++ {
 		buf[i] = 0xAA
 	}
-	out, err := dec.Decompress4X(buf[:0:dstSize], src)
+	out, err := decode(buf[:0:dstSize])
 	for i := dstSize; i < len(buf); i++ {
 		if buf[i] != 0xAA {
 			t.Fatalf("dstSize %d: wrote past the output capacity at +%d", dstSize, i-dstSize)
@@ -278,7 +291,17 @@ func decompress4XGuarded(t *testing.T, dec *Decoder, dstSize int, src []byte) ([
 	return out, err
 }
 
-func testDecompress4XCorruptStaysInBounds(t *testing.T) {
+func decompress4XGuarded(t *testing.T, dec *Decoder, dstSize int, src []byte) ([]byte, error) {
+	t.Helper()
+	return decodeGuarded(t, dstSize, func(dst []byte) ([]byte, error) { return dec.Decompress4X(dst, src) })
+}
+
+func decompress1XGuarded(t *testing.T, dec *Decoder, dstSize int, src []byte) ([]byte, error) {
+	t.Helper()
+	return decodeGuarded(t, dstSize, func(dst []byte) ([]byte, error) { return dec.Decompress1X(dst, src) })
+}
+
+func testDecompressCorruptStaysInBounds(t *testing.T, fourStreams bool) {
 	// A uniform alphabet of 2^k symbols yields exactly k-bit codes; the
 	// skewed 256-symbol sample yields codes up to the maximum length.
 	tables := []struct {
@@ -294,6 +317,11 @@ func testDecompress4XCorruptStaysInBounds(t *testing.T) {
 		{name: "tablelog-11", symbols: 256, skewed: true, minLog: 9, maxLog: 11},
 	}
 	sizes := []int{800, 801, 1000, 4096, 65536, 262143}
+	if !fourStreams {
+		// The single-stream loops also take small outputs, down to the
+		// one-batch minimum, and drain the rest in Go.
+		sizes = append([]int{15, 16, 17, 31, 100}, sizes...)
+	}
 	seed := uint32(0x12345678)
 	next := func() byte {
 		seed = seed*1664525 + 1013904223
@@ -333,14 +361,25 @@ func testDecompress4XCorruptStaysInBounds(t *testing.T) {
 				}
 				enc := &Scratch{Reuse: ReusePolicyMust}
 				enc.TransferCTable(dec)
-				comp, reused, err := Compress4X(in, enc)
+				var comp []byte
+				var reused bool
+				if fourStreams {
+					comp, reused, err = Compress4X(in, enc)
+				} else {
+					comp, reused, err = Compress1X(in, enc)
+				}
 				if err != nil {
 					t.Fatalf("size %d: %v", size, err)
 				}
 				if !reused {
 					t.Fatalf("size %d: table was not reused", size)
 				}
-				out, err := decompress4XGuarded(t, dec.Decoder(), size, comp)
+				var out []byte
+				if fourStreams {
+					out, err = decompress4XGuarded(t, dec.Decoder(), size, comp)
+				} else {
+					out, err = decompress1XGuarded(t, dec.Decoder(), size, comp)
+				}
 				if err != nil {
 					t.Fatalf("size %d: %v", size, err)
 				}
@@ -348,22 +387,34 @@ func testDecompress4XCorruptStaysInBounds(t *testing.T) {
 					t.Fatalf("size %d: roundtrip mismatch", size)
 				}
 
-				// Then corrupt input: four equal streams as long as the jump
-				// table can express, far more bits than the output can hold,
-				// every byte random, marker in the top bit of the last byte.
-				stream := min(size, 65535)
-				src := make([]byte, 6+4*stream)
-				for i := range 3 {
-					src[i*2] = byte(stream)
-					src[i*2+1] = byte(stream >> 8)
+				// Then corrupt input: streams as long as the output, far more
+				// bits than the output can hold, every byte random, marker in
+				// the top bit of the last byte. Four equal streams as long as
+				// the jump table can express, or one stream.
+				var src []byte
+				if fourStreams {
+					stream := min(size, 65535)
+					src = make([]byte, 6+4*stream)
+					for i := range 3 {
+						src[i*2] = byte(stream)
+						src[i*2+1] = byte(stream >> 8)
+					}
+					for i := 6; i < len(src); i++ {
+						src[i] = next()
+					}
+					for i := range 4 {
+						src[6+(i+1)*stream-1] |= 0x80
+					}
+					_, err = decompress4XGuarded(t, dec.Decoder(), size, src)
+				} else {
+					src = make([]byte, size)
+					for i := range src {
+						src[i] = next()
+					}
+					src[len(src)-1] |= 0x80
+					_, err = decompress1XGuarded(t, dec.Decoder(), size, src)
 				}
-				for i := 6; i < len(src); i++ {
-					src[i] = next()
-				}
-				for i := range 4 {
-					src[6+(i+1)*stream-1] |= 0x80
-				}
-				if _, err := decompress4XGuarded(t, dec.Decoder(), size, src); err == nil {
+				if err == nil {
 					t.Errorf("size %d: expected a corruption error", size)
 				}
 			}
@@ -377,6 +428,16 @@ func testDecompress4XCorruptStaysInBounds(t *testing.T) {
 // tables both above and below 8 bits. This is the end-to-end counterpart of
 // TestBitReaderShiftedPrepareForAsm.
 func TestDecompress4XStreamEndsIn01(t *testing.T) {
+	testDecompressStreamEndsIn01(t, true)
+}
+
+// TestDecompress1XStreamEndsIn01 is TestDecompress4XStreamEndsIn01 through
+// Decompress1X.
+func TestDecompress1XStreamEndsIn01(t *testing.T) {
+	testDecompressStreamEndsIn01(t, false)
+}
+
+func testDecompressStreamEndsIn01(t *testing.T, fourStreams bool) {
 	seed := uint32(0xC0FFEE)
 	next := func() byte {
 		seed = seed*1664525 + 1013904223
@@ -396,7 +457,13 @@ func TestDecompress4XStreamEndsIn01(t *testing.T) {
 				in[i] = byte(v % symbols)
 			}
 			s := &Scratch{}
-			comp, _, err := Compress4X(in, s)
+			var comp []byte
+			var err error
+			if fourStreams {
+				comp, _, err = Compress4X(in, s)
+			} else {
+				comp, _, err = Compress1X(in, s)
+			}
 			if err != nil {
 				continue
 			}
@@ -404,24 +471,33 @@ func TestDecompress4XStreamEndsIn01(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// Walk the jump table to find each stream's final byte.
-			start := 6
 			hit := false
-			for i := range 4 {
-				end := len(streams)
-				if i < 3 {
-					end = start + (int(streams[i*2]) | int(streams[i*2+1])<<8)
+			if fourStreams {
+				// Walk the jump table to find each stream's final byte.
+				start := 6
+				for i := range 4 {
+					end := len(streams)
+					if i < 3 {
+						end = start + (int(streams[i*2]) | int(streams[i*2+1])<<8)
+					}
+					if streams[end-1] == 0x01 {
+						hit = true
+					}
+					start = end
 				}
-				if streams[end-1] == 0x01 {
-					hit = true
-				}
-				start = end
+			} else {
+				hit = streams[len(streams)-1] == 0x01
 			}
 			if !hit {
 				continue
 			}
 			found++
-			out, err := decompress4XGuarded(t, dec.Decoder(), len(in), streams)
+			var out []byte
+			if fourStreams {
+				out, err = decompress4XGuarded(t, dec.Decoder(), len(in), streams)
+			} else {
+				out, err = decompress1XGuarded(t, dec.Decoder(), len(in), streams)
+			}
 			if err != nil {
 				t.Fatalf("symbols %d attempt %d: %v", symbols, attempt, err)
 			}
@@ -538,7 +614,18 @@ func testDecompress4X(t *testing.T) {
 	}
 }
 
+// TestRoundtrip1XFuzzNoBMI2 runs the same roundtrips through the generic
+// asm twin on amd64 (a no-op elsewhere).
+func TestRoundtrip1XFuzzNoBMI2(t *testing.T) {
+	defer cpuinfo.DisableBMI2()()
+	testRoundtrip1XFuzz(t)
+}
+
 func TestRoundtrip1XFuzz(t *testing.T) {
+	testRoundtrip1XFuzz(t)
+}
+
+func testRoundtrip1XFuzz(t *testing.T) {
 	for _, test := range testfilesExtended {
 		t.Run(test.name, func(t *testing.T) {
 			var s = &Scratch{}

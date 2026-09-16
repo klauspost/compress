@@ -34,9 +34,9 @@ type decompress4xContext struct {
 // Symbols decoded per stream between reloads by the 4X asm loops; must
 // match the constants of the same names in _generate/gen.go.
 const (
-	fast4XSymbols   = 5  // tablelog 9..11
-	fast4X8bSymbols = 7  // tablelog 5..8
-	fast4X4bSymbols = 14 // tablelog <= 4
+	fastSymbols   = 5  // tablelog 9..11
+	fast8bSymbols = 7  // tablelog 5..8
+	fast4bSymbols = 14 // tablelog <= 4
 )
 
 // Decompress4X will decompress a 4X encoded stream.
@@ -87,11 +87,11 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 
 	var decoded int
 
-	nSyms := fast4XSymbols
+	nSyms := fastSymbols
 	if d.actualTableLog <= 4 {
-		nSyms = fast4X4bSymbols
+		nSyms = fast4bSymbols
 	} else if use8BitTables {
-		nSyms = fast4X8bSymbols
+		nSyms = fast8bSymbols
 	}
 	// The asm writes nSyms bytes per stream per iteration and only re-checks
 	// its bounds between batches of iterations (the batch size is derived
@@ -121,9 +121,9 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 			ctx.ip[i] = &br[i].in[br[i].off]
 		}
 		switch nSyms {
-		case fast4X4bSymbols:
+		case fast4bSymbols:
 			decompress4x_4b_main_loop_asm(&ctx)
-		case fast4X8bSymbols:
+		case fast8bSymbols:
 			decompress4x_8b_main_loop_asm(&ctx)
 		default:
 			decompress4x_main_loop_asm(&ctx)
@@ -175,17 +175,19 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 	return dst, nil
 }
 
+// decompress1xContext is the argument block of the Decompress1X asm loops.
+// Go fills every field but decoded; the asm advances ip, and on return
+// leaves the bit reader in the form bitReaderShifted.restoreFromAsm expects.
 type decompress1xContext struct {
 	pbr      *bitReaderShifted
 	peekBits uint8
 	out      *byte
-	outCap   int
+	outCap   int // no write reaches out[outCap]
 	tbl      *dEntrySingle
 	decoded  int
+	ilowest  *byte // start of the stream; no read goes below it
+	ip       *byte // the 8-byte input window, advanced by the asm
 }
-
-// Error reported by asm implementations
-const error_max_decoded_size_exeeded = -1
 
 // Decompress1X will decompress a 1X encoded stream.
 // The cap of the output buffer will be the maximum decompressed size.
@@ -205,25 +207,36 @@ func (d *Decoder) Decompress1X(dst, src []byte) ([]byte, error) {
 	const tlSize = 1 << tableLogMax
 	const tlMask = tlSize - 1
 
-	if maxDecodedSize >= 4 {
+	// The asm decodes whole batches of symbols and only re-checks its
+	// bounds between them, so it needs at least one batch of room (the
+	// output bound rounds nSyms up to 16, see _generate/gen.go) and a full
+	// 8-byte window ahead of the read pointer to enter the loop. It also
+	// needs at most 7 bits consumed on entry so that a batch cannot run
+	// the container dry, which prepareForAsm establishes.
+	decoded := 0
+	if maxDecodedSize >= 16 && br.canUseAsm() {
+		br.prepareForAsm()
 		ctx := decompress1xContext{
 			pbr:      &br,
 			out:      &dst[0],
 			outCap:   maxDecodedSize,
 			peekBits: uint8((64 - d.actualTableLog) & 63), // see: bitReaderShifted.peekBitsFast()
 			tbl:      &d.dt.single[0],
+			ilowest:  &src[0],
+			ip:       &br.in[br.off],
 		}
-
-		decompress1x_main_loop_asm(&ctx)
-		if ctx.decoded == error_max_decoded_size_exeeded {
-			return nil, ErrMaxDecodedSizeExceeded
+		if d.actualTableLog <= 4 {
+			decompress1x_4b_main_loop_asm(&ctx)
+		} else if d.actualTableLog <= 8 {
+			decompress1x_8b_main_loop_asm(&ctx)
+		} else {
+			decompress1x_main_loop_asm(&ctx)
 		}
-
-		dst = dst[:ctx.decoded]
+		decoded = ctx.decoded
 	}
+	dst = dst[:decoded]
 
-	// br < 8, so uint8 is fine
-	bitsLeft := uint8(br.off)*8 + 64 - br.bitsRead
+	bitsLeft := br.remaining()
 	for bitsLeft > 0 {
 		br.fill()
 		if len(dst) >= maxDecodedSize {
@@ -233,7 +246,7 @@ func (d *Decoder) Decompress1X(dst, src []byte) ([]byte, error) {
 		v := d.dt.single[br.peekBitsFast(d.actualTableLog)&tlMask]
 		nBits := uint8(v.entry)
 		br.advance(nBits)
-		bitsLeft -= nBits
+		bitsLeft -= uint(nBits)
 		dst = append(dst, uint8(v.entry>>8))
 	}
 	return dst, br.close()

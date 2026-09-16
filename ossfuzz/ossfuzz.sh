@@ -48,6 +48,8 @@ fi
 mv $SRC/compress/zstd/decoder_test.go $SRC/compress/zstd/decoder_test_fuzz.go
 mv $SRC/compress/zstd/zstd_test.go $SRC/compress/zstd/zstd_test_fuzz.go
 mv $SRC/compress/zstd/seqdec_test.go $SRC/compress/zstd/seqdec_test_fuzz.go
+mv $SRC/compress/zstd/seqdec_path_test.go $SRC/compress/zstd/seqdec_path_test_fuzz.go
+mv $SRC/compress/zstd/seqdec_path_noasm_test.go $SRC/compress/zstd/seqdec_path_noasm_test_fuzz.go
 mv $SRC/compress/zstd/dict_test.go $SRC/compress/zstd/dict_test_fuzz.go
 mv $SRC/compress/s2/s2_test.go $SRC/compress/s2/s2_test_fuzz.go
 go mod tidy
