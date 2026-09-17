@@ -615,7 +615,11 @@ func NewWrapper(opts ...option) (func(http.Handler) http.HandlerFunc, error) {
 		return func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add(vary, acceptEncoding)
 			if c.allowCompressedRequests && contentGzip(r) {
-				r.Header.Del(contentEncoding)
+				if rest, _ := splitOuterCoding(r.Header.Get(contentEncoding)); rest != "" {
+					r.Header.Set(contentEncoding, rest)
+				} else {
+					r.Header.Del(contentEncoding)
+				}
 				r.Body = &gzipReader{body: r.Body}
 			}
 
@@ -988,10 +992,25 @@ func RandomJitter(n, buffer int, paranoid bool) option {
 	}
 }
 
-// contentGzip returns true if the given HTTP request indicates that it gzipped.
+// contentGzip returns true if the outermost content coding of the request body is gzip.
 func contentGzip(r *http.Request) bool {
-	// See more detail in `acceptsGzip`
-	return r.Method != http.MethodHead && r.Body != nil && parseEncodingGzip(r.Header.Get(contentEncoding)) > 0
+	if r.Method == http.MethodHead || r.Body == nil {
+		return false
+	}
+	// Content-Encoding lists codings in the order they were applied, so only the
+	// last one is removable here.
+	_, outer := splitOuterCoding(r.Header.Get(contentEncoding))
+	coding, _, err := parseCoding(outer)
+	return err == nil && coding == "gzip"
+}
+
+// splitOuterCoding splits a Content-Encoding value into the codings that stay
+// applied and the outermost one.
+func splitOuterCoding(s string) (rest, outer string) {
+	if i := strings.LastIndexByte(s, ','); i >= 0 {
+		return strings.TrimSpace(s[:i]), s[i+1:]
+	}
+	return "", s
 }
 
 // acceptsGzip returns true if the given HTTP request indicates that it will
