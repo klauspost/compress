@@ -615,7 +615,7 @@ func NewWrapper(opts ...option) (func(http.Handler) http.HandlerFunc, error) {
 		return func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add(vary, acceptEncoding)
 			if c.allowCompressedRequests && contentGzip(r) {
-				if rest, _ := splitOuterCoding(r.Header.Get(contentEncoding)); rest != "" {
+				if rest, _ := splitOuterCoding(joinContentEncoding(r)); rest != "" {
 					r.Header.Set(contentEncoding, rest)
 				} else {
 					r.Header.Del(contentEncoding)
@@ -999,9 +999,19 @@ func contentGzip(r *http.Request) bool {
 	}
 	// Content-Encoding lists codings in the order they were applied, so only the
 	// last one is removable here.
-	_, outer := splitOuterCoding(r.Header.Get(contentEncoding))
+	_, outer := splitOuterCoding(joinContentEncoding(r))
 	coding, _, err := parseCoding(outer)
 	return err == nil && coding == "gzip"
+}
+
+// joinContentEncoding returns the Content-Encoding field lines as the single
+// comma list they are equivalent to. A sender may split the list across lines.
+func joinContentEncoding(r *http.Request) string {
+	v := r.Header.Values(contentEncoding)
+	if len(v) == 1 {
+		return v[0]
+	}
+	return strings.Join(v, ", ")
 }
 
 // splitOuterCoding splits a Content-Encoding value into the codings that stay
