@@ -2265,6 +2265,295 @@ func TestDecoderResetWithOptions(t *testing.T) {
 	})
 }
 
+func TestDecoderResetWithOptionsAppliesToDecodeAll(t *testing.T) {
+	const limit = 1 << 20
+	input := make([]byte, 2*limit)
+	var compressed bytes.Buffer
+	enc, err := NewWriter(&compressed,
+		WithEncoderConcurrency(1),
+		WithEncoderCRC(false),
+		WithWindowSize(64<<10),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := enc.Write(input); err != nil {
+		t.Fatal(err)
+	}
+	if err := enc.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var header Header
+	if err := header.Decode(compressed.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	if header.HasFCS {
+		t.Fatal("encoder produced a frame with a content size")
+	}
+
+	t.Run("max-memory", func(t *testing.T) {
+		dec, err := NewReader(nil, WithDecoderConcurrency(4))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer dec.Close()
+		if err := dec.ResetWithOptions(nil, WithDecoderMaxMemory(limit)); err != nil {
+			t.Fatal(err)
+		}
+		for range 4 {
+			got, err := dec.DecodeAll(compressed.Bytes(), nil)
+			if !errors.Is(err, ErrDecoderSizeExceeded) {
+				t.Fatalf("got error %v, want %v", err, ErrDecoderSizeExceeded)
+			}
+			if len(got) > limit+maxCompressedBlockSize {
+				t.Fatalf("got %d output bytes after a %d-byte limit was installed", len(got), limit)
+			}
+		}
+	})
+
+	t.Run("cap-limit", func(t *testing.T) {
+		dec, err := NewReader(nil, WithDecoderConcurrency(4))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer dec.Close()
+		if err := dec.ResetWithOptions(nil, WithDecodeAllCapLimit(true)); err != nil {
+			t.Fatal(err)
+		}
+		for range 4 {
+			got, err := dec.DecodeAll(compressed.Bytes(), make([]byte, 0, limit))
+			if !errors.Is(err, ErrDecoderSizeExceeded) {
+				t.Fatalf("got output=%d, error=%v; want %v", len(got), err, ErrDecoderSizeExceeded)
+			}
+			if len(got) > limit+maxCompressedBlockSize {
+				t.Fatalf("got %d output bytes with a %d-byte destination cap", len(got), limit)
+			}
+		}
+	})
+
+	t.Run("checksum", func(t *testing.T) {
+		compressed := []byte{0x28, 0xb5, 0x2f, 0xfd, 0x24, 0x09, 0x49, 0x00, 0x00, 'C', 'o', 'm', 'p', 'r', 'e', 's', 's', '\n', 0x79, 0x6e, 0xe0, 0xd2}
+		var header Header
+		if err := header.Decode(compressed); err != nil {
+			t.Fatal(err)
+		}
+		if !header.HasCheckSum {
+			t.Fatal("test frame has no checksum")
+		}
+		dec, err := NewReader(nil, WithDecoderConcurrency(4), IgnoreChecksum(true))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer dec.Close()
+		got, err := dec.DecodeAll(compressed, nil)
+		if err != nil {
+			t.Fatalf("decoding with checksum ignored: %v", err)
+		}
+		if want := []byte("Compress\n"); !bytes.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+		if err := dec.ResetWithOptions(nil, IgnoreChecksum(false)); err != nil {
+			t.Fatal(err)
+		}
+		for range 4 {
+			if _, err := dec.DecodeAll(compressed, nil); !errors.Is(err, ErrCRCMismatch) {
+				t.Fatalf("got error %v, want %v", err, ErrCRCMismatch)
+			}
+		}
+	})
+
+	t.Run("options-before-error", func(t *testing.T) {
+		dec, err := NewReader(nil, WithDecoderConcurrency(4))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer dec.Close()
+		// Options preceding an error have historically remained applied.
+		err = dec.ResetWithOptions(nil,
+			WithDecoderMaxMemory(limit),
+			WithDecoderConcurrency(5),
+		)
+		if err == nil {
+			t.Fatal("expected concurrency change to fail")
+		}
+		got, err := dec.DecodeAll(compressed.Bytes(), nil)
+		if !errors.Is(err, ErrDecoderSizeExceeded) {
+			t.Fatalf("got error %v, want %v", err, ErrDecoderSizeExceeded)
+		}
+		if len(got) > limit+maxCompressedBlockSize {
+			t.Fatalf("got %d output bytes after a %d-byte limit was installed", len(got), limit)
+		}
+	})
+}
+
+func TestDecoderResetWithOptionsAppliesToReusedAsyncStream(t *testing.T) {
+	makeFrame := func(window byte) []byte {
+		var compressed bytes.Buffer
+		enc, err := NewWriter(&compressed,
+			WithEncoderConcurrency(1),
+			WithEncoderCRC(false),
+			WithWindowSize(64<<10),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := enc.Write([]byte("small payload")); err != nil {
+			t.Fatal(err)
+		}
+		if err := enc.Close(); err != nil {
+			t.Fatal(err)
+		}
+		frame := bytes.Clone(compressed.Bytes())
+		if len(frame) < 6 || frame[4]&(1<<5) != 0 {
+			t.Fatalf("encoder produced unexpected frame header: %x", frame[:min(len(frame), 8)])
+		}
+		frame[5] = window
+		return frame
+	}
+
+	smallWindowFrame := makeFrame(0x30) // 64 KiB
+	largeWindowFrame := makeFrame(0x68) // 8 MiB
+	var header Header
+	if err := header.Decode(smallWindowFrame); err != nil {
+		t.Fatal(err)
+	}
+	if header.SingleSegment || header.WindowSize != 64<<10 {
+		t.Fatalf("got single-segment=%v, window=%d; want false, %d", header.SingleSegment, header.WindowSize, 64<<10)
+	}
+	if err := header.Decode(largeWindowFrame); err != nil {
+		t.Fatal(err)
+	}
+	if header.SingleSegment || header.WindowSize != 8<<20 {
+		t.Fatalf("got single-segment=%v, window=%d; want false, %d", header.SingleSegment, header.WindowSize, 8<<20)
+	}
+	dec, err := NewReader(bytes.NewReader(smallWindowFrame),
+		WithDecoderConcurrency(2),
+		WithDecodeBuffersBelow(0),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	if _, err := io.ReadAll(dec); err != nil {
+		t.Fatal(err)
+	}
+	if err := dec.ResetWithOptions(bytes.NewReader(largeWindowFrame), WithDecoderMaxMemory(1<<20)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(dec)
+	if len(got) != 0 || !errors.Is(err, ErrWindowSizeExceeded) {
+		t.Fatalf("got output=%q, error=%v; want no output and %v", got, err, ErrWindowSizeExceeded)
+	}
+}
+
+func TestDecoderResetWithOptionsConcurrentDecodeAll(t *testing.T) {
+	want := []byte("concurrent reset and decode")
+	enc, err := NewWriter(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	compressed := enc.EncodeAll(want, nil)
+	enc.Close()
+
+	dec, err := NewReader(nil, WithDecoderConcurrency(2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+
+	const iterations = 100
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() {
+			<-start
+			for range iterations {
+				got, err := dec.DecodeAll(compressed, nil)
+				if err != nil {
+					t.Errorf("DecodeAll: %v", err)
+					return
+				}
+				if !bytes.Equal(got, want) {
+					t.Errorf("got %q, want %q", got, want)
+					return
+				}
+			}
+		})
+	}
+	for i := range 2 {
+		wg.Add(1)
+		go func(id uint32) {
+			defer wg.Done()
+			<-start
+			for j := range iterations {
+				var dictOption DOption
+				if j%2 == 0 {
+					dictOption = WithDecoderDictRaw(id, []byte("dictionary"))
+				} else {
+					dictOption = WithDecoderDictDelete(id)
+				}
+				if err := dec.ResetWithOptions(nil,
+					IgnoreChecksum(j%2 == 0),
+					WithDecoderMaxMemory(uint64(1+j%2)<<20),
+					dictOption,
+				); err != nil {
+					t.Errorf("ResetWithOptions: %v", err)
+					return
+				}
+			}
+		}(uint32(i + 1))
+	}
+	close(start)
+	wg.Wait()
+}
+
+func TestDecoderResetWithOptionsAppliesToDictionaries(t *testing.T) {
+	const dictID = 42
+	dict := []byte("the source content used as a raw dictionary")
+	want := []byte("the target content uses the raw dictionary")
+	enc, err := NewWriter(nil, WithEncoderDictRaw(dictID, dict))
+	if err != nil {
+		t.Fatal(err)
+	}
+	compressed := enc.EncodeAll(want, nil)
+	enc.Close()
+
+	dec, err := NewReader(nil, WithDecoderConcurrency(4), WithDecoderDictRaw(dictID, dict))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	decode := func() {
+		t.Helper()
+		got, err := dec.DecodeAll(compressed, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	}
+	decode()
+	if err := dec.ResetWithOptions(nil, WithDecoderDictDelete(dictID)); err != nil {
+		t.Fatal(err)
+	}
+	for range 4 {
+		if _, err := dec.DecodeAll(compressed, nil); !errors.Is(err, ErrUnknownDictionary) {
+			t.Fatalf("got error %v, want %v", err, ErrUnknownDictionary)
+		}
+	}
+	err = dec.ResetWithOptions(nil,
+		WithDecoderDictRaw(dictID, dict),
+		WithDecoderConcurrency(5),
+	)
+	if err == nil {
+		t.Fatal("expected concurrency change to fail")
+	}
+	for range 4 {
+		decode()
+	}
+}
+
 func TestDecoderDictDelete(t *testing.T) {
 	dictContent := []byte("test dictionary content for decompression testing purposes")
 

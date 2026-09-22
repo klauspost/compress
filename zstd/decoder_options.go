@@ -7,6 +7,7 @@ package zstd
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"math/bits"
 	"runtime"
 )
@@ -16,15 +17,27 @@ type DOption func(*decoderOptions) error
 
 // options retains accumulated state of multiple options.
 type decoderOptions struct {
-	lowMem          bool
-	concurrent      int
-	maxDecodedSize  uint64
-	maxWindowSize   uint64
-	dicts           map[uint32]*dict
+	lowMem         bool
+	concurrent     int
+	maxDecodedSize uint64
+	maxWindowSize  uint64
+	dicts          map[uint32]*dict
+	// dictsShared requires a copy before dicts is modified.
+	dictsShared     bool
 	ignoreChecksum  bool
 	limitToCap      bool
 	decodeBufsBelow int
 	resetOpt        bool
+}
+
+func (o *decoderOptions) makeDictsMutable() {
+	if !o.dictsShared {
+		return
+	}
+	dicts := make(map[uint32]*dict, len(o.dicts))
+	maps.Copy(dicts, o.dicts)
+	o.dicts = dicts
+	o.dictsShared = false
 }
 
 func (o *decoderOptions) setDefault() {
@@ -111,6 +124,7 @@ func WithDecoderMaxMemory(n uint64) DOption {
 // [dictionary format]: https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#dictionary-format
 func WithDecoderDicts(dicts ...[]byte) DOption {
 	return func(o *decoderOptions) error {
+		o.makeDictsMutable()
 		if o.dicts == nil {
 			o.dicts = make(map[uint32]*dict)
 		}
@@ -133,6 +147,7 @@ func WithDecoderDictRaw(id uint32, content []byte) DOption {
 		if bits.UintSize > 32 && uint(len(content)) > dictMaxLength {
 			return fmt.Errorf("dictionary of size %d > 2GiB too large", len(content))
 		}
+		o.makeDictsMutable()
 		if o.dicts == nil {
 			o.dicts = make(map[uint32]*dict)
 		}
@@ -202,6 +217,7 @@ func IgnoreChecksum(b bool) DOption {
 // Should be used with ResetWithOptions.
 func WithDecoderDictDelete(ids ...uint32) DOption {
 	return func(o *decoderOptions) error {
+		o.makeDictsMutable()
 		if len(ids) == 0 {
 			clear(o.dicts)
 		}

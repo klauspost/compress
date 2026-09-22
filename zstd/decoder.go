@@ -10,6 +10,7 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"sync/atomic"
 
 	"github.com/klauspost/compress/zstd/internal/xxhash"
 )
@@ -23,6 +24,10 @@ import (
 type Decoder struct {
 	o decoderOptions
 
+	// publishedOptions contains an immutable copy of o.
+	publishedOptions atomic.Pointer[decoderOptions]
+	resetMu          sync.Mutex
+
 	// Unreferenced decoders, ready for use.
 	decoders chan *blockDec
 
@@ -33,6 +38,7 @@ type Decoder struct {
 	syncStream struct {
 		decodedFrame uint64
 		br           readerWrapper
+		dicts        map[uint32]*dict
 		enabled      bool
 		inFrame      bool
 		dstBuf       []byte
@@ -111,6 +117,8 @@ func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
 		dec.localFrame = newFrameDec(d.o)
 		d.decoders <- dec
 	}
+	initial := d.o
+	d.storeOptions(&initial)
 
 	if r == nil {
 		return &d, nil
@@ -165,6 +173,12 @@ func (d *Decoder) Read(p []byte) (int, error) {
 // After being called with a nil reader, no other operations than Reset or DecodeAll or Close
 // should be used.
 func (d *Decoder) Reset(r io.Reader) error {
+	d.resetMu.Lock()
+	defer d.resetMu.Unlock()
+	return d.reset(r)
+}
+
+func (d *Decoder) reset(r io.Reader) error {
 	if d.current.err == ErrDecoderClosed {
 		return d.current.err
 	}
@@ -172,6 +186,7 @@ func (d *Decoder) Reset(r io.Reader) error {
 	d.drainOutput()
 
 	d.syncStream.br.r = nil
+	d.syncStream.dicts = nil
 	if r == nil {
 		d.current.err = ErrDecoderNilInput
 		if len(d.current.b) > 0 {
@@ -181,8 +196,10 @@ func (d *Decoder) Reset(r io.Reader) error {
 		return nil
 	}
 
+	o := d.loadOptions()
+
 	// If bytes buffer and < 5MB, do sync decoding anyway.
-	if bb, ok := r.(byter); ok && bb.Len() < d.o.decodeBufsBelow && !d.o.limitToCap {
+	if bb, ok := r.(byter); ok && bb.Len() < o.decodeBufsBelow && !o.limitToCap {
 		bb2 := bb
 		if debugDecoder {
 			println("*bytes.Buffer detected, doing sync decode, len:", bb.Len())
@@ -230,18 +247,20 @@ func (d *Decoder) Reset(r io.Reader) error {
 	// Ensure no-one else is still running...
 	d.streamWg.Wait()
 	if d.frame == nil {
-		d.frame = newFrameDec(d.o)
+		d.frame = newFrameDec(o)
+	} else {
+		d.frame.setOptions(o)
 	}
 
-	if d.o.concurrent == 1 {
-		return d.startSyncDecoder(r)
+	if o.concurrent == 1 {
+		return d.startSyncDecoder(r, o.dicts)
 	}
 
-	d.current.output = make(chan decodeOutput, d.o.concurrent)
+	d.current.output = make(chan decodeOutput, o.concurrent)
 	ctx, cancel := context.WithCancel(context.Background())
 	d.current.cancel = cancel
 	d.streamWg.Add(1)
-	go d.startStreamDecoder(ctx, r, d.current.output)
+	go d.startStreamDecoder(ctx, r, d.current.output, o.dicts)
 
 	return nil
 }
@@ -251,14 +270,34 @@ func (d *Decoder) Reset(r io.Reader) error {
 // Options are applied on top of the existing options.
 // Some options cannot be changed on reset and will return an error.
 func (d *Decoder) ResetWithOptions(r io.Reader, opts ...DOption) error {
-	d.o.resetOpt = true
-	defer func() { d.o.resetOpt = false }()
+	d.resetMu.Lock()
+	defer d.resetMu.Unlock()
+
+	if d.current.err == ErrDecoderClosed {
+		return d.current.err
+	}
+	next := d.loadOptions()
+	next.resetOpt = true
 	for _, o := range opts {
-		if err := o(&d.o); err != nil {
+		if err := o(&next); err != nil {
+			next.resetOpt = false
+			d.storeOptions(&next)
 			return err
 		}
 	}
-	return d.Reset(r)
+	next.resetOpt = false
+	d.storeOptions(&next)
+	return d.reset(r)
+}
+
+func (d *Decoder) loadOptions() decoderOptions {
+	return *d.publishedOptions.Load()
+}
+
+func (d *Decoder) storeOptions(o *decoderOptions) {
+	o.dictsShared = true
+	d.o = *o
+	d.publishedOptions.Store(o)
 }
 
 // drainOutput will drain the output until errEndOfStream is sent.
@@ -337,6 +376,8 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 	// Grab a block decoder and frame decoder.
 	block := <-d.decoders
 	frame := block.localFrame
+	o := d.loadOptions()
+	frame.setOptions(o)
 	initialSize := len(dst)
 	defer func() {
 		if debugDecoder {
@@ -364,23 +405,23 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 			}
 			return dst, err
 		}
-		if err = d.setDict(frame); err != nil {
+		if err = d.setDict(frame, o.dicts); err != nil {
 			return nil, err
 		}
-		if frame.WindowSize > d.o.maxWindowSize {
+		if frame.WindowSize > frame.o.maxWindowSize {
 			if debugDecoder {
-				println("window size exceeded:", frame.WindowSize, ">", d.o.maxWindowSize)
+				println("window size exceeded:", frame.WindowSize, ">", frame.o.maxWindowSize)
 			}
 			return dst, ErrWindowSizeExceeded
 		}
 		if frame.FrameContentSize != fcsUnknown {
-			if frame.FrameContentSize > d.o.maxDecodedSize-uint64(len(dst)-initialSize) {
+			if frame.FrameContentSize > frame.o.maxDecodedSize-uint64(len(dst)-initialSize) {
 				if debugDecoder {
-					println("decoder size exceeded; fcs:", frame.FrameContentSize, "> mcs:", d.o.maxDecodedSize-uint64(len(dst)-initialSize), "len:", len(dst))
+					println("decoder size exceeded; fcs:", frame.FrameContentSize, "> mcs:", frame.o.maxDecodedSize-uint64(len(dst)-initialSize), "len:", len(dst))
 				}
 				return dst, ErrDecoderSizeExceeded
 			}
-			if d.o.limitToCap && frame.FrameContentSize > uint64(cap(dst)-len(dst)) {
+			if frame.o.limitToCap && frame.FrameContentSize > uint64(cap(dst)-len(dst)) {
 				if debugDecoder {
 					println("decoder size exceeded; fcs:", frame.FrameContentSize, "> (cap-len)", cap(dst)-len(dst))
 				}
@@ -393,14 +434,14 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 			}
 		}
 
-		if cap(dst) == 0 && !d.o.limitToCap {
+		if cap(dst) == 0 && !frame.o.limitToCap {
 			// Allocate len(input) * 2 by default if nothing is provided
 			// and we didn't get frame content size.
 			size := min(
 				// Cap to 1 MB.
 				len(input)*2, 1<<20)
-			if uint64(size) > d.o.maxDecodedSize {
-				size = int(d.o.maxDecodedSize)
+			if uint64(size) > frame.o.maxDecodedSize {
+				size = int(frame.o.maxDecodedSize)
 			}
 			dst = make([]byte, 0, size)
 		}
@@ -409,7 +450,7 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 		if err != nil {
 			return dst, err
 		}
-		if uint64(len(dst)-initialSize) > d.o.maxDecodedSize {
+		if uint64(len(dst)-initialSize) > frame.o.maxDecodedSize {
 			return dst, ErrDecoderSizeExceeded
 		}
 		if len(frame.bBuf) == 0 {
@@ -472,7 +513,7 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 		println("got", len(d.current.b), "bytes, error:", d.current.err, "data crc:", tmp)
 	}
 
-	if d.o.ignoreChecksum {
+	if d.frame.o.ignoreChecksum {
 		return true
 	}
 
@@ -505,12 +546,12 @@ func (d *Decoder) nextBlockSync() (ok bool) {
 			d.frame.history.reset()
 			d.current.err = d.frame.reset(&d.syncStream.br)
 			if d.current.err == nil {
-				d.current.err = d.setDict(d.frame)
+				d.current.err = d.setDict(d.frame, d.syncStream.dicts)
 			}
 			if d.current.err != nil {
 				return false
 			}
-			if d.frame.WindowSize > d.o.maxDecodedSize || d.frame.WindowSize > d.o.maxWindowSize {
+			if d.frame.WindowSize > d.frame.o.maxDecodedSize || d.frame.WindowSize > d.frame.o.maxWindowSize {
 				d.current.err = ErrDecoderSizeExceeded
 				return false
 			}
@@ -559,11 +600,11 @@ func (d *Decoder) nextBlockSync() (ok bool) {
 
 		// Update/Check CRC
 		if d.frame.HasCheckSum {
-			if !d.o.ignoreChecksum {
+			if !d.frame.o.ignoreChecksum {
 				d.frame.crc.Write(d.current.b)
 			}
 			if d.current.d.Last {
-				if !d.o.ignoreChecksum {
+				if !d.frame.o.ignoreChecksum {
 					d.current.err = d.frame.checkCRC()
 				} else {
 					d.current.err = d.frame.consumeCRC()
@@ -592,6 +633,9 @@ func (d *Decoder) stashDecoder() {
 // Close will release all resources.
 // It is NOT possible to reuse the decoder after this.
 func (d *Decoder) Close() {
+	d.resetMu.Lock()
+	defer d.resetMu.Unlock()
+
 	if d.current.err == ErrDecoderClosed {
 		return
 	}
@@ -650,9 +694,10 @@ type decodeOutput struct {
 	err error
 }
 
-func (d *Decoder) startSyncDecoder(r io.Reader) error {
+func (d *Decoder) startSyncDecoder(r io.Reader, dicts map[uint32]*dict) error {
 	d.frame.history.reset()
 	d.syncStream.br = readerWrapper{r: r}
+	d.syncStream.dicts = dicts
 	d.syncStream.inFrame = false
 	d.syncStream.enabled = true
 	d.syncStream.decodedFrame = 0
@@ -665,12 +710,12 @@ func (d *Decoder) startSyncDecoder(r io.Reader) error {
 // 0: Read frames and decode block literals.
 // 1: Decode sequences.
 // 2: Execute sequences, send to output.
-func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output chan decodeOutput) {
+func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output chan decodeOutput, dicts map[uint32]*dict) {
 	defer d.streamWg.Done()
 	br := readerWrapper{r: r}
 
-	var seqDecode = make(chan *blockDec, d.o.concurrent)
-	var seqExecute = make(chan *blockDec, d.o.concurrent)
+	var seqDecode = make(chan *blockDec, d.frame.o.concurrent)
+	var seqExecute = make(chan *blockDec, d.frame.o.concurrent)
 
 	// Async 1: Decode sequences...
 	go func() {
@@ -869,11 +914,11 @@ decodeStream:
 			println("Frame decoder returned", err)
 		}
 		if err == nil {
-			err = d.setDict(frame)
+			err = d.setDict(frame, dicts)
 		}
-		if err == nil && d.frame.WindowSize > d.o.maxWindowSize {
+		if err == nil && d.frame.WindowSize > d.frame.o.maxWindowSize {
 			if debugDecoder {
-				println("decoder size exceeded, fws:", d.frame.WindowSize, "> mws:", d.o.maxWindowSize)
+				println("decoder size exceeded, fws:", d.frame.WindowSize, "> mws:", d.frame.o.maxWindowSize)
 			}
 
 			err = ErrDecoderSizeExceeded
@@ -952,8 +997,8 @@ decodeStream:
 	d.frame.history.b = frameHistCache
 }
 
-func (d *Decoder) setDict(frame *frameDec) (err error) {
-	dict, ok := d.o.dicts[frame.DictionaryID]
+func (d *Decoder) setDict(frame *frameDec, dicts map[uint32]*dict) (err error) {
+	dict, ok := dicts[frame.DictionaryID]
 	if ok {
 		if debugDecoder {
 			println("setting dict", frame.DictionaryID)

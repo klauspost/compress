@@ -49,13 +49,19 @@ const (
 )
 
 func newFrameDec(o decoderOptions) *frameDec {
+	d := frameDec{}
+	d.setOptions(o)
+	return &d
+}
+
+func (d *frameDec) setOptions(o decoderOptions) {
 	if o.maxWindowSize > o.maxDecodedSize {
 		o.maxWindowSize = o.maxDecodedSize
 	}
-	d := frameDec{
-		o: o,
-	}
-	return &d
+	// The dictionary registry is captured by each operation and should not be
+	// retained by an idle frame decoder.
+	o.dicts = nil
+	d.o = o
 }
 
 // reset will read the frame header and prepare for block decoding.
