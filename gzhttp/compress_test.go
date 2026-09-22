@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/klauspost/compress/flate"
 	"github.com/klauspost/compress/gzip"
 	"github.com/klauspost/compress/zstd"
 )
@@ -2535,6 +2536,122 @@ func TestContentTypeDetectWithJitter(t *testing.T) {
 			handler.ServeHTTP(resp, req)
 
 			assertEqual(t, "text/html; charset=utf-8", resp.Header().Get("Content-Type"))
+		})
+	}
+}
+
+// A Content-Encoding list is in the order the codings were applied, so a
+// decoder may only remove the last one. Each case below encodes testBody with
+// exactly the codings it declares, and the handler decodes whatever is left,
+// so a pass means the payload survived the round trip byte for byte.
+func TestRequestContentEncodingOrder(t *testing.T) {
+	encode := func(t *testing.T, coding string, b []byte) []byte {
+		t.Helper()
+		var buf bytes.Buffer
+		switch coding {
+		case "gzip":
+			w := gzip.NewWriter(&buf)
+			if _, err := w.Write(b); err != nil {
+				t.Fatal(err)
+			}
+			if err := w.Close(); err != nil {
+				t.Fatal(err)
+			}
+		case "deflate":
+			w, err := flate.NewWriter(&buf, flate.DefaultCompression)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := w.Write(b); err != nil {
+				t.Fatal(err)
+			}
+			if err := w.Close(); err != nil {
+				t.Fatal(err)
+			}
+		default:
+			t.Fatalf("unknown coding %q", coding)
+		}
+		return buf.Bytes()
+	}
+	decode := func(t *testing.T, coding string, b []byte) []byte {
+		t.Helper()
+		switch coding {
+		case "gzip":
+			zr, err := gzip.NewReader(bytes.NewReader(b))
+			if err != nil {
+				t.Fatalf("gzip.NewReader: %v", err)
+			}
+			out, err := io.ReadAll(zr)
+			if err != nil {
+				t.Fatalf("gzip read: %v", err)
+			}
+			return out
+		case "deflate":
+			out, err := io.ReadAll(flate.NewReader(bytes.NewReader(b)))
+			if err != nil {
+				t.Fatalf("flate read: %v", err)
+			}
+			return out
+		}
+		t.Fatalf("unknown coding %q", coding)
+		return nil
+	}
+
+	for _, tc := range []struct {
+		name string
+		// sent is one entry per Content-Encoding field line; a line may itself
+		// hold a comma list. Both spellings mean the same list.
+		sent    []string
+		applied []string
+		wantCE  []string
+	}{
+		{"single gzip", []string{"gzip"}, []string{"gzip"}, nil},
+		{"gzip twice", []string{"gzip, gzip"}, []string{"gzip", "gzip"}, []string{"gzip"}},
+		{"gzip outermost", []string{"deflate, gzip"}, []string{"deflate", "gzip"}, []string{"deflate"}},
+		{"gzip not outermost", []string{"gzip, deflate"}, []string{"gzip", "deflate"}, []string{"gzip, deflate"}},
+		{"three codings", []string{"deflate, gzip, gzip"}, []string{"deflate", "gzip", "gzip"}, []string{"deflate, gzip"}},
+		{"split lines, gzip outermost", []string{"deflate", "gzip"}, []string{"deflate", "gzip"}, []string{"deflate"}},
+		{"split lines, gzip not outermost", []string{"gzip", "deflate"}, []string{"gzip", "deflate"}, []string{"gzip", "deflate"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := testBody
+			for _, coding := range tc.applied {
+				body = encode(t, coding, body)
+			}
+
+			var gotCE []string
+			var gotBody []byte
+			var readErr error
+			wrapper, err := NewWrapper(AllowCompressedRequests(true))
+			if err != nil {
+				t.Fatal(err)
+			}
+			handler := wrapper(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotCE = r.Header.Values("Content-Encoding")
+				gotBody, readErr = io.ReadAll(r.Body)
+			}))
+
+			req, _ := http.NewRequest("POST", "/whatever", bytes.NewReader(body))
+			for _, line := range tc.sent {
+				req.Header.Add("Content-Encoding", line)
+			}
+			handler.ServeHTTP(httptest.NewRecorder(), req)
+			if readErr != nil {
+				t.Fatalf("reading the request body: %v", readErr)
+			}
+			assertEqual(t, tc.wantCE, gotCE)
+
+			// Undo what the handler was told is still applied, outermost first.
+			var left []string
+			for _, line := range gotCE {
+				for _, coding := range strings.Split(line, ",") {
+					left = append(left, strings.TrimSpace(coding))
+				}
+			}
+			for i := len(left) - 1; i >= 0; i-- {
+				gotBody = decode(t, left[i], gotBody)
+			}
+			assertEqual(t, testBody, gotBody)
 		})
 	}
 }
