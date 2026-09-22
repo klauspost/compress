@@ -58,9 +58,6 @@ func (d *frameDec) setOptions(o decoderOptions) {
 	if o.maxWindowSize > o.maxDecodedSize {
 		o.maxWindowSize = o.maxDecodedSize
 	}
-	// The dictionary registry is captured by each operation and should not be
-	// retained by an idle frame decoder.
-	o.dicts = nil
 	d.o = o
 }
 

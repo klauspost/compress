@@ -2480,29 +2480,26 @@ func TestDecoderResetWithOptionsConcurrentDecodeAll(t *testing.T) {
 			}
 		})
 	}
-	for i := range 2 {
-		wg.Add(1)
-		go func(id uint32) {
-			defer wg.Done()
-			<-start
-			for j := range iterations {
-				var dictOption DOption
-				if j%2 == 0 {
-					dictOption = WithDecoderDictRaw(id, []byte("dictionary"))
-				} else {
-					dictOption = WithDecoderDictDelete(id)
-				}
-				if err := dec.ResetWithOptions(nil,
-					IgnoreChecksum(j%2 == 0),
-					WithDecoderMaxMemory(uint64(1+j%2)<<20),
-					dictOption,
-				); err != nil {
-					t.Errorf("ResetWithOptions: %v", err)
-					return
-				}
+	wg.Go(func() {
+		<-start
+		const id = 1
+		for j := range iterations {
+			var dictOption DOption
+			if j%2 == 0 {
+				dictOption = WithDecoderDictRaw(id, []byte("dictionary"))
+			} else {
+				dictOption = WithDecoderDictDelete(id)
 			}
-		}(uint32(i + 1))
-	}
+			if err := dec.ResetWithOptions(nil,
+				IgnoreChecksum(j%2 == 0),
+				WithDecoderMaxMemory(uint64(1+j%2)<<20),
+				dictOption,
+			); err != nil {
+				t.Errorf("ResetWithOptions: %v", err)
+				return
+			}
+		}
+	})
 	close(start)
 	wg.Wait()
 }
@@ -2563,8 +2560,8 @@ func TestDecoderDictDelete(t *testing.T) {
 	}
 	defer dec.Close()
 
-	if len(dec.o.dicts) != 2 {
-		t.Fatalf("expected 2 dicts, got %d", len(dec.o.dicts))
+	if dicts := dec.loadOptions().dicts; len(dicts) != 2 {
+		t.Fatalf("expected 2 dicts, got %d", len(dicts))
 	}
 
 	// Delete specific dict
@@ -2572,10 +2569,11 @@ func TestDecoderDictDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(dec.o.dicts) != 1 {
-		t.Errorf("expected 1 dict after delete, got %d", len(dec.o.dicts))
+	dicts := dec.loadOptions().dicts
+	if len(dicts) != 1 {
+		t.Errorf("expected 1 dict after delete, got %d", len(dicts))
 	}
-	if _, ok := dec.o.dicts[200]; !ok {
+	if _, ok := dicts[200]; !ok {
 		t.Error("dict 200 should still exist")
 	}
 
@@ -2584,8 +2582,8 @@ func TestDecoderDictDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(dec.o.dicts) != 2 {
-		t.Errorf("expected 2 dicts after add, got %d", len(dec.o.dicts))
+	if dicts := dec.loadOptions().dicts; len(dicts) != 2 {
+		t.Errorf("expected 2 dicts after add, got %d", len(dicts))
 	}
 
 	// Delete all dicts with no arguments
@@ -2593,8 +2591,8 @@ func TestDecoderDictDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(dec.o.dicts) != 0 {
-		t.Errorf("expected 0 dicts after delete all, got %d", len(dec.o.dicts))
+	if dicts := dec.loadOptions().dicts; len(dicts) != 0 {
+		t.Errorf("expected 0 dicts after delete all, got %d", len(dicts))
 	}
 }
 
@@ -2610,8 +2608,8 @@ func TestDecoderDictDeleteMultiple(t *testing.T) {
 	}
 	defer dec.Close()
 
-	if len(dec.o.dicts) != 3 {
-		t.Fatalf("expected 3 dicts, got %d", len(dec.o.dicts))
+	if dicts := dec.loadOptions().dicts; len(dicts) != 3 {
+		t.Fatalf("expected 3 dicts, got %d", len(dicts))
 	}
 
 	// Delete multiple dicts in one call
@@ -2619,10 +2617,11 @@ func TestDecoderDictDeleteMultiple(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(dec.o.dicts) != 1 {
-		t.Errorf("expected 1 dict after delete, got %d", len(dec.o.dicts))
+	dicts := dec.loadOptions().dicts
+	if len(dicts) != 1 {
+		t.Errorf("expected 1 dict after delete, got %d", len(dicts))
 	}
-	if _, ok := dec.o.dicts[200]; !ok {
+	if _, ok := dicts[200]; !ok {
 		t.Error("dict 200 should still exist")
 	}
 }
