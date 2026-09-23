@@ -2644,7 +2644,7 @@ func TestRequestContentEncodingOrder(t *testing.T) {
 			// Undo what the handler was told is still applied, outermost first.
 			var left []string
 			for _, line := range gotCE {
-				for _, coding := range strings.Split(line, ",") {
+				for coding := range strings.SplitSeq(line, ",") {
 					left = append(left, strings.TrimSpace(coding))
 				}
 			}
