@@ -116,7 +116,7 @@ func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
 		dec.localFrame.o.dicts = nil
 		d.decoders <- dec
 	}
-	d.storeOptions(&o)
+	d.publishedOptions.Store(&o)
 
 	if r == nil {
 		return &d, nil
@@ -190,7 +190,7 @@ func (d *Decoder) Reset(r io.Reader) error {
 		return nil
 	}
 
-	o := d.loadOptions()
+	o := *d.publishedOptions.Load()
 
 	// If bytes buffer and < 5MB, do sync decoding anyway.
 	if bb, ok := r.(byter); ok && bb.Len() < o.decodeBufsBelow && !o.limitToCap {
@@ -267,27 +267,19 @@ func (d *Decoder) ResetWithOptions(r io.Reader, opts ...DOption) error {
 	if d.current.err == ErrDecoderClosed {
 		return d.current.err
 	}
-	next := d.loadOptions()
+	next := *d.publishedOptions.Load()
 	next.dicts = maps.Clone(next.dicts)
 	next.resetOpt = true
 	for _, o := range opts {
 		if err := o(&next); err != nil {
 			next.resetOpt = false
-			d.storeOptions(&next)
+			d.publishedOptions.Store(&next)
 			return err
 		}
 	}
 	next.resetOpt = false
-	d.storeOptions(&next)
+	d.publishedOptions.Store(&next)
 	return d.Reset(r)
-}
-
-func (d *Decoder) loadOptions() decoderOptions {
-	return *d.publishedOptions.Load()
-}
-
-func (d *Decoder) storeOptions(o *decoderOptions) {
-	d.publishedOptions.Store(o)
 }
 
 // drainOutput will drain the output until errEndOfStream is sent.
@@ -366,7 +358,7 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 	// Grab a block decoder and frame decoder.
 	block := <-d.decoders
 	frame := block.localFrame
-	o := d.loadOptions()
+	o := *d.publishedOptions.Load()
 	frame.setOptions(o)
 	initialSize := len(dst)
 	defer func() {

@@ -2560,7 +2560,7 @@ func TestDecoderDictDelete(t *testing.T) {
 	}
 	defer dec.Close()
 
-	if dicts := dec.loadOptions().dicts; len(dicts) != 2 {
+	if dicts := dec.publishedOptions.Load().dicts; len(dicts) != 2 {
 		t.Fatalf("expected 2 dicts, got %d", len(dicts))
 	}
 
@@ -2569,7 +2569,7 @@ func TestDecoderDictDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dicts := dec.loadOptions().dicts
+	dicts := dec.publishedOptions.Load().dicts
 	if len(dicts) != 1 {
 		t.Errorf("expected 1 dict after delete, got %d", len(dicts))
 	}
@@ -2582,7 +2582,7 @@ func TestDecoderDictDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dicts := dec.loadOptions().dicts; len(dicts) != 2 {
+	if dicts := dec.publishedOptions.Load().dicts; len(dicts) != 2 {
 		t.Errorf("expected 2 dicts after add, got %d", len(dicts))
 	}
 
@@ -2591,7 +2591,7 @@ func TestDecoderDictDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dicts := dec.loadOptions().dicts; len(dicts) != 0 {
+	if dicts := dec.publishedOptions.Load().dicts; len(dicts) != 0 {
 		t.Errorf("expected 0 dicts after delete all, got %d", len(dicts))
 	}
 }
@@ -2608,7 +2608,7 @@ func TestDecoderDictDeleteMultiple(t *testing.T) {
 	}
 	defer dec.Close()
 
-	if dicts := dec.loadOptions().dicts; len(dicts) != 3 {
+	if dicts := dec.publishedOptions.Load().dicts; len(dicts) != 3 {
 		t.Fatalf("expected 3 dicts, got %d", len(dicts))
 	}
 
@@ -2617,7 +2617,7 @@ func TestDecoderDictDeleteMultiple(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dicts := dec.loadOptions().dicts
+	dicts := dec.publishedOptions.Load().dicts
 	if len(dicts) != 1 {
 		t.Errorf("expected 1 dict after delete, got %d", len(dicts))
 	}
