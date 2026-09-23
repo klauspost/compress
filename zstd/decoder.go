@@ -59,6 +59,7 @@ type decoderState struct {
 	// crc of current frame
 	crc *xxhash.Digest
 
+	decoded int64
 	flushed bool
 }
 
@@ -172,6 +173,7 @@ func (d *Decoder) Reset(r io.Reader) error {
 	d.drainOutput()
 
 	d.syncStream.br.r = nil
+	d.current.decoded = 0
 	if r == nil {
 		d.current.err = ErrDecoderNilInput
 		if len(d.current.b) > 0 {
@@ -203,6 +205,7 @@ func (d *Decoder) Reset(r io.Reader) error {
 			d.current.b = dst
 			d.current.err = err
 			d.current.flushed = true
+			d.checkWantSize()
 			if debugDecoder {
 				println("sync decode to", len(dst), "bytes, err:", err)
 			}
@@ -440,6 +443,7 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 			return false
 		}
 		ok = d.nextBlockSync()
+		d.checkWantSize()
 		if !ok {
 			d.stashDecoder()
 		}
@@ -462,6 +466,7 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 		d.current.err = io.ErrUnexpectedEOF
 		return false
 	}
+	d.checkWantSize()
 	next := d.current.decodeOutput
 	if next.d != nil && next.d.async.newHist != nil {
 		d.current.crc.Reset()
@@ -577,6 +582,21 @@ func (d *Decoder) nextBlockSync() (ok bool) {
 		d.syncStream.inFrame = !d.current.d.Last
 	}
 	return true
+}
+
+func (d *Decoder) checkWantSize() {
+	if d.o.wantSize <= 0 {
+		return
+	}
+	d.current.decoded += int64(len(d.current.b))
+	if d.current.decoded > d.o.wantSize {
+		// Only in for API contract completeness, at the cost of discarding decoded output;
+		// up to 128 KBs (one block) when streaming, all past wantSize on the shortcut.
+		d.current.b = d.current.b[:int64(len(d.current.b))-(d.current.decoded-d.o.wantSize)]
+		d.current.err = ErrDecoderSizeExceeded
+	} else if d.current.err == io.EOF && d.current.decoded < d.o.wantSize {
+		d.current.err = io.ErrUnexpectedEOF
+	}
 }
 
 func (d *Decoder) stashDecoder() {

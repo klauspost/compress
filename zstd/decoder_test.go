@@ -2401,3 +2401,56 @@ func TestDecoderBufferShortcutFallsBackToStreaming(t *testing.T) {
 		})
 	}
 }
+
+func TestDecoderWantSize(t *testing.T) {
+	input := make([]byte, 1<<20)
+	enc, err := NewWriter(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer enc.Close()
+	half := len(input) / 2
+	first := enc.EncodeAll(input[:half], nil)
+	both := enc.EncodeAll(input[half:], first)
+
+	for _, n := range []int{1, 4} {
+		dec, err := NewReader(nil, WithDecoderConcurrency(n))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer dec.Close()
+		for _, tc := range []struct {
+			name     string
+			in       []byte
+			wantSize int64
+			want     []byte
+			wantErr  error
+		}{
+			{"exact", both, int64(len(input)), input, nil},
+			{"truncated at frame", first, int64(len(input)), input[:half], io.ErrUnexpectedEOF},
+			{"too long", both, int64(half), input[:half], ErrDecoderSizeExceeded},
+			{"disabled", first, 0, input[:half], nil},
+		} {
+			for _, r := range []struct {
+				name string
+				r    io.Reader
+			}{
+				{"bytes.Buffer (shortcut)", bytes.NewBuffer(tc.in)},
+				{"plain reader (streaming)", struct{ io.Reader }{bytes.NewReader(tc.in)}},
+			} {
+				t.Run(fmt.Sprintf("cpu-%d/%s/%s", n, tc.name, r.name), func(t *testing.T) {
+					if err := dec.ResetWithOptions(r.r, DecoderWantSize(tc.wantSize)); err != nil {
+						t.Fatal(err)
+					}
+					got, err := io.ReadAll(dec)
+					if !errors.Is(err, tc.wantErr) {
+						t.Fatalf("read: got %v, want %v", err, tc.wantErr)
+					}
+					if !bytes.Equal(got, tc.want) {
+						t.Fatalf("output mismatch: got %d bytes, want %d", len(got), len(tc.want))
+					}
+				})
+			}
+		}
+	}
+}
