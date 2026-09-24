@@ -2,8 +2,10 @@ package flate
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
 	"os"
 	"testing"
 )
@@ -63,8 +65,20 @@ func Benchmark_tokens_EstimatedBits(b *testing.B) {
 // tiny per-architecture rounding difference in that sum was occasionally
 // enough to flip the table-reuse decision, changing everything encoded
 // after that point.
+//
+// The input is stored gzipped, with stdlib compress/gzip reading it so that a
+// break in this package cannot quietly change what is being compressed.
 func TestCompressArchDependent(t *testing.T) {
-	in, err := os.ReadFile("testdata/issue72-arch-dependent.bin")
+	f, err := os.Open("testdata/issue72-arch-dependent.bin.gz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	zr, err := gzip.NewReader(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in, err := io.ReadAll(zr)
 	if err != nil {
 		t.Fatal(err)
 	}
