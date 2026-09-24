@@ -199,6 +199,7 @@ func IgnoreChecksum(b bool) DOption {
 }
 
 // DecoderWantSize will set the expected decompressed size for streams.
+// This does not apply to DecodeAll calls.
 // If the bytes decoded does not match the size given an error will be returned.
 // Sizes <= 0 results in no content size set.
 // Can be changed with ResetWithOptions.

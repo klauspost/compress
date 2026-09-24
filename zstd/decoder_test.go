@@ -2740,5 +2740,26 @@ func TestDecoderWantSize(t *testing.T) {
 				})
 			}
 		}
+		t.Run(fmt.Sprintf("cpu-%d/DecodeAll", n), func(t *testing.T) {
+			for _, tc := range []struct {
+				in       []byte
+				wantSize int64
+				want     []byte
+			}{
+				{both, int64(half), input},
+				{first, int64(len(input)), input[:half]},
+			} {
+				if err := dec.ResetWithOptions(nil, DecoderWantSize(tc.wantSize)); err != nil {
+					t.Fatal(err)
+				}
+				got, err := dec.DecodeAll(tc.in, nil)
+				if err != nil {
+					t.Fatalf("DecodeAll: %v", err)
+				}
+				if !bytes.Equal(got, tc.want) {
+					t.Fatalf("output mismatch: got %d bytes, want %d", len(got), len(tc.want))
+				}
+			}
+		})
 	}
 }
