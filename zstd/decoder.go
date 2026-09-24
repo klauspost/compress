@@ -9,7 +9,9 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"maps"
 	"sync"
+	"sync/atomic"
 
 	"github.com/klauspost/compress/zstd/internal/xxhash"
 )
@@ -21,7 +23,8 @@ import (
 // A decoder can safely be re-used even if the previous stream failed.
 // To release the resources, you must call the Close() function on a decoder.
 type Decoder struct {
-	o decoderOptions
+	// publishedOptions contains the current immutable decoder options.
+	publishedOptions atomic.Pointer[decoderOptions]
 
 	// Unreferenced decoders, ready for use.
 	decoders chan *blockDec
@@ -86,9 +89,10 @@ var (
 func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
 	initPredefined()
 	var d Decoder
-	d.o.setDefault()
-	for _, o := range opts {
-		err := o(&d.o)
+	var o decoderOptions
+	o.setDefault()
+	for _, opt := range opts {
+		err := opt(&o)
 		if err != nil {
 			return nil, err
 		}
@@ -101,17 +105,19 @@ func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
 	}
 
 	// Initialize dict map if needed.
-	if d.o.dicts == nil {
-		d.o.dicts = make(map[uint32]*dict)
+	if o.dicts == nil {
+		o.dicts = make(map[uint32]*dict)
 	}
 
 	// Create decoders
-	d.decoders = make(chan *blockDec, d.o.concurrent)
-	for i := 0; i < d.o.concurrent; i++ {
-		dec := newBlockDec(d.o.lowMem)
-		dec.localFrame = newFrameDec(d.o)
+	d.decoders = make(chan *blockDec, o.concurrent)
+	for i := 0; i < o.concurrent; i++ {
+		dec := newBlockDec(o.lowMem)
+		dec.localFrame = newFrameDec(o)
+		dec.localFrame.o.dicts = nil
 		d.decoders <- dec
 	}
+	d.publishedOptions.Store(&o)
 
 	if r == nil {
 		return &d, nil
@@ -174,6 +180,9 @@ func (d *Decoder) Reset(r io.Reader) error {
 
 	d.syncStream.br.r = nil
 	d.current.decoded = 0
+	if d.frame != nil {
+		d.frame.o.dicts = nil
+	}
 	if r == nil {
 		d.current.err = ErrDecoderNilInput
 		if len(d.current.b) > 0 {
@@ -183,8 +192,10 @@ func (d *Decoder) Reset(r io.Reader) error {
 		return nil
 	}
 
+	o := *d.publishedOptions.Load()
+
 	// If bytes buffer and < 5MB, do sync decoding anyway.
-	if bb, ok := r.(byter); ok && bb.Len() < d.o.decodeBufsBelow && !d.o.limitToCap {
+	if bb, ok := r.(byter); ok && bb.Len() < o.decodeBufsBelow && !o.limitToCap {
 		bb2 := bb
 		if debugDecoder {
 			println("*bytes.Buffer detected, doing sync decode, len:", bb.Len())
@@ -205,7 +216,7 @@ func (d *Decoder) Reset(r io.Reader) error {
 			d.current.b = dst
 			d.current.err = err
 			d.current.flushed = true
-			d.checkWantSize()
+			d.checkWantSize(o.wantSize)
 			if debugDecoder {
 				println("sync decode to", len(dst), "bytes, err:", err)
 			}
@@ -233,14 +244,16 @@ func (d *Decoder) Reset(r io.Reader) error {
 	// Ensure no-one else is still running...
 	d.streamWg.Wait()
 	if d.frame == nil {
-		d.frame = newFrameDec(d.o)
+		d.frame = newFrameDec(o)
+	} else {
+		d.frame.setOptions(o)
 	}
 
-	if d.o.concurrent == 1 {
+	if o.concurrent == 1 {
 		return d.startSyncDecoder(r)
 	}
 
-	d.current.output = make(chan decodeOutput, d.o.concurrent)
+	d.current.output = make(chan decodeOutput, o.concurrent)
 	ctx, cancel := context.WithCancel(context.Background())
 	d.current.cancel = cancel
 	d.streamWg.Add(1)
@@ -254,13 +267,21 @@ func (d *Decoder) Reset(r io.Reader) error {
 // Options are applied on top of the existing options.
 // Some options cannot be changed on reset and will return an error.
 func (d *Decoder) ResetWithOptions(r io.Reader, opts ...DOption) error {
-	d.o.resetOpt = true
-	defer func() { d.o.resetOpt = false }()
+	if d.current.err == ErrDecoderClosed {
+		return d.current.err
+	}
+	next := *d.publishedOptions.Load()
+	next.dicts = maps.Clone(next.dicts)
+	next.resetOpt = true
 	for _, o := range opts {
-		if err := o(&d.o); err != nil {
+		if err := o(&next); err != nil {
+			next.resetOpt = false
+			d.publishedOptions.Store(&next)
 			return err
 		}
 	}
+	next.resetOpt = false
+	d.publishedOptions.Store(&next)
 	return d.Reset(r)
 }
 
@@ -340,6 +361,8 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 	// Grab a block decoder and frame decoder.
 	block := <-d.decoders
 	frame := block.localFrame
+	o := *d.publishedOptions.Load()
+	frame.setOptions(o)
 	initialSize := len(dst)
 	defer func() {
 		if debugDecoder {
@@ -351,6 +374,7 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 			frame.history.decoders.br.in = nil
 			frame.history.decoders.br.cursor = 0
 		}
+		frame.o.dicts = nil
 		d.decoders <- block
 	}()
 	frame.bBuf = input
@@ -370,20 +394,20 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 		if err = d.setDict(frame); err != nil {
 			return nil, err
 		}
-		if frame.WindowSize > d.o.maxWindowSize {
+		if frame.WindowSize > frame.o.maxWindowSize {
 			if debugDecoder {
-				println("window size exceeded:", frame.WindowSize, ">", d.o.maxWindowSize)
+				println("window size exceeded:", frame.WindowSize, ">", frame.o.maxWindowSize)
 			}
 			return dst, ErrWindowSizeExceeded
 		}
 		if frame.FrameContentSize != fcsUnknown {
-			if frame.FrameContentSize > d.o.maxDecodedSize-uint64(len(dst)-initialSize) {
+			if frame.FrameContentSize > frame.o.maxDecodedSize-uint64(len(dst)-initialSize) {
 				if debugDecoder {
-					println("decoder size exceeded; fcs:", frame.FrameContentSize, "> mcs:", d.o.maxDecodedSize-uint64(len(dst)-initialSize), "len:", len(dst))
+					println("decoder size exceeded; fcs:", frame.FrameContentSize, "> mcs:", frame.o.maxDecodedSize-uint64(len(dst)-initialSize), "len:", len(dst))
 				}
 				return dst, ErrDecoderSizeExceeded
 			}
-			if d.o.limitToCap && frame.FrameContentSize > uint64(cap(dst)-len(dst)) {
+			if frame.o.limitToCap && frame.FrameContentSize > uint64(cap(dst)-len(dst)) {
 				if debugDecoder {
 					println("decoder size exceeded; fcs:", frame.FrameContentSize, "> (cap-len)", cap(dst)-len(dst))
 				}
@@ -396,14 +420,14 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 			}
 		}
 
-		if cap(dst) == 0 && !d.o.limitToCap {
+		if cap(dst) == 0 && !frame.o.limitToCap {
 			// Allocate len(input) * 2 by default if nothing is provided
 			// and we didn't get frame content size.
 			size := min(
 				// Cap to 1 MB.
 				len(input)*2, 1<<20)
-			if uint64(size) > d.o.maxDecodedSize {
-				size = int(d.o.maxDecodedSize)
+			if uint64(size) > frame.o.maxDecodedSize {
+				size = int(frame.o.maxDecodedSize)
 			}
 			dst = make([]byte, 0, size)
 		}
@@ -412,7 +436,7 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 		if err != nil {
 			return dst, err
 		}
-		if uint64(len(dst)-initialSize) > d.o.maxDecodedSize {
+		if uint64(len(dst)-initialSize) > frame.o.maxDecodedSize {
 			return dst, ErrDecoderSizeExceeded
 		}
 		if len(frame.bBuf) == 0 {
@@ -443,7 +467,7 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 			return false
 		}
 		ok = d.nextBlockSync()
-		d.checkWantSize()
+		d.checkWantSize(d.frame.o.wantSize)
 		if !ok {
 			d.stashDecoder()
 		}
@@ -466,7 +490,7 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 		d.current.err = io.ErrUnexpectedEOF
 		return false
 	}
-	d.checkWantSize()
+	d.checkWantSize(d.frame.o.wantSize)
 	next := d.current.decodeOutput
 	if next.d != nil && next.d.async.newHist != nil {
 		d.current.crc.Reset()
@@ -477,7 +501,7 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 		println("got", len(d.current.b), "bytes, error:", d.current.err, "data crc:", tmp)
 	}
 
-	if d.o.ignoreChecksum {
+	if d.frame.o.ignoreChecksum {
 		return true
 	}
 
@@ -515,7 +539,7 @@ func (d *Decoder) nextBlockSync() (ok bool) {
 			if d.current.err != nil {
 				return false
 			}
-			if d.frame.WindowSize > d.o.maxDecodedSize || d.frame.WindowSize > d.o.maxWindowSize {
+			if d.frame.WindowSize > d.frame.o.maxDecodedSize || d.frame.WindowSize > d.frame.o.maxWindowSize {
 				d.current.err = ErrDecoderSizeExceeded
 				return false
 			}
@@ -564,11 +588,11 @@ func (d *Decoder) nextBlockSync() (ok bool) {
 
 		// Update/Check CRC
 		if d.frame.HasCheckSum {
-			if !d.o.ignoreChecksum {
+			if !d.frame.o.ignoreChecksum {
 				d.frame.crc.Write(d.current.b)
 			}
 			if d.current.d.Last {
-				if !d.o.ignoreChecksum {
+				if !d.frame.o.ignoreChecksum {
 					d.current.err = d.frame.checkCRC()
 				} else {
 					d.current.err = d.frame.consumeCRC()
@@ -584,17 +608,17 @@ func (d *Decoder) nextBlockSync() (ok bool) {
 	return true
 }
 
-func (d *Decoder) checkWantSize() {
-	if d.o.wantSize <= 0 {
+func (d *Decoder) checkWantSize(wantSize int64) {
+	if wantSize <= 0 {
 		return
 	}
 	d.current.decoded += int64(len(d.current.b))
-	if d.current.decoded > d.o.wantSize {
+	if d.current.decoded > wantSize {
 		// Only in for API contract completeness, at the cost of discarding decoded output;
 		// up to 128 KBs (one block) when streaming, all past wantSize on the shortcut.
-		d.current.b = d.current.b[:int64(len(d.current.b))-(d.current.decoded-d.o.wantSize)]
+		d.current.b = d.current.b[:int64(len(d.current.b))-(d.current.decoded-wantSize)]
 		d.current.err = ErrDecoderSizeExceeded
-	} else if d.current.err == io.EOF && d.current.decoded < d.o.wantSize {
+	} else if d.current.err == io.EOF && d.current.decoded < wantSize {
 		d.current.err = io.ErrUnexpectedEOF
 	}
 }
@@ -689,8 +713,8 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 	defer d.streamWg.Done()
 	br := readerWrapper{r: r}
 
-	var seqDecode = make(chan *blockDec, d.o.concurrent)
-	var seqExecute = make(chan *blockDec, d.o.concurrent)
+	var seqDecode = make(chan *blockDec, d.frame.o.concurrent)
+	var seqExecute = make(chan *blockDec, d.frame.o.concurrent)
 
 	// Async 1: Decode sequences...
 	go func() {
@@ -891,9 +915,9 @@ decodeStream:
 		if err == nil {
 			err = d.setDict(frame)
 		}
-		if err == nil && d.frame.WindowSize > d.o.maxWindowSize {
+		if err == nil && d.frame.WindowSize > d.frame.o.maxWindowSize {
 			if debugDecoder {
-				println("decoder size exceeded, fws:", d.frame.WindowSize, "> mws:", d.o.maxWindowSize)
+				println("decoder size exceeded, fws:", d.frame.WindowSize, "> mws:", d.frame.o.maxWindowSize)
 			}
 
 			err = ErrDecoderSizeExceeded
@@ -973,7 +997,7 @@ decodeStream:
 }
 
 func (d *Decoder) setDict(frame *frameDec) (err error) {
-	dict, ok := d.o.dicts[frame.DictionaryID]
+	dict, ok := frame.o.dicts[frame.DictionaryID]
 	if ok {
 		if debugDecoder {
 			println("setting dict", frame.DictionaryID)
