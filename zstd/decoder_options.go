@@ -23,9 +23,9 @@ type decoderOptions struct {
 	dicts           map[uint32]*dict
 	ignoreChecksum  bool
 	limitToCap      bool
+	resetOpt        bool
 	decodeBufsBelow int
 	wantSize        int64
-	resetOpt        bool
 }
 
 func (o *decoderOptions) setDefault() {
