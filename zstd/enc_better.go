@@ -32,7 +32,7 @@ var betterPrimes = [2]uint64{prime8bytes, prime5bytes}
 
 // betterHashPrimes returns constants where registers are too scarce to hold them.
 func betterHashPrimes() (primeL, primeS uint64) {
-	if betterPrimesInRegs {
+	if hashPrimesInRegs {
 		return betterPrimes[0], betterPrimes[1]
 	}
 	return prime8bytes, prime5bytes
