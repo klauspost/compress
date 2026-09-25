@@ -1209,21 +1209,33 @@ error_overread:
 	RET
 
 // func sequenceDecs_executeSimple_amd64(ctx *executeAsmContext) bool
-// Requires: SSE
-TEXT ·sequenceDecs_executeSimple_amd64(SB), $8-9
+// Requires: MMX+, SSE
+TEXT ·sequenceDecs_executeSimple_amd64(SB), $32-9
 	MOVQ  ctx+0(FP), R10
 	MOVQ  8(R10), CX
 	TESTQ CX, CX
 	JZ    empty_seqs
 	MOVQ  (R10), AX
-	MOVQ  24(R10), DX
-	MOVQ  32(R10), BX
-	MOVQ  80(R10), SI
-	MOVQ  104(R10), DI
-	MOVQ  120(R10), R8
-	MOVQ  56(R10), R9
-	MOVQ  64(R10), R10
-	ADDQ  R10, R9
+
+	// seqsEnd = seqsBase + 24 * len(seqs) if ctx.prefetch, else seqsBase (prefetch off)
+	MOVQ    AX, DX
+	MOVBQZX 128(R10), R11
+	TESTQ   R11, R11
+	JZ      prefetch_off
+	LEAQ    (CX)(CX*2), DX
+	SHLQ    $0x03, DX
+	ADDQ    AX, DX
+
+prefetch_off:
+	MOVQ DX, (SP)
+	MOVQ 24(R10), DX
+	MOVQ 32(R10), BX
+	MOVQ 80(R10), SI
+	MOVQ 104(R10), DI
+	MOVQ 120(R10), R8
+	MOVQ 56(R10), R9
+	MOVQ 64(R10), R10
+	ADDQ R10, R9
 
 	// seqsBase += 24 * seqIndex
 	LEAQ (DX)(DX*2), R11
@@ -1232,8 +1244,232 @@ TEXT ·sequenceDecs_executeSimple_amd64(SB), $8-9
 
 	// outBase += outPosition
 	ADDQ DI, BX
+	MOVQ BX, 8(SP)
+	MOVQ BX, R11
+	SUBQ DI, R11
+	MOVQ R11, 16(SP)
+	NEGQ R11
+	ADDQ R9, R11
+	MOVQ R11, 24(SP)
 
+	// Prime the prefetch window
+	MOVQ (SP), R11
+	LEAQ (AX), R12
+	CMPQ R12, R11
+	JAE  prefetch_skip_0
+	MOVQ 8(SP), R12
+	MOVQ (AX), R11
+	ADDQ R11, R12
+	MOVQ R12, R13
+	MOVQ 16(AX), R11
+	SUBQ R11, R13
+	MOVQ 16(SP), R11
+	CMPQ R13, R11
+	JAE  prefetch_in_out_0
+	MOVQ 24(SP), R11
+	ADDQ R11, R13
+
+prefetch_in_out_0:
+	PREFETCHT0 (R13)
+	PREFETCHT0 64(R13)
+	MOVQ       8(AX), R11
+	ADDQ       R11, R12
+	MOVQ       R12, 8(SP)
+
+prefetch_skip_0:
+	MOVQ (SP), R11
+	LEAQ 24(AX), R12
+	CMPQ R12, R11
+	JAE  prefetch_skip_1
+	MOVQ 8(SP), R12
+	MOVQ 24(AX), R11
+	ADDQ R11, R12
+	MOVQ R12, R13
+	MOVQ 40(AX), R11
+	SUBQ R11, R13
+	MOVQ 16(SP), R11
+	CMPQ R13, R11
+	JAE  prefetch_in_out_1
+	MOVQ 24(SP), R11
+	ADDQ R11, R13
+
+prefetch_in_out_1:
+	PREFETCHT0 (R13)
+	PREFETCHT0 64(R13)
+	MOVQ       32(AX), R11
+	ADDQ       R11, R12
+	MOVQ       R12, 8(SP)
+
+prefetch_skip_1:
+	MOVQ (SP), R11
+	LEAQ 48(AX), R12
+	CMPQ R12, R11
+	JAE  prefetch_skip_2
+	MOVQ 8(SP), R12
+	MOVQ 48(AX), R11
+	ADDQ R11, R12
+	MOVQ R12, R13
+	MOVQ 64(AX), R11
+	SUBQ R11, R13
+	MOVQ 16(SP), R11
+	CMPQ R13, R11
+	JAE  prefetch_in_out_2
+	MOVQ 24(SP), R11
+	ADDQ R11, R13
+
+prefetch_in_out_2:
+	PREFETCHT0 (R13)
+	PREFETCHT0 64(R13)
+	MOVQ       56(AX), R11
+	ADDQ       R11, R12
+	MOVQ       R12, 8(SP)
+
+prefetch_skip_2:
+	MOVQ (SP), R11
+	LEAQ 72(AX), R12
+	CMPQ R12, R11
+	JAE  prefetch_skip_3
+	MOVQ 8(SP), R12
+	MOVQ 72(AX), R11
+	ADDQ R11, R12
+	MOVQ R12, R13
+	MOVQ 88(AX), R11
+	SUBQ R11, R13
+	MOVQ 16(SP), R11
+	CMPQ R13, R11
+	JAE  prefetch_in_out_3
+	MOVQ 24(SP), R11
+	ADDQ R11, R13
+
+prefetch_in_out_3:
+	PREFETCHT0 (R13)
+	PREFETCHT0 64(R13)
+	MOVQ       80(AX), R11
+	ADDQ       R11, R12
+	MOVQ       R12, 8(SP)
+
+prefetch_skip_3:
+	MOVQ (SP), R11
+	LEAQ 96(AX), R12
+	CMPQ R12, R11
+	JAE  prefetch_skip_4
+	MOVQ 8(SP), R12
+	MOVQ 96(AX), R11
+	ADDQ R11, R12
+	MOVQ R12, R13
+	MOVQ 112(AX), R11
+	SUBQ R11, R13
+	MOVQ 16(SP), R11
+	CMPQ R13, R11
+	JAE  prefetch_in_out_4
+	MOVQ 24(SP), R11
+	ADDQ R11, R13
+
+prefetch_in_out_4:
+	PREFETCHT0 (R13)
+	PREFETCHT0 64(R13)
+	MOVQ       104(AX), R11
+	ADDQ       R11, R12
+	MOVQ       R12, 8(SP)
+
+prefetch_skip_4:
+	MOVQ (SP), R11
+	LEAQ 120(AX), R12
+	CMPQ R12, R11
+	JAE  prefetch_skip_5
+	MOVQ 8(SP), R12
+	MOVQ 120(AX), R11
+	ADDQ R11, R12
+	MOVQ R12, R13
+	MOVQ 136(AX), R11
+	SUBQ R11, R13
+	MOVQ 16(SP), R11
+	CMPQ R13, R11
+	JAE  prefetch_in_out_5
+	MOVQ 24(SP), R11
+	ADDQ R11, R13
+
+prefetch_in_out_5:
+	PREFETCHT0 (R13)
+	PREFETCHT0 64(R13)
+	MOVQ       128(AX), R11
+	ADDQ       R11, R12
+	MOVQ       R12, 8(SP)
+
+prefetch_skip_5:
+	MOVQ (SP), R11
+	LEAQ 144(AX), R12
+	CMPQ R12, R11
+	JAE  prefetch_skip_6
+	MOVQ 8(SP), R12
+	MOVQ 144(AX), R11
+	ADDQ R11, R12
+	MOVQ R12, R13
+	MOVQ 160(AX), R11
+	SUBQ R11, R13
+	MOVQ 16(SP), R11
+	CMPQ R13, R11
+	JAE  prefetch_in_out_6
+	MOVQ 24(SP), R11
+	ADDQ R11, R13
+
+prefetch_in_out_6:
+	PREFETCHT0 (R13)
+	PREFETCHT0 64(R13)
+	MOVQ       152(AX), R11
+	ADDQ       R11, R12
+	MOVQ       R12, 8(SP)
+
+prefetch_skip_6:
+	MOVQ (SP), R11
+	LEAQ 168(AX), R12
+	CMPQ R12, R11
+	JAE  prefetch_skip_7
+	MOVQ 8(SP), R12
+	MOVQ 168(AX), R11
+	ADDQ R11, R12
+	MOVQ R12, R13
+	MOVQ 184(AX), R11
+	SUBQ R11, R13
+	MOVQ 16(SP), R11
+	CMPQ R13, R11
+	JAE  prefetch_in_out_7
+	MOVQ 24(SP), R11
+	ADDQ R11, R13
+
+prefetch_in_out_7:
+	PREFETCHT0 (R13)
+	PREFETCHT0 64(R13)
+	MOVQ       176(AX), R11
+	ADDQ       R11, R12
+	MOVQ       R12, 8(SP)
+
+prefetch_skip_7:
 main_loop:
+	MOVQ (SP), R11
+	LEAQ 192(AX), R12
+	CMPQ R12, R11
+	JAE  prefetch_skip_8
+	MOVQ 8(SP), R12
+	MOVQ 192(AX), R11
+	ADDQ R11, R12
+	MOVQ R12, R13
+	MOVQ 208(AX), R11
+	SUBQ R11, R13
+	MOVQ 16(SP), R11
+	CMPQ R13, R11
+	JAE  prefetch_in_out_8
+	MOVQ 24(SP), R11
+	ADDQ R11, R13
+
+prefetch_in_out_8:
+	PREFETCHT0 (R13)
+	PREFETCHT0 64(R13)
+	MOVQ       200(AX), R11
+	ADDQ       R11, R12
+	MOVQ       R12, 8(SP)
+
+prefetch_skip_8:
 	MOVQ (AX), R11
 	MOVQ 16(AX), R12
 	MOVQ 8(AX), R13
@@ -1476,21 +1712,33 @@ empty_seqs:
 	RET
 
 // func sequenceDecs_executeSimple_safe_amd64(ctx *executeAsmContext) bool
-// Requires: SSE
-TEXT ·sequenceDecs_executeSimple_safe_amd64(SB), $8-9
+// Requires: MMX+, SSE
+TEXT ·sequenceDecs_executeSimple_safe_amd64(SB), $32-9
 	MOVQ  ctx+0(FP), R10
 	MOVQ  8(R10), CX
 	TESTQ CX, CX
 	JZ    empty_seqs
 	MOVQ  (R10), AX
-	MOVQ  24(R10), DX
-	MOVQ  32(R10), BX
-	MOVQ  80(R10), SI
-	MOVQ  104(R10), DI
-	MOVQ  120(R10), R8
-	MOVQ  56(R10), R9
-	MOVQ  64(R10), R10
-	ADDQ  R10, R9
+
+	// seqsEnd = seqsBase + 24 * len(seqs) if ctx.prefetch, else seqsBase (prefetch off)
+	MOVQ    AX, DX
+	MOVBQZX 128(R10), R11
+	TESTQ   R11, R11
+	JZ      prefetch_off
+	LEAQ    (CX)(CX*2), DX
+	SHLQ    $0x03, DX
+	ADDQ    AX, DX
+
+prefetch_off:
+	MOVQ DX, (SP)
+	MOVQ 24(R10), DX
+	MOVQ 32(R10), BX
+	MOVQ 80(R10), SI
+	MOVQ 104(R10), DI
+	MOVQ 120(R10), R8
+	MOVQ 56(R10), R9
+	MOVQ 64(R10), R10
+	ADDQ R10, R9
 
 	// seqsBase += 24 * seqIndex
 	LEAQ (DX)(DX*2), R11
@@ -1499,8 +1747,232 @@ TEXT ·sequenceDecs_executeSimple_safe_amd64(SB), $8-9
 
 	// outBase += outPosition
 	ADDQ DI, BX
+	MOVQ BX, 8(SP)
+	MOVQ BX, R11
+	SUBQ DI, R11
+	MOVQ R11, 16(SP)
+	NEGQ R11
+	ADDQ R9, R11
+	MOVQ R11, 24(SP)
 
+	// Prime the prefetch window
+	MOVQ (SP), R11
+	LEAQ (AX), R12
+	CMPQ R12, R11
+	JAE  prefetch_skip_0
+	MOVQ 8(SP), R12
+	MOVQ (AX), R11
+	ADDQ R11, R12
+	MOVQ R12, R13
+	MOVQ 16(AX), R11
+	SUBQ R11, R13
+	MOVQ 16(SP), R11
+	CMPQ R13, R11
+	JAE  prefetch_in_out_0
+	MOVQ 24(SP), R11
+	ADDQ R11, R13
+
+prefetch_in_out_0:
+	PREFETCHT0 (R13)
+	PREFETCHT0 64(R13)
+	MOVQ       8(AX), R11
+	ADDQ       R11, R12
+	MOVQ       R12, 8(SP)
+
+prefetch_skip_0:
+	MOVQ (SP), R11
+	LEAQ 24(AX), R12
+	CMPQ R12, R11
+	JAE  prefetch_skip_1
+	MOVQ 8(SP), R12
+	MOVQ 24(AX), R11
+	ADDQ R11, R12
+	MOVQ R12, R13
+	MOVQ 40(AX), R11
+	SUBQ R11, R13
+	MOVQ 16(SP), R11
+	CMPQ R13, R11
+	JAE  prefetch_in_out_1
+	MOVQ 24(SP), R11
+	ADDQ R11, R13
+
+prefetch_in_out_1:
+	PREFETCHT0 (R13)
+	PREFETCHT0 64(R13)
+	MOVQ       32(AX), R11
+	ADDQ       R11, R12
+	MOVQ       R12, 8(SP)
+
+prefetch_skip_1:
+	MOVQ (SP), R11
+	LEAQ 48(AX), R12
+	CMPQ R12, R11
+	JAE  prefetch_skip_2
+	MOVQ 8(SP), R12
+	MOVQ 48(AX), R11
+	ADDQ R11, R12
+	MOVQ R12, R13
+	MOVQ 64(AX), R11
+	SUBQ R11, R13
+	MOVQ 16(SP), R11
+	CMPQ R13, R11
+	JAE  prefetch_in_out_2
+	MOVQ 24(SP), R11
+	ADDQ R11, R13
+
+prefetch_in_out_2:
+	PREFETCHT0 (R13)
+	PREFETCHT0 64(R13)
+	MOVQ       56(AX), R11
+	ADDQ       R11, R12
+	MOVQ       R12, 8(SP)
+
+prefetch_skip_2:
+	MOVQ (SP), R11
+	LEAQ 72(AX), R12
+	CMPQ R12, R11
+	JAE  prefetch_skip_3
+	MOVQ 8(SP), R12
+	MOVQ 72(AX), R11
+	ADDQ R11, R12
+	MOVQ R12, R13
+	MOVQ 88(AX), R11
+	SUBQ R11, R13
+	MOVQ 16(SP), R11
+	CMPQ R13, R11
+	JAE  prefetch_in_out_3
+	MOVQ 24(SP), R11
+	ADDQ R11, R13
+
+prefetch_in_out_3:
+	PREFETCHT0 (R13)
+	PREFETCHT0 64(R13)
+	MOVQ       80(AX), R11
+	ADDQ       R11, R12
+	MOVQ       R12, 8(SP)
+
+prefetch_skip_3:
+	MOVQ (SP), R11
+	LEAQ 96(AX), R12
+	CMPQ R12, R11
+	JAE  prefetch_skip_4
+	MOVQ 8(SP), R12
+	MOVQ 96(AX), R11
+	ADDQ R11, R12
+	MOVQ R12, R13
+	MOVQ 112(AX), R11
+	SUBQ R11, R13
+	MOVQ 16(SP), R11
+	CMPQ R13, R11
+	JAE  prefetch_in_out_4
+	MOVQ 24(SP), R11
+	ADDQ R11, R13
+
+prefetch_in_out_4:
+	PREFETCHT0 (R13)
+	PREFETCHT0 64(R13)
+	MOVQ       104(AX), R11
+	ADDQ       R11, R12
+	MOVQ       R12, 8(SP)
+
+prefetch_skip_4:
+	MOVQ (SP), R11
+	LEAQ 120(AX), R12
+	CMPQ R12, R11
+	JAE  prefetch_skip_5
+	MOVQ 8(SP), R12
+	MOVQ 120(AX), R11
+	ADDQ R11, R12
+	MOVQ R12, R13
+	MOVQ 136(AX), R11
+	SUBQ R11, R13
+	MOVQ 16(SP), R11
+	CMPQ R13, R11
+	JAE  prefetch_in_out_5
+	MOVQ 24(SP), R11
+	ADDQ R11, R13
+
+prefetch_in_out_5:
+	PREFETCHT0 (R13)
+	PREFETCHT0 64(R13)
+	MOVQ       128(AX), R11
+	ADDQ       R11, R12
+	MOVQ       R12, 8(SP)
+
+prefetch_skip_5:
+	MOVQ (SP), R11
+	LEAQ 144(AX), R12
+	CMPQ R12, R11
+	JAE  prefetch_skip_6
+	MOVQ 8(SP), R12
+	MOVQ 144(AX), R11
+	ADDQ R11, R12
+	MOVQ R12, R13
+	MOVQ 160(AX), R11
+	SUBQ R11, R13
+	MOVQ 16(SP), R11
+	CMPQ R13, R11
+	JAE  prefetch_in_out_6
+	MOVQ 24(SP), R11
+	ADDQ R11, R13
+
+prefetch_in_out_6:
+	PREFETCHT0 (R13)
+	PREFETCHT0 64(R13)
+	MOVQ       152(AX), R11
+	ADDQ       R11, R12
+	MOVQ       R12, 8(SP)
+
+prefetch_skip_6:
+	MOVQ (SP), R11
+	LEAQ 168(AX), R12
+	CMPQ R12, R11
+	JAE  prefetch_skip_7
+	MOVQ 8(SP), R12
+	MOVQ 168(AX), R11
+	ADDQ R11, R12
+	MOVQ R12, R13
+	MOVQ 184(AX), R11
+	SUBQ R11, R13
+	MOVQ 16(SP), R11
+	CMPQ R13, R11
+	JAE  prefetch_in_out_7
+	MOVQ 24(SP), R11
+	ADDQ R11, R13
+
+prefetch_in_out_7:
+	PREFETCHT0 (R13)
+	PREFETCHT0 64(R13)
+	MOVQ       176(AX), R11
+	ADDQ       R11, R12
+	MOVQ       R12, 8(SP)
+
+prefetch_skip_7:
 main_loop:
+	MOVQ (SP), R11
+	LEAQ 192(AX), R12
+	CMPQ R12, R11
+	JAE  prefetch_skip_8
+	MOVQ 8(SP), R12
+	MOVQ 192(AX), R11
+	ADDQ R11, R12
+	MOVQ R12, R13
+	MOVQ 208(AX), R11
+	SUBQ R11, R13
+	MOVQ 16(SP), R11
+	CMPQ R13, R11
+	JAE  prefetch_in_out_8
+	MOVQ 24(SP), R11
+	ADDQ R11, R13
+
+prefetch_in_out_8:
+	PREFETCHT0 (R13)
+	PREFETCHT0 64(R13)
+	MOVQ       200(AX), R11
+	ADDQ       R11, R12
+	MOVQ       R12, 8(SP)
+
+prefetch_skip_8:
 	MOVQ (AX), R11
 	MOVQ 16(AX), R12
 	MOVQ 8(AX), R13

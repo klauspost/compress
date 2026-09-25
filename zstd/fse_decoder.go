@@ -43,6 +43,27 @@ type fseDecoder struct {
 	preDefined bool
 }
 
+// codeShare returns, in 1/256ths, the table's probability mass on symbols
+// minCode and above: for a table read from the block, the share of its
+// sequences with those codes. The predefined tables describe the format's
+// defaults, not the block, and RLE tables have no distribution; both
+// report -1.
+func (s *fseDecoder) codeShare(minCode int) int {
+	if s == nil || s.preDefined || s.actualTableLog == 0 {
+		return -1
+	}
+	n := 0
+	for c := minCode; c < int(s.symbolLen); c++ {
+		switch v := int(s.norm[c]); {
+		case v > 0:
+			n += v
+		case v < 0:
+			n++ // -1 marks a probability below one slot; it occupies one
+		}
+	}
+	return n * 256 >> s.actualTableLog
+}
+
 // tableStep returns the next table index.
 func tableStep(tableSize uint32) uint32 {
 	return (tableSize >> 1) + (tableSize >> 3) + 3
