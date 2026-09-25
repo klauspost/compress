@@ -4,6 +4,8 @@
 
 package zstd
 
+import "runtime"
+
 const (
 	prime3bytes = 506832829
 	prime4bytes = 2654435761
@@ -12,6 +14,12 @@ const (
 	prime7bytes = 58295818150454627
 	prime8bytes = 0xcf1bbcdcb7a56463
 )
+
+// hashPrimesInRegs reports whether encoders should keep the 64-bit hash primes
+// in registers rather than as constants. The compiler rebuilds a constant at
+// every use: one instruction on amd64, but up to 4 on arm64, which also has
+// the registers to spare. See betterHashPrimes.
+const hashPrimesInRegs = runtime.GOARCH == "arm64"
 
 // hashLen returns a hash of the lowest mls bytes of with length output bits.
 // mls must be >=3 and <=8. Any other value will return hash for 4 bytes.
