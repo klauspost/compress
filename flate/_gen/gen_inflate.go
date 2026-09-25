@@ -132,7 +132,7 @@ $DISCARD$			f.b, f.nb = fb, fnb
 					if debugDecode {
 						fmt.Println("morebits n>0:", err)
 					}
-					f.err = err
+					f.err = noEOF(err)
 $GETBYTE_E$
 				f.roffset++
 				fb |= uint32(c) << (fnb&regmask.Shift32ByUint)
@@ -157,7 +157,7 @@ $DISCARD$			if debugDecode {
 					if debugDecode {
 						fmt.Println("morebits f.nb<5:", err)
 					}
-					f.err = err
+					f.err = noEOF(err)
 $GETBYTE_E$
 				f.roffset++
 				fb |= uint32(c) << (fnb&regmask.Shift32ByUint)
@@ -219,7 +219,7 @@ $DISCARD$						f.b, f.nb = fb, fnb
 					if debugDecode {
 						fmt.Println("morebits f.nb<nb:", err)
 					}
-					f.err = err
+					f.err = noEOF(err)
 $GETBYTE_E$
 				f.roffset++
 				fb |= uint32(c) << (fnb&regmask.Shift32ByUint)
