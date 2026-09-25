@@ -23,8 +23,9 @@ type decoderOptions struct {
 	dicts           map[uint32]*dict
 	ignoreChecksum  bool
 	limitToCap      bool
-	decodeBufsBelow int
 	resetOpt        bool
+	decodeBufsBelow int
+	wantSize        int64
 }
 
 func (o *decoderOptions) setDefault() {
@@ -193,6 +194,18 @@ func WithDecodeBuffersBelow(size int) DOption {
 func IgnoreChecksum(b bool) DOption {
 	return func(o *decoderOptions) error {
 		o.ignoreChecksum = b
+		return nil
+	}
+}
+
+// DecoderWantSize will set the expected decompressed size for streams.
+// This does not apply to DecodeAll calls.
+// If the bytes decoded does not match the size given an error will be returned.
+// Sizes <= 0 results in no content size set.
+// Can be changed with ResetWithOptions.
+func DecoderWantSize(n int64) DOption {
+	return func(o *decoderOptions) error {
+		o.wantSize = n
 		return nil
 	}
 }
