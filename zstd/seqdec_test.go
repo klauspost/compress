@@ -722,3 +722,53 @@ func TestDecoderShortSequenceCopies(t *testing.T) {
 		}
 	}
 }
+
+// TestDecodeOverlappingMatches decodes periodic data, which the encoder
+// turns into long matches whose offset is the period and whose length is
+// many periods, so the copy overlaps its own output. Offsets of 16 and
+// above are copied in 16-byte blocks; shorter ones byte by byte. Both the
+// fast copies (output with slack) and the bounds-exact ones (output sized
+// exactly) must reproduce the input.
+func TestDecodeOverlappingMatches(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	enc, err := NewWriter(nil, WithEncoderLevel(SpeedBestCompression))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer enc.Close()
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+
+	for _, period := range []int{3, 8, 15, 16, 17, 31, 32, 33, 100, 1000} {
+		for _, tail := range []int{0, 1, 15, 16, 17} {
+			pattern := make([]byte, period)
+			rng.Read(pattern)
+			input := bytes.Repeat(pattern, (64<<10)/period+1)
+			input = append(input, pattern[:tail%period]...)
+			comp := enc.EncodeAll(input, nil)
+
+			name := fmt.Sprintf("period=%d/tail=%d", period, tail)
+			t.Run(name+"/slack", func(t *testing.T) {
+				got, err := dec.DecodeAll(comp, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(got, input) {
+					t.Fatal("output mismatch")
+				}
+			})
+			t.Run(name+"/exact", func(t *testing.T) {
+				got, err := dec.DecodeAll(comp, make([]byte, 0, len(input)))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(got, input) {
+					t.Fatal("output mismatch")
+				}
+			})
+		}
+	}
+}
