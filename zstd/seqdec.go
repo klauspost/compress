@@ -367,13 +367,13 @@ func (s *sequenceDecs) decodeSync(hist []byte) error {
 
 		if mo > len(out)+len(hist) || mo > s.windowSize {
 			if len(s.dict) == 0 {
-				return fmt.Errorf("match offset (%d) bigger than current history (%d)", mo, len(out)+len(hist)-startSize)
+				return fmt.Errorf("match offset (%d) bigger than current history (%d)", mo, len(out)-startSize)
 			}
 
 			// we may be in dictionary.
 			dictO := len(s.dict) - (mo - (len(out) + len(hist)))
 			if dictO < 0 || dictO >= len(s.dict) {
-				return fmt.Errorf("match offset (%d) bigger than current history (%d)", mo, len(out)+len(hist)-startSize)
+				return fmt.Errorf("match offset (%d) bigger than current history (%d)", mo, len(out)-startSize)
 			}
 			end := dictO + ml
 			if end > len(s.dict) {

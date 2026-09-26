@@ -418,6 +418,8 @@ func (b *blockDec) decodeLiterals(in []byte, hist *history) (remain []byte, err 
 		if len(literals) != litRegenSize {
 			return in, fmt.Errorf("literal output size mismatch want %d, got %d", litRegenSize, len(literals))
 		}
+		// Re-cap to get extra size.
+		literals = b.literalBuf[:len(literals)]
 
 	case literalsBlockCompressed:
 		if len(in) < litCompSize {
@@ -493,7 +495,11 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		return nil
 	}
 	before := len(hist.decoders.out)
-	err = hist.decoders.decodeSync(hist.b[hist.ignoreBuffer:])
+	h := hist.b[hist.ignoreBuffer:]
+	if hist.ext != nil {
+		h = hist.ext
+	}
+	err = hist.decoders.decodeSync(h)
 	if err != nil {
 		return err
 	}
@@ -673,38 +679,41 @@ func (b *blockDec) decodeSequences(hist *history) error {
 	return err
 }
 
+// executeSequences executes the block's sequences straight into the history
+// ring, as decodeCompressed does, and copies the result to b.dst for output.
 func (b *blockDec) executeSequences(hist *history) error {
-	hbytes := hist.b
-	if len(hbytes) > hist.windowSize {
-		hbytes = hbytes[len(hbytes)-hist.windowSize:]
-	}
+	hist.ensureBlockRing()
+	start := len(hist.b)
 	hist.decoders.windowSize = hist.windowSize
-	hist.decoders.out = b.dst[:0]
-	err := hist.decoders.execute(b.sequence, hbytes)
+	hist.decoders.out = hist.b
+	err := hist.decoders.execute(b.sequence, hist.ext)
 	if err != nil {
 		return err
 	}
-	return b.updateHistory(hist)
+	return b.updateHistory(hist, start)
 }
 
-func (b *blockDec) updateHistory(hist *history) error {
+// updateHistory copies the block's output, which starts at out[start], to
+// b.dst and keeps it as history.
+func (b *blockDec) updateHistory(hist *history, start int) error {
 	if len(b.data) > maxCompressedBlockSize {
 		return fmt.Errorf("compressed block size too large (%d)", len(b.data))
 	}
-	// Set output and release references.
-	b.dst = hist.decoders.out
+	out := hist.decoders.out
+	b.dst = append(b.dst[:0], out[start:]...)
 	hist.recentOffsets = hist.decoders.prevOffset
 
 	if b.Last {
 		// if last block we don't care about history.
-		println("Last block, no history returned")
+		if debugDecoder {
+			println("Last block, no history returned")
+		}
 		hist.b = hist.b[:0]
 		return nil
-	} else {
-		hist.append(b.dst)
-		if debugDecoder {
-			println("Finished block with ", len(b.sequence), "sequences. Added", len(b.dst), "to history, now length", len(hist.b))
-		}
+	}
+	hist.b = out
+	if debugDecoder {
+		println("Finished block with ", len(b.sequence), "sequences. Added", len(b.dst), "to history, now length", len(hist.b))
 	}
 	hist.decoders.out, hist.decoders.literals = nil, nil
 

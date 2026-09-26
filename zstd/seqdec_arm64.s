@@ -861,7 +861,20 @@ copy_2:
 
 	// Copy overlapping match
 copy_overlapping_match:
-	ADD R12, R6, R6
+	ADD  R12, R6, R6
+	CMP  $0x10, R11
+	BLO  copy_slow_3
+	MOVD R3, R11
+	ADD  R12, R3, R3
+
+copy_3:
+	FMOVQ (R10), F0
+	FMOVQ F0, (R11)
+	ADD   $0x10, R10, R10
+	ADD   $0x10, R11, R11
+	SUBS  $0x10, R12, R12
+	BHI   copy_3
+	JMP   handle_loop
 
 copy_slow_3:
 	MOVBU (R10), R11
@@ -1263,6 +1276,19 @@ copy_2_end:
 	// Copy overlapping match
 copy_overlapping_match:
 	ADD R12, R6, R6
+	CMP $0x10, R11
+	BLO copy_slow_3
+
+copy_3_blocks:
+	FMOVQ (R10), F0
+	FMOVQ F0, (R3)
+	ADD   $0x10, R10, R10
+	ADD   $0x10, R3, R3
+	SUB   $0x10, R12, R12
+	CMP   $0x10, R12
+	BHS   copy_3_blocks
+	TST   R12, R12
+	BEQ   handle_loop
 
 copy_slow_3:
 	MOVBU (R10), R11
@@ -1794,7 +1820,20 @@ copy_2:
 
 	// Copy overlapping match
 copy_overlapping_match:
-	ADD R0, R11, R11
+	ADD  R0, R11, R11
+	CMP  $0x10, R12
+	BLO  copy_slow_3
+	MOVD R9, R12
+	ADD  R0, R9, R9
+
+copy_3:
+	FMOVQ (R1), F0
+	FMOVQ F0, (R12)
+	ADD   $0x10, R1, R1
+	ADD   $0x10, R12, R12
+	SUBS  $0x10, R0, R0
+	BHI   copy_3
+	JMP   handle_loop
 
 copy_slow_3:
 	MOVBU (R1), R12
@@ -2486,6 +2525,19 @@ copy_2_end:
 	// Copy overlapping match
 copy_overlapping_match:
 	ADD R0, R11, R11
+	CMP $0x10, R12
+	BLO copy_slow_3
+
+copy_3_blocks:
+	FMOVQ (R1), F0
+	FMOVQ F0, (R9)
+	ADD   $0x10, R1, R1
+	ADD   $0x10, R9, R9
+	SUB   $0x10, R0, R0
+	CMP   $0x10, R0
+	BHS   copy_3_blocks
+	TST   R0, R0
+	BEQ   handle_loop
 
 copy_slow_3:
 	MOVBU (R1), R12

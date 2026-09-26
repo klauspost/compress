@@ -1431,6 +1431,19 @@ copy_2:
 	// Copy overlapping match
 copy_overlapping_match:
 	ADDQ R13, DI
+	CMPQ R12, $0x10
+	JB   copy_slow_3
+	MOVQ BX, R12
+	ADDQ R13, BX
+
+copy_3:
+	MOVUPS (R11), X0
+	MOVUPS X0, (R12)
+	ADDQ   $0x10, R11
+	ADDQ   $0x10, R12
+	SUBQ   $0x10, R13
+	JHI    copy_3
+	JMP    handle_loop
 
 copy_slow_3:
 	MOVBQZX (R11), R12
@@ -1787,6 +1800,19 @@ copy_2_end:
 	// Copy overlapping match
 copy_overlapping_match:
 	ADDQ R13, DI
+	CMPQ R12, $0x10
+	JB   copy_slow_3
+
+copy_3_blocks:
+	MOVUPS (R11), X0
+	MOVUPS X0, (BX)
+	ADDQ   $0x10, R11
+	ADDQ   $0x10, BX
+	SUBQ   $0x10, R13
+	CMPQ   R13, $0x10
+	JAE    copy_3_blocks
+	TESTQ  R13, R13
+	JZ     handle_loop
 
 copy_slow_3:
 	MOVBQZX (R11), R12
@@ -2299,6 +2325,19 @@ copy_2:
 	// Copy overlapping match
 copy_overlapping_match:
 	ADDQ AX, R12
+	CMPQ R13, $0x10
+	JB   copy_slow_3
+	MOVQ R10, R13
+	ADDQ AX, R10
+
+copy_3:
+	MOVUPS (CX), X0
+	MOVUPS X0, (R13)
+	ADDQ   $0x10, CX
+	ADDQ   $0x10, R13
+	SUBQ   $0x10, AX
+	JHI    copy_3
+	JMP    handle_loop
 
 copy_slow_3:
 	MOVBQZX (CX), R13
@@ -2835,6 +2874,19 @@ copy_2:
 	// Copy overlapping match
 copy_overlapping_match:
 	ADDQ CX, R11
+	CMPQ R13, $0x10
+	JB   copy_slow_3
+	MOVQ R9, R13
+	ADDQ CX, R9
+
+copy_3:
+	MOVUPS (R12), X0
+	MOVUPS X0, (R13)
+	ADDQ   $0x10, R12
+	ADDQ   $0x10, R13
+	SUBQ   $0x10, CX
+	JHI    copy_3
+	JMP    handle_loop
 
 copy_slow_3:
 	MOVBQZX (R12), R13
@@ -3478,6 +3530,19 @@ copy_2_end:
 	// Copy overlapping match
 copy_overlapping_match:
 	ADDQ AX, R12
+	CMPQ R13, $0x10
+	JB   copy_slow_3
+
+copy_3_blocks:
+	MOVUPS (CX), X0
+	MOVUPS X0, (R10)
+	ADDQ   $0x10, CX
+	ADDQ   $0x10, R10
+	SUBQ   $0x10, AX
+	CMPQ   AX, $0x10
+	JAE    copy_3_blocks
+	TESTQ  AX, AX
+	JZ     handle_loop
 
 copy_slow_3:
 	MOVBQZX (CX), R13
@@ -4103,6 +4168,19 @@ copy_2_end:
 	// Copy overlapping match
 copy_overlapping_match:
 	ADDQ CX, R11
+	CMPQ R13, $0x10
+	JB   copy_slow_3
+
+copy_3_blocks:
+	MOVUPS (R12), X0
+	MOVUPS X0, (R9)
+	ADDQ   $0x10, R12
+	ADDQ   $0x10, R9
+	SUBQ   $0x10, CX
+	CMPQ   CX, $0x10
+	JAE    copy_3_blocks
+	TESTQ  CX, CX
+	JZ     handle_loop
 
 copy_slow_3:
 	MOVBQZX (R12), R13

@@ -1356,6 +1356,33 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 		Label("copy_overlapping_match")
 		{
 			ADDQ(ml, c.outPosition)
+			// With an offset of at least 16, each 16-byte block reads only
+			// bytes written before it, so it can be copied in blocks like a
+			// non-overlapping match. Repeated content (logs, duplicated
+			// documents) is mostly long overlapping matches at such offsets;
+			// shorter offsets are rare and are copied byte by byte.
+			CMPQ(mo, U8(16))
+			JB(LabelRef("copy_slow_3"))
+			if !e.safeMem {
+				dst := GP64()
+				MOVQ(c.outBase, dst)
+				ADDQ(ml, c.outBase)
+				e.copyMemory("3", src, dst, ml)
+				JMP(LabelRef("handle_loop"))
+			} else {
+				// ml > mo >= 16, so there is at least one whole block.
+				t := XMM()
+				Label("copy_3_blocks")
+				MOVUPS(Mem{Base: src}, t)
+				MOVUPS(t, Mem{Base: c.outBase})
+				ADDQ(U8(16), src)
+				ADDQ(U8(16), c.outBase)
+				SUBQ(U8(16), ml)
+				CMPQ(ml, U8(16))
+				JAE(LabelRef("copy_3_blocks"))
+				TESTQ(ml, ml)
+				JZ(LabelRef("handle_loop"))
+			}
 			e.copyOverlappedMemory("3", src, c.outBase, ml)
 		}
 	}

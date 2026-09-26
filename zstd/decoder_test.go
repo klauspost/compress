@@ -2689,3 +2689,180 @@ func TestDecoderBufferShortcutFallsBackToStreaming(t *testing.T) {
 		})
 	}
 }
+
+// TestStreamRingWraps streams frames long enough to wrap the decoder's
+// history ring many times, so matches start in the previous lap and continue
+// into the current one. "mixed" has back-references at random distances up
+// to a window; "far" repeats a random chunk of 15/16 of the window, which can
+// only compress through matches at nearly the full window distance, so its
+// compressed size shows those matches are in the frame. "raw+rle" alternates
+// raw and RLE blocks, which the encoder does not produce on its own. Each
+// configuration uses one decoder, Reset for every stream, so the ring is
+// reused across frames with different windows, including two such frames in
+// one stream. Output must match the input for the synchronous and the
+// concurrent decoder, both memory modes and both read paths.
+func TestStreamRingWraps(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	const size = 6 << 20
+	mixed := func(window int) []byte {
+		input := make([]byte, 0, size)
+		for len(input) < size {
+			n := 16 + rng.Intn(512)
+			if len(input) > 1024 && rng.Intn(3) > 0 {
+				// Copy from up to a window back.
+				back := 1 + rng.Intn(min(window, len(input)))
+				start := len(input) - back
+				for i := range n {
+					input = append(input, input[start+i])
+				}
+				continue
+			}
+			for range n {
+				input = append(input, byte('a'+rng.Intn(8)))
+			}
+		}
+		return input
+	}
+	far := func(window int) []byte {
+		chunk := make([]byte, window-window/16)
+		rng.Read(chunk)
+		return bytes.Repeat(chunk, size/len(chunk)+1)
+	}
+	type stream struct {
+		name        string
+		comp, input []byte
+	}
+	var streams []stream
+	for _, window := range []int{MinWindowSize, 64 << 10, 1 << 20} {
+		for _, kind := range []string{"mixed", "far"} {
+			input := mixed(window)
+			if kind == "far" {
+				input = far(window)
+			}
+			enc, err := NewWriter(nil, WithWindowSize(window), WithEncoderConcurrency(1))
+			if err != nil {
+				t.Fatal(err)
+			}
+			comp := enc.EncodeAll(input, nil)
+			enc.Close()
+			if kind == "far" {
+				// Random bytes only compress through the repeats, which are
+				// all at the chunk's distance.
+				t.Logf("window=%d: far input compressed to %.1f%%", window, 100*float64(len(comp))/float64(len(input)))
+				if len(comp) > len(input)/2 {
+					t.Fatalf("window=%d: %d random bytes repeated compressed to %d; expected window-distance matches", window, len(input), len(comp))
+				}
+			}
+			streams = append(streams, stream{fmt.Sprintf("window=%d/%s", window, kind), comp, input})
+		}
+	}
+
+	// A 64 KiB-window frame of alternating raw and RLE blocks.
+	var rawRLE, rawRLEWant []byte
+	rawRLE = append(rawRLE, 0x28, 0xb5, 0x2f, 0xfd, 0x00, 6<<3) // magic, no FCS, 64 KiB window
+	for i := 0; len(rawRLEWant) < 4<<20; i++ {
+		raw := make([]byte, 1+rng.Intn(32<<10))
+		rng.Read(raw)
+		rawRLE = append(rawRLE, testBlockHeader(len(raw), blockTypeRaw, false)...)
+		rawRLE = append(rawRLE, raw...)
+		n := 1 + rng.Intn(60<<10)
+		rawRLE = append(rawRLE, testBlockHeader(n, blockTypeRLE, len(rawRLEWant)+len(raw)+n >= 4<<20)...)
+		rawRLE = append(rawRLE, byte(i))
+		rawRLEWant = append(append(rawRLEWant, raw...), bytes.Repeat([]byte{byte(i)}, n)...)
+	}
+	streams = append(streams, stream{"window=65536/raw+rle", rawRLE, rawRLEWant})
+
+	// Two frames with different windows in one stream.
+	a, b := streams[5], streams[2] // window=1048576/far, window=65536/mixed
+	streams = append(streams, stream{"two-frames",
+		append(append([]byte(nil), a.comp...), b.comp...),
+		append(append([]byte(nil), a.input...), b.input...)})
+
+	for _, concurrent := range []int{1, 4} {
+		for _, lowMem := range []bool{true, false} {
+			for _, viaRead := range []bool{false, true} {
+				dec, err := NewReader(nil, WithDecoderConcurrency(concurrent), WithDecoderLowmem(lowMem))
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, s := range streams {
+					t.Run(fmt.Sprintf("conc=%d/lowmem=%v/read=%v/%s", concurrent, lowMem, viaRead, s.name), func(t *testing.T) {
+						if err := dec.Reset(bytes.NewReader(s.comp)); err != nil {
+							t.Fatal(err)
+						}
+						var got []byte
+						if !viaRead {
+							var buf bytes.Buffer
+							_, err = dec.WriteTo(&buf)
+							got = buf.Bytes()
+						} else {
+							got, err = io.ReadAll(struct{ io.Reader }{dec})
+						}
+						if err != nil {
+							t.Fatal(err)
+						}
+						if !bytes.Equal(got, s.input) {
+							t.Fatalf("output mismatch: got %d bytes, want %d", len(got), len(s.input))
+						}
+					})
+				}
+				dec.Close()
+			}
+		}
+	}
+}
+
+// TestDecodeAllChecksumPerBlock checks DecodeAll's frame checksum, which is
+// accumulated block by block, over multi-block frames appended to empty and
+// non-empty destinations: a valid frame decodes, a wrong checksum is
+// reported unless checksums are ignored.
+func TestDecodeAllChecksumPerBlock(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	input := make([]byte, 1<<20)
+	for i := range input {
+		input[i] = byte('a' + rng.Intn(4))
+	}
+	enc, err := NewWriter(nil, WithEncoderCRC(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	comp := enc.EncodeAll(input, nil)
+	enc.Close()
+	bad := append([]byte(nil), comp...)
+	bad[len(bad)-1] ^= 0xff
+
+	prefix := []byte("existing output")
+	tests := []struct {
+		name    string
+		in      []byte
+		dst     []byte
+		ignore  bool
+		wantErr error
+	}{
+		{"valid", comp, nil, false, nil},
+		{"valid/prefix", comp, prefix, false, nil},
+		{"bad checksum", bad, nil, false, ErrCRCMismatch},
+		{"bad checksum/prefix", bad, prefix, false, ErrCRCMismatch},
+		{"bad checksum/ignored", bad, prefix, true, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dec, err := NewReader(nil, WithDecoderConcurrency(1), IgnoreChecksum(tt.ignore))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer dec.Close()
+			dst := append([]byte(nil), tt.dst...)
+			got, err := dec.DecodeAll(tt.in, dst)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("got error %v, want %v", err, tt.wantErr)
+			}
+			if tt.wantErr != nil {
+				return
+			}
+			if !bytes.Equal(got[:len(tt.dst)], tt.dst) || !bytes.Equal(got[len(tt.dst):], input) {
+				t.Fatal("output mismatch")
+			}
+		})
+	}
+}
