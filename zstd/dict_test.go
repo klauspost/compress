@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"os"
 	"strings"
@@ -1101,6 +1102,61 @@ func TestDecoderDictReuseAfterLargeStream(t *testing.T) {
 		}
 		if !bytes.Equal(got, payload) {
 			t.Fatalf("decode %d: output mismatch: got %d bytes, want %d", i, len(got), len(payload))
+		}
+	}
+}
+
+func TestEncoderDictSeedsSequenceTables(t *testing.T) {
+	initPredefined()
+	zr := testCreateZipReader("testdata/dict-tests-small.zip", t)
+	for _, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, ".dict") {
+			continue
+		}
+		r, err := tt.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		in, err := io.ReadAll(r)
+		r.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		d, err := loadDict(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var blk blockEnc
+		blk.init()
+		blk.initNewEncode()
+		blk.coders.seedPrevFromDict(d)
+		for _, tc := range []struct {
+			name string
+			enc  *fseEncoder
+			dec  *fseDecoder
+		}{
+			{"ll", blk.coders.llPrev, d.llDec.fse},
+			{"ml", blk.coders.mlPrev, d.mlDec.fse},
+			{"of", blk.coders.ofPrev, d.ofDec.fse},
+		} {
+			t.Run(tt.Name+"/"+tc.name, func(t *testing.T) {
+				if tc.enc.symbolLen != tc.dec.symbolLen || tc.enc.actualTableLog != tc.dec.actualTableLog {
+					t.Fatalf("got symbolLen %d tableLog %d, want %d %d", tc.enc.symbolLen, tc.enc.actualTableLog, tc.dec.symbolLen, tc.dec.actualTableLog)
+				}
+				if tc.enc.norm != tc.dec.norm {
+					t.Fatal("normalized counts differ from dictionary")
+				}
+				// A histogram shaped like the table must be encodable with it.
+				hist := make([]uint32, tc.enc.symbolLen)
+				for i, v := range tc.enc.norm[:tc.enc.symbolLen] {
+					if v != 0 {
+						hist[i] = 1
+					}
+				}
+				if tc.enc.approxSize(hist) == math.MaxUint32 {
+					t.Fatal("seeded table cannot be reused")
+				}
+			})
 		}
 	}
 }

@@ -17,6 +17,7 @@ type dict struct {
 
 	litEnc              *huff0.Scratch
 	llDec, ofDec, mlDec sequenceDec
+	llEnc, ofEnc, mlEnc *fseEncoder
 	offsets             [3]int
 	content             []byte
 }
@@ -145,6 +146,9 @@ func loadDict(b []byte) (*dict, error) {
 	if d.offsets[0] > len(d.content) || d.offsets[1] > len(d.content) || d.offsets[2] > len(d.content) {
 		return nil, fmt.Errorf("initial offset bigger than dictionary content size %d, offsets: %v", len(d.content), d.offsets)
 	}
+	d.llEnc = newDictSeqEncoder(d.llDec.fse, tableLiteralLengths)
+	d.ofEnc = newDictSeqEncoder(d.ofDec.fse, tableOffsets)
+	d.mlEnc = newDictSeqEncoder(d.mlDec.fse, tableMatchLengths)
 
 	return &d, nil
 }
