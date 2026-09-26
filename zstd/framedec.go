@@ -363,6 +363,10 @@ func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {
 		}
 	}
 	var err error
+	// Hash each block while it is still in cache rather than the whole
+	// frame at the end.
+	hashCRC := d.HasCheckSum && !d.o.ignoreChecksum
+	crcDone := crcStart
 	for {
 		err = dec.reset(d.rawInput, d.WindowSize)
 		if err != nil {
@@ -374,6 +378,10 @@ func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {
 		err = dec.decodeBuf(&d.history)
 		if err != nil {
 			break
+		}
+		if hashCRC {
+			d.crc.Write(d.history.b[crcDone:])
+			crcDone = len(d.history.b)
 		}
 		if uint64(len(d.history.b)-crcStart) > d.o.maxDecodedSize {
 			println("runDecoder: maxDecodedSize exceeded", uint64(len(d.history.b)-crcStart), ">", d.o.maxDecodedSize)
@@ -405,7 +413,6 @@ func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {
 			if d.o.ignoreChecksum {
 				err = d.consumeCRC()
 			} else {
-				d.crc.Write(dst[crcStart:])
 				err = d.checkCRC()
 			}
 		}

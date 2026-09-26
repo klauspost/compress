@@ -2751,3 +2751,58 @@ func TestStreamRingWraps(t *testing.T) {
 		}
 	}
 }
+
+// TestDecodeAllChecksumPerBlock checks DecodeAll's frame checksum, which is
+// accumulated block by block, over multi-block frames appended to empty and
+// non-empty destinations: a valid frame decodes, a wrong checksum is
+// reported unless checksums are ignored.
+func TestDecodeAllChecksumPerBlock(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	input := make([]byte, 1<<20)
+	for i := range input {
+		input[i] = byte('a' + rng.Intn(4))
+	}
+	enc, err := NewWriter(nil, WithEncoderCRC(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	comp := enc.EncodeAll(input, nil)
+	enc.Close()
+	bad := append([]byte(nil), comp...)
+	bad[len(bad)-1] ^= 0xff
+
+	prefix := []byte("existing output")
+	tests := []struct {
+		name    string
+		in      []byte
+		dst     []byte
+		ignore  bool
+		wantErr error
+	}{
+		{"valid", comp, nil, false, nil},
+		{"valid/prefix", comp, prefix, false, nil},
+		{"bad checksum", bad, nil, false, ErrCRCMismatch},
+		{"bad checksum/prefix", bad, prefix, false, ErrCRCMismatch},
+		{"bad checksum/ignored", bad, prefix, true, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dec, err := NewReader(nil, WithDecoderConcurrency(1), IgnoreChecksum(tt.ignore))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer dec.Close()
+			dst := append([]byte(nil), tt.dst...)
+			got, err := dec.DecodeAll(tt.in, dst)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("got error %v, want %v", err, tt.wantErr)
+			}
+			if tt.wantErr != nil {
+				return
+			}
+			if !bytes.Equal(got[:len(tt.dst)], tt.dst) || !bytes.Equal(got[len(tt.dst):], input) {
+				t.Fatal("output mismatch")
+			}
+		})
+	}
+}
