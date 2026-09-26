@@ -747,7 +747,7 @@ func TestDecodeOverlappingMatches(t *testing.T) {
 			pattern := make([]byte, period)
 			rng.Read(pattern)
 			input := bytes.Repeat(pattern, (64<<10)/period+1)
-			input = append(input, pattern[:tail%period]...)
+			input = append(input, bytes.Repeat(pattern, tail/period+1)[:tail]...)
 			comp := enc.EncodeAll(input, nil)
 
 			name := fmt.Sprintf("period=%d/tail=%d", period, tail)

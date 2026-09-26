@@ -2691,15 +2691,17 @@ func TestDecoderBufferShortcutFallsBackToStreaming(t *testing.T) {
 }
 
 // TestStreamRingWraps streams frames long enough to wrap the synchronous
-// decoder's history ring many times, with back-references reaching up to a
-// full window, so matches start in the previous lap and continue into the
-// current one. Output must match the input for every window size, memory
-// mode and read path.
+// decoder's history ring many times, so matches start in the previous lap
+// and continue into the current one. "mixed" has back-references at random
+// distances up to a window; "far" repeats a random chunk of 15/16 of the
+// window, which can only compress through matches at nearly the full window
+// distance, so its compressed size shows those matches are in the frame.
+// Output must match the input for every window size, memory mode and read
+// path.
 func TestStreamRingWraps(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	const size = 6 << 20
-	windows := []int{MinWindowSize, 64 << 10, 1 << 20}
-	for _, window := range windows {
+	mixed := func(window int) []byte {
 		input := make([]byte, 0, size)
 		for len(input) < size {
 			n := 16 + rng.Intn(512)
@@ -2716,38 +2718,63 @@ func TestStreamRingWraps(t *testing.T) {
 				input = append(input, byte('a'+rng.Intn(8)))
 			}
 		}
-		enc, err := NewWriter(nil, WithWindowSize(window), WithEncoderConcurrency(1))
-		if err != nil {
-			t.Fatal(err)
-		}
-		comp := enc.EncodeAll(input, nil)
-		enc.Close()
-
-		for _, lowMem := range []bool{true, false} {
-			for _, viaRead := range []bool{false, true} {
-				name := fmt.Sprintf("window=%d/lowmem=%v/read=%v", window, lowMem, viaRead)
-				t.Run(name, func(t *testing.T) {
-					dec, err := NewReader(bytes.NewReader(comp), WithDecoderConcurrency(1), WithDecoderLowmem(lowMem))
-					if err != nil {
-						t.Fatal(err)
-					}
-					defer dec.Close()
-					var got []byte
-					if !viaRead {
-						var buf bytes.Buffer
-						_, err = dec.WriteTo(&buf)
-						got = buf.Bytes()
-					} else {
-						got, err = io.ReadAll(struct{ io.Reader }{dec})
-					}
-					if err != nil {
-						t.Fatal(err)
-					}
-					if !bytes.Equal(got, input) {
-						t.Fatalf("output mismatch: got %d bytes, want %d", len(got), len(input))
-					}
-				})
+		return input
+	}
+	far := func(window int) []byte {
+		chunk := make([]byte, window-window/16)
+		rng.Read(chunk)
+		return bytes.Repeat(chunk, size/len(chunk)+1)
+	}
+	for _, window := range []int{MinWindowSize, 64 << 10, 1 << 20} {
+		for _, kind := range []string{"mixed", "far"} {
+			input := mixed(window)
+			if kind == "far" {
+				input = far(window)
 			}
+			enc, err := NewWriter(nil, WithWindowSize(window), WithEncoderConcurrency(1))
+			if err != nil {
+				t.Fatal(err)
+			}
+			comp := enc.EncodeAll(input, nil)
+			enc.Close()
+			if kind == "far" {
+				// Random bytes only compress through the repeats, which are
+				// all at the chunk's distance.
+				t.Logf("window=%d: far input compressed to %.1f%%", window, 100*float64(len(comp))/float64(len(input)))
+				if len(comp) > len(input)/2 {
+					t.Fatalf("window=%d: %d random bytes repeated compressed to %d; expected window-distance matches", window, len(input), len(comp))
+				}
+			}
+			testStreamRingWraps(t, fmt.Sprintf("window=%d/%s", window, kind), comp, input)
+		}
+	}
+}
+
+func testStreamRingWraps(t *testing.T, prefix string, comp, input []byte) {
+	for _, lowMem := range []bool{true, false} {
+		for _, viaRead := range []bool{false, true} {
+			name := fmt.Sprintf("%s/lowmem=%v/read=%v", prefix, lowMem, viaRead)
+			t.Run(name, func(t *testing.T) {
+				dec, err := NewReader(bytes.NewReader(comp), WithDecoderConcurrency(1), WithDecoderLowmem(lowMem))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer dec.Close()
+				var got []byte
+				if !viaRead {
+					var buf bytes.Buffer
+					_, err = dec.WriteTo(&buf)
+					got = buf.Bytes()
+				} else {
+					got, err = io.ReadAll(struct{ io.Reader }{dec})
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(got, input) {
+					t.Fatalf("output mismatch: got %d bytes, want %d", len(got), len(input))
+				}
+			})
 		}
 	}
 }
