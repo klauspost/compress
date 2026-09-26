@@ -24,12 +24,11 @@ type history struct {
 	// when checking for matches in history
 	ignoreBuffer int
 
-	windowSize       int
-	allocFrameBuffer int // needed?
-	error            bool
-	dict             *dict
+	windowSize int
+	error      bool
+	dict       *dict
 
-	// ring backs b when streaming synchronously (see ensureBlockRing).
+	// ring backs b when streaming (see ensureBlockRing).
 	// ext holds the part of the previous lap of ring still in the window,
 	// which precedes b[0] in the stream; nil when b holds all history.
 	// The previous lap is ring[extStart:extEnd].
@@ -76,31 +75,6 @@ func (h *history) setDict(dict *dict) {
 	h.decoders.dict = dict.content
 	h.recentOffsets = dict.offsets
 	h.huffTree = dict.litEnc
-}
-
-// append bytes to history.
-// This function will make sure there is space for it,
-// if the buffer has been allocated with enough extra space.
-func (h *history) append(b []byte) {
-	if len(b) >= h.windowSize {
-		// Discard all history by simply overwriting
-		h.b = h.b[:h.windowSize]
-		copy(h.b, b[len(b)-h.windowSize:])
-		return
-	}
-
-	// If there is space, append it.
-	if len(b) < cap(h.b)-len(h.b) {
-		h.b = append(h.b, b...)
-		return
-	}
-
-	// Move data down so we only have window size left.
-	// We know we have less than window size in b at this point.
-	discard := len(b) + len(h.b) - h.windowSize
-	copy(h.b, h.b[discard:])
-	h.b = h.b[:h.windowSize]
-	copy(h.b[h.windowSize-len(b):], b)
 }
 
 // ensureBlockRing makes room for the next block without moving history,

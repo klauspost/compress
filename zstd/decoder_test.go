@@ -2690,14 +2690,17 @@ func TestDecoderBufferShortcutFallsBackToStreaming(t *testing.T) {
 	}
 }
 
-// TestStreamRingWraps streams frames long enough to wrap the synchronous
-// decoder's history ring many times, so matches start in the previous lap
-// and continue into the current one. "mixed" has back-references at random
-// distances up to a window; "far" repeats a random chunk of 15/16 of the
-// window, which can only compress through matches at nearly the full window
-// distance, so its compressed size shows those matches are in the frame.
-// Output must match the input for every window size, memory mode and read
-// path.
+// TestStreamRingWraps streams frames long enough to wrap the decoder's
+// history ring many times, so matches start in the previous lap and continue
+// into the current one. "mixed" has back-references at random distances up
+// to a window; "far" repeats a random chunk of 15/16 of the window, which can
+// only compress through matches at nearly the full window distance, so its
+// compressed size shows those matches are in the frame. "raw+rle" alternates
+// raw and RLE blocks, which the encoder does not produce on its own. Each
+// configuration uses one decoder, Reset for every stream, so the ring is
+// reused across frames with different windows, including two such frames in
+// one stream. Output must match the input for the synchronous and the
+// concurrent decoder, both memory modes and both read paths.
 func TestStreamRingWraps(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	const size = 6 << 20
@@ -2725,6 +2728,11 @@ func TestStreamRingWraps(t *testing.T) {
 		rng.Read(chunk)
 		return bytes.Repeat(chunk, size/len(chunk)+1)
 	}
+	type stream struct {
+		name        string
+		comp, input []byte
+	}
+	var streams []stream
 	for _, window := range []int{MinWindowSize, 64 << 10, 1 << 20} {
 		for _, kind := range []string{"mixed", "far"} {
 			input := mixed(window)
@@ -2745,36 +2753,61 @@ func TestStreamRingWraps(t *testing.T) {
 					t.Fatalf("window=%d: %d random bytes repeated compressed to %d; expected window-distance matches", window, len(input), len(comp))
 				}
 			}
-			testStreamRingWraps(t, fmt.Sprintf("window=%d/%s", window, kind), comp, input)
+			streams = append(streams, stream{fmt.Sprintf("window=%d/%s", window, kind), comp, input})
 		}
 	}
-}
 
-func testStreamRingWraps(t *testing.T, prefix string, comp, input []byte) {
-	for _, lowMem := range []bool{true, false} {
-		for _, viaRead := range []bool{false, true} {
-			name := fmt.Sprintf("%s/lowmem=%v/read=%v", prefix, lowMem, viaRead)
-			t.Run(name, func(t *testing.T) {
-				dec, err := NewReader(bytes.NewReader(comp), WithDecoderConcurrency(1), WithDecoderLowmem(lowMem))
+	// A 64 KiB-window frame of alternating raw and RLE blocks.
+	var rawRLE, rawRLEWant []byte
+	rawRLE = append(rawRLE, 0x28, 0xb5, 0x2f, 0xfd, 0x00, 6<<3) // magic, no FCS, 64 KiB window
+	for i := 0; len(rawRLEWant) < 4<<20; i++ {
+		raw := make([]byte, 1+rng.Intn(32<<10))
+		rng.Read(raw)
+		rawRLE = append(rawRLE, testBlockHeader(len(raw), blockTypeRaw, false)...)
+		rawRLE = append(rawRLE, raw...)
+		n := 1 + rng.Intn(60<<10)
+		rawRLE = append(rawRLE, testBlockHeader(n, blockTypeRLE, len(rawRLEWant)+len(raw)+n >= 4<<20)...)
+		rawRLE = append(rawRLE, byte(i))
+		rawRLEWant = append(append(rawRLEWant, raw...), bytes.Repeat([]byte{byte(i)}, n)...)
+	}
+	streams = append(streams, stream{"window=65536/raw+rle", rawRLE, rawRLEWant})
+
+	// Two frames with different windows in one stream.
+	a, b := streams[5], streams[2] // window=1048576/far, window=65536/mixed
+	streams = append(streams, stream{"two-frames",
+		append(append([]byte(nil), a.comp...), b.comp...),
+		append(append([]byte(nil), a.input...), b.input...)})
+
+	for _, concurrent := range []int{1, 4} {
+		for _, lowMem := range []bool{true, false} {
+			for _, viaRead := range []bool{false, true} {
+				dec, err := NewReader(nil, WithDecoderConcurrency(concurrent), WithDecoderLowmem(lowMem))
 				if err != nil {
 					t.Fatal(err)
 				}
-				defer dec.Close()
-				var got []byte
-				if !viaRead {
-					var buf bytes.Buffer
-					_, err = dec.WriteTo(&buf)
-					got = buf.Bytes()
-				} else {
-					got, err = io.ReadAll(struct{ io.Reader }{dec})
+				for _, s := range streams {
+					t.Run(fmt.Sprintf("conc=%d/lowmem=%v/read=%v/%s", concurrent, lowMem, viaRead, s.name), func(t *testing.T) {
+						if err := dec.Reset(bytes.NewReader(s.comp)); err != nil {
+							t.Fatal(err)
+						}
+						var got []byte
+						if !viaRead {
+							var buf bytes.Buffer
+							_, err = dec.WriteTo(&buf)
+							got = buf.Bytes()
+						} else {
+							got, err = io.ReadAll(struct{ io.Reader }{dec})
+						}
+						if err != nil {
+							t.Fatal(err)
+						}
+						if !bytes.Equal(got, s.input) {
+							t.Fatalf("output mismatch: got %d bytes, want %d", len(got), len(s.input))
+						}
+					})
 				}
-				if err != nil {
-					t.Fatal(err)
-				}
-				if !bytes.Equal(got, input) {
-					t.Fatalf("output mismatch: got %d bytes, want %d", len(got), len(input))
-				}
-			})
+				dec.Close()
+			}
 		}
 	}
 }
