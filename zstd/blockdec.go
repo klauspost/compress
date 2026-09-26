@@ -604,14 +604,9 @@ func (b *blockDec) prepareSequences(in []byte, hist *history) (err error) {
 				if seq.fse == nil || seq.fse.preDefined {
 					seq.fse = fseDecoderPool.Get().(*fseDecoder)
 				}
-				err := seq.fse.readNCount(&br, uint16(maxTableSymbol[i]))
+				err := seq.fse.readNCount(&br, tableIndex(i))
 				if err != nil {
 					println("Read table error:", err)
-					return err
-				}
-				err = seq.fse.transform(symbolTableX[i])
-				if err != nil {
-					println("Transform table error:", err)
 					return err
 				}
 				if debugDecoder {
