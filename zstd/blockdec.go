@@ -495,7 +495,11 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		return nil
 	}
 	before := len(hist.decoders.out)
-	err = hist.decoders.decodeSync(hist.b[hist.ignoreBuffer:])
+	h := hist.b[hist.ignoreBuffer:]
+	if hist.ext != nil {
+		h = hist.ext
+	}
+	err = hist.decoders.decodeSync(h)
 	if err != nil {
 		return err
 	}

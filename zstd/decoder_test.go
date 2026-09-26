@@ -2689,3 +2689,65 @@ func TestDecoderBufferShortcutFallsBackToStreaming(t *testing.T) {
 		})
 	}
 }
+
+// TestStreamRingWraps streams frames long enough to wrap the synchronous
+// decoder's history ring many times, with back-references reaching up to a
+// full window, so matches start in the previous lap and continue into the
+// current one. Output must match the input for every window size, memory
+// mode and read path.
+func TestStreamRingWraps(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	const size = 6 << 20
+	windows := []int{MinWindowSize, 64 << 10, 1 << 20}
+	for _, window := range windows {
+		input := make([]byte, 0, size)
+		for len(input) < size {
+			n := 16 + rng.Intn(512)
+			if len(input) > 1024 && rng.Intn(3) > 0 {
+				// Copy from up to a window back.
+				back := 1 + rng.Intn(min(window, len(input)))
+				start := len(input) - back
+				for i := range n {
+					input = append(input, input[start+i])
+				}
+				continue
+			}
+			for range n {
+				input = append(input, byte('a'+rng.Intn(8)))
+			}
+		}
+		enc, err := NewWriter(nil, WithWindowSize(window), WithEncoderConcurrency(1))
+		if err != nil {
+			t.Fatal(err)
+		}
+		comp := enc.EncodeAll(input, nil)
+		enc.Close()
+
+		for _, lowMem := range []bool{true, false} {
+			for _, viaRead := range []bool{false, true} {
+				name := fmt.Sprintf("window=%d/lowmem=%v/read=%v", window, lowMem, viaRead)
+				t.Run(name, func(t *testing.T) {
+					dec, err := NewReader(bytes.NewReader(comp), WithDecoderConcurrency(1), WithDecoderLowmem(lowMem))
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer dec.Close()
+					var got []byte
+					if !viaRead {
+						var buf bytes.Buffer
+						_, err = dec.WriteTo(&buf)
+						got = buf.Bytes()
+					} else {
+						got, err = io.ReadAll(struct{ io.Reader }{dec})
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Equal(got, input) {
+						t.Fatalf("output mismatch: got %d bytes, want %d", len(got), len(input))
+					}
+				})
+			}
+		}
+	}
+}

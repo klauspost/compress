@@ -546,7 +546,7 @@ func (d *Decoder) nextBlockSync() (ok bool) {
 		if d.current.err != nil {
 			return false
 		}
-		d.frame.history.ensureBlock()
+		d.frame.history.ensureBlockRing()
 		if debugDecoder {
 			println("History trimmed:", len(d.frame.history.b), "decoded already:", d.syncStream.decodedFrame)
 		}
