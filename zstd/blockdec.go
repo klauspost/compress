@@ -418,6 +418,8 @@ func (b *blockDec) decodeLiterals(in []byte, hist *history) (remain []byte, err 
 		if len(literals) != litRegenSize {
 			return in, fmt.Errorf("literal output size mismatch want %d, got %d", litRegenSize, len(literals))
 		}
+		// Re-cap to get extra size.
+		literals = b.literalBuf[:len(literals)]
 
 	case literalsBlockCompressed:
 		if len(in) < litCompSize {
