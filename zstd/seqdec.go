@@ -240,11 +240,17 @@ func (s *sequenceDecs) execute(seqs []seqVals, hist []byte) error {
 	return nil
 }
 
+// decodeSyncGoOnly makes decodeSync skip the assembly decoder, so tests can
+// compare it with the Go one in the same binary.
+var decodeSyncGoOnly bool
+
 // decode sequences from the stream with the provided history.
 func (s *sequenceDecs) decodeSync(hist []byte) error {
-	supported, err := s.decodeSyncSimple(hist)
-	if supported {
-		return err
+	if !decodeSyncGoOnly {
+		supported, err := s.decodeSyncSimple(hist)
+		if supported {
+			return err
+		}
 	}
 
 	br := s.br

@@ -30,3 +30,6 @@ perf.data.old
 
 # gdb history
 .gdb_history
+
+# Silesia corpus, fetched by zstd/testdata/fetch_silesia.sh
+zstd/testdata/silesia.tar*

@@ -1784,6 +1784,78 @@ func BenchmarkDecoderSilesia(b *testing.B) {
 	benchmarkDecoderWithFile("testdata/silesia.tar.zst", b)
 }
 
+var silesia struct {
+	once sync.Once
+	data []byte
+	err  error
+}
+
+// silesiaTar returns testdata/silesia.tar, read once per test binary, and
+// skips when it is absent. testdata/fetch_silesia.sh fetches it.
+func silesiaTar(tb testing.TB) []byte {
+	tb.Helper()
+	silesia.once.Do(func() { silesia.data, silesia.err = os.ReadFile("testdata/silesia.tar") })
+	if os.IsNotExist(silesia.err) {
+		tb.Skip("Missing testdata/silesia.tar; run testdata/fetch_silesia.sh")
+	}
+	if silesia.err != nil {
+		tb.Fatal(silesia.err)
+	}
+	return silesia.data
+}
+
+// silesiaCLIFiles lists testdata/silesia.tar*.zst, encodings of Silesia made
+// by the C zstd CLI.
+func silesiaCLIFiles() []string {
+	files, _ := filepath.Glob("testdata/silesia.tar*.zst")
+	return files
+}
+
+// TestSilesiaCLIDecode decodes the C CLI's encodings of Silesia, among them
+// one of several concatenated frames, with DecodeAll and with the Reader
+// using one goroutine and the default number.
+func TestSilesiaCLIDecode(t *testing.T) {
+	want := silesiaTar(t)
+	files := silesiaCLIFiles()
+	if len(files) == 0 {
+		t.Skip("No testdata/silesia.tar*.zst; run testdata/fetch_silesia.sh -cli")
+	}
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	for _, f := range files {
+		comp, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Run(filepath.Base(f), func(t *testing.T) {
+			got, err := dec.DecodeAll(comp, make([]byte, 0, len(want)))
+			if err != nil {
+				t.Fatal("DecodeAll:", err)
+			}
+			if !bytes.Equal(got, want) {
+				t.Fatal("DecodeAll: output differs from silesia.tar")
+			}
+			for _, conc := range []int{1, 0} {
+				r, err := NewReader(bytes.NewReader(comp), WithDecoderConcurrency(conc))
+				if err != nil {
+					t.Fatal(err)
+				}
+				got, err := io.ReadAll(r)
+				r.Close()
+				if err != nil {
+					t.Fatalf("Reader, concurrency %d: %v", conc, err)
+				}
+				if !bytes.Equal(got, want) {
+					t.Fatalf("Reader, concurrency %d: output differs from silesia.tar", conc)
+				}
+			}
+		})
+	}
+}
+
 func BenchmarkDecoderEnwik9(b *testing.B) {
 	benchmarkDecoderWithFile("testdata/enwik9.zst", b)
 }

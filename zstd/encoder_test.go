@@ -797,6 +797,61 @@ func TestEncoder_EncodeAllSilesia(t *testing.T) {
 	t.Log("Encoded content matched")
 }
 
+// TestSilesiaRoundTrip round-trips testdata/silesia.tar at each level through
+// the streaming Writer and Reader and through EncodeAll and DecodeAll.
+func TestSilesiaRoundTrip(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
+	in := silesiaTar(t)
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	for level := SpeedFastest; level < speedLast; level++ {
+		t.Run(level.String(), func(t *testing.T) {
+			var buf bytes.Buffer
+			w, err := NewWriter(&buf, WithEncoderLevel(level))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := io.Copy(w, bytes.NewReader(in)); err != nil {
+				t.Fatal(err)
+			}
+			if err := w.Close(); err != nil {
+				t.Fatal(err)
+			}
+			r, err := NewReader(&buf)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := io.ReadAll(r)
+			r.Close()
+			if err != nil {
+				t.Fatal("Reader:", err)
+			}
+			if !bytes.Equal(got, in) {
+				t.Fatal("Writer/Reader: output differs from input")
+			}
+
+			enc, err := NewWriter(nil, WithEncoderLevel(level))
+			if err != nil {
+				t.Fatal(err)
+			}
+			comp := enc.EncodeAll(in, nil)
+			enc.Close()
+			got, err = dec.DecodeAll(comp, got[:0])
+			if err != nil {
+				t.Fatal("DecodeAll:", err)
+			}
+			if !bytes.Equal(got, in) {
+				t.Fatal("EncodeAll/DecodeAll: output differs from input")
+			}
+		})
+	}
+}
+
 func TestEncoderReadFrom(t *testing.T) {
 	buffer := bytes.NewBuffer(nil)
 	encoder, err := NewWriter(buffer)
