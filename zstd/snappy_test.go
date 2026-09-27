@@ -376,3 +376,43 @@ func BenchmarkSnappy_ConvertSilesia(b *testing.B) {
 		}
 	}
 }
+
+// TestSnappy_ConvertShortCopy checks that a Snappy stream containing a copy
+// shorter than the zstd minimum match is rejected instead of panicking.
+// Such a copy makes matchLen underflow and produces an out-of-range match
+// length code during sequence encoding.
+func TestSnappy_ConvertShortCopy(t *testing.T) {
+	build := func(ops []byte, decoded int) []byte {
+		in := []byte{0xff, 0x06, 0x00, 0x00}
+		in = append(in, []byte("sNaPpY")...)
+		chunk := []byte{0, 0, 0, 0} // CRC, not verified for compressed chunks
+		v := uint64(decoded)
+		for v >= 0x80 {
+			chunk = append(chunk, byte(v)|0x80)
+			v >>= 7
+		}
+		chunk = append(chunk, byte(v))
+		chunk = append(chunk, ops...)
+		l := len(chunk)
+		in = append(in, 0x00, byte(l), byte(l>>8), byte(l>>16))
+		return append(in, chunk...)
+	}
+
+	// A literal run followed by enough long copies to make the sequence
+	// encoder pick the FSE path, then a length-1 Copy2 (offset 1).
+	ops := []byte{0x0C, 0x41, 0x41, 0x41, 0x41}
+	decoded := 4
+	for i := 0; i < 6; i++ {
+		ops = append(ops, 0xFE, 0x01, 0x00) // Copy2 length 64, offset 1
+		decoded += 64
+	}
+	ops = append(ops, 0x02, 0x01, 0x00) // Copy2 length 1, offset 1
+	decoded++
+
+	var s SnappyConverter
+	var dst bytes.Buffer
+	_, err := s.Convert(bytes.NewReader(build(ops, decoded)), &dst)
+	if err != ErrSnappyCorrupt {
+		t.Fatalf("want ErrSnappyCorrupt, got %v", err)
+	}
+}

@@ -373,6 +373,15 @@ func decodeSnappy(blk *blockEnc, src []byte) error {
 			offset = uint32(src[s-4]) | uint32(src[s-3])<<8 | uint32(src[s-2])<<16 | uint32(src[s-1])<<24
 		}
 
+		// A zstd match is at least zstdMinMatch bytes. A shorter copy
+		// cannot be represented as a sequence and would underflow the
+		// matchLen computation below, producing an out-of-range match
+		// length code.
+		if length < zstdMinMatch {
+			println("length < zstdMinMatch", length)
+			return ErrSnappyCorrupt
+		}
+
 		if offset <= 0 || blk.size+lits < int(offset) /*|| length > len(blk)-d */ {
 			println("offset <= 0 || blk.size+lits < int(offset)", offset, blk.size+lits, int(offset), blk.size, lits)
 
