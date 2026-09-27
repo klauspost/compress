@@ -29,6 +29,7 @@ TEXT ·sequenceDecs_decode_amd64(SB), $40-32
 	MOVQ    144(AX), R11
 	MOVQ    152(AX), R12
 	MOVQ    160(AX), R13
+	PCALIGN $0x40
 
 sequenceDecs_decode_amd64_main_loop:
 	MOVQ (SP), R14
@@ -354,6 +355,7 @@ TEXT ·sequenceDecs_decode_56_amd64(SB), $40-32
 	MOVQ    144(AX), R11
 	MOVQ    152(AX), R12
 	MOVQ    160(AX), R13
+	PCALIGN $0x40
 
 sequenceDecs_decode_56_amd64_main_loop:
 	MOVQ (SP), R14
@@ -650,6 +652,7 @@ TEXT ·sequenceDecs_decode_bmi2(SB), $40-32
 	MOVQ    144(CX), R10
 	MOVQ    152(CX), R11
 	MOVQ    160(CX), R12
+	PCALIGN $0x40
 
 sequenceDecs_decode_bmi2_main_loop:
 	MOVQ (SP), R13
@@ -957,6 +960,7 @@ TEXT ·sequenceDecs_decode_56_bmi2(SB), $40-32
 	MOVQ    144(CX), R10
 	MOVQ    152(CX), R11
 	MOVQ    160(CX), R12
+	PCALIGN $0x40
 
 sequenceDecs_decode_56_bmi2_main_loop:
 	MOVQ (SP), R13
@@ -1443,6 +1447,7 @@ prefetch_in_out_7:
 	MOVQ       176(AX), R11
 	ADDQ       R11, R12
 	MOVQ       R12, 8(SP)
+	PCALIGN    $0x40
 
 prefetch_skip_7:
 main_loop:
@@ -1959,6 +1964,7 @@ prefetch_in_out_7:
 	MOVQ       176(AX), R11
 	ADDQ       R11, R12
 	MOVQ       R12, 8(SP)
+	PCALIGN    $0x40
 
 prefetch_skip_7:
 main_loop:
@@ -2373,7 +2379,8 @@ TEXT ·sequenceDecs_decodeSync_amd64(SB), $96-32
 	ADDQ R10, 64(SP)
 
 	// outBase += outPosition
-	ADDQ R12, R10
+	ADDQ    R12, R10
+	PCALIGN $0x40
 
 sequenceDecs_decodeSync_amd64_main_loop:
 	MOVQ (SP), R13
@@ -2940,7 +2947,8 @@ TEXT ·sequenceDecs_decodeSync_bmi2(SB), $96-32
 	ADDQ R9, 64(SP)
 
 	// outBase += outPosition
-	ADDQ R11, R9
+	ADDQ    R11, R9
+	PCALIGN $0x40
 
 sequenceDecs_decodeSync_bmi2_main_loop:
 	MOVQ (SP), R12
@@ -3489,7 +3497,8 @@ TEXT ·sequenceDecs_decodeSync_safe_amd64(SB), $96-32
 	ADDQ R10, 64(SP)
 
 	// outBase += outPosition
-	ADDQ R12, R10
+	ADDQ    R12, R10
+	PCALIGN $0x40
 
 sequenceDecs_decodeSync_safe_amd64_main_loop:
 	MOVQ (SP), R13
@@ -4145,7 +4154,8 @@ TEXT ·sequenceDecs_decodeSync_safe_bmi2(SB), $96-32
 	ADDQ R9, 64(SP)
 
 	// outBase += outPosition
-	ADDQ R11, R9
+	ADDQ    R11, R9
+	PCALIGN $0x40
 
 sequenceDecs_decodeSync_safe_bmi2_main_loop:
 	MOVQ (SP), R12
