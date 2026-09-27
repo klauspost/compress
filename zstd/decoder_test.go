@@ -1856,6 +1856,145 @@ func TestSilesiaCLIDecode(t *testing.T) {
 	}
 }
 
+// BenchmarkSilesia encodes testdata/silesia.tar at each level and decodes
+// the result, then decodes the C CLI's encodings in testdata/silesia.tar*.zst.
+func BenchmarkSilesia(b *testing.B) {
+	in := silesiaTar(b)
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer dec.Close()
+	dst := make([]byte, 0, len(in))
+	decode := func(name string, comp []byte) {
+		b.Run("decode/"+name, func(b *testing.B) {
+			b.SetBytes(int64(len(in)))
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				if _, err := dec.DecodeAll(comp, dst[:0]); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+	for level := SpeedFastest; level < speedLast; level++ {
+		enc, err := NewWriter(nil, WithEncoderLevel(level), WithEncoderConcurrency(1))
+		if err != nil {
+			b.Fatal(err)
+		}
+		var comp []byte
+		b.Run("encode/"+level.String(), func(b *testing.B) {
+			b.SetBytes(int64(len(in)))
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				comp = enc.EncodeAll(in, comp[:0])
+			}
+		})
+		if comp == nil {
+			// The encode benchmark was filtered out.
+			comp = enc.EncodeAll(in, nil)
+		}
+		enc.Close()
+		decode(level.String(), comp)
+	}
+	for _, f := range silesiaCLIFiles() {
+		comp, err := os.ReadFile(f)
+		if err != nil {
+			b.Fatal(err)
+		}
+		decode(filepath.Base(f), comp)
+	}
+}
+
+// BenchmarkCorpus decodes the files in the directory named by ZSTD_CORPUS,
+// such as the real-world corpora at https://klauspost.com/files/compress/.
+// NAME.zst is decoded as it is; any other file is first encoded here at
+// SpeedDefault. DecodeAll runs on one goroutine into a preallocated buffer
+// (skipped for outputs over 1 GiB); the Reader runs with one goroutine and
+// with the default number, writing to io.Discard.
+func BenchmarkCorpus(b *testing.B) {
+	dir := os.Getenv("ZSTD_CORPUS")
+	if dir == "" {
+		b.Skip("ZSTD_CORPUS not set")
+	}
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		b.Fatal(err)
+	}
+	opts := []DOption{WithDecoderMaxWindow(1 << 31), WithDecoderMaxMemory(1 << 40)}
+	for _, e := range ents {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		comp, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			b.Fatal(err)
+		}
+		if !strings.HasSuffix(name, ".zst") {
+			enc, err := NewWriter(nil)
+			if err != nil {
+				b.Fatal(err)
+			}
+			comp = enc.EncodeAll(comp, nil)
+			enc.Close()
+			name += ".go.zst"
+		}
+		r, err := NewReader(bytes.NewReader(comp), opts...)
+		if err != nil {
+			b.Fatal(err)
+		}
+		n, err := io.Copy(io.Discard, r)
+		r.Close()
+		if err != nil {
+			b.Fatal(name, err)
+		}
+		b.Run(name, func(b *testing.B) {
+			if n <= 1<<30 {
+				b.Run("DecodeAll", func(b *testing.B) {
+					dec, err := NewReader(nil, append(opts, WithDecoderConcurrency(1))...)
+					if err != nil {
+						b.Fatal(err)
+					}
+					defer dec.Close()
+					dst := make([]byte, 0, n)
+					b.SetBytes(n)
+					b.ReportAllocs()
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						if _, err := dec.DecodeAll(comp, dst[:0]); err != nil {
+							b.Fatal(err)
+						}
+					}
+				})
+			}
+			for _, c := range []struct {
+				name string
+				conc int
+			}{{"Reader", 1}, {"Reader-concurrent", 0}} {
+				b.Run(c.name, func(b *testing.B) {
+					r, err := NewReader(nil, append(opts, WithDecoderConcurrency(c.conc))...)
+					if err != nil {
+						b.Fatal(err)
+					}
+					defer r.Close()
+					b.SetBytes(n)
+					b.ReportAllocs()
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						if err := r.Reset(bytes.NewReader(comp)); err != nil {
+							b.Fatal(err)
+						}
+						if _, err := io.Copy(io.Discard, r); err != nil {
+							b.Fatal(err)
+						}
+					}
+				})
+			}
+		})
+	}
+}
+
 func BenchmarkDecoderEnwik9(b *testing.B) {
 	benchmarkDecoderWithFile("testdata/enwik9.zst", b)
 }
