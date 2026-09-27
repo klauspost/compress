@@ -92,15 +92,15 @@ jobs:
       id: keys
       run: |
         command -v zstd || sudo apt-get install -y zstd
-        echo "sha256=$(sed -n 's/^zst_sha256=//p' zstd/testdata/fetch_silesia.sh)" >> "$GITHUB_OUTPUT"
+        echo "sha256=$(sed -n 's/^zst_sha256=//p' testdata/fetch_silesia.sh)" >> "$GITHUB_OUTPUT"
         echo "zstd=$(zstd --version | sed -n 's/.* v\([0-9.]*\),.*/\1/p')" >> "$GITHUB_OUTPUT"
 
     - name: Cache Silesia
       uses: actions/cache@v6.1.0
       with:
         path: |
-          zstd/testdata/silesia.tar
-          zstd/testdata/silesia.tar.zst
+          testdata/silesia.tar
+          testdata/silesia.tar.zst
         key: silesia-${{ steps.keys.outputs.sha256 }}
 
     - name: Cache zstd CLI encodings
@@ -108,18 +108,18 @@ jobs:
       uses: actions/cache@v6.1.0
       with:
         path: |
-          zstd/testdata/silesia.tar.19.zst
-          zstd/testdata/silesia.tar.frames.zst
+          testdata/silesia.tar.19.zst
+          testdata/silesia.tar.frames.zst
         key: silesia-cli-${{ steps.keys.outputs.sha256 }}-zstd${{ steps.keys.outputs.zstd }}
 
     - name: Fetch Silesia
-      run: zstd/testdata/fetch_silesia.sh ${{ steps.cli.outputs.cache-hit != 'true' && '-cli' || '' }}
+      run: testdata/fetch_silesia.sh ${{ steps.cli.outputs.cache-hit != 'true' && '-cli' || '' }}
 
     - name: Test
-      run: go test -run '^TestSilesia' -v ./zstd/
+      run: go test -run '^TestSilesia' -v ./zstd/ ./s2/ ./flate/
 
     - name: Test No-asm
-      run: go test -tags=noasm -run '^TestSilesia' -v ./zstd/
+      run: go test -tags=noasm -run '^TestSilesia' -v ./zstd/ ./s2/ ./flate/
 
   build-special:
     env:

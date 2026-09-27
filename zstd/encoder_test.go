@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/klauspost/compress/internal/silesiatest"
 	"github.com/klauspost/compress/zip"
 	"github.com/klauspost/compress/zstd/internal/xxhash"
 )
@@ -800,10 +801,7 @@ func TestEncoder_EncodeAllSilesia(t *testing.T) {
 // TestSilesiaRoundTrip round-trips testdata/silesia.tar at each level through
 // the streaming Writer and Reader and through EncodeAll and DecodeAll.
 func TestSilesiaRoundTrip(t *testing.T) {
-	if testing.Short() {
-		t.SkipNow()
-	}
-	in := silesiaTar(t)
+	in := silesiatest.Tar(t)
 	dec, err := NewReader(nil)
 	if err != nil {
 		t.Fatal(err)

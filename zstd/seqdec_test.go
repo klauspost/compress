@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/internal/cpuinfo"
+	"github.com/klauspost/compress/internal/silesiatest"
 	"github.com/klauspost/compress/zip"
 )
 
@@ -730,10 +731,7 @@ func TestDecoderShortSequenceCopies(t *testing.T) {
 // use BMI2. The inputs are Go encodings at two levels and the C CLI's
 // encodings in testdata/silesia.tar*.zst.
 func TestSilesiaAsmVsGo(t *testing.T) {
-	if testing.Short() {
-		t.SkipNow()
-	}
-	want := silesiaTar(t)
+	want := silesiatest.Tar(t)
 	type input struct {
 		name string
 		comp []byte
@@ -747,7 +745,7 @@ func TestSilesiaAsmVsGo(t *testing.T) {
 		inputs = append(inputs, input{"go-" + level.String(), enc.EncodeAll(want, nil)})
 		enc.Close()
 	}
-	for _, f := range silesiaCLIFiles() {
+	for _, f := range silesiatest.ZstdFiles() {
 		comp, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)

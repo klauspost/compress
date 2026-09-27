@@ -1,7 +1,7 @@
 #!/bin/sh
 # Fetch the Silesia corpus as testdata/silesia.tar (211947520 bytes), the file
-# the Silesia tests and benchmarks read, from klauspost.com, keeping the
-# downloaded testdata/silesia.tar.zst as well. Both are checked against pinned
+# the packages' Silesia tests and benchmarks read, from klauspost.com, keeping
+# the downloaded testdata/silesia.tar.zst as well. Both are checked against pinned
 # SHA-256s, so every machine tests the same bytes.
 #
 # With -cli, also make testdata/silesia.tar.19.zst (zstd -19 --long=27) and

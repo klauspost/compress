@@ -27,6 +27,7 @@ import (
 	// "github.com/DataDog/zstd"
 	// zstd "github.com/valyala/gozstd"
 
+	"github.com/klauspost/compress/internal/silesiatest"
 	"github.com/klauspost/compress/zstd/internal/xxhash"
 )
 
@@ -1784,39 +1785,13 @@ func BenchmarkDecoderSilesia(b *testing.B) {
 	benchmarkDecoderWithFile("testdata/silesia.tar.zst", b)
 }
 
-var silesia struct {
-	once sync.Once
-	data []byte
-	err  error
-}
-
-// silesiaTar returns testdata/silesia.tar, read once per test binary, and
-// skips when it is absent. testdata/fetch_silesia.sh fetches it.
-func silesiaTar(tb testing.TB) []byte {
-	tb.Helper()
-	silesia.once.Do(func() { silesia.data, silesia.err = os.ReadFile("testdata/silesia.tar") })
-	if os.IsNotExist(silesia.err) {
-		tb.Skip("Missing testdata/silesia.tar; run testdata/fetch_silesia.sh")
-	}
-	if silesia.err != nil {
-		tb.Fatal(silesia.err)
-	}
-	return silesia.data
-}
-
-// silesiaCLIFiles lists testdata/silesia.tar*.zst, encodings of Silesia made
-// by the C zstd CLI.
-func silesiaCLIFiles() []string {
-	files, _ := filepath.Glob("testdata/silesia.tar*.zst")
-	return files
-}
-
-// TestSilesiaCLIDecode decodes the C CLI's encodings of Silesia, among them
-// one of several concatenated frames, with DecodeAll and with the Reader
-// using one goroutine and the default number.
+// TestSilesiaCLIDecode decodes the encodings of Silesia made outside this
+// package by the zstd CLI, among them one of several concatenated frames,
+// with DecodeAll and with the Reader using one goroutine and the default
+// number.
 func TestSilesiaCLIDecode(t *testing.T) {
-	want := silesiaTar(t)
-	files := silesiaCLIFiles()
+	want := silesiatest.Tar(t)
+	files := silesiatest.ZstdFiles()
 	if len(files) == 0 {
 		t.Skip("No testdata/silesia.tar*.zst; run testdata/fetch_silesia.sh -cli")
 	}
@@ -1859,7 +1834,7 @@ func TestSilesiaCLIDecode(t *testing.T) {
 // BenchmarkSilesia encodes testdata/silesia.tar at each level and decodes
 // the result, then decodes the C CLI's encodings in testdata/silesia.tar*.zst.
 func BenchmarkSilesia(b *testing.B) {
-	in := silesiaTar(b)
+	in := silesiatest.Tar(b)
 	dec, err := NewReader(nil, WithDecoderConcurrency(1))
 	if err != nil {
 		b.Fatal(err)
@@ -1897,7 +1872,7 @@ func BenchmarkSilesia(b *testing.B) {
 		enc.Close()
 		decode(level.String(), comp)
 	}
-	for _, f := range silesiaCLIFiles() {
+	for _, f := range silesiatest.ZstdFiles() {
 		comp, err := os.ReadFile(f)
 		if err != nil {
 			b.Fatal(err)
