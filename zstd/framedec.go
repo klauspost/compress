@@ -343,12 +343,6 @@ func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {
 		if debugDecoder {
 			println("maxSyncLen:", d.history.decoders.maxSyncLen)
 		}
-		if !d.o.limitToCap && uint64(cap(dst)) < d.history.decoders.maxSyncLen {
-			// Alloc for output
-			dst2 := make([]byte, len(dst), d.history.decoders.maxSyncLen+compressedBlockOverAlloc)
-			copy(dst2, dst)
-			dst = dst2
-		}
 	}
 	var err error
 	// Hash each block while it is still in cache rather than the whole
