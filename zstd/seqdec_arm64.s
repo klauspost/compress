@@ -6,30 +6,31 @@
 // func sequenceDecs_decode_amd64(s *sequenceDecs, br *bitReader, ctx *decodeAsmContext) int
 // Requires: CMOV
 TEXT ·sequenceDecs_decode_arm64(SB), $40-32
-	MOVD  br+8(FP), R1
-	MOVD  24(R1), R2
-	MOVBU 40(R1), R3
-	MOVD  (R1), R0
-	MOVD  32(R1), R5
-	ADD   R5, R0, R0
-	MOVD  R0, 8(RSP)
-	MOVD  ctx+16(FP), R0
-	MOVD  72(R0), R6
-	MOVD  80(R0), R7
-	MOVD  88(R0), R8
-	MOVD  (R0), R1
-	MOVD  R1, 16(RSP)
-	MOVD  24(R0), R1
-	MOVD  R1, 24(RSP)
-	MOVD  48(R0), R1
-	MOVD  R1, 32(RSP)
-	MOVD  96(R0), R1
-	MOVD  R1, 40(RSP)
-	MOVD  104(R0), R9
-	MOVD  s+0(FP), R0
-	MOVD  144(R0), R10
-	MOVD  152(R0), R11
-	MOVD  160(R0), R12
+	MOVD    br+8(FP), R1
+	MOVD    24(R1), R2
+	MOVBU   40(R1), R3
+	MOVD    (R1), R0
+	MOVD    32(R1), R5
+	ADD     R5, R0, R0
+	MOVD    R0, 8(RSP)
+	MOVD    ctx+16(FP), R0
+	MOVD    72(R0), R6
+	MOVD    80(R0), R7
+	MOVD    88(R0), R8
+	MOVD    (R0), R1
+	MOVD    R1, 16(RSP)
+	MOVD    24(R0), R1
+	MOVD    R1, 24(RSP)
+	MOVD    48(R0), R1
+	MOVD    R1, 32(RSP)
+	MOVD    96(R0), R1
+	MOVD    R1, 40(RSP)
+	MOVD    104(R0), R9
+	MOVD    s+0(FP), R0
+	MOVD    144(R0), R10
+	MOVD    152(R0), R11
+	MOVD    160(R0), R12
+	PCALIGN $0x40
 
 sequenceDecs_decode_amd64_main_loop:
 	MOVD 8(RSP), R13
@@ -326,30 +327,31 @@ error_overread:
 // func sequenceDecs_decode_56_amd64(s *sequenceDecs, br *bitReader, ctx *decodeAsmContext) int
 // Requires: CMOV
 TEXT ·sequenceDecs_decode_56_arm64(SB), $40-32
-	MOVD  br+8(FP), R1
-	MOVD  24(R1), R2
-	MOVBU 40(R1), R3
-	MOVD  (R1), R0
-	MOVD  32(R1), R5
-	ADD   R5, R0, R0
-	MOVD  R0, 8(RSP)
-	MOVD  ctx+16(FP), R0
-	MOVD  72(R0), R6
-	MOVD  80(R0), R7
-	MOVD  88(R0), R8
-	MOVD  (R0), R1
-	MOVD  R1, 16(RSP)
-	MOVD  24(R0), R1
-	MOVD  R1, 24(RSP)
-	MOVD  48(R0), R1
-	MOVD  R1, 32(RSP)
-	MOVD  96(R0), R1
-	MOVD  R1, 40(RSP)
-	MOVD  104(R0), R9
-	MOVD  s+0(FP), R0
-	MOVD  144(R0), R10
-	MOVD  152(R0), R11
-	MOVD  160(R0), R12
+	MOVD    br+8(FP), R1
+	MOVD    24(R1), R2
+	MOVBU   40(R1), R3
+	MOVD    (R1), R0
+	MOVD    32(R1), R5
+	ADD     R5, R0, R0
+	MOVD    R0, 8(RSP)
+	MOVD    ctx+16(FP), R0
+	MOVD    72(R0), R6
+	MOVD    80(R0), R7
+	MOVD    88(R0), R8
+	MOVD    (R0), R1
+	MOVD    R1, 16(RSP)
+	MOVD    24(R0), R1
+	MOVD    R1, 24(RSP)
+	MOVD    48(R0), R1
+	MOVD    R1, 32(RSP)
+	MOVD    96(R0), R1
+	MOVD    R1, 40(RSP)
+	MOVD    104(R0), R9
+	MOVD    s+0(FP), R0
+	MOVD    144(R0), R10
+	MOVD    152(R0), R11
+	MOVD    160(R0), R12
+	PCALIGN $0x40
 
 sequenceDecs_decode_56_amd64_main_loop:
 	MOVD 8(RSP), R13
@@ -849,11 +851,12 @@ prefetch_skip_6:
 	ADD  R10, R12, R12
 
 prefetch_in_out_7:
-	PRFM (R12), PLDL1KEEP
-	PRFM 64(R12), PLDL1KEEP
-	MOVD 176(R0), R10
-	ADD  R10, R11, R11
-	MOVD R11, 16(RSP)
+	PRFM    (R12), PLDL1KEEP
+	PRFM    64(R12), PLDL1KEEP
+	MOVD    176(R0), R10
+	ADD     R10, R11, R11
+	MOVD    R11, 16(RSP)
+	PCALIGN $0x40
 
 prefetch_skip_7:
 main_loop:
@@ -1390,11 +1393,12 @@ prefetch_skip_6:
 	ADD  R10, R12, R12
 
 prefetch_in_out_7:
-	PRFM (R12), PLDL1KEEP
-	PRFM 64(R12), PLDL1KEEP
-	MOVD 176(R0), R10
-	ADD  R10, R11, R11
-	MOVD R11, 16(RSP)
+	PRFM    (R12), PLDL1KEEP
+	PRFM    64(R12), PLDL1KEEP
+	MOVD    176(R0), R10
+	ADD     R10, R11, R11
+	MOVD    R11, 16(RSP)
+	PCALIGN $0x40
 
 prefetch_skip_7:
 main_loop:
@@ -1858,7 +1862,8 @@ TEXT ·sequenceDecs_decodeSync_arm64(SB), $96-32
 	MOVD R16, 72(RSP)
 
 	// outBase += outPosition
-	ADD R11, R9, R9
+	ADD     R11, R9, R9
+	PCALIGN $0x40
 
 sequenceDecs_decodeSync_amd64_main_loop:
 	MOVD 8(RSP), R12
@@ -2454,7 +2459,8 @@ TEXT ·sequenceDecs_decodeSync_safe_arm64(SB), $96-32
 	MOVD R16, 72(RSP)
 
 	// outBase += outPosition
-	ADD R11, R9, R9
+	ADD     R11, R9, R9
+	PCALIGN $0x40
 
 sequenceDecs_decodeSync_safe_amd64_main_loop:
 	MOVD 8(RSP), R12

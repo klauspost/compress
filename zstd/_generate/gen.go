@@ -279,6 +279,11 @@ func (o options) generateBody(name string, executeSingleTriple func(ctx *execute
 	}
 
 	// MAIN LOOP:
+	// Align the loop head (and so the function) to 64 bytes. Otherwise it
+	// lands wherever the linker happens to place the function, and the same
+	// code measured ±2% apart between builds that differed only in what
+	// came before it. The padding runs once per call.
+	PCALIGN(U8(64))
 	Label(name + "_main_loop")
 
 	{
@@ -1113,7 +1118,7 @@ func (e executeSimple) generateProcedure(name string) {
 		ADDQ(outPosition, outBase)
 	}
 
-	var prefetch func(n int)
+	var prefetch func(n int, alignAfter bool)
 	{
 		MOVQ(outBase, pfOutSlot)
 		{
@@ -1127,8 +1132,9 @@ func (e executeSimple) generateProcedure(name string) {
 		}
 		// prefetch touches the source of the sequence n entries past
 		// seqsBase, if there is one, and advances the pending output
-		// position past it.
-		prefetch = func(n int) {
+		// position past it. alignAfter aligns the instruction after it, which
+		// is where its skip label lands.
+		prefetch = func(n int, alignAfter bool) {
 			skip := fmt.Sprintf("prefetch_skip_%d", n)
 			seq := Mem{Base: seqsBase, Disp: n * seqValsSize}
 			v := GP64()
@@ -1156,16 +1162,24 @@ func (e executeSimple) generateProcedure(name string) {
 			MOVQ(seq.Offset(1*8), v) // ml
 			ADDQ(v, t)               // past the match
 			MOVQ(t, pfOutSlot)
+			if alignAfter {
+				// PCALIGN goes before the label, never after it: a label on
+				// a PCALIGN makes the amd64 assembler jump to the wrong place
+				// (Go 1.25 and older, golang/go#74648) or loop forever when
+				// it has to widen a branch (Go 1.26 and newer).
+				PCALIGN(U8(64))
+			}
 			Label(skip)
 		}
 		Comment("Prime the prefetch window")
+		// The last one aligns the loop head to 64 bytes; see generateBody.
 		for n := 0; n < prefetchDist; n++ {
-			prefetch(n)
+			prefetch(n, n == prefetchDist-1)
 		}
 	}
 
 	Label("main_loop")
-	prefetch(prefetchDist)
+	prefetch(prefetchDist, false)
 
 	moPtr := Mem{Base: seqsBase, Disp: 2 * 8}
 	mlPtr := Mem{Base: seqsBase, Disp: 1 * 8}
