@@ -192,6 +192,10 @@ func (d decompress4x) generateProcedure(name string, nSyms int) {
 		Store(iters, ctx.Field("inner"))
 	}
 
+	// Align the loop head (and so the function) to 64 bytes so its placement
+	// does not depend on what the linker puts before it. The padding runs
+	// once per outer iteration, i.e. once per batch of symbols.
+	PCALIGN(U8(64))
 	Label("inner_loop")
 	for k := range nSyms {
 		for i := range 4 {
@@ -380,6 +384,10 @@ func (d decompress1x) generateProcedure(name string, nSyms int) {
 		ADDQ(op, inner)
 	}
 
+	// Align the loop head (and so the function) to 64 bytes so its placement
+	// does not depend on what the linker puts before it. The padding runs
+	// once per outer iteration, i.e. once per batch of symbols.
+	PCALIGN(U8(64))
 	Label("inner_loop")
 	for k := range nSyms {
 		Commentf("symbol %d", k)
