@@ -26,18 +26,6 @@ const (
 	betterShortTableShardSize = betterShortTableSize / betterShortTableShardCnt // Size of an individual shard
 )
 
-// betterPrimes is a var so arm64 keeps the primes in registers instead of
-// rebuilding each 64-bit prime with 4 instructions per use.
-var betterPrimes = [2]uint64{prime8bytes, prime5bytes}
-
-// betterHashPrimes returns constants where registers are too scarce to hold them.
-func betterHashPrimes() (primeL, primeS uint64) {
-	if hashPrimesInRegs {
-		return betterPrimes[0], betterPrimes[1]
-	}
-	return prime8bytes, prime5bytes
-}
-
 // betterHashL is hashLen(u, betterLongTableBits, betterLongLen) with prime = prime8bytes.
 func betterHashL(u, prime uint64) uint32 {
 	return uint32((u * prime) >> (64 - betterLongTableBits))
@@ -148,7 +136,7 @@ func (e *betterFastEncoder) Encode(blk *blockEnc, src []byte) {
 	// Override src
 	src = e.hist
 	sLimit := int32(len(src)) - inputMargin
-	primeL, primeS := betterHashPrimes()
+	primeL, primeS := hashPrimes8and5()
 	// stepSize is the number of bytes to skip on every main loop iteration.
 	// It should be >= 1.
 	const stepSize = 1
@@ -664,7 +652,7 @@ func (e *betterFastEncoderDict) Encode(blk *blockEnc, src []byte) {
 	// Override src
 	src = e.hist
 	sLimit := int32(len(src)) - inputMargin
-	primeL, primeS := betterHashPrimes()
+	primeL, primeS := hashPrimes8and5()
 	// stepSize is the number of bytes to skip on every main loop iteration.
 	// It should be >= 1.
 	const stepSize = 1

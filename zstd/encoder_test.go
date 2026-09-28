@@ -1299,27 +1299,37 @@ func BenchmarkRandomEncoderDefault(b *testing.B) {
 	}
 }
 
-func TestBetterHashMatchesHashLen(t *testing.T) {
+func TestHashHelpersMatchHashLen(t *testing.T) {
 	inputs := []uint64{0, 1, 0xff, 0xffffffffff, 1 << 40, 1<<64 - 1, 0x0123456789abcdef}
 	rng := rand.New(rand.NewSource(1))
 	for range 1000 {
 		inputs = append(inputs, rng.Uint64())
 	}
-	primeL, primeS := betterHashPrimes()
+	primeL, primeS := hashPrimes8and5()
 	tests := []struct {
 		name string
 		got  func(u uint64) uint32
 		want func(u uint64) uint32
 	}{
 		{
-			name: "long",
+			name: "better long",
 			got:  func(u uint64) uint32 { return betterHashL(u, primeL) },
 			want: func(u uint64) uint32 { return hashLen(u, betterLongTableBits, betterLongLen) },
 		},
 		{
-			name: "short",
+			name: "better short",
 			got:  func(u uint64) uint32 { return betterHashS(u, primeS) },
 			want: func(u uint64) uint32 { return hashLen(u, betterShortTableBits, betterShortLen) },
+		},
+		{
+			name: "dfast long",
+			got:  func(u uint64) uint32 { return dFastHashL(u, primeL) },
+			want: func(u uint64) uint32 { return hashLen(u, dFastLongTableBits, dFastLongLen) },
+		},
+		{
+			name: "dfast short",
+			got:  func(u uint64) uint32 { return dFastHashS(u, primeS) },
+			want: func(u uint64) uint32 { return hashLen(u, dFastShortTableBits, dFastShortLen) },
 		},
 	}
 	for _, tt := range tests {
