@@ -131,10 +131,13 @@ jobs:
           s2/FuzzDictBlocks, s2/FuzzEncodingBlocks, s2/FuzzStreamDecode, s2/FuzzDecodeBlock, s2/FuzzLZ4Block,
           snappy/xerial/FuzzDecode, snappy/xerial/FuzzEncode,
           zip/FuzzReader,
-          zstd/FuzzDecodeAll, zstd/FuzzDecAllNoBMI2, zstd/FuzzDecoder, zstd/FuzzNoBMI2Dec, zstd/FuzzEncoding,
+          zstd/FuzzDecodeAll, zstd/FuzzDecoder, zstd/FuzzEncoding,
         ]
-        # Pure Go: neither tags nor arch change the code under test.
         include:
+          # Skipped unless the amd64 BMI2 asm is available.
+          - { os: ubuntu-latest, tags: '', test: zstd/FuzzDecAllNoBMI2 }
+          - { os: ubuntu-latest, tags: '', test: zstd/FuzzNoBMI2Dec }
+          # Pure Go: neither tags nor arch change the code under test.
           - { os: ubuntu-latest, tags: '', test: fse/FuzzCompress }
           - { os: ubuntu-latest, tags: '', test: fse/FuzzDecompress }
           - { os: ubuntu-latest, tags: '', test: lzw/FuzzAldus }
@@ -175,6 +178,9 @@ jobs:
       matrix:
         os: [ ubuntu-latest, ubuntu-24.04-arm ]
         test: [ FuzzDecodeAll, FuzzDecAllNoBMI2 ]
+        exclude:
+          # Skipped without BMI2.
+          - { os: ubuntu-24.04-arm, test: FuzzDecAllNoBMI2 }
     steps:
       - name: Set up Go
         uses: actions/setup-go@v7.0.0
