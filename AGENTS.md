@@ -21,9 +21,12 @@ README describes the packages themselves.
   label). A jump to it makes the amd64 assembler jump to the wrong place
   (Go ≤ 1.25, golang/go#74648) or loop forever when it has to widen a branch
   (Go ≥ 1.26, golang/go#81792). Current versions of the avo fork reject it.
-- When assembly calls a Go function (for example `runtime·memmove`), no value
-  may stay live in a register across the call: Go's ABI has no callee-saved
-  registers. The declared frame must cover every slot you use; on arm64 the
+- When assembly calls a Go function (for example `runtime·memmove`), spill
+  every value you still need and reload it afterwards. Go's ABI has no
+  callee-saved registers: a call may overwrite any register without a fixed
+  role. Only the fixed ones survive (the stack and frame pointers, `BP` or
+  `R29`, and the goroutine register), and those aren't free for your own
+  values. The declared frame must cover every slot you use; on arm64 the
   assembler also reserves 0(RSP) for the link register. Check the prologue
   with `go tool objdump`; tests can pass by luck here.
 - Build tags: `noasm` selects the pure-Go code and `nounsafe` the code without
