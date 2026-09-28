@@ -3,7 +3,6 @@ package main
 //go:generate go run gen.go -out ../seqdec.s -arch amd64,arm64 -pkg=zstd
 
 import (
-	"flag"
 	"fmt"
 	"runtime"
 
@@ -48,9 +47,13 @@ const compressedBlockOverAlloc = 16
 // size of struct seqVals
 const seqValsSize = 24
 
-func main() {
-	flag.Parse()
+// prefetchDist is how many sequences ahead executeSimple prefetches the
+// match source: the knee of a distance sweep on a Neoverse N1 (see
+// executeSimple.generateProcedure). Whether the prefetch runs is decided
+// per call by executeAsmContext.prefetch.
+const prefetchDist = 8
 
+func main() {
 	Constraint(buildtags.Not("appengine").ToConstraint())
 	Constraint(buildtags.Not("noasm").ToConstraint())
 	Constraint(buildtags.Term("gc").ToConstraint())
@@ -1036,6 +1039,41 @@ func (e executeSimple) generateProcedure(name string) {
 	histBase := GP64()
 	histLen := GP64()
 
+	// Match-source prefetch. seqVals already holds every sequence of the
+	// block, so a running sum of ll+ml over the next prefetchDist entries
+	// names the output position each future match is copied to, and that
+	// position minus mo names its source. Touch the source (both halves of
+	// a possibly line-straddling copy) prefetchDist sequences before the
+	// copy needs it.
+	//
+	// The helper costs about a quarter of an iteration on data with nothing
+	// to hide (small windows), so the caller switches it per call through
+	// ctx.prefetch, which folds into the bound check below: with the
+	// prefetch off, the end pointer is the start pointer and every helper
+	// takes its skip branch.
+	//
+	// Register budget: the copy code already peaks at the full register
+	// file and avo has no spilling, so any new loop-carried register is a
+	// generate-time failure (seen with three, two and one). Nothing new is
+	// loop-carried in a register. The prefetch cursor always sits exactly
+	// 24*prefetchDist bytes ahead of seqsBase, so it is a displacement; the
+	// loop-invariant end pointer and the running output position live in
+	// stack slots, reloaded (and the latter stored back) by the helper, three
+	// L1 accesses per sequence.
+	//
+	// A match whose offset reaches past the start of out lives in the
+	// separate history buffer (streaming decode; DecodeAll keeps the whole
+	// frame in out and never takes this path). Its source is histEnd -
+	// (mo - pos), which is (q - mo) + (histEnd - outStart) for q the match's
+	// absolute output pointer: a fixed offset from the in-out address, so
+	// the helper redirects with one compare and one add. Left as garbage
+	// addresses below out, those prefetches cost a page walk each and made
+	// the small-block seqs.zip benchmark 70% slower.
+	seqsEndSlot := AllocLocal(8)
+	pfOutSlot := AllocLocal(8)
+	outStartSlot := AllocLocal(8)
+	histSkewSlot := AllocLocal(8)
+
 	{
 		ctx := Dereference(Param("ctx"))
 		tmp := GP64()
@@ -1043,6 +1081,19 @@ func (e executeSimple) generateProcedure(name string) {
 		TESTQ(seqsLen, seqsLen)
 		JZ(LabelRef("empty_seqs"))
 		Load(ctx.Field("seqs").Base(), seqsBase)
+		{
+			Comment("seqsEnd = seqsBase + 24 * len(seqs) if ctx.prefetch, else seqsBase (prefetch off)")
+			seqsEnd := GP64()
+			MOVQ(seqsBase, seqsEnd)
+			Load(ctx.Field("prefetch"), tmp)
+			TESTQ(tmp, tmp)
+			JZ(LabelRef("prefetch_off"))
+			LEAQ(Mem{Base: seqsLen, Index: seqsLen, Scale: 2}, seqsEnd) // * 3
+			SHLQ(U8(3), seqsEnd)                                        // * 8
+			ADDQ(seqsBase, seqsEnd)
+			Label("prefetch_off")
+			MOVQ(seqsEnd, seqsEndSlot)
+		}
 		Load(ctx.Field("seqIndex"), seqIndex)
 		Load(ctx.Field("out").Base(), outBase)
 		Load(ctx.Field("literals").Base(), literals)
@@ -1062,7 +1113,59 @@ func (e executeSimple) generateProcedure(name string) {
 		ADDQ(outPosition, outBase)
 	}
 
+	var prefetch func(n int)
+	{
+		MOVQ(outBase, pfOutSlot)
+		{
+			t := GP64()
+			MOVQ(outBase, t)
+			SUBQ(outPosition, t) // &out[0]
+			MOVQ(t, outStartSlot)
+			NEGQ(t)
+			ADDQ(histBase, t) // histEnd - &out[0]
+			MOVQ(t, histSkewSlot)
+		}
+		// prefetch touches the source of the sequence n entries past
+		// seqsBase, if there is one, and advances the pending output
+		// position past it.
+		prefetch = func(n int) {
+			skip := fmt.Sprintf("prefetch_skip_%d", n)
+			seq := Mem{Base: seqsBase, Disp: n * seqValsSize}
+			v := GP64()
+			t := GP64()
+			MOVQ(seqsEndSlot, v)
+			LEAQ(seq, t)
+			CMPQ(t, v)
+			JAE(LabelRef(skip))
+			inOut := fmt.Sprintf("prefetch_in_out_%d", n)
+			w := GP64()
+			MOVQ(pfOutSlot, t)
+			MOVQ(seq.Offset(0*8), v) // ll
+			ADDQ(v, t)               // t = the match's output pointer
+			MOVQ(t, w)
+			MOVQ(seq.Offset(2*8), v) // mo
+			SUBQ(v, w)               // w = its source, if inside out
+			MOVQ(outStartSlot, v)
+			CMPQ(w, v)
+			JAE(LabelRef(inOut))
+			MOVQ(histSkewSlot, v)
+			ADDQ(v, w) // redirect into the history buffer
+			Label(inOut)
+			PREFETCHT0(Mem{Base: w})
+			PREFETCHT0(Mem{Base: w, Disp: 64})
+			MOVQ(seq.Offset(1*8), v) // ml
+			ADDQ(v, t)               // past the match
+			MOVQ(t, pfOutSlot)
+			Label(skip)
+		}
+		Comment("Prime the prefetch window")
+		for n := 0; n < prefetchDist; n++ {
+			prefetch(n)
+		}
+	}
+
 	Label("main_loop")
+	prefetch(prefetchDist)
 
 	moPtr := Mem{Base: seqsBase, Disp: 2 * 8}
 	mlPtr := Mem{Base: seqsBase, Disp: 1 * 8}

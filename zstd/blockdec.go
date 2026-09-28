@@ -499,7 +499,16 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 	if hist.ext != nil {
 		h = hist.ext
 	}
-	err = hist.decoders.decodeSync(h)
+	if hist.dict == nil && hist.decoders.useTwoPass() {
+		// Two passes, as the concurrent decoder does: knowing the offsets
+		// up front lets executeSimple prefetch match sources.
+		if err := b.decodeSequences(hist); err != nil {
+			return err
+		}
+		err = hist.decoders.executeSimple(b.sequence, h)
+	} else {
+		err = hist.decoders.decodeSync(h)
+	}
 	if err != nil {
 		return err
 	}

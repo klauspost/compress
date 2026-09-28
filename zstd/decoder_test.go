@@ -2778,37 +2778,46 @@ func TestStreamRingWraps(t *testing.T) {
 		append(append([]byte(nil), a.comp...), b.comp...),
 		append(append([]byte(nil), a.input...), b.input...)})
 
-	for _, concurrent := range []int{1, 4} {
-		for _, lowMem := range []bool{true, false} {
-			for _, viaRead := range []bool{false, true} {
-				dec, err := NewReader(nil, WithDecoderConcurrency(concurrent), WithDecoderLowmem(lowMem))
-				if err != nil {
-					t.Fatal(err)
+	// twopass=true sends every synchronous block through the two-pass path,
+	// whatever the architecture or data, so the ring is tested with it too.
+	for _, twoPass := range []bool{false, true} {
+		restore := func() {}
+		if twoPass {
+			restore = forceTwoPass(true)
+		}
+		for _, concurrent := range []int{1, 4} {
+			for _, lowMem := range []bool{true, false} {
+				for _, viaRead := range []bool{false, true} {
+					dec, err := NewReader(nil, WithDecoderConcurrency(concurrent), WithDecoderLowmem(lowMem))
+					if err != nil {
+						t.Fatal(err)
+					}
+					for _, s := range streams {
+						t.Run(fmt.Sprintf("twopass=%v/conc=%d/lowmem=%v/read=%v/%s", twoPass, concurrent, lowMem, viaRead, s.name), func(t *testing.T) {
+							if err := dec.Reset(bytes.NewReader(s.comp)); err != nil {
+								t.Fatal(err)
+							}
+							var got []byte
+							if !viaRead {
+								var buf bytes.Buffer
+								_, err = dec.WriteTo(&buf)
+								got = buf.Bytes()
+							} else {
+								got, err = io.ReadAll(struct{ io.Reader }{dec})
+							}
+							if err != nil {
+								t.Fatal(err)
+							}
+							if !bytes.Equal(got, s.input) {
+								t.Fatalf("output mismatch: got %d bytes, want %d", len(got), len(s.input))
+							}
+						})
+					}
+					dec.Close()
 				}
-				for _, s := range streams {
-					t.Run(fmt.Sprintf("conc=%d/lowmem=%v/read=%v/%s", concurrent, lowMem, viaRead, s.name), func(t *testing.T) {
-						if err := dec.Reset(bytes.NewReader(s.comp)); err != nil {
-							t.Fatal(err)
-						}
-						var got []byte
-						if !viaRead {
-							var buf bytes.Buffer
-							_, err = dec.WriteTo(&buf)
-							got = buf.Bytes()
-						} else {
-							got, err = io.ReadAll(struct{ io.Reader }{dec})
-						}
-						if err != nil {
-							t.Fatal(err)
-						}
-						if !bytes.Equal(got, s.input) {
-							t.Fatalf("output mismatch: got %d bytes, want %d", len(got), len(s.input))
-						}
-					})
-				}
-				dec.Close()
 			}
 		}
+		restore()
 	}
 }
 
