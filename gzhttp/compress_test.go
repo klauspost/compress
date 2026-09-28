@@ -13,6 +13,7 @@ import (
 	"net/textproto"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -2648,8 +2649,8 @@ func TestRequestContentEncodingOrder(t *testing.T) {
 					left = append(left, strings.TrimSpace(coding))
 				}
 			}
-			for i := len(left) - 1; i >= 0; i-- {
-				gotBody = decode(t, left[i], gotBody)
+			for _, l := range slices.Backward(left) {
+				gotBody = decode(t, l, gotBody)
 			}
 			assertEqual(t, testBody, gotBody)
 		})
