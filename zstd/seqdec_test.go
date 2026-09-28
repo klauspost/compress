@@ -761,17 +761,45 @@ func TestDecodeOverlappingMatches(t *testing.T) {
 			comp := enc.EncodeAll(input, nil)
 
 			name := fmt.Sprintf("period=%d/tail=%d", period, tail)
-			t.Run(name+"/slack", func(t *testing.T) {
-				got, err := dec.DecodeAll(comp, nil)
+			// DecodeAll uses decodeSync, or with twopass decode and
+			// executeSimple; the concurrent Reader uses executeSimple.
+			for _, twoPass := range []bool{false, true} {
+				path := ""
+				if twoPass {
+					path = "/twopass"
+				}
+				t.Run(name+path+"/slack", func(t *testing.T) {
+					if twoPass {
+						defer forceTwoPass(true)()
+					}
+					got, err := dec.DecodeAll(comp, nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Equal(got, input) {
+						t.Fatal("output mismatch")
+					}
+				})
+				t.Run(name+path+"/exact", func(t *testing.T) {
+					if twoPass {
+						defer forceTwoPass(true)()
+					}
+					got, err := dec.DecodeAll(comp, make([]byte, 0, len(input)))
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Equal(got, input) {
+						t.Fatal("output mismatch")
+					}
+				})
+			}
+			t.Run(name+"/concurrent", func(t *testing.T) {
+				r, err := NewReader(bytes.NewReader(comp), WithDecoderConcurrency(4))
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !bytes.Equal(got, input) {
-					t.Fatal("output mismatch")
-				}
-			})
-			t.Run(name+"/exact", func(t *testing.T) {
-				got, err := dec.DecodeAll(comp, make([]byte, 0, len(input)))
+				defer r.Close()
+				got, err := io.ReadAll(r)
 				if err != nil {
 					t.Fatal(err)
 				}
