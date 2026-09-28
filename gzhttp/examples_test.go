@@ -7,7 +7,6 @@ package gzhttp_test
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -30,7 +29,7 @@ func ExampleTransport() {
 	}
 	defer resp.Body.Close()
 
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
 	fmt.Println("body:", string(body))
 }
 
@@ -59,14 +58,14 @@ func ExampleNewWrapper() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	content, _ := ioutil.ReadAll(resp.Body)
+	content, _ := io.ReadAll(resp.Body)
 	fmt.Println(string(content))
 
 	resp, err = http.Get(test.URL + "/b")
 	if err != nil {
 		log.Fatalln(err)
 	}
-	content, _ = ioutil.ReadAll(resp.Body)
+	content, _ = io.ReadAll(resp.Body)
 	fmt.Println(string(content))
 	// Output:
 	// Hello, World, Welcome to the jungle...

@@ -288,7 +288,7 @@ func TestWriteError(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewWriter: level %d: %v", l, err)
 			}
-			n, err := copyBuffer(w, bytes.NewBuffer(in), copyBuf)
+			n, err := io.CopyBuffer(struct{ io.Writer }{w}, struct{ io.Reader }{bytes.NewBuffer(in)}, copyBuf)
 			if err == nil {
 				t.Fatalf("Level %d: Expected an error, writer was %#v", l, ew)
 			}
@@ -426,7 +426,7 @@ func testDeterministic(i int, t *testing.T) {
 	}
 	// Use a very small prime sized buffer.
 	cbuf := make([]byte, 787)
-	_, err = copyBuffer(w, br, cbuf)
+	_, err = io.CopyBuffer(struct{ io.Writer }{w}, struct{ io.Reader }{br}, cbuf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -441,7 +441,7 @@ func testDeterministic(i int, t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = copyBuffer(w2, br2, cbuf)
+	_, err = io.CopyBuffer(struct{ io.Writer }{w2}, struct{ io.Reader }{br2}, cbuf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -471,39 +471,6 @@ func testDeterministic(i int, t *testing.T) {
 	if !bytes.Equal(b1b, b3b) {
 		t.Errorf("level %d (io.WriterTo) did not produce deterministic result, result mismatch, len(a) = %d, len(b) = %d", i, len(b1b), len(b3b))
 	}
-}
-
-// copyBuffer is a copy of io.CopyBuffer, since we want to support older go versions.
-// This is modified to never use io.WriterTo or io.ReaderFrom interfaces.
-func copyBuffer(dst io.Writer, src io.Reader, buf []byte) (written int64, err error) {
-	if buf == nil {
-		buf = make([]byte, 32*1024)
-	}
-	for {
-		nr, er := src.Read(buf)
-		if nr > 0 {
-			nw, ew := dst.Write(buf[0:nr])
-			if nw > 0 {
-				written += int64(nw)
-			}
-			if ew != nil {
-				err = ew
-				break
-			}
-			if nr != nw {
-				err = io.ErrShortWrite
-				break
-			}
-		}
-		if er == io.EOF {
-			break
-		}
-		if er != nil {
-			err = er
-			break
-		}
-	}
-	return written, err
 }
 
 func BenchmarkCompressAllocations(b *testing.B) {
