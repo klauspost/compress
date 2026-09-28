@@ -84,11 +84,10 @@ README describes the packages themselves.
   short `-count 1` run of each, repeated for ten or more rounds, swapping
   which goes first every round (AB, BA, AB, …) so neither build always gets
   the warmer or colder slot. Never run all of A and then all of B. Clock
-  speed, temperature,
-  cache and page-cache state, and background load drift over a session;
-  alternating spreads that drift over both builds instead of turning it into
-  a difference between them. Pin to one core, use an otherwise idle machine,
-  and compare the pooled results with `benchstat`.
+  speed, temperature, cache and page-cache state, and background load drift
+  over a session; alternating spreads that drift over both builds instead of
+  turning it into a difference between them. Pin to one core, use an
+  otherwise idle machine, and compare the pooled results with `benchstat`.
 - Report the number of regressed cases next to the geomean; a small win with
   no regressions is a different result from a larger one with some.
 - No CPU-model-specific code paths or thresholds. A gate for arm64 must be
