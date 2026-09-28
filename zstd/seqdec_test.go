@@ -722,3 +722,28 @@ func TestDecoderShortSequenceCopies(t *testing.T) {
 		}
 	}
 }
+
+// TestReadNCountSymbolPastTable checks that a table description cannot give
+// a count to a symbol past its table's range by reaching it through a run
+// of zero counts.
+func TestReadNCountSymbolPastTable(t *testing.T) {
+	initPredefined()
+	// Offsets: counts for 0..28, a zero run over 29..39, then a count for 40.
+	var enc fseEncoder
+	enc.actualTableLog = 5
+	enc.symbolLen = 41
+	enc.norm[0] = 3
+	for i := 1; i < 29; i++ {
+		enc.norm[i] = 1
+	}
+	enc.norm[40] = 1
+	hdr, err := enc.writeCount(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	br := byteReader{b: append(hdr, make([]byte, 8)...)}
+	var dec fseDecoder
+	if err := dec.readNCount(&br, tableOffsets); err == nil {
+		t.Fatalf("accepted offsets table with symbolLen %d > %d", dec.symbolLen, maxOffsetLengthSymbol+1)
+	}
+}
