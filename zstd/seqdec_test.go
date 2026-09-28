@@ -736,68 +736,78 @@ func TestDecoderShortSequenceCopies(t *testing.T) {
 	}
 }
 
-// TestSilesiaAsmVsGo decodes Silesia with the assembly sequence decoder,
-// with the Go one and, on amd64 with BMI2, with the assembly that does not
-// use BMI2. The inputs are Go encodings at two levels and the C CLI's
-// encodings in testdata/silesia.tar*.zst.
-func TestSilesiaAsmVsGo(t *testing.T) {
-	want := silesiatest.Tar(t)
-	type input struct {
-		name string
-		comp []byte
+// TestDecodeOverlappingMatches decodes periodic data, which the encoder
+// turns into long matches whose offset is the period and whose length is
+// many periods, so the copy overlaps its own output. Offsets of 16 and
+// above are copied in 16-byte blocks; shorter ones byte by byte. Both the
+// fast copies (output with slack) and the bounds-exact ones (output sized
+// exactly) must reproduce the input.
+func TestDecodeOverlappingMatches(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	enc, err := NewWriter(nil, WithEncoderLevel(SpeedBestCompression))
+	if err != nil {
+		t.Fatal(err)
 	}
-	var inputs []input
-	for _, level := range []EncoderLevel{SpeedDefault, SpeedBestCompression} {
-		enc, err := NewWriter(nil, WithEncoderLevel(level))
-		if err != nil {
-			t.Fatal(err)
-		}
-		inputs = append(inputs, input{"go-" + level.String(), enc.EncodeAll(want, nil)})
-		enc.Close()
-	}
-	for _, f := range silesiatest.ZstdFiles() {
-		comp, err := os.ReadFile(f)
-		if err != nil {
-			t.Fatal(err)
-		}
-		inputs = append(inputs, input{filepath.Base(f), comp})
-	}
-
-	decoders := []struct {
-		name  string
-		setup func() (restore func())
-	}{
-		{"asm", func() func() { return func() {} }},
-		{"go", func() func() {
-			// One pass only: the two-pass path executes with assembly.
-			restore := forceTwoPass(false)
-			decodeSyncGoOnly = true
-			return func() { decodeSyncGoOnly = false; restore() }
-		}},
-	}
-	if cpuinfo.HasBMI2() {
-		decoders = append(decoders, struct {
-			name  string
-			setup func() (restore func())
-		}{"asm-nobmi2", cpuinfo.DisableBMI2})
-	}
-
+	defer enc.Close()
 	dec, err := NewReader(nil, WithDecoderConcurrency(1))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer dec.Close()
-	dst := make([]byte, 0, len(want))
-	for _, in := range inputs {
-		for _, d := range decoders {
-			t.Run(in.name+"/"+d.name, func(t *testing.T) {
-				defer d.setup()()
-				got, err := dec.DecodeAll(in.comp, dst[:0])
+
+	for _, period := range []int{3, 8, 15, 16, 17, 31, 32, 33, 100, 1000} {
+		for _, tail := range []int{0, 1, 15, 16, 17} {
+			pattern := make([]byte, period)
+			rng.Read(pattern)
+			input := bytes.Repeat(pattern, (64<<10)/period+1)
+			input = append(input, bytes.Repeat(pattern, tail/period+1)[:tail]...)
+			comp := enc.EncodeAll(input, nil)
+
+			name := fmt.Sprintf("period=%d/tail=%d", period, tail)
+			// DecodeAll uses decodeSync, or with twopass decode and
+			// executeSimple; the concurrent Reader uses executeSimple.
+			for _, twoPass := range []bool{false, true} {
+				path := ""
+				if twoPass {
+					path = "/twopass"
+				}
+				t.Run(name+path+"/slack", func(t *testing.T) {
+					if twoPass {
+						defer forceTwoPass(true)()
+					}
+					got, err := dec.DecodeAll(comp, nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Equal(got, input) {
+						t.Fatal("output mismatch")
+					}
+				})
+				t.Run(name+path+"/exact", func(t *testing.T) {
+					if twoPass {
+						defer forceTwoPass(true)()
+					}
+					got, err := dec.DecodeAll(comp, make([]byte, 0, len(input)))
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Equal(got, input) {
+						t.Fatal("output mismatch")
+					}
+				})
+			}
+			t.Run(name+"/concurrent", func(t *testing.T) {
+				r, err := NewReader(bytes.NewReader(comp), WithDecoderConcurrency(4))
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !bytes.Equal(got, want) {
-					t.Fatal("output differs from silesia.tar")
+				defer r.Close()
+				got, err := io.ReadAll(r)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(got, input) {
+					t.Fatal("output mismatch")
 				}
 			})
 		}
@@ -982,6 +992,74 @@ func TestDecodeTwoPassMatchesOnePass(t *testing.T) {
 				}
 				if _, err := dec.DecodeAll(comp[:len(comp)*2/3], nil); err == nil {
 					t.Fatal("truncated frame decoded without error")
+				}
+			})
+		}
+	}
+}
+
+// TestSilesiaAsmVsGo decodes Silesia with the assembly sequence decoder,
+// with the Go one and, on amd64 with BMI2, with the assembly that does not
+// use BMI2. The inputs are Go encodings at two levels and the C CLI's
+// encodings in testdata/silesia.tar*.zst.
+func TestSilesiaAsmVsGo(t *testing.T) {
+	want := silesiatest.Tar(t)
+	type input struct {
+		name string
+		comp []byte
+	}
+	var inputs []input
+	for _, level := range []EncoderLevel{SpeedDefault, SpeedBestCompression} {
+		enc, err := NewWriter(nil, WithEncoderLevel(level))
+		if err != nil {
+			t.Fatal(err)
+		}
+		inputs = append(inputs, input{"go-" + level.String(), enc.EncodeAll(want, nil)})
+		enc.Close()
+	}
+	for _, f := range silesiatest.ZstdFiles() {
+		comp, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		inputs = append(inputs, input{filepath.Base(f), comp})
+	}
+
+	decoders := []struct {
+		name  string
+		setup func() (restore func())
+	}{
+		{"asm", func() func() { return func() {} }},
+		{"go", func() func() {
+			// One pass only: the two-pass path executes with assembly.
+			restore := forceTwoPass(false)
+			decodeSyncGoOnly = true
+			return func() { decodeSyncGoOnly = false; restore() }
+		}},
+	}
+	if cpuinfo.HasBMI2() {
+		decoders = append(decoders, struct {
+			name  string
+			setup func() (restore func())
+		}{"asm-nobmi2", cpuinfo.DisableBMI2})
+	}
+
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	dst := make([]byte, 0, len(want))
+	for _, in := range inputs {
+		for _, d := range decoders {
+			t.Run(in.name+"/"+d.name, func(t *testing.T) {
+				defer d.setup()()
+				got, err := dec.DecodeAll(in.comp, dst[:0])
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(got, want) {
+					t.Fatal("output differs from silesia.tar")
 				}
 			})
 		}
