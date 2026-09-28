@@ -1,4 +1,4 @@
-//go:build arm64 && !appengine && !noasm && gc
+//go:build arm64 && !noasm && gc
 
 package zstd
 

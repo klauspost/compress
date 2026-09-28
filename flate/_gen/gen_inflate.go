@@ -1,5 +1,4 @@
 //go:build generate
-// +build generate
 
 //go:generate go run $GOFILE
 //go:generate go fmt ../inflate_gen.go
