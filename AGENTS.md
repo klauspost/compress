@@ -4,44 +4,15 @@ Guidance for people and coding agents changing this repository. It records
 conventions and traps learned while working on the decoders and encoders; the
 README describes the packages themselves.
 
-## Assembly is generated
-
-- zstd, huff0 and s2 assembly is generated with [avo](https://github.com/mmcloughlin/avo)
-  from `zstd/_generate`, `huff0/_generate` and `s2/_generate`. Never edit the
-  `.s` files by hand: change the generator, run `go generate -v -x` in the
-  `_generate` directory, and commit the regenerated output. CI's `generate` job
-  fails if the committed files differ from the generator's output.
-- The arm64 files are lowered from the same amd64 program by the
-  `honeycombio/avo` fork that the `_generate/go.mod` files `replace` avo with.
-  A change to the generator changes both architectures; build and test both.
-- When moving the avo pin, regenerate and check the output is byte-identical
-  unless a change is intended, so unrelated printer changes don't slip into a
-  review.
-- Never put a label directly on a `PCALIGN` (emit the `PCALIGN` before the
-  label). A jump to it makes the amd64 assembler jump to the wrong place
-  (Go ≤ 1.25, golang/go#74648) or loop forever when it has to widen a branch
-  (Go ≥ 1.26, golang/go#81792). Current versions of the avo fork reject it.
-- When assembly calls a Go function (for example `runtime·memmove`), spill
-  every value you still need and reload it afterwards. Go's ABI has no
-  callee-saved registers: a call may overwrite any register without a fixed
-  role. Only the fixed ones survive (the stack and frame pointers, `BP` or
-  `R29`, and the goroutine register), and those aren't free for your own
-  values. The declared frame must cover every slot you use; on arm64 the
-  assembler also reserves 0(RSP) for the link register. Check the prologue
-  with `go tool objdump`; tests can pass by luck here.
-- Build tags: `noasm` selects the pure-Go code and `nounsafe` the code without
-  `unsafe`. Every assembly or `unsafe` path needs a portable fallback, and CI
-  runs the default, `noasm`, `nounsafe` and `nounsafe,noasm` builds. The
-  library doesn't use cgo.
-
 ## Checks before sending a change
 
-- `gofmt`, then `go vet ./...` for the host and `GOARCH=arm64 go vet ./...`.
-  `go vet` caches results per package and does not notice edits to files
-  excluded by build tags; use a fresh `GOCACHE` to confirm a stale-looking
-  error.
+- `gofmt`, `go vet ./...` and `go fix -diff ./...` (which should report
+  nothing). Code written for specific platforms must be vetted for them too:
+  run `go vet` with `GOOS`/`GOARCH` set to each platform it targets. `go vet`
+  caches results per package and does not notice edits to files excluded by
+  build tags; use a fresh `GOCACHE` to confirm a stale-looking error.
 - `go test ./...` with and without `-tags=noasm` (and `nounsafe` if you
-  touched `unsafe` code), on amd64 and arm64 when assembly changed.
+  touched `unsafe` code), on every architecture whose assembly changed.
 - Decoder changes: run the fuzzers CI runs (see `.github/workflows/go.yml`),
   also with `-tags=noasm`, `-tags=nounsafe` and `-asan`, for longer than CI
   does, and for zstd both `FuzzDecodeAll` and the `NoBMI2` variants.
@@ -109,3 +80,25 @@ README describes the packages themselves.
 - Keep private or company-internal references (internal service names,
   private links, chat or agent-session URLs) out of code, commit messages and
   PR text.
+
+## Assembly is generated
+
+- zstd, huff0 and s2 assembly is generated with [avo](https://github.com/mmcloughlin/avo)
+  from `zstd/_generate`, `huff0/_generate` and `s2/_generate`. Never edit the
+  `.s` files by hand: change the generator, run `go generate -v -x` in the
+  `_generate` directory, and commit the regenerated output. CI's `generate` job
+  fails if the committed files differ from the generator's output.
+- The arm64 files are lowered from the same amd64 program by the
+  `honeycombio/avo` fork that the `_generate/go.mod` files `replace` avo with.
+  A change to the generator changes both architectures; build and test both.
+- When moving the avo pin, regenerate and check the output is byte-identical
+  unless a change is intended, so unrelated printer changes don't slip into a
+  review.
+- Never put a label directly on a `PCALIGN` (emit the `PCALIGN` before the
+  label). A jump to it makes the amd64 assembler jump to the wrong place
+  (Go ≤ 1.25, golang/go#74648) or loop forever when it has to widen a branch
+  (Go ≥ 1.26, golang/go#81792). Current versions of the avo fork reject it.
+- Build tags: `noasm` selects the pure-Go code and `nounsafe` the code without
+  `unsafe`. Every assembly or `unsafe` path needs a portable fallback, and CI
+  runs the default, `noasm`, `nounsafe` and `nounsafe,noasm` builds. The
+  library doesn't use cgo.
