@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"os"
 	"strings"
@@ -1102,5 +1103,133 @@ func TestDecoderDictReuseAfterLargeStream(t *testing.T) {
 		if !bytes.Equal(got, payload) {
 			t.Fatalf("decode %d: output mismatch: got %d bytes, want %d", i, len(got), len(payload))
 		}
+	}
+}
+
+func TestEncoderDictSeedsSequenceTables(t *testing.T) {
+	initPredefined()
+	zr := testCreateZipReader("testdata/dict-tests-small.zip", t)
+	for _, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, ".dict") {
+			continue
+		}
+		r, err := tt.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		in, err := io.ReadAll(r)
+		r.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		d, err := loadDict(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var blk blockEnc
+		blk.init()
+		blk.initNewEncode()
+		blk.coders.seedPrevFromDict(d)
+		for _, tc := range []struct {
+			name string
+			enc  *fseEncoder
+			dec  *fseDecoder
+		}{
+			{"ll", blk.coders.llPrev, d.llDec.fse},
+			{"ml", blk.coders.mlPrev, d.mlDec.fse},
+			{"of", blk.coders.ofPrev, d.ofDec.fse},
+		} {
+			t.Run(tt.Name+"/"+tc.name, func(t *testing.T) {
+				if tc.enc.symbolLen != tc.dec.symbolLen || tc.enc.actualTableLog != tc.dec.actualTableLog {
+					t.Fatalf("got symbolLen %d tableLog %d, want %d %d", tc.enc.symbolLen, tc.enc.actualTableLog, tc.dec.symbolLen, tc.dec.actualTableLog)
+				}
+				if tc.enc.norm != tc.dec.norm {
+					t.Fatal("normalized counts differ from dictionary")
+				}
+				// A histogram shaped like the table must be encodable with it.
+				hist := make([]uint32, tc.enc.symbolLen)
+				for i, v := range tc.enc.norm[:tc.enc.symbolLen] {
+					if v != 0 {
+						hist[i] = 1
+					}
+				}
+				if tc.enc.approxSize(hist) == math.MaxUint32 {
+					t.Fatal("seeded table cannot be reused")
+				}
+			})
+		}
+	}
+}
+
+func TestEncoderChooseCompWithDictTables(t *testing.T) {
+	initPredefined()
+	zr := testCreateZipReader("testdata/dict-tests-small.zip", t)
+	var d *dict
+	for _, f := range zr.File {
+		if f.Name != "d0.dict" {
+			continue
+		}
+		r, err := f.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		in, err := io.ReadAll(r)
+		r.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		d, err = loadDict(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if d == nil {
+		t.Fatal("d0.dict not found")
+	}
+	for _, tc := range []struct {
+		name   string
+		table  tableIndex
+		counts map[uint8]uint32
+		want   seqCompMode
+	}{
+		// Final state flush makes the dictionary's larger table cost more.
+		{"ml-flush", tableMatchLengths, map[uint8]uint32{9: 1, 10: 1}, compModePredefined},
+		{"of-flush", tableOffsets, map[uint8]uint32{8: 1, 15: 1}, compModePredefined},
+		// A new table beats a poorly fitting dictionary table on its exact header size.
+		{"ll-new", tableLiteralLengths, map[uint8]uint32{3: 1, 4: 5}, compModeFSE},
+		{"of-new", tableOffsets, map[uint8]uint32{0: 5, 3: 1}, compModeFSE},
+		// A fitting dictionary table is reused.
+		{"ml-repeat", tableMatchLengths, map[uint8]uint32{3: 1, 6: 1}, compModeRepeat},
+		{"of-repeat", tableOffsets, map[uint8]uint32{10: 1, 11: 1}, compModeRepeat},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var blk blockEnc
+			blk.init()
+			blk.initNewEncode()
+			blk.coders.seedPrevFromDict(d)
+			prev := map[tableIndex]*fseEncoder{
+				tableLiteralLengths: blk.coders.llPrev,
+				tableOffsets:        blk.coders.ofPrev,
+				tableMatchLengths:   blk.coders.mlPrev,
+			}[tc.table]
+
+			cur := &fseEncoder{}
+			h := cur.Histogram()
+			var maxSym uint8
+			var maxCount, total int
+			for s, v := range tc.counts {
+				h[s] = v
+				maxSym = max(maxSym, s)
+				maxCount = max(maxCount, int(v))
+				total += int(v)
+			}
+			cur.HistogramFinished(maxSym, maxCount)
+			if err := cur.normalizeCount(total); err != nil {
+				t.Fatal(err)
+			}
+			if _, got := blk.chooseComp(cur, prev, &fsePredefEnc[tc.table]); got != tc.want {
+				t.Fatalf("got mode %d, want %d", got, tc.want)
+			}
+		})
 	}
 }
