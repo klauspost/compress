@@ -81,8 +81,10 @@ README describes the packages themselves.
   `PCALIGN $64` before every `TEXT` in the `.s` files of *both* builds
   (measurement only, not committed).
 - Build both variants as test binaries up front, then run them in turns: one
-  short `-count 1` run of A, then one of B, repeated for ten or more rounds
-  (ABAB…, never all A runs followed by all B runs). Clock speed, temperature,
+  short `-count 1` run of each, repeated for ten or more rounds, swapping
+  which goes first every round (AB, BA, AB, …) so neither build always gets
+  the warmer or colder slot. Never run all of A and then all of B. Clock
+  speed, temperature,
   cache and page-cache state, and background load drift over a session;
   alternating spreads that drift over both builds instead of turning it into
   a difference between them. Pin to one core, use an otherwise idle machine,
