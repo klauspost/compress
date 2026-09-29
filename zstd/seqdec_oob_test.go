@@ -1,7 +1,7 @@
 // Copyright 2019+ Klaus Post. All rights reserved.
 // License information can be found in the LICENSE file.
 
-//go:build (amd64 || arm64) && !appengine && !noasm && gc
+//go:build (amd64 || arm64) && !noasm && gc
 
 package zstd
 

@@ -65,13 +65,11 @@ const (
 
 func main() {
 	flag.Parse()
-	Constraint(buildtags.Any(buildtags.Term("amd64"), buildtags.Term("arm64")))
-	Constraint(buildtags.Not("appengine").ToConstraint())
-	Constraint(buildtags.Not("noasm").ToConstraint())
-	Constraint(buildtags.Term("gc").ToConstraint())
-	Constraint(buildtags.Not("noasm").ToConstraint())
+	ConstraintExpr("!noasm,gc")
 
 	if !*genArm64 {
+		// The stubs are shared by both architectures.
+		Constraint(buildtags.Any(buildtags.Term("amd64"), buildtags.Term("arm64")))
 		// We need a function to add comments.
 		// Promoting v4 to v3 is an amd64 assembler concern; on arm64 the
 		// block is not just unnecessary, it is refused, since the lowering

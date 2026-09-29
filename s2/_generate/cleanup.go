@@ -1,5 +1,4 @@
 //go:build custom
-// +build custom
 
 package main
 

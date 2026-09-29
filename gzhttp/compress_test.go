@@ -594,16 +594,7 @@ func TestGzipHandlerDoubleWriteHeader(t *testing.T) {
 	})
 
 	rec := httptest.NewRecorder()
-	// TODO: in Go1.7 httptest.NewRequest was introduced this should be used
-	// once 1.6 is not longer supported.
-	req := &http.Request{
-		Method:     "GET",
-		URL:        &url.URL{Path: "/"},
-		Proto:      "HTTP/1.1",
-		ProtoMinor: 1,
-		RemoteAddr: "192.0.2.1:1234",
-		Header:     make(http.Header),
-	}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 	wrapper.ServeHTTP(rec, req)
 	body, err := io.ReadAll(rec.Body)

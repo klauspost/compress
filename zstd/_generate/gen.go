@@ -9,7 +9,6 @@ import (
 	_ "github.com/klauspost/compress"
 
 	. "github.com/mmcloughlin/avo/build"
-	"github.com/mmcloughlin/avo/buildtags"
 	"github.com/mmcloughlin/avo/gotypes"
 	. "github.com/mmcloughlin/avo/operand"
 	"github.com/mmcloughlin/avo/reg"
@@ -54,10 +53,7 @@ const seqValsSize = 24
 const prefetchDist = 8
 
 func main() {
-	Constraint(buildtags.Not("appengine").ToConstraint())
-	Constraint(buildtags.Not("noasm").ToConstraint())
-	Constraint(buildtags.Term("gc").ToConstraint())
-	Constraint(buildtags.Not("noasm").ToConstraint())
+	ConstraintExpr("!noasm,gc")
 
 	o := options{
 		bmi2:     false,

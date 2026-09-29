@@ -18,7 +18,7 @@ import (
 func main() {
 	flag.Parse()
 
-	ConstraintExpr("!appengine,!noasm,gc")
+	ConstraintExpr("!noasm,gc")
 
 	{
 		decompress := decompress4x{}
