@@ -5,6 +5,47 @@
 
 package huff0
 
+import "github.com/klauspost/compress/internal/le"
+
+// bitState is a bit writer that stays in registers when passed and
+// returned by value. It writes into a buffer owned by the caller.
+type bitState struct {
+	c   uint64
+	nb  uint
+	pos int
+}
+
+// flush writes the whole bytes with one 8-byte store at pos, leaving
+// at most 7 bits. buf must have 8 bytes of room at pos.
+func (s bitState) flush(buf []byte) bitState {
+	le.Store64(buf, s.pos, s.c)
+	s.pos += int(s.nb >> 3)
+	s.c >>= (s.nb &^ 7) & 63
+	s.nb &= 7
+	return s
+}
+
+// add adds n bits from v, which must have no bits set above them.
+// There must be room for them.
+func (s bitState) add(v uint64, n uint) bitState {
+	s.c |= v << (s.nb & 63)
+	s.nb += n
+	return s
+}
+
+// fourSymbols returns the codes for a, b, c and d packed in that order
+// from the LSB, and their total length.
+func fourSymbols(a, b, c, d cTableEntry) (uint64, uint) {
+	bitsA := uint(a.nBits)
+	bitsB := bitsA + uint(b.nBits)
+	bitsC := bitsB + uint(c.nBits)
+	v := uint64(a.val) |
+		uint64(b.val)<<(bitsA&63) |
+		uint64(c.val)<<(bitsB&63) |
+		uint64(d.val)<<(bitsC&63)
+	return v, bitsC + uint(d.nBits)
+}
+
 // bitWriter will write bits.
 // First bit will be LSB of the first byte of output.
 type bitWriter struct {
