@@ -120,6 +120,12 @@ func (l *LZ4sConverter) ConvertBlock(dst, src []byte) ([]byte, int, error) {
 			// 0 bytes.
 			continue
 		}
+		// A copy is emitted below. The literal handling above only checks
+		// d+ll against dLimit and not the copy header it writes, so d can
+		// be past dLimit here; re-check so the copy emit stays in bounds.
+		if d > dLimit {
+			return nil, 0, ErrDstTooSmall
+		}
 		// 2 byte offset
 		if s >= len(src)-2 {
 			if debug {

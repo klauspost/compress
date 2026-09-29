@@ -351,6 +351,57 @@ func BenchmarkCompressBlockReference(b *testing.B) {
 	}
 }
 
+// craftedLZ4CopyNearLimit builds a block that emits a large literal run
+// followed by a long copy. The literal advances the write cursor to within a
+// few bytes of the destination end, and the following copy's header write used
+// to run past the buffer in the pure-Go path.
+func craftedLZ4CopyNearLimit() []byte {
+	var b []byte
+	// token: literal-length nibble 15 (extended), match-length nibble 15 (extended).
+	b = append(b, 0xff)
+	// literal length extension: reach ll = 70000 (base 15, +69985 = 274*255 + 115).
+	for i := 0; i < 274; i++ {
+		b = append(b, 0xff)
+	}
+	b = append(b, 115)
+	// literal payload.
+	for i := 0; i < 70000; i++ {
+		b = append(b, 0x41)
+	}
+	// 2-byte offset = 1 (< 2048).
+	b = append(b, 0x01, 0x00)
+	// match length extension: reach a copy long enough to need a 5-byte header.
+	for i := 0; i < 257; i++ {
+		b = append(b, 0xff)
+	}
+	b = append(b, 251)
+	// trailing byte so the match-length loop's post-break check is satisfied.
+	b = append(b, 0x00)
+	return b
+}
+
+func TestLZ4ConvertBlockDstBounds(t *testing.T) {
+	src := craftedLZ4CopyNearLimit()
+	// A destination one byte short of the output aligns the copy header write
+	// with the end of the buffer. The pure-Go path used to write past it here.
+	for dstLen := 70000; dstLen <= 70020; dstLen++ {
+		run := func(name string, fn func(dst, src []byte) ([]byte, int, error)) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("%s: out-of-bounds write with dstLen=%d: %v", name, dstLen, r)
+				}
+			}()
+			// Must never write out of bounds: either produce output or report
+			// ErrDstTooSmall, never anything else and never a panic.
+			if _, _, err := fn(make([]byte, 0, dstLen), src); err != nil && err != ErrDstTooSmall {
+				t.Fatalf("%s: dstLen=%d: unexpected error %v", name, dstLen, err)
+			}
+		}
+		run("LZ4Converter.ConvertBlock", (&LZ4Converter{}).ConvertBlock)
+		run("LZ4sConverter.ConvertBlock", (&LZ4sConverter{}).ConvertBlock)
+	}
+}
+
 func FuzzLZ4Block(f *testing.F) {
 	fuzz.AddFromZip(f, "testdata/fuzz/lz4-convert-corpus-raw.zip", fuzz.TypeRaw, false)
 	fuzz.AddFromZip(f, "testdata/fuzz/FuzzLZ4Block.zip", fuzz.TypeGoFuzz, false)
