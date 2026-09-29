@@ -215,6 +215,50 @@ func TestEncoder_EncodeAllEncodeXML(t *testing.T) {
 	}
 }
 
+// TestEncoderLongOffsetSequence makes a sequence with more than 56 extra
+// bits (32K+ literals, 64K+ match, offset over 2^26), which the sequence
+// encoder has to split.
+func TestEncoderLongOffsetSequence(t *testing.T) {
+	if testing.Short() || isRaceTest {
+		t.Skip("large input")
+	}
+	const window = 1 << 27
+	rng := rand.New(rand.NewSource(1))
+	a := make([]byte, 100_000)
+	rng.Read(a)
+	lits := make([]byte, 32_800)
+	rng.Read(lits)
+	// Start the literals on a block boundary so the sequence fits in one
+	// block, and end with a short match: the last sequence is encoded apart.
+	in := make([]byte, 513*maxCompressedBlockSize, 513*maxCompressedBlockSize+len(lits)+98_100)
+	copy(in, a)
+	in = append(in, lits...)
+	in = append(in, a[:98_000]...)
+	in = append(in, lits[:100]...)
+
+	dec, err := NewReader(nil, WithDecoderMaxWindow(window))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	for level := speedNotSet + 1; level < speedLast; level++ {
+		t.Run(level.String(), func(t *testing.T) {
+			enc, err := NewWriter(nil, WithEncoderLevel(level), WithWindowSize(window), WithEncoderConcurrency(1))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer enc.Close()
+			got, err := dec.DecodeAll(enc.EncodeAll(in, nil), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, in) {
+				t.Fatal("decoded does not match")
+			}
+		})
+	}
+}
+
 func TestEncoderRegression(t *testing.T) {
 	defer timeout(4 * time.Minute)()
 	data, err := os.ReadFile("testdata/comp-crashers.zip")
