@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"math"
 	"runtime"
+	"slices"
 	"sync"
+
+	"github.com/klauspost/compress/internal/le"
 )
 
 // Compress1X will compress the input.
@@ -243,23 +246,40 @@ func (s *Scratch) compress1xDo(dst, src []byte) []byte {
 		bw.encSymbol(cTable, src[n+i-1])
 	}
 	n -= 4
-	if s.actualTableLog <= 8 {
-		for ; n >= 0; n -= 4 {
-			tmp := src[n : n+4]
-			// tmp should be len 4
-			bw.flush32()
-			bw.encFourSymbols(cTable[tmp[3]], cTable[tmp[2]], cTable[tmp[1]], cTable[tmp[0]])
+
+	// Keep the bit writer in locals. flush stores 8 bytes and leaves at most
+	// 7 bits, so four symbols (at most 4*tableLogMax bits) always fit.
+	// Each chunk checks room for 6 bytes per 4 symbols plus the store.
+	const bytesPer4 = (7 + 4*tableLogMax) / 8
+	c, nb := bw.bitContainer, uint(bw.nBits)
+	buf, pos := bw.out[:cap(bw.out)], len(bw.out)
+	for n >= 0 {
+		k := (len(buf) - pos - 8) / bytesPer4
+		if k <= 0 {
+			buf = slices.Grow(buf[:pos], (n/4+1)*bytesPer4+8)
+			buf = buf[:cap(buf)]
+			continue
 		}
-	} else {
-		for ; n >= 0; n -= 4 {
+		for stop := max(n-4*k, -4); n > stop; n -= 4 {
+			le.Store64(buf, pos, c)
+			pos += int(nb >> 3)
+			c >>= (nb &^ 7) & 63
+			nb &= 7
+
 			tmp := src[n : n+4]
-			// tmp should be len 4
-			bw.flush32()
-			bw.encTwoSymbols(cTable, tmp[3], tmp[2])
-			bw.flush32()
-			bw.encTwoSymbols(cTable, tmp[1], tmp[0])
+			encA, encB, encC, encD := cTable[tmp[3]], cTable[tmp[2]], cTable[tmp[1]], cTable[tmp[0]]
+			bitsA := uint(encA.nBits)
+			bitsB := bitsA + uint(encB.nBits)
+			bitsC := bitsB + uint(encC.nBits)
+			combined := uint64(encA.val) |
+				uint64(encB.val)<<(bitsA&63) |
+				uint64(encC.val)<<(bitsB&63) |
+				uint64(encD.val)<<(bitsC&63)
+			c |= combined << (nb & 63)
+			nb += bitsC + uint(encD.nBits)
 		}
 	}
+	bw.bitContainer, bw.nBits, bw.out = c, uint8(nb), buf[:pos]
 	bw.close()
 	return bw.out
 }
