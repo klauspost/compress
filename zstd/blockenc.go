@@ -12,7 +12,6 @@ import (
 	"slices"
 
 	"github.com/klauspost/compress/huff0"
-	"github.com/klauspost/compress/internal/le"
 )
 
 type blockEnc struct {
@@ -728,21 +727,15 @@ func (b *blockEnc) encode(org []byte, raw, rawAllLits bool) error {
 	// flush stores 8 bytes and advances by whole bytes, so each chunk
 	// checks room for seqMaxBytes per sequence plus the store's slack.
 	const seqMaxBytes = 12 // 26 state bits + 63 extra bits.
-	c, nb := wr.bitContainer, uint(wr.nBits)
-	buf, pos := wr.out[:cap(wr.out)], len(wr.out)
+	w := bitState{c: wr.bitContainer, nb: uint(wr.nBits), pos: len(wr.out)}
+	buf := wr.out[:cap(wr.out)]
 	ofState, mlState, llState := of.state, ml.state, ll.state
 	ofTab, mlTab, llTab := of.stateTable, ml.stateTable, ll.stateTable
 	seqs := b.sequences
-	flush := func() {
-		le.Store64(buf, pos, c)
-		pos += int(nb >> 3)
-		c >>= (nb &^ 7) & 63
-		nb &= 7
-	}
 	for seq >= 0 {
-		n := (len(buf) - pos - 16) / seqMaxBytes
+		n := (len(buf) - w.pos - 16) / seqMaxBytes
 		if n <= 0 {
-			buf = slices.Grow(buf[:pos], (seq+1)*seqMaxBytes+16)
+			buf = slices.Grow(buf[:w.pos], (seq+1)*seqMaxBytes+16)
 			buf = buf[:cap(buf)]
 			continue
 		}
@@ -750,49 +743,34 @@ func (b *blockEnc) encode(org []byte, raw, rawAllLits bool) error {
 			s := seqs[seq]
 			ofB, mlB, llB := ofTT[s.ofCode], mlTT[s.mlCode], llTT[s.llCode]
 
-			// nb <= 37 here, and the states add at most 26 bits.
-			nbBitsOut := (uint32(ofState) + ofB.deltaNbBits) >> 16
-			c |= uint64(ofState&bitMask16[nbBitsOut&31]) << (nb & 63)
-			nb += uint(nbBitsOut)
-			ofState = ofTab[int32(ofState>>(nbBitsOut&15))+int32(ofB.deltaFindState)]
-
-			nbBitsOut = (uint32(mlState) + mlB.deltaNbBits) >> 16
-			c |= uint64(mlState&bitMask16[nbBitsOut&31]) << (nb & 63)
-			nb += uint(nbBitsOut)
-			mlState = mlTab[int32(mlState>>(nbBitsOut&15))+int32(mlB.deltaFindState)]
-
-			nbBitsOut = (uint32(llState) + llB.deltaNbBits) >> 16
-			c |= uint64(llState&bitMask16[nbBitsOut&31]) << (nb & 63)
-			nb += uint(nbBitsOut)
-			llState = llTab[int32(llState>>(nbBitsOut&15))+int32(llB.deltaFindState)]
+			// w.nb <= 37 here, and the states add at most 26 bits.
+			w, ofState = w.addState(ofState, ofTab, ofB)
+			w, mlState = w.addState(mlState, mlTab, mlB)
+			w, llState = w.addState(llState, llTab, llB)
 
 			ofBits, mlBits, llBits := ofB.outBits&31, mlB.outBits&31, llB.outBits&31
 			extra := uint64(s.offset&bitMask32[ofBits])<<(mlBits+llBits) |
 				uint64(s.matchLen&bitMask32[mlBits])<<llBits |
 				uint64(s.litLen&bitMask32[llBits])
 			extraN := uint(ofBits + mlBits + llBits)
-			if nb+extraN > 63 {
-				flush()
+			if w.nb+extraN > 63 {
+				w = w.flush(buf)
 				if extraN > 56 {
 					// Only offsets over 24 bits get here.
 					low := uint(mlBits + llBits)
-					c |= (extra & (1<<low - 1)) << (nb & 63)
-					nb += low
-					flush()
+					w = w.add(extra&(1<<low-1), low).flush(buf)
 					extra >>= low
 					extraN -= low
 				}
 			}
-			c |= extra << (nb & 63)
-			nb += extraN
-			flush()
+			w = w.add(extra, extraN).flush(buf)
 
 			if debugSequences {
 				println("Encoded seq", seq, s)
 			}
 		}
 	}
-	wr.bitContainer, wr.nBits, wr.out = c, uint8(nb), buf[:pos]
+	wr.bitContainer, wr.nBits, wr.out = w.c, uint8(w.nb), buf[:w.pos]
 	of.state, ml.state, ll.state = ofState, mlState, llState
 	ml.flush(mlEnc.actualTableLog)
 	of.flush(ofEnc.actualTableLog)
