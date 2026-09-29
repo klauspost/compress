@@ -1,9 +1,13 @@
 package zstd
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/binary"
+	"io"
 	"math/rand"
+	"os"
+	"strings"
 	"testing"
 )
 
@@ -143,4 +147,120 @@ func walkCheckingMaxSyncLen(t *testing.T, comp, want []byte) map[blockType]int {
 		t.Fatal("decoded output does not match input")
 	}
 	return seen
+}
+
+// TestDecodedLiteralsKeepSlack checks that Huffman-coded literals, whether
+// they carry their own table or reuse the previous block's (treeless), are
+// left with compressedBlockOverAlloc bytes of capacity past their end.
+// Treeless literals kept the capacity Decompress4X/1X was limited to, so
+// useSafeDecodeSync saw no slack and chose the bounds-exact copies for every
+// block that reused a table. The reference encoder reuses tables far more
+// often than this package's, so the inputs are frames it produced.
+func TestDecodedLiteralsKeepSlack(t *testing.T) {
+	frames := map[string][]byte{}
+	zr, err := zip.OpenReader("testdata/benchdecoder.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer zr.Close()
+	for _, f := range zr.File {
+		if !strings.HasSuffix(f.Name, ".zst") {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		frames[f.Name] = b
+	}
+	xml, err := os.ReadFile("testdata/xml.zst")
+	if err != nil {
+		t.Fatal(err)
+	}
+	frames["xml.zst"] = xml
+
+	seen := map[literalsBlockType]int{}
+	for name, comp := range frames {
+		t.Run(name, func(t *testing.T) {
+			checkLiteralSlack(t, comp, seen)
+		})
+	}
+	for _, lt := range []literalsBlockType{literalsBlockCompressed, literalsBlockTreeless} {
+		if seen[lt] == 0 {
+			t.Fatalf("no %v literals in any frame; the test input needs adjusting (saw %v)", lt, seen)
+		}
+	}
+}
+
+// checkLiteralSlack decodes comp block by block with the buffer geometry
+// DecodeAll sets up and fails if Huffman-coded literals lack slack.
+func checkLiteralSlack(t *testing.T, comp []byte, seen map[literalsBlockType]int) {
+	t.Helper()
+	want, err := decodeAllOnce(comp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	block := <-dec.decoders
+	defer func() { dec.decoders <- block }()
+	frame := block.localFrame
+	frame.bBuf = comp
+	frame.history.reset()
+	if err := frame.reset(&frame.bBuf); err != nil {
+		t.Fatal(err)
+	}
+	hist := &frame.history
+	hist.b = make([]byte, 0, len(want)+compressedBlockOverAlloc)
+	hist.ignoreBuffer = 0
+	hist.decoders.maxSyncLen = uint64(len(want))
+
+	for {
+		if err := block.reset(frame.rawInput, frame.WindowSize); err != nil {
+			t.Fatal(err)
+		}
+		if block.Type == blockTypeCompressed {
+			lt := literalsBlockType(block.data[0] & 3)
+			seen[lt]++
+			if lt == literalsBlockCompressed || lt == literalsBlockTreeless {
+				// Decoding the literals here and again in decodeBuf is
+				// harmless: a compressed section sets hist.huffTree to the
+				// same table both times, a treeless one only reads it.
+				if _, err := block.decodeLiterals(block.data, hist); err != nil {
+					t.Fatal(err)
+				}
+				lits := hist.decoders.literals
+				if cap(lits)-len(lits) < compressedBlockOverAlloc {
+					t.Fatalf("%v literals: len %d cap %d, want at least %d bytes of slack",
+						lt, len(lits), cap(lits), compressedBlockOverAlloc)
+				}
+			}
+		}
+		if err := block.decodeBuf(hist); err != nil {
+			t.Fatal(err)
+		}
+		if block.Last {
+			break
+		}
+	}
+	if !bytes.Equal(hist.b, want) {
+		t.Fatal("decoded output does not match DecodeAll")
+	}
+}
+
+func decodeAllOnce(comp []byte) ([]byte, error) {
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		return nil, err
+	}
+	defer dec.Close()
+	return dec.DecodeAll(comp, nil)
 }

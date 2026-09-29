@@ -55,6 +55,9 @@ type executeAsmContext struct {
 	outPosition int
 	litPosition int
 	windowSize  int
+	// prefetch enables the match-source prefetch in the execute loop; see
+	// sequenceDecs.useTwoPass.
+	prefetch bool
 }
 
 const noError = 0
@@ -95,7 +98,9 @@ const errorOverread = 6
 // See #1168. An asan-instrumented fuzz job (see .github/workflows/go.yml)
 // covers the extended-copy path, which -race and plain fuzzing cannot.
 func (s *sequenceDecs) useSafeDecodeSync() bool {
-	if s.maxSyncLen == 0 && cap(s.out)-len(s.out) < maxCompressedBlockSizeAlloc {
+	// A block never produces more than maxBlockSize bytes.
+	maxBlockSize := min(s.windowSize, maxCompressedBlockSize)
+	if s.maxSyncLen == 0 && cap(s.out)-len(s.out) < maxBlockSize+compressedBlockOverAlloc {
 		return true
 	}
 	if s.maxSyncLen > 0 && cap(s.out)-len(s.out)-compressedBlockOverAlloc < int(s.maxSyncLen) {
@@ -112,15 +117,14 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 	if len(s.dict) > 0 {
 		return false, nil
 	}
-	if s.maxSyncLen == 0 && cap(s.out)-len(s.out) < maxCompressedBlockSize {
+	maxBlockSize := min(s.windowSize, maxCompressedBlockSize)
+	if s.maxSyncLen == 0 && cap(s.out)-len(s.out) < maxBlockSize {
 		return false, nil
 	}
 
 	useSafe := s.useSafeDecodeSync()
 
 	br := s.br
-
-	maxBlockSize := min(s.windowSize, maxCompressedBlockSize)
 
 	ctx := decodeSyncAsmContext{
 		llTable:     s.litLengths.fse.dt[:maxTablesize],
@@ -154,7 +158,7 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 
 	case errorMatchOffTooBig:
 		return true, fmt.Errorf("match offset (%d) bigger than current history (%d)",
-			ctx.mo, ctx.outPosition+len(hist)-startSize)
+			ctx.mo, ctx.outPosition-startSize)
 
 	case errorNotEnoughLiterals:
 		return true, fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available",
@@ -290,6 +294,7 @@ func (s *sequenceDecs) executeSimple(seqs []seqVals, hist []byte) error {
 		litPosition: 0,
 		literals:    s.literals,
 		windowSize:  s.windowSize,
+		prefetch:    s.useTwoPass(),
 	}
 	// useSafe avoids overwriting the output buffer when the literals slice has
 	// not been allocated with the required over-allocation slack.
