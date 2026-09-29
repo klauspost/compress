@@ -8,11 +8,14 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/klauspost/compress/internal/cpuinfo"
+	"github.com/klauspost/compress/internal/silesiatest"
 	"github.com/klauspost/compress/zip"
 )
 
@@ -733,6 +736,31 @@ func TestDecoderShortSequenceCopies(t *testing.T) {
 	}
 }
 
+// TestReadNCountSymbolPastTable checks that a table description cannot give
+// a count to a symbol past its table's range by reaching it through a run
+// of zero counts.
+func TestReadNCountSymbolPastTable(t *testing.T) {
+	initPredefined()
+	// Offsets: counts for 0..28, a zero run over 29..39, then a count for 40.
+	var enc fseEncoder
+	enc.actualTableLog = 5
+	enc.symbolLen = 41
+	enc.norm[0] = 3
+	for i := 1; i < 29; i++ {
+		enc.norm[i] = 1
+	}
+	enc.norm[40] = 1
+	hdr, err := enc.writeCount(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	br := byteReader{b: append(hdr, make([]byte, 8)...)}
+	var dec fseDecoder
+	if err := dec.readNCount(&br, tableOffsets); err == nil {
+		t.Fatalf("accepted offsets table with symbolLen %d > %d", dec.symbolLen, maxOffsetLengthSymbol+1)
+	}
+}
+
 // TestDecodeOverlappingMatches decodes periodic data, which the encoder
 // turns into long matches whose offset is the period and whose length is
 // many periods, so the copy overlaps its own output. Offsets of 16 and
@@ -989,6 +1017,74 @@ func TestDecodeTwoPassMatchesOnePass(t *testing.T) {
 				}
 				if _, err := dec.DecodeAll(comp[:len(comp)*2/3], nil); err == nil {
 					t.Fatal("truncated frame decoded without error")
+				}
+			})
+		}
+	}
+}
+
+// TestSilesiaAsmVsGo decodes Silesia with the assembly sequence decoder,
+// with the Go one and, on amd64 with BMI2, with the assembly that does not
+// use BMI2. The inputs are Go encodings at two levels and the C CLI's
+// encodings in testdata/silesia.tar*.zst.
+func TestSilesiaAsmVsGo(t *testing.T) {
+	want := silesiatest.Tar(t)
+	type input struct {
+		name string
+		comp []byte
+	}
+	var inputs []input
+	for _, level := range []EncoderLevel{SpeedDefault, SpeedBestCompression} {
+		enc, err := NewWriter(nil, WithEncoderLevel(level))
+		if err != nil {
+			t.Fatal(err)
+		}
+		inputs = append(inputs, input{"go-" + level.String(), enc.EncodeAll(want, nil)})
+		enc.Close()
+	}
+	for _, f := range silesiatest.ZstdFiles() {
+		comp, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		inputs = append(inputs, input{filepath.Base(f), comp})
+	}
+
+	decoders := []struct {
+		name  string
+		setup func() (restore func())
+	}{
+		{"asm", func() func() { return func() {} }},
+		{"go", func() func() {
+			// One pass only: the two-pass path executes with assembly.
+			restore := forceTwoPass(false)
+			decodeSyncGoOnly = true
+			return func() { decodeSyncGoOnly = false; restore() }
+		}},
+	}
+	if cpuinfo.HasBMI2() {
+		decoders = append(decoders, struct {
+			name  string
+			setup func() (restore func())
+		}{"asm-nobmi2", cpuinfo.DisableBMI2})
+	}
+
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	dst := make([]byte, 0, len(want))
+	for _, in := range inputs {
+		for _, d := range decoders {
+			t.Run(in.name+"/"+d.name, func(t *testing.T) {
+				defer d.setup()()
+				got, err := dec.DecodeAll(in.comp, dst[:0])
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(got, want) {
+					t.Fatal("output differs from silesia.tar")
 				}
 			})
 		}

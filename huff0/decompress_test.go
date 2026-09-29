@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/klauspost/compress/internal/cpuinfo"
@@ -237,6 +238,52 @@ func TestDecompress1XRegression(t *testing.T) {
 
 func TestDecompress4X(t *testing.T) {
 	testDecompress4X(t)
+}
+
+// TestReadTableWeights reads tables with directly stored weights, which can
+// hold any 4-bit value, so the weight checks see values both inside the
+// four-at-a-time counting loop and in its tail.
+func TestReadTableWeights(t *testing.T) {
+	// raw stores weights as nibbles behind the 127+n header byte.
+	raw := func(w ...byte) []byte {
+		b := []byte{byte(127 + len(w))}
+		for i := 0; i < len(w); i += 2 {
+			v := w[i] << 4
+			if i+1 < len(w) {
+				v |= w[i+1]
+			}
+			b = append(b, v)
+		}
+		return b
+	}
+	tests := []struct {
+		name    string
+		in      []byte
+		wantErr string
+	}{
+		// Weights sum to 16, so tableLog is 5 and the implied last weight 5.
+		{name: "valid", in: raw(1, 1, 2, 3, 4)},
+		{name: "too large in loop", in: raw(1, 12, 2, 3, 4), wantErr: "weight too large"},
+		{name: "too large in tail", in: raw(1, 1, 2, 3, 15), wantErr: "weight too large"},
+		{name: "all zero", in: raw(0, 0, 0, 0, 0), wantErr: "weights zero"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, _, err := ReadTable(tt.in, nil)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("got error %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if s.actualTableLog != 5 || s.symbolLen != 6 {
+				t.Fatalf("tableLog %d, symbols %d; want 5, 6", s.actualTableLog, s.symbolLen)
+			}
+		})
+	}
 }
 
 // TestDecompress4XCorruptStaysInBounds feeds Decompress4X streams that

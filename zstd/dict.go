@@ -100,16 +100,11 @@ func loadDict(b []byte) (*dict, error) {
 		off: 0,
 	}
 	readDec := func(i tableIndex, dec *fseDecoder) error {
-		if err := dec.readNCount(&br, uint16(maxTableSymbol[i])); err != nil {
+		if err := dec.readNCount(&br, i); err != nil {
 			return err
 		}
 		if br.overread() {
 			return io.ErrUnexpectedEOF
-		}
-		err = dec.transform(symbolTableX[i])
-		if err != nil {
-			println("Transform table error:", err)
-			return err
 		}
 		if debugDecoder || debugEncoder {
 			println("Read table ok", "symbolLen:", dec.symbolLen)
