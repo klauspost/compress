@@ -11,6 +11,7 @@ import (
 	"io"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -1213,6 +1214,49 @@ func BenchmarkEncoder_EncodeAllPi(b *testing.B) {
 		if len(dst) != wantSize {
 			b.Fatal(len(dst), "!=", wantSize)
 		}
+	}
+}
+
+// BenchmarkEncoderCorpus encodes the files in the directory named by
+// ZSTD_CORPUS with EncodeAll on one goroutine at every level, CRC off.
+// Files ending in .zst are skipped. The compression ratio is reported.
+func BenchmarkEncoderCorpus(b *testing.B) {
+	dir := os.Getenv("ZSTD_CORPUS")
+	if dir == "" {
+		b.Skip("ZSTD_CORPUS not set")
+	}
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		b.Fatal(err)
+	}
+	for _, e := range ents {
+		name := e.Name()
+		if e.IsDir() || strings.HasSuffix(name, ".zst") {
+			continue
+		}
+		in, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			b.Fatal(err)
+		}
+		b.Run(name, func(b *testing.B) {
+			for level := speedNotSet + 1; level < speedLast; level++ {
+				b.Run(level.String(), func(b *testing.B) {
+					enc, err := NewWriter(nil, WithEncoderConcurrency(1), WithEncoderLevel(level), WithEncoderCRC(false))
+					if err != nil {
+						b.Fatal(err)
+					}
+					defer enc.Close()
+					dst := enc.EncodeAll(in, nil)
+					b.SetBytes(int64(len(in)))
+					b.ReportAllocs()
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						dst = enc.EncodeAll(in, dst[:0])
+					}
+					b.ReportMetric(float64(len(in))/float64(len(dst)), "ratio")
+				})
+			}
+		})
 	}
 }
 
