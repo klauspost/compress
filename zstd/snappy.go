@@ -378,7 +378,6 @@ func decodeSnappy(blk *blockEnc, src []byte) error {
 		// matchLen computation below, producing an out-of-range match
 		// length code.
 		if length < zstdMinMatch {
-			println("length < zstdMinMatch", length)
 			return ErrSnappyCorrupt
 		}
 
