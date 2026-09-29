@@ -402,7 +402,7 @@ func TestSnappy_ConvertShortCopy(t *testing.T) {
 	// encoder pick the FSE path, then a length-1 Copy2 (offset 1).
 	ops := []byte{0x0C, 0x41, 0x41, 0x41, 0x41}
 	decoded := 4
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		ops = append(ops, 0xFE, 0x01, 0x00) // Copy2 length 64, offset 1
 		decoded += 64
 	}
