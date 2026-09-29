@@ -352,17 +352,22 @@ func BenchmarkCompressBlockReference(b *testing.B) {
 	}
 }
 
-// lz4Converters are all LZ4 and LZ4s conversions, with and without assembly.
-var lz4Converters = map[string]func(dst, src []byte) ([]byte, int, error){
-	"LZ4":           (&LZ4Converter{}).ConvertBlock,
-	"LZ4Snappy":     (&LZ4Converter{}).ConvertBlockSnappy,
-	"LZ4s":          (&LZ4sConverter{}).ConvertBlock,
-	"LZ4sSnappy":    (&LZ4sConverter{}).ConvertBlockSnappy,
-	"LZ4-Go":        (&LZ4Converter{noAsm: true}).ConvertBlock,
-	"LZ4Snappy-Go":  (&LZ4Converter{noAsm: true}).ConvertBlockSnappy,
-	"LZ4s-Go":       (&LZ4sConverter{noAsm: true}).ConvertBlock,
-	"LZ4sSnappy-Go": (&LZ4sConverter{noAsm: true}).ConvertBlockSnappy,
-}
+// lz4Converters are all LZ4 and LZ4s conversions in Go, and in assembly when available.
+var lz4Converters = func() map[string]func(dst, src []byte) ([]byte, int, error) {
+	m := map[string]func(dst, src []byte) ([]byte, int, error){
+		"LZ4-Go":        (&LZ4Converter{noAsm: true}).ConvertBlock,
+		"LZ4Snappy-Go":  (&LZ4Converter{noAsm: true}).ConvertBlockSnappy,
+		"LZ4s-Go":       (&LZ4sConverter{noAsm: true}).ConvertBlock,
+		"LZ4sSnappy-Go": (&LZ4sConverter{noAsm: true}).ConvertBlockSnappy,
+	}
+	if hasAsm {
+		m["LZ4"] = (&LZ4Converter{}).ConvertBlock
+		m["LZ4Snappy"] = (&LZ4Converter{}).ConvertBlockSnappy
+		m["LZ4s"] = (&LZ4sConverter{}).ConvertBlock
+		m["LZ4sSnappy"] = (&LZ4sConverter{}).ConvertBlockSnappy
+	}
+	return m
+}()
 
 func FuzzLZ4Block(f *testing.F) {
 	fuzz.AddFromZip(f, "testdata/fuzz/lz4-convert-corpus-raw.zip", fuzz.TypeRaw, false)
