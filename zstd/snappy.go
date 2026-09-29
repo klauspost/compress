@@ -69,6 +69,10 @@ var (
 // No CRC value is being generated and not all CRC values of the Snappy stream are checked.
 // However, it provides really fast recompression of Snappy streams.
 // The converter can be reused to avoid allocations, even after errors.
+//
+// Deprecated: Decode the stream with s2.NewReader, which reads Snappy streams,
+// and compress the output with an Encoder. This validates the input and
+// compresses much better.
 type SnappyConverter struct {
 	r     io.Reader
 	err   error
