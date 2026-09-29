@@ -60,7 +60,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7.0.0
       with:
-        go-version: 1.26.x
+        go-version: 1.27.x
 
     - name: Checkout code
       uses: actions/checkout@v7.0.1
@@ -74,6 +74,53 @@ jobs:
         git diff
         test -z "$(git status --porcelain)"
 
+  silesia:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Set up Go
+      uses: actions/setup-go@v7.0.0
+      with:
+        go-version: 1.27.x
+
+    - name: Checkout code
+      uses: actions/checkout@v7.0.1
+
+    - name: Cache keys
+      id: keys
+      run: |
+        command -v zstd || sudo apt-get install -y zstd
+        echo "sha256=$(sed -n 's/^zst_sha256=//p' testdata/fetch_silesia.sh)" >> "$GITHUB_OUTPUT"
+        echo "zstd=$(zstd --version | sed -n 's/.* v\([0-9.]*\),.*/\1/p')" >> "$GITHUB_OUTPUT"
+
+    - name: Cache Silesia
+      uses: actions/cache@v6.1.0
+      with:
+        path: |
+          testdata/silesia.tar
+          testdata/silesia.tar.zst
+        key: silesia-${{ steps.keys.outputs.sha256 }}
+
+    - name: Cache zstd CLI encodings
+      id: cli
+      uses: actions/cache@v6.1.0
+      with:
+        path: |
+          testdata/silesia.tar.19.zst
+          testdata/silesia.tar.frames.zst
+        key: silesia-cli-${{ steps.keys.outputs.sha256 }}-zstd${{ steps.keys.outputs.zstd }}
+
+    - name: Fetch Silesia
+      run: testdata/fetch_silesia.sh ${{ steps.cli.outputs.cache-hit != 'true' && '-cli' || '' }}
+
+    - name: Test
+      run: go test -run '^TestSilesia' -v ./zstd/ ./s2/ ./flate/
+
+    - name: Test No-asm
+      run: go test -tags=noasm -run '^TestSilesia' -v ./zstd/ ./s2/ ./flate/
+
   build-special:
     env:
       CGO_ENABLED: 0
@@ -82,7 +129,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v7.0.0
       with:
-        go-version: 1.26.x
+        go-version: 1.27.x
 
     - name: Checkout code
       uses: actions/checkout@v7.0.1
@@ -100,10 +147,10 @@ jobs:
       run: go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d&&./s2c -verify s2c &&./s2d s2c.s2&&rm ./s2c&&rm s2d&&rm s2c.s2
 
     - name: goreleaser deprecation
-      run: curl -sfL https://goreleaser.com/static/run | VERSION=v2.13.3 bash -s -- check
+      run: curl -sfL https://goreleaser.com/static/run | VERSION=v2.18.2 bash -s -- check
 
     - name: goreleaser snapshot
-      run: curl -sfL https://goreleaser.com/static/run | VERSION=v2.13.3 bash -s -- --snapshot --clean
+      run: curl -sfL https://goreleaser.com/static/run | VERSION=v2.18.2 bash -s -- --snapshot --clean
 
     - name: Test S2 GOAMD64 v3
       env:
@@ -117,63 +164,50 @@ jobs:
       shell: bash {0}
       run: go test . -test.run=None;if [ $? -eq 0 ]; then go test ./s2/...; else true; fi
 
-  fuzz-s2:
+  fuzz:
     env:
       CGO_ENABLED: 0
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        tags: [ 'nounsafe', '"noasm,nounsafe"' ]
-    steps:
-      - name: Set up Go
-        uses: actions/setup-go@v7.0.0
-        with:
-          go-version: 1.26.x
-
-      - name: Checkout code
-        uses: actions/checkout@v7.0.1
-
-      - name: S2/FuzzDictBlocks/${{ matrix.tags }}
-        run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzDictBlocks -fuzztime=100000x -test.fuzzminimizetime=10ms ./s2/.
-
-      - name: S2/FuzzEncodingBlocks/${{ matrix.tags }}
-        run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzEncodingBlocks -fuzztime=500000x -test.fuzzminimizetime=10ms ./s2/.
-
-      - name: S2/FuzzLZ4Block/${{ matrix.tags }}
-        run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzLZ4Block -fuzztime=500000x -test.fuzzminimizetime=10ms ./s2/.
-
-
-  fuzz-zstd:
-    env:
-      CGO_ENABLED: 0
-    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ ubuntu-latest, ubuntu-24.04-arm ]
-        tags: [ 'nounsafe', '"noasm,nounsafe"' ]
+        tags: [ '', 'noasm,nounsafe' ]
+        # Targets that reach assembly or the unsafe loaders in internal/le.
+        test: [
+          flate/FuzzEncoding, flate/FuzzInflateBufio,
+          huff0/FuzzCompress, huff0/FuzzDecompress1x,
+          s2/FuzzDictBlocks, s2/FuzzEncodingBlocks, s2/FuzzStreamDecode, s2/FuzzDecodeBlock, s2/FuzzLZ4Block,
+          snappy/xerial/FuzzDecode, snappy/xerial/FuzzEncode,
+          zip/FuzzReader,
+          zstd/FuzzDecodeAll, zstd/FuzzDecoder, zstd/FuzzEncoding,
+        ]
+        include:
+          # Skipped unless the amd64 BMI2 asm is available.
+          - { os: ubuntu-latest, tags: '', test: zstd/FuzzDecAllNoBMI2 }
+          - { os: ubuntu-latest, tags: '', test: zstd/FuzzNoBMI2Dec }
+          # Pure Go: neither tags nor arch change the code under test.
+          - { os: ubuntu-latest, tags: '', test: fse/FuzzCompress }
+          - { os: ubuntu-latest, tags: '', test: fse/FuzzDecompress }
+          - { os: ubuntu-latest, tags: '', test: lzw/FuzzAldus }
+          - { os: ubuntu-latest, tags: '', test: lzw/FuzzReader }
+          - { os: ubuntu-latest, tags: '', test: lzw/FuzzWriter }
+          - { os: ubuntu-latest, tags: '', test: lzw/FuzzRoundtrip }
+          - { os: ubuntu-latest, tags: '', test: xpress/FuzzXpressPlain }
+          - { os: ubuntu-latest, tags: '', test: xpress/FuzzXpressHuffman }
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Set up Go
         uses: actions/setup-go@v7.0.0
         with:
-          go-version: 1.25.x
+          go-version: 1.27.x
 
       - name: Checkout code
         uses: actions/checkout@v7.0.1
 
-      - name: zstd/FuzzDecodeAll/${{ matrix.tags }}
-        run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzDecodeAll -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
-
-      - name: zstd/FuzzDecAllNoBMI2/${{ matrix.tags }}
-        run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzDecAllNoBMI2 -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
-
-      - name: zstd/FuzzDecoder/${{ matrix.tags }}
-        run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzDecoder -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
-
-      - name: zstd/FuzzNoBMI2Dec/${{ matrix.tags }}
-        run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzNoBMI2Dec -fuzztime=500000x -test.fuzzminimizetime=10ms ./zstd/.
-
-      - name: zstd/FuzzEncoding/${{ matrix.tags }}
-        run: cd zstd&&go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzEncoding -fuzztime=250000x -test.fuzzminimizetime=10ms -fuzz-end=3&&cd ..
+      - name: ${{ matrix.test }}/${{ matrix.tags }}
+        env:
+          TAGS: ${{ matrix.tags }}
+          TEST: ${{ matrix.test }}
+        run: go test -tags="$TAGS" -run=none -fuzz="^${TEST##*/}\$" -fuzztime=2m -test.fuzzminimizetime=100ms "./${TEST%/*}"
 
   # AddressSanitizer catches out-of-bounds accesses in the zstd decode assembly
   # — notably the extended (16-byte-block) memory copies in decodeSyncSimple,
@@ -190,44 +224,18 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-latest, ubuntu-24.04-arm ]
+        test: [ FuzzDecodeAll, FuzzDecAllNoBMI2 ]
+        exclude:
+          # Skipped without BMI2.
+          - { os: ubuntu-24.04-arm, test: FuzzDecAllNoBMI2 }
     steps:
       - name: Set up Go
         uses: actions/setup-go@v7.0.0
         with:
-          go-version: 1.25.x
+          go-version: 1.27.x
 
       - name: Checkout code
         uses: actions/checkout@v7.0.1
 
-      - name: zstd/FuzzDecodeAll (asan)
-        run: go test -asan -run=none -fuzz=FuzzDecodeAll -fuzztime=100000x -test.fuzzminimizetime=10ms ./zstd/.
-
-      - name: zstd/FuzzDecAllNoBMI2 (asan)
-        run: go test -asan -run=none -fuzz=FuzzDecAllNoBMI2 -fuzztime=100000x -test.fuzzminimizetime=10ms ./zstd/.
-
-  fuzz-other:
-    env:
-      CGO_ENABLED: 0
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        tags: [ 'nounsafe', '"noasm,nounsafe"' ]
-    steps:
-      - name: Set up Go
-        uses: actions/setup-go@v7.0.0
-        with:
-          go-version: 1.25.x
-      - name: Checkout code
-        uses: actions/checkout@v7.0.1
-
-      - name: flate/FuzzEncoding/${{ matrix.tags }}
-        run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzEncoding -fuzztime=100000x -test.fuzzminimizetime=10ms ./flate/.
-
-      - name: zip/FuzzReader/${{ matrix.tags }}
-        run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzReader -fuzztime=500000x -test.fuzzminimizetime=10ms ./zip/.
-
-      - name: fse/FuzzCompress/${{ matrix.tags }}
-        run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzCompress -fuzztime=1000000x -test.fuzzminimizetime=10ms ./fse/.
-
-      - name: fse/FuzzDecompress/${{ matrix.tags }}
-        run: go test -tags=${{ matrix.tags }} -run=none -fuzz=FuzzDecompress -fuzztime=1000000x -test.fuzzminimizetime=10ms ./fse/.
+      - name: zstd/${{ matrix.test }} (asan)
+        run: go test -asan -run=none -fuzz='^${{ matrix.test }}$' -fuzztime=3m -test.fuzzminimizetime=100ms ./zstd/.

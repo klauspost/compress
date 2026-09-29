@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/klauspost/compress/internal/silesiatest"
 )
 
 func TestWriterMemUsage(t *testing.T) {
@@ -542,4 +544,52 @@ func TestNonCompressedBlockDoesntAddDict(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestSilesiaRoundTrip round-trips the Silesia corpus through Writer and
+// Reader at each level, decoding each result with the standard library too,
+// and decodes the standard library's encoding.
+func TestSilesiaRoundTrip(t *testing.T) {
+	in := silesiatest.Tar(t)
+	check := func(t *testing.T, r io.Reader) {
+		t.Helper()
+		got, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, in) {
+			t.Fatal("output differs from input")
+		}
+	}
+	for level := HuffmanOnly; level <= BestCompression; level++ {
+		t.Run(fmt.Sprint("level", level), func(t *testing.T) {
+			var buf bytes.Buffer
+			w, err := NewWriter(&buf, level)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := io.Copy(w, bytes.NewReader(in)); err != nil {
+				t.Fatal(err)
+			}
+			if err := w.Close(); err != nil {
+				t.Fatal(err)
+			}
+			check(t, NewReader(bytes.NewReader(buf.Bytes())))
+			check(t, flate.NewReader(bytes.NewReader(buf.Bytes())))
+		})
+	}
+	t.Run("stdlib-encoded", func(t *testing.T) {
+		var buf bytes.Buffer
+		w, err := flate.NewWriter(&buf, flate.DefaultCompression)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write(in); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.Close(); err != nil {
+			t.Fatal(err)
+		}
+		check(t, NewReader(&buf))
+	})
 }

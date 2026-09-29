@@ -13,7 +13,7 @@ import (
 // (fse_decoder_generic.go), kept here so the arm64 asm implementation can be
 // differentially tested against it even though the generic file is not
 // compiled on arm64.
-func buildDtableRef(s *fseDecoder) error {
+func buildDtableRef(s *fseDecoder, ext *symbolExt) error {
 	tableSize := uint32(1 << s.actualTableLog)
 	highThreshold := tableSize - 1
 	symbolNext := s.stateTable[:256]
@@ -56,7 +56,6 @@ func buildDtableRef(s *fseDecoder) error {
 			nextState := symbolNext[symbol]
 			symbolNext[symbol] = nextState + 1
 			nBits := s.actualTableLog - byte(highBits(uint32(nextState)))
-			s.dt[u&maxTableMask].setNBits(nBits)
 			newState := (nextState << nBits) - tableSize
 			if newState > tableSize {
 				return fmt.Errorf("newState (%d) outside table size (%d)", newState, tableSize)
@@ -64,7 +63,7 @@ func buildDtableRef(s *fseDecoder) error {
 			if newState == uint16(u) && nBits == 0 {
 				return fmt.Errorf("newState (%d) == oldState (%d) and no bits", newState, u)
 			}
-			s.dt[u&maxTableMask].setNewState(newState)
+			s.dt[u&maxTableMask] = ext[symbol] | decSymbol(nBits) | decSymbol(newState)<<16
 		}
 	}
 	return nil
@@ -74,11 +73,11 @@ func TestBuildDtableARM64MatchesReference(t *testing.T) {
 	for name, mk := range predefinedFSEInputs() {
 		t.Run(name, func(t *testing.T) {
 			got := mk()
-			if err := got.buildDtable(); err != nil {
+			if err := got.buildDtable(predefinedFSEExt[name]); err != nil {
 				t.Fatalf("asm buildDtable: %v", err)
 			}
 			want := mk()
-			if err := buildDtableRef(want); err != nil {
+			if err := buildDtableRef(want, predefinedFSEExt[name]); err != nil {
 				t.Fatalf("reference buildDtable: %v", err)
 			}
 			tableSize := 1 << got.actualTableLog

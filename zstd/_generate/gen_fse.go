@@ -37,6 +37,7 @@ type buildDtable struct {
 	highThreshold  reg.GPVirtual
 	symbolNext     reg.GPVirtual // array []uint16
 	dt             reg.GPVirtual // array []uint64
+	ext            reg.GPVirtual // array []uint64, per symbol
 }
 
 func (b *buildDtable) generateProcedure(name string) {
@@ -64,6 +65,10 @@ func (b *buildDtable) generateProcedure(name string) {
 		// dt = &s.dt[0]
 		b.dt = GP64()
 		Load(ctx.Field("dt"), b.dt)
+
+		// ext = &ext[0]
+		b.ext = GP64()
+		Load(ctx.Field("ext"), b.ext)
 
 		// highThreshold = tableSize - 1
 		b.highThreshold = GP64()
@@ -234,7 +239,6 @@ func (b *buildDtable) buildTable() {
 			nextState := symbolNext[symbol]
 			symbolNext[symbol] = nextState + 1
 			nBits := s.actualTableLog - byte(highBits(uint32(nextState)))
-			s.dt[u&maxTableMask].setNBits(nBits)
 			newState := (nextState << nBits) - tableSize
 			if newState > tableSize {
 				return fmt.Errorf("newState (%d) outside table size (%d)", newState, tableSize)
@@ -243,7 +247,7 @@ func (b *buildDtable) buildTable() {
 				// Seems weird that this is possible with nbits > 0.
 				return fmt.Errorf("newState (%d) == oldState (%d) and no bits", newState, u)
 			}
-			s.dt[u&maxTableMask].setNewState(newState)
+			s.dt[u&maxTableMask] = ext[symbol] | decSymbol(nBits) | decSymbol(newState)<<16
 		}
 	*/
 	u := New64()
@@ -281,11 +285,19 @@ func (b *buildDtable) buildTable() {
 		SHLQ(reg.CL, newState)
 		SUBQ(b.tableSize, newState)
 
-		// s.dt[u&maxTableMask].setNBits(nBits)         // sets byte #0
-		// s.dt[u&maxTableMask].setNewState(newState)   // sets word #1 (bytes #2 & #3)
+		// s.dt[u&maxTableMask] = ext[symbol] | decSymbol(nBits) | decSymbol(newState)<<16
+		// One 8-byte store: ext[symbol] carries addBits and baseline, which
+		// the spread left as the symbol in byte #1; nBits is byte #0 and
+		// newState word #1 (bytes #2 & #3).
 		{
-			MOVB(nBits.As8(), Mem{Base: b.dt, Index: u, Scale: 8})
-			MOVW(newState.As16(), Mem{Base: b.dt, Index: u, Scale: 8, Disp: 2})
+			entry := GP64()
+			MOVQ(Mem{Base: b.ext, Index: symbol, Scale: 8}, entry)
+			ORQ(nBits, entry)
+			state := Copy64(newState)
+			ANDQ(U32(0xffff), state)
+			SHLQ(U8(16), state)
+			ORQ(state, entry)
+			MOVQ(entry, Mem{Base: b.dt, Index: u, Scale: 8})
 		}
 
 		// if newState > tableSize {
