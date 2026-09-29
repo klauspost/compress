@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"hash/crc32"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -377,6 +378,38 @@ func FuzzLZ4Block(f *testing.F) {
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > maxSize || len(data) == 0 {
 			return
+		}
+
+		// Convert again into a dst that is too small or too large by up to len(data).
+		const (
+			guard  = 16 // Bytes after cap(dst) that must stay untouched.
+			margin = 16 // Conversion must succeed with this much spare capacity.
+		)
+		h := crc32.ChecksumIEEE(data)
+		delta := int(h>>1) % len(data)
+		if h&1 == 0 {
+			delta = -delta
+		}
+		large := make([]byte, len(data)*2+4096)
+		for name, conv := range lz4Converters {
+			want, wantN, wantErr := conv(large[:0], data)
+			n := len(data) + delta
+			if wantErr == nil {
+				n = len(want) + delta
+			}
+			n = max(n, 0)
+			buf := bytes.Repeat([]byte{0xaa}, n+guard)
+			got, gotN, err := conv(buf[:0:n], data)
+			if bytes.Count(buf[n:], []byte{0xaa}) != guard {
+				t.Fatalf("%s: cap %d, need %d: wrote past cap(dst)", name, n, len(want))
+			}
+			switch {
+			case err == nil && (wantErr != nil || gotN != wantN || !bytes.Equal(got, want)),
+				err == ErrCorrupt && wantErr != ErrCorrupt,
+				err == ErrDstTooSmall && wantErr == nil && n >= len(want)+margin,
+				err != nil && err != ErrCorrupt && err != ErrDstTooSmall:
+				t.Fatalf("%s: cap %d: %v; with large dst: %d bytes, %v", name, n, err, len(want), wantErr)
+			}
 		}
 
 		lz4Decoded := make([]byte, len(data)*2+65536)
