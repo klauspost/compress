@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/klauspost/compress/internal/silesiatest"
 	"github.com/klauspost/compress/internal/snapref"
 	"github.com/klauspost/compress/zip"
 	"github.com/klauspost/compress/zstd"
@@ -2275,6 +2276,65 @@ func BenchmarkEncodeBlockParallel(b *testing.B) {
 	for i := range testFiles {
 		b.Run(fmt.Sprint(i, "-", testFiles[i].label), func(b *testing.B) {
 			benchFile(b, i, false)
+		})
+	}
+}
+
+// TestSilesiaRoundTrip round-trips the Silesia corpus through the block
+// encoders and Decode, through Writer and Reader at each level, and through
+// the Snappy format in both directions against the reference implementation.
+func TestSilesiaRoundTrip(t *testing.T) {
+	in := silesiatest.Tar(t)
+	check := func(t *testing.T, got []byte, err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, in) {
+			t.Fatal("output differs from input")
+		}
+	}
+	for _, e := range []struct {
+		name string
+		enc  func(dst, src []byte) []byte
+	}{
+		{"Encode", Encode},
+		{"EncodeBetter", EncodeBetter},
+		{"EncodeBest", EncodeBest},
+		{"EncodeSnappy", EncodeSnappy},
+	} {
+		t.Run("block/"+e.name, func(t *testing.T) {
+			got, err := Decode(nil, e.enc(nil, in))
+			check(t, got, err)
+		})
+	}
+	t.Run("snappy/reference-decode", func(t *testing.T) {
+		got, err := snapref.Decode(nil, EncodeSnappy(nil, in))
+		check(t, got, err)
+	})
+	t.Run("snappy/reference-encode", func(t *testing.T) {
+		got, err := Decode(nil, snapref.Encode(nil, in))
+		check(t, got, err)
+	})
+	for _, w := range []struct {
+		name string
+		opts []WriterOption
+	}{
+		{"default", nil},
+		{"better", []WriterOption{WriterBetterCompression()}},
+		{"best", []WriterOption{WriterBestCompression()}},
+	} {
+		t.Run("stream/"+w.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			enc := NewWriter(&buf, w.opts...)
+			if _, err := io.Copy(enc, bytes.NewReader(in)); err != nil {
+				t.Fatal(err)
+			}
+			if err := enc.Close(); err != nil {
+				t.Fatal(err)
+			}
+			got, err := io.ReadAll(NewReader(&buf))
+			check(t, got, err)
 		})
 	}
 }

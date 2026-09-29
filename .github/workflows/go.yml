@@ -74,6 +74,53 @@ jobs:
         git diff
         test -z "$(git status --porcelain)"
 
+  silesia:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Set up Go
+      uses: actions/setup-go@v7.0.0
+      with:
+        go-version: 1.27.x
+
+    - name: Checkout code
+      uses: actions/checkout@v7.0.1
+
+    - name: Cache keys
+      id: keys
+      run: |
+        command -v zstd || sudo apt-get install -y zstd
+        echo "sha256=$(sed -n 's/^zst_sha256=//p' testdata/fetch_silesia.sh)" >> "$GITHUB_OUTPUT"
+        echo "zstd=$(zstd --version | sed -n 's/.* v\([0-9.]*\),.*/\1/p')" >> "$GITHUB_OUTPUT"
+
+    - name: Cache Silesia
+      uses: actions/cache@v6.1.0
+      with:
+        path: |
+          testdata/silesia.tar
+          testdata/silesia.tar.zst
+        key: silesia-${{ steps.keys.outputs.sha256 }}
+
+    - name: Cache zstd CLI encodings
+      id: cli
+      uses: actions/cache@v6.1.0
+      with:
+        path: |
+          testdata/silesia.tar.19.zst
+          testdata/silesia.tar.frames.zst
+        key: silesia-cli-${{ steps.keys.outputs.sha256 }}-zstd${{ steps.keys.outputs.zstd }}
+
+    - name: Fetch Silesia
+      run: testdata/fetch_silesia.sh ${{ steps.cli.outputs.cache-hit != 'true' && '-cli' || '' }}
+
+    - name: Test
+      run: go test -run '^TestSilesia' -v ./zstd/ ./s2/ ./flate/
+
+    - name: Test No-asm
+      run: go test -tags=noasm -run '^TestSilesia' -v ./zstd/ ./s2/ ./flate/
+
   build-special:
     env:
       CGO_ENABLED: 0
