@@ -103,7 +103,10 @@ func (s *sequenceDecs) useSafeDecodeSync() bool {
 	if s.maxSyncLen == 0 && cap(s.out)-len(s.out) < maxBlockSize+compressedBlockOverAlloc {
 		return true
 	}
-	if s.maxSyncLen > 0 && cap(s.out)-len(s.out)-compressedBlockOverAlloc < int(s.maxSyncLen) {
+	// The block, not the rest of the frame, must fit with the slack: a
+	// buffer sized exactly to the frame needs the safe copies only for the
+	// final block(s).
+	if s.maxSyncLen > 0 && cap(s.out)-len(s.out)-compressedBlockOverAlloc < min(int(s.maxSyncLen), maxBlockSize) {
 		return true
 	}
 	if cap(s.literals) < len(s.literals)+compressedBlockOverAlloc {

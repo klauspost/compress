@@ -454,6 +454,42 @@ func Test_seqdec_decodeSync(t *testing.T) {
 	}
 }
 
+// TestUseSafeDecodeSyncFrameBound checks the copy variant chosen when the
+// frame size is known: only the current block needs the slack, so a buffer
+// sized exactly to the frame uses the extended copies until the last block.
+func TestUseSafeDecodeSyncFrameBound(t *testing.T) {
+	if !haveSeqdecAsm {
+		t.Skip("no assembly decoder on this build")
+	}
+	const mb = maxCompressedBlockSize
+	tests := []struct {
+		name      string
+		remaining int // maxSyncLen: bytes the frame may still produce
+		free      int // cap(out) - len(out)
+		wantSafe  bool
+	}{
+		{"exact frame, far from end", 4 << 20, 4 << 20, false},
+		{"exact frame, one block left", mb, mb, true},
+		{"exact frame, last small block", 1000, 1000, true},
+		{"last small block with slack", 1000, 1000 + compressedBlockOverAlloc, false},
+		{"buffer below frame, block fits", 4 << 20, mb + compressedBlockOverAlloc, false},
+		{"buffer below frame, block lacks slack", 4 << 20, mb + compressedBlockOverAlloc - 1, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := sequenceDecs{
+				windowSize: 8 << 20,
+				maxSyncLen: uint64(tt.remaining),
+				out:        make([]byte, 100, 100+tt.free),
+				literals:   make([]byte, 10, 10+compressedBlockOverAlloc),
+			}
+			if got := decodeSyncUsesSafe(&s); got != tt.wantSafe {
+				t.Errorf("safe copies = %v, want %v", got, tt.wantSafe)
+			}
+		})
+	}
+}
+
 func Benchmark_seqdec_decode(b *testing.B) {
 	benchmark_seqdec_decode(b)
 }
