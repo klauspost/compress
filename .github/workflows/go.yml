@@ -175,7 +175,7 @@ jobs:
         test: [
           flate/FuzzEncoding, flate/FuzzInflateBufio,
           huff0/FuzzCompress, huff0/FuzzDecompress1x,
-          s2/FuzzDictBlocks, s2/FuzzEncodingBlocks, s2/FuzzStreamDecode, s2/FuzzDecodeBlock, s2/FuzzLZ4Block,
+          s2/FuzzDictBlocks, s2/FuzzEncodingBlocks, s2/FuzzStreamDecode, s2/FuzzDecodeBlock,
           snappy/xerial/FuzzDecode, snappy/xerial/FuzzEncode,
           zip/FuzzReader,
           zstd/FuzzDecodeAll, zstd/FuzzDecoder, zstd/FuzzEncoding,
@@ -184,6 +184,9 @@ jobs:
           # Skipped unless the amd64 BMI2 asm is available.
           - { os: ubuntu-latest, tags: '', test: zstd/FuzzDecAllNoBMI2 }
           - { os: ubuntu-latest, tags: '', test: zstd/FuzzNoBMI2Dec }
+          # Covers the assembly and pure Go paths in one run.
+          - { os: ubuntu-latest, tags: '', test: s2/FuzzLZ4Block }
+          - { os: ubuntu-24.04-arm, tags: '', test: s2/FuzzLZ4Block }
           # Pure Go: neither tags nor arch change the code under test.
           - { os: ubuntu-latest, tags: '', test: fse/FuzzCompress }
           - { os: ubuntu-latest, tags: '', test: fse/FuzzDecompress }
