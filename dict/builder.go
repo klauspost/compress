@@ -103,6 +103,9 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 	if hashBytes < 4 || hashBytes > 8 {
 		return nil, fmt.Errorf("HashBytes must be >= 4 and <= 8")
 	}
+	if wantLen <= 0 {
+		return nil, fmt.Errorf("MaxDictSize must be > 0")
+	}
 	println := func(args ...any) {
 		if o.Output != nil {
 			fmt.Fprintln(o.Output, args...)
@@ -135,6 +138,9 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 		}
 		printf("\r input %d indexed...", i)
 	}
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("no input is 8 bytes or longer")
+	}
 	threshold := uint32(total / uint64(len(matches)))
 	println("\nTotal", total, "match", len(matches), "avg", threshold)
 	sorted := make([]match, 0, len(matches)/2)
@@ -143,6 +149,10 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 			continue
 		}
 		sorted = append(sorted, match{hash: k, n: v, offset: offsets[k]})
+	}
+	if len(sorted) == 0 {
+		// Happens with a single input, or inputs that are identical or share nothing.
+		return nil, fmt.Errorf("no content is repeated more than average across inputs")
 	}
 	sort.Slice(sorted, func(i, j int) bool {
 		if true {
@@ -461,8 +471,6 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 }
 
 const (
-	prime3bytes = 506832829
-	prime4bytes = 2654435761
 	prime5bytes = 889523592379
 	prime6bytes = 227718039650203
 	prime7bytes = 58295818150454627
@@ -487,24 +495,6 @@ func hashLen(u uint64, hashLog, mls uint8) uint32 {
 	default:
 		return uint32(u)
 	}
-}
-
-// hash3 returns the hash of the lower 3 bytes of u to fit in a hash table with h bits.
-// Preferably h should be a constant and should always be <32.
-func hash3(u uint32, h uint8) uint32 {
-	return ((u << (32 - 24)) * prime3bytes) >> ((32 - h) & 31)
-}
-
-// hash4 returns the hash of u to fit in a hash table with h bits.
-// Preferably h should be a constant and should always be <32.
-func hash4(u uint32, h uint8) uint32 {
-	return (u * prime4bytes) >> ((32 - h) & 31)
-}
-
-// hash4x64 returns the hash of the lowest 4 bytes of u to fit in a hash table with h bits.
-// Preferably h should be a constant and should always be <32.
-func hash4x64(u uint64, h uint8) uint32 {
-	return (uint32(u) * prime4bytes) >> ((32 - h) & 31)
 }
 
 // hash5 returns the hash of the lowest 5 bytes of u to fit in a hash table with h bits.

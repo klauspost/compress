@@ -66,10 +66,11 @@ func main() {
 		}
 		defer f.Close()
 		b, err := io.ReadAll(io.LimitReader(f, int64(*wantMaxBytes)))
-		if len(b) < 8 {
+		if err != nil {
+			log.Print(err)
 			return nil
 		}
-		if len(b) == 0 {
+		if len(b) < 8 {
 			return nil
 		}
 		input = append(input, b)
