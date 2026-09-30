@@ -3061,3 +3061,45 @@ func TestDecodeAllChecksumPerBlock(t *testing.T) {
 		})
 	}
 }
+
+// TestDecodeAllExactCapacity decodes into a destination with exactly the
+// room the frame needs, on both sequence paths: the output must land in the
+// caller's buffer, not in a reallocated copy. The frame ends with matches
+// 2 MiB back, far enough for the two-pass path to accept its last blocks.
+func TestDecodeAllExactCapacity(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	input := make([]byte, 2<<20, 2<<20+512<<10)
+	rng.Read(input)
+	input = append(input, input[:512<<10]...)
+	enc, err := NewWriter(nil, WithEncoderCRC(false), WithWindowSize(4<<20))
+	if err != nil {
+		t.Fatal(err)
+	}
+	comp := enc.EncodeAll(input, nil)
+	enc.Close()
+
+	prefix := []byte("existing output")
+	for _, twoPass := range []bool{false, true} {
+		for _, pre := range [][]byte{nil, prefix} {
+			t.Run(fmt.Sprintf("twopass=%v/prefix=%d", twoPass, len(pre)), func(t *testing.T) {
+				defer forceTwoPass(twoPass)()
+				dec, err := NewReader(nil, WithDecoderConcurrency(1))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer dec.Close()
+				dst := append(make([]byte, 0, len(pre)+len(input)), pre...)
+				got, err := dec.DecodeAll(comp, dst)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(got[:len(pre)], pre) || !bytes.Equal(got[len(pre):], input) {
+					t.Fatal("output mismatch")
+				}
+				if &got[:1][0] != &dst[:1][0] {
+					t.Fatal("output was reallocated instead of using dst")
+				}
+			})
+		}
+	}
+}
