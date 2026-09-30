@@ -5,7 +5,10 @@
 
 package zstd
 
-import "github.com/klauspost/compress/internal/le"
+import (
+	"github.com/klauspost/compress/internal/le"
+	"github.com/klauspost/compress/internal/regmask"
+)
 
 // bitState is a bit writer that stays in registers when passed and
 // returned by value. It writes into a buffer owned by the caller.
@@ -20,7 +23,7 @@ type bitState struct {
 func (s bitState) flush(buf []byte) bitState {
 	le.Store64(buf, s.pos, s.c)
 	s.pos += int(s.nb >> 3)
-	s.c >>= (s.nb &^ 7) & 63
+	s.c >>= (s.nb &^ 7) & regmask.Shift64ByUint
 	s.nb &= 7
 	return s
 }
@@ -28,7 +31,7 @@ func (s bitState) flush(buf []byte) bitState {
 // add adds n bits from v, which must have no bits set above them.
 // There must be room for them.
 func (s bitState) add(v uint64, n uint) bitState {
-	s.c |= v << (s.nb & 63)
+	s.c |= v << (s.nb & regmask.Shift64ByUint)
 	s.nb += n
 	return s
 }
@@ -38,7 +41,7 @@ func (s bitState) add(v uint64, n uint) bitState {
 func (s bitState) addState(state uint16, tab []uint16, tt symbolTransform) (bitState, uint16) {
 	nbBitsOut := (uint32(state) + tt.deltaNbBits) >> 16
 	s = s.add(uint64(state&bitMask16[nbBitsOut&31]), uint(nbBitsOut))
-	return s, tab[int32(state>>(nbBitsOut&15))+int32(tt.deltaFindState)]
+	return s, tab[int32(state>>(nbBitsOut&regmask.Shift16ByUint32))+int32(tt.deltaFindState)]
 }
 
 // bitWriter will write bits.

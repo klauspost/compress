@@ -5,7 +5,10 @@
 
 package huff0
 
-import "github.com/klauspost/compress/internal/le"
+import (
+	"github.com/klauspost/compress/internal/le"
+	"github.com/klauspost/compress/internal/regmask"
+)
 
 // bitState is a bit writer that stays in registers when passed and
 // returned by value. It writes into a buffer owned by the caller.
@@ -20,7 +23,7 @@ type bitState struct {
 func (s bitState) flush(buf []byte) bitState {
 	le.Store64(buf, s.pos, s.c)
 	s.pos += int(s.nb >> 3)
-	s.c >>= (s.nb &^ 7) & 63
+	s.c >>= (s.nb &^ 7) & regmask.Shift64ByUint
 	s.nb &= 7
 	return s
 }
@@ -28,7 +31,7 @@ func (s bitState) flush(buf []byte) bitState {
 // add adds n bits from v, which must have no bits set above them.
 // There must be room for them.
 func (s bitState) add(v uint64, n uint) bitState {
-	s.c |= v << (s.nb & 63)
+	s.c |= v << (s.nb & regmask.Shift64ByUint)
 	s.nb += n
 	return s
 }
@@ -40,9 +43,9 @@ func fourSymbols(a, b, c, d cTableEntry) (uint64, uint) {
 	bitsB := bitsA + uint(b.nBits)
 	bitsC := bitsB + uint(c.nBits)
 	v := uint64(a.val) |
-		uint64(b.val)<<(bitsA&63) |
-		uint64(c.val)<<(bitsB&63) |
-		uint64(d.val)<<(bitsC&63)
+		uint64(b.val)<<(bitsA&regmask.Shift64ByUint) |
+		uint64(c.val)<<(bitsB&regmask.Shift64ByUint) |
+		uint64(d.val)<<(bitsC&regmask.Shift64ByUint)
 	return v, bitsC + uint(d.nBits)
 }
 
