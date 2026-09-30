@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -1280,6 +1281,49 @@ func TestFSWalk(t *testing.T) {
 				t.Errorf("got %v want %v", files, test.want)
 			}
 		})
+	}
+}
+
+// TestFSWalkBadFile verifies that an archive with an entry named "." does not
+// send fs.WalkDir into unbounded recursion. Such an entry decodes to a
+// directory whose own name is ".", so without the guard in ReadDir the walker
+// descends into it forever and the process dies with a stack overflow.
+func TestFSWalkBadFile(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	zw := NewWriter(&buf)
+	hdr := &FileHeader{Name: "."}
+	hdr.SetMode(fs.ModeDir | 0o755)
+	w, err := zw.CreateHeader(hdr)
+	if err != nil {
+		t.Fatalf("create zip header: %v", err)
+	}
+	if _, err = w.Write([]byte("some data")); err != nil {
+		t.Fatalf("write zip contents: %v", err)
+	}
+	if err = zw.Close(); err != nil {
+		t.Fatalf("close zip writer: %v", err)
+	}
+
+	zr, err := NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatalf("create zip reader: %v", err)
+	}
+
+	var count int
+	errRepeat := errors.New("repeated call to path")
+	err = fs.WalkDir(zr, ".", func(p string, d fs.DirEntry, err error) error {
+		count++
+		if count > 2 { // once for the directory read, once for the error
+			return errRepeat
+		}
+		return err
+	})
+	if err == nil {
+		t.Fatal("expected error from invalid file name")
+	} else if errors.Is(err, errRepeat) {
+		t.Fatal(err)
 	}
 }
 

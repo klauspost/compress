@@ -195,6 +195,21 @@ func TestBuildDictFullyMatchableCorpusReturnsError(t *testing.T) {
 	}
 }
 
+func TestBuildDictUnknownLevel(t *testing.T) {
+	samples, history, _ := buildDictLevelPathFixture()
+	for _, level := range []EncoderLevel{-1, speedLast} {
+		_, err := BuildDict(BuildDictOptions{
+			ID:       1,
+			Contents: samples,
+			History:  history,
+			Level:    level,
+		})
+		if err == nil {
+			t.Errorf("level %d: want error", level)
+		}
+	}
+}
+
 func BenchmarkBuildDictLevelPaths(b *testing.B) {
 	samples, history, _ := buildDictLevelPathFixture()
 	for _, tt := range []struct {

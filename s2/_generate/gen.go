@@ -544,7 +544,7 @@ func (o options) genEncodeBlockAsm(name string, tableBits, skipLog, hashBytes, m
 					JZ(LabelRef("repeat_as_copy_" + name))
 
 					// Emit as repeat...
-					o.emitRepeat("match_repeat_"+name, length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name), false)
+					o.emitRepeat("match_repeat_"+name, length, offsetVal, nil, dst, nil, LabelRef("repeat_end_emit_"+name), false)
 
 					// Emit as copy instead...
 					Label("repeat_as_copy_" + name)
@@ -1251,7 +1251,7 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, sTableBits, sk
 				MOVL(repeatL, offsetVal)
 
 				// Emit as repeat...
-				o.emitRepeat("match_repeat_"+name, length, offsetVal, nil, dst, LabelRef("repeat_end_emit_"+name), false)
+				o.emitRepeat("match_repeat_"+name, length, offsetVal, nil, dst, nil, LabelRef("repeat_end_emit_"+name), false)
 
 				Label("repeat_end_emit_" + name)
 				// Store new dst and nextEmit
@@ -1460,7 +1460,7 @@ func (o options) genEncodeBetterBlockAsm(name string, lTableBits, sTableBits, sk
 				// length += 4
 				ADDL(U8(4), length.As32())
 				MOVL(s, nextEmitL) // nextEmit = s
-				o.emitRepeat("match_nolit_repeat_"+name, length, offset, nil, dst, LabelRef("match_nolit_emitcopy_end_"+name), false)
+				o.emitRepeat("match_nolit_repeat_"+name, length, offset, nil, dst, nil, LabelRef("match_nolit_emitcopy_end_"+name), false)
 			}
 		}
 		Label("match_nolit_emitcopy_end_" + name)
@@ -1994,7 +1994,7 @@ func (o options) genEmitRepeat() {
 	Load(Param("dst").Base(), dstBase)
 	Load(Param("offset"), offset)
 	Load(Param("length"), length)
-	o.emitRepeat("standalone", length, offset, retval, dstBase, LabelRef("gen_emit_repeat_end"), false)
+	o.emitRepeat("standalone", length, offset, retval, dstBase, nil, LabelRef("gen_emit_repeat_end"), false)
 	Label("gen_emit_repeat_end")
 	Store(retval, ReturnIndex(0))
 	RET()
@@ -2006,8 +2006,10 @@ func (o options) genEmitRepeat() {
 // retval can be nil.
 // Will jump to end label when finished.
 // Uses 1 GP register.
+// dstLimit is optional. If set, each extra chunk of a repeat longer than
+// 24 bits checks if dstLimit is reached and jumps to "end" without emitting the rest.
 // longer indicates we know match will be > 12
-func (o options) emitRepeat(name string, length reg.GPVirtual, offset reg.GPVirtual, retval reg.GPVirtual, dstBase reg.GPVirtual, end LabelRef, longer bool) {
+func (o options) emitRepeat(name string, length reg.GPVirtual, offset reg.GPVirtual, retval reg.GPVirtual, dstBase, dstLimit reg.GPVirtual, end LabelRef, longer bool) {
 	Comment("emitRepeat")
 	if longer {
 		// Skip initial length tests
@@ -2056,6 +2058,10 @@ func (o options) emitRepeat(name string, length reg.GPVirtual, offset reg.GPVirt
 		}
 		if retval != nil {
 			ADDQ(U8(5), retval)
+		}
+		if dstLimit != nil {
+			CMPQ(dstBase, dstLimit)
+			JAE(end)
 		}
 		JMP(LabelRef("emit_repeat_again_" + name))
 	} else {
@@ -2261,7 +2267,7 @@ func (o options) emitCopy(name string, length, offset, retval, dstBase, dstLimit
 		//	return 5 + emitRepeat(dst[5:], offset, length)
 		// Inline call to emitRepeat. Will jump to end
 		if !o.snappy {
-			o.emitRepeat(name+"_emit_copy", length, offset, retval, dstBase, end, false)
+			o.emitRepeat(name+"_emit_copy", length, offset, retval, dstBase, dstLimit, end, false)
 		} else {
 			checkDst(dstBase)
 			JMP(LabelRef("four_bytes_loop_back_" + name))
@@ -2329,7 +2335,7 @@ func (o options) emitCopy(name string, length, offset, retval, dstBase, dstLimit
 		ADDQ(U8(2), dstBase)       // dst += 2
 		SUBL(U8(8), length.As32()) // length  -= 8
 		// emitRepeat(dst[2:], offset, length)
-		o.emitRepeat(name+"_emit_copy_short_2b", length, offset, retval, dstBase, end, true)
+		o.emitRepeat(name+"_emit_copy_short_2b", length, offset, retval, dstBase, dstLimit, end, true)
 
 		Label("long_offset_short_" + name)
 	}
@@ -2355,7 +2361,7 @@ func (o options) emitCopy(name string, length, offset, retval, dstBase, dstLimit
 	}
 	// Inline call to emitRepeat. Will jump to end
 	if !o.snappy {
-		o.emitRepeat(name+"_emit_copy_short", length, offset, retval, dstBase, end, false)
+		o.emitRepeat(name+"_emit_copy_short", length, offset, retval, dstBase, dstLimit, end, false)
 	} else {
 		checkDst(dstBase)
 		JMP(LabelRef("two_byte_offset_" + name))
@@ -3020,6 +3026,12 @@ func (o options) cvtLZ4BlockAsm(lz4s bool) {
 	srcEnd, dstEnd := GP64(), GP64()
 	LEAQ(Mem{Base: src, Index: srcLen, Scale: 1, Disp: 0}, srcEnd)
 	LEAQ(Mem{Base: dst, Index: dstLen, Scale: 1, Disp: -o.outputMargin}, dstEnd)
+	litEnd := dstEnd
+	if !o.snappy {
+		// Leave room for a 5-byte literal header and an 8-byte copy.
+		litEnd = GP64()
+		LEAQ(Mem{Base: dstEnd, Disp: -4}, litEnd)
+	}
 	lastOffset := GP64()
 	if !o.snappy {
 		XORQ(lastOffset, lastOffset)
@@ -3084,9 +3096,10 @@ func (o options) cvtLZ4BlockAsm(lz4s bool) {
 	TESTQ(ll, ll)
 	JZ(LabelRef(name + "lits_done"))
 	{
-		dstEnd := GP64()
-		LEAQ(Mem{Base: dst, Index: ll, Scale: 1}, dstEnd)
-		checkDst(dstEnd)
+		litDstEnd := GP64()
+		LEAQ(Mem{Base: dst, Index: ll, Scale: 1}, litDstEnd)
+		CMPQ(litDstEnd, litEnd)
+		JAE(LabelRef(name + "dstfull"))
 		o.outputMargin++
 		ADDQ(ll, retval)
 		o.emitLiteral(strings.TrimRight(name, "_"), ll, nil, dst, src, LabelRef(name+"lits_emit_done"), true)
@@ -3164,7 +3177,7 @@ func (o options) cvtLZ4BlockAsm(lz4s bool) {
 		// Offsets can only be 16 bits
 		{
 			// emitRepeat16(dst[d:], offset, ml)
-			o.emitRepeat("lz4_s2", ml, offset, nil, dst, LabelRef(name+"loop"), false)
+			o.emitRepeat("lz4_s2", ml, offset, nil, dst, dstEnd, LabelRef(name+"loop"), false)
 		}
 	}
 	Label(name + "docopy")
