@@ -1,7 +1,7 @@
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
-github.com/honeycombio/avo v0.6.1-0.20260930032624-ad6f6fab8334 h1:zuNDfwcsmNs0rfdg9A/Qd/JggfIyz33IUMaSPEttR/U=
-github.com/honeycombio/avo v0.6.1-0.20260930032624-ad6f6fab8334/go.mod h1:Uqhb1urCAAbqqvRVVUqk0kJbki2AbTxufhJOstQyXo8=
+github.com/honeycombio/avo v0.6.1-0.20260930044848-5916009d64df h1:u+Wtn+UTRnxABfIAoxzcPWTS39jDIWDuPQ4y1CkhkjI=
+github.com/honeycombio/avo v0.6.1-0.20260930044848-5916009d64df/go.mod h1:Uqhb1urCAAbqqvRVVUqk0kJbki2AbTxufhJOstQyXo8=
 golang.org/x/mod v0.38.0 h1:MECBjubtXD7yj4HrhIUcywNaGeNVUdfVnxmPajOk4yk=
 golang.org/x/mod v0.38.0/go.mod h1:V6Xz0pq8TQ3dGqVQ1FVHuelZpAL0uNhSkk9ogYP3c40=
 golang.org/x/sync v0.22.0 h1:SZjpbeLmrCk4xhRSZFNZW5gFUeCeFgjekvI/+gfScek=

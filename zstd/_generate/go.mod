@@ -17,4 +17,4 @@ replace github.com/klauspost/compress => ../..
 
 // The fork carries the arm64 lowering printer (branch lizf.arm64-lowering-printer);
 // the replacement goes away once that is upstreamed.
-replace github.com/mmcloughlin/avo => github.com/honeycombio/avo v0.6.1-0.20260930032624-ad6f6fab8334
+replace github.com/mmcloughlin/avo => github.com/honeycombio/avo v0.6.1-0.20260930044848-5916009d64df
