@@ -218,6 +218,9 @@ func BuildDict(o BuildDictOptions) ([]byte, error) {
 	if len(contents) == 0 {
 		return nil, errors.New("no content provided")
 	}
+	if o.Level < speedNotSet || o.Level >= speedLast {
+		return nil, fmt.Errorf("unknown encoder level %d", o.Level)
+	}
 	d := dict{
 		id:      o.ID,
 		litEnc:  nil,
