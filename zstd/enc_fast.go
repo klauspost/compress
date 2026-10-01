@@ -171,7 +171,7 @@ encodeLoop:
 			}
 			coffset0 := s - (candidate.offset - e.cur)
 			coffset1 := s - (candidate2.offset - e.cur) + 1
-			if coffset0 < e.maxMatchOff && uint32(cv) == candidate.val {
+			if candidate.offset >= e.cur && coffset0 > 0 && coffset0 < e.maxMatchOff && uint32(cv) == candidate.val {
 				// found a regular match
 				t = candidate.offset - e.cur
 				if debugAsserts && s <= t {
@@ -183,7 +183,7 @@ encodeLoop:
 				break
 			}
 
-			if coffset1 < e.maxMatchOff && uint32(cv>>8) == candidate2.val {
+			if candidate2.offset >= e.cur && coffset1 > 0 && coffset1 < e.maxMatchOff && uint32(cv>>8) == candidate2.val {
 				// found a regular match
 				t = candidate2.offset - e.cur
 				s++
@@ -409,7 +409,7 @@ encodeLoop:
 			}
 			coffset0 := s - (candidate.offset - e.cur)
 			coffset1 := s - (candidate2.offset - e.cur) + 1
-			if coffset0 < e.maxMatchOff && uint32(cv) == candidate.val {
+			if candidate.offset >= e.cur && coffset0 > 0 && coffset0 < e.maxMatchOff && uint32(cv) == candidate.val {
 				// found a regular match
 				t = candidate.offset - e.cur
 				if debugAsserts && s <= t {
@@ -424,7 +424,7 @@ encodeLoop:
 				break
 			}
 
-			if coffset1 < e.maxMatchOff && uint32(cv>>8) == candidate2.val {
+			if candidate2.offset >= e.cur && coffset1 > 0 && coffset1 < e.maxMatchOff && uint32(cv>>8) == candidate2.val {
 				// found a regular match
 				t = candidate2.offset - e.cur
 				s++
@@ -671,7 +671,7 @@ encodeLoop:
 			}
 			coffset0 := s - (candidate.offset - e.cur)
 			coffset1 := s - (candidate2.offset - e.cur) + 1
-			if coffset0 < e.maxMatchOff && uint32(cv) == candidate.val {
+			if candidate.offset >= e.cur && coffset0 > 0 && coffset0 < e.maxMatchOff && uint32(cv) == candidate.val {
 				// found a regular match
 				t = candidate.offset - e.cur
 				if debugAsserts && s <= t {
@@ -683,7 +683,7 @@ encodeLoop:
 				break
 			}
 
-			if coffset1 < e.maxMatchOff && uint32(cv>>8) == candidate2.val {
+			if candidate2.offset >= e.cur && coffset1 > 0 && coffset1 < e.maxMatchOff && uint32(cv>>8) == candidate2.val {
 				// found a regular match
 				t = candidate2.offset - e.cur
 				s++

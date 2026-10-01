@@ -1435,3 +1435,166 @@ func TestEncodeTo(t *testing.T) {
 		})
 	}
 }
+
+func TestIssue1247GenCodes(t *testing.T) {
+	var b blockEnc
+	b.init()
+	b.sequences = []seq{
+		{litLen: 0, matchLen: 5, offset: 0},
+	}
+	err := b.genCodes()
+	if err == nil {
+		t.Fatal("expected error for seq.offset == 0, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid sequence offset 0") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+
+	// Test invalid matchLen
+	b.sequences = []seq{
+		{litLen: 0, matchLen: 1 << 24, offset: 4},
+	}
+	err = b.genCodes()
+	if err == nil {
+		t.Fatal("expected error for invalid matchLen, got nil")
+	}
+
+	// Test invalid litLen
+	b.sequences = []seq{
+		{litLen: 1 << 24, matchLen: 5, offset: 4},
+	}
+	err = b.genCodes()
+	if err == nil {
+		t.Fatal("expected error for invalid litLen, got nil")
+	}
+
+	// Test valid sequence
+	b.sequences = []seq{
+		{litLen: 5, matchLen: 5, offset: 4},
+	}
+	err = b.genCodes()
+	if err != nil {
+		t.Fatalf("expected valid sequence to succeed, got %v", err)
+	}
+}
+
+func TestIssue1247ForwardCandidate(t *testing.T) {
+	t.Run("doubleFast", func(t *testing.T) {
+		enc := &doubleFastEncoder{
+			fastEncoder: fastEncoder{
+				fastBase: fastBase{
+					maxMatchOff: 1 << 20,
+					bufferReset: 1 << 30,
+				},
+			},
+		}
+		enc.cur = 1000
+		src := []byte("0123456789abcdefghijklmnopqrstuvwxyz")
+		s := int32(4)
+		cv := load6432(src, s)
+		primeL, primeS := hashPrimes8and5()
+		hL := dFastHashL(cv, primeL)
+		hS := dFastHashS(cv, primeS)
+
+		// Inject a forward candidate (offset ahead of s) with identical 4-byte value
+		// candidate.offset - enc.cur = s + 3 -> coffset = s - (s + 3) = -3
+		enc.longTable[hL] = tableEntry{offset: s + enc.cur + 3, val: uint32(cv)}
+		enc.table[hS] = tableEntry{offset: s + enc.cur + 3, val: uint32(cv)}
+
+		var blk blockEnc
+		blk.init()
+		enc.EncodeNoHist(&blk, src)
+
+		for _, seq := range blk.sequences {
+			if seq.offset == 0 {
+				t.Fatalf("found sequence with offset 0: %+v", seq)
+			}
+		}
+
+		// Also test Encode with history
+		blk.reset(nil)
+		enc.longTable[hL] = tableEntry{offset: s + enc.cur + 3, val: uint32(cv)}
+		enc.table[hS] = tableEntry{offset: s + enc.cur + 3, val: uint32(cv)}
+		enc.Encode(&blk, src)
+		for _, seq := range blk.sequences {
+			if seq.offset == 0 {
+				t.Fatalf("found sequence with offset 0: %+v", seq)
+			}
+		}
+	})
+
+	t.Run("fast", func(t *testing.T) {
+		enc := &fastEncoder{
+			fastBase: fastBase{
+				maxMatchOff: 1 << 20,
+				bufferReset: 1 << 30,
+			},
+		}
+		enc.cur = 1000
+		src := []byte("0123456789abcdefghijklmnopqrstuvwxyz")
+		s := int32(4)
+		cv := load6432(src, s)
+		h := hashLen(cv, tableBits, tableFastHashLen)
+
+		// Inject a forward candidate (offset ahead of s) with identical 4-byte value
+		enc.table[h] = tableEntry{offset: s + enc.cur + 3, val: uint32(cv)}
+
+		var blk blockEnc
+		blk.init()
+		enc.EncodeNoHist(&blk, src)
+
+		for _, seq := range blk.sequences {
+			if seq.offset == 0 {
+				t.Fatalf("found sequence with offset 0: %+v", seq)
+			}
+		}
+
+		// Also test Encode with history
+		blk.reset(nil)
+		enc.table[h] = tableEntry{offset: s + enc.cur + 3, val: uint32(cv)}
+		enc.Encode(&blk, src)
+		for _, seq := range blk.sequences {
+			if seq.offset == 0 {
+				t.Fatalf("found sequence with offset 0: %+v", seq)
+			}
+		}
+	})
+
+	t.Run("better", func(t *testing.T) {
+		enc := &betterFastEncoder{
+			fastBase: fastBase{
+				maxMatchOff: 1 << 20,
+				bufferReset: 1 << 30,
+			},
+		}
+		enc.cur = 1000
+		src := []byte("0123456789abcdefghijklmnopqrstuvwxyz")
+		s := int32(4)
+		cv := load6432(src, s)
+		primeL, _ := hashPrimes8and5()
+		hL := betterHashL(cv, primeL)
+
+		// Inject a forward candidate
+		enc.longTable[hL] = prevEntry{offset: s + enc.cur + 3}
+
+		var blk blockEnc
+		blk.init()
+		enc.EncodeNoHist(&blk, src)
+
+		for _, seq := range blk.sequences {
+			if seq.offset == 0 {
+				t.Fatalf("found sequence with offset 0: %+v", seq)
+			}
+		}
+
+		// Also test Encode with history
+		blk.reset(nil)
+		enc.longTable[hL] = prevEntry{offset: s + enc.cur + 3}
+		enc.Encode(&blk, src)
+		for _, seq := range blk.sequences {
+			if seq.offset == 0 {
+				t.Fatalf("found sequence with offset 0: %+v", seq)
+			}
+		}
+	})
+}

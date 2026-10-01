@@ -304,7 +304,7 @@ encodeLoop:
 			coffsetLP := candidateL.prev - e.cur
 
 			// Check if we have a long match.
-			if s-coffsetL < e.maxMatchOff && cv == load6432(src, coffsetL) {
+			if coffsetL >= 0 && coffsetL < s && s-coffsetL < e.maxMatchOff && cv == load6432(src, coffsetL) {
 				// Found a long match, at least 8 bytes.
 				matched = e.matchlen(s+8, coffsetL+8, src) + 8
 				t = coffsetL
@@ -318,7 +318,7 @@ encodeLoop:
 					println("long match")
 				}
 
-				if s-coffsetLP < e.maxMatchOff && cv == load6432(src, coffsetLP) {
+				if coffsetLP >= 0 && coffsetLP < s && s-coffsetLP < e.maxMatchOff && cv == load6432(src, coffsetLP) {
 					// Found a long match, at least 8 bytes.
 					prevMatch := e.matchlen(s+8, coffsetLP+8, src) + 8
 					if prevMatch > matched {
@@ -339,7 +339,7 @@ encodeLoop:
 			}
 
 			// Check if we have a long match on prev.
-			if s-coffsetLP < e.maxMatchOff && cv == load6432(src, coffsetLP) {
+			if coffsetLP >= 0 && coffsetLP < s && s-coffsetLP < e.maxMatchOff && cv == load6432(src, coffsetLP) {
 				// Found a long match, at least 8 bytes.
 				matched = e.matchlen(s+8, coffsetLP+8, src) + 8
 				t = coffsetLP
@@ -358,7 +358,7 @@ encodeLoop:
 			coffsetS := candidateS.offset - e.cur
 
 			// Check if we have a short match.
-			if s-coffsetS < e.maxMatchOff && uint32(cv) == candidateS.val {
+			if coffsetS >= 0 && coffsetS < s && s-coffsetS < e.maxMatchOff && uint32(cv) == candidateS.val {
 				// found a regular match
 				matched = e.matchlen(s+4, coffsetS+4, src) + 4
 
@@ -371,7 +371,7 @@ encodeLoop:
 
 				// We can store it, since we have at least a 4 byte match.
 				e.longTable[nextHashL] = prevEntry{offset: s + checkAt + e.cur, prev: candidateL.offset}
-				if s-coffsetL < e.maxMatchOff && cv == load6432(src, coffsetL) {
+				if coffsetL >= 0 && coffsetL < s+checkAt && (s+checkAt)-coffsetL < e.maxMatchOff && cv == load6432(src, coffsetL) {
 					// Found a long match, at least 8 bytes.
 					matchedNext := e.matchlen(s+8+checkAt, coffsetL+8, src) + 8
 					if matchedNext > matched {
@@ -387,7 +387,7 @@ encodeLoop:
 
 				// Check prev long...
 				coffsetL = candidateL.prev - e.cur
-				if s-coffsetL < e.maxMatchOff && cv == load6432(src, coffsetL) {
+				if coffsetL >= 0 && coffsetL < s+checkAt && (s+checkAt)-coffsetL < e.maxMatchOff && cv == load6432(src, coffsetL) {
 					// Found a long match, at least 8 bytes.
 					matchedNext := e.matchlen(s+8+checkAt, coffsetL+8, src) + 8
 					if matchedNext > matched {
@@ -827,7 +827,7 @@ encodeLoop:
 			coffsetLP := candidateL.prev - e.cur
 
 			// Check if we have a long match.
-			if s-coffsetL < e.maxMatchOff && cv == load6432(src, coffsetL) {
+			if coffsetL >= 0 && coffsetL < s && s-coffsetL < e.maxMatchOff && cv == load6432(src, coffsetL) {
 				// Found a long match, at least 8 bytes.
 				matched = e.matchlen(s+8, coffsetL+8, src) + 8
 				t = coffsetL
@@ -841,7 +841,7 @@ encodeLoop:
 					println("long match")
 				}
 
-				if s-coffsetLP < e.maxMatchOff && cv == load6432(src, coffsetLP) {
+				if coffsetLP >= 0 && coffsetLP < s && s-coffsetLP < e.maxMatchOff && cv == load6432(src, coffsetLP) {
 					// Found a long match, at least 8 bytes.
 					prevMatch := e.matchlen(s+8, coffsetLP+8, src) + 8
 					if prevMatch > matched {
@@ -862,7 +862,7 @@ encodeLoop:
 			}
 
 			// Check if we have a long match on prev.
-			if s-coffsetLP < e.maxMatchOff && cv == load6432(src, coffsetLP) {
+			if coffsetLP >= 0 && coffsetLP < s && s-coffsetLP < e.maxMatchOff && cv == load6432(src, coffsetLP) {
 				// Found a long match, at least 8 bytes.
 				matched = e.matchlen(s+8, coffsetLP+8, src) + 8
 				t = coffsetLP
@@ -881,7 +881,7 @@ encodeLoop:
 			coffsetS := candidateS.offset - e.cur
 
 			// Check if we have a short match.
-			if s-coffsetS < e.maxMatchOff && uint32(cv) == candidateS.val {
+			if coffsetS >= 0 && coffsetS < s && s-coffsetS < e.maxMatchOff && uint32(cv) == candidateS.val {
 				// found a regular match
 				matched = e.matchlen(s+4, coffsetS+4, src) + 4
 
@@ -895,7 +895,7 @@ encodeLoop:
 				// We can store it, since we have at least a 4 byte match.
 				e.longTable[nextHashL] = prevEntry{offset: s + checkAt + e.cur, prev: candidateL.offset}
 				e.markLongShardDirty(nextHashL)
-				if s-coffsetL < e.maxMatchOff && cv == load6432(src, coffsetL) {
+				if coffsetL >= 0 && coffsetL < s+checkAt && (s+checkAt)-coffsetL < e.maxMatchOff && cv == load6432(src, coffsetL) {
 					// Found a long match, at least 8 bytes.
 					matchedNext := e.matchlen(s+8+checkAt, coffsetL+8, src) + 8
 					if matchedNext > matched {
@@ -911,7 +911,7 @@ encodeLoop:
 
 				// Check prev long...
 				coffsetL = candidateL.prev - e.cur
-				if s-coffsetL < e.maxMatchOff && cv == load6432(src, coffsetL) {
+				if coffsetL >= 0 && coffsetL < s+checkAt && (s+checkAt)-coffsetL < e.maxMatchOff && cv == load6432(src, coffsetL) {
 					// Found a long match, at least 8 bytes.
 					matchedNext := e.matchlen(s+8+checkAt, coffsetL+8, src) + 8
 					if matchedNext > matched {

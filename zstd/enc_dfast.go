@@ -192,7 +192,7 @@ encodeLoop:
 			coffsetS := s - (candidateS.offset - e.cur)
 
 			// Check if we have a long match.
-			if coffsetL < e.maxMatchOff && uint32(cv) == candidateL.val {
+			if candidateL.offset >= e.cur && coffsetL > 0 && coffsetL < e.maxMatchOff && uint32(cv) == candidateL.val {
 				// Found a long match, likely at least 8 bytes.
 				// Reference encoder checks all 8 bytes, we only check 4,
 				// but the likelihood of both the first 4 bytes and the hash matching should be enough.
@@ -210,7 +210,7 @@ encodeLoop:
 			}
 
 			// Check if we have a short match.
-			if coffsetS < e.maxMatchOff && uint32(cv) == candidateS.val {
+			if candidateS.offset >= e.cur && coffsetS > 0 && coffsetS < e.maxMatchOff && uint32(cv) == candidateS.val {
 				// found a regular match
 				// See if we can find a long match at s+1
 				const checkAt = 1
@@ -221,7 +221,7 @@ encodeLoop:
 
 				// We can store it, since we have at least a 4 byte match.
 				e.longTable[nextHashL] = tableEntry{offset: s + checkAt + e.cur, val: uint32(cv)}
-				if coffsetL < e.maxMatchOff && uint32(cv) == candidateL.val {
+				if candidateL.offset >= e.cur && coffsetL > 0 && coffsetL < e.maxMatchOff && uint32(cv) == candidateL.val {
 					// Found a long match, likely at least 8 bytes.
 					// Reference encoder checks all 8 bytes, we only check 4,
 					// but the likelihood of both the first 4 bytes and the hash matching should be enough.
@@ -500,7 +500,7 @@ encodeLoop:
 			coffsetS := s - (candidateS.offset - e.cur)
 
 			// Check if we have a long match.
-			if coffsetL < e.maxMatchOff && uint32(cv) == candidateL.val {
+			if candidateL.offset >= e.cur && coffsetL > 0 && coffsetL < e.maxMatchOff && uint32(cv) == candidateL.val {
 				// Found a long match, likely at least 8 bytes.
 				// Reference encoder checks all 8 bytes, we only check 4,
 				// but the likelihood of both the first 4 bytes and the hash matching should be enough.
@@ -518,7 +518,7 @@ encodeLoop:
 			}
 
 			// Check if we have a short match.
-			if coffsetS < e.maxMatchOff && uint32(cv) == candidateS.val {
+			if candidateS.offset >= e.cur && coffsetS > 0 && coffsetS < e.maxMatchOff && uint32(cv) == candidateS.val {
 				// found a regular match
 				// See if we can find a long match at s+1
 				const checkAt = 1
@@ -529,7 +529,7 @@ encodeLoop:
 
 				// We can store it, since we have at least a 4 byte match.
 				e.longTable[nextHashL] = tableEntry{offset: s + checkAt + e.cur, val: uint32(cv)}
-				if coffsetL < e.maxMatchOff && uint32(cv) == candidateL.val {
+				if candidateL.offset >= e.cur && coffsetL > 0 && coffsetL < e.maxMatchOff && uint32(cv) == candidateL.val {
 					// Found a long match, likely at least 8 bytes.
 					// Reference encoder checks all 8 bytes, we only check 4,
 					// but the likelihood of both the first 4 bytes and the hash matching should be enough.
@@ -842,7 +842,7 @@ encodeLoop:
 			coffsetS := s - (candidateS.offset - e.cur)
 
 			// Check if we have a long match.
-			if coffsetL < e.maxMatchOff && uint32(cv) == candidateL.val {
+			if candidateL.offset >= e.cur && coffsetL > 0 && coffsetL < e.maxMatchOff && uint32(cv) == candidateL.val {
 				// Found a long match, likely at least 8 bytes.
 				// Reference encoder checks all 8 bytes, we only check 4,
 				// but the likelihood of both the first 4 bytes and the hash matching should be enough.
@@ -860,7 +860,7 @@ encodeLoop:
 			}
 
 			// Check if we have a short match.
-			if coffsetS < e.maxMatchOff && uint32(cv) == candidateS.val {
+			if candidateS.offset >= e.cur && coffsetS > 0 && coffsetS < e.maxMatchOff && uint32(cv) == candidateS.val {
 				// found a regular match
 				// See if we can find a long match at s+1
 				const checkAt = 1
@@ -872,7 +872,7 @@ encodeLoop:
 				// We can store it, since we have at least a 4 byte match.
 				e.longTable[nextHashL] = tableEntry{offset: s + checkAt + e.cur, val: uint32(cv)}
 				e.markLongShardDirty(nextHashL)
-				if coffsetL < e.maxMatchOff && uint32(cv) == candidateL.val {
+				if candidateL.offset >= e.cur && coffsetL > 0 && coffsetL < e.maxMatchOff && uint32(cv) == candidateL.val {
 					// Found a long match, likely at least 8 bytes.
 					// Reference encoder checks all 8 bytes, we only check 4,
 					// but the likelihood of both the first 4 bytes and the hash matching should be enough.

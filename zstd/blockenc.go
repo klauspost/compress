@@ -611,7 +611,10 @@ func (b *blockEnc) encode(org []byte, raw, rawAllLits bool) error {
 	if debugEncoder {
 		println("Encoding", len(b.sequences), "sequences")
 	}
-	b.genCodes()
+	err = b.genCodes()
+	if err != nil {
+		return err
+	}
 	llEnc := b.coders.llEnc
 	ofEnc := b.coders.ofEnc
 	mlEnc := b.coders.mlEnc
@@ -844,13 +847,13 @@ func (b *blockEnc) chooseComp(cur, prev, preDef *fseEncoder) (*fseEncoder, seqCo
 
 var errIncompressible = errors.New("incompressible")
 
-func (b *blockEnc) genCodes() {
+func (b *blockEnc) genCodes() error {
 	if len(b.sequences) == 0 {
 		// nothing to do
-		return
+		return nil
 	}
 	if len(b.sequences) > math.MaxUint16 {
-		panic("can only encode up to 64K sequences")
+		return fmt.Errorf("can only encode up to 64K sequences (got %d)", len(b.sequences))
 	}
 	// No bounds checks after here:
 	llH := b.coders.llEnc.Histogram()
@@ -870,6 +873,9 @@ func (b *blockEnc) genCodes() {
 	for i := range b.sequences {
 		seq := &b.sequences[i]
 		v := llCode(seq.litLen)
+		if v > maxLiteralLengthSymbol {
+			return fmt.Errorf("invalid sequence litLen %d (code %d > %d) at sequence %d: %+v", seq.litLen, v, maxLiteralLengthSymbol, i, *seq)
+		}
 		seq.llCode = v
 		llH[v]++
 		if v > llMax {
@@ -877,6 +883,9 @@ func (b *blockEnc) genCodes() {
 		}
 
 		v = ofCode(seq.offset)
+		if seq.offset == 0 || v > maxOffsetBits {
+			return fmt.Errorf("invalid sequence offset %d (code %d > %d) at sequence %d: %+v", seq.offset, v, maxOffsetBits, i, *seq)
+		}
 		seq.ofCode = v
 		ofH[v]++
 		if v > ofMax {
@@ -884,26 +893,18 @@ func (b *blockEnc) genCodes() {
 		}
 
 		v = mlCode(seq.matchLen)
+		if v > maxMatchLengthSymbol {
+			return fmt.Errorf("invalid sequence matchLen %d (code %d > %d) at sequence %d: %+v", seq.matchLen, v, maxMatchLengthSymbol, i, *seq)
+		}
 		seq.mlCode = v
 		mlH[v]++
 		if v > mlMax {
 			mlMax = v
-			if debugAsserts && mlMax > maxMatchLengthSymbol {
-				panic(fmt.Errorf("mlMax > maxMatchLengthSymbol (%d), matchlen: %d", mlMax, seq.matchLen))
-			}
 		}
-	}
-	if debugAsserts && mlMax > maxMatchLengthSymbol {
-		panic(fmt.Errorf("mlMax > maxMatchLengthSymbol (%d)", mlMax))
-	}
-	if debugAsserts && ofMax > maxOffsetBits {
-		panic(fmt.Errorf("ofMax > maxOffsetBits (%d)", ofMax))
-	}
-	if debugAsserts && llMax > maxLiteralLengthSymbol {
-		panic(fmt.Errorf("llMax > maxLiteralLengthSymbol (%d)", llMax))
 	}
 
 	b.coders.mlEnc.HistogramFinished(mlMax, int(slices.Max(mlH[:mlMax+1])))
 	b.coders.ofEnc.HistogramFinished(ofMax, int(slices.Max(ofH[:ofMax+1])))
 	b.coders.llEnc.HistogramFinished(llMax, int(slices.Max(llH[:llMax+1])))
+	return nil
 }

@@ -280,7 +280,10 @@ func BuildDict(o BuildDictOptions) ([]byte, error) {
 			continue
 		}
 		seqs += len(block.sequences)
-		block.genCodes()
+		err := block.genCodes()
+		if err != nil {
+			return nil, err
+		}
 		addHist(&ll, block.coders.llEnc.Histogram())
 		addHist(&ml, block.coders.mlEnc.Histogram())
 		addHist(&of, block.coders.ofEnc.Histogram())
