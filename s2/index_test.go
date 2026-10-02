@@ -468,3 +468,34 @@ func ExampleIndexStream() {
 	// last 10 bytes read
 	// 10 bytes at offset 10 read
 }
+
+// TestRemoveIndexHeadersShortChunk feeds RemoveIndexHeaders chunk lengths that
+// are too short to hold the header, size field and trailer it trims off. The
+// chunk length is attacker controlled, so a nil return is required rather than
+// a slice bounds panic.
+func TestRemoveIndexHeadersShortChunk(t *testing.T) {
+	// Valid index to splice a bad chunk length into.
+	var compressed bytes.Buffer
+	enc := s2.NewWriter(&compressed, s2.WriterBlockSize(4<<10))
+	for i := range 1000 {
+		fmt.Fprintf(enc, "Item %019d\n", i)
+	}
+	index, err := enc.CloseIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s2.RemoveIndexHeaders(index) == nil {
+		t.Fatal("removing headers from a valid index failed")
+	}
+
+	minChunkLen := len(s2.S2IndexHeader) + len(s2.S2IndexTrailer) + 4
+	for _, chunkLen := range []int{0, 1, len(s2.S2IndexHeader) - 1, len(s2.S2IndexHeader), minChunkLen - 1} {
+		t.Run(fmt.Sprintf("chunkLen=%d", chunkLen), func(t *testing.T) {
+			b := append([]byte(nil), index...)
+			b[1], b[2], b[3] = uint8(chunkLen), uint8(chunkLen>>8), uint8(chunkLen>>16)
+			if got := s2.RemoveIndexHeaders(b); got != nil {
+				t.Errorf("want nil, got %d bytes", len(got))
+			}
+		})
+	}
+}
