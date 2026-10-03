@@ -2422,19 +2422,6 @@ func TestAcceptEncodingFieldLinesHandler(t *testing.T) {
 	}
 }
 
-// TestAcceptsGzipFieldLines checks that acceptsGzip sees every Accept-Encoding field line.
-func TestAcceptsGzipFieldLines(t *testing.T) {
-	req, _ := http.NewRequest("GET", "/", nil)
-	req.Header.Add("Accept-Encoding", "deflate")
-	if acceptsGzip(req) {
-		t.Fatal("acceptsGzip() = true for deflate only")
-	}
-	req.Header.Add("Accept-Encoding", "gzip")
-	if !acceptsGzip(req) {
-		t.Error("acceptsGzip() = false, want true when gzip is on a later field line")
-	}
-}
-
 // TestZstdRandomJitter tests that RandomJitter works with zstd using skippable frames.
 func TestZstdRandomJitter(t *testing.T) {
 	r := httptest.NewRequest("GET", "/", nil)

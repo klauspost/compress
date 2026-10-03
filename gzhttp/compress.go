@@ -1029,16 +1029,6 @@ func splitOuterCoding(s string) (rest, outer string) {
 	return "", s
 }
 
-// acceptsGzip returns true if the given HTTP request indicates that it will
-// accept a gzipped response.
-func acceptsGzip(r *http.Request) bool {
-	// Note that we don't request this for HEAD requests,
-	// due to a bug in nginx:
-	//   https://trac.nginx.org/nginx/ticket/358
-	//   https://golang.org/issue/5522
-	return r.Method != http.MethodHead && parseEncodingGzip(joinFieldLines(r, acceptEncoding)) > 0
-}
-
 // selectEncoding determines the best encoding based on Accept-Encoding header.
 func selectEncoding(r *http.Request, gzipEnabled, zstdEnabled, preferZstd bool) encoding {
 	// Don't compress HEAD requests due to nginx bug.
