@@ -2365,6 +2365,76 @@ func TestSelectEncodingFunction(t *testing.T) {
 	}
 }
 
+// A client may split Accept-Encoding over several field lines, which means the
+// same as the comma list they join to (RFC 9110, section 5.3).
+func TestAcceptEncodingFieldLines(t *testing.T) {
+	tests := []struct {
+		name       string
+		lines      []string
+		preferZstd bool
+		want       encoding
+	}{
+		{"gzip-on-second-line", []string{"deflate", "gzip"}, true, encodingGzip},
+		{"zstd-on-second-line", []string{"br", "zstd"}, true, encodingZstd},
+		{"both-on-own-lines-prefers-zstd", []string{"gzip", "zstd"}, true, encodingZstd},
+		{"both-on-own-lines-prefers-gzip", []string{"gzip", "zstd"}, false, encodingGzip},
+		{"qvalue-on-later-line", []string{"gzip;q=0.5", "zstd;q=1.0"}, false, encodingZstd},
+		{"empty-first-line", []string{"", "gzip"}, true, encodingGzip},
+		{"accepts-neither", []string{"br", "deflate"}, true, encodingNone},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, _ := http.NewRequest("GET", "/", nil)
+			for _, line := range tt.lines {
+				req.Header.Add("Accept-Encoding", line)
+			}
+			got := selectEncoding(req, true, true, tt.preferZstd)
+			if got != tt.want {
+				t.Errorf("selectEncoding() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestAcceptEncodingFieldLinesHandler checks that a response is compressed when
+// the supported coding is not on the first Accept-Encoding field line.
+func TestAcceptEncodingFieldLinesHandler(t *testing.T) {
+	handler := newTestHandler(testBody)
+
+	req, _ := http.NewRequest("GET", "/whatever", nil)
+	req.Header.Add("Accept-Encoding", "deflate")
+	req.Header.Add("Accept-Encoding", "gzip")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+
+	assertEqual(t, "gzip", res.Header().Get("Content-Encoding"))
+	zr, err := gzip.NewReader(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(zr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, testBody) {
+		t.Error("decompressed body differs from the original")
+	}
+}
+
+// TestAcceptsGzipFieldLines checks that acceptsGzip sees every Accept-Encoding field line.
+func TestAcceptsGzipFieldLines(t *testing.T) {
+	req, _ := http.NewRequest("GET", "/", nil)
+	req.Header.Add("Accept-Encoding", "deflate")
+	if acceptsGzip(req) {
+		t.Fatal("acceptsGzip() = true for deflate only")
+	}
+	req.Header.Add("Accept-Encoding", "gzip")
+	if !acceptsGzip(req) {
+		t.Error("acceptsGzip() = false, want true when gzip is on a later field line")
+	}
+}
+
 // TestZstdRandomJitter tests that RandomJitter works with zstd using skippable frames.
 func TestZstdRandomJitter(t *testing.T) {
 	r := httptest.NewRequest("GET", "/", nil)
