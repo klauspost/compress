@@ -239,15 +239,8 @@ func (s *sequenceDecs) execute(seqs []seqVals, hist []byte) error {
 				continue
 			} else {
 				// Overlapping copy
-				// Extend destination slice and copy one byte at the time.
-				src := out[start : start+seq.ml]
-				dst := out[t:]
-				dst = dst[:len(src)]
-				t += len(src)
-				// Destination is the space we just added.
-				for i := range src {
-					dst[i] = src[i]
-				}
+				overlapCopy(out, start, t, seq.ml)
+				t += seq.ml
 			}
 		}
 	}
@@ -440,15 +433,8 @@ func (s *sequenceDecs) decodeSync(hist []byte) error {
 				out = append(out, out[start:start+ml]...)
 			} else {
 				// Overlapping copy
-				// Extend destination slice and copy one byte at the time.
 				out = out[:len(out)+ml]
-				src := out[start : start+ml]
-				// Destination is the space we just added.
-				dst := out[len(out)-ml:]
-				dst = dst[:len(src)]
-				for i := range src {
-					dst[i] = src[i]
-				}
+				overlapCopy(out, start, len(out)-ml, ml)
 			}
 		}
 		if i == 0 {
@@ -485,6 +471,19 @@ func (s *sequenceDecs) decodeSync(hist []byte) error {
 	// Add final literals
 	s.out = append(out, s.literals...)
 	return br.close()
+}
+
+// overlapCopy writes n bytes at out[t:] repeating out[start:t], which
+// overlaps the destination. Each copy doubles the repeated span, so it takes
+// about log2(n/(t-start)) copies instead of n byte moves.
+func overlapCopy(out []byte, start, t, n int) {
+	if start >= t {
+		// Nothing to repeat; callers reject a zero offset.
+		return
+	}
+	for end := t + n; t < end; {
+		t += copy(out[t:end], out[start:t])
+	}
 }
 
 var bitMask [16]uint16

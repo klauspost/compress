@@ -454,6 +454,31 @@ func Test_seqdec_decodeSync(t *testing.T) {
 	}
 }
 
+// TestOverlapCopy checks overlapCopy against a bytewise copy.
+func TestOverlapCopy(t *testing.T) {
+	tests := []struct{ mo, n int }{
+		{1, 1}, {1, 2}, {1, 100}, {2, 3}, {3, 10}, {7, 50}, {15, 16},
+		{16, 17}, {17, 1000}, {5, 5}, {0, 4},
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("mo=%d/n=%d", tt.mo, tt.n), func(t *testing.T) {
+			const prefix = 40
+			want := make([]byte, prefix+tt.n)
+			for i := range want[:prefix] {
+				want[i] = byte(i*7 + 1)
+			}
+			got := append([]byte(nil), want...)
+			for i := prefix; i < len(want) && tt.mo > 0; i++ {
+				want[i] = want[i-tt.mo]
+			}
+			overlapCopy(got, prefix-tt.mo, prefix, tt.n)
+			if !bytes.Equal(got, want) {
+				t.Fatalf("got %v, want %v", got[prefix:], want[prefix:])
+			}
+		})
+	}
+}
+
 // TestUseSafeDecodeSyncFrameBound checks the copy variant chosen when the
 // frame size is known: only the current block needs the slack, so a buffer
 // sized exactly to the frame uses the extended copies until the last block.

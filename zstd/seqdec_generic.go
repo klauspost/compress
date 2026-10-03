@@ -217,15 +217,8 @@ func (s *sequenceDecs) executeSimple(seqs []seqVals, hist []byte) error {
 				t += seq.ml
 			} else {
 				// Overlapping copy
-				// Extend destination slice and copy one byte at the time.
-				src := out[start : start+seq.ml]
-				dst := out[t:]
-				dst = dst[:len(src)]
-				t += len(src)
-				// Destination is the space we just added.
-				for i := range src {
-					dst[i] = src[i]
-				}
+				overlapCopy(out, start, t, seq.ml)
+				t += seq.ml
 			}
 		}
 	}
