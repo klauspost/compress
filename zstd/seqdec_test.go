@@ -454,6 +454,174 @@ func Test_seqdec_decodeSync(t *testing.T) {
 	}
 }
 
+// TestExecuteShortSequences runs execute on random sequences around the
+// 16-byte copies, with and without a dictionary, at every spare output
+// capacity from 0 to 32 bytes, against a byte-by-byte reference.
+func TestExecuteShortSequences(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	random := func(n int) []byte {
+		b := make([]byte, n)
+		rng.Read(b)
+		return b
+	}
+	hist, dict := random(100), random(100)
+
+	tests := []struct {
+		name string
+		dict []byte
+	}{
+		{"nodict", nil},
+		{"dict", dict},
+	}
+	for _, tt := range tests {
+		// The reference output is everything after dict and hist.
+		ref := append(append([]byte(nil), tt.dict...), hist...)
+		base := len(ref)
+		var seqs []seqVals
+		var lits []byte
+		for i := range 3000 {
+			ll, ml := rng.Intn(21), 3+rng.Intn(18)
+			last := i == 2999
+			if last {
+				ll = 5
+			}
+			l := random(ll)
+			lits = append(lits, l...)
+			ref = append(ref, l...)
+			inHist := len(ref) - len(tt.dict)
+			mo := min(16+rng.Intn(25), inHist)
+			switch rng.Intn(8) {
+			case 0:
+				// Overlaps the 16-byte copy unless done bytewise.
+				mo, ml = 1+rng.Intn(15), 12+rng.Intn(5)
+			case 1:
+				mo = 1 + rng.Intn(inHist)
+			case 2:
+				mo = 1 + rng.Intn(len(ref))
+			}
+			if last {
+				// Ends the output at a fixed distance from the capacity.
+				ml, mo = 10, 20
+			}
+			for range ml {
+				ref = append(ref, ref[len(ref)-mo])
+			}
+			seqs = append(seqs, seqVals{ll: ll, ml: ml, mo: mo})
+		}
+		want := ref[base:]
+
+		for _, litExtra := range []int{0, 16} {
+			for extra := range 33 {
+				t.Run(fmt.Sprintf("%s/litextra=%d/extra=%d", tt.name, litExtra, extra), func(t *testing.T) {
+					s := sequenceDecs{
+						dict:       tt.dict,
+						literals:   append(make([]byte, 0, len(lits)+litExtra), lits...),
+						out:        make([]byte, 0, len(want)+extra),
+						seqSize:    len(want),
+						windowSize: 1 << 17,
+					}
+					if err := s.execute(seqs, hist); err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Equal(s.out, want) {
+						t.Fatal("output mismatch")
+					}
+				})
+			}
+		}
+	}
+
+	// A match starting one byte before the dictionary is an error.
+	s := sequenceDecs{
+		dict:       dict,
+		literals:   make([]byte, 0, 16),
+		out:        make([]byte, 0, 64),
+		seqSize:    4,
+		windowSize: 1 << 17,
+	}
+	if err := s.execute([]seqVals{{ml: 4, mo: len(hist) + len(dict) + 1}}, hist); err == nil {
+		t.Fatal("offset before the dictionary decoded without error")
+	}
+}
+
+// TestMatchSource checks the bounds of matchSource. out holds 100 bytes of
+// output, matches start at p = 50, the history is 30 bytes and the
+// dictionary 20.
+func TestMatchSource(t *testing.T) {
+	out := make([]byte, 100)
+	hist := make([]byte, 30)
+	dict := make([]byte, 20)
+	for i := range out {
+		out[i] = byte(i)
+	}
+	for i := range hist {
+		hist[i] = byte(100 + i)
+	}
+	for i := range dict {
+		dict[i] = byte(200 + i)
+	}
+	const p = 50
+	tests := []struct {
+		name       string
+		mo, n, win int
+		want       []byte // nil: general path
+	}{
+		{"out, offset n", 16, 16, 100, out[34:50]},
+		{"out, overlaps", 15, 16, 100, nil},
+		{"out, long", 30, 30, 100, out[20:50]},
+		{"out, long overlaps", 29, 30, 100, nil},
+		{"out, offset p", 50, 16, 100, out[0:16]},
+		{"out, window", 40, 16, 40, out[10:26]},
+		{"out, past window", 41, 16, 40, nil},
+		{"hist, start n", 66, 16, 100, hist[14:30]},
+		{"hist, start n-1", 65, 16, 100, nil},
+		{"hist, start len", 80, 16, 100, hist[0:16]},
+		{"hist, long", 80, 30, 100, hist[0:30]},
+		{"hist into dict", 81, 16, 100, nil},
+		{"hist, window", 66, 16, 66, hist[14:30]},
+		{"hist, past window", 66, 16, 65, nil},
+		{"dict, reach n", 96, 16, 100, dict[4:20]},
+		{"dict, reach n-1", 95, 16, 100, nil},
+		{"dict, reach len", 100, 16, 100, dict[0:16]},
+		{"dict, past start", 101, 16, 100, nil},
+		{"dict, long", 100, 20, 100, dict[0:20]},
+		{"dict, long reach n-1", 99, 20, 100, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := matchSource(out, hist, dict, p, tt.mo, tt.n, tt.win)
+			if (got == nil) != (tt.want == nil) || !bytes.Equal(got, tt.want) {
+				t.Fatalf("matchSource(mo=%d, n=%d, window=%d) = %v, want %v", tt.mo, tt.n, tt.win, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestOverlapCopy checks overlapCopy against a bytewise copy.
+func TestOverlapCopy(t *testing.T) {
+	tests := []struct{ mo, n int }{
+		{1, 1}, {1, 2}, {1, 100}, {2, 3}, {3, 10}, {7, 50}, {15, 16},
+		{16, 17}, {17, 1000}, {5, 5}, {0, 4},
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("mo=%d/n=%d", tt.mo, tt.n), func(t *testing.T) {
+			const prefix = 40
+			want := make([]byte, prefix+tt.n)
+			for i := range want[:prefix] {
+				want[i] = byte(i*7 + 1)
+			}
+			got := append([]byte(nil), want...)
+			for i := prefix; i < len(want) && tt.mo > 0; i++ {
+				want[i] = want[i-tt.mo]
+			}
+			overlapCopy(got, prefix-tt.mo, prefix, tt.n)
+			if !bytes.Equal(got, want) {
+				t.Fatalf("got %v, want %v", got[prefix:], want[prefix:])
+			}
+		})
+	}
+}
+
 // TestUseSafeDecodeSyncFrameBound checks the copy variant chosen when the
 // frame size is known: only the current block needs the slack, so a buffer
 // sized exactly to the frame uses the extended copies until the last block.
@@ -709,6 +877,8 @@ func TestDecoderShortSequenceCopies(t *testing.T) {
 		name     string
 		wordLens []int // lengths of the repeated words the encoder should match
 		litLens  []int // lengths of the random runs between words
+		// if set, repeat 3..20 bytes from offsets 1..maxOffset instead of words
+		maxOffset int
 	}{
 		{name: "words16-lits0", wordLens: []int{16}, litLens: []int{0}},
 		{name: "words17-lits0", wordLens: []int{17}, litLens: []int{0}},
@@ -716,6 +886,7 @@ func TestDecoderShortSequenceCopies(t *testing.T) {
 		{name: "words17-lits17", wordLens: []int{17}, litLens: []int{17}},
 		{name: "words15-lits1", wordLens: []int{15}, litLens: []int{1}},
 		{name: "mixed", wordLens: []int{4, 5, 8, 15, 16, 17, 31, 32, 33}, litLens: []int{0, 0, 0, 1, 2, 15, 16, 17, 32, 33}},
+		{name: "offsets40-lits20", litLens: []int{0, 1, 2, 5, 15, 16, 17, 20}, maxOffset: 40},
 	}
 	levels := []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression}
 
@@ -737,7 +908,13 @@ func TestDecoderShortSequenceCopies(t *testing.T) {
 			if n := tc.litLens[rng.Intn(len(tc.litLens))]; n > 0 {
 				input = append(input, randomBytes(n)...)
 			}
-			input = append(input, words[rng.Intn(len(words))]...)
+			if tc.maxOffset == 0 {
+				input = append(input, words[rng.Intn(len(words))]...)
+			} else if mo := 1 + rng.Intn(tc.maxOffset); mo <= len(input) {
+				for range 3 + rng.Intn(18) {
+					input = append(input, input[len(input)-mo])
+				}
+			}
 		}
 
 		for _, level := range levels {
@@ -755,6 +932,18 @@ func TestDecoderShortSequenceCopies(t *testing.T) {
 				}
 				if !bytes.Equal(got, input) {
 					t.Fatalf("DecodeAll output mismatch (len %d vs %d)", len(got), len(input))
+				}
+
+				decodeSyncGoOnly = true
+				restore := forceTwoPass(false)
+				got, err = dec.DecodeAll(compressed, nil)
+				decodeSyncGoOnly = false
+				restore()
+				if err != nil {
+					t.Fatalf("DecodeAll (Go): %v", err)
+				}
+				if !bytes.Equal(got, input) {
+					t.Fatalf("DecodeAll (Go) output mismatch (len %d vs %d)", len(got), len(input))
 				}
 
 				if err := dec.Reset(bytes.NewReader(compressed)); err != nil {
