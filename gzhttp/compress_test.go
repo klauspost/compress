@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"mime"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/klauspost/compress/flate"
 	"github.com/klauspost/compress/gzip"
@@ -180,6 +183,83 @@ func TestGzipHandlerRangeReply(t *testing.T) {
 	assertEqual(t, 200, res.StatusCode)
 	assertEqual(t, "", res.Header.Get("Content-Encoding"))
 	assertEqual(t, testBody, resp.Body.Bytes())
+}
+
+// A 206 response is a part of the representation and must not be compressed,
+// also when it has no Content-Range header (the multipart/byteranges answer to
+// a request for several ranges).
+func TestGzipHandlerPartialContentNoRangeHeader(t *testing.T) {
+	tests := []struct {
+		name  string
+		write func(w http.ResponseWriter)
+	}{
+		{"write", func(w http.ResponseWriter) {
+			w.WriteHeader(http.StatusPartialContent)
+			w.Write(testBody)
+		}},
+		{"flush", func(w http.ResponseWriter) {
+			w.WriteHeader(http.StatusPartialContent)
+			w.Write(testBody[:100])
+			w.(http.Flusher).Flush()
+			w.Write(testBody[100:])
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "multipart/byteranges; boundary=b")
+				tt.write(w)
+			}))
+			req, _ := http.NewRequest("GET", "/", nil)
+			req.Header.Set("Accept-Encoding", "gzip")
+
+			resp := httptest.NewRecorder()
+			handler.ServeHTTP(resp, req)
+			res := resp.Result()
+			assertEqual(t, http.StatusPartialContent, res.StatusCode)
+			assertEqual(t, "", res.Header.Get("Content-Encoding"))
+			assertEqual(t, testBody, resp.Body.Bytes())
+		})
+	}
+}
+
+// http.ServeContent answers a request for several ranges with a 206
+// multipart/byteranges body. It must reach the client uncompressed.
+func TestGzipHandlerMultipleRanges(t *testing.T) {
+	handler := GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeContent(w, r, "body.txt", time.Time{}, bytes.NewReader(testBody))
+	}))
+	req, _ := http.NewRequest("GET", "/body.txt", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	req.Header.Set("Range", "bytes=0-1499,2000-3499")
+
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+	res := resp.Result()
+	assertEqual(t, http.StatusPartialContent, res.StatusCode)
+	assertEqual(t, "", res.Header.Get("Content-Encoding"))
+
+	_, params, err := mime.ParseMediaType(res.Header.Get("Content-Type"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mr := multipart.NewReader(resp.Body, params["boundary"])
+	for _, want := range [][]byte{testBody[0:1500], testBody[2000:3500]} {
+		part, err := mr.NextPart()
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := io.ReadAll(part)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Errorf("part has %d bytes, want %d bytes with the same content", len(got), len(want))
+		}
+	}
+	if _, err := mr.NextPart(); err != io.EOF {
+		t.Errorf("expected the end of the multipart body, got %v", err)
+	}
 }
 
 func TestGzipHandlerAcceptRange(t *testing.T) {
