@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
-	"sync"
 
 	"github.com/klauspost/compress/fse"
 )
@@ -117,7 +116,6 @@ type Scratch struct {
 	nodes          []nodeElt
 	tmpOut         [4][]byte
 	fse            *fse.Scratch
-	decPool        sync.Pool // *[4][256]byte buffers.
 	huffWeight     [maxSymbolValue + 1]byte
 }
 
