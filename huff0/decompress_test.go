@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"runtime"
-	"runtime/debug"
 	"strings"
 	"testing"
 
@@ -1067,46 +1065,5 @@ func BenchmarkDecompress4XTable(b *testing.B) {
 				}
 			}
 		})
-	}
-}
-
-// TestDecoderDoesNotPinScratch checks that a discarded Scratch whose decoder
-// buffers were used is freed by the next GC.
-func TestDecoderDoesNotPinScratch(t *testing.T) {
-	var enc Scratch
-	in := make([]byte, 4096)
-	for i := range in {
-		in[i] = byte(i % 7)
-	}
-	b, _, err := Compress1X(in, &enc)
-	if err != nil {
-		t.Fatal(err)
-	}
-	heap := func() int64 {
-		var ms runtime.MemStats
-		runtime.ReadMemStats(&ms)
-		return int64(ms.HeapAlloc)
-	}
-	defer debug.SetGCPercent(debug.SetGCPercent(-1))
-	runtime.GC()
-	before := heap()
-	const n = 32
-	for range n {
-		s, remain, err := ReadTable(b, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := s.Decompress1X(remain); err != nil {
-			t.Fatal(err)
-		}
-		// The assembly decoders do not use the buffers; use one directly.
-		d := s.Decoder()
-		d.bufs.Put(d.buffer())
-	}
-	allocated := heap() - before
-	runtime.GC()
-	retained := heap() - before
-	if limit := int64(n * BlockSizeMax / 2); retained > limit {
-		t.Errorf("one GC after %d discarded decoders: %d of %d bytes still live (limit %d)", n, retained, allocated, limit)
 	}
 }

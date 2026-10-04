@@ -232,13 +232,9 @@ func (s *Scratch) Decoder() *Decoder {
 	return &Decoder{
 		dt:             s.dt,
 		actualTableLog: s.actualTableLog,
-		bufs:           &decBufPool,
+		bufs:           &s.decPool,
 	}
 }
-
-// decBufPool holds the *[4][256]byte buffers of all decoders. A pool in
-// each Scratch kept the Scratch alive for two GCs after its first use.
-var decBufPool sync.Pool
 
 // Decoder provides stateless decoding.
 type Decoder struct {
