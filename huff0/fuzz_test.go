@@ -18,7 +18,7 @@ func FuzzCompress(f *testing.F) {
 	var s, decS Scratch
 	f.Fuzz(func(t *testing.T, buf0 []byte) {
 		//use of Compress1X
-		s.Reuse = ReusePolicyAllow
+		s.Reuse = ReusePolicyNone
 		s.prevTable = s.prevTable[:0]
 		if len(buf0) > BlockSizeMax {
 			buf0 = buf0[:BlockSizeMax]
