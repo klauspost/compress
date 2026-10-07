@@ -176,8 +176,8 @@ func (d *Decoder) Decompress4X(dst, src []byte) ([]byte, error) {
 }
 
 // decompress1xContext is the argument block of the Decompress1X asm loops.
-// Go fills every field but decoded; the asm advances ip, and on return
-// leaves the bit reader in the form bitReaderShifted.restoreFromAsm expects.
+// Go supplies the inputs; the asm writes decoded and returns the bit reader
+// in its normal Go representation.
 type decompress1xContext struct {
 	pbr      *bitReaderShifted
 	peekBits uint8
