@@ -11,6 +11,7 @@ import (
 	"io"
 
 	"github.com/klauspost/compress/huff0"
+	"github.com/klauspost/compress/internal/castagnoli"
 	snappy "github.com/klauspost/compress/internal/snapref"
 )
 
@@ -422,12 +423,10 @@ func (r *SnappyConverter) readFull(p []byte, allowEOF bool) (ok bool) {
 	return true
 }
 
-var crcTable = crc32.MakeTable(crc32.Castagnoli)
-
 // crc implements the checksum specified in section 3 of
 // https://github.com/google/snappy/blob/master/framing_format.txt
 func snappyCRC(b []byte) uint32 {
-	c := crc32.Update(0, crcTable, b)
+	c := crc32.Update(0, castagnoli.Table(), b)
 	return c>>15 | c<<17 + 0xa282ead8
 }
 

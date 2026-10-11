@@ -48,6 +48,7 @@ import (
 	"github.com/klauspost/compress/gzhttp/writer/gzkp"
 	"github.com/klauspost/compress/gzhttp/writer/zstdkp"
 	"github.com/klauspost/compress/gzip"
+	"github.com/klauspost/compress/internal/castagnoli"
 	"github.com/klauspost/compress/zstd"
 )
 
@@ -223,8 +224,6 @@ func (w *GzipResponseWriter) Unwrap() http.ResponseWriter {
 	return w.ResponseWriter
 }
 
-var castagnoliTable = crc32.MakeTable(crc32.Castagnoli)
-
 // partialContent reports whether the response is a part of the representation,
 // which must not be compressed on the fly. A single range is marked by a
 // Content-Range header, but the multipart/byteranges answer to a request for
@@ -320,13 +319,13 @@ func (w *GzipResponseWriter) startCompression(remain []byte) error {
 					var tmp [sha256.Size]byte
 					jitRNG = binary.LittleEndian.Uint32(h.Sum(tmp[:0]))
 				} else {
-					h := crc32.Update(0, castagnoliTable, hashBuf)
+					h := crc32.Update(0, castagnoli.Table(), hashBuf)
 					if len(remain) > 0 && len(hashBuf) < w.jitterBuffer {
 						remain := remain
 						if len(remain)+len(hashBuf) > w.jitterBuffer {
 							remain = remain[:w.jitterBuffer-len(hashBuf)]
 						}
-						h = crc32.Update(h, castagnoliTable, remain)
+						h = crc32.Update(h, castagnoli.Table(), remain)
 					}
 					jitRNG = bits.RotateLeft32(h, 19) ^ 0xab0755de
 				}

@@ -38,6 +38,7 @@ import (
 	"bytes"
 	"hash/crc32"
 
+	"github.com/klauspost/compress/internal/castagnoli"
 	"github.com/klauspost/compress/internal/race"
 )
 
@@ -110,7 +111,6 @@ const (
 )
 
 var (
-	crcTable              = crc32.MakeTable(crc32.Castagnoli)
 	magicChunkSnappyBytes = []byte(magicChunkSnappy) // Can be passed to functions where it escapes.
 	magicChunkBytes       = []byte(magicChunk)       // Can be passed to functions where it escapes.
 )
@@ -120,7 +120,7 @@ var (
 func crc(b []byte) uint32 {
 	race.ReadSlice(b)
 
-	c := crc32.Update(0, crcTable, b)
+	c := crc32.Update(0, castagnoli.Table(), b)
 	return c>>15 | c<<17 + 0xa282ead8
 }
 
