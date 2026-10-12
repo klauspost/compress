@@ -1,6 +1,6 @@
 package main
 
-//go:generate go run gen_fse.go -out ../fse_decoder.s -arch amd64,arm64 -pkg=zstd
+//go:generate go run gen_fse.go -out ../fse_decoder.s -arch amd64,arm64 -arm64-promote-stack-slots -pkg=zstd
 
 import (
 	"flag"
