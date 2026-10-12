@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,6 +28,7 @@ import (
 	// "github.com/DataDog/zstd"
 	// zstd "github.com/valyala/gozstd"
 
+	"github.com/klauspost/compress/internal/silesiatest"
 	"github.com/klauspost/compress/zstd/internal/xxhash"
 )
 
@@ -813,6 +815,44 @@ func TestDecoderRegression(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestDecoderHuffWeightsTableLog decodes two blocks with Huffman weights at
+// FSE tableLog 15. The second table's only count, 1<<15, overflowed an int16
+// and decoded with the first table's state, panicking in fse. That state is
+// kept between blocks, and comes back from huffDecoderPool in the next frame.
+func TestDecoderHuffWeightsTableLog(t *testing.T) {
+	oneFrame := slices.Concat(
+		[]byte{0x28, 0xb5, 0x2f, 0xfd, 0x00, 0x38, 0x74, 0x06, 0x00, 0x42, 0xb8, 0x32, 0x0d, 0x1a, 0x00, 0x00, 0x00, 0x90, 0xaf, 0xfa, 0xff, 0x03, 0x00, 0x80, 0xff, 0x7f},
+		bytes.Repeat([]byte{0xa5, 0x94, 0x52, 0x4a, 0x29}, 37),
+		[]byte{0xa5, 0x94, 0x12, 0x00, 0xad, 0x56, 0x03, 0xee, 0xff, 0xdf, 0xb3, 0x1a, 0x1c, 0x1a, 0x00, 0xe0, 0xff, 0x1f, 0x0f, 0xb1, 0x9c, 0x5a, 0xcf, 0x4d, 0xe4, 0x1d, 0x7b, 0xab, 0x99, 0x5e, 0x01, 0x51, 0xa4, 0x73, 0xd8, 0xb1, 0xf3, 0x39, 0x4b, 0x67, 0xf6, 0xab, 0x1a, 0xab, 0x1a, 0xab, 0x1a},
+		bytes.Repeat([]byte{0x8c, 0x31, 0xc6, 0x18, 0x63}, 1365),
+		[]byte{0x8c, 0x31},
+		bytes.Repeat([]byte{0x63, 0x8c, 0x31, 0xc6, 0x18}, 1365),
+		[]byte{0x63, 0x2c},
+		bytes.Repeat([]byte{0x31, 0xc6, 0x18, 0x63, 0x8c}, 1365),
+		[]byte{0x31, 0x46},
+		bytes.Repeat([]byte{0x31, 0xc6, 0x18, 0x63, 0x8c}, 1365),
+		[]byte{0x31, 0x06, 0x00},
+	)
+	// The same blocks, the first marked last, each in its own frame.
+	twoFrames := slices.Concat(oneFrame[:6], []byte{0x75, 0x06, 0x00}, oneFrame[9:215], oneFrame[:6], oneFrame[215:])
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	for _, in := range [][]byte{oneFrame, twoFrames} {
+		if _, err := dec.DecodeAll(in, nil); err == nil {
+			t.Error("DecodeAll: want error")
+		}
+		if err := dec.Reset(bytes.NewReader(in)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.ReadAll(dec); err == nil {
+			t.Error("Reader: want error")
+		}
 	}
 }
 
@@ -1784,6 +1824,191 @@ func BenchmarkDecoderSilesia(b *testing.B) {
 	benchmarkDecoderWithFile("testdata/silesia.tar.zst", b)
 }
 
+// TestSilesiaCLIDecode decodes the encodings of Silesia made outside this
+// package by the zstd CLI, among them one of several concatenated frames,
+// with DecodeAll and with the Reader using one goroutine and the default
+// number.
+func TestSilesiaCLIDecode(t *testing.T) {
+	want := silesiatest.Tar(t)
+	files := silesiatest.ZstdFiles()
+	if len(files) == 0 {
+		t.Skip("No testdata/silesia.tar*.zst; run testdata/fetch_silesia.sh -cli")
+	}
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	for _, f := range files {
+		comp, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Run(filepath.Base(f), func(t *testing.T) {
+			got, err := dec.DecodeAll(comp, make([]byte, 0, len(want)))
+			if err != nil {
+				t.Fatal("DecodeAll:", err)
+			}
+			if !bytes.Equal(got, want) {
+				t.Fatal("DecodeAll: output differs from silesia.tar")
+			}
+			for _, conc := range []int{1, 0} {
+				r, err := NewReader(bytes.NewReader(comp), WithDecoderConcurrency(conc))
+				if err != nil {
+					t.Fatal(err)
+				}
+				got, err := io.ReadAll(r)
+				r.Close()
+				if err != nil {
+					t.Fatalf("Reader, concurrency %d: %v", conc, err)
+				}
+				if !bytes.Equal(got, want) {
+					t.Fatalf("Reader, concurrency %d: output differs from silesia.tar", conc)
+				}
+			}
+		})
+	}
+}
+
+// BenchmarkSilesia encodes testdata/silesia.tar at each level and decodes
+// the result, then decodes the C CLI's encodings in testdata/silesia.tar*.zst.
+func BenchmarkSilesia(b *testing.B) {
+	in := silesiatest.Tar(b)
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer dec.Close()
+	dst := make([]byte, 0, len(in))
+	decode := func(name string, comp []byte) {
+		b.Run("decode/"+name, func(b *testing.B) {
+			b.SetBytes(int64(len(in)))
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				if _, err := dec.DecodeAll(comp, dst[:0]); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+	for level := SpeedFastest; level < speedLast; level++ {
+		enc, err := NewWriter(nil, WithEncoderLevel(level), WithEncoderConcurrency(1))
+		if err != nil {
+			b.Fatal(err)
+		}
+		var comp []byte
+		b.Run("encode/"+level.String(), func(b *testing.B) {
+			b.SetBytes(int64(len(in)))
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				comp = enc.EncodeAll(in, comp[:0])
+			}
+		})
+		if comp == nil {
+			// The encode benchmark was filtered out.
+			comp = enc.EncodeAll(in, nil)
+		}
+		enc.Close()
+		decode(level.String(), comp)
+	}
+	for _, f := range silesiatest.ZstdFiles() {
+		comp, err := os.ReadFile(f)
+		if err != nil {
+			b.Fatal(err)
+		}
+		decode(filepath.Base(f), comp)
+	}
+}
+
+// BenchmarkCorpus decodes the files in the directory named by ZSTD_CORPUS,
+// such as the real-world corpora at https://klauspost.com/files/compress/.
+// NAME.zst is decoded as it is; any other file is first encoded here at
+// SpeedDefault. DecodeAll runs on one goroutine into a preallocated buffer
+// (skipped for outputs over 1 GiB); the Reader runs with one goroutine and
+// with the default number, writing to io.Discard.
+func BenchmarkCorpus(b *testing.B) {
+	dir := os.Getenv("ZSTD_CORPUS")
+	if dir == "" {
+		b.Skip("ZSTD_CORPUS not set")
+	}
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		b.Fatal(err)
+	}
+	opts := []DOption{WithDecoderMaxWindow(1 << 31), WithDecoderMaxMemory(1 << 40)}
+	for _, e := range ents {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		comp, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			b.Fatal(err)
+		}
+		if !strings.HasSuffix(name, ".zst") {
+			enc, err := NewWriter(nil)
+			if err != nil {
+				b.Fatal(err)
+			}
+			comp = enc.EncodeAll(comp, nil)
+			enc.Close()
+			name += ".go.zst"
+		}
+		r, err := NewReader(bytes.NewReader(comp), opts...)
+		if err != nil {
+			b.Fatal(err)
+		}
+		n, err := io.Copy(io.Discard, r)
+		r.Close()
+		if err != nil {
+			b.Fatal(name, err)
+		}
+		b.Run(name, func(b *testing.B) {
+			if n <= 1<<30 {
+				b.Run("DecodeAll", func(b *testing.B) {
+					dec, err := NewReader(nil, append(opts, WithDecoderConcurrency(1))...)
+					if err != nil {
+						b.Fatal(err)
+					}
+					defer dec.Close()
+					dst := make([]byte, 0, n)
+					b.SetBytes(n)
+					b.ReportAllocs()
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						if _, err := dec.DecodeAll(comp, dst[:0]); err != nil {
+							b.Fatal(err)
+						}
+					}
+				})
+			}
+			for _, c := range []struct {
+				name string
+				conc int
+			}{{"Reader", 1}, {"Reader-concurrent", 0}} {
+				b.Run(c.name, func(b *testing.B) {
+					r, err := NewReader(nil, append(opts, WithDecoderConcurrency(c.conc))...)
+					if err != nil {
+						b.Fatal(err)
+					}
+					defer r.Close()
+					b.SetBytes(n)
+					b.ReportAllocs()
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						if err := r.Reset(bytes.NewReader(comp)); err != nil {
+							b.Fatal(err)
+						}
+						if _, err := io.Copy(io.Discard, r); err != nil {
+							b.Fatal(err)
+						}
+					}
+				})
+			}
+		})
+	}
+}
+
 func BenchmarkDecoderEnwik9(b *testing.B) {
 	benchmarkDecoderWithFile("testdata/enwik9.zst", b)
 }
@@ -2265,6 +2490,292 @@ func TestDecoderResetWithOptions(t *testing.T) {
 	})
 }
 
+func TestDecoderResetWithOptionsAppliesToDecodeAll(t *testing.T) {
+	const limit = 1 << 20
+	input := make([]byte, 2*limit)
+	var compressed bytes.Buffer
+	enc, err := NewWriter(&compressed,
+		WithEncoderConcurrency(1),
+		WithEncoderCRC(false),
+		WithWindowSize(64<<10),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := enc.Write(input); err != nil {
+		t.Fatal(err)
+	}
+	if err := enc.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var header Header
+	if err := header.Decode(compressed.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	if header.HasFCS {
+		t.Fatal("encoder produced a frame with a content size")
+	}
+
+	t.Run("max-memory", func(t *testing.T) {
+		dec, err := NewReader(nil, WithDecoderConcurrency(4))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer dec.Close()
+		if err := dec.ResetWithOptions(nil, WithDecoderMaxMemory(limit)); err != nil {
+			t.Fatal(err)
+		}
+		for range 4 {
+			got, err := dec.DecodeAll(compressed.Bytes(), nil)
+			if !errors.Is(err, ErrDecoderSizeExceeded) {
+				t.Fatalf("got error %v, want %v", err, ErrDecoderSizeExceeded)
+			}
+			if len(got) > limit+maxCompressedBlockSize {
+				t.Fatalf("got %d output bytes after a %d-byte limit was installed", len(got), limit)
+			}
+		}
+	})
+
+	t.Run("cap-limit", func(t *testing.T) {
+		dec, err := NewReader(nil, WithDecoderConcurrency(4))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer dec.Close()
+		if err := dec.ResetWithOptions(nil, WithDecodeAllCapLimit(true)); err != nil {
+			t.Fatal(err)
+		}
+		for range 4 {
+			got, err := dec.DecodeAll(compressed.Bytes(), make([]byte, 0, limit))
+			if !errors.Is(err, ErrDecoderSizeExceeded) {
+				t.Fatalf("got output=%d, error=%v; want %v", len(got), err, ErrDecoderSizeExceeded)
+			}
+			if len(got) > limit+maxCompressedBlockSize {
+				t.Fatalf("got %d output bytes with a %d-byte destination cap", len(got), limit)
+			}
+		}
+	})
+
+	t.Run("checksum", func(t *testing.T) {
+		compressed := []byte{0x28, 0xb5, 0x2f, 0xfd, 0x24, 0x09, 0x49, 0x00, 0x00, 'C', 'o', 'm', 'p', 'r', 'e', 's', 's', '\n', 0x79, 0x6e, 0xe0, 0xd2}
+		var header Header
+		if err := header.Decode(compressed); err != nil {
+			t.Fatal(err)
+		}
+		if !header.HasCheckSum {
+			t.Fatal("test frame has no checksum")
+		}
+		dec, err := NewReader(nil, WithDecoderConcurrency(4), IgnoreChecksum(true))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer dec.Close()
+		got, err := dec.DecodeAll(compressed, nil)
+		if err != nil {
+			t.Fatalf("decoding with checksum ignored: %v", err)
+		}
+		if want := []byte("Compress\n"); !bytes.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+		if err := dec.ResetWithOptions(nil, IgnoreChecksum(false)); err != nil {
+			t.Fatal(err)
+		}
+		for range 4 {
+			if _, err := dec.DecodeAll(compressed, nil); !errors.Is(err, ErrCRCMismatch) {
+				t.Fatalf("got error %v, want %v", err, ErrCRCMismatch)
+			}
+		}
+	})
+
+	t.Run("options-before-error", func(t *testing.T) {
+		dec, err := NewReader(nil, WithDecoderConcurrency(4))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer dec.Close()
+		// Options preceding an error have historically remained applied.
+		err = dec.ResetWithOptions(nil,
+			WithDecoderMaxMemory(limit),
+			WithDecoderConcurrency(5),
+		)
+		if err == nil {
+			t.Fatal("expected concurrency change to fail")
+		}
+		got, err := dec.DecodeAll(compressed.Bytes(), nil)
+		if !errors.Is(err, ErrDecoderSizeExceeded) {
+			t.Fatalf("got error %v, want %v", err, ErrDecoderSizeExceeded)
+		}
+		if len(got) > limit+maxCompressedBlockSize {
+			t.Fatalf("got %d output bytes after a %d-byte limit was installed", len(got), limit)
+		}
+	})
+}
+
+func TestDecoderResetWithOptionsAppliesToReusedAsyncStream(t *testing.T) {
+	makeFrame := func(window byte) []byte {
+		var compressed bytes.Buffer
+		enc, err := NewWriter(&compressed,
+			WithEncoderConcurrency(1),
+			WithEncoderCRC(false),
+			WithWindowSize(64<<10),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := enc.Write([]byte("small payload")); err != nil {
+			t.Fatal(err)
+		}
+		if err := enc.Close(); err != nil {
+			t.Fatal(err)
+		}
+		frame := bytes.Clone(compressed.Bytes())
+		if len(frame) < 6 || frame[4]&(1<<5) != 0 {
+			t.Fatalf("encoder produced unexpected frame header: %x", frame[:min(len(frame), 8)])
+		}
+		frame[5] = window
+		return frame
+	}
+
+	smallWindowFrame := makeFrame(0x30) // 64 KiB
+	largeWindowFrame := makeFrame(0x68) // 8 MiB
+	var header Header
+	if err := header.Decode(smallWindowFrame); err != nil {
+		t.Fatal(err)
+	}
+	if header.SingleSegment || header.WindowSize != 64<<10 {
+		t.Fatalf("got single-segment=%v, window=%d; want false, %d", header.SingleSegment, header.WindowSize, 64<<10)
+	}
+	if err := header.Decode(largeWindowFrame); err != nil {
+		t.Fatal(err)
+	}
+	if header.SingleSegment || header.WindowSize != 8<<20 {
+		t.Fatalf("got single-segment=%v, window=%d; want false, %d", header.SingleSegment, header.WindowSize, 8<<20)
+	}
+	dec, err := NewReader(bytes.NewReader(smallWindowFrame),
+		WithDecoderConcurrency(2),
+		WithDecodeBuffersBelow(0),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	if _, err := io.ReadAll(dec); err != nil {
+		t.Fatal(err)
+	}
+	if err := dec.ResetWithOptions(bytes.NewReader(largeWindowFrame), WithDecoderMaxMemory(1<<20)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(dec)
+	if len(got) != 0 || !errors.Is(err, ErrWindowSizeExceeded) {
+		t.Fatalf("got output=%q, error=%v; want no output and %v", got, err, ErrWindowSizeExceeded)
+	}
+}
+
+func TestDecoderResetWithOptionsConcurrentDecodeAll(t *testing.T) {
+	want := []byte("concurrent reset and decode")
+	enc, err := NewWriter(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	compressed := enc.EncodeAll(want, nil)
+	enc.Close()
+
+	dec, err := NewReader(nil, WithDecoderConcurrency(2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+
+	const iterations = 100
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() {
+			<-start
+			for range iterations {
+				got, err := dec.DecodeAll(compressed, nil)
+				if err != nil {
+					t.Errorf("DecodeAll: %v", err)
+					return
+				}
+				if !bytes.Equal(got, want) {
+					t.Errorf("got %q, want %q", got, want)
+					return
+				}
+			}
+		})
+	}
+	wg.Go(func() {
+		<-start
+		const id = 1
+		for j := range iterations {
+			var dictOption DOption
+			if j%2 == 0 {
+				dictOption = WithDecoderDictRaw(id, []byte("dictionary"))
+			} else {
+				dictOption = WithDecoderDictDelete(id)
+			}
+			if err := dec.ResetWithOptions(nil,
+				IgnoreChecksum(j%2 == 0),
+				WithDecoderMaxMemory(uint64(1+j%2)<<20),
+				dictOption,
+			); err != nil {
+				t.Errorf("ResetWithOptions: %v", err)
+				return
+			}
+		}
+	})
+	close(start)
+	wg.Wait()
+}
+
+func TestDecoderResetWithOptionsAppliesToDictionaries(t *testing.T) {
+	const dictID = 42
+	dict := []byte("the source content used as a raw dictionary")
+	want := []byte("the target content uses the raw dictionary")
+	enc, err := NewWriter(nil, WithEncoderDictRaw(dictID, dict))
+	if err != nil {
+		t.Fatal(err)
+	}
+	compressed := enc.EncodeAll(want, nil)
+	enc.Close()
+
+	dec, err := NewReader(nil, WithDecoderConcurrency(4), WithDecoderDictRaw(dictID, dict))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	decode := func() {
+		t.Helper()
+		got, err := dec.DecodeAll(compressed, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	}
+	decode()
+	if err := dec.ResetWithOptions(nil, WithDecoderDictDelete(dictID)); err != nil {
+		t.Fatal(err)
+	}
+	for range 4 {
+		if _, err := dec.DecodeAll(compressed, nil); !errors.Is(err, ErrUnknownDictionary) {
+			t.Fatalf("got error %v, want %v", err, ErrUnknownDictionary)
+		}
+	}
+	err = dec.ResetWithOptions(nil,
+		WithDecoderDictRaw(dictID, dict),
+		WithDecoderConcurrency(5),
+	)
+	if err == nil {
+		t.Fatal("expected concurrency change to fail")
+	}
+	for range 4 {
+		decode()
+	}
+}
+
 func TestDecoderDictDelete(t *testing.T) {
 	dictContent := []byte("test dictionary content for decompression testing purposes")
 
@@ -2274,8 +2785,8 @@ func TestDecoderDictDelete(t *testing.T) {
 	}
 	defer dec.Close()
 
-	if len(dec.o.dicts) != 2 {
-		t.Fatalf("expected 2 dicts, got %d", len(dec.o.dicts))
+	if dicts := dec.publishedOptions.Load().dicts; len(dicts) != 2 {
+		t.Fatalf("expected 2 dicts, got %d", len(dicts))
 	}
 
 	// Delete specific dict
@@ -2283,10 +2794,11 @@ func TestDecoderDictDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(dec.o.dicts) != 1 {
-		t.Errorf("expected 1 dict after delete, got %d", len(dec.o.dicts))
+	dicts := dec.publishedOptions.Load().dicts
+	if len(dicts) != 1 {
+		t.Errorf("expected 1 dict after delete, got %d", len(dicts))
 	}
-	if _, ok := dec.o.dicts[200]; !ok {
+	if _, ok := dicts[200]; !ok {
 		t.Error("dict 200 should still exist")
 	}
 
@@ -2295,8 +2807,8 @@ func TestDecoderDictDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(dec.o.dicts) != 2 {
-		t.Errorf("expected 2 dicts after add, got %d", len(dec.o.dicts))
+	if dicts := dec.publishedOptions.Load().dicts; len(dicts) != 2 {
+		t.Errorf("expected 2 dicts after add, got %d", len(dicts))
 	}
 
 	// Delete all dicts with no arguments
@@ -2304,8 +2816,8 @@ func TestDecoderDictDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(dec.o.dicts) != 0 {
-		t.Errorf("expected 0 dicts after delete all, got %d", len(dec.o.dicts))
+	if dicts := dec.publishedOptions.Load().dicts; len(dicts) != 0 {
+		t.Errorf("expected 0 dicts after delete all, got %d", len(dicts))
 	}
 }
 
@@ -2321,8 +2833,8 @@ func TestDecoderDictDeleteMultiple(t *testing.T) {
 	}
 	defer dec.Close()
 
-	if len(dec.o.dicts) != 3 {
-		t.Fatalf("expected 3 dicts, got %d", len(dec.o.dicts))
+	if dicts := dec.publishedOptions.Load().dicts; len(dicts) != 3 {
+		t.Fatalf("expected 3 dicts, got %d", len(dicts))
 	}
 
 	// Delete multiple dicts in one call
@@ -2330,10 +2842,11 @@ func TestDecoderDictDeleteMultiple(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(dec.o.dicts) != 1 {
-		t.Errorf("expected 1 dict after delete, got %d", len(dec.o.dicts))
+	dicts := dec.publishedOptions.Load().dicts
+	if len(dicts) != 1 {
+		t.Errorf("expected 1 dict after delete, got %d", len(dicts))
 	}
-	if _, ok := dec.o.dicts[200]; !ok {
+	if _, ok := dicts[200]; !ok {
 		t.Error("dict 200 should still exist")
 	}
 }
@@ -2399,5 +2912,233 @@ func TestDecoderBufferShortcutFallsBackToStreaming(t *testing.T) {
 				t.Fatalf("output mismatch: got %d bytes, want %d", len(got), len(input))
 			}
 		})
+	}
+}
+
+// TestStreamRingWraps streams frames long enough to wrap the decoder's
+// history ring many times, so matches start in the previous lap and continue
+// into the current one. "mixed" has back-references at random distances up
+// to a window; "far" repeats a random chunk of 15/16 of the window, which can
+// only compress through matches at nearly the full window distance, so its
+// compressed size shows those matches are in the frame. "raw+rle" alternates
+// raw and RLE blocks, which the encoder does not produce on its own. Each
+// configuration uses one decoder, Reset for every stream, so the ring is
+// reused across frames with different windows, including two such frames in
+// one stream. Output must match the input for the synchronous and the
+// concurrent decoder, both memory modes and both read paths.
+func TestStreamRingWraps(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	const size = 6 << 20
+	mixed := func(window int) []byte {
+		input := make([]byte, 0, size)
+		for len(input) < size {
+			n := 16 + rng.Intn(512)
+			if len(input) > 1024 && rng.Intn(3) > 0 {
+				// Copy from up to a window back.
+				back := 1 + rng.Intn(min(window, len(input)))
+				start := len(input) - back
+				for i := range n {
+					input = append(input, input[start+i])
+				}
+				continue
+			}
+			for range n {
+				input = append(input, byte('a'+rng.Intn(8)))
+			}
+		}
+		return input
+	}
+	far := func(window int) []byte {
+		chunk := make([]byte, window-window/16)
+		rng.Read(chunk)
+		return bytes.Repeat(chunk, size/len(chunk)+1)
+	}
+	type stream struct {
+		name        string
+		comp, input []byte
+	}
+	var streams []stream
+	for _, window := range []int{MinWindowSize, 64 << 10, 1 << 20} {
+		for _, kind := range []string{"mixed", "far"} {
+			input := mixed(window)
+			if kind == "far" {
+				input = far(window)
+			}
+			enc, err := NewWriter(nil, WithWindowSize(window), WithEncoderConcurrency(1))
+			if err != nil {
+				t.Fatal(err)
+			}
+			comp := enc.EncodeAll(input, nil)
+			enc.Close()
+			if kind == "far" {
+				// Random bytes only compress through the repeats, which are
+				// all at the chunk's distance.
+				t.Logf("window=%d: far input compressed to %.1f%%", window, 100*float64(len(comp))/float64(len(input)))
+				if len(comp) > len(input)/2 {
+					t.Fatalf("window=%d: %d random bytes repeated compressed to %d; expected window-distance matches", window, len(input), len(comp))
+				}
+			}
+			streams = append(streams, stream{fmt.Sprintf("window=%d/%s", window, kind), comp, input})
+		}
+	}
+
+	// A 64 KiB-window frame of alternating raw and RLE blocks.
+	var rawRLE, rawRLEWant []byte
+	rawRLE = append(rawRLE, 0x28, 0xb5, 0x2f, 0xfd, 0x00, 6<<3) // magic, no FCS, 64 KiB window
+	for i := 0; len(rawRLEWant) < 4<<20; i++ {
+		raw := make([]byte, 1+rng.Intn(32<<10))
+		rng.Read(raw)
+		rawRLE = append(rawRLE, testBlockHeader(len(raw), blockTypeRaw, false)...)
+		rawRLE = append(rawRLE, raw...)
+		n := 1 + rng.Intn(60<<10)
+		rawRLE = append(rawRLE, testBlockHeader(n, blockTypeRLE, len(rawRLEWant)+len(raw)+n >= 4<<20)...)
+		rawRLE = append(rawRLE, byte(i))
+		rawRLEWant = append(append(rawRLEWant, raw...), bytes.Repeat([]byte{byte(i)}, n)...)
+	}
+	streams = append(streams, stream{"window=65536/raw+rle", rawRLE, rawRLEWant})
+
+	// Two frames with different windows in one stream.
+	a, b := streams[5], streams[2] // window=1048576/far, window=65536/mixed
+	streams = append(streams, stream{"two-frames",
+		append(append([]byte(nil), a.comp...), b.comp...),
+		append(append([]byte(nil), a.input...), b.input...)})
+
+	// twopass=true sends every synchronous block through the two-pass path,
+	// whatever the architecture or data, so the ring is tested with it too.
+	for _, twoPass := range []bool{false, true} {
+		restore := func() {}
+		if twoPass {
+			restore = forceTwoPass(true)
+		}
+		for _, concurrent := range []int{1, 4} {
+			for _, lowMem := range []bool{true, false} {
+				for _, viaRead := range []bool{false, true} {
+					dec, err := NewReader(nil, WithDecoderConcurrency(concurrent), WithDecoderLowmem(lowMem))
+					if err != nil {
+						t.Fatal(err)
+					}
+					for _, s := range streams {
+						t.Run(fmt.Sprintf("twopass=%v/conc=%d/lowmem=%v/read=%v/%s", twoPass, concurrent, lowMem, viaRead, s.name), func(t *testing.T) {
+							if err := dec.Reset(bytes.NewReader(s.comp)); err != nil {
+								t.Fatal(err)
+							}
+							var got []byte
+							if !viaRead {
+								var buf bytes.Buffer
+								_, err = dec.WriteTo(&buf)
+								got = buf.Bytes()
+							} else {
+								got, err = io.ReadAll(struct{ io.Reader }{dec})
+							}
+							if err != nil {
+								t.Fatal(err)
+							}
+							if !bytes.Equal(got, s.input) {
+								t.Fatalf("output mismatch: got %d bytes, want %d", len(got), len(s.input))
+							}
+						})
+					}
+					dec.Close()
+				}
+			}
+		}
+		restore()
+	}
+}
+
+// TestDecodeAllChecksumPerBlock checks DecodeAll's frame checksum, which is
+// accumulated block by block, over multi-block frames appended to empty and
+// non-empty destinations: a valid frame decodes, a wrong checksum is
+// reported unless checksums are ignored.
+func TestDecodeAllChecksumPerBlock(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	input := make([]byte, 1<<20)
+	for i := range input {
+		input[i] = byte('a' + rng.Intn(4))
+	}
+	enc, err := NewWriter(nil, WithEncoderCRC(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	comp := enc.EncodeAll(input, nil)
+	enc.Close()
+	bad := append([]byte(nil), comp...)
+	bad[len(bad)-1] ^= 0xff
+
+	prefix := []byte("existing output")
+	tests := []struct {
+		name    string
+		in      []byte
+		dst     []byte
+		ignore  bool
+		wantErr error
+	}{
+		{"valid", comp, nil, false, nil},
+		{"valid/prefix", comp, prefix, false, nil},
+		{"bad checksum", bad, nil, false, ErrCRCMismatch},
+		{"bad checksum/prefix", bad, prefix, false, ErrCRCMismatch},
+		{"bad checksum/ignored", bad, prefix, true, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dec, err := NewReader(nil, WithDecoderConcurrency(1), IgnoreChecksum(tt.ignore))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer dec.Close()
+			dst := append([]byte(nil), tt.dst...)
+			got, err := dec.DecodeAll(tt.in, dst)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("got error %v, want %v", err, tt.wantErr)
+			}
+			if tt.wantErr != nil {
+				return
+			}
+			if !bytes.Equal(got[:len(tt.dst)], tt.dst) || !bytes.Equal(got[len(tt.dst):], input) {
+				t.Fatal("output mismatch")
+			}
+		})
+	}
+}
+
+// TestDecodeAllExactCapacity decodes into a destination with exactly the
+// room the frame needs, on both sequence paths: the output must land in the
+// caller's buffer, not in a reallocated copy. The frame ends with matches
+// 2 MiB back, far enough for the two-pass path to accept its last blocks.
+func TestDecodeAllExactCapacity(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	input := make([]byte, 2<<20, 2<<20+512<<10)
+	rng.Read(input)
+	input = append(input, input[:512<<10]...)
+	enc, err := NewWriter(nil, WithEncoderCRC(false), WithWindowSize(4<<20))
+	if err != nil {
+		t.Fatal(err)
+	}
+	comp := enc.EncodeAll(input, nil)
+	enc.Close()
+
+	prefix := []byte("existing output")
+	for _, twoPass := range []bool{false, true} {
+		for _, pre := range [][]byte{nil, prefix} {
+			t.Run(fmt.Sprintf("twopass=%v/prefix=%d", twoPass, len(pre)), func(t *testing.T) {
+				defer forceTwoPass(twoPass)()
+				dec, err := NewReader(nil, WithDecoderConcurrency(1))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer dec.Close()
+				dst := append(make([]byte, 0, len(pre)+len(input)), pre...)
+				got, err := dec.DecodeAll(comp, dst)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(got[:len(pre)], pre) || !bytes.Equal(got[len(pre):], input) {
+					t.Fatal("output mismatch")
+				}
+				if &got[:1][0] != &dst[:1][0] {
+					t.Fatal("output was reallocated instead of using dst")
+				}
+			})
+		}
 	}
 }

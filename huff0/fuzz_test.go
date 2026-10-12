@@ -12,9 +12,14 @@ import (
 func FuzzCompress(f *testing.F) {
 	fuzz.AddFromZip(f, "testdata/fse_compress.zip", fuzz.TypeRaw, false)
 	fuzz.AddFromZip(f, "testdata/regression.zip", fuzz.TypeRaw, testing.Short())
+	// Reuse the Scratches across inputs, as zstd does. Each Scratch's buffer
+	// pool keeps it alive until the second GC after use, so one per input
+	// grows the worker's heap until it is OOM-killed.
+	var s, decS Scratch
 	f.Fuzz(func(t *testing.T, buf0 []byte) {
 		//use of Compress1X
-		var s Scratch
+		s.Reuse = ReusePolicyNone
+		s.prevTable = s.prevTable[:0]
 		if len(buf0) > BlockSizeMax {
 			buf0 = buf0[:BlockSizeMax]
 		}
@@ -41,7 +46,7 @@ func FuzzCompress(f *testing.F) {
 			t.Error("FuzzCompress: got no data output")
 		}
 
-		dec, remain, err := ReadTable(b, nil)
+		dec, remain, err := ReadTable(b, &decS)
 
 		//use of Decompress1X
 		out, err := dec.Decompress1X(remain)
@@ -106,8 +111,8 @@ func FuzzDecompress1x(f *testing.F) {
 	fuzz.ReturnFromZip(f, "testdata/regression.zip", fuzz.TypeRaw, addCompressed)
 	fuzz.ReturnFromZip(f, "testdata/fse_compress.zip", fuzz.TypeRaw, addCompressed)
 
+	var s Scratch // Reused across inputs; see FuzzCompress.
 	f.Fuzz(func(t *testing.T, buf0 []byte) {
-		var s Scratch
 		_, remain, err := ReadTable(buf0, &s)
 		if err != nil {
 			return

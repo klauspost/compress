@@ -307,8 +307,9 @@ func refEmitCodes(codes []uint32, order lzw.Order, litWidth int) []byte {
 // so code 4095 is never assigned and a stream using it is corrupt. This decoder
 // rejects it, which also keeps hi from climbing past the maximum and eventually
 // wrapping a uint16. The reference lets hi climb instead, so it accepts the code
-// and expands the entry that was never assigned. Reaching this needs 3838 codes,
-// far more than FuzzAldus will produce, hence the hand built stream.
+// and expands the entry that was never assigned. Reaching this needs thousands
+// of codes, hence the hand built stream; FuzzAldus reaches it too, and stops
+// comparing there, see aldusRefLimit.
 func TestAldusMaxWidthCode(t *testing.T) {
 	// 254 + 512 + 1024 + 2048 codes take hi from 257 to 4095, the point at which
 	// the table is full.
@@ -335,6 +336,86 @@ func TestAldusMaxWidthCode(t *testing.T) {
 	}
 }
 
+// How a stream ends the reference decoder's usefulness as an oracle, as
+// reported by aldusRefLimit. A full table alone does not: as long as the stream
+// stays inside the codes the Aldus rule assigns, or clears the table and starts
+// again, the two decoders still agree.
+const (
+	refHolds         = iota // it decodes the whole stream as this decoder does
+	refTakesCode4095        // with the table full it accepts code 4095, which this decoder rejects
+	refHiWrapped            // its hi wrapped a uint16, after which it assigns codes this decoder does not
+)
+
+// aldusRefLimit reports whether, and how, the reference decoder parts ways with
+// this one on the code stream in. It tracks the width exactly as both decoders
+// do, and stops at anything that ends the stream for both of them.
+func aldusRefLimit(in []byte, order lzw.Order, litWidth int) int {
+	const maxCode = 1<<maxWidth - 1
+	var bits uint32
+	var nBits uint
+	pos := 0
+	width := uint(litWidth) + 1
+	clearCode := uint16(1) << litWidth
+	hi, overflow := clearCode+1, uint16(1)<<width
+	full := false // the table has stopped growing at the maximum width
+
+	for {
+		for nBits < width {
+			if pos >= len(in) {
+				return refHolds
+			}
+			if order == lzw.MSB {
+				bits |= uint32(in[pos]) << (24 - nBits)
+			} else {
+				bits |= uint32(in[pos]) << nBits
+			}
+			pos++
+			nBits += 8
+		}
+		var code uint16
+		if order == lzw.MSB {
+			code = uint16(bits >> (32 - width))
+			bits <<= width
+		} else {
+			code = uint16(bits) & (1<<width - 1)
+			bits >>= width
+		}
+		nBits -= width
+
+		switch {
+		case code == clearCode:
+			width = uint(litWidth) + 1
+			hi, overflow, full = clearCode+1, uint16(1)<<width, false
+			continue
+		case code == clearCode+1: // EOF: both decoders stop here
+			return refHolds
+		case full:
+			// The table stopped growing at 4094, so 4095 was never assigned:
+			// this decoder rejects it and the reference expands it. Every other
+			// code is one both of them hold the same expansion for.
+			if code == maxCode {
+				return refTakesCode4095
+			}
+		case code > hi: // rejected by both decoders
+			return refHolds
+		}
+		// hi here is the reference's, which keeps climbing once the table is
+		// full, rather than this decoder's, which stops at 4094.
+		hi++
+		if hi == 0 {
+			return refHiWrapped
+		}
+		if hi+1 >= overflow {
+			if width == maxWidth {
+				full = true
+			} else {
+				width++
+				overflow <<= 1
+			}
+		}
+	}
+}
+
 // FuzzAldus requires that Aldus decoding matches the reference decoder byte for
 // byte and error for error, including for corrupt and truncated input.
 func FuzzAldus(f *testing.F) {
@@ -344,6 +425,20 @@ func FuzzAldus(f *testing.F) {
 		order, litWidth := lzw.Order(cfg&1), int(cfg>>1)%7+2
 		want, wantErr := drainAll(NewReader(bytes.NewReader(in), Order(order), litWidth))
 		got, gotErr := drainAll(ourReader(in, order, litWidth, true))
+		switch aldusRefLimit(in, order, litWidth) {
+		case refTakesCode4095:
+			// Everything up to the code the Aldus rule never assigns must still
+			// match, and this decoder must be the one that stopped there.
+			if !bytes.HasPrefix(want, got) || errText(gotErr) != "lzw: invalid code" {
+				t.Fatalf("order=%d litWidth=%d: got %d bytes %v, want a rejection of code 4095 after a prefix of the reference's %d bytes %v\n got: %x\nwant: %x",
+					order, litWidth, len(got), gotErr, len(want), wantErr, head(got), head(want))
+			}
+			return
+		case refHiWrapped:
+			// The reference resumes assigning codes from a wrapped hi, so
+			// nothing it decodes from there on says anything about this decoder.
+			return
+		}
 		if !bytes.Equal(got, want) || errText(gotErr) != errText(wantErr) {
 			t.Fatalf("order=%d litWidth=%d: got %d bytes %v, want %d bytes %v\n got: %x\nwant: %x",
 				order, litWidth, len(got), gotErr, len(want), wantErr, head(got), head(want))

@@ -7,6 +7,7 @@ import "testing"
 // Defined without build constraints so the benchmark can run under both the
 // asm and -tags noasm (pure-Go) builds for an apples-to-apples comparison.
 func predefinedFSEInputs() map[string]func() *fseDecoder {
+	initPredefined()
 	return map[string]func() *fseDecoder{
 		"litLength": func() *fseDecoder {
 			s := &fseDecoder{actualTableLog: 6, symbolLen: 36}
@@ -34,6 +35,16 @@ func predefinedFSEInputs() map[string]func() *fseDecoder {
 	}
 }
 
+// predefinedFSEExt maps the predefinedFSEInputs names to their symbolExtX tables.
+var predefinedFSEExt = map[string]*symbolExt{
+	"litLength":   &symbolExtX[tableLiteralLengths],
+	"offset":      &symbolExtX[tableOffsets],
+	"matchLength": &symbolExtX[tableMatchLengths],
+}
+
+// BenchmarkBuildDtable times building a sequence decoding table, including
+// merging in each symbol's addBits and baseline; before that was folded into
+// buildDtable it was a separate transform pass this benchmark did not time.
 func BenchmarkBuildDtable(b *testing.B) {
 	for name, mk := range predefinedFSEInputs() {
 		b.Run(name, func(b *testing.B) {
@@ -48,7 +59,7 @@ func BenchmarkBuildDtable(b *testing.B) {
 				for j := range s.stateTable {
 					s.stateTable[j] = 0
 				}
-				if err := s.buildDtable(); err != nil {
+				if err := s.buildDtable(predefinedFSEExt[name]); err != nil {
 					b.Fatal(err)
 				}
 			}

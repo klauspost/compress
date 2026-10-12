@@ -93,8 +93,8 @@ func TestHuffmanGenerateOptimal(t *testing.T) {
 			}
 		}
 		list = list[:count]
-		sortByFreq(list)
-		ref.assignEncodingAndSize(ref.bitCounts(list, maxBits), list)
+		ref.sortByFreq(list)
+		ref.assignEncodingAndSize(ref.bitCounts(list, maxBits), list, ref.codes)
 		wantBits := checkCode(t, freq, ref.codes, int(maxBits))
 
 		if gotBits != wantBits {

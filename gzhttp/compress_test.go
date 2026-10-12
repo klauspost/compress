@@ -13,10 +13,12 @@ import (
 	"net/textproto"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/klauspost/compress/flate"
 	"github.com/klauspost/compress/gzip"
 	"github.com/klauspost/compress/zstd"
 )
@@ -592,16 +594,7 @@ func TestGzipHandlerDoubleWriteHeader(t *testing.T) {
 	})
 
 	rec := httptest.NewRecorder()
-	// TODO: in Go1.7 httptest.NewRequest was introduced this should be used
-	// once 1.6 is not longer supported.
-	req := &http.Request{
-		Method:     "GET",
-		URL:        &url.URL{Path: "/"},
-		Proto:      "HTTP/1.1",
-		ProtoMinor: 1,
-		RemoteAddr: "192.0.2.1:1234",
-		Header:     make(http.Header),
-	}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 	wrapper.ServeHTTP(rec, req)
 	body, err := io.ReadAll(rec.Body)
@@ -2535,6 +2528,122 @@ func TestContentTypeDetectWithJitter(t *testing.T) {
 			handler.ServeHTTP(resp, req)
 
 			assertEqual(t, "text/html; charset=utf-8", resp.Header().Get("Content-Type"))
+		})
+	}
+}
+
+// A Content-Encoding list is in the order the codings were applied, so a
+// decoder may only remove the last one. Each case below encodes testBody with
+// exactly the codings it declares, and the handler decodes whatever is left,
+// so a pass means the payload survived the round trip byte for byte.
+func TestRequestContentEncodingOrder(t *testing.T) {
+	encode := func(t *testing.T, coding string, b []byte) []byte {
+		t.Helper()
+		var buf bytes.Buffer
+		switch coding {
+		case "gzip":
+			w := gzip.NewWriter(&buf)
+			if _, err := w.Write(b); err != nil {
+				t.Fatal(err)
+			}
+			if err := w.Close(); err != nil {
+				t.Fatal(err)
+			}
+		case "deflate":
+			w, err := flate.NewWriter(&buf, flate.DefaultCompression)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := w.Write(b); err != nil {
+				t.Fatal(err)
+			}
+			if err := w.Close(); err != nil {
+				t.Fatal(err)
+			}
+		default:
+			t.Fatalf("unknown coding %q", coding)
+		}
+		return buf.Bytes()
+	}
+	decode := func(t *testing.T, coding string, b []byte) []byte {
+		t.Helper()
+		switch coding {
+		case "gzip":
+			zr, err := gzip.NewReader(bytes.NewReader(b))
+			if err != nil {
+				t.Fatalf("gzip.NewReader: %v", err)
+			}
+			out, err := io.ReadAll(zr)
+			if err != nil {
+				t.Fatalf("gzip read: %v", err)
+			}
+			return out
+		case "deflate":
+			out, err := io.ReadAll(flate.NewReader(bytes.NewReader(b)))
+			if err != nil {
+				t.Fatalf("flate read: %v", err)
+			}
+			return out
+		}
+		t.Fatalf("unknown coding %q", coding)
+		return nil
+	}
+
+	for _, tc := range []struct {
+		name string
+		// sent is one entry per Content-Encoding field line; a line may itself
+		// hold a comma list. Both spellings mean the same list.
+		sent    []string
+		applied []string
+		wantCE  []string
+	}{
+		{"single gzip", []string{"gzip"}, []string{"gzip"}, nil},
+		{"gzip twice", []string{"gzip, gzip"}, []string{"gzip", "gzip"}, []string{"gzip"}},
+		{"gzip outermost", []string{"deflate, gzip"}, []string{"deflate", "gzip"}, []string{"deflate"}},
+		{"gzip not outermost", []string{"gzip, deflate"}, []string{"gzip", "deflate"}, []string{"gzip, deflate"}},
+		{"three codings", []string{"deflate, gzip, gzip"}, []string{"deflate", "gzip", "gzip"}, []string{"deflate, gzip"}},
+		{"split lines, gzip outermost", []string{"deflate", "gzip"}, []string{"deflate", "gzip"}, []string{"deflate"}},
+		{"split lines, gzip not outermost", []string{"gzip", "deflate"}, []string{"gzip", "deflate"}, []string{"gzip", "deflate"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := testBody
+			for _, coding := range tc.applied {
+				body = encode(t, coding, body)
+			}
+
+			var gotCE []string
+			var gotBody []byte
+			var readErr error
+			wrapper, err := NewWrapper(AllowCompressedRequests(true))
+			if err != nil {
+				t.Fatal(err)
+			}
+			handler := wrapper(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotCE = r.Header.Values("Content-Encoding")
+				gotBody, readErr = io.ReadAll(r.Body)
+			}))
+
+			req, _ := http.NewRequest("POST", "/whatever", bytes.NewReader(body))
+			for _, line := range tc.sent {
+				req.Header.Add("Content-Encoding", line)
+			}
+			handler.ServeHTTP(httptest.NewRecorder(), req)
+			if readErr != nil {
+				t.Fatalf("reading the request body: %v", readErr)
+			}
+			assertEqual(t, tc.wantCE, gotCE)
+
+			// Undo what the handler was told is still applied, outermost first.
+			var left []string
+			for _, line := range gotCE {
+				for coding := range strings.SplitSeq(line, ",") {
+					left = append(left, strings.TrimSpace(coding))
+				}
+			}
+			for _, l := range slices.Backward(left) {
+				gotBody = decode(t, l, gotBody)
+			}
+			assertEqual(t, testBody, gotBody)
 		})
 	}
 }

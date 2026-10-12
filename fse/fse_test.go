@@ -59,9 +59,9 @@ var decTestfiles = []struct {
 	{name: "hang2", fn: func() ([]byte, error) { return os.ReadFile("../testdata/dec-hang2.bin") }, err: "newState (0) == oldState (0) and no bits"},
 	{name: "hang3", fn: func() ([]byte, error) { return os.ReadFile("../testdata/dec-hang3.bin") }, err: "maxSymbolValue too small"},
 	{name: "symlen1", fn: func() ([]byte, error) { return os.ReadFile("../testdata/dec-symlen1.bin") }, err: "symbolLen (257) too big"},
-	{name: "crash4", fn: func() ([]byte, error) { return os.ReadFile("../testdata/crash4.bin") }, err: "symbolLen (1) too small"},
-	{name: "crash5", fn: func() ([]byte, error) { return os.ReadFile("../testdata/crash5.bin") }, err: "symbolLen (1) too small"},
-	{name: "crash6", fn: func() ([]byte, error) { return os.ReadFile("../testdata/dec-crash6.bin") }, err: "newState (32768) outside table size (32768)"},
+	{name: "crash4", fn: func() ([]byte, error) { return os.ReadFile("../testdata/crash4.bin") }, err: "corruption detected (count 32768 > 32767)"},
+	{name: "crash5", fn: func() ([]byte, error) { return os.ReadFile("../testdata/crash5.bin") }, err: "corruption detected (count 32768 > 32767)"},
+	{name: "crash6", fn: func() ([]byte, error) { return os.ReadFile("../testdata/dec-crash6.bin") }, err: "corruption detected (count 32768 > 32767)"},
 	{name: "something", fn: func() ([]byte, error) { return os.ReadFile("../testdata/fse-artifact3.bin") }, err: "corrupt stream, did not find end of stream"},
 }
 
@@ -126,6 +126,23 @@ func TestDecompress(t *testing.T) {
 			}
 			t.Logf("%s: %d -> %d bytes (1:%.2f)", test.name, len(buf0), len(b), float64(len(buf0))/float64(len(b)))
 		})
+	}
+}
+
+// TestDecompressCountOverflow decodes a table whose only count, 1<<15, does
+// not fit in an int16, on a Scratch whose previous table filled the decoding
+// table. Truncated, the count left that table in place and decoding panicked.
+func TestDecompressCountOverflow(t *testing.T) {
+	var s Scratch
+	s.DecompressLimit = 255
+	// tableLog 15, counts 0, -1, 11000, 21767.
+	if _, err := Decompress([]byte{0x1a, 0x00, 0x00, 0x00, 0x90, 0xaf, 0xfa, 0xff, 0x03, 0x00, 0x80, 0xff, 0x7f}, &s); err != nil {
+		t.Fatal(err)
+	}
+	// tableLog 15, counts 0, 32768.
+	_, err := Decompress([]byte{0x1a, 0x00, 0xe0, 0xff, 0x1f, 0x0f, 0xb1, 0x9c, 0x5a, 0xcf, 0x4d, 0xe4, 0x1d, 0x7b, 0xab, 0x99, 0x5e, 0x01, 0x51, 0xa4, 0x73, 0xd8, 0xb1, 0xf3, 0x39, 0x4b, 0x67, 0xf6}, &s)
+	if want := "corruption detected (count 32768 > 32767)"; fmt.Sprint(err) != want {
+		t.Fatalf("want error %q, got %v", want, err)
 	}
 }
 

@@ -5,13 +5,17 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/klauspost/compress/internal/cpuinfo"
+	"github.com/klauspost/compress/internal/silesiatest"
 	"github.com/klauspost/compress/zip"
 )
 
@@ -340,16 +344,25 @@ func Test_seqdec_execute(t *testing.T) {
 		lits := s.literals
 
 		t.Run(tt.Name, func(t *testing.T) {
-			s.literals = lits
-			if len(s.out) > 0 {
-				s.out = s.out[:0]
+			// Prefetch off, then forced on (which on these small windows
+			// exercises the history-buffer redirect); output must match.
+			var outs [2][]byte
+			for i, on := range []bool{false, true} {
+				restore := forceTwoPass(on)
+				s.literals = lits
+				s.out = nil
+				err := s.execute(seqs, hist)
+				restore()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(s.out) != s.seqSize {
+					t.Errorf("want %d != got %d", s.seqSize, len(s.out))
+				}
+				outs[i] = s.out
 			}
-			err := s.execute(seqs, hist)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(s.out) != s.seqSize {
-				t.Errorf("want %d != got %d", s.seqSize, len(s.out))
+			if !bytes.Equal(outs[0], outs[1]) {
+				t.Error("output differs with the match prefetch enabled")
 			}
 		})
 	}
@@ -436,6 +449,210 @@ func Test_seqdec_decodeSync(t *testing.T) {
 				} else if !bytes.Equal(s.out, want) {
 					t.Errorf("%s: output differs from the go path (%d vs %d bytes)", v.name, len(s.out), len(want))
 				}
+			}
+		})
+	}
+}
+
+// TestExecuteShortSequences runs execute on random sequences around the
+// 16-byte copies, with and without a dictionary, at every spare output
+// capacity from 0 to 32 bytes, against a byte-by-byte reference.
+func TestExecuteShortSequences(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	random := func(n int) []byte {
+		b := make([]byte, n)
+		rng.Read(b)
+		return b
+	}
+	hist, dict := random(100), random(100)
+
+	tests := []struct {
+		name string
+		dict []byte
+	}{
+		{"nodict", nil},
+		{"dict", dict},
+	}
+	for _, tt := range tests {
+		// The reference output is everything after dict and hist.
+		ref := append(append([]byte(nil), tt.dict...), hist...)
+		base := len(ref)
+		var seqs []seqVals
+		var lits []byte
+		for i := range 3000 {
+			ll, ml := rng.Intn(21), 3+rng.Intn(18)
+			last := i == 2999
+			if last {
+				ll = 5
+			}
+			l := random(ll)
+			lits = append(lits, l...)
+			ref = append(ref, l...)
+			inHist := len(ref) - len(tt.dict)
+			mo := min(16+rng.Intn(25), inHist)
+			switch rng.Intn(8) {
+			case 0:
+				// Overlaps the 16-byte copy unless done bytewise.
+				mo, ml = 1+rng.Intn(15), 12+rng.Intn(5)
+			case 1:
+				mo = 1 + rng.Intn(inHist)
+			case 2:
+				mo = 1 + rng.Intn(len(ref))
+			}
+			if last {
+				// Ends the output at a fixed distance from the capacity.
+				ml, mo = 10, 20
+			}
+			for range ml {
+				ref = append(ref, ref[len(ref)-mo])
+			}
+			seqs = append(seqs, seqVals{ll: ll, ml: ml, mo: mo})
+		}
+		want := ref[base:]
+
+		for _, litExtra := range []int{0, 16} {
+			for extra := range 33 {
+				t.Run(fmt.Sprintf("%s/litextra=%d/extra=%d", tt.name, litExtra, extra), func(t *testing.T) {
+					s := sequenceDecs{
+						dict:       tt.dict,
+						literals:   append(make([]byte, 0, len(lits)+litExtra), lits...),
+						out:        make([]byte, 0, len(want)+extra),
+						seqSize:    len(want),
+						windowSize: 1 << 17,
+					}
+					if err := s.execute(seqs, hist); err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Equal(s.out, want) {
+						t.Fatal("output mismatch")
+					}
+				})
+			}
+		}
+	}
+
+	// A match starting one byte before the dictionary is an error.
+	s := sequenceDecs{
+		dict:       dict,
+		literals:   make([]byte, 0, 16),
+		out:        make([]byte, 0, 64),
+		seqSize:    4,
+		windowSize: 1 << 17,
+	}
+	if err := s.execute([]seqVals{{ml: 4, mo: len(hist) + len(dict) + 1}}, hist); err == nil {
+		t.Fatal("offset before the dictionary decoded without error")
+	}
+}
+
+// TestMatchSource checks the bounds of matchSource. out holds 100 bytes of
+// output, matches start at p = 50, the history is 30 bytes and the
+// dictionary 20.
+func TestMatchSource(t *testing.T) {
+	out := make([]byte, 100)
+	hist := make([]byte, 30)
+	dict := make([]byte, 20)
+	for i := range out {
+		out[i] = byte(i)
+	}
+	for i := range hist {
+		hist[i] = byte(100 + i)
+	}
+	for i := range dict {
+		dict[i] = byte(200 + i)
+	}
+	const p = 50
+	tests := []struct {
+		name       string
+		mo, n, win int
+		want       []byte // nil: general path
+	}{
+		{"out, offset n", 16, 16, 100, out[34:50]},
+		{"out, overlaps", 15, 16, 100, nil},
+		{"out, long", 30, 30, 100, out[20:50]},
+		{"out, long overlaps", 29, 30, 100, nil},
+		{"out, offset p", 50, 16, 100, out[0:16]},
+		{"out, window", 40, 16, 40, out[10:26]},
+		{"out, past window", 41, 16, 40, nil},
+		{"hist, start n", 66, 16, 100, hist[14:30]},
+		{"hist, start n-1", 65, 16, 100, nil},
+		{"hist, start len", 80, 16, 100, hist[0:16]},
+		{"hist, long", 80, 30, 100, hist[0:30]},
+		{"hist into dict", 81, 16, 100, nil},
+		{"hist, window", 66, 16, 66, hist[14:30]},
+		{"hist, past window", 66, 16, 65, nil},
+		{"dict, reach n", 96, 16, 100, dict[4:20]},
+		{"dict, reach n-1", 95, 16, 100, nil},
+		{"dict, reach len", 100, 16, 100, dict[0:16]},
+		{"dict, past start", 101, 16, 100, nil},
+		{"dict, long", 100, 20, 100, dict[0:20]},
+		{"dict, long reach n-1", 99, 20, 100, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := matchSource(out, hist, dict, p, tt.mo, tt.n, tt.win)
+			if (got == nil) != (tt.want == nil) || !bytes.Equal(got, tt.want) {
+				t.Fatalf("matchSource(mo=%d, n=%d, window=%d) = %v, want %v", tt.mo, tt.n, tt.win, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestOverlapCopy checks overlapCopy against a bytewise copy.
+func TestOverlapCopy(t *testing.T) {
+	tests := []struct{ mo, n int }{
+		{1, 1}, {1, 2}, {1, 100}, {2, 3}, {3, 10}, {7, 50}, {15, 16},
+		{16, 17}, {17, 1000}, {5, 5}, {0, 4},
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("mo=%d/n=%d", tt.mo, tt.n), func(t *testing.T) {
+			const prefix = 40
+			want := make([]byte, prefix+tt.n)
+			for i := range want[:prefix] {
+				want[i] = byte(i*7 + 1)
+			}
+			got := append([]byte(nil), want...)
+			for i := prefix; i < len(want) && tt.mo > 0; i++ {
+				want[i] = want[i-tt.mo]
+			}
+			overlapCopy(got, prefix-tt.mo, prefix, tt.n)
+			if !bytes.Equal(got, want) {
+				t.Fatalf("got %v, want %v", got[prefix:], want[prefix:])
+			}
+		})
+	}
+}
+
+// TestUseSafeDecodeSyncFrameBound checks the copy variant chosen when the
+// frame size is known: only the current block needs the slack, so a buffer
+// sized exactly to the frame uses the extended copies until the last block.
+func TestUseSafeDecodeSyncFrameBound(t *testing.T) {
+	if !haveSeqdecAsm {
+		t.Skip("no assembly decoder on this build")
+	}
+	const mb = maxCompressedBlockSize
+	tests := []struct {
+		name      string
+		remaining int // maxSyncLen: bytes the frame may still produce
+		free      int // cap(out) - len(out)
+		wantSafe  bool
+	}{
+		{"exact frame, far from end", 4 << 20, 4 << 20, false},
+		{"exact frame, one block left", mb, mb, true},
+		{"exact frame, last small block", 1000, 1000, true},
+		{"last small block with slack", 1000, 1000 + compressedBlockOverAlloc, false},
+		{"buffer below frame, block fits", 4 << 20, mb + compressedBlockOverAlloc, false},
+		{"buffer below frame, block lacks slack", 4 << 20, mb + compressedBlockOverAlloc - 1, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := sequenceDecs{
+				windowSize: 8 << 20,
+				maxSyncLen: uint64(tt.remaining),
+				out:        make([]byte, 100, 100+tt.free),
+				literals:   make([]byte, 10, 10+compressedBlockOverAlloc),
+			}
+			if got := decodeSyncUsesSafe(&s); got != tt.wantSafe {
+				t.Errorf("safe copies = %v, want %v", got, tt.wantSafe)
 			}
 		})
 	}
@@ -660,6 +877,8 @@ func TestDecoderShortSequenceCopies(t *testing.T) {
 		name     string
 		wordLens []int // lengths of the repeated words the encoder should match
 		litLens  []int // lengths of the random runs between words
+		// if set, repeat 3..20 bytes from offsets 1..maxOffset instead of words
+		maxOffset int
 	}{
 		{name: "words16-lits0", wordLens: []int{16}, litLens: []int{0}},
 		{name: "words17-lits0", wordLens: []int{17}, litLens: []int{0}},
@@ -667,6 +886,7 @@ func TestDecoderShortSequenceCopies(t *testing.T) {
 		{name: "words17-lits17", wordLens: []int{17}, litLens: []int{17}},
 		{name: "words15-lits1", wordLens: []int{15}, litLens: []int{1}},
 		{name: "mixed", wordLens: []int{4, 5, 8, 15, 16, 17, 31, 32, 33}, litLens: []int{0, 0, 0, 1, 2, 15, 16, 17, 32, 33}},
+		{name: "offsets40-lits20", litLens: []int{0, 1, 2, 5, 15, 16, 17, 20}, maxOffset: 40},
 	}
 	levels := []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression}
 
@@ -688,7 +908,13 @@ func TestDecoderShortSequenceCopies(t *testing.T) {
 			if n := tc.litLens[rng.Intn(len(tc.litLens))]; n > 0 {
 				input = append(input, randomBytes(n)...)
 			}
-			input = append(input, words[rng.Intn(len(words))]...)
+			if tc.maxOffset == 0 {
+				input = append(input, words[rng.Intn(len(words))]...)
+			} else if mo := 1 + rng.Intn(tc.maxOffset); mo <= len(input) {
+				for range 3 + rng.Intn(18) {
+					input = append(input, input[len(input)-mo])
+				}
+			}
 		}
 
 		for _, level := range levels {
@@ -708,6 +934,18 @@ func TestDecoderShortSequenceCopies(t *testing.T) {
 					t.Fatalf("DecodeAll output mismatch (len %d vs %d)", len(got), len(input))
 				}
 
+				decodeSyncGoOnly = true
+				restore := forceTwoPass(false)
+				got, err = dec.DecodeAll(compressed, nil)
+				decodeSyncGoOnly = false
+				restore()
+				if err != nil {
+					t.Fatalf("DecodeAll (Go): %v", err)
+				}
+				if !bytes.Equal(got, input) {
+					t.Fatalf("DecodeAll (Go) output mismatch (len %d vs %d)", len(got), len(input))
+				}
+
 				if err := dec.Reset(bytes.NewReader(compressed)); err != nil {
 					t.Fatal(err)
 				}
@@ -717,6 +955,361 @@ func TestDecoderShortSequenceCopies(t *testing.T) {
 				}
 				if !bytes.Equal(got, input) {
 					t.Fatalf("streaming output mismatch (len %d vs %d)", len(got), len(input))
+				}
+			})
+		}
+	}
+}
+
+// TestReadNCountSymbolPastTable checks that a table description cannot give
+// a count to a symbol past its table's range by reaching it through a run
+// of zero counts.
+func TestReadNCountSymbolPastTable(t *testing.T) {
+	initPredefined()
+	// Offsets: counts for 0..28, a zero run over 29..39, then a count for 40.
+	var enc fseEncoder
+	enc.actualTableLog = 5
+	enc.symbolLen = 41
+	enc.norm[0] = 3
+	for i := 1; i < 29; i++ {
+		enc.norm[i] = 1
+	}
+	enc.norm[40] = 1
+	hdr, err := enc.writeCount(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	br := byteReader{b: append(hdr, make([]byte, 8)...)}
+	var dec fseDecoder
+	if err := dec.readNCount(&br, tableOffsets); err == nil {
+		t.Fatalf("accepted offsets table with symbolLen %d > %d", dec.symbolLen, maxOffsetLengthSymbol+1)
+	}
+}
+
+// TestDecodeOverlappingMatches decodes periodic data, which the encoder
+// turns into long matches whose offset is the period and whose length is
+// many periods, so the copy overlaps its own output. Offsets of 16 and
+// above are copied in 16-byte blocks; shorter ones byte by byte. Both the
+// fast copies (output with slack) and the bounds-exact ones (output sized
+// exactly) must reproduce the input.
+func TestDecodeOverlappingMatches(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	enc, err := NewWriter(nil, WithEncoderLevel(SpeedBestCompression))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer enc.Close()
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+
+	for _, period := range []int{3, 8, 15, 16, 17, 31, 32, 33, 100, 1000} {
+		for _, tail := range []int{0, 1, 15, 16, 17} {
+			pattern := make([]byte, period)
+			rng.Read(pattern)
+			input := bytes.Repeat(pattern, (64<<10)/period+1)
+			input = append(input, bytes.Repeat(pattern, tail/period+1)[:tail]...)
+			comp := enc.EncodeAll(input, nil)
+
+			name := fmt.Sprintf("period=%d/tail=%d", period, tail)
+			// DecodeAll uses decodeSync, or with twopass decode and
+			// executeSimple; the concurrent Reader uses executeSimple.
+			for _, twoPass := range []bool{false, true} {
+				path := ""
+				if twoPass {
+					path = "/twopass"
+				}
+				t.Run(name+path+"/slack", func(t *testing.T) {
+					if twoPass {
+						defer forceTwoPass(true)()
+					}
+					got, err := dec.DecodeAll(comp, nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Equal(got, input) {
+						t.Fatal("output mismatch")
+					}
+				})
+				t.Run(name+path+"/exact", func(t *testing.T) {
+					if twoPass {
+						defer forceTwoPass(true)()
+					}
+					got, err := dec.DecodeAll(comp, make([]byte, 0, len(input)))
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Equal(got, input) {
+						t.Fatal("output mismatch")
+					}
+				})
+			}
+			t.Run(name+"/concurrent", func(t *testing.T) {
+				r, err := NewReader(bytes.NewReader(comp), WithDecoderConcurrency(4))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer r.Close()
+				got, err := io.ReadAll(r)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(got, input) {
+					t.Fatal("output mismatch")
+				}
+			})
+		}
+	}
+}
+
+// twoPassTestInput builds ~6 MiB whose matches reach across the whole
+// window: random vocabulary text, then copies from up to 4 MiB back.
+func twoPassTestInput() []byte {
+	rng := rand.New(rand.NewSource(7))
+	vocab := make([][]byte, 4096)
+	for i := range vocab {
+		w := make([]byte, 3+rng.Intn(8))
+		for j := range w {
+			w[j] = byte('a' + rng.Intn(26))
+		}
+		vocab[i] = w
+	}
+	buf := make([]byte, 0, 6<<20)
+	for len(buf) < 4<<20 {
+		buf = append(buf, vocab[rng.Intn(len(vocab))]...)
+		buf = append(buf, " ,.\n"[rng.Intn(4)])
+	}
+	for len(buf) < 6<<20 {
+		for i := rng.Intn(4); i > 0; i-- {
+			buf = append(buf, byte(rng.Intn(256)))
+		}
+		n := 4 + rng.Intn(60)
+		off := 1 + rng.Intn(4<<20)
+		src := len(buf) - off
+		buf = append(buf, buf[src:src+n]...)
+	}
+	return buf
+}
+
+// forceTwoPass makes the synchronous decoder take the two-pass path on every
+// block (on) or the one-pass path (off) whatever the data, and returns a
+// function restoring the thresholds.
+func forceTwoPass(on bool) func() {
+	a, b := decodeTwoPassMinWindow, twoPassMinFarShare
+	if on {
+		decodeTwoPassMinWindow, twoPassMinFarShare = 0, 0
+	} else {
+		decodeTwoPassMinWindow, twoPassMinFarShare = math.MaxInt, 257
+	}
+	return func() { decodeTwoPassMinWindow, twoPassMinFarShare = a, b }
+}
+
+// TestSequenceDecsUseTwoPass checks the two-pass decision against each kind
+// of offset table.
+func TestSequenceDecsUseTwoPass(t *testing.T) {
+	defer forceTwoPass(false)()
+	decodeTwoPassMinWindow, twoPassMinFarShare = 1<<20, 46
+
+	// fseTable: log-8 table with far slots on codes 20-22 (two of them -1),
+	// the rest on code 3.
+	fseTable := func(far int) *fseDecoder {
+		f := &fseDecoder{actualTableLog: 8, symbolLen: twoPassFarCode + 3}
+		f.norm[3] = int16(256 - far)
+		f.norm[twoPassFarCode] = int16(far - 2)
+		f.norm[twoPassFarCode+1] = -1
+		f.norm[twoPassFarCode+2] = -1
+		return f
+	}
+	rle := func(code uint8) *fseDecoder {
+		return &fseDecoder{actualTableLog: 0, maxBits: code}
+	}
+	predefined := &fseDecoder{preDefined: true}
+
+	tests := []struct {
+		name   string
+		fse    *fseDecoder
+		window int
+		want   bool
+	}{
+		{"fse at threshold", fseTable(46), 1 << 20, true},
+		{"fse at threshold small window", fseTable(46), 1<<20 - 1, false},
+		{"fse below threshold", fseTable(45), 1 << 30, false},
+		{"fse far only", fseTable(256), 1 << 20, true},
+		{"fse none far", fseTable(2), 1 << 30, false},
+		{"fse no far codes in table", &fseDecoder{actualTableLog: 8, symbolLen: twoPassFarCode}, 1 << 20, false},
+		{"rle large window", rle(uint8(twoPassFarCode - 1)), 1 << 20, true},
+		{"rle small window", rle(uint8(twoPassFarCode)), 1<<20 - 1, false},
+		{"predefined small window", predefined, 1<<20 - 1, false},
+		{"predefined large window", predefined, 1 << 20, true},
+		{"no table small window", nil, 1<<20 - 1, false},
+		{"no table large window", nil, 1 << 20, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := sequenceDecs{windowSize: tt.window}
+			s.offsets.fse = tt.fse
+			if got := s.useTwoPass(); got != tt.want {
+				t.Errorf("useTwoPass = %v, want %v (share %d)", got, tt.want, tt.fse.codeShare(twoPassFarCode))
+			}
+		})
+	}
+}
+
+// TestDecodeTwoPassMatchesOnePass forces both the two-pass and the one-pass
+// path on any architecture and checks every DecodeAll and Reader shape, plus
+// rejection of corrupt input, on each.
+func TestDecodeTwoPassMatchesOnePass(t *testing.T) {
+	input := twoPassTestInput()
+	frames := map[string][]byte{}
+	for _, lvl := range []EncoderLevel{SpeedDefault, SpeedBestCompression} {
+		enc, err := NewWriter(nil, WithEncoderLevel(lvl), WithWindowSize(8<<20))
+		if err != nil {
+			t.Fatal(err)
+		}
+		frames[lvl.String()] = enc.EncodeAll(input, nil)
+		enc.Close()
+	}
+
+	paths := []struct {
+		name string
+		on   bool
+	}{
+		{"two-pass+prefetch", true},
+		{"one-pass", false},
+	}
+	for _, p := range paths {
+		for name, comp := range frames {
+			t.Run(p.name+"/"+name, func(t *testing.T) {
+				defer forceTwoPass(p.on)()
+
+				dec, err := NewReader(nil, WithDecoderConcurrency(1))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer dec.Close()
+
+				got, err := dec.DecodeAll(comp, nil)
+				if err != nil {
+					t.Fatal("DecodeAll:", err)
+				}
+				if !bytes.Equal(got, input) {
+					t.Fatal("DecodeAll output differs from input")
+				}
+
+				// A non-empty dst puts the history in a separate buffer.
+				prefix := []byte("prefix bytes that are not part of the frame")
+				got, err = dec.DecodeAll(comp, append([]byte(nil), prefix...))
+				if err != nil {
+					t.Fatal("DecodeAll with prefix:", err)
+				}
+				if !bytes.Equal(got, append(append([]byte(nil), prefix...), input...)) {
+					t.Fatal("DecodeAll with prefix: output differs from input")
+				}
+
+				// Exactly sized dst.
+				got, err = dec.DecodeAll(comp, make([]byte, 0, len(input)))
+				if err != nil {
+					t.Fatal("DecodeAll exact:", err)
+				}
+				if !bytes.Equal(got, input) {
+					t.Fatal("DecodeAll exact: output differs from input")
+				}
+
+				for _, n := range []int{1, 2} {
+					rdr, err := NewReader(bytes.NewReader(comp), WithDecoderConcurrency(n))
+					if err != nil {
+						t.Fatal(err)
+					}
+					got, err = io.ReadAll(rdr)
+					rdr.Close()
+					if err != nil {
+						t.Fatalf("Reader concurrency %d: %v", n, err)
+					}
+					if !bytes.Equal(got, input) {
+						t.Fatalf("Reader concurrency %d: output differs from input", n)
+					}
+				}
+
+				// Corrupt input must error, not panic.
+				bad := append([]byte(nil), comp...)
+				for i := len(bad) / 3; i < len(bad); i += len(bad) / 7 {
+					bad[i] ^= 0x5a
+				}
+				if _, err := dec.DecodeAll(bad, nil); err == nil {
+					t.Fatal("corrupted frame decoded without error")
+				}
+				if _, err := dec.DecodeAll(comp[:len(comp)*2/3], nil); err == nil {
+					t.Fatal("truncated frame decoded without error")
+				}
+			})
+		}
+	}
+}
+
+// TestSilesiaAsmVsGo decodes Silesia with the assembly sequence decoder,
+// with the Go one and, on amd64 with BMI2, with the assembly that does not
+// use BMI2. The inputs are Go encodings at two levels and the C CLI's
+// encodings in testdata/silesia.tar*.zst.
+func TestSilesiaAsmVsGo(t *testing.T) {
+	want := silesiatest.Tar(t)
+	type input struct {
+		name string
+		comp []byte
+	}
+	var inputs []input
+	for _, level := range []EncoderLevel{SpeedDefault, SpeedBestCompression} {
+		enc, err := NewWriter(nil, WithEncoderLevel(level))
+		if err != nil {
+			t.Fatal(err)
+		}
+		inputs = append(inputs, input{"go-" + level.String(), enc.EncodeAll(want, nil)})
+		enc.Close()
+	}
+	for _, f := range silesiatest.ZstdFiles() {
+		comp, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		inputs = append(inputs, input{filepath.Base(f), comp})
+	}
+
+	decoders := []struct {
+		name  string
+		setup func() (restore func())
+	}{
+		{"asm", func() func() { return func() {} }},
+		{"go", func() func() {
+			// One pass only: the two-pass path executes with assembly.
+			restore := forceTwoPass(false)
+			decodeSyncGoOnly = true
+			return func() { decodeSyncGoOnly = false; restore() }
+		}},
+	}
+	if cpuinfo.HasBMI2() {
+		decoders = append(decoders, struct {
+			name  string
+			setup func() (restore func())
+		}{"asm-nobmi2", cpuinfo.DisableBMI2})
+	}
+
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	dst := make([]byte, 0, len(want))
+	for _, in := range inputs {
+		for _, d := range decoders {
+			t.Run(in.name+"/"+d.name, func(t *testing.T) {
+				defer d.setup()()
+				got, err := dec.DecodeAll(in.comp, dst[:0])
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(got, want) {
+					t.Fatal("output differs from silesia.tar")
 				}
 			})
 		}

@@ -39,6 +39,49 @@ func TestTransport(t *testing.T) {
 	}
 }
 
+func TestTransportReuseRequest(t *testing.T) {
+	payload := bytes.Repeat([]byte("reusable request body"), 100)
+	for _, useZstd := range []bool{false, true} {
+		name := "gzip"
+		if useZstd {
+			name = "zstd"
+		}
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(newTestHandler(payload))
+			defer server.Close()
+			client := http.Client{Transport: Transport(http.DefaultTransport, TransportEnableZstd(useZstd))}
+			req, err := http.NewRequest(http.MethodGet, server.URL, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("X-Custom", "preserved")
+			for attempt := range 2 {
+				resp, err := client.Do(req)
+				if err != nil {
+					t.Fatal(err)
+				}
+				body, readErr := io.ReadAll(resp.Body)
+				closeErr := resp.Body.Close()
+				if readErr != nil || closeErr != nil {
+					t.Fatalf("attempt %d: read error %v, close error %v", attempt, readErr, closeErr)
+				}
+				if !bytes.Equal(body, payload) {
+					t.Errorf("attempt %d: response was not decompressed", attempt)
+				}
+				if !resp.Uncompressed {
+					t.Errorf("attempt %d: response is not marked Uncompressed", attempt)
+				}
+				if got := req.Header.Get("Accept-Encoding"); got != "" {
+					t.Errorf("attempt %d: request Accept-Encoding changed to %q", attempt, got)
+				}
+				if got := req.Header.Get("X-Custom"); got != "preserved" {
+					t.Errorf("attempt %d: request X-Custom changed to %q", attempt, got)
+				}
+			}
+		})
+	}
+}
+
 func TestTransportForced(t *testing.T) {
 	raw, err := os.ReadFile("testdata/benchmark.json")
 	if err != nil {

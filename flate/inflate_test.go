@@ -5,14 +5,55 @@
 package flate
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/rand"
+	"encoding/hex"
 	"io"
 	"os"
 	"strconv"
 	"strings"
 	"testing"
 )
+
+func TestTruncatedDeflateReportsUnexpectedEOF(t *testing.T) {
+	stream, err := hex.DecodeString("ca48cdc9c95728cf2fca495118658fb2a9c5060c00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	readers := map[string]func([]byte) io.Reader{
+		"bytes.Reader":   func(b []byte) io.Reader { return bytes.NewReader(b) },
+		"bytes.Buffer":   func(b []byte) io.Reader { return bytes.NewBuffer(b) },
+		"strings.Reader": func(b []byte) io.Reader { return strings.NewReader(string(b)) },
+		"bufio.Reader":   func(b []byte) io.Reader { return bufio.NewReader(bytes.NewReader(b)) },
+		"generic Reader": func(b []byte) io.Reader { return struct{ Reader }{bytes.NewReader(b)} },
+	}
+	for name, makeReader := range readers {
+		t.Run(name, func(t *testing.T) {
+			for cut := 1; cut < len(stream); cut++ {
+				for _, copyOutput := range []bool{false, true} {
+					reader := NewReader(makeReader(stream[:cut]))
+					var readErr error
+					if copyOutput {
+						_, readErr = io.Copy(io.Discard, reader)
+					} else {
+						_, readErr = io.ReadAll(reader)
+					}
+					reader.Close()
+					if readErr != io.ErrUnexpectedEOF {
+						t.Errorf("cut at %d, copy=%v: got %v, want io.ErrUnexpectedEOF", cut, copyOutput, readErr)
+					}
+				}
+			}
+			reader := NewReader(makeReader(stream))
+			decoded, err := io.ReadAll(reader)
+			reader.Close()
+			if err != nil || !bytes.Equal(decoded, bytes.Repeat([]byte("hello world "), 50)) {
+				t.Errorf("complete stream: %d decoded bytes, error %v", len(decoded), err)
+			}
+		})
+	}
+}
 
 func TestReset(t *testing.T) {
 	ss := []string{

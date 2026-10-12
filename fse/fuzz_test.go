@@ -37,6 +37,12 @@ func FuzzDecompress(f *testing.F) {
 	f.Fuzz(func(t *testing.T, buf0 []byte) {
 		var s2 Scratch
 		s2.DecompressLimit = 128 << 10
+		// buildDtable relies on accepted counts filling the table exactly.
+		if _, err := s2.prepare(buf0); err == nil && s2.readNCount() == nil {
+			if err := s2.validateNorm(); err != nil {
+				t.Fatal(err)
+			}
+		}
 		//Decompress
 		got, err := Decompress(buf0, &s2)
 		if err != nil || len(got) == 0 {

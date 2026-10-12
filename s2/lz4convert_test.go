@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"hash/crc32"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -351,6 +352,23 @@ func BenchmarkCompressBlockReference(b *testing.B) {
 	}
 }
 
+// lz4Converters are all LZ4 and LZ4s conversions in Go, and in assembly when available.
+var lz4Converters = func() map[string]func(dst, src []byte) ([]byte, int, error) {
+	m := map[string]func(dst, src []byte) ([]byte, int, error){
+		"LZ4-Go":        (&LZ4Converter{noAsm: true}).ConvertBlock,
+		"LZ4Snappy-Go":  (&LZ4Converter{noAsm: true}).ConvertBlockSnappy,
+		"LZ4s-Go":       (&LZ4sConverter{noAsm: true}).ConvertBlock,
+		"LZ4sSnappy-Go": (&LZ4sConverter{noAsm: true}).ConvertBlockSnappy,
+	}
+	if hasAsm {
+		m["LZ4"] = (&LZ4Converter{}).ConvertBlock
+		m["LZ4Snappy"] = (&LZ4Converter{}).ConvertBlockSnappy
+		m["LZ4s"] = (&LZ4sConverter{}).ConvertBlock
+		m["LZ4sSnappy"] = (&LZ4sConverter{}).ConvertBlockSnappy
+	}
+	return m
+}()
+
 func FuzzLZ4Block(f *testing.F) {
 	fuzz.AddFromZip(f, "testdata/fuzz/lz4-convert-corpus-raw.zip", fuzz.TypeRaw, false)
 	fuzz.AddFromZip(f, "testdata/fuzz/FuzzLZ4Block.zip", fuzz.TypeGoFuzz, false)
@@ -365,6 +383,38 @@ func FuzzLZ4Block(f *testing.F) {
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > maxSize || len(data) == 0 {
 			return
+		}
+
+		// Convert again into a dst that is too small or too large by up to len(data).
+		const (
+			guard  = 16 // Bytes after cap(dst) that must stay untouched.
+			margin = 16 // Conversion must succeed with this much spare capacity.
+		)
+		h := crc32.ChecksumIEEE(data)
+		delta := int(h>>1) % len(data)
+		if h&1 == 0 {
+			delta = -delta
+		}
+		large := make([]byte, len(data)*2+4096)
+		for name, conv := range lz4Converters {
+			want, wantN, wantErr := conv(large[:0], data)
+			n := len(data) + delta
+			if wantErr == nil {
+				n = len(want) + delta
+			}
+			n = max(n, 0)
+			buf := bytes.Repeat([]byte{0xaa}, n+guard)
+			got, gotN, err := conv(buf[:0:n], data)
+			if bytes.Count(buf[n:], []byte{0xaa}) != guard {
+				t.Fatalf("%s: cap %d, need %d: wrote past cap(dst)", name, n, len(want))
+			}
+			switch {
+			case err == nil && (wantErr != nil || gotN != wantN || !bytes.Equal(got, want)),
+				err == ErrCorrupt && wantErr != ErrCorrupt,
+				err == ErrDstTooSmall && wantErr == nil && n >= len(want)+margin,
+				err != nil && err != ErrCorrupt && err != ErrDstTooSmall:
+				t.Fatalf("%s: cap %d: %v; with large dst: %d bytes, %v", name, n, err, len(want), wantErr)
+			}
 		}
 
 		lz4Decoded := make([]byte, len(data)*2+65536)
@@ -445,4 +495,62 @@ func FuzzLZ4Block(f *testing.F) {
 			panic(fmt.Sprintf("lz4 returned %d, conversion returned %v, input: %#v", lzN, cErr, data))
 		}
 	})
+}
+
+func TestLZ4ConvertBlockDstBounds(t *testing.T) {
+	// seq appends an LZ4 sequence with ll literals and a match; ml == 0 emits literals only.
+	seq := func(b []byte, ll int, offset uint16, ml int) []byte {
+		ext := func(b []byte, v int) []byte {
+			for ; v >= 255; v -= 255 {
+				b = append(b, 255)
+			}
+			return append(b, byte(v))
+		}
+		tok := byte(min(ll, 15)) << 4
+		if ml > 0 {
+			tok |= byte(min(ml-4, 15))
+		}
+		b = append(b, tok)
+		if ll >= 15 {
+			b = ext(b, ll-15)
+		}
+		b = append(b, bytes.Repeat([]byte{'a'}, ll)...)
+		if ml == 0 {
+			return b
+		}
+		b = append(b, byte(offset), byte(offset>>8))
+		if ml >= 19 {
+			b = ext(b, ml-19)
+		}
+		return b
+	}
+	tests := []struct {
+		name  string
+		start int // Smallest dst capacity tried.
+		src   []byte
+	}{
+		// A 3 or 4 byte literal header followed by a copy with a 5-byte repeat.
+		{"long-literal-copy", 69990, seq(seq(nil, 70000, 1, 65805), 5, 0, 0)},
+		{"long-literal-far-copy", 69990, seq(seq(nil, 70000, 3000, 65900), 5, 0, 0)},
+		{"literal-far-copy", 2990, seq(seq(nil, 3000, 3000, 65900), 5, 0, 0)},
+		// Matches needing more than one 5-byte repeat.
+		{"huge-copy", 0, seq(seq(nil, 10, 1, 100<<20), 5, 0, 0)},
+		{"huge-repeat", 0, seq(seq(seq(nil, 10, 1, 5), 0, 1, 100<<20), 5, 0, 0)},
+	}
+	const guard = 64
+	for _, tt := range tests {
+		for name, conv := range lz4Converters {
+			for dstLen := tt.start; dstLen < tt.start+100; dstLen++ {
+				// The assembly doesn't bounds check, so look for writes past cap(dst).
+				buf := bytes.Repeat([]byte{0xaa}, dstLen+guard)
+				_, _, err := conv(buf[:0:dstLen], tt.src)
+				if err != nil && err != ErrDstTooSmall {
+					t.Fatalf("%s/%s dstLen=%d: %v", tt.name, name, dstLen, err)
+				}
+				if bytes.Count(buf[dstLen:], []byte{0xaa}) != guard {
+					t.Fatalf("%s/%s dstLen=%d: wrote past cap(dst)", tt.name, name, dstLen)
+				}
+			}
+		}
+	}
 }
