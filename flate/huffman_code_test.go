@@ -6,6 +6,7 @@ package flate
 
 import (
 	"math/rand"
+	"slices"
 	"testing"
 )
 
@@ -15,6 +16,7 @@ import (
 func checkCode(t *testing.T, freq []uint16, codes []hcode, maxBits int) (total int) {
 	t.Helper()
 	var kraft uint64 // scaled by 1<<maxBitsLimit
+	var used []int
 	for i, f := range freq {
 		c := codes[i]
 		if f == 0 {
@@ -27,15 +29,36 @@ func checkCode(t *testing.T, freq []uint16, codes []hcode, maxBits int) (total i
 		if n == 0 || n > maxBits {
 			t.Fatalf("symbol %d: code length %d, want 1..%d", i, n, maxBits)
 		}
+		if c.code64()>>n != 0 {
+			t.Fatalf("symbol %d: code %#x does not fit in %d bits", i, c.code64(), n)
+		}
 		kraft += 1 << (maxBitsLimit - n)
 		total += n * int(f)
+		used = append(used, i)
 	}
 	// Two or fewer symbols are all assigned length 1 and may leave the
 	// code incomplete; otherwise the code must be complete.
-	if used := countNonZero(freq); used > 2 && kraft != 1<<maxBitsLimit {
+	if len(used) > 2 && kraft != 1<<maxBitsLimit {
 		t.Fatalf("code is not complete: kraft sum %d/%d", kraft, 1<<maxBitsLimit)
 	} else if kraft > 1<<maxBitsLimit {
 		t.Fatalf("code is not a prefix code: kraft sum %d/%d", kraft, 1<<maxBitsLimit)
+	}
+
+	// The Kraft sum only constrains the code lengths. Also check the
+	// code words themselves: no code may equal or be a prefix of another.
+	// Codes are stored bit-reversed, so a prefix is a suffix in the
+	// stored form: the shorter code must match the low bits of the longer.
+	for a, i := range used {
+		ci := codes[i]
+		for _, j := range used[a+1:] {
+			cj := codes[j]
+			n := min(ci.len(), cj.len())
+			mask := uint64(1)<<n - 1
+			if ci.code64()&mask == cj.code64()&mask {
+				t.Fatalf("symbol %d (code %0*b) and symbol %d (code %0*b) overlap",
+					i, ci.len(), ci.code64(), j, cj.len(), cj.code64())
+			}
+		}
 	}
 	return total
 }
@@ -54,6 +77,7 @@ func countNonZero(freq []uint16) (n int) {
 // length-limited construction whenever it is used.
 func TestHuffmanGenerateOptimal(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
+	treeUsed := 0
 	for iter := range 2000 {
 		size := []int{literalCount, offsetCodeCount, codegenCodeCount}[iter%3]
 		maxBits := int32(15)
@@ -78,13 +102,9 @@ func TestHuffmanGenerateOptimal(t *testing.T) {
 			continue
 		}
 
-		fast := newHuffmanEncoder(size)
-		fast.generate(freq, maxBits)
-		gotBits := checkCode(t, freq, fast.codes, int(maxBits))
-
-		// Reference: the length-limited construction only.
-		ref := newHuffmanEncoder(size)
-		list := ref.freqcache[:len(freq)+1]
+		// The sorted symbol list, as generate builds it.
+		h := newHuffmanEncoder(size)
+		list := h.freqcache[:len(freq)+1]
 		count := 0
 		for i, f := range freq {
 			if f != 0 {
@@ -93,13 +113,42 @@ func TestHuffmanGenerateOptimal(t *testing.T) {
 			}
 		}
 		list = list[:count]
-		ref.sortByFreq(list)
-		ref.assignEncodingAndSize(ref.bitCounts(list, maxBits), list, ref.codes)
+		slices.SortFunc(list, func(a, b literalNode) int {
+			return (int(a.freq)<<10 + int(a.literal)) - (int(b.freq)<<10 + int(b.literal))
+		})
+
+		// Unrestricted tree construction. Only compare when it is within
+		// the limit, which is when generate uses it.
+		treeCount, treeMax := h.treeBitCounts(list)
+		if treeMax > int(maxBits) {
+			continue
+		}
+		treeUsed++
+		treeCount = slices.Clone(treeCount)
+
+		// Reference: the length-limited construction.
+		ref := newHuffmanEncoder(size)
+		refCount := slices.Clone(ref.bitCounts(list, maxBits))
+
+		// assignEncodingAndSize reorders list, so give each call a copy.
+		tree := newHuffmanEncoder(size)
+		tree.assignEncodingAndSize(treeCount, slices.Clone(list), tree.codes)
+		gotBits := checkCode(t, freq, tree.codes, int(maxBits))
+		ref.assignEncodingAndSize(refCount, slices.Clone(list), ref.codes)
 		wantBits := checkCode(t, freq, ref.codes, int(maxBits))
 
 		if gotBits != wantBits {
-			t.Fatalf("iteration %d: generated code needs %d bits, length-limited construction needs %d", iter, gotBits, wantBits)
+			t.Fatalf("iteration %d: tree construction needs %d bits, length-limited construction needs %d", iter, gotBits, wantBits)
 		}
+
+		// generate must produce the same code as the tree construction.
+		h.generate(freq, maxBits)
+		if !slices.Equal(h.codes, tree.codes) {
+			t.Fatalf("iteration %d: generate produced a different code than treeBitCounts", iter)
+		}
+	}
+	if treeUsed == 0 {
+		t.Fatal("tree construction was never within the limit; nothing was tested")
 	}
 }
 
