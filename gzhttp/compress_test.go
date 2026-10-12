@@ -55,8 +55,13 @@ func TestParseEncodings(t *testing.T) {
 		t.Run(eg, func(t *testing.T) {
 			act, _ := parseEncodings(eg)
 			assertEqual(t, exp, act)
+			want, ok := exp["gzip"]
+			if !ok && exp["*"] > 0 {
+				// "*" matches gzip when gzip is not listed.
+				want = exp["*"]
+			}
 			gz := parseEncodingGzip(eg)
-			assertEqual(t, exp["gzip"], gz)
+			assertEqual(t, want, gz)
 		})
 	}
 }
@@ -2269,6 +2274,12 @@ func TestSelectEncodingFunction(t *testing.T) {
 		{"zstd-disabled", "gzip, zstd", true, false, true, encodingGzip},
 		{"both-disabled", "gzip, zstd", false, false, true, encodingNone},
 		{"accepts-neither", "br", true, true, true, encodingNone},
+		{"wildcard", "*", true, true, true, encodingZstd},
+		{"wildcard-gzip-only", "*", true, false, true, encodingGzip},
+		{"wildcard-refused", "*;q=0", true, true, true, encodingNone},
+		{"wildcard-explicit-refusal", "*, zstd;q=0", true, true, true, encodingGzip},
+		{"wildcard-explicit-refusal-first", "gzip;q=0, *", true, true, false, encodingZstd},
+		{"wildcard-lower-than-listed", "*;q=0.2, gzip;q=0.5", true, true, true, encodingGzip},
 	}
 
 	for _, tt := range tests {

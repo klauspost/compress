@@ -1081,8 +1081,11 @@ func selectEncoding(r *http.Request, gzipEnabled, zstdEnabled, preferZstd bool) 
 }
 
 // parseEncodingQValue returns the qvalue for a specific encoding.
+// An entry naming the encoding takes precedence over "*", which applies
+// only when the encoding is not listed (RFC 9110, section 12.5.3).
 func parseEncodingQValue(header, enc string) float64 {
 	header = strings.TrimSpace(header)
+	wildcard := -1.0
 	for len(header) > 0 {
 		stop := strings.IndexByte(header, ',')
 		if stop < 0 {
@@ -1092,10 +1095,16 @@ func parseEncodingQValue(header, enc string) float64 {
 		if coding == enc {
 			return qvalue
 		}
+		if coding == "*" && wildcard < 0 {
+			wildcard = qvalue
+		}
 		if stop == len(header) {
 			break
 		}
 		header = header[stop+1:]
+	}
+	if wildcard > 0 {
+		return wildcard
 	}
 	return 0
 }
@@ -1123,24 +1132,7 @@ func handleContentType(contentTypes []parsedContentType, ct string) bool {
 
 // parseEncodingGzip returns the qvalue of gzip compression.
 func parseEncodingGzip(s string) float64 {
-	s = strings.TrimSpace(s)
-
-	for len(s) > 0 {
-		stop := strings.IndexByte(s, ',')
-		if stop < 0 {
-			stop = len(s)
-		}
-		coding, qvalue, _ := parseCoding(s[:stop])
-
-		if coding == "gzip" {
-			return qvalue
-		}
-		if stop == len(s) {
-			break
-		}
-		s = s[stop+1:]
-	}
-	return 0
+	return parseEncodingQValue(s, "gzip")
 }
 
 func parseEncodings(s string) (codings, error) {
