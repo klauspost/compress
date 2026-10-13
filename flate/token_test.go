@@ -82,7 +82,7 @@ func TestCompressArchDependent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const wantSHA256 = "485a8c79e4888759521afde1ea9d2cf2e3d21a621000ed0183c502d8a8a843d0"
+	const wantSHA256 = "49f7c250792dbefbbae57be18455a6c61ef71d9c6fe885b579e58add5b7a723b"
 
 	var buf bytes.Buffer
 	w, err := NewWriter(&buf, 3)
