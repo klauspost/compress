@@ -622,7 +622,7 @@ func NewWrapper(opts ...option) (func(http.Handler) http.HandlerFunc, error) {
 				r.Body = &gzipReader{body: r.Body}
 			}
 
-			enc := selectEncoding(r, c.gzipEnabled, c.zstdEnabled, c.preferZstd)
+			enc := selectEncoding(r, c.gzipEnabled, c.zstdEnabled, c.preferZstd, c.acceptWildcards)
 			if enc != encodingNone {
 				gw := grwPool.Get().(*GzipResponseWriter)
 				*gw = GzipResponseWriter{
@@ -717,6 +717,8 @@ type config struct {
 	zstdWriter  writer.ZstdWriterFactory
 	preferZstd  bool
 	gzipEnabled bool
+
+	acceptWildcards bool
 }
 
 func (c *config) validate() error {
@@ -834,6 +836,17 @@ func ZstdImplementation(zw writer.ZstdWriterFactory) option {
 func PreferZstd(prefer bool) option {
 	return func(c *config) {
 		c.preferZstd = prefer
+	}
+}
+
+// AcceptWildcards sets whether a "*" entry in Accept-Encoding selects
+// gzip or zstd when the encoding is not listed by name.
+// RFC 9110 allows this, but many servers ignore "*", and clients that send
+// it often expect raw bytes, so it is disabled by default.
+// Use PreferZstd(false) to answer "*" with gzip rather than zstd.
+func AcceptWildcards(b bool) option {
+	return func(c *config) {
+		c.acceptWildcards = b
 	}
 }
 
@@ -1033,7 +1046,7 @@ func acceptsGzip(r *http.Request) bool {
 }
 
 // selectEncoding determines the best encoding based on Accept-Encoding header.
-func selectEncoding(r *http.Request, gzipEnabled, zstdEnabled, preferZstd bool) encoding {
+func selectEncoding(r *http.Request, gzipEnabled, zstdEnabled, preferZstd, acceptWildcards bool) encoding {
 	// Don't compress HEAD requests due to nginx bug.
 	if r.Method == http.MethodHead {
 		return encodingNone
@@ -1044,8 +1057,8 @@ func selectEncoding(r *http.Request, gzipEnabled, zstdEnabled, preferZstd bool) 
 		return encodingNone
 	}
 
-	gzipQ := parseEncodingQValue(ae, "gzip")
-	zstdQ := parseEncodingQValue(ae, "zstd")
+	gzipQ := parseEncodingQValue(ae, "gzip", acceptWildcards)
+	zstdQ := parseEncodingQValue(ae, "zstd", acceptWildcards)
 
 	// Neither accepted
 	if (!gzipEnabled || gzipQ <= 0) && (!zstdEnabled || zstdQ <= 0) {
@@ -1081,11 +1094,12 @@ func selectEncoding(r *http.Request, gzipEnabled, zstdEnabled, preferZstd bool) 
 }
 
 // parseEncodingQValue returns the qvalue for a specific encoding.
-// An entry naming the encoding takes precedence over "*", which applies
-// only when the encoding is not listed (RFC 9110, section 12.5.3).
-func parseEncodingQValue(header, enc string) float64 {
+// If wildcard is true, a "*" entry applies when the encoding is not listed
+// by name; an entry naming the encoding always takes precedence
+// (RFC 9110, section 12.5.3).
+func parseEncodingQValue(header, enc string, wildcard bool) float64 {
 	header = strings.TrimSpace(header)
-	wildcard := -1.0
+	wildcardQ := -1.0
 	for len(header) > 0 {
 		stop := strings.IndexByte(header, ',')
 		if stop < 0 {
@@ -1095,16 +1109,16 @@ func parseEncodingQValue(header, enc string) float64 {
 		if coding == enc {
 			return qvalue
 		}
-		if coding == "*" && wildcard < 0 {
-			wildcard = qvalue
+		if wildcard && coding == "*" && wildcardQ < 0 {
+			wildcardQ = qvalue
 		}
 		if stop == len(header) {
 			break
 		}
 		header = header[stop+1:]
 	}
-	if wildcard > 0 {
-		return wildcard
+	if wildcardQ > 0 {
+		return wildcardQ
 	}
 	return 0
 }
@@ -1132,7 +1146,7 @@ func handleContentType(contentTypes []parsedContentType, ct string) bool {
 
 // parseEncodingGzip returns the qvalue of gzip compression.
 func parseEncodingGzip(s string) float64 {
-	return parseEncodingQValue(s, "gzip")
+	return parseEncodingQValue(s, "gzip", false)
 }
 
 func parseEncodings(s string) (codings, error) {

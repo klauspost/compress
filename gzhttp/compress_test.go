@@ -55,13 +55,8 @@ func TestParseEncodings(t *testing.T) {
 		t.Run(eg, func(t *testing.T) {
 			act, _ := parseEncodings(eg)
 			assertEqual(t, exp, act)
-			want, ok := exp["gzip"]
-			if !ok && exp["*"] > 0 {
-				// "*" matches gzip when gzip is not listed.
-				want = exp["*"]
-			}
 			gz := parseEncodingGzip(eg)
-			assertEqual(t, want, gz)
+			assertEqual(t, exp["gzip"], gz)
 		})
 	}
 }
@@ -2274,12 +2269,7 @@ func TestSelectEncodingFunction(t *testing.T) {
 		{"zstd-disabled", "gzip, zstd", true, false, true, encodingGzip},
 		{"both-disabled", "gzip, zstd", false, false, true, encodingNone},
 		{"accepts-neither", "br", true, true, true, encodingNone},
-		{"wildcard", "*", true, true, true, encodingZstd},
-		{"wildcard-gzip-only", "*", true, false, true, encodingGzip},
-		{"wildcard-refused", "*;q=0", true, true, true, encodingNone},
-		{"wildcard-explicit-refusal", "*, zstd;q=0", true, true, true, encodingGzip},
-		{"wildcard-explicit-refusal-first", "gzip;q=0, *", true, true, false, encodingZstd},
-		{"wildcard-lower-than-listed", "*;q=0.2, gzip;q=0.5", true, true, true, encodingGzip},
+		{"wildcard-ignored-by-default", "*", true, true, true, encodingNone},
 	}
 
 	for _, tt := range tests {
@@ -2288,11 +2278,69 @@ func TestSelectEncodingFunction(t *testing.T) {
 			if tt.acceptEnc != "" {
 				req.Header.Set("Accept-Encoding", tt.acceptEnc)
 			}
-			got := selectEncoding(req, tt.gzipEnabled, tt.zstdEnabled, tt.preferZstd)
+			got := selectEncoding(req, tt.gzipEnabled, tt.zstdEnabled, tt.preferZstd, false)
 			if got != tt.want {
 				t.Errorf("selectEncoding() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestSelectEncodingAcceptWildcards(t *testing.T) {
+	tests := []struct {
+		name        string
+		acceptEnc   string
+		gzipEnabled bool
+		zstdEnabled bool
+		preferZstd  bool
+		want        encoding
+	}{
+		{"wildcard", "*", true, true, true, encodingZstd},
+		{"wildcard-prefer-gzip", "*", true, true, false, encodingGzip},
+		{"wildcard-gzip-only", "*", true, false, true, encodingGzip},
+		{"wildcard-refused", "*;q=0", true, true, true, encodingNone},
+		{"wildcard-explicit-refusal", "*, zstd;q=0", true, true, true, encodingGzip},
+		{"wildcard-explicit-refusal-first", "gzip;q=0, *", true, true, false, encodingZstd},
+		{"wildcard-lower-than-listed", "*;q=0.2, gzip;q=0.5", true, true, true, encodingGzip},
+		{"listed-without-wildcard", "gzip, zstd", true, true, true, encodingZstd},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, _ := http.NewRequest("GET", "/", nil)
+			req.Header.Set("Accept-Encoding", tt.acceptEnc)
+			got := selectEncoding(req, tt.gzipEnabled, tt.zstdEnabled, tt.preferZstd, true)
+			if got != tt.want {
+				t.Errorf("selectEncoding() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAcceptWildcardsOption(t *testing.T) {
+	body := strings.Repeat("hello world ", 200)
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(body))
+	})
+	for _, tc := range []struct {
+		opts []option
+		want string
+	}{
+		{nil, ""},
+		{[]option{AcceptWildcards(true)}, "zstd"},
+		{[]option{AcceptWildcards(true), PreferZstd(false)}, "gzip"},
+	} {
+		wrap, err := NewWrapper(tc.opts...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest("GET", "/", nil)
+		req.Header.Set("Accept-Encoding", "*")
+		rec := httptest.NewRecorder()
+		wrap(h).ServeHTTP(rec, req)
+		if got := rec.Header().Get("Content-Encoding"); got != tc.want {
+			t.Errorf("Content-Encoding = %q, want %q", got, tc.want)
+		}
 	}
 }
 
