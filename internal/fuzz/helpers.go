@@ -65,13 +65,9 @@ func AddFromZip(f *testing.F, filename string, t InputType, short bool) {
 		rc.Close()
 		t := t
 		if t == TypeOSSFuzz {
-			t = TypeRaw // Fallback
-			if len(b) >= 4 {
-				sz := binary.BigEndian.Uint32(b)
-				if sz <= uint32(len(b))-4 {
-					f.Add(b[4 : 4+sz])
-					continue
-				}
+			if v, ok := ossFuzzBytes(b); ok {
+				f.Add(v)
+				continue
 			}
 		}
 
@@ -126,13 +122,9 @@ func ReturnFromZip(tb testing.TB, filename string, t InputType, fn func([]byte))
 		rc.Close()
 		t := t
 		if t == TypeOSSFuzz {
-			t = TypeRaw // Fallback
-			if len(b) >= 4 {
-				sz := binary.BigEndian.Uint32(b)
-				if sz <= uint32(len(b))-4 {
-					fn(b[4 : 4+sz])
-					continue
-				}
+			if v, ok := ossFuzzBytes(b); ok {
+				fn(v)
+				continue
 			}
 		}
 
@@ -154,6 +146,22 @@ func ReturnFromZip(tb testing.TB, filename string, t InputType, fn func([]byte))
 			fn(v)
 		}
 	}
+}
+
+// ossFuzzBytes returns the []byte that OSS-Fuzz's Go harness passes to the
+// fuzz function for input b, as decoded by go-fuzz-headers' GetBytes.
+func ossFuzzBytes(b []byte) ([]byte, bool) {
+	if len(b) <= 4 {
+		return nil, false
+	}
+	sz := binary.BigEndian.Uint32(b)
+	if sz == 0 {
+		sz = 30
+	}
+	if left := uint32(len(b) - 4); sz != left {
+		sz %= left
+	}
+	return b[4 : 4+sz], true
 }
 
 // unmarshalCorpusFile decodes corpus bytes into their respective values.
