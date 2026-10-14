@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -183,6 +184,24 @@ func TestWriteBlockDynamic(t *testing.T) {
 func TestWriteBlockDynamicSync(t *testing.T) {
 	for _, test := range writeBlockTests {
 		testBlock(t, test, "sync")
+	}
+}
+
+// TestWriteBlockHuffEOF checks that a final block doesn't reuse the table of
+// a non-final block that is still open.
+func TestWriteBlockHuffEOF(t *testing.T) {
+	want := bytes.Repeat([]byte("aaab"), 500)
+	var b bytes.Buffer
+	w := newHuffmanBitWriter(&b)
+	w.writeBlockHuff(false, want[:1000], false)
+	w.writeBlockHuff(true, want[1000:], true)
+	w.flush()
+	got, err := io.ReadAll(NewReader(&b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatal("round trip mismatch")
 	}
 }
 

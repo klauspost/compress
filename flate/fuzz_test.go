@@ -28,6 +28,7 @@ func FuzzEncoding(f *testing.F) {
 	fuzz.AddFromZip(f, "testdata/regression.zip", fuzz.TypeRaw, false)
 	fuzz.AddFromZip(f, "testdata/fuzz/encode-raw-corpus.zip", fuzz.TypeRaw, testing.Short())
 	fuzz.AddFromZip(f, "testdata/fuzz/FuzzEncoding.zip", fuzz.TypeGoFuzz, testing.Short())
+	fuzz.AddFromZip(f, "testdata/fuzz/encode-oss-corpus.zip", fuzz.TypeOSSFuzz, testing.Short())
 
 	startFuzz := *fuzzStartF
 	endFuzz := *fuzzEndF
