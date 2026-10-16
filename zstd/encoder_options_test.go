@@ -236,3 +236,44 @@ func TestEncoderDictDelete(t *testing.T) {
 		t.Error("dict should be nil after delete")
 	}
 }
+
+func TestEncoderResetWithOptionsErrorPreservesStream(t *testing.T) {
+	var buf, unused bytes.Buffer
+	enc, err := NewWriter(&buf, WithEncoderConcurrency(1), WithEncoderCRC(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer enc.Close()
+	first := bytes.Repeat([]byte("first log batch\n"), 1000)
+	second := bytes.Repeat([]byte("second log batch\n"), 1000)
+	if _, err := enc.Write(first); err != nil {
+		t.Fatal(err)
+	}
+	if err := enc.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if err := enc.ResetWithOptions(&unused, WithEncoderCRC(false), WithEncoderConcurrency(2)); err == nil {
+		t.Fatal("expected changing concurrency to fail")
+	}
+	if _, err := enc.Write(second); err != nil {
+		t.Fatal(err)
+	}
+	if err := enc.Close(); err != nil {
+		t.Fatal(err)
+	}
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	got, err := dec.DecodeAll(buf.Bytes(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, append(first, second...)) {
+		t.Fatal("stream changed after a rejected reset")
+	}
+	if unused.Len() != 0 {
+		t.Fatal("rejected reset wrote to the new destination")
+	}
+}
