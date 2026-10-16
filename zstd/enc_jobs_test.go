@@ -25,6 +25,111 @@ func (w *countWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+type resetBlockedWriter struct {
+	bytes.Buffer
+	writes  int
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (w *resetBlockedWriter) Write(p []byte) (int, error) {
+	w.writes++
+	if w.writes == 2 {
+		close(w.entered)
+		<-w.release
+	}
+	return w.Buffer.Write(p)
+}
+
+func TestEncoderResetWithOptionsPendingWrites(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		parallel bool
+		dict     bool
+	}{
+		{name: "blocks-dictionary", dict: true},
+		{name: "jobs-checksum", parallel: true},
+		{name: "jobs-dictionary", parallel: true, dict: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			old := &resetBlockedWriter{entered: make(chan struct{}), release: make(chan struct{})}
+			var release sync.Once
+			unblock := func() { release.Do(func() { close(old.release) }) }
+			defer unblock()
+			enc, err := NewWriter(old, WithEncoderConcurrency(2), WithWindowSize(128<<10), WithConcurrentBlocks(tc.parallel))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(enc.shutdownJobWorkers)
+			size := enc.o.blockSize
+			if tc.parallel {
+				size = 2 * enc.o.jobSize()
+			}
+			if _, err := enc.Write(bytes.Repeat([]byte("a"), size)); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case <-old.entered:
+			case <-time.After(5 * time.Second):
+				t.Fatal("old stream did not reach the blocked write")
+			}
+
+			var next bytes.Buffer
+			dict := []byte("new log stream dictionary")
+			opts := []EOption{WithEncoderCRC(false)}
+			if tc.dict {
+				opts = append(opts, WithEncoderDictRaw(42, dict))
+			}
+			resetDone := make(chan error, 1)
+			go func() { resetDone <- enc.ResetWithOptions(&next, opts...) }()
+			var resetErr error
+			early := false
+			select {
+			case resetErr = <-resetDone:
+				early = true
+			case <-time.After(100 * time.Millisecond):
+			}
+			unblock()
+			if !early {
+				select {
+				case resetErr = <-resetDone:
+				case <-time.After(5 * time.Second):
+					t.Fatal("reset did not finish after releasing the old writer")
+				}
+			}
+			if resetErr != nil {
+				t.Fatal(resetErr)
+			}
+			enc.waitAllJobs()
+			if early {
+				t.Error("reset returned while the old writer was still in use")
+			}
+			if enc.state.jobs.started {
+				t.Error("reset left the old compression workers running")
+			}
+			input := bytes.Repeat([]byte("new log stream dictionary: value\n"), 100)
+			if _, err := enc.Write(input); err != nil {
+				t.Fatal(err)
+			}
+			if err := enc.Close(); err != nil {
+				t.Fatal(err)
+			}
+			dec, err := NewReader(nil, WithDecoderConcurrency(1), WithDecoderDictRaw(42, dict))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer dec.Close()
+			got, err := dec.DecodeAll(next.Bytes(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, input) {
+				t.Fatal("new stream contains data from the old writer")
+			}
+		})
+	}
+}
+
 // getConcBlockOpts generates option combinations for concurrent blocks testing.
 // Similar to getEncOpts but always includes WithConcurrentBlocks(true).
 func getConcBlockOpts(cMax int) []testEncOpt {
