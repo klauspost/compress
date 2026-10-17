@@ -11,6 +11,7 @@ import (
 	"io"
 	"math/rand"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -28,6 +29,9 @@ func TestEmpty(t *testing.T) {
 	r, err := NewReader(buf)
 	if err != nil {
 		t.Fatalf("NewReader: %v", err)
+	}
+	if want := (Header{OS: 255}); !reflect.DeepEqual(r.Header, want) {
+		t.Errorf("Header mismatch:\ngot  %#v\nwant %#v", r.Header, want)
 	}
 	b, err := io.ReadAll(r)
 	if err != nil {

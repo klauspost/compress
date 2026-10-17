@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"time"
 
 	"github.com/klauspost/compress/flate"
 )
@@ -189,7 +190,11 @@ func (z *Writer) Write(p []byte) (int, error) {
 		if z.Comment != "" {
 			z.buf[3] |= 0x10
 		}
-		le.PutUint32(z.buf[4:8], uint32(z.ModTime.Unix()))
+		if z.ModTime.After(time.Unix(0, 0)) {
+			// Section 2.3.1, the zero value for MTIME means that the
+			// modified time is not set.
+			le.PutUint32(z.buf[4:8], uint32(z.ModTime.Unix()))
+		}
 		if z.level == BestCompression {
 			z.buf[8] = 2
 		} else if z.level == BestSpeed {
