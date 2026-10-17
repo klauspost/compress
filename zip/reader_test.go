@@ -2069,3 +2069,81 @@ func TestNameDecoderError(t *testing.T) {
 		t.Errorf("NewReaderWithOptions err = %v, want %v", err, wantErr)
 	}
 }
+
+// TestReaderInfoZIPMaxUint32Fields checks archives written by Info-ZIP 3.0
+// where a 32-bit size or header offset is exactly 0xFFFFFFFF. Info-ZIP stores
+// such values directly, without a Zip64 extra field.
+func TestReaderInfoZIPMaxUint32Fields(t *testing.T) {
+	type wantFile struct {
+		name       string
+		size       uint64
+		dataOffset int64
+		content    []byte // checked if non-nil
+	}
+	tests := []struct {
+		golden string
+		files  []wantFile
+	}{
+		{
+			// Stored entry of 4GiB-1 bytes: CompressedSize and
+			// UncompressedSize are both 0xFFFFFFFF.
+			golden: "infozip-store-4g-minus-1",
+			files: []wantFile{
+				{name: "big4g-1.bin", size: 1<<32 - 1, dataOffset: 41},
+			},
+		},
+		{
+			// The second local file header starts at offset 0xFFFFFFFF.
+			golden: "infozip-offset-eq-4g",
+			files: []wantFile{
+				{name: "first", size: 1<<32 - 36, dataOffset: 35},
+				{name: "small.bin", size: 42, dataOffset: 1<<32 + 38, content: make([]byte, 42)},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.golden, func(t *testing.T) {
+			sf, err := readSparseFile(filepath.Join("testdata", "zip64", test.golden+".zsparse"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			r, err := NewReader(sf, sf.Size)
+			if err != nil {
+				t.Fatalf("NewReader: %v", err)
+			}
+			if len(r.File) != len(test.files) {
+				t.Fatalf("got %d files, want %d", len(r.File), len(test.files))
+			}
+			for i, want := range test.files {
+				f := r.File[i]
+				if f.Name != want.name {
+					t.Errorf("file %d: name = %q, want %q", i, f.Name, want.name)
+				}
+				if f.CompressedSize64 != want.size || f.UncompressedSize64 != want.size {
+					t.Errorf("%s: sizes = %d/%d, want %d", f.Name, f.CompressedSize64, f.UncompressedSize64, want.size)
+				}
+				off, err := f.DataOffset()
+				if err != nil {
+					t.Errorf("%s: DataOffset: %v", f.Name, err)
+				} else if off != want.dataOffset {
+					t.Errorf("%s: DataOffset = %d, want %d", f.Name, off, want.dataOffset)
+				}
+				if want.content == nil {
+					continue
+				}
+				rc, err := f.Open()
+				if err != nil {
+					t.Fatalf("%s: Open: %v", f.Name, err)
+				}
+				got, err := io.ReadAll(rc)
+				rc.Close()
+				if err != nil {
+					t.Fatalf("%s: read: %v", f.Name, err)
+				}
+				if !bytes.Equal(got, want.content) {
+					t.Errorf("%s: content = %q, want %q", f.Name, got, want.content)
+				}
+			}
+		})
+	}
+}
