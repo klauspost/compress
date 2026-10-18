@@ -583,20 +583,41 @@ func TestNilStream(t *testing.T) {
 }
 
 func TestTruncatedStreams(t *testing.T) {
-	const data = "\x1f\x8b\b\x04\x00\tn\x88\x00\xff\a\x00foo bar\xcbH\xcd\xc9\xc9\xd7Q(\xcf/\xcaI\x01\x04:r\xab\xff\f\x00\x00\x00"
+	const original = "\x1f\x8b\b\x04\x00\tn\x88\x00\xff\a\x00foo bar\xcbH\xcd\xc9\xc9\xd7Q(\xcf/\xcaI\x01\x04:r\xab\xff\f\x00\x00\x00"
+
+	cases := []struct {
+		name   string
+		prefix string // complete members before the truncated one
+		data   string
+	}{
+		{name: "original", data: original},
+		{name: "truncated name", data: "\x1f\x8b\x08\x08\x00\x00\x00\x00\x00\xff\x01"},
+		{name: "truncated comment", data: "\x1f\x8b\x08\x10\x00\x00\x00\x00\x00\xff\x01"},
+		{name: "second member truncated name", prefix: original, data: "\x1f\x8b\x08\x08\x00\x00\x00\x00\x00\xff\x01"},
+	}
 
 	// Intentionally iterate starting with at least one byte in the stream.
-	for i := 1; i < len(data)-1; i++ {
-		r, err := NewReader(strings.NewReader(data[:i]))
-		if err != nil {
-			if err != io.ErrUnexpectedEOF {
-				t.Errorf("NewReader(%d) on truncated stream: got %v, want %v", i, err, io.ErrUnexpectedEOF)
+	for _, tc := range cases {
+		for i := 1; i < len(tc.data); i++ {
+			r, err := NewReader(strings.NewReader(tc.prefix + tc.data[:i]))
+			if err != nil {
+				if err != io.ErrUnexpectedEOF {
+					t.Errorf("NewReader(%s-%d) on truncated stream: got %v, want %v", tc.name, i, err, io.ErrUnexpectedEOF)
+				}
+				continue
 			}
-			continue
-		}
-		_, err = io.Copy(io.Discard, r)
-		if err != io.ErrUnexpectedEOF {
-			t.Errorf("io.Copy(%d) on truncated stream: got %v, want %v", i, err, io.ErrUnexpectedEOF)
+			// io.Copy uses Reader.WriteTo.
+			_, err = io.Copy(io.Discard, r)
+			if err != io.ErrUnexpectedEOF {
+				t.Errorf("io.Copy(%s-%d) on truncated stream: got %v, want %v", tc.name, i, err, io.ErrUnexpectedEOF)
+			}
+			if err := r.Reset(strings.NewReader(tc.prefix + tc.data[:i])); err != nil {
+				t.Fatalf("Reset(%s-%d): %v", tc.name, i, err)
+			}
+			_, err = io.ReadAll(struct{ io.Reader }{r})
+			if err != io.ErrUnexpectedEOF {
+				t.Errorf("Read(%s-%d) on truncated stream: got %v, want %v", tc.name, i, err, io.ErrUnexpectedEOF)
+			}
 		}
 	}
 }
