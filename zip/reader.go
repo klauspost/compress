@@ -444,10 +444,6 @@ func readDirectoryHeader(f *File, r io.Reader) error {
 		f.NonUTF8 = f.Flags&0x800 == 0
 	}
 
-	needUSize := f.UncompressedSize == ^uint32(0)
-	needCSize := f.CompressedSize == ^uint32(0)
-	needHeaderOffset := f.headerOffset == int64(^uint32(0))
-
 	// Best effort to find what we need.
 	// Other zip authors might not even follow the basic format,
 	// and we'll just ignore the Extra content in that case.
@@ -469,22 +465,19 @@ parseExtras:
 			// They should only be consulted if the sizes read earlier
 			// are maxed out.
 			// See golang.org/issue/13367.
-			if needUSize {
-				needUSize = false
+			if f.UncompressedSize == ^uint32(0) {
 				if len(fieldBuf) < 8 {
 					return ErrFormat
 				}
 				f.UncompressedSize64 = fieldBuf.uint64()
 			}
-			if needCSize {
-				needCSize = false
+			if f.CompressedSize == ^uint32(0) {
 				if len(fieldBuf) < 8 {
 					return ErrFormat
 				}
 				f.CompressedSize64 = fieldBuf.uint64()
 			}
-			if needHeaderOffset {
-				needHeaderOffset = false
+			if f.headerOffset == int64(^uint32(0)) {
 				if len(fieldBuf) < 8 {
 					return ErrFormat
 				}
@@ -545,20 +538,6 @@ parseExtras:
 		if f.ModifiedTime != 0 || f.ModifiedDate != 0 {
 			f.Modified = modified.In(timeZone(msdosModified.Sub(modified)))
 		}
-	}
-
-	// Assume that uncompressed size 2³²-1 could plausibly happen in
-	// an old zip32 file that was sharding inputs into the largest chunks
-	// possible (or is just malicious; search the web for 42.zip).
-	// If needUSize is true still, it means we didn't see a zip64 extension.
-	// As long as the compressed size is not also 2³²-1 (implausible)
-	// and the header is not also 2³²-1 (equally implausible),
-	// accept the uncompressed size 2³²-1 as valid.
-	// If nothing else, this keeps archive/zip working with 42.zip.
-	_ = needUSize
-
-	if needCSize || needHeaderOffset {
-		return ErrFormat
 	}
 
 	return nil
