@@ -279,6 +279,21 @@ func TestLimitedWrite(t *testing.T) {
 	}
 }
 
+// shortWriter reports writing fewer bytes than it was given, without an error.
+type shortWriter struct{}
+
+func (shortWriter) Write(p []byte) (int, error) {
+	return len(p) / 2, nil
+}
+
+func TestShortHeaderWrite(t *testing.T) {
+	z := NewWriter(shortWriter{})
+	n, err := z.Write([]byte("a"))
+	if n != 0 || err != io.ErrShortWrite {
+		t.Errorf("Write() = %d, %v, want 0, %v", n, err, io.ErrShortWrite)
+	}
+}
+
 var testbuf []byte
 
 func testFile(i, level int, t *testing.T) {

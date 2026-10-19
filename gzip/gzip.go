@@ -203,7 +203,10 @@ func (z *Writer) Write(p []byte) (int, error) {
 			z.buf[8] = 0
 		}
 		z.buf[9] = z.OS
-		_, z.err = z.w.Write(z.buf[:10])
+		n, z.err = z.w.Write(z.buf[:10])
+		if z.err == nil && n != 10 {
+			z.err = io.ErrShortWrite
+		}
 		if z.err != nil {
 			return 0, z.err
 		}
