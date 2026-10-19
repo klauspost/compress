@@ -279,18 +279,40 @@ func TestLimitedWrite(t *testing.T) {
 	}
 }
 
-// shortWriter reports writing fewer bytes than it was given, without an error.
-type shortWriter struct{}
+// shortWriter writes the first ok writes in full, then reports writing
+// fewer bytes than it was given, without an error.
+type shortWriter struct{ ok int }
 
-func (shortWriter) Write(p []byte) (int, error) {
+func (w *shortWriter) Write(p []byte) (int, error) {
+	if w.ok > 0 {
+		w.ok--
+		return len(p), nil
+	}
 	return len(p) / 2, nil
 }
 
 func TestShortHeaderWrite(t *testing.T) {
-	z := NewWriter(shortWriter{})
-	n, err := z.Write([]byte("a"))
-	if n != 0 || err != io.ErrShortWrite {
-		t.Errorf("Write() = %d, %v, want 0, %v", n, err, io.ErrShortWrite)
+	for _, tc := range []struct {
+		name   string
+		header Header
+	}{
+		{name: "fixed", header: Header{}},
+		{name: "extra", header: Header{Extra: []byte("extra")}},
+		{name: "name", header: Header{Name: "name"}},
+		{name: "comment", header: Header{Comment: "comment"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ok := 1 // the 10-byte fixed header
+			if tc.name == "fixed" {
+				ok = 0
+			}
+			z := NewWriter(&shortWriter{ok: ok})
+			z.Header = tc.header
+			n, err := z.Write([]byte("a"))
+			if n != 0 || err != io.ErrShortWrite {
+				t.Errorf("Write() = %d, %v, want 0, %v", n, err, io.ErrShortWrite)
+			}
+		})
 	}
 }
 
