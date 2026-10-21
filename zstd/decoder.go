@@ -365,8 +365,12 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 		if debugDecoder {
 			printf("re-adding decoder: %p", block)
 		}
+		block.data = nil
 		frame.rawInput = nil
 		frame.bBuf = nil
+		frame.history.b = nil
+		frame.history.decoders.literals = nil
+		frame.history.decoders.out = nil
 		if frame.history.decoders.br != nil {
 			frame.history.decoders.br.in = nil
 			frame.history.decoders.br.cursor = 0
