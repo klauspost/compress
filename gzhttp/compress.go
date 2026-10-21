@@ -496,16 +496,23 @@ func (w *GzipResponseWriter) writeZstdSkippableFrame(data []byte) error {
 }
 
 // Flush flushes the underlying compression writer and then the underlying
-// http.ResponseWriter if it is an http.Flusher. This makes GzipResponseWriter
-// an http.Flusher.
+// http.ResponseWriter, using http.ResponseController so writers that only
+// expose Unwrap are flushed too. This makes GzipResponseWriter an http.Flusher.
 // If not enough bytes has been written to determine if we have reached minimum size,
 // this will be ignored.
 // If nothing has been written yet, nothing will be flushed.
 func (w *GzipResponseWriter) Flush() {
+	_ = w.FlushError()
+}
+
+// FlushError is like Flush, but returns the error from flushing the encoder
+// or the underlying http.ResponseWriter.
+// http.ResponseController uses it in preference to Flush.
+func (w *GzipResponseWriter) FlushError() error {
 	if w.gw == nil && w.zw == nil && !w.ignore {
 		if len(w.buf) == 0 {
 			// Nothing written yet.
-			return
+			return nil
 		}
 		var (
 			cl, _ = atoi(w.Header().Get(contentLength))
@@ -538,24 +545,24 @@ func (w *GzipResponseWriter) Flush() {
 	}
 
 	if w.gw != nil {
-		w.gw.Flush()
+		if err := w.gw.Flush(); err != nil {
+			return err
+		}
 	}
 	if w.zw != nil {
-		w.zw.Flush()
+		if err := w.zw.Flush(); err != nil {
+			return err
+		}
 	}
 
-	if fw, ok := w.ResponseWriter.(http.Flusher); ok {
-		fw.Flush()
-	}
+	return http.NewResponseController(w.ResponseWriter).Flush()
 }
 
-// Hijack implements http.Hijacker. If the underlying ResponseWriter is a
-// Hijacker, its Hijack method is returned. Otherwise an error is returned.
+// Hijack implements http.Hijacker. It hijacks the underlying ResponseWriter
+// through http.ResponseController, which also follows Unwrap.
+// http.ErrNotSupported is returned if nothing underneath supports it.
 func (w *GzipResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	if hj, ok := w.ResponseWriter.(http.Hijacker); ok {
-		return hj.Hijack()
-	}
-	return nil, nil, fmt.Errorf("http.Hijacker interface is not supported")
+	return http.NewResponseController(w.ResponseWriter).Hijack()
 }
 
 // verify Hijacker interface implementation
@@ -1325,13 +1332,17 @@ func (n *NoGzipResponseWriter) CloseNotify() <-chan bool {
 }
 
 func (n *NoGzipResponseWriter) Flush() {
+	_ = n.FlushError()
+}
+
+// FlushError is like Flush, but returns the error from flushing the
+// underlying http.ResponseWriter.
+func (n *NoGzipResponseWriter) FlushError() error {
 	if !n.hdrCleaned {
 		n.ResponseWriter.Header().Del(HeaderNoCompression)
 		n.hdrCleaned = true
 	}
-	if f, ok := n.ResponseWriter.(http.Flusher); ok {
-		f.Flush()
-	}
+	return http.NewResponseController(n.ResponseWriter).Flush()
 }
 
 func (n *NoGzipResponseWriter) Header() http.Header {

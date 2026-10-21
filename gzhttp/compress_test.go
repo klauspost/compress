@@ -1,8 +1,10 @@
 package gzhttp
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -759,6 +761,140 @@ func (m *mockRWCloseNotify) Write([]byte) (int, error) {
 
 func (m *mockRWCloseNotify) WriteHeader(int) {
 	panic("implement me")
+}
+
+// unwrapOnlyWriter exposes the wrapped writer only through Unwrap,
+// not through http.Flusher or http.Hijacker.
+type unwrapOnlyWriter struct {
+	http.ResponseWriter
+}
+
+func (u unwrapOnlyWriter) Unwrap() http.ResponseWriter {
+	return u.ResponseWriter
+}
+
+type hijackRecorder struct {
+	*httptest.ResponseRecorder
+	hijacked bool
+}
+
+func (h *hijackRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	h.hijacked = true
+	return nil, nil, nil
+}
+
+// noFlushWriter supports neither flushing nor Unwrap.
+type noFlushWriter struct {
+	header http.Header
+	err    error
+}
+
+func (n *noFlushWriter) Header() http.Header {
+	return n.header
+}
+
+func (n *noFlushWriter) Write(b []byte) (int, error) {
+	if n.err != nil {
+		return 0, n.err
+	}
+	return len(b), nil
+}
+
+func (n *noFlushWriter) WriteHeader(int) {}
+
+func TestFlushThroughUnwrap(t *testing.T) {
+	tests := []struct {
+		name           string
+		acceptEncoding string
+		noCompression  bool
+		wantEncoding   string
+	}{
+		{name: "compressed", acceptEncoding: "gzip", wantEncoding: "gzip"},
+		{name: "plain", acceptEncoding: "gzip", noCompression: true},
+		{name: "no accept-encoding"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			flushed := false
+			handler := GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tt.noCompression {
+					w.Header().Set(HeaderNoCompression, "1")
+				}
+				w.Write(testBody)
+				w.(http.Flusher).Flush()
+				flushed = rec.Flushed
+			}))
+			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			r.Header.Set(acceptEncoding, tt.acceptEncoding)
+			handler.ServeHTTP(unwrapOnlyWriter{rec}, r)
+
+			assertEqual(t, true, flushed)
+			assertEqual(t, tt.wantEncoding, rec.Header().Get(contentEncoding))
+		})
+	}
+}
+
+func TestFlushError(t *testing.T) {
+	writeErr := errors.New("write failed")
+	tests := []struct {
+		name           string
+		acceptEncoding string
+		noCompression  bool
+		writeErr       error
+		wantErr        error
+	}{
+		{name: "compressed, not supported", acceptEncoding: "gzip", wantErr: http.ErrNotSupported},
+		{name: "plain, not supported", acceptEncoding: "gzip", noCompression: true, wantErr: http.ErrNotSupported},
+		{name: "no accept-encoding, not supported", wantErr: http.ErrNotSupported},
+		{name: "compressed, write error", acceptEncoding: "gzip", writeErr: writeErr, wantErr: writeErr},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var err error
+			handler := GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tt.noCompression {
+					w.Header().Set(HeaderNoCompression, "1")
+				}
+				w.Write(testBody)
+				err = http.NewResponseController(w).Flush()
+			}))
+			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			r.Header.Set(acceptEncoding, tt.acceptEncoding)
+			handler.ServeHTTP(&noFlushWriter{header: http.Header{}, err: tt.writeErr}, r)
+
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("want %v, got %v", tt.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestHijackThroughUnwrap(t *testing.T) {
+	rec := &hijackRecorder{ResponseRecorder: httptest.NewRecorder()}
+	handler := GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _, err := w.(http.Hijacker).Hijack()
+		assertNil(t, err)
+	}))
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Header.Set(acceptEncoding, "gzip")
+	handler.ServeHTTP(unwrapOnlyWriter{rec}, r)
+
+	assertEqual(t, true, rec.hijacked)
+}
+
+func TestHijackNotSupported(t *testing.T) {
+	var err error
+	handler := GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _, err = w.(http.Hijacker).Hijack()
+	}))
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Header.Set(acceptEncoding, "gzip")
+	handler.ServeHTTP(unwrapOnlyWriter{httptest.NewRecorder()}, r)
+
+	if !errors.Is(err, http.ErrNotSupported) {
+		t.Fatalf("want %v, got %v", http.ErrNotSupported, err)
+	}
 }
 
 func TestIgnoreSubsequentWriteHeader(t *testing.T) {
