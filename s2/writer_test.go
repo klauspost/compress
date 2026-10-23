@@ -12,7 +12,9 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/klauspost/compress/internal/snapref"
 	"github.com/klauspost/compress/zip"
@@ -616,6 +618,84 @@ func TestWriterBufferDone(t *testing.T) {
 	}
 	if cbErr != nil {
 		t.Fatal(cbErr)
+	}
+}
+
+func TestWriterReadFromConsumesBuffer(t *testing.T) {
+	for _, concurrency := range []int{1, 2, 4} {
+		for _, size := range []int{0, 37, 8193} {
+			for _, prefix := range []string{"", "already read"} {
+				t.Run(fmt.Sprintf("c%d/size%d/prefix%d", concurrency, size, len(prefix)), func(t *testing.T) {
+					data := bytes.Repeat([]byte("x"), size)
+					source := bytes.NewBuffer(append([]byte(prefix), data...))
+					source.Next(len(prefix))
+					var dst bytes.Buffer
+					enc := NewWriter(&dst, WriterConcurrency(concurrency), WriterBlockSize(4096))
+					t.Cleanup(func() { enc.Close() })
+					n, err := enc.ReadFrom(source)
+					if err != nil || n != int64(len(data)) {
+						t.Fatalf("ReadFrom = %d, %v; want %d, nil", n, err, len(data))
+					}
+					if source.Len() != 0 {
+						t.Errorf("source has %d unread bytes", source.Len())
+					}
+					if err := enc.Close(); err != nil {
+						t.Fatal(err)
+					}
+					got, err := io.ReadAll(NewReader(&dst))
+					if err != nil || !bytes.Equal(got, data) {
+						t.Fatalf("round trip: %v, equal=%v", err, bytes.Equal(got, data))
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestWriterReadFromOwnsInput(t *testing.T) {
+	for _, concurrency := range []int{2, 4} {
+		for _, readerOnly := range []bool{false, true} {
+			t.Run(fmt.Sprintf("c%d/readerOnly%v", concurrency, readerOnly), func(t *testing.T) {
+				data := bytes.Repeat([]byte("original input\n"), 64)
+				source := bytes.NewBuffer(bytes.Clone(data))
+				var input io.Reader = source
+				if readerOnly {
+					input = struct{ io.Reader }{source}
+				}
+				entered, release := make(chan struct{}), make(chan struct{})
+				unblock := sync.OnceFunc(func() { close(release) })
+				var dst bytes.Buffer
+				enc := NewWriter(&dst, WriterConcurrency(concurrency), WriterCustomEncoder(func(_, _ []byte) int {
+					close(entered)
+					<-release
+					return 0
+				}))
+				t.Cleanup(func() {
+					unblock()
+					enc.Close()
+				})
+				n, err := enc.ReadFrom(input)
+				if err != nil || n != int64(len(data)) {
+					t.Fatalf("ReadFrom = %d, %v; want %d, nil", n, err, len(data))
+				}
+				select {
+				case <-entered:
+				case <-time.After(5 * time.Second):
+					t.Fatal("encoder did not receive input")
+				}
+				// Reuse the source after ReadFrom returns, before encoding completes.
+				source.Reset()
+				source.Write(bytes.Repeat([]byte("X"), len(data)))
+				unblock()
+				if err := enc.Close(); err != nil {
+					t.Fatal(err)
+				}
+				got, err := io.ReadAll(NewReader(&dst))
+				if err != nil || !bytes.Equal(got, data) {
+					t.Fatalf("source reuse changed output: %v, equal=%v", err, bytes.Equal(got, data))
+				}
+			})
+		}
 	}
 }
 
