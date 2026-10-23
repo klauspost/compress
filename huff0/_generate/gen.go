@@ -219,14 +219,8 @@ func (d decompress4x) generateProcedure(name string, nSyms int) {
 	for i := range 4 {
 		ADDQ(U8(nSyms), op[i])
 	}
-	{
-		// A slot is only promoted if every access is a plain MOVQ, so the
-		// limit is loaded rather than compared in memory.
-		inner := GP64()
-		MOVQ(innerSlot, inner)
-		CMPQ(op[0], inner)
-		JB(LabelRef("inner_loop"))
-	}
+	CMPQ(op[0], innerSlot)
+	JB(LabelRef("inner_loop"))
 	JMP(LabelRef("outer_loop"))
 
 	Label("done")

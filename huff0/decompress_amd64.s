@@ -307,8 +307,7 @@ inner_loop:
 	ADDQ   $0x05, DI
 	ADDQ   $0x05, R9
 	ADDQ   $0x05, R11
-	MOVQ   32(SP), CX
-	CMPQ   BX, CX
+	CMPQ   BX, 32(SP)
 	JB     inner_loop
 	JMP    outer_loop
 
@@ -715,8 +714,7 @@ inner_loop:
 	ADDQ   $0x07, DI
 	ADDQ   $0x07, R9
 	ADDQ   $0x07, R11
-	MOVQ   32(SP), CX
-	CMPQ   BX, CX
+	CMPQ   BX, 32(SP)
 	JB     inner_loop
 	JMP    outer_loop
 
@@ -1375,8 +1373,7 @@ inner_loop:
 	ADDQ   $0x0e, DI
 	ADDQ   $0x0e, R9
 	ADDQ   $0x0e, R11
-	MOVQ   32(SP), CX
-	CMPQ   BX, CX
+	CMPQ   BX, 32(SP)
 	JB     inner_loop
 	JMP    outer_loop
 
@@ -1671,8 +1668,7 @@ inner_loop:
 	ADDQ   $0x05, SI
 	ADDQ   $0x05, DI
 	ADDQ   $0x05, R8
-	MOVQ   32(SP), R12
-	CMPQ   BX, R12
+	CMPQ   BX, 32(SP)
 	JB     inner_loop
 	JMP    outer_loop
 
@@ -2023,8 +2019,7 @@ inner_loop:
 	ADDQ   $0x07, SI
 	ADDQ   $0x07, DI
 	ADDQ   $0x07, R8
-	MOVQ   32(SP), R12
-	CMPQ   BX, R12
+	CMPQ   BX, 32(SP)
 	JB     inner_loop
 	JMP    outer_loop
 
@@ -2571,8 +2566,7 @@ inner_loop:
 	ADDQ   $0x0e, SI
 	ADDQ   $0x0e, DI
 	ADDQ   $0x0e, R8
-	MOVQ   32(SP), R12
-	CMPQ   BX, R12
+	CMPQ   BX, 32(SP)
 	JB     inner_loop
 	JMP    outer_loop
 
