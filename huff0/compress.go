@@ -112,11 +112,14 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 		panic("invalid table generated")
 	}
 
+	// Write the new table first, so its size counts against it.
+	err = s.cTable.write(s)
 	if s.Reuse == ReusePolicyAllow && canReuse {
 		hSize := len(s.Out)
 		oldSize := s.prevTable.estimateSize(s.count[:s.symbolLen])
 		newSize := s.cTable.estimateSize(s.count[:s.symbolLen])
-		if oldSize <= hSize+newSize || hSize+12 >= wantSize {
+		if err != nil || oldSize <= hSize+newSize || hSize+12 >= wantSize {
+			s.Out = s.Out[:0]
 			// Retain cTable even if we re-use.
 			keepTable := s.cTable
 			keepTL := s.actualTableLog
@@ -140,7 +143,6 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 	}
 
 	// Use new table
-	err = s.cTable.write(s)
 	if err != nil {
 		s.OutTable = nil
 		return nil, false, err

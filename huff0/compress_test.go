@@ -516,6 +516,47 @@ func TestCompress1XReuse(t *testing.T) {
 	}
 }
 
+func TestCompress1XReuseCountsTable(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	letters := func(n, skew int) []byte {
+		b := make([]byte, n)
+		for i := range b {
+			b[i] = 'a' + byte(rng.Intn(26))
+			if rng.Intn(skew) == 0 {
+				b[i] = 'a' + byte(rng.Intn(4))
+			}
+		}
+		return b
+	}
+	prev := letters(4096, 1000)
+	smaller := 0
+	for i := range 100 {
+		in := letters(200, 3)
+		size := func(p ReusePolicy) int {
+			var s Scratch
+			if _, _, err := Compress1X(prev, &s); err != nil {
+				t.Fatal(err)
+			}
+			s.Reuse = p
+			out, _, err := Compress1X(in, &s)
+			if err != nil {
+				t.Fatal(i, p, err)
+			}
+			return len(out)
+		}
+		reused, fresh, got := size(ReusePolicyPrefer), size(ReusePolicyNone), size(ReusePolicyAllow)
+		if got > min(reused, fresh) {
+			t.Fatalf("%d: got %d bytes, reusing gives %d and a new table %d", i, got, reused, fresh)
+		}
+		if reused < fresh {
+			smaller++
+		}
+	}
+	if smaller == 0 {
+		t.Fatal("reusing never wins; the test needs other input")
+	}
+}
+
 func BenchmarkDeflate(b *testing.B) {
 	for _, tt := range testfiles {
 		test := tt
