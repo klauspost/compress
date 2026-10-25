@@ -501,15 +501,28 @@ func TestSmallFlushKeepsHistory(t *testing.T) {
 		`"tags":["alpha","beta","gamma"],"location":{"city":"Denver","zip":"80202"},` +
 		`"score":87.5,"joined":"2024-03-15T10:22:00Z","meta":{"verified":true,"level":3}}`
 
+	type writerCase struct {
+		name   string
+		create func(io.Writer) (*Writer, error)
+	}
+	var writers []writerCase
+	for level := 1; level <= 9; level++ {
+		writers = append(writers, writerCase{fmt.Sprintf("level=%d", level),
+			func(w io.Writer) (*Writer, error) { return NewWriter(w, level) }})
+	}
+	// Custom windows use their own encoder.
+	writers = append(writers, writerCase{"window=1024",
+		func(w io.Writer) (*Writer, error) { return NewWriterWindow(w, 1024) }})
+
 	// Separators on both sides of minNonLiteralBlockSize, below which the
 	// encoder does not look for matches at all.
 	for _, sep := range []string{"Testing", strings.Repeat("separator", 5)} {
-		for level := 1; level <= 9; level++ {
-			t.Run(fmt.Sprintf("level=%d/sep=%d", level, len(sep)), func(t *testing.T) {
+		for _, wc := range writers {
+			t.Run(fmt.Sprintf("%s/sep=%d", wc.name, len(sep)), func(t *testing.T) {
 				var buf bytes.Buffer
-				w, err := NewWriter(&buf, level)
+				w, err := wc.create(&buf)
 				if err != nil {
-					t.Fatalf("NewWriter: %v", err)
+					t.Fatalf("%s: %v", wc.name, err)
 				}
 				// Reuse the writer, so that a Close leaving the compressor in
 				// its no-more-data state would show up here.
