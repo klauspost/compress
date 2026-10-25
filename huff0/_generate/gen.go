@@ -1,6 +1,6 @@
 package main
 
-//go:generate go run gen.go -out ../decompress.s -arch amd64,arm64 -pkg=huff0
+//go:generate go run gen.go -out ../decompress.s -arch amd64,arm64 -arm64-promote-stack-slots -pkg=huff0
 //go:generate gofmt -w ../decompress_amd64.go
 
 import (
@@ -103,9 +103,13 @@ func outputBoundShift(nSyms int) int {
 // consumed before the next reload re-reads memory, so the OR is harmless
 // (bitReaderShifted.restoreFromAsm re-reads memory for the same reason).
 //
-// Register budget: the four containers, the four output pointers, the table,
-// peekBits and the context pointer are live throughout (11 of 15), so every
-// step below uses at most two temporaries.
+// Register budget: the four containers, the four output pointers, the table
+// and peekBits are live throughout (10 of the 13 avo allocates). The input
+// pointers and the inner-loop limit live in stack slots rather than in ctx,
+// so ctx is dead inside the inner loop (it is re-read from the argument at
+// the top of the outer loop and at done) and its register is free for the
+// reload's pointer temporary. On arm64, -arm64-promote-stack-slots keeps the
+// slots in registers and folds the reload's slot copies away.
 func (d decompress4x) generateProcedure(name string, nSyms int) {
 	Package("github.com/klauspost/compress/huff0")
 	TEXT(name, 0, "func(ctx* decompress4xContext)")
@@ -116,9 +120,14 @@ func (d decompress4x) generateProcedure(name string, nSyms int) {
 	Doc(doc...)
 	Pragma("noescape")
 
-	// ctx stays in one register for the whole function; every memory
-	// operand below is a field of it or of the bit readers it points to.
+	// Every memory operand below is a field of ctx, of the bit readers it
+	// points to, or one of the stack slots.
 	ctx := Dereference(Param("ctx"))
+	var ipSlot [4]Mem
+	for i := range ipSlot {
+		ipSlot[i] = AllocLocal(8)
+	}
+	innerSlot := AllocLocal(8)
 	peekBits := GP64()
 	table := GP64()
 	var op, bits [4]reg.GPVirtual
@@ -126,14 +135,6 @@ func (d decompress4x) generateProcedure(name string, nSyms int) {
 		op[i] = GP64()
 		bits[i] = GP64()
 	}
-	ip := func(i int) Mem {
-		m, err := ctx.Field("ip").Index(i).Resolve()
-		if err != nil {
-			panic(err)
-		}
-		return m.Addr
-	}
-
 	Comment("Preload values")
 	Load(ctx.Field("peekBits"), peekBits)
 	Load(ctx.Field("tbl"), table)
@@ -145,6 +146,13 @@ func (d decompress4x) generateProcedure(name string, nSyms int) {
 		LEAQ(Mem{Base: op[0], Index: dstEvery, Scale: 2}, op[2])
 		LEAQ(Mem{Base: dstEvery, Index: dstEvery, Scale: 2}, op[3])
 		ADDQ(op[0], op[3])
+	}
+
+	Comment("Copy the input pointers to their stack slots")
+	for i := range ipSlot {
+		t := GP64()
+		Load(ctx.Field("ip").Index(i), t)
+		MOVQ(t, ipSlot[i])
 	}
 
 	Comment("Convert each bit reader to sentinel form: bits = value | 1<<bitsRead")
@@ -165,6 +173,7 @@ func (d decompress4x) generateProcedure(name string, nSyms int) {
 		// The outer loop only re-checks bounds after a whole batch of
 		// iterations, and each iteration writes nSyms bytes per stream, so
 		// the batch must satisfy iters*nSyms <= limit-op0.
+		ctx := Dereference(Param("ctx"))
 		outShift := outputBoundShift(nSyms)
 		Commentf("Iterations allowed by the output: (limit - op0) / %d", 1<<outShift)
 		iters := GP64()
@@ -179,7 +188,7 @@ func (d decompress4x) generateProcedure(name string, nSyms int) {
 		ilowest, _ := ctx.Field("ilowest").Resolve()
 		for i := range 4 {
 			t := GP64()
-			MOVQ(ip(i), t)
+			MOVQ(ipSlot[i], t)
 			SUBQ(ilowest.Addr, t)
 			SHRQ(U8(3), t)
 			CMPQ(t, iters)
@@ -189,7 +198,7 @@ func (d decompress4x) generateProcedure(name string, nSyms int) {
 		JZ(LabelRef("done"))
 		IMUL3Q(Imm(uint64(nSyms)), iters, iters)
 		ADDQ(op[0], iters)
-		Store(iters, ctx.Field("inner"))
+		MOVQ(iters, innerSlot)
 	}
 
 	// Align the loop head (and so the function) to 64 bytes so its placement
@@ -205,28 +214,26 @@ func (d decompress4x) generateProcedure(name string, nSyms int) {
 	}
 	Comment("Reload the four bit containers")
 	for i := range 4 {
-		d.reload(bits[i], ip(i))
+		d.reload(bits[i], ipSlot[i])
 	}
 	for i := range 4 {
 		ADDQ(U8(nSyms), op[i])
 	}
-	{
-		inner, _ := ctx.Field("inner").Resolve()
-		CMPQ(op[0], inner.Addr)
-		JB(LabelRef("inner_loop"))
-	}
+	CMPQ(op[0], innerSlot)
+	JB(LabelRef("inner_loop"))
 	JMP(LabelRef("outer_loop"))
 
 	Label("done")
 	Comment("Hand the state back: off = ip - in (negative when the window reached below the stream start),")
 	Comment("value = the sentinel-form container. bitReaderShifted.restoreFromAsm normalizes both.")
+	ctx = Dereference(Param("ctx"))
 	{
 		br := GP64()
 		Load(ctx.Field("pbr"), br)
 		for i := range 4 {
 			off := i * bitReader__size
 			tmp := GP64()
-			MOVQ(ip(i), tmp)
+			MOVQ(ipSlot[i], tmp)
 			SUBQ(Mem{Base: br, Disp: off + bitReader_in}, tmp)
 			MOVQ(tmp, Mem{Base: br, Disp: off + bitReader_off})
 			MOVQ(bits[i], Mem{Base: br, Disp: off + bitReader_value})
@@ -286,12 +293,14 @@ func (d decompress4x) reload(bits reg.GPVirtual, ip Mem) {
 	MOVQ(consumed, nb)
 	ANDQ(U8(7), nb)
 	SHRQ(U8(3), consumed)
-	// The old container is dead once its zero count is taken, so it holds
-	// the input pointer until the fresh load overwrites it.
-	MOVQ(ip, bits)
-	SUBQ(consumed, bits)
-	MOVQ(bits, ip)
-	MOVQ(Mem{Base: bits}, bits)
+	// The pointer gets its own temporary, never bits: a register whose
+	// value is copied to and from the slot can share the slot's promoted
+	// arm64 register, which turns this into one SUB and the load.
+	ptr := GP64()
+	MOVQ(ip, ptr)
+	SUBQ(consumed, ptr)
+	MOVQ(ptr, ip)
+	MOVQ(Mem{Base: ptr}, bits)
 	ORQ(U8(1), bits)
 	if d.bmi2 {
 		SHLXQ(nb, bits, bits)
