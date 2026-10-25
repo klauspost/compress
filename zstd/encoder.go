@@ -337,7 +337,7 @@ func (e *Encoder) nextBlock(final bool) error {
 			WindowSize:    uint32(s.encoder.WindowSize(s.frameContentSize)),
 			SingleSegment: false,
 			Checksum:      e.o.crc,
-			DictID:        e.o.dict.ID(),
+			DictID:        e.o.dictID(),
 			NoMagic:       e.o.magicless,
 		}
 
@@ -778,7 +778,7 @@ func (e *Encoder) encodeAll(enc encoder, src, dst []byte) []byte {
 		WindowSize:    uint32(enc.WindowSize(int64(len(src)))),
 		SingleSegment: single,
 		Checksum:      e.o.crc,
-		DictID:        e.o.dict.ID(),
+		DictID:        e.o.dictID(),
 		NoMagic:       e.o.magicless,
 	}
 
@@ -862,7 +862,7 @@ func (e *Encoder) MaxEncodedSize(size int) int {
 	if e.o.magicless {
 		frameHeader -= 4
 	}
-	if e.o.dict != nil {
+	if e.o.dictID() != 0 {
 		frameHeader += 4
 	}
 	// Frame content size:

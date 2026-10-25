@@ -30,6 +30,7 @@ type encoderOptions struct {
 	customBlockSize  bool
 	lowMem           bool
 	dict             *dict
+	noDictID         bool
 	magicless        bool
 	concurrentBlocks bool
 }
@@ -54,6 +55,14 @@ func (o *encoderOptions) validate() error {
 		return errors.New("WithEncoderPadding cannot be used with WithEncoderMagicless")
 	}
 	return nil
+}
+
+// dictID returns the dictionary ID to write in frame headers.
+func (o *encoderOptions) dictID() uint32 {
+	if o.noDictID {
+		return 0
+	}
+	return o.dict.ID()
 }
 
 // encoder returns an encoder with the selected options.
@@ -421,6 +430,16 @@ func WithEncoderDictRaw(id uint32, content []byte) EOption {
 		o.dict = &dict{id: id, content: content, offsets: [3]int{1, 4, 8}}
 		return nil
 	}
+}
+
+// WithEncoderDictID controls whether the dictionary ID is written in the frame header
+// when a dictionary is used, like ZSTD_c_dictIDFlag in the reference implementation.
+// Leaving it out saves up to 4 bytes per frame, but the decoder must then be given
+// the dictionary for frames without an ID, see WithDecoderDefaultDict.
+// Default is true.
+// Can be changed with ResetWithOptions.
+func WithEncoderDictID(b bool) EOption {
+	return func(o *encoderOptions) error { o.noDictID = !b; return nil }
 }
 
 // WithEncoderDictDelete clears the dictionary, so no dictionary will be used.

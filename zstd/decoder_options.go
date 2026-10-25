@@ -142,6 +142,34 @@ func WithDecoderDictRaw(id uint32, content []byte) DOption {
 	}
 }
 
+// WithDecoderDefaultDict registers a dictionary for frames that carry no dictionary ID,
+// such as frames written with WithEncoderDictID(false) or "zstd --no-dictID".
+//
+// The slice b must be in the [dictionary format], as for WithDecoderDicts.
+// The ID stored in the dictionary is not used: the dictionary is registered as ID 0,
+// replacing any dictionary added with WithDecoderDictRaw(0, ...), and can be removed
+// with WithDecoderDictDelete(0). To also decode frames that carry the dictionary's ID,
+// add it with WithDecoderDicts too.
+//
+// Frames compressed without a dictionary also carry no dictionary ID,
+// so they are decoded with this dictionary as well, which may fail or give wrong output.
+// Can be changed with ResetWithOptions.
+//
+// [dictionary format]: https://github.com/facebook/zstd/blob/dev/doc/zstd_compression_format.md#dictionary-format
+func WithDecoderDefaultDict(b []byte) DOption {
+	return func(o *decoderOptions) error {
+		d, err := loadDict(b)
+		if err != nil {
+			return err
+		}
+		if o.dicts == nil {
+			o.dicts = make(map[uint32]*dict)
+		}
+		o.dicts[0] = d
+		return nil
+	}
+}
+
 // WithDecoderMagicless makes the decoder read frames without the 4-byte magic number,
 // as written by WithEncoderMagicless or with ZSTD_f_zstd1_magicless in the reference implementation.
 // Each frame must start directly with its frame header. Frames with the magic number

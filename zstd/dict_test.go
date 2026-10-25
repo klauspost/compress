@@ -2,6 +2,7 @@ package zstd
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
@@ -1246,5 +1247,136 @@ func TestEncoderChooseCompWithDictTables(t *testing.T) {
 				t.Fatalf("got mode %d, want %d", got, tc.want)
 			}
 		})
+	}
+}
+
+// stripDictID returns a copy of a single frame with the Dictionary_ID
+// removed from its header, as "zstd --no-dictID" writes it.
+func stripDictID(frame []byte) []byte {
+	fhd := frame[4]
+	pos := 5
+	if fhd&(1<<5) == 0 {
+		pos++ // Window_Descriptor
+	}
+	idSize := [4]int{0, 1, 2, 4}[fhd&3]
+	out := append([]byte{}, frame[:pos]...)
+	out[4] &^= 3
+	return append(out, frame[pos+idSize:]...)
+}
+
+// TestDecoderDefaultDict decodes frames written by the reference
+// implementation after removing their dictionary ID and magic number.
+func TestDecoderDefaultDict(t *testing.T) {
+	zr := testCreateZipReader("testdata/dict-tests-small.zip", t)
+	dicts := readDicts(t, zr)
+	byID := make(map[uint32][]byte)
+	for _, d := range dicts {
+		byID[binary.LittleEndian.Uint32(d[4:8])] = d
+	}
+	dec, err := NewReader(nil, WithDecoderConcurrency(1), WithDecoderDicts(dicts...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	tested := 0
+	for _, tt := range zr.File {
+		if !strings.HasSuffix(tt.Name, ".zst") {
+			continue
+		}
+		r, err := tt.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		in, err := io.ReadAll(r)
+		r.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var h Header
+		if err := h.Decode(in); err != nil || h.DictionaryID == 0 {
+			continue
+		}
+		want, err := dec.DecodeAll(in, nil)
+		if err != nil {
+			t.Fatal(tt.Name, err)
+		}
+		noID := stripDictID(in)
+		for _, magicless := range []bool{false, true} {
+			input := noID
+			if magicless {
+				input = noID[4:]
+			}
+			dec2, err := NewReader(nil, WithDecoderConcurrency(1), WithDecoderMagicless(magicless), WithDecoderDefaultDict(byID[h.DictionaryID]))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := dec2.DecodeAll(input, nil)
+			if err != nil {
+				t.Fatal(tt.Name, "magicless:", magicless, err)
+			}
+			if !bytes.Equal(got, want) {
+				t.Fatal(tt.Name, "magicless:", magicless, "output mismatch")
+			}
+			if err := dec2.Reset(bytes.NewReader(input)); err != nil {
+				t.Fatal(err)
+			}
+			got, err = io.ReadAll(dec2)
+			if err != nil {
+				t.Fatal(tt.Name, "magicless:", magicless, "stream:", err)
+			}
+			if !bytes.Equal(got, want) {
+				t.Fatal(tt.Name, "magicless:", magicless, "stream output mismatch")
+			}
+			dec2.Close()
+		}
+		tested++
+	}
+	if tested == 0 {
+		t.Fatal("no frames with a dictionary ID found")
+	}
+}
+
+func TestEncoderDictIDOmitted(t *testing.T) {
+	zr := testCreateZipReader("testdata/dict-tests-small.zip", t)
+	dict := readDicts(t, zr)[0]
+	want := []byte("small messages compressed with a trained dictionary carry no dictionary ID")
+	dec, err := NewReader(nil, WithDecoderDefaultDict(dict))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	for level := SpeedFastest; level < speedLast; level++ {
+		t.Run(level.String(), func(t *testing.T) {
+			withID, err := NewWriter(nil, WithEncoderLevel(level), WithEncoderDict(dict))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer withID.Close()
+			enc, err := NewWriter(nil, WithEncoderLevel(level), WithEncoderDict(dict), WithEncoderDictID(false))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer enc.Close()
+			encoded := enc.EncodeAll(want, nil)
+			if ref := withID.EncodeAll(want, nil); !bytes.Equal(stripDictID(ref), encoded) {
+				t.Fatal("frame differs from the frame with its dictionary ID removed")
+			}
+			if len(encoded) > enc.MaxEncodedSize(len(want)) {
+				t.Errorf("got %d bytes, MaxEncodedSize is %d", len(encoded), enc.MaxEncodedSize(len(want)))
+			}
+			got, err := dec.DecodeAll(encoded, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, want) {
+				t.Fatalf("got %q, want %q", got, want)
+			}
+		})
+	}
+	if err := dec.ResetWithOptions(nil, WithDecoderDictDelete(0)); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := dec.publishedOptions.Load().dicts[0]; ok {
+		t.Error("WithDecoderDictDelete(0) did not remove the default dictionary")
 	}
 }
