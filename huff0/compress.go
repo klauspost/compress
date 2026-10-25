@@ -100,6 +100,7 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 		}
 		// Do not attempt to re-use later.
 		s.prevTable = s.prevTable[:0]
+		s.Out = s.Out[:0]
 	}
 
 	// Calculate new table.
