@@ -30,6 +30,7 @@ type encoderOptions struct {
 	customBlockSize  bool
 	lowMem           bool
 	dict             *dict
+	magicless        bool
 	concurrentBlocks bool
 }
 
@@ -45,6 +46,14 @@ func (o *encoderOptions) setDefault() {
 		lowMem:        false,
 		fullZero:      true,
 	}
+}
+
+// validate checks options that depend on each other.
+func (o *encoderOptions) validate() error {
+	if o.magicless && o.pad > 0 {
+		return errors.New("WithEncoderPadding cannot be used with WithEncoderMagicless")
+	}
+	return nil
 }
 
 // encoder returns an encoder with the selected options.
@@ -77,6 +86,15 @@ func (o encoderOptions) encoder() encoder {
 // Can be changed with ResetWithOptions.
 func WithEncoderCRC(b bool) EOption {
 	return func(o *encoderOptions) error { o.crc = b; return nil }
+}
+
+// WithEncoderMagicless will leave out the 4-byte magic number at the start of each frame,
+// like ZSTD_f_zstd1_magicless in the reference implementation.
+// The output can only be decoded by a decoder that expects it, see WithDecoderMagicless.
+// Cannot be combined with WithEncoderPadding, since padding uses skippable frames.
+// Can be changed with ResetWithOptions.
+func WithEncoderMagicless(b bool) EOption {
+	return func(o *encoderOptions) error { o.magicless = b; return nil }
 }
 
 // WithEncoderConcurrency will set the concurrency,

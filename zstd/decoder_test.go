@@ -3142,3 +3142,96 @@ func TestDecodeAllExactCapacity(t *testing.T) {
 		}
 	}
 }
+
+func TestDecoderMagicless(t *testing.T) {
+	small := []byte("magicless frames start with the frame header descriptor")
+	large := bytes.Repeat([]byte("an input that needs more than one block, "), 40000)
+	tests := []struct {
+		name   string
+		in     []byte
+		stream bool
+		opts   []EOption
+	}{
+		{name: "encodeall", in: small},
+		{name: "encodeall-blocks", in: large},
+		{name: "encodeall-nocrc", in: small, opts: []EOption{WithEncoderCRC(false)}},
+		{name: "encodeall-zero", in: nil, opts: []EOption{WithZeroFrames(true)}},
+		{name: "stream-sync", in: large, stream: true, opts: []EOption{WithEncoderConcurrency(1)}},
+		{name: "stream-async", in: large, stream: true, opts: []EOption{WithEncoderConcurrency(2)}},
+		{name: "stream-jobs", in: large, stream: true, opts: []EOption{WithEncoderConcurrency(2), WithConcurrentBlocks(true), WithWindowSize(1 << 17)}},
+		{name: "stream-zero", in: nil, stream: true, opts: []EOption{WithZeroFrames(true)}},
+	}
+	encode := func(t *testing.T, in []byte, stream bool, opts ...EOption) []byte {
+		t.Helper()
+		enc, err := NewWriter(nil, opts...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer enc.Close()
+		if !stream {
+			return enc.EncodeAll(in, nil)
+		}
+		var buf bytes.Buffer
+		enc.Reset(&buf)
+		if _, err := enc.Write(in); err != nil {
+			t.Fatal(err)
+		}
+		if err := enc.Close(); err != nil {
+			t.Fatal(err)
+		}
+		return buf.Bytes()
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			withMagic := encode(t, tt.in, tt.stream, tt.opts...)
+			magicless := encode(t, tt.in, tt.stream, append(tt.opts, WithEncoderMagicless(true))...)
+			if !bytes.Equal(withMagic[4:], magicless) {
+				t.Fatalf("magicless frame differs from frame without its magic number")
+			}
+			// Two frames back to back.
+			input := append(slices.Clip(magicless), magicless...)
+			want := append(slices.Clip(tt.in), tt.in...)
+			for _, conc := range []int{1, 4} {
+				dec, err := NewReader(nil, WithDecoderMagicless(true), WithDecoderConcurrency(conc))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer dec.Close()
+				got, err := dec.DecodeAll(input, nil)
+				if err != nil {
+					t.Fatalf("DecodeAll: %v", err)
+				}
+				if !bytes.Equal(got, want) {
+					t.Fatalf("DecodeAll: got %d bytes, want %d", len(got), len(want))
+				}
+				if err := dec.Reset(bytes.NewReader(input)); err != nil {
+					t.Fatal(err)
+				}
+				got, err = io.ReadAll(dec)
+				if err != nil {
+					t.Fatalf("Read: %v", err)
+				}
+				if !bytes.Equal(got, want) {
+					t.Fatalf("Read: got %d bytes, want %d", len(got), len(want))
+				}
+				if _, err := dec.DecodeAll(withMagic, nil); err == nil {
+					t.Fatal("magicless decoder accepted a frame with a magic number")
+				}
+			}
+			dec, err := NewReader(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer dec.Close()
+			if _, err := dec.DecodeAll(magicless, nil); !errors.Is(err, ErrMagicMismatch) {
+				t.Fatalf("got error %v, want %v", err, ErrMagicMismatch)
+			}
+			if err := dec.ResetWithOptions(nil, WithDecoderMagicless(true)); err != nil {
+				t.Fatal(err)
+			}
+			if got, err := dec.DecodeAll(magicless, nil); err != nil || !bytes.Equal(got, tt.in) {
+				t.Fatalf("after ResetWithOptions: got %d bytes, error %v", len(got), err)
+			}
+		})
+	}
+}

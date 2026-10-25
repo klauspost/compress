@@ -57,6 +57,14 @@ func FuzzDecodeAll(f *testing.F) {
 			t.Fatalf("Output mismatch, low: %v, hi: %v", err1, err2)
 		}
 
+		// Decode as magicless frames, without the magic number if present.
+		decML, err := NewReader(nil, WithDecoderMagicless(true), WithDecoderConcurrency(1), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer decML.Close()
+		_, _ = decML.DecodeAll(bytes.TrimPrefix(b, []byte(frameMagic)), nil)
+
 		if compareNonAsm && cpuinfo.HasBMI2() {
 			// Decode again with the BMI2 assembly disabled and require identical
 			// output, exercising the assembly against the non-assembly path.

@@ -61,13 +61,9 @@ func (d *frameDec) setOptions(o decoderOptions) {
 	d.o = o
 }
 
-// reset will read the frame header and prepare for block decoding.
+// readMagic skips any skippable frames and reads the frame magic number.
 // If nothing can be read from the input, io.EOF will be returned.
-// Any other error indicated that the stream contained data, but
-// there was a problem.
-func (d *frameDec) reset(br byteBuffer) error {
-	d.HasCheckSum = false
-	d.WindowSize = 0
+func (d *frameDec) readMagic(br byteBuffer) error {
 	var signature [4]byte
 	for {
 		var err error
@@ -123,10 +119,29 @@ func (d *frameDec) reset(br byteBuffer) error {
 		}
 		return ErrMagicMismatch
 	}
+	return nil
+}
+
+// reset will read the frame header and prepare for block decoding.
+// If nothing can be read from the input, io.EOF will be returned.
+// Any other error indicated that the stream contained data, but
+// there was a problem.
+func (d *frameDec) reset(br byteBuffer) error {
+	d.HasCheckSum = false
+	d.WindowSize = 0
+	if !d.o.magicless {
+		if err := d.readMagic(br); err != nil {
+			return err
+		}
+	}
 
 	// Read Frame_Header_Descriptor
 	fhd, err := br.readByte()
 	if err != nil {
+		if d.o.magicless && err == io.ErrUnexpectedEOF {
+			// Nothing left to read, so no more frames.
+			return io.EOF
+		}
 		if debugDecoder {
 			println("Reading Frame_Header_Descriptor", err)
 		}

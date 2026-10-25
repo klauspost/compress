@@ -24,6 +24,7 @@ type decoderOptions struct {
 	ignoreChecksum  bool
 	limitToCap      bool
 	decodeBufsBelow int
+	magicless       bool
 	resetOpt        bool
 }
 
@@ -137,6 +138,18 @@ func WithDecoderDictRaw(id uint32, content []byte) DOption {
 			o.dicts = make(map[uint32]*dict)
 		}
 		o.dicts[id] = &dict{id: id, content: content, offsets: [3]int{1, 4, 8}}
+		return nil
+	}
+}
+
+// WithDecoderMagicless makes the decoder read frames without the 4-byte magic number,
+// as written by WithEncoderMagicless or with ZSTD_f_zstd1_magicless in the reference implementation.
+// Each frame must start directly with its frame header. Frames with the magic number
+// and skippable frames cannot be decoded in this mode.
+// Can be changed with ResetWithOptions.
+func WithDecoderMagicless(b bool) DOption {
+	return func(o *decoderOptions) error {
+		o.magicless = b
 		return nil
 	}
 }

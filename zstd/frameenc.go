@@ -18,12 +18,15 @@ type frameHeader struct {
 	SingleSegment bool
 	Checksum      bool
 	DictID        uint32
+	NoMagic       bool
 }
 
 const maxHeaderSize = 14
 
 func (f frameHeader) appendTo(dst []byte) []byte {
-	dst = append(dst, frameMagic...)
+	if !f.NoMagic {
+		dst = append(dst, frameMagic...)
+	}
 	var fhd uint8
 	if f.Checksum {
 		fhd |= 1 << 2

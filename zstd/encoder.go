@@ -78,6 +78,9 @@ func NewWriter(w io.Writer, opts ...EOption) (*Encoder, error) {
 			return nil, err
 		}
 	}
+	if err := e.o.validate(); err != nil {
+		return nil, err
+	}
 	if e.o.concurrentBlocks && (e.o.dict != nil || e.o.concurrent <= 1) {
 		e.o.concurrentBlocks = false
 	}
@@ -169,6 +172,9 @@ func (e *Encoder) ResetWithOptions(w io.Writer, opts ...EOption) error {
 		if err := o(&next); err != nil {
 			return err
 		}
+	}
+	if err := next.validate(); err != nil {
+		return err
 	}
 	next.resetOpt = false
 
@@ -332,6 +338,7 @@ func (e *Encoder) nextBlock(final bool) error {
 			SingleSegment: false,
 			Checksum:      e.o.crc,
 			DictID:        e.o.dict.ID(),
+			NoMagic:       e.o.magicless,
 		}
 
 		dst := fh.appendTo(tmp[:0])
@@ -747,6 +754,7 @@ func (e *Encoder) encodeAll(enc encoder, src, dst []byte) []byte {
 				// Adding a checksum would be a waste of space.
 				Checksum: false,
 				DictID:   0,
+				NoMagic:  e.o.magicless,
 			}
 			dst = fh.appendTo(dst)
 
@@ -771,6 +779,7 @@ func (e *Encoder) encodeAll(enc encoder, src, dst []byte) []byte {
 		SingleSegment: single,
 		Checksum:      e.o.crc,
 		DictID:        e.o.dict.ID(),
+		NoMagic:       e.o.magicless,
 	}
 
 	// If less than 1MB, allocate a buffer up front.
@@ -850,6 +859,9 @@ func (e *Encoder) encodeAll(enc encoder, src, dst []byte) []byte {
 // size of an encoded block or stream.
 func (e *Encoder) MaxEncodedSize(size int) int {
 	frameHeader := 4 + 2 // magic + frame header & window descriptor
+	if e.o.magicless {
+		frameHeader -= 4
+	}
 	if e.o.dict != nil {
 		frameHeader += 4
 	}

@@ -291,6 +291,7 @@ func (e *Encoder) dispatchJob(final bool) error {
 			SingleSegment: false,
 			Checksum:      e.o.crc,
 			DictID:        0,
+			NoMagic:       e.o.magicless,
 		}
 		dst := fh.appendTo(tmp[:0])
 		var n2 int

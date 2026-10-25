@@ -375,6 +375,9 @@ and it will likely be used even if it doesn't improve compression.
 
 The used dictionary must be used to decompress the content.
 
+For very small payloads, `WithEncoderMagicless(true)` leaves out the 4-byte magic number
+at the start of each frame. The output can only be decompressed with `WithDecoderMagicless(true)`.
+
 For any real gains, the dictionary should be built with similar data. 
 If an unsuitable dictionary is used the output may be slightly larger than using no dictionary.
 Use the [zstd commandline tool](https://github.com/facebook/zstd/releases) to build a dictionary from sample data.

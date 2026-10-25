@@ -277,3 +277,26 @@ func TestEncoderResetWithOptionsErrorPreservesStream(t *testing.T) {
 		t.Fatal("rejected reset wrote to the new destination")
 	}
 }
+
+func TestEncoderMagiclessPadding(t *testing.T) {
+	if _, err := NewWriter(nil, WithEncoderMagicless(true), WithEncoderPadding(16)); err == nil {
+		t.Error("NewWriter should reject padding with magicless frames")
+	}
+	if _, err := NewWriter(nil, WithEncoderPadding(16), WithEncoderMagicless(true)); err == nil {
+		t.Error("NewWriter should reject magicless frames with padding")
+	}
+	enc, err := NewWriter(nil, WithEncoderPadding(16))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer enc.Close()
+	if err := enc.ResetWithOptions(nil, WithEncoderMagicless(true)); err == nil {
+		t.Error("ResetWithOptions should reject magicless frames with padding")
+	}
+	if enc.o.magicless {
+		t.Error("failed ResetWithOptions changed the options")
+	}
+	if err := enc.ResetWithOptions(nil, WithEncoderPadding(1), WithEncoderMagicless(true)); err != nil {
+		t.Errorf("ResetWithOptions without padding: %v", err)
+	}
+}
