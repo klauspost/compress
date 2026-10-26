@@ -237,6 +237,11 @@ func (w *GzipResponseWriter) startCompression(remain []byte) error {
 		return w.startPlain()
 	}
 
+	// The handler may have replaced the Vary header that the wrapper added.
+	if !varyListsAcceptEncoding(w.Header()) {
+		w.Header().Add(vary, acceptEncoding)
+	}
+
 	// if the Content-Length is already set, then calls to Write on compression
 	// will fail to set the Content-Length header since its already set
 	// See: https://github.com/golang/go/issues/14975.
@@ -1009,6 +1014,19 @@ func RandomJitter(n, buffer int, paranoid bool) option {
 			c.jitterBuffer = 0
 		}
 	}
+}
+
+// varyListsAcceptEncoding reports whether the Vary header lists Accept-Encoding or "*".
+func varyListsAcceptEncoding(h http.Header) bool {
+	for _, v := range h.Values(vary) {
+		for field := range strings.SplitSeq(v, ",") {
+			field = strings.TrimSpace(field)
+			if field == "*" || strings.EqualFold(field, acceptEncoding) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // contentGzip returns true if the outermost content coding of the request body is gzip.
