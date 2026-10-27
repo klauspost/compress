@@ -50,6 +50,9 @@ func FuzzCompress(f *testing.F) {
 		if len(s.OutData) < min {
 			t.Errorf("FuzzCompress: output data length (%d) below shannon limit (%d)", len(s.OutData), min)
 		}
+		if lb := s.minNewSize(len(buf0)); len(b) < lb {
+			t.Errorf("FuzzCompress: output length (%d) below lower bound (%d)", len(b), lb)
+		}
 		if len(s.OutTable) == 0 {
 			t.Error("FuzzCompress: got no table definition")
 		}

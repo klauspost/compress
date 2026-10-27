@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -600,6 +602,61 @@ func TestCompressPreferFallback(t *testing.T) {
 				t.Fatal("output mismatch")
 			}
 		})
+	}
+}
+
+func TestMinTableSize(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	var s Scratch
+	tested := 0
+	for i := range 20000 {
+		// Use `used` of the first `symbols` values, including the last,
+		// with a random skew.
+		symbols := 2 + rng.Intn(maxSymbolValue)
+		used := 2 + rng.Intn(symbols-1)
+		vals := rng.Perm(symbols - 1)[:used-1]
+		vals = append(vals, symbols-1)
+		skew := 2 * rng.Float64()
+		cum := make([]float64, used)
+		sum := 0.0
+		for j := range cum {
+			sum += math.Pow(float64(j+1), -skew)
+			cum[j] = sum
+		}
+		in := make([]byte, used+rng.Intn([]int{16, 128, 1024, 8192}[i%4]))
+		for j := range in {
+			k := j
+			if k >= used {
+				k, _ = slices.BinarySearch(cum, rng.Float64()*sum)
+			}
+			in[j] = byte(vals[k])
+		}
+		s.Reuse = ReusePolicyNone
+		if _, _, err := Compress1X(in, &s); err != nil {
+			continue
+		}
+		tested++
+		lb := s.minNewSize(len(in))
+		if got := len(s.OutTable) + s.prevTable.estimateSize(s.count[:s.symbolLen]); lb > got {
+			t.Fatalf("%d: lower bound %d > size %d, %d of %d symbols", i, lb, got, used, symbols)
+		}
+		// The fixed-point entropy may be lower than minSize by rounding, and
+		// by up to 0.006 bits per count for counts above 512.
+		if ent := lb - s.minTableSize(used-1); ent > s.minSize(len(in)) || ent < s.minSize(len(in))-1-len(in)/1024 {
+			t.Fatalf("%d: entropy %d, want %d", i, ent, s.minSize(len(in)))
+		}
+	}
+	if tested < 10000 {
+		t.Fatalf("only %d of the inputs were compressed", tested)
+	}
+}
+
+func TestLog2Bounds(t *testing.T) {
+	for v := uint32(1); v <= BlockSizeMax; v++ {
+		lo, hi := log2Bounds(v)
+		if f := math.Log2(float64(v)) * (1 << 16); float64(lo) > f || float64(hi) < f {
+			t.Fatalf("log2(%d) = %f, bounds %d, %d", v, f, lo, hi)
+		}
 	}
 }
 

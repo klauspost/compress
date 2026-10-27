@@ -103,6 +103,15 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 		s.Out = s.Out[:0]
 	}
 
+	var oldSize int
+	if s.Reuse == ReusePolicyAllow && canReuse {
+		oldSize = s.prevTable.estimateSize(s.count[:s.symbolLen])
+		// Skip the new table if it can't be smaller.
+		if oldSize <= s.minNewSize(len(in)) {
+			return s.compressReused(in, compressor, wantSize)
+		}
+	}
+
 	// Calculate new table.
 	err = s.buildCTable()
 	if err != nil {
@@ -117,29 +126,9 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 	err = s.cTable.write(s)
 	if s.Reuse == ReusePolicyAllow && canReuse {
 		hSize := len(s.Out)
-		oldSize := s.prevTable.estimateSize(s.count[:s.symbolLen])
 		newSize := s.cTable.estimateSize(s.count[:s.symbolLen])
 		if err != nil || oldSize <= hSize+newSize || hSize+12 >= wantSize {
-			s.Out = s.Out[:0]
-			// Retain cTable even if we re-use.
-			keepTable := s.cTable
-			keepTL := s.actualTableLog
-
-			s.cTable = s.prevTable
-			s.actualTableLog = s.prevTableLog
-			s.Out, err = compressor(in)
-
-			// Restore ctable.
-			s.cTable = keepTable
-			s.actualTableLog = keepTL
-			if err != nil {
-				return nil, false, err
-			}
-			if len(s.Out) >= wantSize {
-				return nil, false, ErrIncompressible
-			}
-			s.OutData = s.Out
-			return s.Out, true, nil
+			return s.compressReused(in, compressor, wantSize)
 		}
 	}
 
@@ -164,6 +153,30 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 	s.prevTable, s.prevTableLog, s.cTable = s.cTable, s.actualTableLog, s.prevTable[:0]
 	s.OutData = s.Out[len(s.OutTable):]
 	return s.Out, false, nil
+}
+
+// compressReused compresses in with the previous table.
+func (s *Scratch) compressReused(in []byte, compressor func(src []byte) ([]byte, error), wantSize int) (out []byte, reUsed bool, err error) {
+	s.Out = s.Out[:0]
+	// Retain cTable even if we re-use.
+	keepTable := s.cTable
+	keepTL := s.actualTableLog
+
+	s.cTable = s.prevTable
+	s.actualTableLog = s.prevTableLog
+	s.Out, err = compressor(in)
+
+	// Restore ctable.
+	s.cTable = keepTable
+	s.actualTableLog = keepTL
+	if err != nil {
+		return nil, false, err
+	}
+	if len(s.Out) >= wantSize {
+		return nil, false, ErrIncompressible
+	}
+	s.OutData = s.Out
+	return s.Out, true, nil
 }
 
 // EstimateSizes will estimate the data sizes
