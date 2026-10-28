@@ -2197,6 +2197,22 @@ func newTestHandlerLevel(body []byte, opts ...option) http.Handler {
 	}))
 }
 
+func TestGzipHandlerVaryReplacedByHandler(t *testing.T) {
+	handler := GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Vary", "Cookie")
+		w.Write(testBody)
+	}))
+
+	req, _ := http.NewRequest("GET", "/whatever", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+	res := resp.Result()
+
+	assertEqual(t, "gzip", res.Header.Get("Content-Encoding"))
+	assertEqual(t, []string{"Cookie", "Accept-Encoding"}, res.Header.Values("Vary"))
+}
+
 func TestGzipHandlerNilContentType(t *testing.T) {
 	// This just exists to provide something for GzipHandler to wrap.
 	handler := newTestHandler(testBody)
