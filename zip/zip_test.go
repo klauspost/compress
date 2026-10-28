@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"math/bits"
 	"runtime"
 	"sort"
 	"strings"
@@ -496,6 +497,9 @@ func TestZip64LargeDirectory(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping in short mode")
 	}
+	if bits.UintSize == 32 {
+		t.Skip("skipping on 32-bit platforms")
+	}
 	t.Parallel()
 	// gen returns a func that writes a zip with a wantLen bytes
 	// of central directory.
@@ -534,14 +538,29 @@ func TestZip64LargeDirectory(t *testing.T) {
 	}
 	t.Run("uint32max-1_NoZip64", func(t *testing.T) {
 		t.Parallel()
-		if generatesZip64(t, gen(uint32max-1)) {
+		buf := new(rleBuffer)
+		w := NewWriter(buf)
+		gen(uint32max - 1)(w)
+		if suffixIsZip64(t, buf) {
 			t.Error("unexpected zip64")
+		}
+		if _, err := NewReader(buf, buf.Size()); err != nil {
+			t.Errorf("NewReader: %v", err)
 		}
 	})
 	t.Run("uint32max_HasZip64", func(t *testing.T) {
 		t.Parallel()
-		if !generatesZip64(t, gen(uint32max)) {
+		buf := new(rleBuffer)
+		w := NewWriter(buf)
+		gen(uint32max)(w)
+		if !suffixIsZip64(t, buf) {
 			t.Error("expected zip64")
+		}
+		// Round-trip through NewReader. With CD size exactly 0xFFFFFFFF,
+		// records well below 0xFFFF, and dirOffset == 0, the only EOCD
+		// field that holds the placeholder is directorySize.
+		if _, err := NewReader(buf, buf.Size()); err != nil {
+			t.Errorf("NewReader: %v", err)
 		}
 	})
 }
