@@ -5,10 +5,12 @@
 package gzhttp
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/klauspost/compress/gzip"
 	"github.com/klauspost/compress/zstd"
@@ -135,17 +137,56 @@ func (g *gzRoundtripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
+var errReadOnClosedBody = errors.New("gzhttp: read on closed body")
+
+const (
+	guardReading = 1 << iota
+	guardClosed
+)
+
+// readGuard lets Close be called while a Read is in progress, as net/http
+// allows for response bodies. The decoder must then stay with that Read
+// until it returns, so it is released by whichever of the two finishes last.
+type readGuard struct {
+	state atomic.Uint32
+}
+
+// start marks a Read as in progress, unless the body is closed.
+func (g *readGuard) start() bool {
+	return g.state.CompareAndSwap(0, guardReading)
+}
+
+// done ends a Read and reports whether it must release the decoder.
+func (g *readGuard) done() bool {
+	return g.state.And(^uint32(guardReading))&guardClosed != 0
+}
+
+// close marks the body closed and reports whether Close must release the
+// decoder, which is when no Read is in progress.
+func (g *readGuard) close() bool {
+	return g.state.Or(guardClosed) == 0
+}
+
 var gzReaderPool sync.Pool
 
 // gzipReader wraps a response body so it can lazily
 // call gzip.NewReader on the first call to Read
 type gzipReader struct {
-	body io.ReadCloser // underlying HTTP/1 response body framing
-	zr   *gzip.Reader  // lazily-initialized gzip reader
-	zerr error         // any error from gzip.NewReader; sticky
+	body  io.ReadCloser // underlying HTTP/1 response body framing
+	zr    *gzip.Reader  // lazily-initialized gzip reader
+	zerr  error         // any error from gzip.NewReader; sticky
+	guard readGuard     // lets Close run during a Read
 }
 
 func (gz *gzipReader) Read(p []byte) (n int, err error) {
+	if !gz.guard.start() {
+		return 0, errReadOnClosedBody
+	}
+	defer func() {
+		if gz.guard.done() {
+			gz.release()
+		}
+	}()
 	if gz.zr == nil {
 		if gz.zerr == nil {
 			zr, ok := gzReaderPool.Get().(*gzip.Reader)
@@ -164,11 +205,17 @@ func (gz *gzipReader) Read(p []byte) (n int, err error) {
 }
 
 func (gz *gzipReader) Close() error {
+	if gz.guard.close() {
+		gz.release()
+	}
+	return gz.body.Close()
+}
+
+func (gz *gzipReader) release() {
 	if gz.zr != nil {
 		gzReaderPool.Put(gz.zr)
 		gz.zr = nil
 	}
-	return gz.body.Close()
 }
 
 // asciiEqualFold is strings.EqualFold, ASCII only. It reports whether s and t
@@ -199,12 +246,21 @@ var zstdReaderPool sync.Pool
 // zstdReader wraps a response body so it can lazily
 // call zstd.NewReader on the first call to Read
 type zstdReader struct {
-	body io.ReadCloser // underlying HTTP/1 response body framing
-	zr   *zstd.Decoder // lazily-initialized zstd reader
-	zerr error         // any error from zstd.NewReader; sticky
+	body  io.ReadCloser // underlying HTTP/1 response body framing
+	zr    *zstd.Decoder // lazily-initialized zstd reader
+	zerr  error         // any error from zstd.NewReader; sticky
+	guard readGuard     // lets Close run during a Read
 }
 
 func (zr *zstdReader) Read(p []byte) (n int, err error) {
+	if !zr.guard.start() {
+		return 0, errReadOnClosedBody
+	}
+	defer func() {
+		if zr.guard.done() {
+			zr.release()
+		}
+	}()
 	if zr.zerr != nil {
 		return 0, zr.zerr
 	}
@@ -224,19 +280,23 @@ func (zr *zstdReader) Read(p []byte) (n int, err error) {
 	if err != nil {
 		// Usually this will be io.EOF,
 		// stash the decoder and keep the error.
-		zr.zr.Reset(nil)
-		zstdReaderPool.Put(zr.zr)
-		zr.zr = nil
+		zr.release()
 		zr.zerr = err
 	}
 	return
 }
 
 func (zr *zstdReader) Close() error {
+	if zr.guard.close() {
+		zr.release()
+	}
+	return zr.body.Close()
+}
+
+func (zr *zstdReader) release() {
 	if zr.zr != nil {
 		zr.zr.Reset(nil)
 		zstdReaderPool.Put(zr.zr)
 		zr.zr = nil
 	}
-	return zr.body.Close()
 }

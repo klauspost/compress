@@ -359,6 +359,101 @@ func TestTransportTransportAlwaysDecompress(t *testing.T) {
 	resp.Body.Close()
 }
 
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+// stallReader blocks in Read until release is closed, then returns err.
+type stallReader struct {
+	stalled, release chan struct{}
+	err              error
+}
+
+func newStallReader(err error) *stallReader {
+	return &stallReader{stalled: make(chan struct{}), release: make(chan struct{}), err: err}
+}
+
+func (s *stallReader) Read([]byte) (int, error) {
+	select {
+	case <-s.stalled:
+	default:
+		close(s.stalled)
+	}
+	<-s.release
+	return 0, s.err
+}
+
+// TestTransportCloseDuringRead closes a response body while a Read is blocked
+// on it, as net/http allows, and checks that the decoder that Read is using
+// is not handed to the next response before the Read returns.
+func TestTransportCloseDuringRead(t *testing.T) {
+	bin, err := os.ReadFile("testdata/benchmark.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gzBuf bytes.Buffer
+	gz := gzip.NewWriter(&gzBuf)
+	gz.Write(bin)
+	gz.Close()
+	enc, _ := zstd.NewWriter(nil)
+	defer enc.Close()
+
+	for _, test := range []struct {
+		encoding string
+		data     []byte
+	}{
+		{encoding: "gzip", data: gzBuf.Bytes()},
+		{encoding: "zstd", data: enc.EncodeAll(bin, nil)},
+	} {
+		t.Run(test.encoding, func(t *testing.T) {
+			half := len(test.data) / 2
+			// The first body fails once released, like a closed connection.
+			// The second stalls half-way, then completes.
+			stallA, stallB := newStallReader(io.ErrClosedPipe), newStallReader(io.EOF)
+			bodies := []io.Reader{
+				io.MultiReader(bytes.NewReader(test.data[:half]), stallA),
+				io.MultiReader(bytes.NewReader(test.data[:half]), stallB, bytes.NewReader(test.data[half:])),
+			}
+			tr := Transport(roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				body := bodies[0]
+				bodies = bodies[1:]
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Encoding": {test.encoding}},
+					Body:       io.NopCloser(body),
+				}, nil
+			}))
+			get := func() (io.ReadCloser, chan []byte) {
+				req, _ := http.NewRequest(http.MethodGet, "http://example.com/", nil)
+				resp, err := tr.RoundTrip(req)
+				if err != nil {
+					t.Fatal(err)
+				}
+				got := make(chan []byte, 1)
+				go func() {
+					b, _ := io.ReadAll(resp.Body)
+					got <- b
+				}()
+				return resp.Body, got
+			}
+
+			bodyA, gotA := get()
+			<-stallA.stalled
+			bodyA.Close()
+			bodyB, gotB := get()
+			<-stallB.stalled
+			// Let the first Read return while the second response is mid-stream.
+			close(stallA.release)
+			<-gotA
+			close(stallB.release)
+			if got := <-gotB; !bytes.Equal(got, bin) {
+				t.Errorf("second response: got %d bytes, want %d", len(got), len(bin))
+			}
+			bodyB.Close()
+		})
+	}
+}
+
 func BenchmarkTransport(b *testing.B) {
 	raw, err := os.ReadFile("testdata/benchmark.json")
 	if err != nil {
