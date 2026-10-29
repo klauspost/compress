@@ -10,6 +10,7 @@ import (
 	"errors"
 	"io"
 	"maps"
+	"math"
 	"sync"
 	"sync/atomic"
 
@@ -414,8 +415,12 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 				}
 				return dst, ErrDecoderSizeExceeded
 			}
-			if cap(dst)-len(dst) < int(frame.FrameContentSize) {
-				dst2 := make([]byte, len(dst), len(dst)+int(frame.FrameContentSize)+compressedBlockOverAlloc)
+			// The content size is only checked once the frame is decoded, so
+			// allocate no more than the rest of the input can decode to (each
+			// block is at least 4 bytes) and only what fits in an int.
+			size := min(frame.FrameContentSize, uint64(len(frame.bBuf))*(maxCompressedBlockSize/4))
+			if size <= math.MaxInt-compressedBlockOverAlloc-uint64(len(dst)) && cap(dst)-len(dst) < int(size) {
+				dst2 := make([]byte, len(dst), len(dst)+int(size)+compressedBlockOverAlloc)
 				copy(dst2, dst)
 				dst = dst2
 			}

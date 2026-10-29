@@ -3142,3 +3142,30 @@ func TestDecodeAllExactCapacity(t *testing.T) {
 		}
 	}
 }
+
+// TestDecodeAllContentSizeAlloc decodes frames that declare far more content
+// than they hold. DecodeAll must fail without allocating the declared size,
+// which on 32-bit platforms also overflowed an int.
+func TestDecodeAllContentSizeAlloc(t *testing.T) {
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	for _, fcs := range []uint64{1 << 30, 1<<31 - 8, 60 << 30} {
+		t.Run(strconv.FormatUint(fcs, 10), func(t *testing.T) {
+			// Header with an 8-byte content size and a 1 KiB window,
+			// followed by a last raw block of one byte.
+			in := []byte{0x28, 0xb5, 0x2f, 0xfd, 0xc0, 0x00}
+			in = binary.LittleEndian.AppendUint64(in, fcs)
+			in = append(in, 0x09, 0x00, 0x00, 'a')
+			got, err := dec.DecodeAll(in, nil)
+			if err != ErrFrameSizeMismatch {
+				t.Errorf("want %v, got %v", ErrFrameSizeMismatch, err)
+			}
+			if cap(got) > 1<<20 {
+				t.Errorf("allocated %d bytes for a %d byte input", cap(got), len(in))
+			}
+		})
+	}
+}
