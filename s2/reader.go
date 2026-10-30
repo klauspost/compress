@@ -751,8 +751,8 @@ func (r *Reader) Skip(n int64) error {
 					r.err = err
 					return r.err
 				}
-				if crc(r.decoded[:dLen]) != checksum {
-					r.err = ErrCorrupt
+				if !r.ignoreCRC && crc(r.decoded[:dLen]) != checksum {
+					r.err = ErrCRC
 					return r.err
 				}
 			} else {
@@ -793,11 +793,9 @@ func (r *Reader) Skip(n int64) error {
 			if !r.readFull(r.decoded[:n2], false) {
 				return r.err
 			}
-			if int64(n2) < n {
-				if crc(r.decoded[:n2]) != checksum {
-					r.err = ErrCorrupt
-					return r.err
-				}
+			if !r.ignoreCRC && crc(r.decoded[:n2]) != checksum {
+				r.err = ErrCRC
+				return r.err
 			}
 			r.i, r.j = 0, n2
 			continue
