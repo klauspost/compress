@@ -154,6 +154,29 @@ func TestWindowSize(t *testing.T) {
 	}
 }
 
+func TestJobAndOverlapSize(t *testing.T) {
+	tests := []struct {
+		windowSize           int
+		level                EncoderLevel
+		jobSize, overlapSize int
+	}{
+		{MinWindowSize, SpeedDefault, 512 << 10, MinWindowSize / 8},
+		{64 << 20, SpeedBestCompression, 256 << 20, 32 << 20},
+		{128 << 20, SpeedBetterCompression, 256 << 20, 32 << 20},
+		{128 << 20, SpeedBestCompression, 256 << 20, 64 << 20},
+		{MaxWindowSize, SpeedBestCompression, 256 << 20, 128 << 20},
+	}
+	for _, tt := range tests {
+		o := encoderOptions{windowSize: tt.windowSize, level: tt.level}
+		if got := o.jobSize(); got != tt.jobSize {
+			t.Errorf("window %d, %v: jobSize = %d, want %d", tt.windowSize, tt.level, got, tt.jobSize)
+		}
+		if got := o.overlapSize(); got != tt.overlapSize {
+			t.Errorf("window %d, %v: overlapSize = %d, want %d", tt.windowSize, tt.level, got, tt.overlapSize)
+		}
+	}
+}
+
 func TestEncoderResetWithOptions(t *testing.T) {
 	var buf bytes.Buffer
 	enc, err := NewWriter(&buf, WithEncoderLevel(SpeedFastest), WithEncoderCRC(true))
