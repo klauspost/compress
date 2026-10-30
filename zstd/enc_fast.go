@@ -31,8 +31,13 @@ type fastEncoder struct {
 type fastEncoderDict struct {
 	fastEncoder
 	dictTable       []tableEntry
-	tableShardDirty [tableShardCnt]bool
+	tableShardDirty [tableShardCnt]bool // Used by doubleFastEncoderDict.
 	allDirty        bool
+
+	// Small blocks log individual writes instead of dirtying 1 KiB shards.
+	// A full log falls back to restoring the entire table.
+	dirtyEntries    [2048]uint16
+	dirtyEntryCount int
 }
 
 // Encode mimmics functionality in zstd_fast.c
@@ -543,6 +548,7 @@ func (e *fastEncoderDict) Encode(blk *blockEnc, src []byte) {
 	}
 	// Protect against e.cur wraparound.
 	for e.cur >= e.bufferReset-int32(len(e.hist)) {
+		e.allDirty = true
 		if len(e.hist) == 0 {
 			e.table = [tableSize]tableEntry{}
 			e.cur = e.maxMatchOff
@@ -625,9 +631,9 @@ encodeLoop:
 			repIndex := s - offset1 + 2
 
 			e.table[nextHash] = tableEntry{offset: s + e.cur, val: uint32(cv)}
-			e.markShardDirty(nextHash)
+			e.markEntryDirty(nextHash)
 			e.table[nextHash2] = tableEntry{offset: s + e.cur + 1, val: uint32(cv >> 8)}
-			e.markShardDirty(nextHash2)
+			e.markEntryDirty(nextHash2)
 
 			if canRepeat && repIndex >= 0 && load3232(src, repIndex) == uint32(cv>>16) {
 				// Consider history as well.
@@ -756,7 +762,7 @@ encodeLoop:
 			// Store this, since we have it.
 			nextHash := hashLen(cv, hashLog, tableFastHashLen)
 			e.table[nextHash] = tableEntry{offset: s + e.cur, val: uint32(cv)}
-			e.markShardDirty(nextHash)
+			e.markEntryDirty(nextHash)
 			seq.matchLen = uint32(l) - zstdMinMatch
 			seq.litLen = 0
 			// Since litlen is always 0, this is offset 1.
@@ -847,6 +853,15 @@ func (e *fastEncoderDict) Reset(d *dict, singleBlock bool) {
 	}
 
 	e.cur = e.maxMatchOff
+	// Only fastEncoderDict uses the entry log; doubleFastEncoderDict uses shards.
+	if !e.allDirty && e.dirtyEntryCount != 0 {
+		for _, idx := range e.dirtyEntries[:e.dirtyEntryCount] {
+			e.table[idx] = e.dictTable[idx]
+		}
+		e.dirtyEntryCount = 0
+		return
+	}
+	e.dirtyEntryCount = 0
 	dirtyShardCnt := 0
 	if !e.allDirty {
 		for i := range e.tableShardDirty {
@@ -889,4 +904,13 @@ func (e *fastEncoderDict) markAllShardsDirty() {
 
 func (e *fastEncoderDict) markShardDirty(entryNum uint32) {
 	e.tableShardDirty[entryNum/tableShardSize] = true
+}
+
+func (e *fastEncoderDict) markEntryDirty(entryNum uint32) {
+	if e.dirtyEntryCount == len(e.dirtyEntries) {
+		e.allDirty = true
+		return
+	}
+	e.dirtyEntries[e.dirtyEntryCount] = uint16(entryNum)
+	e.dirtyEntryCount++
 }
