@@ -215,6 +215,7 @@ func (w *Writer) Write(p []byte) (nRet int, errRet error) {
 // ReadFrom reads data from r until EOF or error.
 // The return value n is the number of bytes read.
 // Any error except io.EOF encountered during the read is also returned.
+// The source is consumed through Read; its buffers are not retained after return.
 func (w *Writer) ReadFrom(r io.Reader) (n int64, err error) {
 	if err := w.err(nil); err != nil {
 		return 0, err
@@ -224,13 +225,6 @@ func (w *Writer) ReadFrom(r io.Reader) (n int64, err error) {
 		if err != nil {
 			return 0, err
 		}
-	}
-	if br, ok := r.(byter); ok {
-		buf := br.Bytes()
-		if err := w.EncodeBuffer(buf); err != nil {
-			return 0, err
-		}
-		return int64(len(buf)), w.AsyncFlush()
 	}
 	for {
 		inbuf := w.buffers.Get().([]byte)[:w.blockSize+obufHeaderLen]
