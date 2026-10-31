@@ -396,17 +396,22 @@ func FuzzLZ4Block(f *testing.F) {
 			delta = -delta
 		}
 		large := make([]byte, len(data)*2+4096)
+		// Bytes after len(src) that must not be copied to dst.
+		src := append(data[:len(data):len(data)], bytes.Repeat([]byte{0x55}, guard)...)[:len(data):len(data)]
 		for name, conv := range lz4Converters {
-			want, wantN, wantErr := conv(large[:0], data)
+			want, wantN, wantErr := conv(large[:0], src)
 			n := len(data) + delta
 			if wantErr == nil {
 				n = len(want) + delta
 			}
 			n = max(n, 0)
 			buf := bytes.Repeat([]byte{0xaa}, n+guard)
-			got, gotN, err := conv(buf[:0:n], data)
+			got, gotN, err := conv(buf[:0:n], src)
 			if bytes.Count(buf[n:], []byte{0xaa}) != guard {
 				t.Fatalf("%s: cap %d, need %d: wrote past cap(dst)", name, n, len(want))
+			}
+			if err == nil && bytes.IndexByte(buf[len(got):n], 0x55) >= 0 {
+				t.Fatalf("%s: read past len(src)", name)
 			}
 			switch {
 			case err == nil && (wantErr != nil || gotN != wantN || !bytes.Equal(got, want)),
@@ -495,6 +500,28 @@ func FuzzLZ4Block(f *testing.F) {
 			panic(fmt.Sprintf("lz4 returned %d, conversion returned %v, input: %#v", lzN, cErr, data))
 		}
 	})
+}
+
+func TestLZ4ConvertBlockSrcBounds(t *testing.T) {
+	const guard = 16
+	for ll := 1; ll < 15; ll++ {
+		// A block of nothing but literals, which end at the last byte of src.
+		src := append([]byte{byte(ll) << 4}, bytes.Repeat([]byte{'a'}, ll)...)
+		n := len(src)
+		src = append(src, bytes.Repeat([]byte{0xaa}, guard)...)[:n:n]
+		for name, conv := range lz4Converters {
+			// The assembly doesn't bounds check, but what it reads past
+			// len(src) ends up in dst, right after the literals.
+			dst := make([]byte, 64)
+			out, got, err := conv(dst[:0], src)
+			if err != nil || got != ll {
+				t.Fatalf("%s ll=%d: got %d, %v", name, ll, got, err)
+			}
+			if bytes.IndexByte(dst[len(out):], 0xaa) >= 0 {
+				t.Fatalf("%s ll=%d: read past len(src): %x", name, ll, dst[len(out):len(out)+guard])
+			}
+		}
+	}
 }
 
 func TestLZ4ConvertBlockDstBounds(t *testing.T) {
