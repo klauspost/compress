@@ -38,10 +38,18 @@ const errorOverread = 6
 const maxMatchLen = 131074
 
 // compressedBlockOverAlloc mirrors the constant of the same name in the zstd
-// package: the number of extra bytes callers over-allocate so the extended
-// (16-byte-block) copies may overrun a run by up to this many bytes minus one,
+// package (they must agree): the number of extra bytes callers over-allocate
+// so the extended copies may overrun a run by up to this many bytes minus one,
 // and an empty literal run may read and write a full block past its position.
-const compressedBlockOverAlloc = 16
+// The widest such copy is the non-overlapping match's first block, which
+// overruns by up to matchFirstBlock-1 bytes (ml can be 1 after a history
+// split), so this must be at least matchFirstBlock.
+const compressedBlockOverAlloc = matchFirstBlock
+
+// matchFirstBlock is the number of bytes the extended non-overlapping match
+// copy writes unconditionally before looping in 32-byte steps. A multiple of
+// 16, at least 32.
+const matchFirstBlock = 32
 
 // size of struct seqVals
 const seqValsSize = 24
@@ -1442,24 +1450,39 @@ func (e executeSimple) executeSingleTriple(c *executeSingleTripleContext, handle
 			if e.safeMem {
 				e.copyMemoryPrecise("2", src, c.outBase, ml, 1)
 			} else {
-				// 92% of matches are at most 16 bytes (benchdecoder corpus),
-				// so the first block is copied straight-line and only the
-				// tail enters the loop. Same 15-byte overrun as the loop.
-				t := XMM()
-				MOVUPS(Mem{Base: src}, t)
-				MOVUPS(t, Mem{Base: c.outBase})
-				CMPQ(ml, U8(16))
+				// The match length decides how many blocks to copy, and on
+				// data compressed at SpeedBetterCompression 35-80% of matches
+				// are longer than 16 bytes, so a short first block leaves a
+				// poorly predicted exit branch on most sequences. Copy
+				// matchFirstBlock bytes straight-line, then loop in 32-byte
+				// steps; fewer distinct trip counts mean fewer mispredicts.
+				//
+				// All loads are issued before any store, so the copy is
+				// correct for every ml <= mo even when the block reaches
+				// into bytes this copy writes: everything past ml is
+				// garbage that later output overwrites. The overrun is
+				// covered by compressedBlockOverAlloc.
+				var ts []reg.VecVirtual
+				for i := 0; i < matchFirstBlock/16; i++ {
+					t := XMM()
+					MOVUPS(Mem{Base: src, Disp: 16 * i}, t)
+					ts = append(ts, t)
+				}
+				for i, t := range ts {
+					MOVUPS(t, Mem{Base: c.outBase, Disp: 16 * i})
+				}
+				CMPQ(ml, U8(matchFirstBlock))
 				JA(LabelRef("copy_2_long"))
 				ADDQ(ml, c.outBase)
 				JMP(LabelRef("handle_loop"))
 
 				Label("copy_2_long")
 				dst := GP64()
-				LEAQ(Mem{Base: c.outBase, Disp: 16}, dst)
+				LEAQ(Mem{Base: c.outBase, Disp: matchFirstBlock}, dst)
 				ADDQ(ml, c.outBase)
-				ADDQ(U8(16), src)
-				SUBQ(U8(16), ml)
-				e.copyMemory("2", src, dst, ml)
+				ADDQ(U8(matchFirstBlock), src)
+				SUBQ(U8(matchFirstBlock), ml)
+				e.copyMemory32("2", src, dst, ml)
 			}
 
 			JMP(LabelRef("handle_loop"))
@@ -1514,6 +1537,24 @@ func (e executeSimple) copyMemory(suffix string, src, dst, length reg.GPVirtual)
 	ADDQ(U8(16), src)
 	ADDQ(U8(16), dst)
 	SUBQ(U8(16), length)
+	// jump if (CF == 0 and ZF == 0).
+	JHI(LabelRef(label))
+}
+
+// copyMemory32 is copyMemory in 32-byte steps (two loads, then two stores),
+// overwriting up to 31 extra bytes.
+func (e executeSimple) copyMemory32(suffix string, src, dst, length reg.GPVirtual) {
+	label := "copy_" + suffix
+
+	Label(label)
+	t0, t1 := XMM(), XMM()
+	MOVUPS(Mem{Base: src}, t0)
+	MOVUPS(Mem{Base: src, Disp: 16}, t1)
+	MOVUPS(t0, Mem{Base: dst})
+	MOVUPS(t1, Mem{Base: dst, Disp: 16})
+	ADDQ(U8(32), src)
+	ADDQ(U8(32), dst)
+	SUBQ(U8(32), length)
 	// jump if (CF == 0 and ZF == 0).
 	JHI(LabelRef(label))
 }
