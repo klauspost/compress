@@ -102,6 +102,11 @@ Each non-first job receives an overlap prefix from the previous job for match co
 so compression ratio is only marginally affected. Output is flushed in order,
 producing a valid single-frame zstd stream.
 
+A job is four windows long, capped at 256 MiB, so even very large windows
+(`WithWindowSize`) split the input into several jobs. For windows of 128 MiB and
+up this trades some total CPU time and a little ratio (under 0.5% at the best level
+with a 256 MiB window) for much lower wall time and peak memory.
+
 Benchmark on 1.8GB GOB stream (AMD Ryzen 9 9950X):
 
 | Level   |  1 thread  |     4 threads      |     16 threads      | 1T ratio | 16T ratio |

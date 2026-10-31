@@ -109,7 +109,7 @@ func (e *Encoder) Reset(w io.Writer) {
 		js.jobSize = e.o.jobSize()
 		js.overlapSize = e.o.overlapSize()
 		// js.filling is allocated lazily on first Write/ReadFrom so callers
-		// that only use EncodeAll don't pay the (up to ~32 MB) jobSize cost.
+		// that only use EncodeAll don't pay the jobSize cost (up to maxJobSize).
 		js.filling = js.filling[:0]
 		if js.nextPrefix != nil {
 			js.putOverlapBuf(js.nextPrefix)
