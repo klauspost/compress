@@ -164,6 +164,8 @@ func TestJobAndOverlapSize(t *testing.T) {
 		{64 << 20, SpeedBestCompression, 256 << 20, 32 << 20},
 		{128 << 20, SpeedBetterCompression, 256 << 20, 32 << 20},
 		{128 << 20, SpeedBestCompression, 256 << 20, 64 << 20},
+		// windowSize*4 overflows a 32-bit int here, so on 386 this row
+		// checks that jobSize clamps before multiplying.
 		{MaxWindowSize, SpeedBestCompression, 256 << 20, 128 << 20},
 	}
 	for _, tt := range tests {

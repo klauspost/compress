@@ -353,7 +353,8 @@ func WithConcurrentBlocks(b bool) EOption {
 }
 
 // maxJobSize caps the job size, so large windows still give several jobs.
-const maxJobSize = 256 << 20
+// A variable so tests can exercise the cap with small inputs.
+var maxJobSize = 256 << 20
 
 // jobSize returns the input section size per parallel job.
 func (o *encoderOptions) jobSize() int {

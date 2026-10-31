@@ -721,22 +721,22 @@ func TestConcurrentBlocks_WindowSizes(t *testing.T) {
 }
 
 // TestConcurrentBlocks_CappedJobSize round-trips a stream whose window is
-// large enough for maxJobSize to limit the job size.
+// large enough for maxJobSize to limit the job size. It lowers maxJobSize so
+// the input stays small, and so must not run in parallel with other tests.
 func TestConcurrentBlocks_CappedJobSize(t *testing.T) {
-	if testing.Short() {
-		t.Skip("large input")
-	}
-	const winSize = 128 << 20
+	defer func(old int) { maxJobSize = old }(maxJobSize)
+	maxJobSize = 4 << 20
+	const winSize = 2 << 20
 	o := encoderOptions{windowSize: winSize, level: SpeedDefault}
 	if o.jobSize() != maxJobSize {
 		t.Fatalf("jobSize = %d, want %d", o.jobSize(), maxJobSize)
 	}
 
 	// Repeat a random block, so matches reach back across job boundaries.
-	block := make([]byte, 4<<20)
+	block := make([]byte, 256<<10)
 	mrand.New(mrand.NewSource(1)).Read(block)
 	// Two jobs: one full job, and a second one that needs its prefix.
-	input := make([]byte, 0, maxJobSize+(16<<20))
+	input := make([]byte, 0, maxJobSize+(1<<20))
 	for i := 0; len(input) < cap(input); i++ {
 		block[0] = byte(i)
 		input = append(input, block...)
