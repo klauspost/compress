@@ -377,6 +377,7 @@ func writeNewSymbolicLink(root *os.Root, name, target string, pending *[]string)
 		_ = root.Remove(name)
 		return fmt.Errorf("%s: illegal link target: %w", name, err)
 	}
+	*pending = append(*pending, name)
 	return nil
 }
 
@@ -391,8 +392,10 @@ func revalidatePendingSymlinks(root *os.Root, pending *[]string) error {
 				remaining = append(remaining, name)
 				continue
 			}
+			_ = root.Remove(name)
 			return fmt.Errorf("%s: illegal link target: %w", name, err)
 		}
+		remaining = append(remaining, name)
 	}
 	*pending = remaining
 	return nil
