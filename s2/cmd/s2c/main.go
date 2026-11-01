@@ -459,6 +459,9 @@ Options:`)
 				if *remove {
 					exitErr(errors.New("cannot remove when input = output"))
 				}
+				if *safe {
+					exitErr(errors.New("cannot use -safe when output path is the same as the input file"))
+				}
 			}
 
 			// Input file.
