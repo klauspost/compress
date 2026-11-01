@@ -117,16 +117,22 @@ func (o *Output) Commit() error {
 	return nil
 }
 
-// sync flushes regular files. Devices, FIFOs, and pipes do not support fsync.
+// sync flushes regular files and block devices. Char devices, FIFOs, and
+// sockets may not support fsync or return EINVAL.
 func (o *Output) sync() error {
 	info, err := o.file.Stat()
 	if err != nil {
 		return err
 	}
-	if !info.Mode().IsRegular() {
+	mode := info.Mode()
+	switch {
+	case mode.IsRegular():
+		return o.file.Sync()
+	case mode&os.ModeDevice != 0 && mode&os.ModeCharDevice == 0:
+		return o.file.Sync()
+	default:
 		return nil
 	}
-	return o.file.Sync()
 }
 
 func (o *Output) failCommit(cause error) error {

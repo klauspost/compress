@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -119,8 +120,52 @@ func TestUntarRejectsSymlinkEscapeViaArchive(t *testing.T) {
 	if err := untar(dst, bytes.NewReader(archive)); err == nil {
 		t.Fatal("extraction unexpectedly accepted an escaping symbolic link")
 	}
+	if _, err := os.Lstat(filepath.Join(dst, "d2", "link")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("escaping symlink left under extraction root: %v", err)
+	}
 	if _, err := os.Lstat(filepath.Join(outside, "link")); err == nil {
 		t.Fatal("escaping symbolic link was created outside the extraction root")
+	}
+}
+
+func TestUntarAllowsSymlinkBeforeTarget(t *testing.T) {
+	setQuiet(t)
+	dst := filepath.Join(t.TempDir(), "dst")
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	if err := tw.WriteHeader(&tar.Header{Name: "alias", Typeflag: tar.TypeSymlink, Linkname: "file.txt", Mode: 0o777}); err != nil {
+		t.Fatal(err)
+	}
+	hdr := tar.Header{Name: "file.txt", Mode: 0o644, Size: 5}
+	if err := tw.WriteHeader(&hdr); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write([]byte("hello")); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := untar(dst, bytes.NewReader(buf.Bytes())); err != nil {
+		if strings.Contains(err.Error(), "making symbolic link") {
+			t.Skipf("symbolic links are unavailable: %v", err)
+		}
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(dst, "file.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "hello" {
+		t.Fatalf("file.txt = %q, want hello", got)
+	}
+	linkTarget, err := os.Readlink(filepath.Join(dst, "alias"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if linkTarget != "file.txt" {
+		t.Fatalf("alias link = %q, want file.txt", linkTarget)
 	}
 }
 
