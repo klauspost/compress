@@ -137,19 +137,39 @@ func TestUntarRejectsDeferredSymlinkEscape(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	archive, err := tarArchive(
-		tar.Header{Name: "d2/link", Typeflag: tar.TypeSymlink, Linkname: "sub/../../outside", Mode: 0o777},
-		tar.Header{Name: "d2/sub", Typeflag: tar.TypeSymlink, Linkname: ".", Mode: 0o777},
-	)
-	if err != nil {
+	// Link target sub/../../outside resolves to a file named "outside" inside the
+	// extraction root while d2/sub is a directory; replacing d2/sub with a symlink
+	// makes the same link target escape to dir/outside.
+	var archive bytes.Buffer
+	tw := tar.NewWriter(&archive)
+	outsideFile := tar.Header{Name: "outside", Mode: 0o644, Size: 1}
+	if err := tw.WriteHeader(&outsideFile); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write([]byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	for _, hdr := range []tar.Header{
+		{Name: "d2/sub/", Typeflag: tar.TypeDir, Mode: 0o755},
+		{Name: "d2/link", Typeflag: tar.TypeSymlink, Linkname: "sub/../../outside", Mode: 0o777},
+		{Name: "d2/sub", Typeflag: tar.TypeSymlink, Linkname: ".", Mode: 0o777},
+	} {
+		if err := tw.WriteHeader(&hdr); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tw.Close(); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := untar(dst, bytes.NewReader(archive)); err == nil {
+	if err := untar(dst, bytes.NewReader(archive.Bytes())); err == nil {
 		t.Fatal("extraction unexpectedly accepted a deferred escaping symbolic link")
 	}
 	if _, err := os.Lstat(filepath.Join(dst, "d2", "link")); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("deferred escaping symlink left under extraction root: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(outside, "link")); err == nil {
+		t.Fatal("deferred escaping symbolic link was created outside the extraction root")
 	}
 }
 
