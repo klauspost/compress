@@ -173,6 +173,21 @@ func TestUntarRejectsDeferredSymlinkEscape(t *testing.T) {
 	}
 }
 
+func TestUntarRejectsHardLinkToSymlink(t *testing.T) {
+	setQuiet(t)
+	dst := filepath.Join(t.TempDir(), "dst")
+	archive, err := tarArchive(
+		tar.Header{Name: "link", Typeflag: tar.TypeSymlink, Linkname: "file.txt", Mode: 0o777},
+		tar.Header{Name: "alias", Typeflag: tar.TypeLink, Linkname: "link", Mode: 0o644},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := untar(dst, bytes.NewReader(archive)); err == nil {
+		t.Fatal("extraction unexpectedly accepted a hard link to a symbolic link")
+	}
+}
+
 func TestUntarAllowsSymlinkBeforeTarget(t *testing.T) {
 	setQuiet(t)
 	dst := filepath.Join(t.TempDir(), "dst")
