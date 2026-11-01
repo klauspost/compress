@@ -293,6 +293,9 @@ func untar(dst string, r io.Reader) error {
 			if err := root.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return err
 			}
+			if err := removeExisting(root, target); err != nil {
+				return err
+			}
 			f, err := root.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode).Perm())
 			if err != nil {
 				return err
@@ -360,6 +363,9 @@ func writeNewSymbolicLink(root *os.Root, name, target string) error {
 		return fmt.Errorf("%s: making symbolic link: %w", name, err)
 	}
 	if _, err := root.Stat(name); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
 		_ = root.Remove(name)
 		return fmt.Errorf("%s: illegal link target: %w", name, err)
 	}
