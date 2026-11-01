@@ -89,14 +89,14 @@ func (o *Output) Commit() error {
 	if o == nil || o.file == nil {
 		return fs.ErrClosed
 	}
-	if err := o.file.Sync(); err != nil {
+	if err := o.sync(); err != nil {
 		return o.failCommit(err)
 	}
 	if o.restore {
 		if err := o.file.Chmod(o.finalMode); err != nil {
 			return o.failCommit(err)
 		}
-		if err := o.file.Sync(); err != nil {
+		if err := o.sync(); err != nil {
 			return o.failCommit(err)
 		}
 	}
@@ -115,6 +115,18 @@ func (o *Output) Commit() error {
 	}
 	o.tempName = ""
 	return nil
+}
+
+// sync flushes regular files. Devices, FIFOs, and pipes do not support fsync.
+func (o *Output) sync() error {
+	info, err := o.file.Stat()
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return nil
+	}
+	return o.file.Sync()
 }
 
 func (o *Output) failCommit(cause error) error {

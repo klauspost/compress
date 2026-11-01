@@ -359,6 +359,10 @@ func writeNewSymbolicLink(root *os.Root, name, target string) error {
 	if err := root.Symlink(target, name); err != nil {
 		return fmt.Errorf("%s: making symbolic link: %w", name, err)
 	}
+	if _, err := root.Stat(name); err != nil {
+		_ = root.Remove(name)
+		return fmt.Errorf("%s: illegal link target: %w", name, err)
+	}
 	return nil
 }
 
