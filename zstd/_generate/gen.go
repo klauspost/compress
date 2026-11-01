@@ -1,6 +1,6 @@
 package main
 
-//go:generate go run gen.go -out ../seqdec.s -arch amd64,arm64 -arm64-promote-stack-slots -pkg=zstd
+//go:generate go run gen.go -out ../seqdec.s -arch amd64,arm64 -arm64-promote-stack-slots -arm64-pair-vector-moves -pkg=zstd
 
 import (
 	"fmt"
@@ -8,10 +8,10 @@ import (
 
 	_ "github.com/klauspost/compress"
 
-	. "github.com/mmcloughlin/avo/build"
-	"github.com/mmcloughlin/avo/gotypes"
-	. "github.com/mmcloughlin/avo/operand"
-	"github.com/mmcloughlin/avo/reg"
+	. "github.com/honeycombio/avo/build"
+	"github.com/honeycombio/avo/gotypes"
+	. "github.com/honeycombio/avo/operand"
+	"github.com/honeycombio/avo/reg"
 )
 
 // insert extra checks here and there.
