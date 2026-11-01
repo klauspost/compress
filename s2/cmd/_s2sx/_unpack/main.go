@@ -248,6 +248,7 @@ func untar(dst string, r io.Reader) error {
 	}
 
 	tr := tar.NewReader(r)
+	var pendingSymlinks []string
 
 	for {
 		header, err := tr.Next()
@@ -256,6 +257,9 @@ func untar(dst string, r io.Reader) error {
 
 		// if no more files are found return
 		case err == io.EOF:
+			if err := revalidatePendingSymlinks(root, &pendingSymlinks); err != nil {
+				return err
+			}
 			return nil
 
 		// return any other error
@@ -311,7 +315,7 @@ func untar(dst string, r io.Reader) error {
 			if !*quiet {
 				fmt.Println(displayTarget)
 			}
-			if err := writeNewSymbolicLink(root, target, filepath.FromSlash(header.Linkname)); err != nil {
+			if err := writeNewSymbolicLink(root, target, filepath.FromSlash(header.Linkname), &pendingSymlinks); err != nil {
 				return err
 			}
 		case tar.TypeLink:
@@ -325,6 +329,9 @@ func untar(dst string, r io.Reader) error {
 			if err := writeNewHardLink(root, target, linkTarget); err != nil {
 				return err
 			}
+		}
+		if err := revalidatePendingSymlinks(root, &pendingSymlinks); err != nil {
+			return err
 		}
 	}
 }
@@ -352,7 +359,7 @@ func checkLinkTarget(name, linkTarget string) error {
 	return nil
 }
 
-func writeNewSymbolicLink(root *os.Root, name, target string) error {
+func writeNewSymbolicLink(root *os.Root, name, target string, pending *[]string) error {
 	if err := root.MkdirAll(filepath.Dir(name), 0o755); err != nil {
 		return fmt.Errorf("%s: making directory for file: %w", name, err)
 	}
@@ -364,11 +371,30 @@ func writeNewSymbolicLink(root *os.Root, name, target string) error {
 	}
 	if _, err := root.Stat(name); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			*pending = append(*pending, name)
 			return nil
 		}
 		_ = root.Remove(name)
 		return fmt.Errorf("%s: illegal link target: %w", name, err)
 	}
+	return nil
+}
+
+func revalidatePendingSymlinks(root *os.Root, pending *[]string) error {
+	if len(*pending) == 0 {
+		return nil
+	}
+	remaining := (*pending)[:0]
+	for _, name := range *pending {
+		if _, err := root.Stat(name); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				remaining = append(remaining, name)
+				continue
+			}
+			return fmt.Errorf("%s: illegal link target: %w", name, err)
+		}
+	}
+	*pending = remaining
 	return nil
 }
 

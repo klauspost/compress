@@ -128,6 +128,31 @@ func TestUntarRejectsSymlinkEscapeViaArchive(t *testing.T) {
 	}
 }
 
+func TestUntarRejectsDeferredSymlinkEscape(t *testing.T) {
+	setQuiet(t)
+	dir := t.TempDir()
+	dst := filepath.Join(dir, "dst")
+	outside := filepath.Join(dir, "outside")
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	archive, err := tarArchive(
+		tar.Header{Name: "d2/link", Typeflag: tar.TypeSymlink, Linkname: "sub/../../outside", Mode: 0o777},
+		tar.Header{Name: "d2/sub", Typeflag: tar.TypeSymlink, Linkname: ".", Mode: 0o777},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := untar(dst, bytes.NewReader(archive)); err == nil {
+		t.Fatal("extraction unexpectedly accepted a deferred escaping symbolic link")
+	}
+	if _, err := os.Lstat(filepath.Join(dst, "d2", "link")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("deferred escaping symlink left under extraction root: %v", err)
+	}
+}
+
 func TestUntarAllowsSymlinkBeforeTarget(t *testing.T) {
 	setQuiet(t)
 	dst := filepath.Join(t.TempDir(), "dst")
