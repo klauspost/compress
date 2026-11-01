@@ -98,6 +98,46 @@ func TestUntarRejectsSymlinkRoot(t *testing.T) {
 	}
 }
 
+func TestUntarRejectsSymlinkEscapeViaArchive(t *testing.T) {
+	setQuiet(t)
+	dir := t.TempDir()
+	dst := filepath.Join(dir, "dst")
+	outside := filepath.Join(dir, "outside")
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	archive, err := tarArchive(
+		tar.Header{Name: "d1", Typeflag: tar.TypeSymlink, Linkname: ".", Mode: 0o777},
+		tar.Header{Name: "d1/d2/", Typeflag: tar.TypeDir, Mode: 0o755},
+		tar.Header{Name: "d1/d2/link", Typeflag: tar.TypeSymlink, Linkname: "../../outside", Mode: 0o777},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := untar(dst, bytes.NewReader(archive)); err == nil {
+		t.Fatal("extraction unexpectedly accepted an escaping symbolic link")
+	}
+	if _, err := os.Lstat(filepath.Join(outside, "link")); err == nil {
+		t.Fatal("escaping symbolic link was created outside the extraction root")
+	}
+}
+
+func tarArchive(headers ...tar.Header) ([]byte, error) {
+	var archive bytes.Buffer
+	tw := tar.NewWriter(&archive)
+	for i := range headers {
+		if err := tw.WriteHeader(&headers[i]); err != nil {
+			return nil, err
+		}
+	}
+	if err := tw.Close(); err != nil {
+		return nil, err
+	}
+	return archive.Bytes(), nil
+}
+
 func tarBytes(t *testing.T, header tar.Header, contents string) []byte {
 	t.Helper()
 	var archive bytes.Buffer

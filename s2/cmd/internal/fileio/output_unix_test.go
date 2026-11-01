@@ -81,3 +81,16 @@ func TestCreatePreservesExistingMode(t *testing.T) {
 		t.Fatalf("existing output mode = %v, want 0640", got)
 	}
 }
+
+func TestCommitSkipsSyncForDevice(t *testing.T) {
+	output, err := Create("/dev/null", 0o666, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := output.Write([]byte("discard")); err != nil {
+		t.Fatal(err)
+	}
+	if err := output.Commit(); err != nil {
+		t.Fatalf("commit to /dev/null: %v", err)
+	}
+}
