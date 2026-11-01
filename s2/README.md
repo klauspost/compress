@@ -164,6 +164,16 @@ To build binaries to the current folder use:
 
 `go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d`
 
+### Output file safety
+
+On Unix-like systems the command-line tools harden how output files are created:
+
+- With `-safe`, the destination is opened with an exclusive create. Any existing directory entry at that path—including a **symbolic link**—is rejected instead of being followed.
+- New files are staged with restrictive permissions, then committed with sanitized mode bits. Setuid, setgid, and sticky bits from user-supplied metadata are not applied to created outputs.
+- `s2c` stream recompression writes through a private temporary file next to the destination and replaces the final name only after `Sync`.
+- `s2sx -untar` keeps extraction within the current directory, rejects path traversal, and rejects unsafe symbolic and hard links (including when a pre-existing symlink occupies an extracted path).
+
+Treat archives and output directories as untrusted when running these tools with elevated privileges. See https://github.com/klauspost/compress/issues/1296 and https://github.com/klauspost/compress/pull/1297.
 
 ## s2c
 
@@ -322,7 +332,7 @@ Files are extracted to the current folder with the path specified in the tar fil
 
 Note that tar files are not validated before they are wrapped.
 
-For security reasons files that move below the root folder are not allowed.
+Extraction stays within the destination directory: absolute paths, `..` components, and link targets that escape the extraction root are rejected. Pre-existing symbolic links at extracted paths are not followed. See [Output file safety](#output-file-safety) above.
 
 # Performance
 

@@ -20,6 +20,7 @@ import (
 	"unicode"
 
 	"github.com/klauspost/compress/s2"
+	"github.com/klauspost/compress/s2/cmd/internal/fileio"
 	"github.com/klauspost/compress/s2/cmd/internal/readahead"
 )
 
@@ -169,56 +170,43 @@ Options:`)
 			exitErr(err)
 			defer src.Close()
 			var out io.Writer
+			var bw *bufio.Writer
+			var sw *switchWriter
 			switch {
 			case *stdout:
 				out = os.Stdout
 			default:
-				if *safe {
-					_, err := os.Stat(dstFilename)
-					if !os.IsNotExist(err) {
-						exitErr(errors.New("destination file exists"))
-					}
-				}
-				dstFile, err := os.OpenFile(dstFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0777)
+				firstOutput, err := fileio.Create(dstFilename, 0o777, *safe)
 				exitErr(err)
-				defer dstFile.Close()
-				sw := &switchWriter{w: dstFile, left: sz, close: nil}
-				sw.fn = func() {
+				sw = &switchWriter{output: firstOutput, left: sz}
+				sw.next = func() (*fileio.Output, error) {
 					dstFilename := dstFilename + ".more"
-					if *safe {
-						_, err := os.Stat(dstFilename)
-						if !os.IsNotExist(err) {
-							exitErr(fmt.Errorf("destination '%s' file exists", dstFilename))
-						}
-					}
-					dstFile, err := os.OpenFile(dstFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0777)
-					exitErr(err)
-					sw.close = dstFile.Close
-					sw.w = dstFile
-					sw.left = (1 << 63) - 1
+					return fileio.Create(dstFilename, 0o777, *safe)
 				}
-				defer sw.Close()
-				bw := bufio.NewWriterSize(sw, 4<<20*2)
-				defer bw.Flush()
+				defer sw.Abort()
+				bw = bufio.NewWriterSize(sw, 4<<20*2)
 				out = bw
 				_, err = out.Write(exec)
-				exitErr(err)
+				exitSFXOutputErr(sw, err)
 				_, err = out.Write([]byte{mode})
 			}
-			exitErr(err)
+			exitSFXOutputErr(sw, err)
 			wc := wCounter{out: out}
 			start := time.Now()
 			var input int64
 			if !isCompressed {
 				wr.Reset(&wc)
-				defer wr.Close()
 				input, err = wr.ReadFrom(src)
-				exitErr(err)
+				exitSFXOutputErr(sw, err)
 				err = wr.Close()
-				exitErr(err)
+				exitSFXOutputErr(sw, err)
 			} else {
 				input, err = io.Copy(&wc, src)
-				exitErr(err)
+				exitSFXOutputErr(sw, err)
+			}
+			if bw != nil {
+				exitSFXOutputErr(sw, bw.Flush())
+				exitSFXOutputErr(sw, sw.Close())
 			}
 			if !*quiet {
 				elapsed := time.Since(start)
@@ -252,6 +240,16 @@ func exitErr(err error) {
 		fmt.Fprintln(os.Stderr, "\nERROR:", err.Error())
 		os.Exit(2)
 	}
+}
+
+func exitSFXOutputErr(output *switchWriter, err error) {
+	if err == nil {
+		return
+	}
+	if output != nil {
+		err = errors.Join(err, output.Abort())
+	}
+	exitErr(err)
 }
 
 type wCounter struct {
@@ -308,28 +306,42 @@ func toSize(size string) (int64, error) {
 }
 
 type switchWriter struct {
-	w     io.Writer
-	left  int64
-	fn    func()
-	close func() error
+	output *fileio.Output
+	left   int64
+	next   func() (*fileio.Output, error)
 }
 
 func (w *switchWriter) Write(b []byte) (int, error) {
 	if int64(len(b)) <= w.left {
 		w.left -= int64(len(b))
-		return w.w.Write(b)
+		return w.output.Write(b)
 	}
-	n, err := w.w.Write(b[:w.left])
+	n, err := w.output.Write(b[:w.left])
 	if err != nil {
 		return n, err
 	}
-	w.fn()
+	if err := w.output.Commit(); err != nil {
+		return n, err
+	}
+	w.output, err = w.next()
+	if err != nil {
+		return n, err
+	}
+	w.left = (1 << 63) - 1
 	n2, err := w.Write(b[n:])
 	return n + n2, err
 }
+
 func (w *switchWriter) Close() error {
-	if w.close == nil {
+	if w == nil || w.output == nil {
 		return nil
 	}
-	return w.close()
+	return w.output.Commit()
+}
+
+func (w *switchWriter) Abort() error {
+	if w == nil || w.output == nil {
+		return nil
+	}
+	return w.output.Abort()
 }
