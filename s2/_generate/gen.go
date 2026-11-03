@@ -13,10 +13,10 @@ import (
 	"runtime"
 	"strings"
 
-	. "github.com/mmcloughlin/avo/build"
-	"github.com/mmcloughlin/avo/buildtags"
-	. "github.com/mmcloughlin/avo/operand"
-	"github.com/mmcloughlin/avo/reg"
+	. "github.com/honeycombio/avo/build"
+	"github.com/honeycombio/avo/buildtags"
+	. "github.com/honeycombio/avo/operand"
+	"github.com/honeycombio/avo/reg"
 )
 
 // insert extra checks here and there.

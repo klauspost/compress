@@ -3118,27 +3118,42 @@ func TestDecodeAllExactCapacity(t *testing.T) {
 	enc.Close()
 
 	prefix := []byte("existing output")
+	// slack is the spare capacity past the output; at compressedBlockOverAlloc
+	// the last block may use the extended copies, which must stay within cap.
+	const guard = 256
 	for _, twoPass := range []bool{false, true} {
 		for _, pre := range [][]byte{nil, prefix} {
-			t.Run(fmt.Sprintf("twopass=%v/prefix=%d", twoPass, len(pre)), func(t *testing.T) {
-				defer forceTwoPass(twoPass)()
-				dec, err := NewReader(nil, WithDecoderConcurrency(1))
-				if err != nil {
-					t.Fatal(err)
-				}
-				defer dec.Close()
-				dst := append(make([]byte, 0, len(pre)+len(input)), pre...)
-				got, err := dec.DecodeAll(comp, dst)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if !bytes.Equal(got[:len(pre)], pre) || !bytes.Equal(got[len(pre):], input) {
-					t.Fatal("output mismatch")
-				}
-				if &got[:1][0] != &dst[:1][0] {
-					t.Fatal("output was reallocated instead of using dst")
-				}
-			})
+			for _, slack := range []int{0, compressedBlockOverAlloc - 1, compressedBlockOverAlloc} {
+				t.Run(fmt.Sprintf("twopass=%v/prefix=%d/slack=%d", twoPass, len(pre), slack), func(t *testing.T) {
+					defer forceTwoPass(twoPass)()
+					dec, err := NewReader(nil, WithDecoderConcurrency(1))
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer dec.Close()
+					size := len(pre) + len(input) + slack
+					backing := make([]byte, size+guard)
+					for i := range backing[size:] {
+						backing[size+i] = 0xa5
+					}
+					dst := append(backing[:0:size], pre...)
+					got, err := dec.DecodeAll(comp, dst)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Equal(got[:len(pre)], pre) || !bytes.Equal(got[len(pre):], input) {
+						t.Fatal("output mismatch")
+					}
+					if &got[:1][0] != &backing[0] {
+						t.Fatal("output was reallocated instead of using dst")
+					}
+					for i, b := range backing[size:] {
+						if b != 0xa5 {
+							t.Fatalf("wrote %d bytes past cap(dst)", i+1)
+						}
+					}
+				})
+			}
 		}
 	}
 }

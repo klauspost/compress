@@ -10,9 +10,9 @@ import (
 
 	_ "github.com/klauspost/compress"
 
-	. "github.com/mmcloughlin/avo/build"
-	. "github.com/mmcloughlin/avo/operand"
-	"github.com/mmcloughlin/avo/reg"
+	. "github.com/honeycombio/avo/build"
+	. "github.com/honeycombio/avo/operand"
+	"github.com/honeycombio/avo/reg"
 )
 
 func main() {

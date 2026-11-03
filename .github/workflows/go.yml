@@ -213,8 +213,9 @@ jobs:
         run: go test -tags="$TAGS" -run=none -fuzz="^${TEST##*/}\$" -fuzztime=2m -test.fuzzminimizetime=100ms "./${TEST%/*}"
 
   # AddressSanitizer catches out-of-bounds accesses in the zstd decode assembly
-  # — notably the extended (16-byte-block) memory copies in decodeSyncSimple,
-  # which overrun a literal run or match by up to 15 bytes. -race and plain
+  # — notably the extended (block-wise) memory copies in decodeSyncSimple,
+  # which overrun a literal run or match by up to compressedBlockOverAlloc-1
+  # bytes. -race and plain
   # fuzzing cannot observe such an overrun when it lands in an adjacent live
   # allocation, so asan is the only guard against a regression reintroducing the
   # 2022 crash (#644/#645, see #1168). Requires CGO + clang; run on amd64+arm64.
