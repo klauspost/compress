@@ -685,7 +685,7 @@ func TestConcurrentBlocks_WindowSizes(t *testing.T) {
 	for _, winSize := range testWindowSizes {
 		t.Run(fmt.Sprintf("w%dk", winSize/1024), func(t *testing.T) {
 			// Input must exceed jobSize to trigger multi-job.
-			jobSize := max(winSize*4, 512<<10)
+			jobSize := (&encoderOptions{windowSize: winSize}).jobSize()
 			inputSize := min(
 				// Cap at 8MB for test speed.
 				jobSize*2+1000, 8<<20)
@@ -717,6 +717,71 @@ func TestConcurrentBlocks_WindowSizes(t *testing.T) {
 				t.Fatalf("mismatch at window %d", winSize)
 			}
 		})
+	}
+}
+
+// TestConcurrentBlocks_CappedJobSize round-trips a stream whose window is
+// large enough for maxJobSize to limit the job size. It lowers maxJobSize so
+// the input stays small, and so must not run in parallel with other tests.
+func TestConcurrentBlocks_CappedJobSize(t *testing.T) {
+	defer func(old int) { maxJobSize = old }(maxJobSize)
+	maxJobSize = 4 << 20
+	// The window is larger than a job, so the overlap is clamped too.
+	const winSize = 8 << 20
+	o := encoderOptions{windowSize: winSize, level: SpeedBestCompression}
+	if o.jobSize() != maxJobSize {
+		t.Fatalf("jobSize = %d, want %d", o.jobSize(), maxJobSize)
+	}
+	if o.overlapSize() != maxJobSize/2 {
+		t.Fatalf("overlapSize = %d, want %d", o.overlapSize(), maxJobSize/2)
+	}
+
+	// Repeat a random block, so matches reach back across job boundaries.
+	block := make([]byte, 256<<10)
+	mrand.New(mrand.NewSource(1)).Read(block)
+	// Two jobs: one full job, and a second one that needs its prefix.
+	input := make([]byte, 0, maxJobSize+(1<<20))
+	for i := 0; len(input) < cap(input); i++ {
+		block[0] = byte(i)
+		input = append(input, block...)
+	}
+
+	var buf bytes.Buffer
+	enc, err := NewWriter(&buf,
+		WithEncoderConcurrency(2),
+		WithConcurrentBlocks(true),
+		WithWindowSize(winSize),
+		WithEncoderLevel(SpeedBestCompression),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := enc.Write(input); err != nil {
+		t.Fatal(err)
+	}
+	if err := enc.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := enc.state.jobs.jobSeq; got != 2 {
+		t.Fatalf("dispatched %d jobs, want 2", got)
+	}
+	// Only the first random block is incompressible. Without its prefix, the
+	// second job's first block would not compress either.
+	if limit := len(block) * 3 / 2; buf.Len() > limit {
+		t.Fatalf("compressed to %d bytes, want at most %d; was the prefix used?", buf.Len(), limit)
+	}
+
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	decoded, err := dec.DecodeAll(buf.Bytes(), nil)
+	if err != nil {
+		t.Fatal("decode error:", err)
+	}
+	if !bytes.Equal(decoded, input) {
+		t.Fatal("round trip mismatch")
 	}
 }
 
