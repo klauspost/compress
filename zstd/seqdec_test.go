@@ -640,6 +640,7 @@ func TestUseSafeDecodeSyncFrameBound(t *testing.T) {
 		{"exact frame, one block left", mb, mb, true},
 		{"exact frame, last small block", 1000, 1000, true},
 		{"last small block with slack", 1000, 1000 + compressedBlockOverAlloc, false},
+		{"last small block, slack minus one", 1000, 1000 + compressedBlockOverAlloc - 1, true},
 		{"buffer below frame, block fits", 4 << 20, mb + compressedBlockOverAlloc, false},
 		{"buffer below frame, block lacks slack", 4 << 20, mb + compressedBlockOverAlloc - 1, true},
 	}
@@ -886,6 +887,9 @@ func TestDecoderShortSequenceCopies(t *testing.T) {
 		{name: "words17-lits17", wordLens: []int{17}, litLens: []int{17}},
 		{name: "words15-lits1", wordLens: []int{15}, litLens: []int{1}},
 		{name: "mixed", wordLens: []int{4, 5, 8, 15, 16, 17, 31, 32, 33}, litLens: []int{0, 0, 0, 1, 2, 15, 16, 17, 32, 33}},
+		{name: "words32-lits0", wordLens: []int{32}, litLens: []int{0}},
+		{name: "words33-lits0", wordLens: []int{33}, litLens: []int{0}},
+		{name: "long-words", wordLens: []int{47, 48, 63, 64, 65, 96, 97, 200}, litLens: []int{0, 0, 1, 16, 17}},
 		{name: "offsets40-lits20", litLens: []int{0, 1, 2, 5, 15, 16, 17, 20}, maxOffset: 40},
 	}
 	levels := []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression}
@@ -944,6 +948,16 @@ func TestDecoderShortSequenceCopies(t *testing.T) {
 				}
 				if !bytes.Equal(got, input) {
 					t.Fatalf("DecodeAll (Go) output mismatch (len %d vs %d)", len(got), len(input))
+				}
+
+				restore = forceTwoPass(true)
+				got, err = dec.DecodeAll(compressed, nil)
+				restore()
+				if err != nil {
+					t.Fatalf("DecodeAll (two-pass): %v", err)
+				}
+				if !bytes.Equal(got, input) {
+					t.Fatalf("DecodeAll (two-pass) output mismatch (len %d vs %d)", len(got), len(input))
 				}
 
 				if err := dec.Reset(bytes.NewReader(compressed)); err != nil {
