@@ -65,7 +65,7 @@ Usually lengths around 6-8 are best.
 - `-o` Output name. Default `dictionary.bin`.
 - `-q`    Do not print progress
 - `-dictID` zstd dictionary ID. 0 will be random. Default 0.
-- `-zcompat` Generate dictionary compatible with zstd 1.5.5 and older. Default false.
+- `-zcompat` Generate dictionary compatible with zstd 1.5.5 and older. Default true.
 - `-zlevel` Zstandard compression level.
 
 The Zstandard compression level to use when compressing the samples.
@@ -77,7 +77,7 @@ Valid values are 1-4, where 1 = fastest, 2 = default, 3 = better, 4 = best.
 
 ## Library
 
-The `github.com/klaupost/compress/dict` package can be used to build dictionaries in code.
+The `github.com/klauspost/compress/dict` package can be used to build dictionaries in code.
 The caller must supply a collection of (pre-truncated) samples, and the options to use.
 The options largely correspond to the command line options.
 
@@ -85,7 +85,7 @@ The options largely correspond to the command line options.
 package main
 
 import (
-	"github.com/klaupost/compress/dict"
+	"github.com/klauspost/compress/dict"
 	"github.com/klauspost/compress/zstd"
 )
 
@@ -95,11 +95,11 @@ func main() {
 	// ... Fill samples with representative data.
 
 	dict, err := dict.BuildZstdDict(samples, dict.Options{
-		HashLen:     6,
-		MaxDictSize: 114688,
-		ZstdDictID:  0, // Random
-		ZstdCompat:  false,
-		ZstdLevel:   zstd.SpeedBestCompression,
+		HashBytes:      6,
+		MaxDictSize:    114688,
+		ZstdDictID:     0, // Random
+		ZstdDictCompat: false,
+		ZstdLevel:      zstd.SpeedBestCompression,
 	})
 	// ... Handle error, etc.
 }
