@@ -404,9 +404,6 @@ func writeHeader(w io.Writer, h *header) error {
 	if len(h.Name) > maxUint16 {
 		return errLongName
 	}
-	if len(h.Extra) > maxUint16 {
-		return errLongExtra
-	}
 
 	// The correct behavior of a streaming writer, implemented by Info-ZIP 3.0,
 	// would be to write 0xFFFFFFFF in the size fields and then write a Zip64
@@ -442,6 +439,9 @@ func writeHeader(w io.Writer, h *header) error {
 		b.uint16(16) // size of Zip64 extra field data
 		b.uint64(h.UncompressedSize64)
 		b.uint64(h.CompressedSize64)
+	}
+	if len(h.Extra)+len(zip64ExtraInfo) > maxUint16 {
+		return errLongExtra
 	}
 
 	var buf [fileHeaderLen]byte

@@ -536,8 +536,9 @@ func TestZip64LargeDirectory(t *testing.T) {
 			}
 		}
 	}
+	// Each NewReader below holds about 8 GiB of directory, so the
+	// subtests run one at a time, with a GC in between.
 	t.Run("uint32max-1_NoZip64", func(t *testing.T) {
-		t.Parallel()
 		buf := new(rleBuffer)
 		w := NewWriter(buf)
 		gen(uint32max - 1)(w)
@@ -548,8 +549,8 @@ func TestZip64LargeDirectory(t *testing.T) {
 			t.Errorf("NewReader: %v", err)
 		}
 	})
+	runtime.GC()
 	t.Run("uint32max_HasZip64", func(t *testing.T) {
-		t.Parallel()
 		buf := new(rleBuffer)
 		w := NewWriter(buf)
 		gen(uint32max)(w)
@@ -714,6 +715,7 @@ func TestHeaderTooLongErr(t *testing.T) {
 	var headerTests = []struct {
 		name    string
 		extra   []byte
+		size    uint64 // if non-zero, use CreateRaw with this uncompressed size
 		wanterr error
 	}{
 		{
@@ -724,6 +726,14 @@ func TestHeaderTooLongErr(t *testing.T) {
 		{
 			name:    "long_extra",
 			extra:   bytes.Repeat([]byte{0xff}, 1<<16),
+			wanterr: errLongExtra,
+		},
+		{
+			// Fits on its own, but not with the 20-byte Zip64 extra
+			// that CreateRaw adds to the local header.
+			name:    "long_extra_zip64",
+			extra:   bytes.Repeat([]byte{0xff}, uint16max-10),
+			size:    5 << 30,
 			wanterr: errLongExtra,
 		},
 	}
@@ -737,7 +747,13 @@ func TestHeaderTooLongErr(t *testing.T) {
 			Name:  test.name,
 			Extra: test.extra,
 		}
-		_, err := w.CreateHeader(h)
+		var err error
+		if test.size > 0 {
+			h.UncompressedSize64 = test.size
+			_, err = w.CreateRaw(h)
+		} else {
+			_, err = w.CreateHeader(h)
+		}
 		if err != test.wanterr {
 			t.Errorf("error=%v, want %v", err, test.wanterr)
 		}
