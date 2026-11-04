@@ -170,7 +170,7 @@ func TestUntarPathMutationCannotWriteOutsideRoot(t *testing.T) {
 	link := filepath.Join(dst, "d2", "link")
 	if target, err := os.Readlink(link); err != nil {
 		t.Fatalf("final symbolic link is missing: %v", err)
-	} else if target != "sub/../../outside" {
+	} else if target != filepath.FromSlash("sub/../../outside") {
 		t.Fatalf("final symbolic link target = %q", target)
 	}
 	if _, err := os.Stat(filepath.Join(outside, "escaped.txt")); !errors.Is(err, fs.ErrNotExist) {
