@@ -92,14 +92,13 @@ Options:`)
 			return
 		}
 		dstFilename := *out
-		output, err := fileio.Create(dstFilename, os.ModePerm, *safe)
+		dstFile, err := fileio.Create(dstFilename, os.ModePerm, *safe)
 		exitErr(err)
-		defer output.Abort()
-		bw := bufio.NewWriterSize(output, 4<<20)
+		bw := bufio.NewWriterSize(dstFile, 4<<20)
 		_, copyErr := io.Copy(bw, r)
 		flushErr := bw.Flush()
-		exitOutputErr(output, errors.Join(copyErr, flushErr))
-		exitErr(output.Commit())
+		closeErr := dstFile.Close()
+		exitErr(errors.Join(copyErr, flushErr, closeErr))
 		return
 	}
 	var files []string
@@ -251,7 +250,7 @@ Options:`)
 				src = rc
 			}
 			var out io.Writer
-			var dstOutput *fileio.Output
+			var dstFile *os.File
 			var bw *bufio.Writer
 			switch {
 			case *verify:
@@ -259,12 +258,11 @@ Options:`)
 			case *stdout:
 				out = os.Stdout
 			default:
-				dstOutput, err = fileio.Create(dstFilename, mode, *safe)
+				dstFile, err = fileio.Create(dstFilename, mode, *safe)
 				exitErr(err)
-				defer dstOutput.Abort()
-				out = dstOutput
+				out = dstFile
 				if !block {
-					bw = bufio.NewWriterSize(dstOutput, 4<<20)
+					bw = bufio.NewWriterSize(dstFile, 4<<20)
 					out = bw
 				}
 			}
@@ -297,13 +295,15 @@ Options:`)
 			} else {
 				output, err = io.Copy(out, decoded)
 			}
-			exitOutputErr(dstOutput, err)
+			var flushErr error
 			if bw != nil {
-				exitOutputErr(dstOutput, bw.Flush())
+				flushErr = bw.Flush()
 			}
-			if dstOutput != nil {
-				exitOutputErr(dstOutput, dstOutput.Commit())
+			var closeErr error
+			if dstFile != nil {
+				closeErr = dstFile.Close()
 			}
+			exitErr(errors.Join(err, flushErr, closeErr))
 			if !*quiet {
 				elapsed := time.Since(start)
 				mbPerSec := (float64(output) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
@@ -367,16 +367,6 @@ func exitErr(err error) {
 		fmt.Fprintln(os.Stderr, "\nERROR:", err.Error())
 		os.Exit(2)
 	}
-}
-
-func exitOutputErr(output *fileio.Output, err error) {
-	if err == nil {
-		return
-	}
-	if output != nil {
-		err = errors.Join(err, output.Abort())
-	}
-	exitErr(err)
 }
 
 type rCounter struct {

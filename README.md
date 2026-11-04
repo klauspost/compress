@@ -30,9 +30,6 @@ Use the links above for more information on each.
 
 # changelog
 
-* Nov 1st, 2026
-	* s2/cmd: Harden `s2c`, `s2d`, and `s2sx` output file creation and self-extractor tar extraction in https://github.com/klauspost/compress/pull/1297. https://github.com/klauspost/compress/issues/1296
-
 * Sep 25th, 2026 [1.20.1](https://github.com/klauspost/compress/releases/tag/v1.20.1)
 	* zstd: Apply reset options to reused frame decoders by @pellared in https://github.com/klauspost/compress/pull/1226
 	* flate: Report unexpected EOF for truncated Huffman extra bits by @rupayon123 in https://github.com/klauspost/compress/pull/1229
