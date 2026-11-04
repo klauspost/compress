@@ -2147,3 +2147,41 @@ func TestReaderInfoZIPMaxUint32Fields(t *testing.T) {
 		})
 	}
 }
+
+// TestReaderDirectorySizePlaceholder checks that a 0xFFFFFFFF directory size
+// in the end record is taken from the Zip64 end record, even when the record
+// count and offset fit in the end record.
+func TestReaderDirectorySizePlaceholder(t *testing.T) {
+	var buf bytes.Buffer
+	w := NewWriter(&buf)
+	fh := &FileHeader{
+		Name:               "x",
+		Method:             Deflate,
+		CompressedSize64:   1024,
+		UncompressedSize64: 5 << 30,
+	}
+	fw, err := w.CreateRaw(fh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.CopyN(fw, zeros{}, int64(fh.CompressedSize64)); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// The Zip64 entry makes the writer emit a Zip64 end record. Mark only
+	// the directory size in the end record as a placeholder, as the writer
+	// does for a central directory of 4 GiB - 1 bytes.
+	b := buf.Bytes()
+	le.PutUint32(b[len(b)-directoryEndLen+12:], uint32max)
+
+	r, err := NewReader(bytes.NewReader(b), int64(len(b)))
+	if err != nil {
+		t.Fatalf("NewReader: %v", err)
+	}
+	if len(r.File) != 1 || r.File[0].UncompressedSize64 != fh.UncompressedSize64 {
+		t.Fatalf("got %d files, want 1 of %d bytes", len(r.File), fh.UncompressedSize64)
+	}
+}
