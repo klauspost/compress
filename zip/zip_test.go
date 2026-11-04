@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"math/bits"
 	"runtime"
 	"sort"
 	"strings"
@@ -496,6 +497,9 @@ func TestZip64LargeDirectory(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping in short mode")
 	}
+	if bits.UintSize == 32 {
+		t.Skip("skipping on 32-bit platforms")
+	}
 	t.Parallel()
 	// gen returns a func that writes a zip with a wantLen bytes
 	// of central directory.
@@ -532,16 +536,32 @@ func TestZip64LargeDirectory(t *testing.T) {
 			}
 		}
 	}
+	// Each NewReader below holds about 8 GiB of directory, so the
+	// subtests run one at a time, with a GC in between.
 	t.Run("uint32max-1_NoZip64", func(t *testing.T) {
-		t.Parallel()
-		if generatesZip64(t, gen(uint32max-1)) {
+		buf := new(rleBuffer)
+		w := NewWriter(buf)
+		gen(uint32max - 1)(w)
+		if suffixIsZip64(t, buf) {
 			t.Error("unexpected zip64")
 		}
+		if _, err := NewReader(buf, buf.Size()); err != nil {
+			t.Errorf("NewReader: %v", err)
+		}
 	})
+	runtime.GC()
 	t.Run("uint32max_HasZip64", func(t *testing.T) {
-		t.Parallel()
-		if !generatesZip64(t, gen(uint32max)) {
+		buf := new(rleBuffer)
+		w := NewWriter(buf)
+		gen(uint32max)(w)
+		if !suffixIsZip64(t, buf) {
 			t.Error("expected zip64")
+		}
+		// Round-trip through NewReader. With CD size exactly 0xFFFFFFFF,
+		// records well below 0xFFFF, and dirOffset == 0, the only EOCD
+		// field that holds the placeholder is directorySize.
+		if _, err := NewReader(buf, buf.Size()); err != nil {
+			t.Errorf("NewReader: %v", err)
 		}
 	})
 }
@@ -695,6 +715,7 @@ func TestHeaderTooLongErr(t *testing.T) {
 	var headerTests = []struct {
 		name    string
 		extra   []byte
+		size    uint64 // if non-zero, use CreateRaw with this uncompressed size
 		wanterr error
 	}{
 		{
@@ -705,6 +726,14 @@ func TestHeaderTooLongErr(t *testing.T) {
 		{
 			name:    "long_extra",
 			extra:   bytes.Repeat([]byte{0xff}, 1<<16),
+			wanterr: errLongExtra,
+		},
+		{
+			// Fits on its own, but not with the 20-byte Zip64 extra
+			// that CreateRaw adds to the local header.
+			name:    "long_extra_zip64",
+			extra:   bytes.Repeat([]byte{0xff}, uint16max-10),
+			size:    5 << 30,
 			wanterr: errLongExtra,
 		},
 	}
@@ -718,7 +747,13 @@ func TestHeaderTooLongErr(t *testing.T) {
 			Name:  test.name,
 			Extra: test.extra,
 		}
-		_, err := w.CreateHeader(h)
+		var err error
+		if test.size > 0 {
+			h.UncompressedSize64 = test.size
+			_, err = w.CreateRaw(h)
+		} else {
+			_, err = w.CreateHeader(h)
+		}
 		if err != test.wanterr {
 			t.Errorf("error=%v, want %v", err, test.wanterr)
 		}

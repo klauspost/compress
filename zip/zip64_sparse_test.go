@@ -7,7 +7,6 @@ package zip
 import (
 	"cmp"
 	"compress/gzip"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -19,7 +18,8 @@ import (
 // (the LFH headers, the Central Directory, the EOCD records, and any
 // non-zero compressed bodies) plus a total length. Bytes outside any span
 // are implicitly zero. This is the storage format used for goldens under
-// testdata/zip64/ (suffix .zsparse), copied from the standard library.
+// testdata/zip64/ (suffix .zsparse) and the in-memory shape produced by
+// the writer-reproduction harness.
 //
 // On-disk layout (all little-endian):
 //
@@ -68,6 +68,80 @@ func (f *sparseFile) ReadAt(p []byte, off int64) (int, error) {
 	return n, nil
 }
 
+// materializeTail returns the last keep bytes of the conceptual file as a
+// plain byte slice, suitable for [parseCD].
+func (f *sparseFile) materializeTail(keep int64) (data []byte, baseOff uint64) {
+	if keep > f.Size {
+		keep = f.Size
+	}
+	base := f.Size - keep
+	buf := make([]byte, keep)
+	f.ReadAt(buf, base)
+	return buf, uint64(base)
+}
+
+const sparseChunk = 4096
+
+// scanSparse stream-reads r and builds a sparseFile, treating any contiguous
+// run of zero bytes (rounded to sparseChunk boundaries) as a gap. Adjacent
+// non-zero chunks are coalesced into one span.
+func scanSparse(r io.Reader) (*sparseFile, error) {
+	f := &sparseFile{}
+	var cur *sparseSpan
+	buf := make([]byte, sparseChunk)
+	for {
+		n, err := io.ReadFull(r, buf)
+		if n > 0 {
+			chunk := buf[:n]
+			if isAllZero(chunk) {
+				if cur != nil {
+					f.Spans = append(f.Spans, *cur)
+					cur = nil
+				}
+			} else {
+				if cur == nil {
+					cur = &sparseSpan{Offset: f.Size}
+				}
+				cur.Data = append(cur.Data, chunk...)
+			}
+			f.Size += int64(n)
+		}
+		if err != nil {
+			if err == io.EOF || err == io.ErrUnexpectedEOF {
+				break
+			}
+			return nil, err
+		}
+	}
+	if cur != nil {
+		f.Spans = append(f.Spans, *cur)
+	}
+	return f, nil
+}
+
+// writeSparse serializes f to w in the on-disk format described on
+// [sparseFile].
+func writeSparse(w io.Writer, f *sparseFile) error {
+	var hdr [12]byte
+	le.PutUint64(hdr[:8], uint64(f.Size))
+	le.PutUint32(hdr[8:12], uint32(len(f.Spans)))
+	if _, err := w.Write(hdr[:]); err != nil {
+		return err
+	}
+	for _, s := range f.Spans {
+		var b [12]byte
+		le.PutUint64(b[:8], uint64(s.Offset))
+		le.PutUint32(b[8:12], uint32(len(s.Data)))
+		if _, err := w.Write(b[:]); err != nil {
+			return err
+		}
+		if _, err := w.Write(s.Data); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // readSparse parses the on-disk format from r.
 func readSparse(r io.Reader) (*sparseFile, error) {
 	var hdr [12]byte
@@ -75,9 +149,9 @@ func readSparse(r io.Reader) (*sparseFile, error) {
 		return nil, err
 	}
 	f := &sparseFile{
-		Size: int64(binary.LittleEndian.Uint64(hdr[:8])),
+		Size: int64(le.Uint64(hdr[:8])),
 	}
-	n := binary.LittleEndian.Uint32(hdr[8:12])
+	n := le.Uint32(hdr[8:12])
 	if n > 1<<20 {
 		return nil, fmt.Errorf("sparseFile: implausible span count %d", n)
 	}
@@ -87,8 +161,8 @@ func readSparse(r io.Reader) (*sparseFile, error) {
 		if _, err := io.ReadFull(r, b[:]); err != nil {
 			return nil, err
 		}
-		f.Spans[i].Offset = int64(binary.LittleEndian.Uint64(b[:8]))
-		sz := binary.LittleEndian.Uint32(b[8:12])
+		f.Spans[i].Offset = int64(le.Uint64(b[:8]))
+		sz := le.Uint32(b[8:12])
 		f.Spans[i].Data = make([]byte, sz)
 		if _, err := io.ReadFull(r, f.Spans[i].Data); err != nil {
 			return nil, err
@@ -120,4 +194,44 @@ func readSparseFile(path string) (*sparseFile, error) {
 	}
 	defer zr.Close()
 	return readSparse(zr)
+}
+
+// isAllZero reports whether every byte in b is 0.
+func isAllZero(b []byte) bool {
+	for _, c := range b {
+		if c != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// sparseBuffer accumulates writes into a [sparseFile], dropping any
+// chunkSize-byte chunk that is all-zero. This makes capturing the result
+// of pushing multi-GiB streams of zeros through the writer almost free —
+// the only bytes that end up retained are the LFHs, the Central
+// Directory, the EOCD records, and any non-zero compressed body.
+type sparseBuffer struct {
+	f   sparseFile
+	cur *sparseSpan
+}
+
+func (t *sparseBuffer) Write(p []byte) (int, error) {
+	n := len(p)
+	for len(p) > 0 {
+		k := min(len(p), sparseChunk)
+		chunk := p[:k]
+		if isAllZero(chunk) {
+			t.cur = nil
+		} else {
+			if t.cur == nil {
+				t.f.Spans = append(t.f.Spans, sparseSpan{Offset: t.f.Size})
+				t.cur = &t.f.Spans[len(t.f.Spans)-1]
+			}
+			t.cur.Data = append(t.cur.Data, chunk...)
+		}
+		t.f.Size += int64(k)
+		p = p[k:]
+	}
+	return n, nil
 }
