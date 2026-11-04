@@ -3100,10 +3100,26 @@ func (o options) cvtLZ4BlockAsm(lz4s bool) {
 		LEAQ(Mem{Base: dst, Index: ll, Scale: 1}, litDstEnd)
 		CMPQ(litDstEnd, litEnd)
 		JAE(LabelRef(name + "dstfull"))
-		o.outputMargin++
 		ADDQ(ll, retval)
+		// With output margin short literals are moved as 8 bytes, reading
+		// past their end. Exact moves are around 10% slower on real data,
+		// since their sizes are hard to predict, so only use them when
+		// that would read past src.
+		litLimit := GP64()
+		LEAQ(Mem{Base: src, Disp: 8}, litLimit)
+		CMPQ(litLimit, srcEnd)
+		JA(LabelRef(name + "lits_tail"))
+		o.outputMargin++
 		o.emitLiteral(strings.TrimRight(name, "_"), ll, nil, dst, src, LabelRef(name+"lits_emit_done"), true)
 		o.outputMargin--
+
+		Label(name + "lits_tail")
+		// Since we may be at the end of source,
+		// we cannot have output margin.
+		x := o.outputMargin
+		o.outputMargin = 0
+		o.emitLiteral(strings.TrimRight(name, "_")+"_tail", ll, nil, dst, src, LabelRef(name+"lits_emit_done"), true)
+		o.outputMargin = x
 		Label(name + "lits_emit_done")
 		MOVQ(endLits, src)
 	}
