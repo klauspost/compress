@@ -227,28 +227,13 @@ func untar(dst string, r io.Reader) error {
 	if err := os.MkdirAll(dst, 0o755); err != nil {
 		return err
 	}
-	info, err := os.Lstat(dst)
-	if err != nil {
-		return err
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("extraction root cannot be a symbolic link: %s", dst)
-	}
 	root, err := os.OpenRoot(dst)
 	if err != nil {
 		return err
 	}
 	defer root.Close()
-	rootInfo, err := root.Stat(".")
-	if err != nil {
-		return err
-	}
-	if !os.SameFile(info, rootInfo) {
-		return fmt.Errorf("extraction root changed while opening: %s", dst)
-	}
 
 	tr := tar.NewReader(r)
-	var pendingSymlinks []string
 
 	for {
 		header, err := tr.Next()
@@ -257,9 +242,6 @@ func untar(dst string, r io.Reader) error {
 
 		// if no more files are found return
 		case err == io.EOF:
-			if err := revalidatePendingSymlinks(root, &pendingSymlinks); err != nil {
-				return err
-			}
 			return nil
 
 		// return any other error
@@ -315,7 +297,7 @@ func untar(dst string, r io.Reader) error {
 			if !*quiet {
 				fmt.Println(displayTarget)
 			}
-			if err := writeNewSymbolicLink(root, target, filepath.FromSlash(header.Linkname), &pendingSymlinks); err != nil {
+			if err := writeNewSymbolicLink(root, target, filepath.FromSlash(header.Linkname)); err != nil {
 				return err
 			}
 		case tar.TypeLink:
@@ -329,9 +311,6 @@ func untar(dst string, r io.Reader) error {
 			if err := writeNewHardLink(root, target, linkTarget); err != nil {
 				return err
 			}
-		}
-		if err := revalidatePendingSymlinks(root, &pendingSymlinks); err != nil {
-			return err
 		}
 	}
 }
@@ -359,7 +338,7 @@ func checkLinkTarget(name, linkTarget string) error {
 	return nil
 }
 
-func writeNewSymbolicLink(root *os.Root, name, target string, pending *[]string) error {
+func writeNewSymbolicLink(root *os.Root, name, target string) error {
 	if err := root.MkdirAll(filepath.Dir(name), 0o755); err != nil {
 		return fmt.Errorf("%s: making directory for file: %w", name, err)
 	}
@@ -369,46 +348,6 @@ func writeNewSymbolicLink(root *os.Root, name, target string, pending *[]string)
 	if err := root.Symlink(target, name); err != nil {
 		return fmt.Errorf("%s: making symbolic link: %w", name, err)
 	}
-	if _, err := root.Stat(name); err != nil {
-		if symlinkStatPending(err) {
-			*pending = append(*pending, name)
-			return nil
-		}
-		_ = root.Remove(name)
-		return fmt.Errorf("%s: illegal link target: %w", name, err)
-	}
-	*pending = append(*pending, name)
-	return nil
-}
-
-func symlinkStatPending(err error) bool {
-	if errors.Is(err, os.ErrNotExist) {
-		return true
-	}
-	var pe *os.PathError
-	if errors.As(err, &pe) {
-		return isIncompleteSymlinkResolution(pe.Err)
-	}
-	return false
-}
-
-func revalidatePendingSymlinks(root *os.Root, pending *[]string) error {
-	if len(*pending) == 0 {
-		return nil
-	}
-	remaining := (*pending)[:0]
-	for _, name := range *pending {
-		if _, err := root.Stat(name); err != nil {
-			if symlinkStatPending(err) {
-				remaining = append(remaining, name)
-				continue
-			}
-			_ = root.Remove(name)
-			return fmt.Errorf("%s: illegal link target: %w", name, err)
-		}
-		remaining = append(remaining, name)
-	}
-	*pending = remaining
 	return nil
 }
 
@@ -418,11 +357,6 @@ func writeNewHardLink(root *os.Root, name, target string) error {
 	}
 	if err := removeExisting(root, name); err != nil {
 		return fmt.Errorf("%s: failed to unlink: %w", name, err)
-	}
-	if fi, err := root.Lstat(target); err != nil {
-		return fmt.Errorf("%s: hard link target: %w", name, err)
-	} else if fi.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("%s: hard links to symbolic links are not allowed", name)
 	}
 	if err := root.Link(target, name); err != nil {
 		return fmt.Errorf("%s: making hard link: %w", name, err)

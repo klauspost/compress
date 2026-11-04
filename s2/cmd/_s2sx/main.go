@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"embed"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -176,37 +175,42 @@ Options:`)
 			case *stdout:
 				out = os.Stdout
 			default:
-				firstOutput, err := fileio.Create(dstFilename, 0o777, *safe)
+				dstFile, err := fileio.Create(dstFilename, 0o777, *safe)
 				exitErr(err)
-				sw = &switchWriter{output: firstOutput, left: sz}
-				sw.next = func() (*fileio.Output, error) {
+				sw = &switchWriter{w: dstFile, left: sz, close: dstFile.Close}
+				sw.fn = func() {
+					exitErr(sw.Close())
 					dstFilename := dstFilename + ".more"
-					return fileio.Create(dstFilename, 0o777, *safe)
+					dstFile, err := fileio.Create(dstFilename, 0o777, *safe)
+					exitErr(err)
+					sw.w = dstFile
+					sw.left = (1 << 63) - 1
+					sw.close = dstFile.Close
 				}
-				defer sw.Abort()
 				bw = bufio.NewWriterSize(sw, 4<<20*2)
 				out = bw
 				_, err = out.Write(exec)
-				exitSFXOutputErr(sw, err)
+				exitErr(err)
 				_, err = out.Write([]byte{mode})
 			}
-			exitSFXOutputErr(sw, err)
+			exitErr(err)
 			wc := wCounter{out: out}
 			start := time.Now()
 			var input int64
 			if !isCompressed {
 				wr.Reset(&wc)
 				input, err = wr.ReadFrom(src)
-				exitSFXOutputErr(sw, err)
+				exitErr(err)
 				err = wr.Close()
-				exitSFXOutputErr(sw, err)
+				exitErr(err)
 			} else {
 				input, err = io.Copy(&wc, src)
-				exitSFXOutputErr(sw, err)
+				exitErr(err)
 			}
 			if bw != nil {
-				exitSFXOutputErr(sw, bw.Flush())
-				exitSFXOutputErr(sw, sw.Close())
+				exitErr(bw.Flush())
+				exitErr(sw.Close())
+				sw.close = nil
 			}
 			if !*quiet {
 				elapsed := time.Since(start)
@@ -240,16 +244,6 @@ func exitErr(err error) {
 		fmt.Fprintln(os.Stderr, "\nERROR:", err.Error())
 		os.Exit(2)
 	}
-}
-
-func exitSFXOutputErr(output *switchWriter, err error) {
-	if err == nil {
-		return
-	}
-	if output != nil {
-		err = errors.Join(err, output.Abort())
-	}
-	exitErr(err)
 }
 
 type wCounter struct {
@@ -306,42 +300,29 @@ func toSize(size string) (int64, error) {
 }
 
 type switchWriter struct {
-	output *fileio.Output
-	left   int64
-	next   func() (*fileio.Output, error)
+	w     io.Writer
+	left  int64
+	fn    func()
+	close func() error
 }
 
 func (w *switchWriter) Write(b []byte) (int, error) {
 	if int64(len(b)) <= w.left {
 		w.left -= int64(len(b))
-		return w.output.Write(b)
+		return w.w.Write(b)
 	}
-	n, err := w.output.Write(b[:w.left])
+	n, err := w.w.Write(b[:w.left])
 	if err != nil {
 		return n, err
 	}
-	if err := w.output.Commit(); err != nil {
-		return n, err
-	}
-	w.output, err = w.next()
-	if err != nil {
-		return n, err
-	}
-	w.left = (1 << 63) - 1
+	w.fn()
 	n2, err := w.Write(b[n:])
 	return n + n2, err
 }
 
 func (w *switchWriter) Close() error {
-	if w == nil || w.output == nil {
+	if w.close == nil {
 		return nil
 	}
-	return w.output.Commit()
-}
-
-func (w *switchWriter) Abort() error {
-	if w == nil || w.output == nil {
-		return nil
-	}
-	return w.output.Abort()
+	return w.close()
 }

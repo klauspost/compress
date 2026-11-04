@@ -164,16 +164,7 @@ To build binaries to the current folder use:
 
 `go build github.com/klauspost/compress/s2/cmd/s2c && go build github.com/klauspost/compress/s2/cmd/s2d`
 
-## Output file safety
-
-On Unix-like systems the command-line tools harden how output files are created:
-
-- With `-safe`, the destination is opened with an exclusive create. Any existing directory entry at that path—including a **symbolic link**—is rejected instead of being followed.
-- New files are staged with restrictive permissions, then committed with sanitized mode bits. Setuid, setgid, and sticky bits from user-supplied metadata are not applied to created outputs.
-- `s2c` stream recompression writes through a private temporary file next to the destination and replaces the final name only after `Sync`.
-- `s2sx -untar` keeps extraction within the destination directory (the current working directory by default, or the optional output path argument), rejects path traversal and link targets that escape the root, and removes any existing directory entry at an extracted path before creating a file or link there.
-
-Treat archives and output directories as untrusted when running these tools with elevated privileges. See https://github.com/klauspost/compress/issues/1296 and https://github.com/klauspost/compress/pull/1297.
+With `-safe`, output uses exclusive creation and fails if any directory entry, including a dangling symbolic link, already exists at the destination.
 
 ## s2c
 
@@ -328,11 +319,11 @@ This functionality is disabled with stdin/stdout.
 
 If you wrap a TAR file you can specify `-untar` to make it untar on the destination host.
 
-Files are extracted under the destination directory with the path specified in the tar file (current working directory by default, or the optional output path argument).
+Files are extracted under the selected destination directory (the current directory by default, or the optional output path).
 
 Note that tar files are not validated before they are wrapped.
 
-Extraction stays within the destination directory: absolute paths, paths that escape the extraction root after normalization (including via `..`), and link targets that escape the extraction root are rejected. Existing entries at an extracted path are removed before a new file or link is created. See [Output file safety](#output-file-safety) above.
+Extraction operations are confined to that directory, so archive contents cannot write outside the selected root.
 
 # Performance
 
