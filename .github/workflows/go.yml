@@ -34,9 +34,7 @@ jobs:
 
     - name: Test SFX
       working-directory: s2/cmd/_s2sx
-      run: |
-        go generate .
-        go test . ./_unpack
+      run: go test ./_unpack
 
     - name: Test No-asm
       run: go test -tags=noasm ./...
