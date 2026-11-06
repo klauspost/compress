@@ -150,9 +150,6 @@ func FuzzNoBMI2Dec(f *testing.F) {
 }
 
 func FuzzEncoding(f *testing.F) {
-	fuzz.AddFromZip(f, "testdata/fuzz/encode-corpus-raw.zip", fuzz.TypeRaw, testing.Short())
-	fuzz.AddFromZip(f, "testdata/comp-crashers.zip", fuzz.TypeRaw, false)
-	fuzz.AddFromZip(f, "testdata/fuzz/encode-corpus-encoded.zip", fuzz.TypeGoFuzz, testing.Short())
 	// Fuzzing tweaks:
 	const (
 		// Test a subset of encoders.
@@ -162,6 +159,25 @@ func FuzzEncoding(f *testing.F) {
 		// Also tests with dictionaries...
 		testDicts = true
 	)
+	// Inputs ending in flushMarker have it removed, and are written to the
+	// dictionary encoders in flushed pieces, so frames have several blocks.
+	flushMarker := []byte{1, 2, 3, 4}
+	addWithMarker := func(filename string, typ fuzz.InputType) {
+		i := 0
+		fuzz.ReturnFromZip(f, filename, typ, func(b []byte) {
+			defer func() { i++ }()
+			if testing.Short() && i%10 != 0 {
+				return
+			}
+			f.Add(b)
+			if testDicts {
+				f.Add(append(b, flushMarker...))
+			}
+		})
+	}
+	addWithMarker("testdata/fuzz/encode-corpus-raw.zip", fuzz.TypeRaw)
+	fuzz.AddFromZip(f, "testdata/comp-crashers.zip", fuzz.TypeRaw, false)
+	addWithMarker("testdata/fuzz/encode-corpus-encoded.zip", fuzz.TypeGoFuzz)
 
 	var dec *Decoder
 	var encs [SpeedBestCompression + 1]*Encoder
@@ -221,6 +237,10 @@ func FuzzEncoding(f *testing.F) {
 		if len(data) > *fuzzMaxF {
 			return
 		}
+		flushed := testDicts && bytes.HasSuffix(data, flushMarker)
+		if flushed {
+			data = data[:len(data)-len(flushMarker)]
+		}
 		var bufSize = len(data)
 		if bufSize > 2 {
 			// Make deterministic size
@@ -278,12 +298,28 @@ func FuzzEncoding(f *testing.F) {
 			enc = encsD[level]
 			dst.Reset()
 			enc.Reset(&dst)
-			n, err = enc.Write(data)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if n != len(data) {
-				t.Fatal(fmt.Sprintln("Dict Level", level, "Short write, got:", n, "want:", len(data)))
+			if flushed {
+				// At most 256 pieces, so large inputs don't flush every byte.
+				for todo, piece := data, max(1+bufSize%2048, (len(data)+255)/256); len(todo) > 0; todo = todo[n:] {
+					n, err = enc.Write(todo[:min(piece, len(todo))])
+					if err != nil {
+						t.Fatal(err)
+					}
+					if n != min(piece, len(todo)) {
+						t.Fatal(fmt.Sprintln("Dict Level", level, "Short write, got:", n, "want:", min(piece, len(todo))))
+					}
+					if err := enc.Flush(); err != nil {
+						t.Fatal(err)
+					}
+				}
+			} else {
+				n, err = enc.Write(data)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if n != len(data) {
+					t.Fatal(fmt.Sprintln("Dict Level", level, "Short write, got:", n, "want:", len(data)))
+				}
 			}
 
 			encoded = enc.EncodeAll(data, encoded[:0])
@@ -303,7 +339,8 @@ func FuzzEncoding(f *testing.F) {
 				t.Fatal(fmt.Sprintln("Dict Level", level, "Close (buffer) error:", err))
 			}
 			encoded2 = dst.Bytes()
-			if len(encoded2) > enc.MaxEncodedSize(len(data)) {
+			// MaxEncodedSize does not count the blocks that flushes add.
+			if !flushed && len(encoded2) > enc.MaxEncodedSize(len(data)) {
 				t.Errorf("max encoded size for %v: got: %d, want max: %d", len(data), len(encoded2), enc.MaxEncodedSize(len(data)))
 			}
 			if !bytes.Equal(encoded, encoded2) {
