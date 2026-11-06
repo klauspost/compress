@@ -83,6 +83,10 @@ func (l *LZ4Converter) ConvertBlock(dst, src []byte) ([]byte, int, error) {
 				}
 				val := src[s]
 				ll += int(val)
+				// Checking per byte keeps ll from overflowing on 32-bit.
+				if ll >= len(src)-s {
+					return nil, 0, ErrCorrupt
+				}
 				if val != 255 {
 					break
 				}
@@ -107,6 +111,9 @@ func (l *LZ4Converter) ConvertBlock(dst, src []byte) ([]byte, int, error) {
 			d += emitLiteralGo(dst[d:], src[s:s+ll])
 			s += ll
 			uncompressed += ll
+			if uncompressed < 0 {
+				return nil, 0, ErrTooLarge
+			}
 		}
 
 		// Check if we are done...
@@ -146,6 +153,10 @@ func (l *LZ4Converter) ConvertBlock(dst, src []byte) ([]byte, int, error) {
 				val := src[s]
 				s++
 				ml += int(val)
+				// ml and uncompressed can overflow on 32-bit.
+				if ml < 0 {
+					return nil, 0, ErrTooLarge
+				}
 				if val != 255 {
 					if s >= len(src) {
 						if debug {
@@ -270,6 +281,9 @@ func (l *LZ4Converter) ConvertBlock(dst, src []byte) ([]byte, int, error) {
 			lastOffset = offset
 		}
 		uncompressed += ml
+		if uncompressed < 0 {
+			return nil, 0, ErrTooLarge
+		}
 		if d > dLimit {
 			return nil, 0, ErrDstTooSmall
 		}
@@ -341,6 +355,10 @@ func (l *LZ4Converter) ConvertBlockSnappy(dst, src []byte) ([]byte, int, error) 
 				}
 				val := src[s]
 				ll += int(val)
+				// Checking per byte keeps ll from overflowing on 32-bit.
+				if ll >= len(src)-s {
+					return nil, 0, ErrCorrupt
+				}
 				if val != 255 {
 					break
 				}
@@ -364,6 +382,9 @@ func (l *LZ4Converter) ConvertBlockSnappy(dst, src []byte) ([]byte, int, error) 
 			d += emitLiteralGo(dst[d:], src[s:s+ll])
 			s += ll
 			uncompressed += ll
+			if uncompressed < 0 {
+				return nil, 0, ErrTooLarge
+			}
 		}
 
 		// Check if we are done...
@@ -403,6 +424,10 @@ func (l *LZ4Converter) ConvertBlockSnappy(dst, src []byte) ([]byte, int, error) 
 				val := src[s]
 				s++
 				ml += int(val)
+				// ml and uncompressed can overflow on 32-bit.
+				if ml < 0 {
+					return nil, 0, ErrTooLarge
+				}
 				if val != 255 {
 					if s >= len(src) {
 						if debug {
@@ -449,6 +474,9 @@ func (l *LZ4Converter) ConvertBlockSnappy(dst, src []byte) ([]byte, int, error) 
 			break
 		}
 		uncompressed += ml
+		if uncompressed < 0 {
+			return nil, 0, ErrTooLarge
+		}
 		if d > dLimit {
 			return nil, 0, ErrDstTooSmall
 		}
