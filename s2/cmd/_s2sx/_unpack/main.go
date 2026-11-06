@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -225,6 +224,15 @@ func exeReaderMacho(rda io.ReaderAt, size int64) (io.Reader, error) {
 // untar takes a destination path and a reader; a tar reader loops over the tarfile
 // creating the file structure at 'dst' along the way, and writing any files
 func untar(dst string, r io.Reader) error {
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		return err
+	}
+	root, err := os.OpenRoot(dst)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+
 	tr := tar.NewReader(r)
 
 	for {
@@ -245,11 +253,11 @@ func untar(dst string, r io.Reader) error {
 			continue
 		}
 
-		// the target location where the dir/file should be created
-		if err := checkPath(dst, header.Name); err != nil {
+		target, err := cleanArchivePath(header.Name)
+		if err != nil {
 			return err
 		}
-		target := filepath.Join(dst, header.Name)
+		displayTarget := filepath.Join(dst, target)
 
 		// check the file type
 		switch header.Typeflag {
@@ -257,137 +265,112 @@ func untar(dst string, r io.Reader) error {
 		// if its a dir and it doesn't exist create it
 		case tar.TypeDir:
 			if !*quiet {
-				fmt.Println(target)
+				fmt.Println(displayTarget)
 			}
-			if _, err := os.Stat(target); err != nil {
-				if err := os.MkdirAll(target, 0755); err != nil {
-					return err
-				}
+			if err := root.MkdirAll(target, 0o755); err != nil {
+				return err
 			}
 
 		// if it's a file create it
 		case tar.TypeReg, tar.TypeChar, tar.TypeBlock, tar.TypeFifo, tar.TypeGNUSparse:
-			target = path.Clean(target)
 			if !*quiet {
-				fmt.Println(target)
+				fmt.Println(displayTarget)
 			}
-
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
-			if err != nil {
-				if os.IsNotExist(err) {
-					if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-						return err
-					}
-					f, err = os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
-				}
-				if err != nil {
-					return err
-				}
-			}
-
-			// copy over contents
-			if _, err := io.Copy(f, tr); err != nil {
+			if err := root.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return err
 			}
-
-			f.Close()
-		case tar.TypeSymlink:
-			target = path.Clean(target)
-			// A symlink target is resolved relative to the link's own
-			// directory (or used as-is when absolute); reject any that
-			// escape dst so the link cannot point outside the archive root.
-			linkTarget := header.Linkname
-			if !filepath.IsAbs(linkTarget) {
-				linkTarget = filepath.Join(filepath.Dir(target), linkTarget)
+			if err := removeExisting(root, target); err != nil {
+				return err
 			}
-			if !within(dst, linkTarget) {
-				return fmt.Errorf("illegal link target: %s", header.Linkname)
+			f, err := root.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode).Perm())
+			if err != nil {
+				return err
+			}
+			_, copyErr := io.Copy(f, tr)
+			if err := errors.Join(copyErr, f.Close()); err != nil {
+				return err
+			}
+		case tar.TypeSymlink:
+			if err := checkLinkTarget(target, header.Linkname); err != nil {
+				return err
 			}
 			if !*quiet {
-				fmt.Println(target)
+				fmt.Println(displayTarget)
 			}
-
-			err := writeNewSymbolicLink(target, header.Linkname)
-			if err != nil {
+			if err := writeNewSymbolicLink(root, target, filepath.FromSlash(header.Linkname)); err != nil {
 				return err
 			}
 		case tar.TypeLink:
-			target = path.Clean(target)
-			// Hardlink targets are relative to the archive root.
-			if err := checkPath(dst, header.Linkname); err != nil {
-				return err
-			}
-			if !*quiet {
-				fmt.Println(target)
-			}
-
-			err := writeNewHardLink(target, filepath.Join(dst, header.Linkname))
+			linkTarget, err := cleanArchivePath(header.Linkname)
 			if err != nil {
 				return err
 			}
+			if !*quiet {
+				fmt.Println(displayTarget)
+			}
+			if err := writeNewHardLink(root, target, linkTarget); err != nil {
+				return err
+			}
 		}
 	}
 }
 
-// Thanks to https://github.com/mholt/archiver for the following:
+func cleanArchivePath(name string) (string, error) {
+	name = filepath.Clean(filepath.FromSlash(name))
+	if filepath.IsAbs(name) || filepath.VolumeName(name) != "" ||
+		strings.HasPrefix(name, string(os.PathSeparator)) ||
+		name == ".." || strings.HasPrefix(name, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("illegal file path: %s", name)
+	}
+	return name, nil
+}
 
-func checkPath(dst, filename string) error {
-	//prevent path traversal attacks
-	if !within(dst, filepath.Join(dst, filename)) {
-		return fmt.Errorf("illegal file path: %s", filename)
+func checkLinkTarget(name, linkTarget string) error {
+	linkTarget = filepath.FromSlash(linkTarget)
+	if filepath.IsAbs(linkTarget) || filepath.VolumeName(linkTarget) != "" ||
+		strings.HasPrefix(linkTarget, string(os.PathSeparator)) {
+		return fmt.Errorf("illegal link target: %s", linkTarget)
+	}
+	resolved := filepath.Clean(filepath.Join(filepath.Dir(name), linkTarget))
+	if resolved == ".." || strings.HasPrefix(resolved, ".."+string(os.PathSeparator)) {
+		return fmt.Errorf("illegal link target: %s", linkTarget)
 	}
 	return nil
 }
 
-// within reports whether target stays inside dst. A raw strings.HasPrefix
-// check is not separator-aware: dst "out" would wrongly accept the sibling
-// "out_evil". filepath.Rel collapses the path and a ".." result means escape.
-func within(dst, target string) bool {
-	rel, err := filepath.Rel(dst, target)
-	if err != nil {
-		return false
+func writeNewSymbolicLink(root *os.Root, name, target string) error {
+	if err := root.MkdirAll(filepath.Dir(name), 0o755); err != nil {
+		return fmt.Errorf("%s: making directory for file: %w", name, err)
 	}
-	return rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
-}
-
-func writeNewSymbolicLink(fpath string, target string) error {
-	err := os.MkdirAll(filepath.Dir(fpath), 0755)
-	if err != nil {
-		return fmt.Errorf("%s: making directory for file: %v", fpath, err)
+	if err := removeExisting(root, name); err != nil {
+		return fmt.Errorf("%s: failed to unlink: %w", name, err)
 	}
-
-	_, err = os.Lstat(fpath)
-	if err == nil {
-		err = os.Remove(fpath)
-		if err != nil {
-			return fmt.Errorf("%s: failed to unlink: %+v", fpath, err)
-		}
-	}
-
-	err = os.Symlink(target, fpath)
-	if err != nil {
-		return fmt.Errorf("%s: making symbolic link for: %v", fpath, err)
+	if err := root.Symlink(target, name); err != nil {
+		return fmt.Errorf("%s: making symbolic link: %w", name, err)
 	}
 	return nil
 }
 
-func writeNewHardLink(fpath string, target string) error {
-	err := os.MkdirAll(filepath.Dir(fpath), 0755)
-	if err != nil {
-		return fmt.Errorf("%s: making directory for file: %v", fpath, err)
+func writeNewHardLink(root *os.Root, name, target string) error {
+	if err := root.MkdirAll(filepath.Dir(name), 0o755); err != nil {
+		return fmt.Errorf("%s: making directory for file: %w", name, err)
 	}
-
-	_, err = os.Lstat(fpath)
-	if err == nil {
-		err = os.Remove(fpath)
-		if err != nil {
-			return fmt.Errorf("%s: failed to unlink: %+v", fpath, err)
-		}
+	if err := removeExisting(root, name); err != nil {
+		return fmt.Errorf("%s: failed to unlink: %w", name, err)
 	}
-
-	err = os.Link(target, fpath)
-	if err != nil {
-		return fmt.Errorf("%s: making hard link for: %v", fpath, err)
+	if err := root.Link(target, name); err != nil {
+		return fmt.Errorf("%s: making hard link: %w", name, err)
 	}
 	return nil
+}
+
+func removeExisting(root *os.Root, name string) error {
+	_, err := root.Lstat(name)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return root.Remove(name)
 }

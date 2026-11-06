@@ -18,6 +18,7 @@ import (
 	"unicode"
 
 	"github.com/klauspost/compress/s2"
+	"github.com/klauspost/compress/s2/cmd/internal/fileio"
 	"github.com/klauspost/compress/s2/cmd/internal/filepathx"
 	"github.com/klauspost/compress/s2/cmd/internal/readahead"
 )
@@ -91,19 +92,13 @@ Options:`)
 			return
 		}
 		dstFilename := *out
-		if *safe {
-			_, err := os.Stat(dstFilename)
-			if !os.IsNotExist(err) {
-				exitErr(errors.New("destination files exists"))
-			}
-		}
-		dstFile, err := os.OpenFile(dstFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.ModePerm)
+		dstFile, err := fileio.Create(dstFilename, os.ModePerm, *safe)
 		exitErr(err)
-		defer dstFile.Close()
 		bw := bufio.NewWriterSize(dstFile, 4<<20)
-		defer bw.Flush()
-		_, err = io.Copy(bw, r)
-		exitErr(err)
+		_, copyErr := io.Copy(bw, r)
+		flushErr := bw.Flush()
+		closeErr := dstFile.Close()
+		exitErr(errors.Join(copyErr, flushErr, closeErr))
 		return
 	}
 	var files []string
@@ -254,26 +249,20 @@ Options:`)
 			} else {
 				src = rc
 			}
-			if *safe {
-				_, err := os.Stat(dstFilename)
-				if !os.IsNotExist(err) {
-					exitErr(errors.New("destination files exists"))
-				}
-			}
 			var out io.Writer
+			var dstFile *os.File
+			var bw *bufio.Writer
 			switch {
 			case *verify:
 				out = io.Discard
 			case *stdout:
 				out = os.Stdout
 			default:
-				dstFile, err := os.OpenFile(dstFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+				dstFile, err = fileio.Create(dstFilename, mode, *safe)
 				exitErr(err)
-				defer dstFile.Close()
 				out = dstFile
 				if !block {
-					bw := bufio.NewWriterSize(dstFile, 4<<20)
-					defer bw.Flush()
+					bw = bufio.NewWriterSize(dstFile, 4<<20)
 					out = bw
 				}
 			}
@@ -306,7 +295,15 @@ Options:`)
 			} else {
 				output, err = io.Copy(out, decoded)
 			}
-			exitErr(err)
+			var flushErr error
+			if bw != nil {
+				flushErr = bw.Flush()
+			}
+			var closeErr error
+			if dstFile != nil {
+				closeErr = dstFile.Close()
+			}
+			exitErr(errors.Join(err, flushErr, closeErr))
 			if !*quiet {
 				elapsed := time.Since(start)
 				mbPerSec := (float64(output) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
