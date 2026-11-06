@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -513,6 +515,148 @@ func TestCompress1XReuse(t *testing.T) {
 			t.Logf("Estimate: table %d, got %d, data %d, got %d, reuse: %d", tbSz, len(s.OutTable), dSz, len(s.OutData), reSz)
 			t.Logf("%s: %d -> %d bytes (%.2f:1) %t", test.name, len(buf0), len(b), float64(len(buf0))/float64(len(b)), re)
 		})
+	}
+}
+
+func TestCompress1XReuseCountsTable(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	letters := func(n, skew int) []byte {
+		b := make([]byte, n)
+		for i := range b {
+			b[i] = 'a' + byte(rng.Intn(26))
+			if rng.Intn(skew) == 0 {
+				b[i] = 'a' + byte(rng.Intn(4))
+			}
+		}
+		return b
+	}
+	prev := letters(4096, 1000)
+	smaller := 0
+	for i := range 100 {
+		in := letters(200, 3)
+		size := func(p ReusePolicy) int {
+			var s Scratch
+			if _, _, err := Compress1X(prev, &s); err != nil {
+				t.Fatal(err)
+			}
+			s.Reuse = p
+			out, _, err := Compress1X(in, &s)
+			if err != nil {
+				t.Fatal(i, p, err)
+			}
+			return len(out)
+		}
+		reused, fresh, got := size(ReusePolicyPrefer), size(ReusePolicyNone), size(ReusePolicyAllow)
+		if got > min(reused, fresh) {
+			t.Fatalf("%d: got %d bytes, reusing gives %d and a new table %d", i, got, reused, fresh)
+		}
+		if reused < fresh {
+			smaller++
+		}
+	}
+	if smaller == 0 {
+		t.Fatal("reusing never wins; the test needs other input")
+	}
+}
+
+func TestCompressPreferFallback(t *testing.T) {
+	// The previous table has long codes for 1-4, so reusing it is rejected
+	// and a new table must be used.
+	prev := []byte(strings.Repeat("the quick brown fox jumps over the lazy dog ", 100) + "\x01\x02\x03\x04")
+	rng := rand.New(rand.NewSource(1))
+	in := make([]byte, 2000)
+	for i := range in {
+		in[i] = 1 + byte(rng.Intn(4))
+	}
+	for _, tc := range []struct {
+		name string
+		comp func([]byte, *Scratch) ([]byte, bool, error)
+		dec  func(*Scratch, []byte, int) ([]byte, error)
+		in   []byte
+	}{
+		{"1X", Compress1X, func(s *Scratch, b []byte, _ int) ([]byte, error) { return s.Decompress1X(b) }, in[:500]},
+		{"4X", Compress4X, (*Scratch).Decompress4X, in},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var s Scratch
+			if _, _, err := tc.comp(prev, &s); err != nil {
+				t.Fatal(err)
+			}
+			s.Reuse = ReusePolicyPrefer
+			out, reUsed, err := tc.comp(tc.in, &s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if reUsed {
+				t.Fatal("reused a table with long codes")
+			}
+			dt, rem, err := ReadTable(out, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := tc.dec(dt, rem, len(tc.in))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, tc.in) {
+				t.Fatal("output mismatch")
+			}
+		})
+	}
+}
+
+func TestMinTableSize(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	var s Scratch
+	tested := 0
+	for i := range 20000 {
+		// Use `used` of the first `symbols` values, including the last,
+		// with a random skew.
+		symbols := 2 + rng.Intn(maxSymbolValue)
+		used := 2 + rng.Intn(symbols-1)
+		vals := rng.Perm(symbols - 1)[:used-1]
+		vals = append(vals, symbols-1)
+		skew := 2 * rng.Float64()
+		cum := make([]float64, used)
+		sum := 0.0
+		for j := range cum {
+			sum += math.Pow(float64(j+1), -skew)
+			cum[j] = sum
+		}
+		in := make([]byte, used+rng.Intn([]int{16, 128, 1024, 8192}[i%4]))
+		for j := range in {
+			k := j
+			if k >= used {
+				k, _ = slices.BinarySearch(cum, rng.Float64()*sum)
+			}
+			in[j] = byte(vals[k])
+		}
+		s.Reuse = ReusePolicyNone
+		if _, _, err := Compress1X(in, &s); err != nil {
+			continue
+		}
+		tested++
+		lb := s.minNewSize(len(in))
+		if got := len(s.OutTable) + s.prevTable.estimateSize(s.count[:s.symbolLen]); lb > got {
+			t.Fatalf("%d: lower bound %d > size %d, %d of %d symbols", i, lb, got, used, symbols)
+		}
+		// The fixed-point entropy may be lower than minSize by rounding, and
+		// by up to 0.006 bits per count for counts above 512.
+		if ent := lb - s.minTableSize(used-1); ent > s.minSize(len(in)) || ent < s.minSize(len(in))-1-len(in)/1024 {
+			t.Fatalf("%d: entropy %d, want %d", i, ent, s.minSize(len(in)))
+		}
+	}
+	if tested < 10000 {
+		t.Fatalf("only %d of the inputs were compressed", tested)
+	}
+}
+
+func TestLog2Bounds(t *testing.T) {
+	for v := uint32(1); v <= BlockSizeMax; v++ {
+		lo, hi := log2Bounds(v)
+		if f := math.Log2(float64(v)) * (1 << 16); float64(lo) > f || float64(hi) < f {
+			t.Fatalf("log2(%d) = %f, bounds %d, %d", v, f, lo, hi)
+		}
 	}
 }
 
