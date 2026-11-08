@@ -364,13 +364,13 @@ Options:`)
 				exitErr(err)
 
 				var out io.Writer
+				var dstFile *os.File
 				switch {
 				case *stdout:
 					out = os.Stdout
 				default:
-					dstFile, err := fileio.Create(dstFilename, mode, *safe)
+					dstFile, err = fileio.Create(dstFilename, mode, *safe)
 					exitErr(err)
-					defer dstFile.Close()
 					out = dstFile
 				}
 				start := time.Now()
@@ -397,6 +397,9 @@ Options:`)
 				}
 				_, err = out.Write(compressed)
 				exitErr(err)
+				if dstFile != nil {
+					exitErr(dstFile.Close())
+				}
 				if !*quiet {
 					elapsed := time.Since(start)
 					mbpersec := (float64(len(inBytes)) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))

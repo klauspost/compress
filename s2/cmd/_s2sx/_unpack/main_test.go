@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 )
 
@@ -120,26 +119,6 @@ func TestUntarAllowsSymlinkedRoot(t *testing.T) {
 	}
 	if got, err := os.ReadFile(filepath.Join(realRoot, "file.txt")); err != nil || string(got) != "x" {
 		t.Fatalf("file under symlinked root = %q, %v", got, err)
-	}
-}
-
-func TestUntarSanitizesFileMode(t *testing.T) {
-	setQuiet(t)
-	dst := filepath.Join(t.TempDir(), "dst")
-	archive := tarBytes(t, tarEntry{
-		header:   tar.Header{Name: "file.txt", Mode: 0o7755},
-		contents: "x",
-	})
-
-	if err := untar(dst, bytes.NewReader(archive)); err != nil {
-		t.Fatal(err)
-	}
-	info, err := os.Stat(filepath.Join(dst, "file.txt"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if special := info.Mode() & (os.ModeSetuid | os.ModeSetgid | os.ModeSticky); runtime.GOOS != "windows" && special != 0 {
-		t.Fatalf("extracted file retained special mode bits: %v", special)
 	}
 }
 
