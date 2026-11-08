@@ -444,6 +444,48 @@ func TestEncoder_EncodeRLE(t *testing.T) {
 	}
 }
 
+// In these streams a block builds a literal table but stores its literals raw,
+// and the next block would reuse the table the decoder never got.
+func TestEncoderFlushRawLiterals(t *testing.T) {
+	streams := [][]string{
+		{"ahbkkdaflabkbbecakeiaaddaaaaacjaajadbbfalbkmfaamalfkja", "mmiijagdaafcbaajcmjdbalcmgbcagafbijfakbabgcfdkcaeldgfik", "akecbajaaaaahfabgahc", "jkcbaemekbmibgaffdegkdlifhaabiaaca", "bcjihjimfaemceeamhkabgebaaacaaaafaaback"},
+		{"kbeaelahfejbdfeediaenceadfdgijlbfbabbndikkdal", "jmgcahcbkffagbdbccnoejcdlemeahaana", "aaealoaanmkabahkbfgmdccgcagnacfjafa", "onfaneoanaghbacbeckanaeacomfchfgabadgnhnieeliggccginaaoelgkbdelnaheaciaakibbakafihbadkdkdlhcibgibldkaanhe", "ahcehdkdlnbjgaacdonlkmabhbhaajacehjcokaf"},
+	}
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	var buf bytes.Buffer
+	enc, err := NewWriter(&buf, WithEncoderLevel(SpeedBetterCompression))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, pieces := range streams {
+		buf.Reset()
+		enc.Reset(&buf)
+		var in []byte
+		for _, p := range pieces {
+			in = append(in, p...)
+			if _, err := enc.Write([]byte(p)); err != nil {
+				t.Fatal(err)
+			}
+			if err := enc.Flush(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := enc.Close(); err != nil {
+			t.Fatal(err)
+		}
+		got, err := dec.DecodeAll(buf.Bytes(), nil)
+		if err != nil {
+			t.Errorf("stream %d: %v", i, err)
+		} else if !bytes.Equal(got, in) {
+			t.Errorf("stream %d: decoded does not match", i)
+		}
+	}
+}
+
 func TestEncoder_EncodeAllPi(t *testing.T) {
 	in, err := os.ReadFile("../testdata/pi.txt")
 	if err != nil {

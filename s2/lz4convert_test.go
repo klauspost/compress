@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash/crc32"
+	"math"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -583,6 +584,36 @@ func TestLZ4ConvertBlockDstBounds(t *testing.T) {
 				if bytes.Count(buf[dstLen:], []byte{0xaa}) != guard {
 					t.Fatalf("%s/%s dstLen=%d: wrote past cap(dst)", tt.name, name, dstLen)
 				}
+			}
+		}
+	}
+}
+
+func TestLZ4ConvertBlockLengthOverflow(t *testing.T) {
+	ext := func(b []byte, v int64) []byte {
+		b = append(b, bytes.Repeat([]byte{255}, int(v/255))...)
+		return append(b, byte(v%255))
+	}
+	// match appends one literal and a match of length ml at offset 1.
+	match := func(b []byte, ml int64) []byte {
+		return ext(append(b, 0x1f, 'a', 1, 0), ml-19)
+	}
+	// Each block is corrupt or decodes to more than math.MaxInt32 bytes.
+	tests := []struct {
+		name string
+		src  []byte
+	}{
+		{"literal-length", ext([]byte{0xf0}, math.MaxInt32-15)},
+		{"match-length", append(match(nil, 1<<32+100), 0x10, 'a')},
+		{"match-total", append(match(match(nil, 1<<30+100), 1<<30+100), 0)},
+		{"literal-total", append(match(match(nil, 1<<30), math.MaxInt32-3-1<<30), 0x40, 'a', 'a', 'a', 'a')},
+	}
+	for _, tt := range tests {
+		for name, conv := range lz4Converters {
+			// A non-empty dst, as when the caller writes the S2 block header first.
+			_, n, err := conv(make([]byte, 1, 4<<10), tt.src)
+			if err == nil && n <= math.MaxInt32 {
+				t.Errorf("%s/%s: got %d, want an error or more than MaxInt32", tt.name, name, n)
 			}
 		}
 	}
