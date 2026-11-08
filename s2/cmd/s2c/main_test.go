@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,6 +41,44 @@ func TestBlockOutput(t *testing.T) {
 			t.Fatalf("decoded output = %q, want %q", decoded, input)
 		}
 	})
+
+	t.Run("replace input", func(t *testing.T) {
+		input := []byte("replace input after successful block output")
+		filename := writeTestInput(t, "replace.txt", input)
+
+		runS2C(t, "-block", "-q", "-verify", "-o", filename, filename)
+
+		compressed, err := os.ReadFile(filename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded, err := s2.Decode(nil, compressed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(decoded, input) {
+			t.Fatalf("decoded output = %q, want %q", decoded, input)
+		}
+		assertNoBlockTempFiles(t, filename)
+	})
+
+	for _, flag := range []string{"-safe", "-rm"} {
+		t.Run("replace input rejects "+flag, func(t *testing.T) {
+			input := []byte("preserve input when replacement is rejected")
+			filename := writeTestInput(t, "preserve.txt", input)
+
+			runS2CWantError(t, "-block", "-q", flag, "-o", filename, filename)
+
+			got, err := os.ReadFile(filename)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, input) {
+				t.Fatalf("input contents = %q, want %q", got, input)
+			}
+			assertNoBlockTempFiles(t, filename)
+		})
+	}
 
 	t.Run("remove source after success", func(t *testing.T) {
 		input := []byte("remove source after successful output")
@@ -92,6 +131,39 @@ func TestBlockOutput(t *testing.T) {
 	})
 }
 
+func TestWriteBlockOutputRemovesPartialFile(t *testing.T) {
+	name := filepath.Join(t.TempDir(), "partial.s2.block")
+	output, err := os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := &failAfterWriter{out: output, limit: 3}
+
+	err = writeBlockOutput(writer, output, name, []byte("compressed block"))
+	if err == nil {
+		t.Fatal("write unexpectedly succeeded")
+	}
+	if _, err := os.Lstat(name); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("partial output still exists: %v", err)
+	}
+}
+
+type failAfterWriter struct {
+	out   io.Writer
+	limit int
+}
+
+func (w *failAfterWriter) Write(p []byte) (int, error) {
+	if len(p) > w.limit {
+		p = p[:w.limit]
+	}
+	n, err := w.out.Write(p)
+	if err != nil {
+		return n, err
+	}
+	return n, errors.New("injected write failure")
+}
+
 func writeTestInput(t *testing.T, name string, contents []byte) string {
 	t.Helper()
 	filename := filepath.Join(t.TempDir(), name)
@@ -99,6 +171,17 @@ func writeTestInput(t *testing.T, name string, contents []byte) string {
 		t.Fatal(err)
 	}
 	return filename
+}
+
+func assertNoBlockTempFiles(t *testing.T, filename string) {
+	t.Helper()
+	matches, err := filepath.Glob(filepath.Join(filepath.Dir(filename), "."+filepath.Base(filename)+".tmp-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("temporary output remains: %v", matches)
+	}
 }
 
 func runS2C(t *testing.T, args ...string) []byte {
