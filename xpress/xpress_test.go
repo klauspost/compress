@@ -74,6 +74,24 @@ func TestXpressTruncated(t *testing.T) {
 	}
 }
 
+func TestXpressHuffmanMatchPastSize(t *testing.T) {
+	// Huff7 is a literal followed by one match of 70000 bytes. A smaller
+	// declared size must not be overrun by that match.
+	for _, v := range xpressVectors {
+		if !strings.HasPrefix(v.name, "Huff7") {
+			continue
+		}
+		for _, size := range []int{2, 1000, len(v.expected) - 1} {
+			out, err := AppendHDecompressed(nil, v.data, size)
+			if !errors.Is(err, errCorrupt) {
+				t.Errorf("size %d: expected corrupt stream, got %v with %d bytes", size, err, len(out))
+			}
+		}
+		return
+	}
+	t.Fatal("vector Huff7 not found")
+}
+
 func TestXpressExpansionRatio(t *testing.T) {
 	// A match with a 4GB raw length via the LE32 extension must be
 	// rejected by the decompressed-size cap. The flag group is stored
