@@ -45,6 +45,26 @@ func TestLeadingSkippableBlock(t *testing.T) {
 	}
 }
 
+func TestSkipOversizedChunk(t *testing.T) {
+	// An uncompressed chunk larger than the configured maximum block size
+	// must be rejected with ErrCorrupt, by Read as well as by Skip.
+	stream := []byte{0xff, 0x06, 0x00, 0x00, 's', 'N', 'a', 'P', 'p', 'Y'}
+	stream = append(stream, 0x01, 0xff, 0xff, 0x00) // uncompressed chunk of 65535 bytes
+
+	for _, tc := range []struct {
+		name string
+		op   func(*Reader) error
+	}{
+		{"Read", func(r *Reader) error { _, err := r.Read(make([]byte, 1)); return err }},
+		{"Skip", func(r *Reader) error { return r.Skip(1) }},
+	} {
+		r := NewReader(bytes.NewReader(stream), ReaderMaxBlockSize(1024))
+		if err := tc.op(r); err != ErrCorrupt {
+			t.Errorf("%s: got %v, want ErrCorrupt", tc.name, err)
+		}
+	}
+}
+
 func TestReaderSkipCRC(t *testing.T) {
 	// Returns a stream of 4 KiB chunks and the start of the chunk holding
 	// uncompressed offset 4096. Random data is written as uncompressed chunks,
