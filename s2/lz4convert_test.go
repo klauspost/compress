@@ -618,3 +618,43 @@ func TestLZ4ConvertBlockLengthOverflow(t *testing.T) {
 		}
 	}
 }
+
+// TestLZ4Converter_EmptyDst checks that a destination with no spare capacity,
+// including a nil one, is reported as too small instead of crashing in the
+// assembly.
+func TestLZ4Converter_EmptyDst(t *testing.T) {
+	data := bytes.Repeat([]byte("hello world "), 20)
+	lz4Data := make([]byte, lz4ref.CompressBlockBound(len(data)))
+	n, err := lz4ref.CompressBlock(data, lz4Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lz4Data = lz4Data[:n]
+	fns := map[string]func(dst, src []byte) ([]byte, int, error){
+		"LZ4":           (&LZ4Converter{}).ConvertBlock,
+		"LZ4Snappy":     (&LZ4Converter{}).ConvertBlockSnappy,
+		"LZ4-Go":        (&LZ4Converter{noAsm: true}).ConvertBlock,
+		"LZ4Snappy-Go":  (&LZ4Converter{noAsm: true}).ConvertBlockSnappy,
+		"LZ4s":          (&LZ4sConverter{}).ConvertBlock,
+		"LZ4sSnappy":    (&LZ4sConverter{}).ConvertBlockSnappy,
+		"LZ4s-Go":       (&LZ4sConverter{noAsm: true}).ConvertBlock,
+		"LZ4sSnappy-Go": (&LZ4sConverter{noAsm: true}).ConvertBlockSnappy,
+	}
+	for name, fn := range fns {
+		for dstName, dst := range map[string][]byte{"nil": nil, "empty": make([]byte, 0), "full": make([]byte, 10)} {
+			t.Run(name+"/"+dstName, func(t *testing.T) {
+				out, sz, err := fn(dst, lz4Data)
+				if err != ErrDstTooSmall {
+					t.Fatalf("got out=%d sz=%d err=%v, want ErrDstTooSmall", len(out), sz, err)
+				}
+			})
+			// an empty block (a single 0x00 token) needs no room and converts to nothing
+			t.Run(name+"/"+dstName+"/empty-block", func(t *testing.T) {
+				out, sz, err := fn(dst, []byte{0})
+				if err != nil || sz != 0 || len(out) != len(dst) {
+					t.Fatalf("got out=%d sz=%d err=%v, want the unchanged dst and no error", len(out), sz, err)
+				}
+			})
+		}
+	}
+}
