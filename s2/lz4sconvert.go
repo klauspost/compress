@@ -38,6 +38,14 @@ func (l *LZ4sConverter) ConvertBlock(dst, src []byte) ([]byte, int, error) {
 
 	s, d := 0, len(dst)
 	dst = dst[:cap(dst)]
+	if d == len(dst) {
+		if len(src) == 1 && src[0] == 0 {
+			// An empty block converts to nothing, so no room is needed.
+			return dst[:d], 0, nil
+		}
+		// No room to write anything; keep a nil dst away from the assembly.
+		return nil, 0, ErrDstTooSmall
+	}
 	if !debug && hasAsm && !l.noAsm {
 		res, sz := cvtLZ4sBlockAsm(dst[d:], src)
 		if res < 0 {
@@ -314,6 +322,14 @@ func (l *LZ4sConverter) ConvertBlockSnappy(dst, src []byte) ([]byte, int, error)
 
 	s, d := 0, len(dst)
 	dst = dst[:cap(dst)]
+	if d == len(dst) {
+		if len(src) == 1 && src[0] == 0 {
+			// An empty block converts to nothing, so no room is needed.
+			return dst[:d], 0, nil
+		}
+		// No room to write anything; keep a nil dst away from the assembly.
+		return nil, 0, ErrDstTooSmall
+	}
 	// Use assembly when possible
 	if !debug && hasAsm && !l.noAsm {
 		res, sz := cvtLZ4sBlockSnappyAsm(dst[d:], src)
