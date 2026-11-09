@@ -352,7 +352,11 @@ Options:`)
 				if *out != "" {
 					dstFilename = *out
 				}
-				replaceInput := dstFilename == filename && !*stdout
+				replaceInput := false
+				if !*stdout {
+					replaceInput, err = outputAliasesInput(filename, dstFilename)
+					exitErr(err)
+				}
 				if replaceInput {
 					if *remove {
 						exitErr(errors.New("cannot remove when input = output"))
@@ -410,36 +414,26 @@ Options:`)
 					}
 					compressed = s2.EncodeBetter(nil, inBytes)
 				}
-				outputName := dstFilename
-				if tempName != "" {
-					outputName = tempName
-				}
-				exitErr(writeBlockOutput(out, dstFile, outputName, compressed))
-				var tempInfo os.FileInfo
-				exitTempErr := func(err error) {
-					if err == nil {
+				exitBlockErr := func(outputErr error) {
+					if outputErr == nil {
 						return
 					}
-					if replaceInput && tempName != "" {
-						if dstFile != nil {
-							err = errors.Join(err, cleanupFailedBlockOutput(dstFile, tempName))
-							dstFile = nil
-						} else {
-							err = errors.Join(err, removeBlockOutput(tempName, tempInfo))
-						}
-					}
-					exitErr(err)
+					outputErr = cleanupFailedBlockOutput(outputErr, dstFile, tempName)
+					dstFile = nil
+					exitErr(outputErr)
+				}
+				if writeErr := writeBlockOutput(out, dstFile, tempName, compressed); writeErr != nil {
+					dstFile = nil
+					exitErr(writeErr)
 				}
 				if replaceInput {
-					tempInfo, err = dstFile.Stat()
-					exitTempErr(err)
-					exitTempErr(dstFile.Sync())
-					exitTempErr(dstFile.Chmod(mode.Perm()))
+					exitBlockErr(dstFile.Sync())
+					exitBlockErr(dstFile.Chmod(mode.Perm()))
 				}
 				if dstFile != nil {
-					closeErr := dstFile.Close()
+					closeErr := closeBlockOutput(dstFile, tempName)
 					dstFile = nil
-					exitTempErr(closeErr)
+					exitErr(closeErr)
 				}
 				if !*quiet {
 					elapsed := time.Since(start)
@@ -449,16 +443,16 @@ Options:`)
 				}
 				if *verify {
 					got, err := s2.Decode(make([]byte, 0, len(inBytes)), compressed)
-					exitTempErr(err)
+					exitBlockErr(err)
 					if !bytes.Equal(got, inBytes) {
-						exitTempErr(fmt.Errorf("decoded content mismatch"))
+						exitBlockErr(fmt.Errorf("decoded content mismatch"))
 					}
 					if !*quiet {
 						fmt.Print("... Verified ok.")
 					}
 				}
 				if replaceInput {
-					exitTempErr(os.Rename(tempName, dstFilename))
+					exitBlockErr(os.Rename(tempName, dstFilename))
 					tempName = ""
 				}
 				if *remove {
@@ -491,7 +485,11 @@ Options:`)
 				fmt.Print("Compressing ", filename, " -> ", dstFilename)
 			}
 
-			replaceInput := dstFilename == filename && !*stdout
+			replaceInput := false
+			if !*stdout {
+				replaceInput, err = outputAliasesInput(filename, dstFilename)
+				exitErr(err)
+			}
 			if replaceInput {
 				if *remove {
 					exitErr(errors.New("cannot remove when input = output"))
@@ -619,6 +617,24 @@ func isHTTP(name string) bool {
 	return strings.HasPrefix(name, "http://") || strings.HasPrefix(name, "https://")
 }
 
+func outputAliasesInput(inputName, outputName string) (bool, error) {
+	if isHTTP(inputName) {
+		return false, nil
+	}
+	inputInfo, err := os.Stat(inputName)
+	if err != nil {
+		return false, err
+	}
+	outputInfo, err := os.Stat(outputName)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return os.SameFile(inputInfo, outputInfo), nil
+}
+
 func openFile(name string) (rc io.ReadCloser, size int64, mode os.FileMode) {
 	if isHTTP(name) {
 		resp, err := http.Get(name)
@@ -680,38 +696,30 @@ func verifyTo(w io.Writer) (io.Writer, func() error) {
 	}
 }
 
-func writeBlockOutput(out io.Writer, dstFile *os.File, dstName string, compressed []byte) error {
+func writeBlockOutput(out io.Writer, dstFile io.Closer, tempName string, compressed []byte) error {
 	_, err := out.Write(compressed)
-	if err == nil || dstFile == nil {
-		return err
-	}
-	return errors.Join(err, cleanupFailedBlockOutput(dstFile, dstName))
+	return cleanupFailedBlockOutput(err, dstFile, tempName)
 }
 
-func cleanupFailedBlockOutput(file *os.File, name string) error {
-	fileInfo, statErr := file.Stat()
-	closeErr := file.Close()
-	if statErr != nil {
-		return errors.Join(statErr, closeErr)
-	}
-	return errors.Join(closeErr, removeBlockOutput(name, fileInfo))
+func closeBlockOutput(output io.Closer, tempName string) error {
+	return cleanupFailedBlockOutput(output.Close(), nil, tempName)
 }
 
-func removeBlockOutput(name string, fileInfo os.FileInfo) error {
-	if fileInfo == nil || !fileInfo.Mode().IsRegular() {
+func cleanupFailedBlockOutput(outputErr error, output io.Closer, tempName string) error {
+	if outputErr == nil {
 		return nil
 	}
-	pathInfo, err := os.Lstat(name)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
+	if output != nil {
+		outputErr = errors.Join(outputErr, output.Close())
 	}
-	if err != nil {
-		return err
+	if tempName != "" {
+		removeErr := os.Remove(tempName)
+		if errors.Is(removeErr, os.ErrNotExist) {
+			removeErr = nil
+		}
+		outputErr = errors.Join(outputErr, removeErr)
 	}
-	if !pathInfo.Mode().IsRegular() || !os.SameFile(fileInfo, pathInfo) {
-		return nil
-	}
-	return os.Remove(name)
+	return outputErr
 }
 
 func printErr(err error) {
