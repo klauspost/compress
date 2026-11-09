@@ -194,6 +194,11 @@ func TestOneMByte(t *testing.T) {
 
 		decompresser := NewReader(&compressedOutput)
 		t.Log("level:", level, "compressed:", compressedOutput.Len())
+		// A window of zeros is about 1 KiB at every matching level (around 130 KiB
+		// with Huffman only); a regression in match selection would show up here.
+		if level >= BestSpeed && compressedOutput.Len() > 4096 {
+			t.Errorf("level %d: compressed %d bytes, expected a few KiB at most", level, compressedOutput.Len())
+		}
 		if _, err := io.Copy(&decompressedOutput, decompresser); err != nil {
 			t.Fatalf("decompress: %s", err)
 		}
