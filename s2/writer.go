@@ -803,6 +803,11 @@ func (w *Writer) closeIndex(idx bool) ([]byte, error) {
 
 	var index []byte
 	if w.err(err) == nil && w.writer != nil {
+		if w.appendIndex && !w.wroteStreamHeader {
+			if _, err := w.writeSync(nil); err != nil {
+				return nil, err
+			}
+		}
 		// Create index.
 		if idx {
 			compSize := int64(-1)
