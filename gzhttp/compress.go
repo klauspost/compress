@@ -631,6 +631,9 @@ func NewWrapper(opts ...option) (func(http.Handler) http.HandlerFunc, error) {
 				} else {
 					r.Header.Del(contentEncoding)
 				}
+				// The decoded length is unknown, as for a response Transport decodes.
+				r.Header.Del(contentLength)
+				r.ContentLength = -1
 				r.Body = &gzipReader{body: r.Body}
 			}
 
