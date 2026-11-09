@@ -9,12 +9,91 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"io"
 	"os"
 	"strconv"
 	"strings"
 	"testing"
 )
+
+// partialWriter accepts n bytes on its first call and may also return an
+// error. Later calls report a zero-byte write.
+type partialWriter struct {
+	done bool
+	n    int
+	err  error
+}
+
+func (w *partialWriter) Write(p []byte) (int, error) {
+	if w.done {
+		return 0, nil
+	}
+	w.done = true
+	if len(p) > w.n {
+		p = p[:w.n]
+	}
+	return len(p), w.err
+}
+
+func TestWriteToShortWriteDoesNotReplayData(t *testing.T) {
+	const payload = "hello world, this is a reasonably long payload for flate"
+	wantErr := errors.New("writer failed")
+	for _, tc := range []struct {
+		name    string
+		newW    func() io.Writer
+		want    int64
+		err     error // returned by WriteTo
+		readErr error // returned by a later Read
+	}{
+		{"one byte, no error", func() io.Writer { return &partialWriter{n: 1} }, 1, io.ErrShortWrite, io.ErrShortWrite},
+		{"zero bytes, no error", func() io.Writer { return &partialWriter{n: 0} }, 0, io.ErrShortWrite, io.ErrShortWrite},
+		{"one byte with error", func() io.Writer { return &partialWriter{n: 1, err: wantErr} }, 1, wantErr, wantErr},
+		{"zero bytes with error", func() io.Writer { return &partialWriter{n: 0, err: wantErr} }, 0, wantErr, wantErr},
+		{"writer returns EOF", func() io.Writer { return &partialWriter{n: 1, err: io.EOF} }, 1, io.EOF, io.ErrUnexpectedEOF},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			w, err := NewWriter(&buf, DefaultCompression)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := w.Write([]byte(payload)); err != nil {
+				t.Fatal(err)
+			}
+			if err := w.Close(); err != nil {
+				t.Fatal(err)
+			}
+
+			r := NewReader(bytes.NewReader(buf.Bytes()))
+			n, err := r.(io.WriterTo).WriteTo(tc.newW())
+			if n != tc.want {
+				t.Errorf("WriteTo wrote %d bytes, want %d", n, tc.want)
+			}
+			if err != tc.err {
+				t.Fatalf("got %v, want %v", err, tc.err)
+			}
+			// The buffered output must not be handed out a second time by Read.
+			p := make([]byte, 256)
+			got, err := r.Read(p)
+			if got != 0 {
+				t.Errorf("Read returned %d bytes after the failed write: %q", got, p[:got])
+			}
+			if err != tc.readErr {
+				t.Errorf("Read got %v, want %v", err, tc.readErr)
+			}
+			// A fresh reader must not let io.ReadAll report success on
+			// truncated output either.
+			r2 := NewReader(bytes.NewReader(buf.Bytes()))
+			if _, err := r2.(io.WriterTo).WriteTo(tc.newW()); err != tc.err {
+				t.Fatalf("second WriteTo got %v, want %v", err, tc.err)
+			}
+			if _, err := io.ReadAll(r2); err == nil {
+				t.Error("io.ReadAll reported success after the failed write")
+			}
+		})
+	}
+}
 
 func TestTruncatedDeflateReportsUnexpectedEOF(t *testing.T) {
 	stream, err := hex.DecodeString("ca48cdc9c95728cf2fca495118658fb2a9c5060c00")
