@@ -2824,6 +2824,8 @@ func TestRequestContentEncodingOrder(t *testing.T) {
 
 			var gotCE []string
 			var gotBody []byte
+			var gotLen int64
+			var gotCL string
 			var readErr error
 			wrapper, err := NewWrapper(AllowCompressedRequests(true))
 			if err != nil {
@@ -2831,6 +2833,7 @@ func TestRequestContentEncodingOrder(t *testing.T) {
 			}
 			handler := wrapper(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				gotCE = r.Header.Values("Content-Encoding")
+				gotLen, gotCL = r.ContentLength, r.Header.Get("Content-Length")
 				gotBody, readErr = io.ReadAll(r.Body)
 			}))
 
@@ -2838,11 +2841,20 @@ func TestRequestContentEncodingOrder(t *testing.T) {
 			for _, line := range tc.sent {
 				req.Header.Add("Content-Encoding", line)
 			}
+			req.Header.Set("Content-Length", strconv.Itoa(len(body)))
 			handler.ServeHTTP(httptest.NewRecorder(), req)
 			if readErr != nil {
 				t.Fatalf("reading the request body: %v", readErr)
 			}
 			assertEqual(t, tc.wantCE, gotCE)
+
+			// A decoded body has no known length; one passed through keeps its own.
+			wantLen, wantCL := int64(len(body)), strconv.Itoa(len(body))
+			if tc.applied[len(tc.applied)-1] == "gzip" {
+				wantLen, wantCL = -1, ""
+			}
+			assertEqual(t, wantLen, gotLen)
+			assertEqual(t, wantCL, gotCL)
 
 			// Undo what the handler was told is still applied, outermost first.
 			var left []string
