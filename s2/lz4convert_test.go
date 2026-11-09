@@ -648,6 +648,13 @@ func TestLZ4Converter_EmptyDst(t *testing.T) {
 					t.Fatalf("got out=%d sz=%d err=%v, want ErrDstTooSmall", len(out), sz, err)
 				}
 			})
+			// an empty block (a single 0x00 token) needs no room and converts to nothing
+			t.Run(name+"/"+dstName+"/empty-block", func(t *testing.T) {
+				out, sz, err := fn(dst, []byte{0})
+				if err != nil || sz != 0 || len(out) != len(dst) {
+					t.Fatalf("got out=%d sz=%d err=%v, want the unchanged dst and no error", len(out), sz, err)
+				}
+			})
 		}
 	}
 }
