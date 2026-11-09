@@ -771,7 +771,7 @@ func (r *Reader) Skip(n int64) error {
 				return r.err
 			}
 			if !r.ensureBufferSize(chunkLen) {
-				if r.err != nil {
+				if r.err == nil {
 					r.err = ErrUnsupported
 				}
 				return r.err
