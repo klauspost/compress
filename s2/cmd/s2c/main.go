@@ -187,7 +187,7 @@ Options:`)
 						fmt.Print("Reading ", filename, "...")
 					}
 					// Input file.
-					file, size, _ := openFile(filename)
+					file, size, _, _ := openFile(filename)
 					b := make([]byte, size)
 					_, err = io.ReadFull(file, b)
 					exitErr(err)
@@ -268,7 +268,7 @@ Options:`)
 					fmt.Print("Reading ", filename, "...")
 				}
 				// Input file.
-				file, size, _ := openFile(filename)
+				file, size, _, _ := openFile(filename)
 				b := make([]byte, size)
 				_, err = io.ReadFull(file, b)
 				exitErr(err)
@@ -369,7 +369,7 @@ Options:`)
 					fmt.Print("Compressing ", filename, " -> ", dstFilename)
 				}
 				// Input file.
-				file, _, mode := openFile(filename)
+				file, _, mode, inputInfo := openFile(filename)
 				exitErr(err)
 				inBytes, readErr := io.ReadAll(file)
 				exitErr(errors.Join(readErr, file.Close()))
@@ -387,7 +387,17 @@ Options:`)
 							tempName = dstFile.Name()
 						}
 					} else {
-						dstFile, err = fileio.Create(dstFilename, mode, *safe)
+						dstFile, replaceInput, err = openOutputFile(inputInfo, dstFilename, mode, *safe)
+						if err == nil && replaceInput {
+							if *remove {
+								err = errors.New("cannot remove when input = output")
+							} else {
+								dstFile, err = os.CreateTemp(filepath.Dir(dstFilename), "."+filepath.Base(dstFilename)+".tmp-*")
+								if err == nil {
+									tempName = dstFile.Name()
+								}
+							}
+						}
 					}
 					exitErr(err)
 					out = dstFile
@@ -500,7 +510,7 @@ Options:`)
 			}
 
 			// Input file.
-			file, _, mode := openFile(filename)
+			file, _, mode, inputInfo := openFile(filename)
 			exitErr(err)
 			defer closeOnce.Do(func() { file.Close() })
 			inputReader, err := readahead.NewReaderSize(file, *cpu+1, 1<<20)
@@ -538,7 +548,17 @@ Options:`)
 						tempName = dstFile.Name()
 					}
 				} else {
-					dstFile, err = fileio.Create(dstFilename, mode, *safe)
+					dstFile, replaceInput, err = openOutputFile(inputInfo, dstFilename, mode, *safe)
+					if err == nil && replaceInput {
+						if *remove {
+							err = errors.New("cannot remove when input = output")
+						} else {
+							dstFile, err = os.CreateTemp(filepath.Dir(dstFilename), "."+filepath.Base(dstFilename)+".tmp-*")
+							if err == nil {
+								tempName = dstFile.Name()
+							}
+						}
+					}
 				}
 				exitErr(err)
 				bw = bufio.NewWriterSize(dstFile, int(sz)*2)
@@ -632,23 +652,57 @@ func outputAliasesInput(inputName, outputName string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return os.SameFile(inputInfo, outputInfo), nil
+	if !os.SameFile(inputInfo, outputInfo) {
+		return false, nil
+	}
+	if !inputInfo.Mode().IsRegular() || !outputInfo.Mode().IsRegular() {
+		return false, errors.New("input and output refer to the same non-regular file")
+	}
+	return true, nil
 }
 
-func openFile(name string) (rc io.ReadCloser, size int64, mode os.FileMode) {
+func openOutputFile(inputInfo os.FileInfo, name string, mode os.FileMode, exclusive bool) (*os.File, bool, error) {
+	flags := os.O_CREATE | os.O_WRONLY
+	if exclusive {
+		flags |= os.O_EXCL
+	}
+	output, err := os.OpenFile(name, flags, mode.Perm())
+	if err != nil {
+		return nil, false, err
+	}
+	outputInfo, err := output.Stat()
+	if err != nil {
+		return nil, false, errors.Join(err, output.Close())
+	}
+	if inputInfo != nil && os.SameFile(inputInfo, outputInfo) {
+		closeErr := output.Close()
+		if !inputInfo.Mode().IsRegular() || !outputInfo.Mode().IsRegular() {
+			return nil, false, errors.Join(errors.New("input and output refer to the same non-regular file"), closeErr)
+		}
+		return nil, true, closeErr
+	}
+	if outputInfo.Mode().IsRegular() {
+		if err := output.Truncate(0); err != nil {
+			return nil, false, errors.Join(err, output.Close())
+		}
+	}
+	return output, false, nil
+}
+
+func openFile(name string) (rc io.ReadCloser, size int64, mode os.FileMode, info os.FileInfo) {
 	if isHTTP(name) {
 		resp, err := http.Get(name)
 		exitErr(err)
 		if resp.StatusCode != http.StatusOK {
 			exitErr(fmt.Errorf("unexpected response status code %v, want OK", resp.Status))
 		}
-		return resp.Body, resp.ContentLength, os.ModePerm
+		return resp.Body, resp.ContentLength, os.ModePerm, nil
 	}
 	file, err := os.Open(name)
 	exitErr(err)
 	st, err := file.Stat()
 	exitErr(err)
-	return file, st.Size(), st.Mode()
+	return file, st.Size(), st.Mode(), st
 }
 
 func cleanFileName(s string) string {
