@@ -136,9 +136,12 @@ The goal will be to keep the default efficiency at the default zstd (level 3).
 However the encoding should never be assumed to remain the same, 
 and you should not use hashes of compressed output for similarity checks.
 
-The Encoder can be assumed to produce the same output from the exact same code version.
-However, the may be modes in the future that break this, 
-although they will not be enabled without an explicit option.
+Output is only deterministic within a single version of this package:
+the same version, options and input give the same output.
+Any release, including a patch release, may change the output for the same input and options,
+for example to compress better. Do not rely on hashes of compressed output staying the same across versions.
+Modes that are not deterministic even within a version may be added in the future,
+but they will not be enabled without an explicit option.
 
 Building with `-tags=zstdlegacycost` restores the v1.20.2 output for frames without a dictionary,
 at a cost of 0.01-0.6% larger output. This is a temporary migration aid and may be removed in a future version.
