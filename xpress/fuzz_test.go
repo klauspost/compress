@@ -39,5 +39,8 @@ func FuzzXpressHuffman(f *testing.F) {
 		if err != nil && len(out) != len(pre) {
 			t.Fatalf("LZ77+Huff: error, but output modified %d != %d", len(out), len(pre))
 		}
+		if err == nil && len(out)-len(pre) != dsize {
+			t.Fatalf("LZ77+Huff: %d bytes of output, want %d", len(out)-len(pre), dsize)
+		}
 	})
 }
