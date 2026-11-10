@@ -543,9 +543,13 @@ func (w *GzipResponseWriter) FlushError() error {
 
 		// See if we should compress...
 		if len(w.Header()[HeaderNoCompression]) == 0 && ce == "" && cr == "" && cl >= w.minSize && w.contentTypeFilter(ct) {
-			w.startCompression(nil)
+			if err := w.startCompression(nil); err != nil {
+				return err
+			}
 		} else {
-			w.startPlain()
+			if err := w.startPlain(); err != nil {
+				return err
+			}
 		}
 	}
 
