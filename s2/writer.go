@@ -788,6 +788,7 @@ func (w *Writer) Close() error {
 }
 
 // CloseIndex calls Close and returns an index on first call.
+// It returns no index if no data was written.
 // This is not required if you are only adding index to a stream.
 func (w *Writer) CloseIndex() ([]byte, error) {
 	return w.closeIndex(true)
@@ -803,13 +804,8 @@ func (w *Writer) closeIndex(idx bool) ([]byte, error) {
 
 	var index []byte
 	if w.err(err) == nil && w.writer != nil {
-		if w.appendIndex && !w.wroteStreamHeader {
-			if _, err := w.writeSync(nil); err != nil {
-				return nil, err
-			}
-		}
 		// Create index.
-		if idx {
+		if idx && w.uncompWritten > 0 {
 			compSize := int64(-1)
 			if w.pad <= 1 {
 				compSize = w.written

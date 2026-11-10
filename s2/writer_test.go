@@ -406,54 +406,53 @@ func TestWriterEmptyIndex(t *testing.T) {
 	for _, snappy := range []bool{false, true} {
 		for _, padding := range []int{0, 64} {
 			for _, concurrency := range []int{1, 2} {
-				for _, closeIndex := range []bool{false, true} {
-					t.Run(fmt.Sprintf("snappy=%v/padding=%d/concurrency=%d/closeIndex=%v", snappy, padding, concurrency, closeIndex), func(t *testing.T) {
-						options := []WriterOption{WriterAddIndex(), WriterConcurrency(concurrency)}
-						if snappy {
-							options = append(options, WriterSnappyCompat())
-						}
-						if padding > 0 {
-							options = append(options, WriterPadding(padding), WriterPaddingSrc(zeroReader{}))
-						}
-						var dst bytes.Buffer
-						w := NewWriter(&dst, options...)
-						for range 2 {
-							var err error
-							if closeIndex {
-								_, err = w.CloseIndex()
-							} else {
-								err = w.Close()
+				for _, appendIndex := range []bool{false, true} {
+					for _, closeIndex := range []bool{false, true} {
+						t.Run(fmt.Sprintf("snappy=%v/padding=%d/concurrency=%d/appendIndex=%v/closeIndex=%v", snappy, padding, concurrency, appendIndex, closeIndex), func(t *testing.T) {
+							options := []WriterOption{WriterConcurrency(concurrency)}
+							if appendIndex {
+								options = append(options, WriterAddIndex())
 							}
-							if err != nil {
-								t.Fatal(err)
+							if snappy {
+								options = append(options, WriterSnappyCompat())
 							}
-							got, err := io.ReadAll(NewReader(bytes.NewReader(dst.Bytes())))
-							if err != nil {
-								t.Fatalf("decoding empty indexed stream: %v", err)
+							if padding > 0 {
+								options = append(options, WriterPadding(padding), WriterPaddingSrc(zeroReader{}))
 							}
-							if len(got) != 0 {
-								t.Fatalf("decoded %d bytes, want none", len(got))
-							}
-							var index Index
-							if err := index.LoadStream(bytes.NewReader(dst.Bytes())); err != nil {
-								t.Fatal(err)
-							}
-							if index.TotalUncompressed != 0 {
-								t.Fatalf("index size = %d, want 0", index.TotalUncompressed)
-							}
-							if padding > 0 && dst.Len()%padding != 0 {
-								t.Fatalf("stream length %d is not a multiple of %d", dst.Len(), padding)
+							var dst bytes.Buffer
+							w := NewWriter(&dst, options...)
+							for range 2 {
+								var index []byte
+								var err error
+								if closeIndex {
+									index, err = w.CloseIndex()
+								} else {
+									err = w.Close()
+								}
+								if err != nil {
+									t.Fatal(err)
+								}
+								if len(index) != 0 {
+									t.Fatalf("empty stream returned %d index bytes", len(index))
+								}
+								if dst.Len() != 0 {
+									t.Fatalf("empty stream wrote %d bytes", dst.Len())
+								}
+								got, err := io.ReadAll(NewReader(bytes.NewReader(dst.Bytes())))
+								if err != nil || len(got) != 0 {
+									t.Fatalf("decoding empty stream: got %d bytes, error %v", len(got), err)
+								}
+								if err := w.Close(); err != nil {
+									t.Fatal(err)
+								}
+								dst.Reset()
+								w.Reset(&dst)
 							}
 							if err := w.Close(); err != nil {
 								t.Fatal(err)
 							}
-							dst.Reset()
-							w.Reset(&dst)
-						}
-						if err := w.Close(); err != nil {
-							t.Fatal(err)
-						}
-					})
+						})
+					}
 				}
 			}
 		}
