@@ -427,11 +427,18 @@ func (f *decompressor) WriteTo(w io.Writer) (int64, error) {
 			n, err := w.Write(f.toRead)
 			total += int64(n)
 			if err != nil {
-				f.err = err
+				// f.err doubles as the end-of-stream marker, so keep a
+				// writer's io.EOF distinct from a clean end of the input.
+				f.err = noEOF(err)
+				// A later Read must not replay bytes already handed to
+				// the writer, even when the write also returned an error.
+				f.toRead = f.toRead[:0]
 				return total, err
 			}
 			if n != len(f.toRead) {
-				return total, io.ErrShortWrite
+				f.err = io.ErrShortWrite
+				f.toRead = f.toRead[:0]
+				return total, f.err
 			}
 			f.toRead = f.toRead[:0]
 		}
