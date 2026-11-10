@@ -7,6 +7,8 @@ package zstd
 // should select it actually did.
 const haveSeqdecAsm = true
 
+const haveUnsafeAsm = true
+
 // decodeSyncUsesSafe reports which copy variant the assembly decoder would
 // use for s's current buffers. It must be asked before decoding, since the
 // answer depends on the capacity left in s.out.
