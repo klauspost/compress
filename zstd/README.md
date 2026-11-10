@@ -143,8 +143,9 @@ for example to compress better. Do not rely on hashes of compressed output stayi
 Modes that are not deterministic even within a version may be added in the future,
 but they will not be enabled without an explicit option.
 
-Building with `-tags=zstdlegacycost` restores the v1.20.2 output for frames without a dictionary,
-at a cost of 0.01-0.6% larger output. This is a temporary migration aid and may be removed in a future version.
+Building with `-tags=zstdlegacycost` makes frames without a dictionary choose sequence tables as v1.20.2 did,
+which reproduces its output for common options. Output is typically 0.01-0.6% larger.
+Bug fixes that change output are not reverted. This is a temporary migration aid and may be removed in a future version.
 
 This encoder is not designed to (and will probably never) output the exact same bitstream as the reference encoder.
 

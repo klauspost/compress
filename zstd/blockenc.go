@@ -22,7 +22,8 @@ type blockEnc struct {
 	litEnc     *huff0.Scratch
 	dictLitEnc *huff0.Scratch
 	wr         bitWriter
-	// withDict keeps exact table costs when built with zstdlegacycost.
+	// withDict is set for frames with a dictionary; they always use
+	// exact table costs, also when built with zstdlegacycost.
 	withDict bool
 
 	extraLits         int

@@ -1176,10 +1176,11 @@ func TestEncoderDictSeedsSequenceTables(t *testing.T) {
 	}
 }
 
-func TestEncoderChooseCompWithDictTables(t *testing.T) {
+// testLoadDict0 loads d0.dict from dict-tests-small.zip.
+func testLoadDict0(t *testing.T) *dict {
+	t.Helper()
 	initPredefined()
 	zr := testCreateZipReader("testdata/dict-tests-small.zip", t)
-	var d *dict
 	for _, f := range zr.File {
 		if f.Name != "d0.dict" {
 			continue
@@ -1193,14 +1194,18 @@ func TestEncoderChooseCompWithDictTables(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		d, err = loadDict(in)
+		d, err := loadDict(in)
 		if err != nil {
 			t.Fatal(err)
 		}
+		return d
 	}
-	if d == nil {
-		t.Fatal("d0.dict not found")
-	}
+	t.Fatal("d0.dict not found")
+	return nil
+}
+
+func TestEncoderChooseCompWithDictTables(t *testing.T) {
+	d := testLoadDict0(t)
 	for _, tc := range []struct {
 		name   string
 		table  tableIndex
@@ -1257,5 +1262,52 @@ func TestEncoderChooseCompWithDictTables(t *testing.T) {
 				t.Fatalf("without dictionary: got mode %d, want %d", got, want)
 			}
 		})
+	}
+}
+
+// The encoder's withDict flag must follow the frame, whichever block encodes it.
+func TestEncoderWithDictFlag(t *testing.T) {
+	d := testLoadDict0(t)
+	for _, level := range []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression} {
+		o := encoderOptions{}
+		o.setDefault()
+		o.level = level
+		plain := o.encoder()
+		o.dict = d
+		withDict := o.encoder()
+		for _, tc := range []struct {
+			name  string
+			enc   encoder
+			reset func(e encoder)
+			want  bool
+		}{
+			{"dict", withDict, func(e encoder) { e.Reset(d, false) }, true},
+			{"dict-single", withDict, func(e encoder) { e.Reset(d, true) }, true},
+			{"dict-then-none", withDict, func(e encoder) { e.Reset(d, false); e.Reset(nil, false) }, false},
+			// A stale flag must be cleared.
+			{"none", plain, func(e encoder) { e.Reset(nil, false); e.Block().withDict = true; e.Reset(nil, false) }, false},
+			{"prefix", plain, func(e encoder) { e.Reset(nil, false); e.Block().withDict = true; e.ResetPrefix([]byte("prefix")) }, false},
+		} {
+			t.Run(level.String()+"/"+tc.name, func(t *testing.T) {
+				tc.reset(tc.enc)
+				if got := tc.enc.Block().withDict; got != tc.want {
+					t.Fatalf("after reset: got %v, want %v", got, tc.want)
+				}
+				// Per-block resets keep the flag.
+				tc.enc.Block().reset(nil)
+				if got := tc.enc.Block().withDict; got != tc.want {
+					t.Fatalf("after block reset: got %v, want %v", got, tc.want)
+				}
+				// The async stream hands the frame to another block.
+				var other blockEnc
+				other.init()
+				other.initNewEncode()
+				other.withDict = !tc.want
+				tc.enc.UseBlock(&other)
+				if got := tc.enc.Block().withDict; got != tc.want {
+					t.Fatalf("after UseBlock: got %v, want %v", got, tc.want)
+				}
+			})
+		}
 	}
 }
