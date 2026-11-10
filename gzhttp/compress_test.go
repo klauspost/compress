@@ -870,6 +870,52 @@ func TestFlushError(t *testing.T) {
 	}
 }
 
+type flushErrorWriter struct {
+	noFlushWriter
+	flushErr error
+}
+
+func (w *flushErrorWriter) FlushError() error { return w.flushErr }
+
+func TestFlushErrorBufferedWrite(t *testing.T) {
+	writeErr := errors.New("buffered write failed")
+	flushErr := errors.New("flush failed")
+	tests := []struct {
+		name        string
+		encoding    string
+		contentType string
+		writeErr    error
+		flushErr    error
+		wantErr     error
+	}{
+		{"plain write error", "gzip", "image/jpeg", writeErr, nil, writeErr},
+		{"plain write error before flush error", "gzip", "image/jpeg", writeErr, flushErr, writeErr},
+		{"plain flush error", "gzip", "image/jpeg", nil, flushErr, flushErr},
+		{"plain success", "gzip", "image/jpeg", nil, nil, nil},
+		{"gzip write error", "gzip", "text/plain", writeErr, nil, writeErr},
+		{"zstd write error", "zstd", "text/plain", writeErr, nil, writeErr},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got error
+			handler := GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set(contentType, tt.contentType)
+				n, err := w.Write(smallTestBody)
+				assertEqual(t, len(smallTestBody), n)
+				assertNil(t, err)
+				got = http.NewResponseController(w).Flush()
+			}))
+			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			r.Header.Set(acceptEncoding, tt.encoding)
+			w := &flushErrorWriter{noFlushWriter: noFlushWriter{header: http.Header{}, err: tt.writeErr}, flushErr: tt.flushErr}
+			handler.ServeHTTP(w, r)
+			if !errors.Is(got, tt.wantErr) {
+				t.Fatalf("Flush: want %v, got %v", tt.wantErr, got)
+			}
+		})
+	}
+}
+
 func TestHijackThroughUnwrap(t *testing.T) {
 	rec := &hijackRecorder{ResponseRecorder: httptest.NewRecorder()}
 	handler := GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
