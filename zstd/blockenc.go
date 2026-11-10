@@ -22,6 +22,8 @@ type blockEnc struct {
 	litEnc     *huff0.Scratch
 	dictLitEnc *huff0.Scratch
 	wr         bitWriter
+	// withDict keeps exact table costs when built with zstdlegacycost.
+	withDict bool
 
 	extraLits         int
 	output            []byte
@@ -79,6 +81,7 @@ func (b *blockEnc) initNewEncode() {
 	b.litEnc.Reuse = huff0.ReusePolicyNone
 	b.coders.setPrev(nil, nil, nil)
 	b.dictLitEnc = nil
+	b.withDict = false
 }
 
 // reset will reset the block for a new encode, but in the same stream,
@@ -93,6 +96,7 @@ func (b *blockEnc) reset(prev *blockEnc) {
 	b.last = false
 	if prev != nil {
 		b.recentOffsets = prev.prevRecentOffsets
+		b.withDict = prev.withDict
 	}
 	b.dictLitEnc = nil
 }
@@ -821,20 +825,22 @@ func (b *blockEnc) chooseComp(cur, prev, preDef *fseEncoder) (*fseEncoder, seqCo
 	// The previous table may come from a dictionary and fit poorly,
 	// so it is compared against the exact header size, without penalty.
 	nSizePrev := nSize
-	if prevSize != math.MaxUint32 {
-		// Written to spare capacity; the real header goes there later.
-		if hdr, err := cur.writeCount(b.output[len(b.output):]); err == nil {
-			nSizePrev = cur.approxSize(hist) + uint32(len(hdr))*8
+	if b.withDict || !legacyCost {
+		if prevSize != math.MaxUint32 {
+			// Written to spare capacity; the real header goes there later.
+			if hdr, err := cur.writeCount(b.output[len(b.output):]); err == nil {
+				nSizePrev = cur.approxSize(hist) + uint32(len(hdr))*8
+			}
 		}
-	}
-	// Each stream ends with a flush of tableLog bits.
-	nSize += uint32(cur.actualTableLog)
-	nSizePrev += uint32(cur.actualTableLog)
-	if predefSize != math.MaxUint32 {
-		predefSize += uint32(preDef.actualTableLog)
-	}
-	if prevSize != math.MaxUint32 {
-		prevSize += uint32(prev.actualTableLog)
+		// Each stream ends with a flush of tableLog bits.
+		nSize += uint32(cur.actualTableLog)
+		nSizePrev += uint32(cur.actualTableLog)
+		if predefSize != math.MaxUint32 {
+			predefSize += uint32(preDef.actualTableLog)
+		}
+		if prevSize != math.MaxUint32 {
+			prevSize += uint32(prev.actualTableLog)
+		}
 	}
 	switch {
 	case predefSize <= prevSize && predefSize <= nSize || forcePreDef:

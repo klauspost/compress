@@ -41,6 +41,9 @@ jobs:
     - name: Test No-unsafe, noasm
       run: go test -tags="nounsafe,noasm" ./...
 
+    - name: Test zstd legacy cost
+      run: go test -tags=zstdlegacycost ./zstd/...
+
     - name: Test Race 1 CPU
       env:
         CGO_ENABLED: 1

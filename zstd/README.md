@@ -138,7 +138,10 @@ and you should not use hashes of compressed output for similarity checks.
 
 The Encoder can be assumed to produce the same output from the exact same code version.
 However, the may be modes in the future that break this, 
-although they will not be enabled without an explicit option.   
+although they will not be enabled without an explicit option.
+
+Building with `-tags=zstdlegacycost` restores the v1.20.2 output for frames without a dictionary,
+at a cost of 0.01-0.6% larger output. This is a temporary migration aid and may be removed in a future version.
 
 This encoder is not designed to (and will probably never) output the exact same bitstream as the reference encoder.
 

@@ -1206,16 +1206,17 @@ func TestEncoderChooseCompWithDictTables(t *testing.T) {
 		table  tableIndex
 		counts map[uint8]uint32
 		want   seqCompMode
+		legacy seqCompMode
 	}{
 		// Final state flush makes the dictionary's larger table cost more.
-		{"ml-flush", tableMatchLengths, map[uint8]uint32{9: 1, 10: 1}, compModePredefined},
-		{"of-flush", tableOffsets, map[uint8]uint32{8: 1, 15: 1}, compModePredefined},
+		{"ml-flush", tableMatchLengths, map[uint8]uint32{9: 1, 10: 1}, compModePredefined, compModeRepeat},
+		{"of-flush", tableOffsets, map[uint8]uint32{8: 1, 15: 1}, compModePredefined, compModeRepeat},
 		// A new table beats a poorly fitting dictionary table on its exact header size.
-		{"ll-new", tableLiteralLengths, map[uint8]uint32{3: 1, 4: 5}, compModeFSE},
-		{"of-new", tableOffsets, map[uint8]uint32{0: 5, 3: 1}, compModeFSE},
+		{"ll-new", tableLiteralLengths, map[uint8]uint32{3: 1, 4: 5}, compModeFSE, compModeRepeat},
+		{"of-new", tableOffsets, map[uint8]uint32{0: 5, 3: 1}, compModeFSE, compModeRepeat},
 		// A fitting dictionary table is reused.
-		{"ml-repeat", tableMatchLengths, map[uint8]uint32{3: 1, 6: 1}, compModeRepeat},
-		{"of-repeat", tableOffsets, map[uint8]uint32{10: 1, 11: 1}, compModeRepeat},
+		{"ml-repeat", tableMatchLengths, map[uint8]uint32{3: 1, 6: 1}, compModeRepeat, compModeRepeat},
+		{"of-repeat", tableOffsets, map[uint8]uint32{10: 1, 11: 1}, compModeRepeat, compModeRepeat},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var blk blockEnc
@@ -1242,8 +1243,18 @@ func TestEncoderChooseCompWithDictTables(t *testing.T) {
 			if err := cur.normalizeCount(total); err != nil {
 				t.Fatal(err)
 			}
+			blk.withDict = true
 			if _, got := blk.chooseComp(cur, prev, &fsePredefEnc[tc.table]); got != tc.want {
 				t.Fatalf("got mode %d, want %d", got, tc.want)
+			}
+			// zstdlegacycost keeps the older estimate without a dictionary.
+			blk.withDict = false
+			want := tc.want
+			if legacyCost {
+				want = tc.legacy
+			}
+			if _, got := blk.chooseComp(cur, prev, &fsePredefEnc[tc.table]); got != want {
+				t.Fatalf("without dictionary: got mode %d, want %d", got, want)
 			}
 		})
 	}
