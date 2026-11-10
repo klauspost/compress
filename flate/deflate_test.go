@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"reflect"
 	"strings"
@@ -193,6 +194,11 @@ func TestOneMByte(t *testing.T) {
 
 		decompresser := NewReader(&compressedOutput)
 		t.Log("level:", level, "compressed:", compressedOutput.Len())
+		// A window of zeros is about 1 KiB at every matching level (around 130 KiB
+		// with Huffman only); a regression in match selection would show up here.
+		if level >= BestSpeed && compressedOutput.Len() > 4096 {
+			t.Errorf("level %d: compressed %d bytes, expected a few KiB at most", level, compressedOutput.Len())
+		}
 		if _, err := io.Copy(&decompressedOutput, decompresser); err != nil {
 			t.Fatalf("decompress: %s", err)
 		}
@@ -784,5 +790,48 @@ func TestBestSpeed(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// TestBestCompressionRuns checks that the level 9 gain estimate does not
+// reject matches on bytes that are missing from the first part of the window:
+// data made of long runs of varying byte values compressed about 7x worse at
+// level 9 than at level 8 once the input exceeded the first flate block.
+func TestBestCompressionRuns(t *testing.T) {
+	rng := rand.New(rand.NewSource(7))
+	input := make([]byte, 70000)
+	for i := 0; i < len(input); {
+		run := 1 + rng.Intn(300)
+		v := byte(rng.Intn(256))
+		for j := 0; j < run && i < len(input); j++ {
+			input[i] = v
+			i++
+		}
+	}
+	sizes := make(map[int]int)
+	for _, level := range []int{8, 9} {
+		var buf bytes.Buffer
+		w, err := NewWriter(&buf, level)
+		if err != nil {
+			t.Fatalf("NewWriter(%d): %v", level, err)
+		}
+		if _, err := w.Write(input); err != nil {
+			t.Fatalf("Write(%d): %v", level, err)
+		}
+		if err := w.Close(); err != nil {
+			t.Fatalf("Close(%d): %v", level, err)
+		}
+		sizes[level] = buf.Len()
+		out, err := io.ReadAll(NewReader(&buf))
+		if err != nil {
+			t.Fatalf("decompress(%d): %v", level, err)
+		}
+		if !bytes.Equal(out, input) {
+			t.Fatalf("level %d: decompressed output differs from input", level)
+		}
+	}
+	t.Logf("level 8: %d bytes, level 9: %d bytes", sizes[8], sizes[9])
+	if sizes[9] > sizes[8]*3/2 {
+		t.Errorf("level 9 output (%d bytes) is much larger than level 8 output (%d bytes)", sizes[9], sizes[8])
 	}
 }
