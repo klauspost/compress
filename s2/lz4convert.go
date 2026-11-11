@@ -19,11 +19,41 @@ type LZ4Converter struct {
 // ErrDstTooSmall is returned when provided destination is too small.
 var ErrDstTooSmall = errors.New("s2: destination too small")
 
+// convertDstMargin is the extra tail the converters reserve while writing
+// (10 bytes in the Go fallback, up to 32 in assembly for very small blocks).
+// Callers that size dst with MaxEncodedLen(uncompressed) can still land
+// exactly on the limit for incompressible input, so convertFitDst retries
+// with this much extra capacity and copies back if the result fits.
+const convertDstMargin = 32
+
+func convertFitDst(dst, src []byte, convert func(dst, src []byte) ([]byte, int, error)) ([]byte, int, error) {
+	out, n, err := convert(dst, src)
+	if err != ErrDstTooSmall {
+		return out, n, err
+	}
+	buf := make([]byte, len(dst), cap(dst)+convertDstMargin)
+	copy(buf, dst)
+	out, n, err = convert(buf, src)
+	if err != nil {
+		return nil, 0, err
+	}
+	if len(out) > cap(dst) {
+		return nil, 0, ErrDstTooSmall
+	}
+	res := dst[:len(out)]
+	copy(res, out)
+	return res, n, nil
+}
+
 // ConvertBlock will convert an LZ4 block and append it as an S2
 // block without block length to dst.
 // The uncompressed size is returned as well.
 // dst must have capacity to contain the entire compressed block.
 func (l *LZ4Converter) ConvertBlock(dst, src []byte) ([]byte, int, error) {
+	return convertFitDst(dst, src, l.convertBlockInner)
+}
+
+func (l *LZ4Converter) convertBlockInner(dst, src []byte) ([]byte, int, error) {
 	if len(src) == 0 {
 		return dst, 0, nil
 	}
@@ -305,6 +335,10 @@ func (l *LZ4Converter) ConvertBlock(dst, src []byte) ([]byte, int, error) {
 // The uncompressed size is returned as well.
 // dst must have capacity to contain the entire compressed block.
 func (l *LZ4Converter) ConvertBlockSnappy(dst, src []byte) ([]byte, int, error) {
+	return convertFitDst(dst, src, l.convertBlockSnappyInner)
+}
+
+func (l *LZ4Converter) convertBlockSnappyInner(dst, src []byte) ([]byte, int, error) {
 	if len(src) == 0 {
 		return dst, 0, nil
 	}

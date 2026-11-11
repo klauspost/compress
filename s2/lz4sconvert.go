@@ -29,6 +29,10 @@ type LZ4sConverter struct {
 // The uncompressed size is returned as well.
 // dst must have capacity to contain the entire compressed block.
 func (l *LZ4sConverter) ConvertBlock(dst, src []byte) ([]byte, int, error) {
+	return convertFitDst(dst, src, l.convertBlockInner)
+}
+
+func (l *LZ4sConverter) convertBlockInner(dst, src []byte) ([]byte, int, error) {
 	if len(src) == 0 {
 		return dst, 0, nil
 	}
@@ -314,6 +318,10 @@ func (l *LZ4sConverter) ConvertBlock(dst, src []byte) ([]byte, int, error) {
 // The uncompressed size is returned as well.
 // dst must have capacity to contain the entire compressed block.
 func (l *LZ4sConverter) ConvertBlockSnappy(dst, src []byte) ([]byte, int, error) {
+	return convertFitDst(dst, src, l.convertBlockSnappyInner)
+}
+
+func (l *LZ4sConverter) convertBlockSnappyInner(dst, src []byte) ([]byte, int, error) {
 	if len(src) == 0 {
 		return dst, 0, nil
 	}

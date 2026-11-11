@@ -6,6 +6,7 @@ package s2
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/binary"
 	"fmt"
 	"hash/crc32"
@@ -653,6 +654,53 @@ func TestLZ4Converter_EmptyDst(t *testing.T) {
 				out, sz, err := fn(dst, []byte{0})
 				if err != nil || sz != 0 || len(out) != len(dst) {
 					t.Fatalf("got out=%d sz=%d err=%v, want the unchanged dst and no error", len(out), sz, err)
+				}
+			})
+		}
+	}
+}
+
+// TestLZ4Converter_ExactMaxEncodedLen checks that a destination whose capacity
+// is exactly MaxEncodedLen(uncompressed), optionally already holding the
+// varint length header, is accepted for incompressible input (GitHub issue 1308).
+func TestLZ4Converter_ExactMaxEncodedLen(t *testing.T) {
+	sizes := []int{1, 10, 1000, 100000}
+	converters := []struct {
+		name string
+		fn   func(dst, src []byte) ([]byte, int, error)
+	}{
+		{"LZ4", (&LZ4Converter{}).ConvertBlock},
+		{"LZ4Snappy", (&LZ4Converter{}).ConvertBlockSnappy},
+		{"LZ4-Go", (&LZ4Converter{noAsm: true}).ConvertBlock},
+		{"LZ4Snappy-Go", (&LZ4Converter{noAsm: true}).ConvertBlockSnappy},
+		{"LZ4s", (&LZ4sConverter{}).ConvertBlock},
+		{"LZ4sSnappy", (&LZ4sConverter{}).ConvertBlockSnappy},
+		{"LZ4s-Go", (&LZ4sConverter{noAsm: true}).ConvertBlock},
+		{"LZ4sSnappy-Go", (&LZ4sConverter{noAsm: true}).ConvertBlockSnappy},
+	}
+	for _, n := range sizes {
+		data := make([]byte, n)
+		if _, err := rand.Read(data); err != nil {
+			t.Fatal(err)
+		}
+		lz4Data := make([]byte, lz4ref.CompressBlockBound(len(data)))
+		lzN, err := lz4ref.CompressBlock(data, lz4Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lz4Data = lz4Data[:lzN]
+		for _, conv := range converters {
+			t.Run(fmt.Sprintf("%s/n=%d", conv.name, n), func(t *testing.T) {
+				dst := binary.AppendUvarint(make([]byte, 0, MaxEncodedLen(len(data))), uint64(len(data)))
+				out, sz, err := conv.fn(dst, lz4Data)
+				if err != nil {
+					t.Fatalf("ConvertBlock: %v", err)
+				}
+				if sz != len(data) {
+					t.Fatalf("uncompressed size %d, want %d", sz, len(data))
+				}
+				if cap(out) != cap(dst) || len(out) > cap(dst) {
+					t.Fatalf("result len=%d cap=%d, caller cap=%d", len(out), cap(out), cap(dst))
 				}
 			})
 		}
