@@ -790,3 +790,84 @@ func TestBufferedPartialCopyGzip(t *testing.T) {
 		t.Errorf("reading the remainder: %v", err)
 	}
 }
+
+func TestWriteToThenReadSingleStream(t *testing.T) {
+	var buf bytes.Buffer
+	w := NewWriter(&buf)
+	w.Write([]byte("first"))
+	w.Close()
+	w.Reset(&buf)
+	w.Write([]byte("second"))
+	w.Close()
+
+	z, err := NewReader(bytes.NewReader(buf.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	z.Multistream(false)
+	// WriteTo consumes the single member, just like Read would.
+	if _, err := z.WriteTo(io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	// A later Read must report io.EOF. Without state carried over from
+	// WriteTo, Read tries to interpret the next member's header bytes as
+	// a checksum and reports ErrChecksum instead.
+	var p [8]byte
+	if _, err := z.Read(p[:]); err != io.EOF {
+		t.Fatalf("got %v, want io.EOF", err)
+	}
+}
+
+// eofWriter accepts up to n bytes and reports io.EOF. A destination that
+// returns io.EOF is a write failure, not the end of the compressed stream.
+type eofWriter struct{ n int }
+
+func (w *eofWriter) Write(p []byte) (int, error) {
+	if len(p) > w.n {
+		p = p[:w.n]
+	}
+	return len(p), io.EOF
+}
+
+func TestWriteToDoesNotTreatWriterEOFAsEndOfStream(t *testing.T) {
+	var buf bytes.Buffer
+	w := NewWriter(&buf)
+	if _, err := w.Write([]byte("payload for checksum verification")); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	z, err := NewReader(bytes.NewReader(buf.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dst := &eofWriter{n: 4}
+	n, err := z.WriteTo(dst)
+	if err != io.EOF {
+		t.Fatalf("first WriteTo: got %v, want io.EOF", err)
+	}
+	if n != 4 {
+		t.Fatalf("first WriteTo wrote %d bytes, want 4", n)
+	}
+
+	// A destination write failure is not truncated gzip input. Later calls
+	// must keep reporting the writer's io.EOF (identifiable via errors.Is),
+	// neither as a clean end of stream nor as io.ErrUnexpectedEOF.
+	n2, err2 := z.WriteTo(dst)
+	if !errors.Is(err2, io.EOF) || err2 == io.EOF || errors.Is(err2, io.ErrUnexpectedEOF) {
+		t.Errorf("second WriteTo: got %v, want a wrapped io.EOF", err2)
+	}
+	if n2 != 0 {
+		t.Errorf("second WriteTo wrote %d bytes, want 0", n2)
+	}
+	rn, rerr := z.Read(make([]byte, 4))
+	if !errors.Is(rerr, io.EOF) || rerr == io.EOF || errors.Is(rerr, io.ErrUnexpectedEOF) {
+		t.Errorf("Read after failed WriteTo: got %v, want a wrapped io.EOF", rerr)
+	}
+	if rn != 0 {
+		t.Errorf("Read after failed WriteTo returned %d bytes, want 0", rn)
+	}
+}
