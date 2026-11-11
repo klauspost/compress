@@ -692,6 +692,7 @@ func TestLZ4Converter_ExactMaxEncodedLen(t *testing.T) {
 		for _, conv := range converters {
 			t.Run(fmt.Sprintf("%s/n=%d", conv.name, n), func(t *testing.T) {
 				dst := binary.AppendUvarint(make([]byte, 0, MaxEncodedLen(len(data))), uint64(len(data)))
+				header := append([]byte(nil), dst...)
 				out, sz, err := conv.fn(dst, lz4Data)
 				if err != nil {
 					t.Fatalf("ConvertBlock: %v", err)
@@ -701,6 +702,16 @@ func TestLZ4Converter_ExactMaxEncodedLen(t *testing.T) {
 				}
 				if cap(out) != cap(dst) || len(out) > cap(dst) {
 					t.Fatalf("result len=%d cap=%d, caller cap=%d", len(out), cap(out), cap(dst))
+				}
+				if !bytes.HasPrefix(out, header) {
+					t.Fatal("length header changed")
+				}
+				decoded, err := Decode(nil, out)
+				if err != nil {
+					t.Fatalf("Decode: %v", err)
+				}
+				if !bytes.Equal(decoded, data) {
+					t.Fatal("decoded output mismatch")
 				}
 			})
 		}
