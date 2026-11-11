@@ -15,6 +15,16 @@
 // R10 (g) and R11 (the assembler's REGTMP) must not hold long-lived values:
 // the assembler itself clobbers R11 when it needs a temporary for a large
 // immediate, and the runtime requires R10 to remain valid for signal handling.
+//
+// This file is hand-written on purpose. The other zstd assembly is lowered by
+// the honeycombio/avo fork from zstd/_generate, but avo has no 32-bit ARM
+// backend, so there is no generator for this target. The differential test
+// TestArmAsmMatchesGo (run under qemu-arm, see zstd/seqdec_arm_test.go) is the
+// reference check for changes here. See the exception in AGENTS.md.
+//
+// Requires GOARM=7: the refill and copy paths use unaligned 32-bit loads,
+// which fault or rotate on pre-ARMv6 cores. seqdec_arm.go is therefore gated
+// on the arm.7 build tag and lower GOARM levels use the generic decoder.
 
 #define CTXP      ctxp-4(SP)
 #define OUTBASE   outbase-8(SP)
@@ -44,6 +54,7 @@
 #define OFBASE    ofbase-104(SP)
 #define TMP1      tmp1-112(SP)
 #define INBASE    inbase-116(SP)
+#define OUTCAP    outcap-120(SP)
 
 TEXT ·sequenceDecs_decodeSync_arm(SB), NOSPLIT, $128-8
 	MOVW ctx+0(FP), R9
@@ -103,6 +114,8 @@ TEXT ·sequenceDecs_decodeSync_arm(SB), NOSPLIT, $128-8
 	MOVW R11, STARTSZ
 	MOVW 116(R9), R11
 	MOVW R11, MAXBITS
+	MOVW 80(R9), R11
+	MOVW R11, OUTCAP
 
 mainloop:
 	CMP $64, R0
@@ -359,7 +372,10 @@ st_fill_done:
 	ADD R9, R6, R5        // ll + ml
 	MOVW OUTBASE, R11
 	SUB R11, R7, R4       // outPos
-	ADD R4, R5, R5
+	ADD R4, R5, R5        // absolute end of this sequence
+	MOVW OUTCAP, R11
+	CMP R11, R5
+	BHI err_space         // never write past cap(s.out)
 	MOVW STARTSZ, R4
 	SUB R4, R5, R5
 	MOVW MAXBLOCK, R4

@@ -1,4 +1,4 @@
-//go:build arm && !noasm
+//go:build arm && arm.7 && !noasm && gc
 
 package zstd
 
@@ -44,6 +44,7 @@ func TestArmAsmMatchesGo(t *testing.T) {
 	levels := []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression}
 	sizes := []int{300, 4000, 30000, 100000}
 
+	var asmCalls uint64
 	for _, level := range levels {
 		for _, n := range sizes {
 			for _, in := range inputs {
@@ -70,7 +71,9 @@ func TestArmAsmMatchesGo(t *testing.T) {
 					t.Fatalf("go ref: level=%v n=%d: %v", level, n, err)
 				}
 				useGoArmRef = false
+				before := armFastPathCalls
 				got, err := decodeAll(comp)
+				asmCalls += armFastPathCalls - before
 				if err != nil {
 					t.Fatalf("asm: level=%v n=%d: %v", level, n, err)
 				}
@@ -85,6 +88,9 @@ func TestArmAsmMatchesGo(t *testing.T) {
 		}
 	}
 	useGoArmRef = false
+	if asmCalls == 0 {
+		t.Fatal("the assembly decoder never ran; the test is only exercising the generic loop")
+	}
 }
 
 func decodeAll(comp []byte) ([]byte, error) {
@@ -93,5 +99,7 @@ func decodeAll(comp []byte) ([]byte, error) {
 		return nil, err
 	}
 	defer d.Close()
-	return d.DecodeAll(comp, nil)
+	// Give the decoder at least a block of room so small frames still select
+	// the assembly path instead of falling back on capacity.
+	return d.DecodeAll(comp, make([]byte, 0, maxCompressedBlockSize))
 }

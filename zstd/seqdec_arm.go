@@ -1,4 +1,4 @@
-//go:build arm && !appengine && !noasm && gc
+//go:build arm && arm.7 && !noasm && gc
 
 package zstd
 
@@ -32,6 +32,8 @@ type armBitReader struct {
 	hi, lo   uint32
 }
 
+// init resets b to read the bit stream in in, which must end with a non-zero
+// byte whose highest set bit marks the start of the stream.
 func (b *armBitReader) init(in []byte) error {
 	if len(in) < 1 {
 		return errors.New("corrupt stream: too short")
@@ -54,6 +56,7 @@ func (b *armBitReader) init(in []byte) error {
 	return nil
 }
 
+// fillFastStart loads the first 64 bits. It requires at least 8 bytes.
 func (b *armBitReader) fillFastStart() {
 	b.cursor -= 8
 	p := unsafe.Add(b.in, b.cursor)
@@ -62,6 +65,8 @@ func (b *armBitReader) fillFastStart() {
 	b.bitsRead = 0
 }
 
+// fillFast shifts in 32 bits when fewer than 32 are left. It requires at
+// least 4 unread bytes.
 func (b *armBitReader) fillFast() {
 	if b.bitsRead < 32 {
 		return
@@ -72,6 +77,8 @@ func (b *armBitReader) fillFast() {
 	b.bitsRead -= 32
 }
 
+// fill shifts in 32 bits when fewer than 32 are left, falling back to a byte
+// at a time for the last few bytes of the stream.
 func (b *armBitReader) fill() {
 	if b.bitsRead < 32 {
 		return
@@ -93,6 +100,8 @@ func (b *armBitReader) fill() {
 }
 
 // getBits returns n bits, n in [0,32]. The top n bits of value<<bitsRead.
+// getBits returns n bits from the top of the window, n in [0,32], and advances
+// the reader by n.
 func (b *armBitReader) getBits(n int) uint32 {
 	if n == 0 {
 		return 0
@@ -109,6 +118,8 @@ func (b *armBitReader) getBits(n int) uint32 {
 	return h >> uint(32-n)
 }
 
+// close releases the input and reports whether the stream was consumed
+// exactly. It must be called once decoding is finished.
 func (b *armBitReader) close() error {
 	b.in = nil
 	b.cursor = 0
@@ -154,8 +165,10 @@ func (s *sequenceDecs) decodeSyncSimpleGo(hist []byte) (bool, error) {
 	if s.windowSize < maxBlockSize {
 		maxBlockSize = s.windowSize
 	}
-	// The fast path writes directly into s.out and never grows it.
-	if cap(s.out)-len(s.out) < maxBlockSize {
+	// The fast path never grows s.out. When the frame size is known the
+	// decoder may have sized the buffer to the remaining frame rather than to
+	// a whole block; the copy loops then check the real capacity.
+	if s.maxSyncLen == 0 && cap(s.out)-len(s.out) < maxBlockSize {
 		return false, nil
 	}
 
@@ -303,7 +316,7 @@ func (s *sequenceDecs) decodeSyncSimpleGo(hist []byte) (bool, error) {
 		if ll > litLen-litPos {
 			return fail(errorNotEnoughLiterals, ll, ml, mo)
 		}
-		if outPos+ll+ml-startSize > maxBlockSize {
+		if outPos+ll+ml-startSize > maxBlockSize || outPos+ll+ml > outEnd {
 			return fail(errorNotEnoughSpace, ll, ml, mo)
 		}
 		if ml > maxMatchLen {
@@ -519,8 +532,10 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 	if s.windowSize < maxBlockSize {
 		maxBlockSize = s.windowSize
 	}
-	// The fast path writes directly into s.out and never grows it.
-	if cap(s.out)-len(s.out) < maxBlockSize {
+	// The fast path never grows s.out. When the frame size is known the
+	// decoder may have sized the buffer to the remaining frame rather than to
+	// a whole block; the copy loops then check the real capacity.
+	if s.maxSyncLen == 0 && cap(s.out)-len(s.out) < maxBlockSize {
 		return false, nil
 	}
 
@@ -560,6 +575,7 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 		startSize:  int32(len(s.out)),
 		maxBits:    int32(s.maxBits),
 	}
+	armFastPathCalls++
 	s.seqSize = 0
 	startSize := len(s.out)
 
@@ -602,3 +618,8 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 	s.out = append(s.out, s.literals...)
 	return true, nil
 }
+
+// armFastPathCalls counts how often the assembly decoder ran. The differential
+// test uses it to prove that the cases it generated actually took the fast
+// path instead of silently falling back to the generic loop.
+var armFastPathCalls uint64
