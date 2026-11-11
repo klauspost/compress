@@ -2,6 +2,7 @@ package s2_test
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -12,6 +13,56 @@ import (
 
 	"github.com/klauspost/compress/s2"
 )
+
+func TestIndexLoadStreamBounds(t *testing.T) {
+	trailer := func(size uint32) []byte {
+		b := make([]byte, 4)
+		binary.LittleEndian.PutUint32(b, size)
+		return append(b, s2.S2IndexTrailer...)
+	}
+	for _, tt := range []struct {
+		name string
+		data []byte
+		want error
+	}{
+		{"empty", nil, s2.ErrUnsupported},
+		{"one byte", make([]byte, 1), s2.ErrUnsupported},
+		{"short trailer", make([]byte, 9), s2.ErrUnsupported},
+		{"missing signature", make([]byte, 10), s2.ErrUnsupported},
+		{"index exceeds stream", trailer(11), io.ErrUnexpectedEOF},
+		{"maximum index exceeds stream", trailer(1<<24 + 3), io.ErrUnexpectedEOF},
+		{"invalid index size", trailer(1<<24 + 4), s2.ErrCorrupt},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var index s2.Index
+			if err := index.LoadStream(bytes.NewReader(tt.data)); err != tt.want {
+				t.Fatalf("got %v, want %v", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestReadSeekerShortStream(t *testing.T) {
+	for _, size := range []int{0, 1, 9} {
+		t.Run(fmt.Sprint(size), func(t *testing.T) {
+			input := bytes.NewReader(make([]byte, size))
+			if _, err := input.Seek(int64(size), io.SeekStart); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s2.NewReader(input).ReadSeeker(false, nil); err != nil {
+				t.Fatal(err)
+			}
+			if pos, err := input.Seek(0, io.SeekCurrent); err != nil || pos != int64(size) {
+				t.Fatalf("position = %d, err = %v", pos, err)
+			}
+			_, err := s2.NewReader(bytes.NewReader(make([]byte, size))).ReadSeeker(true, nil)
+			want := s2.ErrCantSeek{Reason: "input stream does not contain an index"}
+			if err != want {
+				t.Fatalf("got %v, want %v", err, want)
+			}
+		})
+	}
+}
 
 func ExampleIndex_Load() {
 	fatalErr := func(err error) {
