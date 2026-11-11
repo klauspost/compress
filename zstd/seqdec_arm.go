@@ -1,4 +1,4 @@
-//go:build arm && arm.7 && !noasm && gc
+//go:build arm && arm.7 && !noasm && !nounsafe && gc
 
 package zstd
 
@@ -155,6 +155,7 @@ const (
 	errorNotEnoughLiterals   = 4
 	errorNotEnoughSpace      = 5
 	errorOverread            = 6
+	errorNotEnoughCapacity   = 7
 )
 
 func (s *sequenceDecs) decodeSyncSimpleGo(hist []byte) (bool, error) {
@@ -219,6 +220,8 @@ func (s *sequenceDecs) decodeSyncSimpleGo(hist []byte) (bool, error) {
 			return true, fmt.Errorf("match offset (%d) bigger than current history (%d)", mo, outPos+histLen-startSize)
 		case errorNotEnoughLiterals:
 			return true, fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available", ll, litLen-litPos+ll)
+		case errorNotEnoughCapacity:
+			return true, ErrDecoderSizeExceeded
 		default:
 			return true, fmt.Errorf("sequenceDecs_decode returned erroneous code %d", code)
 		}
@@ -316,8 +319,11 @@ func (s *sequenceDecs) decodeSyncSimpleGo(hist []byte) (bool, error) {
 		if ll > litLen-litPos {
 			return fail(errorNotEnoughLiterals, ll, ml, mo)
 		}
-		if outPos+ll+ml-startSize > maxBlockSize || outPos+ll+ml > outEnd {
+		if outPos+ll+ml-startSize > maxBlockSize {
 			return fail(errorNotEnoughSpace, ll, ml, mo)
+		}
+		if outPos+ll+ml > outEnd {
+			return fail(errorNotEnoughCapacity, ll, ml, mo)
 		}
 		if ml > maxMatchLen {
 			return fail(errorMatchLenTooBig, ll, ml, mo)
@@ -593,6 +599,8 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 			ctx.errLL, int(ctx.litLen-ctx.litPos)+int(ctx.errLL))
 	case errorNotEnoughSpace:
 		return true, fmt.Errorf("output bigger than max block size (%d)", maxBlockSize)
+	case errorNotEnoughCapacity:
+		return true, ErrDecoderSizeExceeded
 	case errorOverread:
 		return true, io.ErrUnexpectedEOF
 	default:

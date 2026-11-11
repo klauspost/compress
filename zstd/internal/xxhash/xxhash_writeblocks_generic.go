@@ -1,4 +1,4 @@
-//go:build (!amd64 && !arm64 && !arm) || !gc || purego || noasm
+//go:build (!amd64 && !arm64 && (!arm || !arm.7 || nounsafe)) || !gc || purego || noasm
 
 package xxhash
 

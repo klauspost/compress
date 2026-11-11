@@ -373,14 +373,14 @@ st_fill_done:
 	MOVW OUTBASE, R11
 	SUB R11, R7, R4       // outPos
 	ADD R4, R5, R5        // absolute end of this sequence
+	MOVW STARTSZ, R4
+	SUB R4, R5, R4        // bytes produced by this block
+	MOVW MAXBLOCK, R11
+	CMP R11, R4
+	BHI err_space
 	MOVW OUTCAP, R11
 	CMP R11, R5
-	BHI err_space         // never write past cap(s.out)
-	MOVW STARTSZ, R4
-	SUB R4, R5, R5
-	MOVW MAXBLOCK, R4
-	CMP R4, R5
-	BHI err_space
+	BHI err_cap           // never write past cap(s.out)
 	MOVW MLV, R6
 	CMP $131074, R6
 	BHI err_mllen
@@ -723,6 +723,9 @@ err_moff:
 	MOVW MOV, R6
 	MOVW $3, R5
 	B publish_mo
+err_cap:
+	MOVW $7, R5
+	B publish
 err_lit:
 	MOVW LLV, R6
 	MOVW $4, R5

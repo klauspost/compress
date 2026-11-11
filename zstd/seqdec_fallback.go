@@ -1,4 +1,4 @@
-//go:build (!amd64 && !arm64 && (!arm || !arm.7)) || !gc || noasm
+//go:build (!amd64 && !arm64 && (!arm || !arm.7 || nounsafe)) || !gc || noasm
 
 package zstd
 

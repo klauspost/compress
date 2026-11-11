@@ -1,4 +1,4 @@
-//go:build arm && gc && !purego && !noasm
+//go:build arm && arm.7 && gc && !purego && !noasm && !nounsafe
 
 package xxhash
 
