@@ -9,7 +9,7 @@ import (
 )
 
 // TestArmAsmMatchesGo differentially tests the arm32 assembly sequence decoder
-// against the pure Go reference in seqdec_arm.go. It covers incompressible,
+// against the generic decodeSync loop. It covers incompressible,
 // highly repetitive and mixed text-like inputs at every encoder level, which
 // exercises literal runs and matches of all lengths, short offsets, history
 // copies and repeated-offset codes.
@@ -45,6 +45,11 @@ func TestArmAsmMatchesGo(t *testing.T) {
 	sizes := []int{300, 4000, 30000, 100000}
 
 	var asmCalls uint64
+	armSeqdecTestHook = func() { asmCalls++ }
+	defer func() {
+		armSeqdecTestHook = nil
+		decodeSyncGoOnly = false
+	}()
 	for _, level := range levels {
 		for _, n := range sizes {
 			for _, in := range inputs {
@@ -65,15 +70,17 @@ func TestArmAsmMatchesGo(t *testing.T) {
 				}
 				comp := buf.Bytes()
 
-				useGoArmRef = true
+				before := asmCalls
+				decodeSyncGoOnly = true
 				want, err := decodeAll(comp)
+				decodeSyncGoOnly = false
 				if err != nil {
-					t.Fatalf("go ref: level=%v n=%d: %v", level, n, err)
+					t.Fatalf("generic: level=%v n=%d: %v", level, n, err)
 				}
-				useGoArmRef = false
-				before := armFastPathCalls
+				if asmCalls != before || !bytes.Equal(want, src) {
+					t.Fatalf("generic decoder used assembly or returned incorrect output: level=%v n=%d", level, n)
+				}
 				got, err := decodeAll(comp)
-				asmCalls += armFastPathCalls - before
 				if err != nil {
 					t.Fatalf("asm: level=%v n=%d: %v", level, n, err)
 				}
@@ -87,7 +94,6 @@ func TestArmAsmMatchesGo(t *testing.T) {
 			}
 		}
 	}
-	useGoArmRef = false
 	if asmCalls == 0 {
 		t.Fatal("the assembly decoder never ran; the test is only exercising the generic loop")
 	}
