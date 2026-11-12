@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"embed"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -20,6 +19,7 @@ import (
 	"unicode"
 
 	"github.com/klauspost/compress/s2"
+	"github.com/klauspost/compress/s2/cmd/internal/fileio"
 	"github.com/klauspost/compress/s2/cmd/internal/readahead"
 )
 
@@ -169,37 +169,25 @@ Options:`)
 			exitErr(err)
 			defer src.Close()
 			var out io.Writer
+			var bw *bufio.Writer
+			var sw *switchWriter
 			switch {
 			case *stdout:
 				out = os.Stdout
 			default:
-				if *safe {
-					_, err := os.Stat(dstFilename)
-					if !os.IsNotExist(err) {
-						exitErr(errors.New("destination file exists"))
-					}
-				}
-				dstFile, err := os.OpenFile(dstFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0777)
+				dstFile, err := fileio.Create(dstFilename, 0o777, *safe)
 				exitErr(err)
-				defer dstFile.Close()
-				sw := &switchWriter{w: dstFile, left: sz, close: nil}
+				sw = &switchWriter{w: dstFile, left: sz, close: dstFile.Close}
 				sw.fn = func() {
+					exitErr(sw.Close())
 					dstFilename := dstFilename + ".more"
-					if *safe {
-						_, err := os.Stat(dstFilename)
-						if !os.IsNotExist(err) {
-							exitErr(fmt.Errorf("destination '%s' file exists", dstFilename))
-						}
-					}
-					dstFile, err := os.OpenFile(dstFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0777)
+					dstFile, err := fileio.Create(dstFilename, 0o777, *safe)
 					exitErr(err)
-					sw.close = dstFile.Close
 					sw.w = dstFile
 					sw.left = (1 << 63) - 1
+					sw.close = dstFile.Close
 				}
-				defer sw.Close()
-				bw := bufio.NewWriterSize(sw, 4<<20*2)
-				defer bw.Flush()
+				bw = bufio.NewWriterSize(sw, 4<<20*2)
 				out = bw
 				_, err = out.Write(exec)
 				exitErr(err)
@@ -211,7 +199,6 @@ Options:`)
 			var input int64
 			if !isCompressed {
 				wr.Reset(&wc)
-				defer wr.Close()
 				input, err = wr.ReadFrom(src)
 				exitErr(err)
 				err = wr.Close()
@@ -219,6 +206,11 @@ Options:`)
 			} else {
 				input, err = io.Copy(&wc, src)
 				exitErr(err)
+			}
+			if bw != nil {
+				exitErr(bw.Flush())
+				exitErr(sw.Close())
+				sw.close = nil
 			}
 			if !*quiet {
 				elapsed := time.Since(start)
@@ -327,6 +319,7 @@ func (w *switchWriter) Write(b []byte) (int, error) {
 	n2, err := w.Write(b[n:])
 	return n + n2, err
 }
+
 func (w *switchWriter) Close() error {
 	if w.close == nil {
 		return nil
