@@ -2437,6 +2437,132 @@ func TestWithDecodeAllCapLimit(t *testing.T) {
 	}
 }
 
+func encodeUnknownSizeFrame(t testing.TB, src []byte, window int) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	enc, err := NewWriter(&buf, WithEncoderConcurrency(1), WithWindowSize(window), WithEncoderCRC(false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := enc.Write(src); err != nil {
+		t.Fatal(err)
+	}
+	if err := enc.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if err := enc.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var header Header
+	if err := header.Decode(buf.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	if header.HasFCS {
+		t.Fatal("encoder wrote a known frame size")
+	}
+	return buf.Bytes()
+}
+
+func TestWithDecodeAllCapLimitUnknownSize(t *testing.T) {
+	raw := make([]byte, 300)
+	rand.New(rand.NewSource(1)).Read(raw)
+	seq := bytes.Repeat([]byte("abcd"), 75)
+	tail := append(bytes.Clone(seq), []byte("0123456789XYZ")...)
+	tests := []struct {
+		name            string
+		src, compressed []byte
+	}{
+		{name: "raw", src: raw},
+		{name: "rle", src: bytes.Repeat([]byte("a"), 300)},
+		{name: "sequences", src: seq},
+		{name: "final-literals", src: tail},
+		{name: "multiple-blocks", src: bytes.Repeat(seq, 12)},
+		{name: "multiple-frames", src: bytes.Repeat(seq, 2), compressed: append(encodeUnknownSizeFrame(t, seq, 1024), encodeUnknownSizeFrame(t, seq, 1024)...)},
+	}
+	// A compressed block can contain raw literals and no sequences.
+	literals := []byte("abcdefghijklmnopqrst")
+	body := append([]byte{byte(len(literals) << 3)}, literals...)
+	body = append(body, 0)
+	blockHeader := uint32(len(body)<<3) | uint32(blockTypeCompressed)<<1 | 1
+	compressed := (frameHeader{WindowSize: 1024}).appendTo(nil)
+	compressed = append(compressed, byte(blockHeader), byte(blockHeader>>8), byte(blockHeader>>16))
+	compressed = append(compressed, body...)
+	tests = append(tests, struct {
+		name            string
+		src, compressed []byte
+	}{"literal-only-compressed", literals, compressed})
+
+	for _, mode := range []string{"one-pass", "generic", "two-pass"} {
+		t.Run(mode, func(t *testing.T) {
+			defer forceTwoPass(mode == "two-pass")()
+			decodeSyncGoOnly = mode == "generic"
+			defer func() { decodeSyncGoOnly = false }()
+			dec, err := NewReader(nil, WithDecoderConcurrency(1), WithDecoderLowmem(true), WithDecodeAllCapLimit(true))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer dec.Close()
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					comp := tt.compressed
+					if comp == nil {
+						comp = encodeUnknownSizeFrame(t, tt.src, 1024)
+					}
+					for _, prefixLen := range []int{0, 5} {
+						for _, limit := range []int{0, 1, len(tt.src) - 1, len(tt.src), len(tt.src) + 17} {
+							dst := make([]byte, prefixLen, prefixLen+limit)
+							for i := range dst {
+								dst[i] = 0xaa
+							}
+							got, err := dec.DecodeAll(comp, dst)
+							if limit < len(tt.src) {
+								if !errors.Is(err, ErrDecoderSizeExceeded) {
+									t.Fatalf("prefix=%d limit=%d: got %v, want %v", prefixLen, limit, err, ErrDecoderSizeExceeded)
+								}
+							} else if err != nil || !bytes.Equal(got[prefixLen:], tt.src) {
+								t.Fatalf("prefix=%d limit=%d: len=%d err=%v", prefixLen, limit, len(got), err)
+							}
+							if len(got) < prefixLen || len(got) > cap(dst) || cap(got) != cap(dst) || !bytes.Equal(got[:prefixLen], bytes.Repeat([]byte{0xaa}, prefixLen)) {
+								t.Fatalf("prefix=%d limit=%d: output grew beyond dst or changed its prefix: len=%d cap=%d", prefixLen, limit, len(got), cap(got))
+							}
+						}
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestWithDecodeAllCapLimitBlockError(t *testing.T) {
+	comp := encodeUnknownSizeFrame(t, bytes.Repeat([]byte("abcd"), 750), 4096)
+	var header Header
+	if err := header.Decode(comp); err != nil {
+		t.Fatal(err)
+	}
+	// Declare a smaller window without changing the compressed block.
+	bad := append((frameHeader{WindowSize: 1024}).appendTo(nil), comp[header.HeaderSize:]...)
+	for _, mode := range []string{"one-pass", "generic", "two-pass"} {
+		t.Run(mode, func(t *testing.T) {
+			defer forceTwoPass(mode == "two-pass")()
+			decodeSyncGoOnly = mode == "generic"
+			defer func() { decodeSyncGoOnly = false }()
+			dec, err := NewReader(nil, WithDecoderConcurrency(1), WithDecodeAllCapLimit(true))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer dec.Close()
+			for _, prefix := range []int{0, 5} {
+				for _, limit := range []int{100, 4096} {
+					_, err := dec.DecodeAll(bad, make([]byte, prefix, prefix+limit))
+					if err == nil || err.Error() != "output bigger than max block size (1024)" {
+						t.Fatalf("prefix=%d limit=%d: got %v", prefix, limit, err)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestDecoderResetWithOptions(t *testing.T) {
 	dec, err := NewReader(nil, WithDecoderConcurrency(1), WithDecoderLowmem(true))
 	if err != nil {

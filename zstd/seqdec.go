@@ -74,6 +74,16 @@ type sequenceDecs struct {
 	windowSize   int
 	maxBits      uint8
 	maxSyncLen   uint64
+	limitToCap   bool
+	outputLimit  int // Remaining DecodeAll capacity, independent of the frame-size bound.
+}
+
+// syncOutCap also bounds an internal block buffer when dst has a prefix.
+func (s *sequenceDecs) syncOutCap() int {
+	if s.limitToCap {
+		return min(cap(s.out), len(s.out)+s.outputLimit)
+	}
+	return cap(s.out)
 }
 
 // twoPassFarCode is the offset code from which a match counts as far: 20 is
@@ -303,6 +313,10 @@ func (s *sequenceDecs) decodeSync(hist []byte) error {
 	llState, mlState, ofState := s.litLengths.state.state, s.matchLengths.state.state, s.offsets.state.state
 	out := s.out
 	maxBlockSize := min(windowSize, maxCompressedBlockSize)
+	maxOutput := maxBlockSize
+	if s.limitToCap {
+		maxOutput = min(maxOutput, s.outputLimit)
+	}
 
 	if debugDecoder {
 		println("decodeSync: decoding", seqs, "sequences", br.remain(), "bits remain on stream")
@@ -384,8 +398,11 @@ func (s *sequenceDecs) decodeSync(hist []byte) error {
 			return fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available", ll, len(literals))
 		}
 		size := ll + ml + len(out)
-		if size-startSize > maxBlockSize {
-			return fmt.Errorf("output bigger than max block size (%d)", maxBlockSize)
+		if size-startSize > maxOutput {
+			if size-startSize > maxBlockSize {
+				return fmt.Errorf("output bigger than max block size (%d)", maxBlockSize)
+			}
+			return ErrDecoderSizeExceeded
 		}
 		// Matches from earlier output, the history or the dictionary are
 		// copied without calling executeSeq; short ones with fixed 16-byte copies, with no
@@ -446,8 +463,11 @@ func (s *sequenceDecs) decodeSync(hist []byte) error {
 		}
 	}
 
-	if size := len(literals) + len(out) - startSize; size > maxBlockSize {
-		return fmt.Errorf("output bigger than max block size (%d)", maxBlockSize)
+	if size := len(literals) + len(out) - startSize; size > maxOutput {
+		if size > maxBlockSize {
+			return fmt.Errorf("output bigger than max block size (%d)", maxBlockSize)
+		}
+		return ErrDecoderSizeExceeded
 	}
 
 	// Add final literals

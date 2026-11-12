@@ -111,7 +111,7 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 		nSeqs:      int32(s.nSeqs),
 		outBase:    uintptr(unsafe.Pointer(unsafe.SliceData(s.out))),
 		outLen:     int32(len(s.out)),
-		outCap:     int32(cap(s.out)),
+		outCap:     int32(s.syncOutCap()),
 		litBase:    uintptr(unsafe.Pointer(unsafe.SliceData(s.literals))),
 		litLen:     int32(len(s.literals)),
 		litPos:     0,
@@ -140,10 +140,11 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 	case errorNotEnoughLiterals:
 		return true, fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available",
 			ctx.errLL, int(ctx.litLen-ctx.litPos)+int(ctx.errLL))
-	case errorNotEnoughSpace:
+	case errorNotEnoughSpace, errorNotEnoughCapacity:
+		if errCode == errorNotEnoughCapacity && s.limitToCap {
+			return true, ErrDecoderSizeExceeded
+		}
 		return true, fmt.Errorf("output bigger than max block size (%d)", maxBlockSize)
-	case errorNotEnoughCapacity:
-		return true, ErrDecoderSizeExceeded
 	case errorOverread:
 		return true, io.ErrUnexpectedEOF
 	default:
@@ -163,6 +164,9 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 	}
 	if err := br.close(); err != nil {
 		return true, err
+	}
+	if s.limitToCap && s.seqSize > s.outputLimit {
+		return true, ErrDecoderSizeExceeded
 	}
 	s.literals = s.literals[ctx.litPos:]
 	s.out = s.out[:ctx.outPos]
