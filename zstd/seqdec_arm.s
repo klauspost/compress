@@ -1,3 +1,5 @@
+//go:build arm && arm.7 && !noasm && !nounsafe && gc
+
 #include "textflag.h"
 
 // func sequenceDecs_decodeSync_arm(ctx *armSeqCtx) int32
