@@ -71,7 +71,7 @@ type armSeqCtx struct {
 }
 
 // armSeqdecTestHook is nil outside path-selection tests.
-var armSeqdecTestHook func()
+var armSeqdecTestHook func(*sequenceDecs, []byte)
 
 //go:noescape
 func sequenceDecs_decodeSync_arm(ctx *armSeqCtx) int32
@@ -86,6 +86,9 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 		return false, nil
 	}
 
+	if armSeqdecTestHook != nil {
+		armSeqdecTestHook(s, hist)
+	}
 	br := s.br
 	llD := s.litLengths.state.state
 	mlD := s.matchLengths.state.state
@@ -121,9 +124,6 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 		maxBlock:   int32(maxBlockSize),
 		startSize:  int32(len(s.out)),
 		maxBits:    int32(s.maxBits),
-	}
-	if armSeqdecTestHook != nil {
-		armSeqdecTestHook()
 	}
 	s.seqSize = 0
 	startSize := len(s.out)

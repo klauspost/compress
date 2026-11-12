@@ -10,9 +10,9 @@ import (
 
 // TestArmAsmMatchesGo differentially tests the arm32 assembly sequence decoder
 // against the generic decodeSync loop. It covers incompressible,
-// highly repetitive and mixed text-like inputs at every encoder level, which
-// exercises literal runs and matches of all lengths, short offsets, history
-// copies and repeated-offset codes.
+// highly repetitive and mixed text-like inputs at every encoder level, exercising
+// literal runs, short offsets and repeated-offset codes. Multi-block cases check
+// matches wholly in history and matches spanning history and current output.
 func TestArmAsmMatchesGo(t *testing.T) {
 	r := rand.New(rand.NewSource(1))
 
@@ -45,7 +45,7 @@ func TestArmAsmMatchesGo(t *testing.T) {
 	sizes := []int{300, 4000, 30000, 100000}
 
 	var asmCalls uint64
-	armSeqdecTestHook = func() { asmCalls++ }
+	armSeqdecTestHook = func(*sequenceDecs, []byte) { asmCalls++ }
 	defer func() {
 		armSeqdecTestHook = nil
 		decodeSyncGoOnly = false
@@ -96,6 +96,112 @@ func TestArmAsmMatchesGo(t *testing.T) {
 	}
 	if asmCalls == 0 {
 		t.Fatal("the assembly decoder never ran; the test is only exercising the generic loop")
+	}
+	t.Run("multi-block-history", testArmMultiBlockHistory)
+}
+
+func testArmMultiBlockHistory(t *testing.T) {
+	for _, level := range []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression} {
+		t.Run(level.String(), func(t *testing.T) {
+			for _, tc := range []struct {
+				name                 string
+				historySize, repeats int
+				spanning             bool
+			}{
+				{"history-only", maxCompressedBlockSize, 1, false},
+				{"history-and-output", maxCompressedBlockSize / 4, 4, true},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					history := make([]byte, tc.historySize)
+					rand.New(rand.NewSource(2)).Read(history)
+					tail := bytes.Repeat(history, tc.repeats)
+					src := append(bytes.Clone(history), tail...)
+					var buf bytes.Buffer
+					enc, err := NewWriter(&buf, WithEncoderLevel(level), WithEncoderConcurrency(1), WithEncoderCRC(true))
+					if err != nil {
+						t.Fatal(err)
+					}
+					if _, err := enc.Write(history); err != nil {
+						t.Fatal(err)
+					}
+					if err := enc.Flush(); err != nil {
+						t.Fatal(err)
+					}
+					if _, err := enc.Write(tail); err != nil {
+						t.Fatal(err)
+					}
+					if err := enc.Close(); err != nil {
+						t.Fatal(err)
+					}
+
+					var calls, historyOnly, spanning int
+					oldHook := armSeqdecTestHook
+					armSeqdecTestHook = func(s *sequenceDecs, hist []byte) {
+						calls++
+						if len(hist) == 0 {
+							return
+						}
+						// Inspect a private reader/state copy to prove which history branches
+						// the selected assembly must take, without changing its input.
+						ref, br := *s, *s.br
+						ref.br = &br
+						seqs := make([]seqVals, s.nSeqs)
+						if err := ref.decode(seqs); err != nil {
+							t.Fatal(err)
+						}
+						pos := len(s.out)
+						for _, seq := range seqs {
+							pos += seq.ll
+							if back := seq.mo - pos; back > 0 {
+								if back > len(hist) {
+									t.Fatal("match exceeds available history")
+								}
+								if seq.ml <= back {
+									historyOnly++
+								} else if back >= 8 {
+									spanning++
+								}
+							}
+							pos += seq.ml
+						}
+					}
+					defer func() { armSeqdecTestHook = oldHook; decodeSyncGoOnly = false }()
+					decode := func() []byte {
+						d, err := NewReader(nil, WithDecoderConcurrency(1), WithDecoderLowmem(true))
+						if err != nil {
+							t.Fatal(err)
+						}
+						defer d.Close()
+						// A nonempty prefix keeps prior blocks in the separate history
+						// buffer rather than making them part of the current block's output.
+						prefix := []byte("prefix")
+						dst := make([]byte, len(prefix), len(prefix)+len(src)+maxCompressedBlockSize)
+						copy(dst, prefix)
+						out, err := d.DecodeAll(buf.Bytes(), dst)
+						if err != nil {
+							t.Fatal(err)
+						}
+						if len(out) < len(prefix) || !bytes.Equal(out[:len(prefix)], prefix) {
+							t.Fatal("prefix changed")
+						}
+						return out[len(prefix):]
+					}
+					decodeSyncGoOnly = true
+					want := decode()
+					if calls != 0 || !bytes.Equal(want, src) {
+						t.Fatal("generic decoder used assembly or returned incorrect output")
+					}
+					decodeSyncGoOnly = false
+					got := decode()
+					if calls == 0 || !bytes.Equal(got, want) {
+						t.Fatal("assembly did not run or returned incorrect output")
+					}
+					if (!tc.spanning && historyOnly == 0) || (tc.spanning && spanning == 0) {
+						t.Fatalf("required history branch not exercised: history-only=%d spanning=%d", historyOnly, spanning)
+					}
+				})
+			}
+		})
 	}
 }
 
