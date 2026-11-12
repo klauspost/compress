@@ -164,6 +164,40 @@ jobs:
       shell: bash {0}
       run: go test . -test.run=None;if [ $? -eq 0 ]; then go test ./s2/...; else true; fi
 
+  arm32:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CGO_ENABLED: 0
+      GOARCH: arm
+      GOARM: 7
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v7.0.0
+        with:
+          go-version: 1.25.x
+
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+
+      - name: Install QEMU
+        run: sudo apt-get update && sudo apt-get install -y qemu-user
+
+      - name: Vet ARM build matrix
+        run: |
+          for arm in 5 6 7; do
+            for tags in '' noasm nounsafe nounsafe,noasm purego appengine; do
+              GOARM="$arm" go vet -tags="$tags" ./zstd/... ./huff0/...
+            done
+          done
+
+      - name: Test ARMv7 and replay decoder corpus
+        run: |
+          for tags in '' noasm nounsafe nounsafe,noasm; do
+            go test -exec qemu-arm -tags="$tags" -short ./zstd/... ./huff0/...
+            go test -exec qemu-arm -tags="$tags" -run '^FuzzDecodeAll$' ./zstd
+          done
+
   fuzz:
     env:
       CGO_ENABLED: 0
