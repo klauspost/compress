@@ -99,6 +99,27 @@ func TestSnappyDecodeMalformedBNoData(t *testing.T) {
 	}
 }
 
+func TestSnappyDecodeMalformedTrailingBytes(t *testing.T) {
+	// A truncated size field at the end of a framed stream must be reported,
+	// just like a truncated size field at the start.
+	block := s2.EncodeSnappy(nil, []byte("hello"))
+	for _, extra := range []int{1, 2, 3} {
+		buf := append([]byte{}, xerialHeader...)
+		buf = append(buf, xerialVersionInfo...)
+		var sz [4]byte
+		sz[3] = byte(len(block))
+		buf = append(buf, sz[:]...)
+		buf = append(buf, block...)
+		buf = append(buf, make([]byte, extra)...)
+		if _, err := Decode(buf); err != ErrMalformed {
+			t.Errorf("extra=%d: got %v, want ErrMalformed", extra, err)
+		}
+		if _, err := DecodeCapped(make([]byte, 0, 64), buf); err != ErrMalformed {
+			t.Errorf("DecodeCapped extra=%d: got %v, want ErrMalformed", extra, err)
+		}
+	}
+}
+
 func TestSnappyMasterDecodeFailed(t *testing.T) {
 	buf := make([]byte, 21)
 	copy(buf, xerialHeader)

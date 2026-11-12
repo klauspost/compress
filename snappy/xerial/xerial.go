@@ -189,6 +189,9 @@ func DecodeInto(dst, src []byte) ([]byte, error) {
 		}
 		pos = nextPos
 	}
+	if pos != max {
+		return nil, ErrMalformed
+	}
 	return dst, nil
 }
 
@@ -250,6 +253,9 @@ func DecodeCapped(dst, src []byte) ([]byte, error) {
 		}
 		dst = dst[:dstEnd]
 		pos = nextPos
+	}
+	if pos != max {
+		return nil, ErrMalformed
 	}
 	return dst, nil
 }
