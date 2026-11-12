@@ -493,6 +493,9 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		return err
 	}
 	if hist.decoders.nSeqs == 0 {
+		if hist.decoders.limitToCap && len(hist.decoders.literals) > hist.decoders.outputLimit {
+			return ErrDecoderSizeExceeded
+		}
 		b.dst = append(b.dst, hist.decoders.literals...)
 		hist.decoders.consumeSyncLen(len(hist.decoders.literals))
 		return nil
@@ -507,6 +510,9 @@ func (b *blockDec) decodeCompressed(hist *history) error {
 		// up front lets executeSimple prefetch match sources.
 		if err := b.decodeSequences(hist); err != nil {
 			return err
+		}
+		if hist.decoders.limitToCap && hist.decoders.seqSize > hist.decoders.outputLimit {
+			return ErrDecoderSizeExceeded
 		}
 		err = hist.decoders.executeSimple(b.sequence, h)
 	} else {

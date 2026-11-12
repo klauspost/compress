@@ -327,6 +327,7 @@ func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {
 	// Store input length, so we only check new data.
 	crcStart := len(dst)
 	d.history.decoders.maxSyncLen = 0
+	d.history.decoders.limitToCap = d.o.limitToCap
 	if d.o.limitToCap {
 		d.history.decoders.maxSyncLen = uint64(cap(dst) - len(dst))
 	}
@@ -356,6 +357,15 @@ func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {
 		}
 		if debugDecoder {
 			println("next block:", dec)
+		}
+		if d.o.limitToCap {
+			remaining := cap(dst) - len(d.history.b)
+			d.history.decoders.outputLimit = remaining
+			if (dec.Type == blockTypeRaw && len(dec.data) > remaining) ||
+				(dec.Type == blockTypeRLE && int(dec.RLESize) > remaining) {
+				err = ErrDecoderSizeExceeded
+				break
+			}
 		}
 		err = dec.decodeBuf(&d.history)
 		if err != nil {
