@@ -4,6 +4,8 @@
 
 // func sequenceDecs_decodeSync_arm(ctx *armSeqCtx) int32
 //
+// Requires ctx.nSeqs > 0; decodeCompressed handles literal-only blocks.
+//
 // 32-bit ARM implementation of the zstd sequence decoder + executor. It is a
 // transliteration of the generic decodeSync loop in seqdec.go, using a bit
 // reader split into two 32-bit words (hi:lo) instead of a uint64, and inline
@@ -17,6 +19,8 @@
 // R10 (g) and R11 (the assembler's REGTMP) must not hold long-lived values:
 // the assembler itself clobbers R11 when it needs a temporary for a large
 // immediate, and the runtime requires R10 to remain valid for signal handling.
+// In particular, AND $511 and CMP $131074 may overwrite R11; reload any
+// scratch value held there after these pseudo-instructions.
 //
 // This file is hand-written on purpose. The other zstd assembly is lowered by
 // the honeycombio/avo fork from zstd/_generate, but avo has no 32-bit ARM

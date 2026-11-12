@@ -28,9 +28,8 @@ func writeBlocks(d *Digest, b []byte) int {
 	return n &^ 31
 }
 
-// load64 reads a little-endian uint64 with two 32-bit loads. The compiler
-// lowers a uint64 load on arm32 to the same pair, but spelling it out makes it
-// explicit that any input alignment is safe on pre-ARMv6 cores too.
+// load64 reads a little-endian uint64 with two 32-bit loads. GOARM=7 permits
+// unaligned word loads at both addresses.
 func load64(p unsafe.Pointer) uint64 {
 	lo := uint32(*(*uint32)(p))
 	hi := uint32(*(*uint32)(unsafe.Add(p, 4)))
