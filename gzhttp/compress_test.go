@@ -2916,3 +2916,99 @@ func TestRequestContentEncodingOrder(t *testing.T) {
 		})
 	}
 }
+
+// A buffered write must commit the same status as an immediate net/http write.
+func TestWriteCommitsStatus(t *testing.T) {
+	for _, encoding := range []string{"identity", "gzip", "zstd"} {
+		for _, size := range []int{0, 3, DefaultMinSize + 1} {
+			for _, initial := range []int{0, http.StatusCreated} {
+				t.Run(fmt.Sprintf("%s/size=%d/status=%d", encoding, size, initial), func(t *testing.T) {
+					body := strings.Repeat("x", size)
+					handler := GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						if initial != 0 {
+							w.WriteHeader(initial)
+						}
+						if _, err := io.WriteString(w, body); err != nil {
+							t.Fatal(err)
+						}
+						w.WriteHeader(http.StatusInternalServerError)
+					}))
+					r := httptest.NewRequest(http.MethodGet, "/", nil)
+					r.Header.Set(acceptEncoding, encoding)
+					w := httptest.NewRecorder()
+					handler.ServeHTTP(w, r)
+					want := initial
+					if want == 0 {
+						want = http.StatusOK
+					}
+					assertEqual(t, want, w.Result().StatusCode)
+					var reader io.Reader = w.Body
+					switch w.Header().Get(contentEncoding) {
+					case "gzip":
+						gz, err := gzip.NewReader(w.Body)
+						if err != nil {
+							t.Fatal(err)
+						}
+						defer gz.Close()
+						reader = gz
+					case "zstd":
+						zr, err := zstd.NewReader(w.Body)
+						if err != nil {
+							t.Fatal(err)
+						}
+						defer zr.Close()
+						reader = zr
+					}
+					got, err := io.ReadAll(reader)
+					if err != nil {
+						t.Fatal(err)
+					}
+					assertEqual(t, body, string(got))
+				})
+			}
+		}
+	}
+}
+
+type statusRecordingWriter struct {
+	*httptest.ResponseRecorder
+	statuses []int
+}
+
+func (w *statusRecordingWriter) WriteHeader(code int) {
+	w.statuses = append(w.statuses, code)
+	if code >= 200 {
+		w.ResponseRecorder.WriteHeader(code)
+	}
+}
+
+func TestWriteHeaderAfterFinalStatus(t *testing.T) {
+	for _, encoding := range []string{"gzip", "zstd"} {
+		for _, size := range []int{0, 3, DefaultMinSize + 1} {
+			for _, explicit := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/size=%d/explicit=%t", encoding, size, explicit), func(t *testing.T) {
+					handler := GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.WriteHeader(http.StatusEarlyHints)
+						if explicit {
+							w.WriteHeader(http.StatusCreated)
+						}
+						if _, err := io.WriteString(w, strings.Repeat("x", size)); err != nil {
+							t.Fatal(err)
+						}
+						w.WriteHeader(http.StatusProcessing)
+						w.WriteHeader(http.StatusInternalServerError)
+					}))
+					r := httptest.NewRequest(http.MethodGet, "/", nil)
+					r.Header.Set(acceptEncoding, encoding)
+					w := &statusRecordingWriter{ResponseRecorder: httptest.NewRecorder()}
+					handler.ServeHTTP(w, r)
+					want := http.StatusOK
+					if explicit {
+						want = http.StatusCreated
+					}
+					assertEqual(t, []int{http.StatusEarlyHints, want}, w.statuses)
+				})
+			}
+		}
+	}
+}
