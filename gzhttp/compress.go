@@ -109,7 +109,8 @@ type GzipResponseWriter struct {
 	zw          writer.ZstdWriter
 	zstdJitter  []byte // Jitter to write as skippable frame on Close
 
-	code int // Saves the WriteHeader value.
+	code        int  // Saves the WriteHeader value.
+	wroteHeader bool // A final status has been selected, even while buffering.
 
 	minSize          int    // Specifies the minimum response size to gzip. If the response length is bigger than this value, it is compressed.
 	buf              []byte // Holds the first part of the write before reaching the minSize or the end of the write.
@@ -135,6 +136,9 @@ func (w GzipResponseWriterWithCloseNotify) CloseNotify() <-chan bool {
 
 // Write appends data to the gzip writer.
 func (w *GzipResponseWriter) Write(b []byte) (int, error) {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
 	// Compression writer is initialized. Use it.
 	if w.gw != nil {
 		return w.gw.Write(b)
@@ -394,15 +398,17 @@ func (w *GzipResponseWriter) startPlain() error {
 // WriteHeader just saves the response code until close or GZIP effective writes.
 // In the specific case of 1xx status codes, WriteHeader is directly calling the wrapped ResponseWriter.
 func (w *GzipResponseWriter) WriteHeader(code int) {
+	if w.wroteHeader {
+		return
+	}
 	// Handle informational headers
 	if code >= 100 && code <= 199 {
 		w.ResponseWriter.WriteHeader(code)
 		return
 	}
 
-	if w.code == 0 {
-		w.code = code
-	}
+	w.wroteHeader = true
+	w.code = code
 }
 
 // init grabs a new compression writer from the appropriate pool.
