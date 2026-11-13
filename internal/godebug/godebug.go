@@ -7,12 +7,39 @@
 // Needed since internal/godebug is not available here.
 package godebug
 
-import "os"
+import (
+	"os"
+	"runtime/debug"
+	"sync"
+)
 
+// Get returns the value of the GODEBUG setting key.
+// As in the standard library, $GODEBUG takes precedence over the defaults the
+// binary was built with, which include //go:debug directives and godebug lines
+// in go.mod.
 func Get(key string) string {
-	s := os.Getenv("GODEBUG")
+	if v, ok := lookup(os.Getenv("GODEBUG"), key); ok {
+		return v
+	}
+	v, _ := lookup(defaultGODEBUG(), key)
+	return v
+}
+
+// defaultGODEBUG returns the DefaultGODEBUG setting from the build info.
+var defaultGODEBUG = sync.OnceValue(func() string {
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		for _, s := range bi.Settings {
+			if s.Key == "DefaultGODEBUG" {
+				return s.Value
+			}
+		}
+	}
+	return ""
+})
+
+func lookup(s, key string) (string, bool) {
 	if s == "" {
-		return ""
+		return "", false
 	}
 	// Scan the string backward so that later settings are used
 	// and earlier settings are ignored.
@@ -28,10 +55,10 @@ func Get(key string) string {
 				if name == key {
 					for j := 0; j < len(arg); j++ {
 						if arg[j] == '#' {
-							return arg[:j]
+							return arg[:j], true
 						}
 					}
-					return arg
+					return arg, true
 				}
 			}
 			eq = -1
@@ -40,5 +67,5 @@ func Get(key string) string {
 			eq = i
 		}
 	}
-	return ""
+	return "", false
 }
