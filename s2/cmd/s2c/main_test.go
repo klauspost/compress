@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/klauspost/compress/s2"
 )
@@ -1072,4 +1074,81 @@ func runS2CProcess(t *testing.T, args ...string) ([]byte, []byte, error) {
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	return stdout.Bytes(), stderr.Bytes(), err
+}
+
+func TestStdin(t *testing.T) {
+	if mode := os.Getenv("S2C_TEST_STDIN"); mode != "" {
+		var file *os.File
+		switch mode {
+		case "read":
+			file = os.Stdin
+		case "write", "close":
+			file = os.Stdout
+		}
+		if file != nil {
+			if err := file.Close(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		// The child command uses -- in place of the program name.
+		os.Args = os.Args[2:]
+		main()
+		os.Exit(0)
+	}
+
+	for _, tt := range []struct {
+		name        string
+		input       string
+		op          string
+		args        []string
+		diagnostics int
+	}{
+		{name: "success", input: "hello\n"},
+		{name: "write", input: "hello\n", op: "write", diagnostics: 2},
+		{name: "close", op: "write", args: []string{"-pad=32"}, diagnostics: 1},
+		{name: "read", op: "read", diagnostics: 2},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestStdin$", "--", "-cpu=1")
+			cmd.Args = append(cmd.Args, tt.args...)
+			cmd.Args = append(cmd.Args, "-")
+			cmd.Env = append(os.Environ(), "S2C_TEST_STDIN="+tt.name)
+			cmd.Stdin = strings.NewReader(tt.input)
+			var stdout, stderr bytes.Buffer
+			cmd.Stdout, cmd.Stderr = &stdout, &stderr
+			err := cmd.Run()
+			var exitErr *exec.ExitError
+			if err != nil && (!errors.As(err, &exitErr) || exitErr.ExitCode() != 2) {
+				t.Fatalf("run s2c: %v; stdout=%q; stderr=%q", err, stdout.String(), stderr.String())
+			}
+			wantStatus := 0
+			wantStderr := ""
+			if tt.op != "" {
+				wantStatus = 2
+				file := os.Stdout
+				if tt.op == "read" {
+					file = os.Stdin
+				}
+				pathErr := &os.PathError{Op: tt.op, Path: file.Name(), Err: os.ErrClosed}
+				wantStderr = strings.Repeat("\nERROR: "+pathErr.Error()+"\n", tt.diagnostics)
+			}
+			if got := cmd.ProcessState.ExitCode(); got != wantStatus {
+				t.Errorf("exit status = %d, want %d; stderr=%q", got, wantStatus, stderr.String())
+			}
+			if stderr.String() != wantStderr {
+				t.Errorf("stderr = %q, want %q", stderr.String(), wantStderr)
+			}
+			if wantStatus == 0 {
+				decoded, err := io.ReadAll(s2.NewReader(&stdout))
+				if err != nil {
+					t.Fatalf("decoding stdout: %v", err)
+				}
+				if string(decoded) != tt.input {
+					t.Errorf("decoded stdin = %q, want %q", decoded, tt.input)
+				}
+			}
+		})
+	}
 }
