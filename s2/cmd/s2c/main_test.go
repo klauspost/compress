@@ -1132,7 +1132,7 @@ func TestStdin(t *testing.T) {
 					file = os.Stdin
 				}
 				pathErr := &os.PathError{Op: tt.op, Path: file.Name(), Err: os.ErrClosed}
-				wantStderr = strings.Repeat("\nERROR: "+pathErr.Error()+"\n", tt.diagnostics)
+				wantStderr = "\nERROR: " + strings.TrimSuffix(strings.Repeat(pathErr.Error()+"\n", tt.diagnostics), "\n") + "\n"
 			}
 			if got := cmd.ProcessState.ExitCode(); got != wantStatus {
 				t.Errorf("exit status = %d, want %d; stderr=%q", got, wantStatus, stderr.String())
