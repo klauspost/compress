@@ -4,6 +4,7 @@ package xxhash
 
 import (
 	"encoding/binary"
+	"runtime"
 	"unsafe"
 )
 
@@ -31,7 +32,13 @@ func writeBlocks(d *Digest, b []byte) int {
 	return n &^ 31
 }
 
-// The input may be unaligned; let the compiler select alignment-safe loads.
 func load64(p unsafe.Pointer) uint64 {
+	// Linux enables unaligned ARMv7 word loads in normal RAM. This condition
+	// is constant-folded; other systems use alignment-safe byte loads.
+	if runtime.GOOS == "linux" || runtime.GOOS == "android" {
+		lo := *(*uint32)(p)
+		hi := *(*uint32)(unsafe.Add(p, 4))
+		return uint64(lo) | uint64(hi)<<32
+	}
 	return binary.LittleEndian.Uint64((*[8]byte)(p)[:])
 }
