@@ -70,9 +70,9 @@ func (e *Encoder) jobWorker() {
 	js := &e.state.jobs
 	defer js.workerWg.Done()
 	for job := range js.jobCh {
-		enc := <-e.encoders
+		enc, _ := e.encoders.get()
 		e.compressJob(enc, job)
-		e.encoders <- enc
+		e.encoders.put(enc)
 		close(job.done)
 	}
 }

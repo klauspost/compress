@@ -24,7 +24,7 @@ import (
 // Use NewWriter to create a new instance.
 type Encoder struct {
 	o        encoderOptions
-	encoders chan encoder
+	encoders *boundedPool[encoder]
 	state    encoderState
 	init     sync.Once
 }
@@ -91,10 +91,10 @@ func (e *Encoder) initialize() {
 	if e.o.concurrent == 0 {
 		e.o.setDefault()
 	}
-	e.encoders = make(chan encoder, e.o.concurrent)
+	e.encoders = newBoundedPool[encoder](e.o.concurrent)
 	for i := 0; i < e.o.concurrent; i++ {
 		enc := e.o.encoder()
-		e.encoders <- enc
+		e.encoders.put(enc)
 	}
 }
 
@@ -729,9 +729,9 @@ func (e *Encoder) closeJobs() error {
 // using either a stream or DecodeAll.
 func (e *Encoder) EncodeAll(src, dst []byte) []byte {
 	e.init.Do(e.initialize)
-	enc := <-e.encoders
+	enc, _ := e.encoders.get()
 	defer func() {
-		e.encoders <- enc
+		e.encoders.put(enc)
 	}()
 	return e.encodeAll(enc, src, dst)
 }
