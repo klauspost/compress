@@ -401,9 +401,6 @@ Options:`)
 				} else {
 					dstFile, tempName, err = createOutput(inputInfo, dstFilename, mode, *safe, *remove)
 					exitErr(err)
-					if tempName != "" && *safe {
-						exitErr(errors.New("cannot use -safe when output path is the same as the input file"))
-					}
 					_, outputErr = dstFile.Write(compressed)
 					outputErr = finishOutput(dstFile, tempName, dstFilename, mode, outputErr)
 					dstFile = nil
@@ -481,9 +478,6 @@ Options:`)
 			default:
 				dstFile, tempName, err = createOutput(inputInfo, dstFilename, mode, *safe, *remove)
 				exitErr(err)
-				if tempName != "" && *safe {
-					exitErr(errors.New("cannot use -safe when output path is the same as the input file"))
-				}
 				bw = bufio.NewWriterSize(dstFile, int(sz)*2)
 				out = bw
 			}
@@ -576,6 +570,24 @@ func outputAliasesInput(inputName, outputName string) (bool, error) {
 // createOutput opens dst. When dst is the input file it creates a temporary
 // file next to it instead, which finishOutput renames over dst.
 func createOutput(in os.FileInfo, dst string, mode os.FileMode, safe, remove bool) (*os.File, string, error) {
+	if in != nil {
+		outInfo, err := os.Stat(dst)
+		if err == nil && os.SameFile(in, outInfo) {
+			if !in.Mode().IsRegular() || !outInfo.Mode().IsRegular() {
+				return nil, "", errors.New("input and output refer to the same non-regular file")
+			}
+			if remove {
+				return nil, "", errors.New("cannot remove when input = output")
+			}
+			if safe {
+				return nil, "", errors.New("cannot use -safe when output path is the same as the input file")
+			}
+			return createStagedOutput(dst)
+		}
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return nil, "", err
+		}
+	}
 	f, alias, err := openOutputFile(in, dst, mode, safe)
 	if err != nil || !alias {
 		return f, "", err
@@ -592,7 +604,11 @@ func createOutput(in os.FileInfo, dst string, mode os.FileMode, safe, remove boo
 			return nil, "", err
 		}
 	}
-	f, err = os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+".tmp-*")
+	return createStagedOutput(dst)
+}
+
+func createStagedOutput(dst string) (*os.File, string, error) {
+	f, err := os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+".tmp-*")
 	if err != nil {
 		return nil, "", err
 	}
@@ -634,7 +650,17 @@ func finishOutput(f outputHandle, tmp, dst string, mode os.FileMode, err error) 
 		return err
 	}
 	if err == nil {
+		chmodErr := os.Chmod(dst, 0o666)
+		if errors.Is(chmodErr, os.ErrNotExist) {
+			chmodErr = nil
+		}
+		err = chmodErr
+	}
+	if err == nil {
 		err = os.Rename(tmp, dst)
+	}
+	if err == nil {
+		err = os.Chmod(dst, mode.Perm())
 	}
 	if err != nil {
 		removeErr := os.Remove(tmp)

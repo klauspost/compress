@@ -391,6 +391,71 @@ func TestOpenOutputFile(t *testing.T) {
 		}
 	})
 
+	t.Run("createOutput read-only alias stages without opening destination", func(t *testing.T) {
+		dir := t.TempDir()
+		inputName := filepath.Join(dir, "input.txt")
+		if err := os.WriteFile(inputName, []byte("input"), 0o444); err != nil {
+			t.Fatal(err)
+		}
+		input, err := os.Open(inputName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		inputInfo, err := input.Stat()
+		if err != nil {
+			input.Close()
+			t.Fatal(err)
+		}
+		if err := input.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		output, tempName, err := createOutput(inputInfo, inputName, 0o644, false, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tempName == "" {
+			if output != nil {
+				output.Close()
+			}
+			t.Fatal("createOutput() did not stage a temporary file for a read-only alias")
+		}
+		if _, err := output.Write([]byte("compressed")); err != nil {
+			output.Close()
+			t.Fatal(err)
+		}
+		if err := finishOutput(output, tempName, inputName, 0o644, nil); err != nil {
+			t.Fatal(err)
+		}
+		got, err := os.ReadFile(inputName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != "compressed" {
+			t.Fatalf("input contents = %q, want compressed", got)
+		}
+	})
+
+	t.Run("createOutput safe alias rejects before staging", func(t *testing.T) {
+		inputName := writeTestInput(t, "input.txt", []byte("input"))
+		input, err := os.Open(inputName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		inputInfo, err := input.Stat()
+		if err != nil {
+			input.Close()
+			t.Fatal(err)
+		}
+		if err := input.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, _, err := createOutput(inputInfo, inputName, 0o600, true, false); err == nil {
+			t.Fatal("createOutput() unexpectedly accepted -safe with an input alias")
+		}
+	})
+
 	t.Run("safe output never opens existing alias", func(t *testing.T) {
 		inputName := writeTestInput(t, "input.txt", []byte("input"))
 		input, err := os.Open(inputName)
