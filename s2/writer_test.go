@@ -677,6 +677,44 @@ func TestWriterBufferDone(t *testing.T) {
 	}
 }
 
+func TestWriterReadFromBuffer(t *testing.T) {
+	data := expand(readFile(t, "../testdata/Mark.Twain-Tom.Sawyer.txt"), 256<<10)
+	type withBytes struct{ *bytes.Buffer }
+	for _, conc := range []int{1, 4} {
+		for _, custom := range []bool{false, true} {
+			t.Run(fmt.Sprintf("c-%d/custom-%v", conc, custom), func(t *testing.T) {
+				encode := func(reuse bool) []byte {
+					src := bytes.NewBuffer(bytes.Clone(data))
+					var r io.Reader = src
+					if custom {
+						r = withBytes{src}
+					}
+					var buf bytes.Buffer
+					// Slow 64 KiB blocks are still being encoded when a borrowing ReadFrom returns.
+					w := NewWriter(&buf, WriterConcurrency(conc), WriterBlockSize(64<<10), WriterBestCompression())
+					if n, err := w.ReadFrom(r); err != nil || n != int64(len(data)) {
+						t.Fatalf("ReadFrom = %d, %v; want %d", n, err, len(data))
+					}
+					if src.Len() != 0 {
+						t.Fatalf("source has %d unread bytes", src.Len())
+					}
+					if reuse {
+						src.Reset()
+						src.Write(bytes.Repeat([]byte{'X'}, len(data)))
+					}
+					if err := w.Close(); err != nil {
+						t.Fatal(err)
+					}
+					return buf.Bytes()
+				}
+				if !bytes.Equal(encode(true), encode(false)) {
+					t.Fatal("reusing the source after ReadFrom changed the stream")
+				}
+			})
+		}
+	}
+}
+
 func TestWriterFlushAfterError(t *testing.T) {
 	pr, pw := io.Pipe()
 	pr.Close()

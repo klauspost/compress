@@ -6,6 +6,7 @@
 package s2
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
@@ -225,12 +226,15 @@ func (w *Writer) ReadFrom(r io.Reader) (n int64, err error) {
 			return 0, err
 		}
 	}
-	if br, ok := r.(byter); ok {
-		buf := br.Bytes()
+	if bb, ok := r.(*bytes.Buffer); ok {
+		buf := bb.Bytes()
 		if err := w.EncodeBuffer(buf); err != nil {
 			return 0, err
 		}
-		return int64(len(buf)), w.AsyncFlush()
+		// EncodeBuffer borrows buf until Flush, and ReadFrom must consume r.
+		err := w.Flush()
+		bb.Next(len(buf))
+		return int64(len(buf)), err
 	}
 	for {
 		inbuf := w.buffers.Get().([]byte)[:w.blockSize+obufHeaderLen]
