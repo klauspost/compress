@@ -762,13 +762,12 @@ func (w *Writer) AsyncFlush() error {
 // Flush flushes the Writer to its underlying io.Writer.
 // This does not apply padding.
 func (w *Writer) Flush() error {
-	if err := w.AsyncFlush(); err != nil {
+	err := w.AsyncFlush()
+	if w.output == nil {
 		return err
 	}
-	if w.output == nil {
-		return w.err(nil)
-	}
 
+	// Wait even after an error: queued blocks may still read EncodeBuffer input.
 	// Send empty buffer
 	res := make(chan result)
 	w.output <- res

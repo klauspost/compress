@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/klauspost/compress/internal/snapref"
 	"github.com/klauspost/compress/zip"
@@ -674,6 +675,38 @@ func TestWriterBufferDone(t *testing.T) {
 	if cbErr != nil {
 		t.Fatal(cbErr)
 	}
+}
+
+func TestWriterFlushAfterError(t *testing.T) {
+	pr, pw := io.Pipe()
+	pr.Close()
+	release := make(chan struct{})
+	w := NewWriter(pw, WriterConcurrency(2), WriterCustomEncoder(func(_, _ []byte) int {
+		<-release
+		return -1
+	}))
+	defer w.Close()
+	if err := w.EncodeBuffer(make([]byte, 1000)); err != nil {
+		t.Fatal(err)
+	}
+	// Wait for the stream header write to fail.
+	for w.AsyncFlush() == nil {
+		runtime.Gosched()
+	}
+	done := make(chan struct{})
+	go func() {
+		if w.Flush() == nil {
+			t.Error("Flush returned no error")
+		}
+		close(done)
+	}()
+	select {
+	case <-done:
+		t.Error("Flush returned while an encoder still reads the EncodeBuffer input")
+	case <-time.After(10 * time.Millisecond):
+	}
+	close(release)
+	<-done
 }
 
 func BenchmarkWriterRandom(b *testing.B) {
