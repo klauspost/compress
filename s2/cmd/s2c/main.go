@@ -352,19 +352,6 @@ Options:`)
 				if *out != "" {
 					dstFilename = *out
 				}
-				replaceInput := false
-				if !*stdout {
-					replaceInput, err = outputAliasesInput(filename, dstFilename)
-					exitErr(err)
-				}
-				if replaceInput {
-					if *remove {
-						exitErr(errors.New("cannot remove when input = output"))
-					}
-					if *safe {
-						exitErr(errors.New("cannot use -safe when output path is the same as the input file"))
-					}
-				}
 				if !*quiet {
 					fmt.Print("Compressing ", filename, " -> ", dstFilename)
 				}
@@ -374,34 +361,6 @@ Options:`)
 				inBytes, readErr := io.ReadAll(file)
 				exitErr(errors.Join(readErr, file.Close()))
 
-				var out io.Writer
-				var dstFile *os.File
-				var tempName string
-				switch {
-				case *stdout:
-					out = os.Stdout
-				default:
-					if replaceInput {
-						dstFile, err = os.CreateTemp(filepath.Dir(dstFilename), "."+filepath.Base(dstFilename)+".tmp-*")
-						if err == nil {
-							tempName = dstFile.Name()
-						}
-					} else {
-						dstFile, replaceInput, err = openOutputFile(inputInfo, dstFilename, mode, *safe)
-						if err == nil && replaceInput {
-							if *remove {
-								err = errors.New("cannot remove when input = output")
-							} else {
-								dstFile, err = os.CreateTemp(filepath.Dir(dstFilename), "."+filepath.Base(dstFilename)+".tmp-*")
-								if err == nil {
-									tempName = dstFile.Name()
-								}
-							}
-						}
-					}
-					exitErr(err)
-					out = dstFile
-				}
 				start := time.Now()
 				var compressed []byte
 				switch {
@@ -424,46 +383,38 @@ Options:`)
 					}
 					compressed = s2.EncodeBetter(nil, inBytes)
 				}
-				exitBlockErr := func(outputErr error) {
-					if outputErr == nil {
-						return
-					}
-					outputErr = cleanupFailedBlockOutput(outputErr, dstFile, tempName)
-					dstFile = nil
-					exitErr(outputErr)
-				}
-				if writeErr := writeBlockOutput(out, dstFile, tempName, compressed); writeErr != nil {
-					dstFile = nil
-					exitErr(writeErr)
-				}
-				if replaceInput {
-					exitBlockErr(dstFile.Sync())
-					exitBlockErr(dstFile.Chmod(mode.Perm()))
-				}
-				if dstFile != nil {
-					closeErr := closeBlockOutput(dstFile, tempName)
-					dstFile = nil
-					exitErr(closeErr)
-				}
-				if !*quiet {
-					elapsed := time.Since(start)
-					mbpersec := (float64(len(inBytes)) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
-					pct := float64(len(compressed)) * 100 / float64(len(inBytes))
-					fmt.Printf(" %d -> %d [%.02f%%]; %.01fMB/s\n", len(inBytes), len(compressed), pct, mbpersec)
-				}
 				if *verify {
 					got, err := s2.Decode(make([]byte, 0, len(inBytes)), compressed)
-					exitBlockErr(err)
+					exitErr(err)
 					if !bytes.Equal(got, inBytes) {
-						exitBlockErr(fmt.Errorf("decoded content mismatch"))
+						exitErr(fmt.Errorf("decoded content mismatch"))
 					}
 					if !*quiet {
 						fmt.Print("... Verified ok.")
 					}
 				}
-				if replaceInput {
-					exitBlockErr(os.Rename(tempName, dstFilename))
+				var dstFile *os.File
+				var tempName string
+				var outputErr error
+				if *stdout {
+					_, outputErr = os.Stdout.Write(compressed)
+				} else {
+					dstFile, tempName, err = createOutput(inputInfo, dstFilename, mode, *safe, *remove)
+					exitErr(err)
+					if tempName != "" && *safe {
+						exitErr(errors.New("cannot use -safe when output path is the same as the input file"))
+					}
+					_, outputErr = dstFile.Write(compressed)
+					outputErr = finishOutput(dstFile, tempName, dstFilename, mode, outputErr)
+					dstFile = nil
 					tempName = ""
+				}
+				exitErr(outputErr)
+				if !*quiet {
+					elapsed := time.Since(start)
+					mbpersec := (float64(len(inBytes)) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
+					pct := float64(len(compressed)) * 100 / float64(len(inBytes))
+					fmt.Printf(" %d -> %d [%.02f%%]; %.01fMB/s\n", len(inBytes), len(compressed), pct, mbpersec)
 				}
 				if *remove {
 					if !*quiet {
@@ -493,20 +444,6 @@ Options:`)
 			}
 			if !*quiet {
 				fmt.Print("Compressing ", filename, " -> ", dstFilename)
-			}
-
-			replaceInput := false
-			if !*stdout {
-				replaceInput, err = outputAliasesInput(filename, dstFilename)
-				exitErr(err)
-			}
-			if replaceInput {
-				if *remove {
-					exitErr(errors.New("cannot remove when input = output"))
-				}
-				if *safe {
-					exitErr(errors.New("cannot use -safe when output path is the same as the input file"))
-				}
 			}
 
 			// Input file.
@@ -542,44 +479,25 @@ Options:`)
 			case *stdout:
 				out = os.Stdout
 			default:
-				if replaceInput {
-					dstFile, err = os.CreateTemp(filepath.Dir(dstFilename), "."+filepath.Base(dstFilename)+".tmp-*")
-					if err == nil {
-						tempName = dstFile.Name()
-					}
-				} else {
-					dstFile, replaceInput, err = openOutputFile(inputInfo, dstFilename, mode, *safe)
-					if err == nil && replaceInput {
-						if *remove {
-							err = errors.New("cannot remove when input = output")
-						} else {
-							dstFile, err = os.CreateTemp(filepath.Dir(dstFilename), "."+filepath.Base(dstFilename)+".tmp-*")
-							if err == nil {
-								tempName = dstFile.Name()
-							}
-						}
-					}
-				}
+				dstFile, tempName, err = createOutput(inputInfo, dstFilename, mode, *safe, *remove)
 				exitErr(err)
+				if tempName != "" && *safe {
+					exitErr(errors.New("cannot use -safe when output path is the same as the input file"))
+				}
 				bw = bufio.NewWriterSize(dstFile, int(sz)*2)
 				out = bw
 			}
-			exitOutputErr := func(err error) {
-				if err == nil {
+			replaceInput := tempName != ""
+			exitOutputErr := func(outputErr error) {
+				if outputErr == nil {
 					return
 				}
 				if dstFile != nil {
-					err = errors.Join(err, dstFile.Close())
+					outputErr = finishOutput(dstFile, tempName, dstFilename, mode, outputErr)
 					dstFile = nil
+					tempName = ""
 				}
-				if tempName != "" {
-					removeErr := os.Remove(tempName)
-					if errors.Is(removeErr, os.ErrNotExist) {
-						removeErr = nil
-					}
-					err = errors.Join(err, removeErr)
-				}
-				exitErr(err)
+				exitErr(outputErr)
 			}
 			closeSource := func() error {
 				readaheadErr := inputReader.Close()
@@ -603,17 +521,11 @@ Options:`)
 			}
 			if replaceInput {
 				exitOutputErr(closeSource())
-				exitOutputErr(dstFile.Sync())
-				exitOutputErr(dstFile.Chmod(mode.Perm()))
-				closeErr := dstFile.Close()
+			}
+			if dstFile != nil {
+				exitOutputErr(finishOutput(dstFile, tempName, dstFilename, mode, nil))
 				dstFile = nil
-				exitOutputErr(closeErr)
-				exitOutputErr(os.Rename(tempName, dstFilename))
 				tempName = ""
-			} else if dstFile != nil {
-				closeErr := dstFile.Close()
-				dstFile = nil
-				exitOutputErr(closeErr)
 			}
 			if !*quiet {
 				input := rc.n
@@ -659,6 +571,79 @@ func outputAliasesInput(inputName, outputName string) (bool, error) {
 		return false, errors.New("input and output refer to the same non-regular file")
 	}
 	return true, nil
+}
+
+// createOutput opens dst. When dst is the input file it creates a temporary
+// file next to it instead, which finishOutput renames over dst.
+func createOutput(in os.FileInfo, dst string, mode os.FileMode, safe, remove bool) (*os.File, string, error) {
+	f, alias, err := openOutputFile(in, dst, mode, safe)
+	if err != nil || !alias {
+		return f, "", err
+	}
+	if remove {
+		if f != nil {
+			err = errors.Join(err, f.Close())
+		}
+		return nil, "", errors.Join(errors.New("cannot remove when input = output"), err)
+	}
+	if f != nil {
+		err = f.Close()
+		if err != nil {
+			return nil, "", err
+		}
+	}
+	f, err = os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+".tmp-*")
+	if err != nil {
+		return nil, "", err
+	}
+	return f, f.Name(), nil
+}
+
+type outputHandle interface {
+	Chmod(os.FileMode) error
+	Close() error
+	Stat() (os.FileInfo, error)
+	Sync() error
+}
+
+// finishOutput closes f after writing ended with err. A temporary file
+// replaces dst only if everything succeeded, and is removed otherwise.
+func finishOutput(f outputHandle, tmp, dst string, mode os.FileMode, err error) error {
+	if f == nil {
+		return err
+	}
+	var removePath string
+	var removeIdentity os.FileInfo
+	if tmp == "" && dst != "" {
+		if st, statErr := f.Stat(); statErr == nil && st.Mode().IsRegular() {
+			removePath = dst
+			removeIdentity = st
+		}
+	}
+	if tmp != "" && err == nil {
+		err = errors.Join(f.Sync(), f.Chmod(mode.Perm()))
+	}
+	closeErr := f.Close()
+	err = errors.Join(err, closeErr)
+	if tmp == "" {
+		if closeErr != nil && removePath != "" && removeIdentity != nil {
+			if post, statErr := os.Stat(removePath); statErr == nil && os.SameFile(removeIdentity, post) {
+				err = errors.Join(err, os.Remove(removePath))
+			}
+		}
+		return err
+	}
+	if err == nil {
+		err = os.Rename(tmp, dst)
+	}
+	if err != nil {
+		removeErr := os.Remove(tmp)
+		if errors.Is(removeErr, os.ErrNotExist) {
+			removeErr = nil
+		}
+		err = errors.Join(err, removeErr)
+	}
+	return err
 }
 
 func openOutputFile(inputInfo os.FileInfo, name string, mode os.FileMode, exclusive bool) (*os.File, bool, error) {
@@ -748,32 +733,6 @@ func verifyTo(w io.Writer) (io.Writer, func() error) {
 		}
 		return err
 	}
-}
-
-func writeBlockOutput(out io.Writer, dstFile io.Closer, tempName string, compressed []byte) error {
-	_, err := out.Write(compressed)
-	return cleanupFailedBlockOutput(err, dstFile, tempName)
-}
-
-func closeBlockOutput(output io.Closer, tempName string) error {
-	return cleanupFailedBlockOutput(output.Close(), nil, tempName)
-}
-
-func cleanupFailedBlockOutput(outputErr error, output io.Closer, tempName string) error {
-	if outputErr == nil {
-		return nil
-	}
-	if output != nil {
-		outputErr = errors.Join(outputErr, output.Close())
-	}
-	if tempName != "" {
-		removeErr := os.Remove(tempName)
-		if errors.Is(removeErr, os.ErrNotExist) {
-			removeErr = nil
-		}
-		outputErr = errors.Join(outputErr, removeErr)
-	}
-	return outputErr
 }
 
 func printErr(err error) {

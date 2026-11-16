@@ -739,10 +739,13 @@ func TestBlockOutputFailureCleanup(t *testing.T) {
 			t.Fatal(err)
 		}
 		writer := &failAfterWriter{out: output, limit: 3, err: writeErr}
-
-		err = writeBlockOutput(writer, output, "", []byte(contents))
+		if _, err := writer.Write([]byte(contents)); !errors.Is(err, writeErr) {
+			output.Close()
+			t.Fatalf("write error = %v, want %v", err, writeErr)
+		}
+		err = finishOutput(output, "", name, 0o600, writeErr)
 		if !errors.Is(err, writeErr) {
-			t.Fatalf("writeBlockOutput() error = %v, want %v", err, writeErr)
+			t.Fatalf("finishOutput() error = %v, want %v", err, writeErr)
 		}
 		got, err := os.ReadFile(name)
 		if err != nil {
@@ -753,7 +756,7 @@ func TestBlockOutputFailureCleanup(t *testing.T) {
 		}
 	})
 
-	t.Run("direct close failure leaves output", func(t *testing.T) {
+	t.Run("direct close failure removes output", func(t *testing.T) {
 		name := filepath.Join(t.TempDir(), "partial.s2.block")
 		output, err := os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 		if err != nil {
@@ -764,16 +767,12 @@ func TestBlockOutputFailureCleanup(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err = closeBlockOutput(&failCloser{closer: output, err: closeErr}, "")
+		err = finishOutput(&failOutputFile{File: output, closeErr: closeErr}, "", name, 0o600, nil)
 		if !errors.Is(err, closeErr) {
-			t.Fatalf("closeBlockOutput() error = %v, want %v", err, closeErr)
+			t.Fatalf("finishOutput() error = %v, want %v", err, closeErr)
 		}
-		got, err := os.ReadFile(name)
-		if err != nil {
-			t.Fatalf("direct output was removed: %v", err)
-		}
-		if string(got) != contents {
-			t.Fatalf("direct output = %q, want %q", got, contents)
+		if _, err := os.Stat(name); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("direct output was not removed: %v", err)
 		}
 	})
 
@@ -786,10 +785,13 @@ func TestBlockOutputFailureCleanup(t *testing.T) {
 		}
 		tempName := output.Name()
 		writer := &failAfterWriter{out: output, limit: 3, err: writeErr}
-
-		err = writeBlockOutput(writer, output, tempName, []byte(contents))
+		if _, err := writer.Write([]byte(contents)); !errors.Is(err, writeErr) {
+			output.Close()
+			t.Fatalf("write error = %v, want %v", err, writeErr)
+		}
+		err = finishOutput(output, tempName, finalName, 0o600, writeErr)
 		if !errors.Is(err, writeErr) {
-			t.Fatalf("writeBlockOutput() error = %v, want %v", err, writeErr)
+			t.Fatalf("finishOutput() error = %v, want %v", err, writeErr)
 		}
 		assertNoOutputTempFiles(t, finalName)
 	})
@@ -803,9 +805,9 @@ func TestBlockOutputFailureCleanup(t *testing.T) {
 		}
 		tempName := output.Name()
 
-		err = closeBlockOutput(&failCloser{closer: output, err: closeErr}, tempName)
+		err = finishOutput(&failOutputFile{File: output, closeErr: closeErr}, tempName, finalName, 0o600, nil)
 		if !errors.Is(err, closeErr) {
-			t.Fatalf("closeBlockOutput() error = %v, want %v", err, closeErr)
+			t.Fatalf("finishOutput() error = %v, want %v", err, closeErr)
 		}
 		assertNoOutputTempFiles(t, finalName)
 	})
@@ -820,6 +822,10 @@ func TestBlockOutputFailureCleanup(t *testing.T) {
 			t.Fatal(err)
 		}
 		writer := &failAfterWriter{out: output, limit: 3, err: writeErr}
+		if _, err := writer.Write([]byte(contents)); !errors.Is(err, writeErr) {
+			output.Close()
+			t.Fatalf("write error = %v, want %v", err, writeErr)
+		}
 		closer := &replaceOnClose{
 			file:        output,
 			name:        name,
@@ -828,9 +834,9 @@ func TestBlockOutputFailureCleanup(t *testing.T) {
 			err:         closeErr,
 		}
 
-		err = writeBlockOutput(writer, closer, "", []byte(contents))
+		err = finishOutput(closer, "", name, 0o600, writeErr)
 		if !errors.Is(err, writeErr) || !errors.Is(err, closeErr) {
-			t.Fatalf("writeBlockOutput() error = %v, want write and close errors", err)
+			t.Fatalf("finishOutput() error = %v, want write and close errors", err)
 		}
 		got, err := os.ReadFile(name)
 		if err != nil {
@@ -859,13 +865,13 @@ func (w *failAfterWriter) Write(p []byte) (int, error) {
 	return n, w.err
 }
 
-type failCloser struct {
-	closer io.Closer
-	err    error
+type failOutputFile struct {
+	*os.File
+	closeErr error
 }
 
-func (c *failCloser) Close() error {
-	return errors.Join(c.closer.Close(), c.err)
+func (f *failOutputFile) Close() error {
+	return errors.Join(f.File.Close(), f.closeErr)
 }
 
 type replaceOnClose struct {
@@ -874,6 +880,18 @@ type replaceOnClose struct {
 	movedName   string
 	replacement []byte
 	err         error
+}
+
+func (c *replaceOnClose) Chmod(mode os.FileMode) error {
+	return c.file.Chmod(mode)
+}
+
+func (c *replaceOnClose) Stat() (os.FileInfo, error) {
+	return c.file.Stat()
+}
+
+func (c *replaceOnClose) Sync() error {
+	return c.file.Sync()
 }
 
 func (c *replaceOnClose) Close() error {

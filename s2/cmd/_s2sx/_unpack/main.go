@@ -316,7 +316,7 @@ func untar(dst string, r io.Reader) error {
 }
 
 func cleanArchivePath(name string) (string, error) {
-	name = filepath.Clean(filepath.FromSlash(name))
+	name = filepath.Clean(strings.TrimLeft(filepath.FromSlash(name), string(os.PathSeparator)))
 	if filepath.IsAbs(name) || filepath.VolumeName(name) != "" ||
 		strings.HasPrefix(name, string(os.PathSeparator)) ||
 		name == ".." || strings.HasPrefix(name, ".."+string(os.PathSeparator)) {
@@ -325,6 +325,8 @@ func cleanArchivePath(name string) (string, error) {
 	return name, nil
 }
 
+// checkLinkTarget rejects obviously unsafe symlink targets. os.Root still
+// confines all writes to the extraction directory; links may point outside it.
 func checkLinkTarget(name, linkTarget string) error {
 	linkTarget = filepath.FromSlash(linkTarget)
 	if filepath.IsAbs(linkTarget) || filepath.VolumeName(linkTarget) != "" ||

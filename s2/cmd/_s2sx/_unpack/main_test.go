@@ -75,6 +75,39 @@ func TestUntarRejectsPreexistingSymlinkEscape(t *testing.T) {
 	}
 }
 
+func TestUntarExtractsAbsoluteMemberPath(t *testing.T) {
+	setQuiet(t)
+	dst := filepath.Join(t.TempDir(), "dst")
+	archive := tarBytes(t, tarEntry{
+		header:   tar.Header{Name: "/nested/file.txt", Mode: 0o640},
+		contents: "contents",
+	})
+
+	if err := untar(dst, bytes.NewReader(archive)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(dst, "nested", "file.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "contents" {
+		t.Fatalf("extracted content = %q, want contents", got)
+	}
+}
+
+func TestUntarRejectsSimpleParentEscapeLink(t *testing.T) {
+	setQuiet(t)
+	requireSymlinks(t)
+	dst := filepath.Join(t.TempDir(), "dst")
+	archive := tarBytes(t,
+		tarEntry{header: tar.Header{Name: "link", Typeflag: tar.TypeSymlink, Linkname: "../outside", Mode: 0o777}},
+	)
+
+	if err := untar(dst, bytes.NewReader(archive)); err == nil {
+		t.Fatal("extraction unexpectedly accepted a parent-escaping symbolic link")
+	}
+}
+
 func TestUntarRejectsArchiveSymlinkWriteEscape(t *testing.T) {
 	setQuiet(t)
 	requireSymlinks(t)
@@ -149,7 +182,7 @@ func TestUntarPathMutationCannotWriteOutsideRoot(t *testing.T) {
 	link := filepath.Join(dst, "d2", "link")
 	if target, err := os.Readlink(link); err != nil {
 		t.Fatalf("final symbolic link is missing: %v", err)
-	} else if target != filepath.FromSlash("sub/../../outside") {
+	} else if filepath.Clean(target) != filepath.Clean(filepath.FromSlash("sub/../../outside")) {
 		t.Fatalf("final symbolic link target = %q", target)
 	}
 	if _, err := os.Stat(filepath.Join(outside, "escaped.txt")); !errors.Is(err, fs.ErrNotExist) {
