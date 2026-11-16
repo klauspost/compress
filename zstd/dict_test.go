@@ -1239,10 +1239,12 @@ func TestEncoderChooseCompWithDictTables(t *testing.T) {
 				total += int(v)
 			}
 			cur.HistogramFinished(maxSym, maxCount)
-			if err := cur.normalizeCount(total); err != nil {
+			blk.sequences = make([]seq, total)
+			_, got, err := blk.chooseComp(cur, prev, &fsePredefEnc[tc.table], maxSym)
+			if err != nil {
 				t.Fatal(err)
 			}
-			if _, got := blk.chooseComp(cur, prev, &fsePredefEnc[tc.table]); got != tc.want {
+			if got != tc.want {
 				t.Fatalf("got mode %d, want %d", got, tc.want)
 			}
 		})
