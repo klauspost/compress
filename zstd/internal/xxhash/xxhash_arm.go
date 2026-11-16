@@ -2,7 +2,10 @@
 
 package xxhash
 
-import "unsafe"
+import (
+	"encoding/binary"
+	"unsafe"
+)
 
 // writeBlocks is the arm32 fast path for the 32-byte stripe loop. The generic
 // version indexes b[0:8:len(b)] four times per stripe and reloads the slice
@@ -28,10 +31,7 @@ func writeBlocks(d *Digest, b []byte) int {
 	return n &^ 31
 }
 
-// load64 reads a little-endian uint64 with two 32-bit loads. GOARM=7 permits
-// unaligned word loads at both addresses.
+// The input may be unaligned; let the compiler select alignment-safe loads.
 func load64(p unsafe.Pointer) uint64 {
-	lo := uint32(*(*uint32)(p))
-	hi := uint32(*(*uint32)(unsafe.Add(p, 4)))
-	return uint64(lo) | uint64(hi)<<32
+	return binary.LittleEndian.Uint64((*[8]byte)(p)[:])
 }

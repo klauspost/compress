@@ -45,7 +45,10 @@ func TestArmAsmMatchesGo(t *testing.T) {
 	sizes := []int{300, 4000, 30000, 100000}
 
 	var asmCalls uint64
-	armSeqdecTestHook = func(*sequenceDecs, []byte) { asmCalls++ }
+	armSeqdecTestHook = func(s *sequenceDecs, hist []byte) {
+		asmCalls++
+		testArmSequenceAlignment(t, s, hist)
+	}
 	defer func() {
 		armSeqdecTestHook = nil
 		decodeSyncGoOnly = false
@@ -138,6 +141,7 @@ func testArmMultiBlockHistory(t *testing.T) {
 					oldHook := armSeqdecTestHook
 					armSeqdecTestHook = func(s *sequenceDecs, hist []byte) {
 						calls++
+						testArmSequenceAlignment(t, s, hist)
 						if len(hist) == 0 {
 							return
 						}
@@ -202,6 +206,44 @@ func testArmMultiBlockHistory(t *testing.T) {
 				})
 			}
 		})
+	}
+}
+
+// Replay each selected block at every source/destination alignment, including
+// literals and history that DecodeAll normally puts in aligned allocations.
+func testArmSequenceAlignment(t *testing.T, s *sequenceDecs, hist []byte) {
+	t.Helper()
+	oldHook, oldGoOnly := armSeqdecTestHook, decodeSyncGoOnly
+	armSeqdecTestHook = nil
+	defer func() { armSeqdecTestHook, decodeSyncGoOnly = oldHook, oldGoOnly }()
+	offsetCopy := func(b []byte, offset, capacity int) []byte {
+		dst := make([]byte, offset+len(b), offset+capacity)[offset:]
+		copy(dst, b)
+		return dst
+	}
+	clone := func(srcOffset, dstOffset int) sequenceDecs {
+		c, br := *s, *s.br
+		c.br = &br
+		br.in = offsetCopy(br.in, srcOffset, len(br.in))
+		c.literals = offsetCopy(s.literals, srcOffset, cap(s.literals))
+		c.out = offsetCopy(s.out, dstOffset, cap(s.out))
+		return c
+	}
+	ref := clone(0, 0)
+	decodeSyncGoOnly = true
+	if err := ref.decodeSync(hist); err != nil {
+		t.Fatal(err)
+	}
+	decodeSyncGoOnly = false
+	for srcOffset := 0; srcOffset < 4; srcOffset++ {
+		for dstOffset := 0; dstOffset < 4; dstOffset++ {
+			got := clone(srcOffset, dstOffset)
+			history := offsetCopy(hist, srcOffset, len(hist))
+			supported, err := got.decodeSyncSimple(history)
+			if !supported || err != nil || !bytes.Equal(got.out, ref.out) {
+				t.Fatalf("alignment src=%d dst=%d: assembly=%v err=%v output equal=%v", srcOffset, dstOffset, supported, err, bytes.Equal(got.out, ref.out))
+			}
+		}
 	}
 }
 

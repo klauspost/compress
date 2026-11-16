@@ -28,9 +28,8 @@
 // TestArmAsmMatchesGo (run under qemu-arm, see zstd/seqdec_arm_test.go) is the
 // reference check for changes here. See the exception in AGENTS.md.
 //
-// Requires GOARM=7: the refill and copy paths use unaligned 32-bit loads,
-// which fault or rotate on pre-ARMv6 cores. seqdec_arm.go is therefore gated
-// on the arm.7 build tag and lower GOARM levels use the generic decoder.
+// Input refills use byte loads. Copies use words and halfwords only when
+// both addresses are word-aligned, with forward byte copies otherwise.
 
 #define CTXP      ctxp-4(SP)
 #define OUTBASE   outbase-8(SP)
@@ -138,9 +137,14 @@ mainloop:
 	SUB $4, R3
 	MOVW INBASE, R9
 	ADD R3, R9, R9
-	MOVW R2, R12
-	MOVW (R9), R2
-	MOVW R12, R1
+	MOVW R2, R1
+	MOVBU (R9), R2
+	MOVBU 1(R9), R12
+	ORR R12<<8, R2
+	MOVBU 2(R9), R12
+	ORR R12<<16, R2
+	MOVBU 3(R9), R12
+	ORR R12<<24, R2
 	SUB $32, R0
 	B of_fill_done
 of_fill_done_byte:
@@ -201,9 +205,14 @@ of_gb_shift:
 	SUB $4, R3
 	MOVW INBASE, R9
 	ADD R3, R9, R9
-	MOVW R2, R12
-	MOVW (R9), R2
-	MOVW R12, R1
+	MOVW R2, R1
+	MOVBU (R9), R2
+	MOVBU 1(R9), R12
+	ORR R12<<8, R2
+	MOVBU 2(R9), R12
+	ORR R12<<16, R2
+	MOVBU 3(R9), R12
+	ORR R12<<24, R2
 	SUB $32, R0
 	B ml_nofill
 ml2_byte:
@@ -342,9 +351,14 @@ adj_done:
 	SUB $4, R3
 	MOVW INBASE, R9
 	ADD R3, R9, R9
-	MOVW R2, R12
-	MOVW (R9), R2
-	MOVW R12, R1
+	MOVW R2, R1
+	MOVBU (R9), R2
+	MOVBU 1(R9), R12
+	ORR R12<<8, R2
+	MOVBU 2(R9), R12
+	ORR R12<<16, R2
+	MOVBU 3(R9), R12
+	ORR R12<<24, R2
 	SUB $32, R0
 	B st_fill_done
 st_fill_done_byte:
@@ -392,6 +406,9 @@ st_fill_done:
 	BHI err_mllen
 
 	// ---- copy literals ----
+	ORR R7, R8, R4
+	TST $3, R4
+	BNE lit_t1
 	CMP $8, R9
 	BLO lit_tail
 lit_l8:
@@ -427,6 +444,8 @@ lit_t1:
 	MOVB R4, (R7)
 	ADD $1, R7
 	ADD $1, R8
+	SUB $1, R9
+	B lit_t1
 lit_done:
 
 	// ---- match ----
@@ -460,6 +479,9 @@ lit_done:
 	BLS hist_all
 	// copy v bytes, then the rest from out
 	MOVW R4, R5
+	ORR R7, R12, R4
+	TST $3, R4
+	BNE hist_l_t1
 	CMP $8, R5
 	BLO hist_l_tail
 hist_l8:
@@ -495,6 +517,8 @@ hist_l_t1:
 	MOVB R4, (R7)
 	ADD $1, R12
 	ADD $1, R7
+	SUB $1, R5
+	B hist_l_t1
 hist_l_done:
 	MOVW MLV, R9
 	MOVW TMP1, R4
@@ -503,6 +527,9 @@ hist_l_done:
 	B match_out
 hist_all:
 	MOVW R9, R5
+	ORR R7, R12, R4
+	TST $3, R4
+	BNE hist_a_t1
 	CMP $8, R5
 	BLO hist_a_tail
 hist_a8:
@@ -537,12 +564,17 @@ hist_a_t1:
 	MOVBU (R12), R4
 	MOVB R4, (R7)
 	ADD $1, R7
-	B seq_done
+	ADD $1, R12
+	SUB $1, R5
+	B hist_a_t1
 
 match_out:
 	// src = outPtr - mo
 	MOVW R7, R12
 	SUB R6, R12, R12
+	ORR R7, R12, R4
+	TST $3, R4
+	BNE match_ovl
 	CMP $8, R6
 	BLO match_ovl
 match_l8:

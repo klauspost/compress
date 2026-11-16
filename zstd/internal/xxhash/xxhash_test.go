@@ -82,6 +82,29 @@ func testSum(t *testing.T, input string, want uint64) {
 	}
 }
 
+func TestWriteAlignment(t *testing.T) {
+	for _, size := range []int{31, 32, 33, 63, 64, 65, 1025} {
+		input := make([]byte, size)
+		for i := range input {
+			input[i] = byte(i*37 + i/7)
+		}
+		want := Sum64(input)
+		for offset := 0; offset < 8; offset++ {
+			t.Run(fmt.Sprintf("size=%d/offset=%d", size, offset), func(t *testing.T) {
+				buf := make([]byte, offset+size)[offset:]
+				copy(buf, input)
+				d := New()
+				if n, err := d.Write(buf); err != nil || n != size {
+					t.Fatalf("Write: n=%d err=%v", n, err)
+				}
+				if got := d.Sum64(); got != want {
+					t.Fatalf("Sum64: got %x, want %x", got, want)
+				}
+			})
+		}
+	}
+}
+
 func TestReset(t *testing.T) {
 	parts := []string{"The quic", "k br", "o", "wn fox jumps", " ov", "er the lazy ", "dog."}
 	d := New()
