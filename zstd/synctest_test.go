@@ -100,8 +100,8 @@ func TestSynctestEncoderOutlivesBubble(t *testing.T) {
 	}
 }
 
-// With concurrency 1, concurrent DecodeAll calls wait for the one block
-// decoder. That wait must be one synctest sees as durably blocked.
+// With concurrency 1, DecodeAll waits while the one block decoder is in
+// use. That wait must be one synctest sees as durably blocked.
 func TestSynctestDecodeAllWaits(t *testing.T) {
 	in := synctestInput()
 	enc, err := NewWriter(nil)
@@ -117,20 +117,41 @@ func TestSynctestDecodeAllWaits(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer dec.Close()
+
+		// Hold the only block decoder, so every DecodeAll must wait.
+		block, ok := dec.decoders.get()
+		if !ok {
+			t.Fatal("no block decoder")
+		}
+		const calls = 4
 		var wg sync.WaitGroup
-		for range 4 {
+		var mu sync.Mutex
+		done := 0
+		for range calls {
 			wg.Go(func() {
 				got, err := dec.DecodeAll(comp, nil)
 				if err != nil {
 					t.Error(err)
-					return
-				}
-				if !bytes.Equal(got, in) {
+				} else if !bytes.Equal(got, in) {
 					t.Error("decoded output differs")
 				}
+				mu.Lock()
+				done++
+				mu.Unlock()
 			})
 		}
+		synctest.Wait()
+		mu.Lock()
+		if done != 0 {
+			t.Fatalf("%d DecodeAll calls finished while the block decoder was held", done)
+		}
+		mu.Unlock()
+
+		dec.decoders.put(block)
 		wg.Wait()
+		if done != calls {
+			t.Fatalf("%d DecodeAll calls finished; want %d", done, calls)
+		}
 	})
 }
 
@@ -214,4 +235,26 @@ func TestBoundedPoolClose(t *testing.T) {
 			t.Fatalf("close returned %d items; want 0", len(free))
 		}
 	})
+}
+
+// An item given back after close is dropped: neither get nor getContext
+// hands it out.
+func TestBoundedPoolPutAfterClose(t *testing.T) {
+	p := newBoundedPool[int](1)
+	p.put(1)
+	v, ok := p.get()
+	if !ok || v != 1 {
+		t.Fatalf("get = %d, %v; want 1, true", v, ok)
+	}
+	p.close()
+	p.put(v)
+	if v, ok := p.get(); ok {
+		t.Fatalf("get after close returned %d", v)
+	}
+	if v, ok := p.getContext(context.Background()); ok {
+		t.Fatalf("getContext after close returned %d", v)
+	}
+	if n := p.len(); n != 0 {
+		t.Fatalf("len after close = %d; want 0", n)
+	}
 }

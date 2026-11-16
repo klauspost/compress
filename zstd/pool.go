@@ -58,6 +58,12 @@ func (p *boundedPool[T]) getContext(ctx context.Context) (v T, ok bool) {
 		}
 	}
 	if ctx.Err() != nil {
+		// A put may have woken this waiter just before the cancel. Pass
+		// that wake-up on, so an item is not left free while another
+		// get waits.
+		if len(p.free) > 0 {
+			p.cond.Signal()
+		}
 		return v, false
 	}
 	return p.pop()
@@ -77,8 +83,13 @@ func (p *boundedPool[T]) pop() (v T, ok bool) {
 }
 
 // put gives an item back and wakes one waiting get.
+// An item given back after close is dropped.
 func (p *boundedPool[T]) put(v T) {
 	p.mu.Lock()
+	if p.closed {
+		p.mu.Unlock()
+		return
+	}
 	p.free = append(p.free, v)
 	p.mu.Unlock()
 	p.cond.Signal()
