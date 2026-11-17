@@ -853,6 +853,10 @@ func (e *fastEncoderDict) Reset(d *dict, singleBlock bool) {
 	}
 
 	e.cur = e.maxMatchOff
+	// A full log may have dropped writes.
+	if e.dirtyEntryCount == len(e.dirtyEntries) {
+		e.allDirty = true
+	}
 	// Only fastEncoderDict uses the entry log; doubleFastEncoderDict uses shards.
 	if !e.allDirty && e.dirtyEntryCount != 0 {
 		for _, idx := range e.dirtyEntries[:e.dirtyEntryCount] {
@@ -907,10 +911,8 @@ func (e *fastEncoderDict) markShardDirty(entryNum uint32) {
 }
 
 func (e *fastEncoderDict) markEntryDirty(entryNum uint32) {
-	if e.dirtyEntryCount == len(e.dirtyEntries) {
-		e.allDirty = true
-		return
+	if e.dirtyEntryCount < len(e.dirtyEntries) {
+		e.dirtyEntries[e.dirtyEntryCount] = uint16(entryNum)
+		e.dirtyEntryCount++
 	}
-	e.dirtyEntries[e.dirtyEntryCount] = uint16(entryNum)
-	e.dirtyEntryCount++
 }
