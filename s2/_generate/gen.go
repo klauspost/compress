@@ -2049,7 +2049,7 @@ func (o options) emitRepeat(name string, length reg.GPVirtual, offset reg.GPVirt
 		JB(LabelRef("repeat_five_" + name)) // If less than 24 bits to represent.
 
 		if !o.skipOutput {
-			// We have have more than 24 bits
+			// We have more than 24 bits
 			// Emit so we have at least 4 bytes left.
 			LEAL(Mem{Base: length, Disp: -(maxRepeat - 4)}, length.As32()) // length -= (maxRepeat - 4)
 			MOVL(U32(7<<2|tagCopy1|(65531<<16)), Mem{Base: dstBase})       // dst[0] = 7<<2 | tagCopy1, dst[1] = 0 dst[2+3] = 65531
