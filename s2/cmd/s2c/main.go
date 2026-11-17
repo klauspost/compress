@@ -607,6 +607,26 @@ func createOutput(in os.FileInfo, dst string, mode os.FileMode, safe, remove boo
 	return createStagedOutput(dst)
 }
 
+// replaceOutput renames tmp over dst. If dst exists and blocks replace, remove
+// a regular file at dst and retry once (read-only inputs on Windows).
+func replaceOutput(tmp, dst string) error {
+	err := os.Rename(tmp, dst)
+	if err == nil {
+		return nil
+	}
+	info, statErr := os.Lstat(dst)
+	if statErr != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return err
+	}
+	if removeErr := os.Remove(dst); removeErr != nil {
+		return errors.Join(err, removeErr)
+	}
+	return os.Rename(tmp, dst)
+}
+
 func createStagedOutput(dst string) (*os.File, string, error) {
 	f, err := os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+".tmp-*")
 	if err != nil {
@@ -650,17 +670,7 @@ func finishOutput(f outputHandle, tmp, dst string, mode os.FileMode, err error) 
 		return err
 	}
 	if err == nil {
-		chmodErr := os.Chmod(dst, 0o666)
-		if errors.Is(chmodErr, os.ErrNotExist) {
-			chmodErr = nil
-		}
-		err = chmodErr
-	}
-	if err == nil {
-		err = os.Rename(tmp, dst)
-	}
-	if err == nil {
-		err = os.Chmod(dst, mode.Perm())
+		err = replaceOutput(tmp, dst)
 	}
 	if err != nil {
 		removeErr := os.Remove(tmp)
