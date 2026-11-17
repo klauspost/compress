@@ -184,6 +184,7 @@ func (r *Reader) Reset(reader io.Reader) {
 	r.j = 0
 	r.blockStart = 0
 	r.readHeader = r.ignoreStreamID
+	r.snappyFrame = false
 }
 
 func (r *Reader) readFull(p []byte, allowEOF bool) (ok bool) {
