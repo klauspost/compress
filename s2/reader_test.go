@@ -45,6 +45,48 @@ func TestLeadingSkippableBlock(t *testing.T) {
 	}
 }
 
+func TestSkippableCBTruncated(t *testing.T) {
+	var buf bytes.Buffer
+	w := NewWriter(&buf)
+	if err := w.AddSkippableBlock(0x80, bytes.Repeat([]byte("m"), 100)); err != nil {
+		t.Fatalf("w.AddSkippableBlock: %v", err)
+	}
+	if _, err := w.Write([]byte("some data")); err != nil {
+		t.Fatalf("w.Write: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("w.Close: %v", err)
+	}
+	// Stream identifier, then the skippable chunk cut short after 50 bytes.
+	stream := buf.Bytes()[:4+len(magicBody)+4+50]
+	if stream[4+len(magicBody)] != 0x80 {
+		t.Fatalf("chunk type %#x, want 0x80", stream[4+len(magicBody)])
+	}
+
+	for _, tc := range []struct {
+		name string
+		op   func(*Reader) error
+	}{
+		{"Read", func(r *Reader) error { _, err := io.ReadAll(r); return err }},
+		{"Skip", func(r *Reader) error { return r.Skip(1) }},
+		{"DecodeConcurrent", func(r *Reader) error { _, err := r.DecodeConcurrent(io.Discard, 2); return err }},
+	} {
+		// Without a callback the truncated chunk is rejected; it must be with one too.
+		for _, cb := range []bool{false, true} {
+			r := NewReader(bytes.NewReader(stream))
+			if cb {
+				r.SkippableCB(0x80, func(sr io.Reader) error {
+					_, err := io.ReadAll(sr)
+					return err
+				})
+			}
+			if err := tc.op(r); err != ErrCorrupt {
+				t.Errorf("%s (callback %v): got %v, want ErrCorrupt", tc.name, cb, err)
+			}
+		}
+	}
+}
+
 func TestSkipOversizedChunk(t *testing.T) {
 	// An uncompressed chunk larger than the configured maximum block size
 	// must be rejected with ErrCorrupt, by Read as well as by Skip.
