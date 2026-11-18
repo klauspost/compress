@@ -210,6 +210,45 @@ func TestBuildDictUnknownLevel(t *testing.T) {
 	}
 }
 
+// BuildDict's history buffer holds the dictionary plus one block; samples
+// that overflow it must work with histories shorter and longer than the window.
+func TestBuildDictLargeSamples(t *testing.T) {
+	in, err := os.ReadFile("../testdata/Mark.Twain-Tom.Sawyer.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const sampleSize = 200 << 10
+	for _, histSize := range []int{100 << 10, 140 << 10} {
+		hist := in[:histSize]
+		samples := [][]byte{in[histSize : histSize+sampleSize], in[len(in)-sampleSize:]}
+		for level := SpeedFastest; level < speedLast; level++ {
+			t.Run(fmt.Sprintf("hist%dK-%s", histSize>>10, level), func(t *testing.T) {
+				dict, err := BuildDict(BuildDictOptions{ID: 1, Contents: samples, History: hist, Offsets: [3]int{1, 4, 8}, Level: level})
+				if err != nil {
+					t.Fatal(err)
+				}
+				enc, err := NewWriter(nil, WithEncoderDict(dict), WithEncoderLevel(level), WithEncoderConcurrency(1))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer enc.Close()
+				dec, err := NewReader(nil, WithDecoderDicts(dict), WithDecoderConcurrency(1))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer dec.Close()
+				got, err := dec.DecodeAll(enc.EncodeAll(samples[0], nil), nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(got, samples[0]) {
+					t.Fatal("round trip mismatch")
+				}
+			})
+		}
+	}
+}
+
 func BenchmarkBuildDictLevelPaths(b *testing.B) {
 	samples, history, _ := buildDictLevelPathFixture()
 	for _, tt := range []struct {

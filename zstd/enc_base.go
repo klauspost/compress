@@ -66,11 +66,13 @@ func (e *fastBase) addBlock(src []byte) int32 {
 			if cap(e.hist) < int(e.maxMatchOff+maxCompressedBlockSize) {
 				panic(fmt.Errorf("unexpected buffer cap %d, want at least %d with window %d", cap(e.hist), e.maxMatchOff+maxCompressedBlockSize, e.maxMatchOff))
 			}
-			// Move down
-			offset := int32(len(e.hist)) - e.maxMatchOff
-			copy(e.hist[0:e.maxMatchOff], e.hist[offset:])
-			e.cur += offset
-			e.hist = e.hist[:e.maxMatchOff]
+			// Move down. A history shorter than the window only overflows on
+			// blocks above maxCompressedBlockSize (BuildDict); append grows it.
+			if offset := int32(len(e.hist)) - e.maxMatchOff; offset > 0 {
+				copy(e.hist[0:e.maxMatchOff], e.hist[offset:])
+				e.cur += offset
+				e.hist = e.hist[:e.maxMatchOff]
+			}
 		}
 	}
 	s := int32(len(e.hist))
