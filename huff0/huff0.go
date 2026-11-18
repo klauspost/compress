@@ -106,6 +106,11 @@ type Scratch struct {
 	// If WantLogLess == 0 any improvement will do.
 	WantLogLess uint8
 
+	// OptimalDepth makes new tables search the maximum code length, up to
+	// TableLog, for the smallest table plus data, instead of deriving it
+	// from the input size. This is slower.
+	OptimalDepth bool
+
 	symbolLen      uint16 // Length of active part of the symbol table.
 	maxCount       int    // count of the most probable symbol
 	clearCount     bool   // clear count

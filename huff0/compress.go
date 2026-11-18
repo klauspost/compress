@@ -467,6 +467,44 @@ func (s *Scratch) optimalTableLog() {
 	s.actualTableLog = tableLog
 }
 
+// optimalDepth sets s.actualTableLog to the code length limit giving the
+// smallest table plus data, as HUF_optimalTableLog does with
+// HUF_flags_optimalDepth. Limits below minTablelog are fine: tables are
+// written with the actual depth, which can already be lower.
+func (s *Scratch) optimalDepth() {
+	nonZero := uint32(0)
+	for _, v := range s.count[:s.symbolLen] {
+		if v > 0 {
+			nonZero++
+		}
+	}
+	minLog := uint8(highBit32(nonZero) + 1)
+	maxLog := max(s.TableLog, minLog)
+	bestLog, bestSize := maxLog, math.MaxInt-1
+	for tl := minLog; tl <= maxLog; tl++ {
+		s.actualTableLog = tl
+		if s.buildCTableLog() != nil {
+			continue
+		}
+		// A limit that doesn't bind gives the same table as all higher ones.
+		if s.actualTableLog < tl && tl > minLog {
+			break
+		}
+		hSize, err := s.cTable.estTableSize(s)
+		if err != nil {
+			continue
+		}
+		size := hSize + s.cTable.estimateSize(s.count[:s.symbolLen])
+		if size > bestSize+1 {
+			break
+		}
+		if size < bestSize {
+			bestLog, bestSize = tl, size
+		}
+	}
+	s.actualTableLog = bestLog
+}
+
 type cTableEntry struct {
 	val   uint16
 	nBits uint8
@@ -476,7 +514,17 @@ type cTableEntry struct {
 const huffNodesMask = huffNodesLen - 1
 
 func (s *Scratch) buildCTable() error {
-	s.optimalTableLog()
+	if s.OptimalDepth {
+		s.optimalDepth()
+	} else {
+		s.optimalTableLog()
+	}
+	return s.buildCTableLog()
+}
+
+// buildCTableLog builds s.cTable with code lengths limited to s.actualTableLog,
+// which it sets to the longest code.
+func (s *Scratch) buildCTableLog() error {
 	s.huffSort()
 	if cap(s.cTable) < maxSymbolValue+1 {
 		s.cTable = make([]cTableEntry, s.symbolLen, maxSymbolValue+1)

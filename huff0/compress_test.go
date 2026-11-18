@@ -535,7 +535,8 @@ func TestCompress1XReuseCountsTable(t *testing.T) {
 	for i := range 100 {
 		in := letters(200, 3)
 		size := func(p ReusePolicy) int {
-			var s Scratch
+			// The comparison must also use a table from the depth search.
+			s := Scratch{OptimalDepth: i%2 == 1}
 			if _, _, err := Compress1X(prev, &s); err != nil {
 				t.Fatal(err)
 			}
@@ -603,6 +604,79 @@ func TestCompressPreferFallback(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCompressOptimalDepth(t *testing.T) {
+	var inputs [][]byte
+	for _, test := range testfiles {
+		b, err := test.fn()
+		if err != nil {
+			t.Fatal(err)
+		}
+		inputs = append(inputs, b)
+	}
+	for _, test := range testfilesExtended {
+		b, _ := test.fn()
+		inputs = append(inputs, b)
+	}
+	smaller := 0
+	for _, four := range []bool{false, true} {
+		comp, streams := Compress1X, 1
+		if four {
+			comp, streams = Compress4X, 4
+		}
+		// est is the table plus estimated data, which the search minimises.
+		run := func(in []byte, wll uint8, opt bool) (out []byte, est int, err error) {
+			s := Scratch{WantLogLess: wll, OptimalDepth: opt}
+			out, _, err = comp(in, &s)
+			if err == nil {
+				est = len(s.OutTable) + s.prevTable.estimateSize(s.count[:s.symbolLen])
+			}
+			return out, est, err
+		}
+		for i, in := range inputs {
+			in = in[:min(len(in), BlockSizeMax)]
+			for _, wll := range []uint8{0, 4} {
+				def, defEst, defErr := run(in, wll, false)
+				out, est, err := run(in, wll, true)
+				if err != nil {
+					if defErr == nil {
+						t.Fatalf("four=%v input %d: %v, but works without OptimalDepth", four, i, err)
+					}
+					continue
+				}
+				if defErr == nil {
+					// The padding of each stream isn't in the estimate.
+					if est > defEst || len(out) > len(def)+streams {
+						t.Fatalf("four=%v input %d: %d bytes (est %d), %d without OptimalDepth (est %d)", four, i, len(out), est, len(def), defEst)
+					}
+					if len(out) < len(def) {
+						smaller++
+					}
+				}
+				dec, rem, err := ReadTable(out, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var got []byte
+				if four {
+					got, err = dec.Decompress4X(rem, len(in))
+				} else {
+					got, err = dec.Decompress1X(rem)
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(got, in) {
+					t.Fatalf("four=%v input %d: output mismatch", four, i)
+				}
+			}
+		}
+	}
+	if smaller == 0 {
+		t.Fatal("OptimalDepth never helps; the test needs other input")
+	}
+	t.Log(smaller, "smaller outputs")
 }
 
 func TestMinTableSize(t *testing.T) {

@@ -28,6 +28,7 @@ func FuzzCompress(f *testing.F) {
 	// grows the worker's heap until it is OOM-killed.
 	var s, decS Scratch
 	f.Fuzz(func(t *testing.T, buf0 []byte) {
+		s.OptimalDepth = len(buf0) > 0 && buf0[0]&8 != 0
 		fuzzReuse(t, buf0, &s, &decS)
 
 		//use of Compress1X
