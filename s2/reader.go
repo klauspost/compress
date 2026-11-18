@@ -816,6 +816,8 @@ func (r *Reader) Skip(n int64) error {
 				}
 			}
 
+			r.snappyFrame = string(r.buf[:len(magicBody)]) == magicBodySnappy
+
 			continue
 		}
 
