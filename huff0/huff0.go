@@ -118,6 +118,9 @@ type Scratch struct {
 	prevTableLog   uint8  // Tablelog for previous table
 	prevTable      cTable // Table used for previous compression.
 	cTable         cTable // compression table
+	oldTable       cTable // prevTable before the last new table, for RestorePrevTable.
+	oldTableLog    uint8
+	canRestore     bool   // oldTable can be restored.
 	dt             dTable // decompression table
 	nodes          []nodeElt
 	tmpOut         [4][]byte
@@ -134,6 +137,7 @@ func (s *Scratch) TransferCTable(src *Scratch) {
 	s.prevTable = s.prevTable[:len(src.prevTable)]
 	copy(s.prevTable, src.prevTable)
 	s.prevTableLog = src.prevTableLog
+	s.canRestore = false
 }
 
 // TableBits fills dst with the code length in bits of each symbol in the
@@ -149,6 +153,19 @@ func (s *Scratch) TableBits(dst *[256]uint8) bool {
 		dst[i] = v.nBits
 	}
 	return len(s.prevTable) > 0
+}
+
+// RestorePrevTable undoes the new table made by the last Compress1X or
+// Compress4X call, for when its output is not used: the table that could be
+// reused before that call can be reused again. It does nothing if the call
+// reused a table or failed.
+// It returns whether there is a table to reuse afterwards.
+func (s *Scratch) RestorePrevTable() bool {
+	if s.canRestore {
+		s.prevTable, s.prevTableLog, s.oldTable = s.oldTable, s.oldTableLog, s.prevTable[:0]
+		s.canRestore = false
+	}
+	return s.Reuse != ReusePolicyNone && len(s.prevTable) > 0
 }
 
 func (s *Scratch) prepare(in []byte) (*Scratch, error) {

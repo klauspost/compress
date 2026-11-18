@@ -746,6 +746,98 @@ func TestTableBits(t *testing.T) {
 	}
 }
 
+func TestRestorePrevTable(t *testing.T) {
+	// The text's table has long codes for 1-4, so other gets a new table,
+	// also with ReusePolicyPrefer.
+	text := []byte(strings.Repeat("the quick brown fox jumps over the lazy dog ", 100) + "\x01\x02\x03\x04")
+	rng := rand.New(rand.NewSource(1))
+	other := make([]byte, 2000)
+	for i := range other {
+		other[i] = 1 + byte(rng.Intn(4))
+	}
+	for _, tc := range []struct {
+		name string
+		comp func([]byte, *Scratch) ([]byte, bool, error)
+		dec  func(*Scratch, []byte, int) ([]byte, error)
+	}{
+		{"1X", Compress1X, func(s *Scratch, b []byte, _ int) ([]byte, error) { return s.Decompress1X(b) }},
+		{"4X", Compress4X, (*Scratch).Decompress4X},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var s Scratch
+			var bits, decBits [256]uint8
+			comp := func(in []byte, p ReusePolicy) ([]byte, bool, error) {
+				s.Reuse = p
+				return tc.comp(in, &s)
+			}
+			// write compresses in with a new table and returns its decoder.
+			write := func(in []byte) *Scratch {
+				t.Helper()
+				out, _, err := comp(in, ReusePolicyNone)
+				if err != nil {
+					t.Fatal(err)
+				}
+				dec, _, err := ReadTable(out, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				dec.TableBits(&decBits)
+				return dec
+			}
+
+			// Without a table before, there is none after.
+			if _, _, err := comp(other, ReusePolicyAllow); err != nil {
+				t.Fatal(err)
+			}
+			if s.RestorePrevTable() || s.RestorePrevTable() {
+				t.Fatal("restored a table on a new Scratch")
+			}
+			if _, _, err := comp(text, ReusePolicyMust); err != ErrIncompressible {
+				t.Fatal("reused after restoring no table:", err)
+			}
+
+			for _, p := range []ReusePolicy{ReusePolicyNone, ReusePolicyAllow, ReusePolicyPrefer} {
+				dec := write(text)
+				if _, reused, err := comp(other, p); err != nil || reused {
+					t.Fatalf("policy %d: no new table: %v", p, err)
+				}
+				ok := s.RestorePrevTable()
+				if ok2 := s.RestorePrevTable(); ok != ok2 || ok != (p != ReusePolicyNone) {
+					t.Fatalf("policy %d: restored %v, then %v", p, ok, ok2)
+				}
+				if !ok {
+					continue
+				}
+				if !s.TableBits(&bits) || bits != decBits {
+					t.Fatalf("policy %d: restored another table", p)
+				}
+				in := text[:1000]
+				out, reused, err := comp(in, ReusePolicyMust)
+				if err != nil || !reused {
+					t.Fatalf("policy %d: no reuse: %v", p, err)
+				}
+				got, err := tc.dec(dec, out, len(in))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(got, in) {
+					t.Fatalf("policy %d: output mismatch", p)
+				}
+			}
+
+			// Calls that reuse the table or fail leave nothing to restore,
+			// also after a new table that was used.
+			for _, in := range [][]byte{other, make([]byte, 100), make([]byte, BlockSizeMax+1)} {
+				write(other)
+				comp(in, ReusePolicyAllow)
+				if !s.RestorePrevTable() || !s.TableBits(&bits) || bits != decBits {
+					t.Fatalf("%d bytes: restore changed the table", len(in))
+				}
+			}
+		})
+	}
+}
+
 func TestMinTableSize(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	var s Scratch

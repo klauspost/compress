@@ -13,6 +13,10 @@ import (
 // Supply a Scratch object. The scratch object contains state about re-use,
 // So when sharing across independent encodes, be sure to set the re-use policy.
 func Compress1X(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
+	if s != nil {
+		// Even a failed call leaves nothing to restore.
+		s.canRestore = false
+	}
 	s, err = s.prepare(in)
 	if err != nil {
 		return nil, false, err
@@ -26,6 +30,10 @@ func Compress1X(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
 // Supply a Scratch object. The scratch object contains state about re-use,
 // So when sharing across independent encodes, be sure to set the re-use policy.
 func Compress4X(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
+	if s != nil {
+		// Even a failed call leaves nothing to restore.
+		s.canRestore = false
+	}
 	s, err = s.prepare(in)
 	if err != nil {
 		return nil, false, err
@@ -46,6 +54,7 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 	if s.Reuse == ReusePolicyNone {
 		s.prevTable = s.prevTable[:0]
 	}
+	prevLen := len(s.prevTable)
 
 	// Create histogram, if none was provided.
 	maxCount := s.maxCount
@@ -149,8 +158,11 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 		s.OutTable = nil
 		return nil, false, ErrIncompressible
 	}
-	// Move current table into previous.
-	s.prevTable, s.prevTableLog, s.cTable = s.cTable, s.actualTableLog, s.prevTable[:0]
+	// Move current table into previous. Keep the old one for RestorePrevTable,
+	// with its length from before a Prefer fallback dropped it.
+	s.oldTable, s.prevTable, s.cTable = s.prevTable[:prevLen], s.cTable, s.oldTable[:0]
+	s.oldTableLog, s.prevTableLog = s.prevTableLog, s.actualTableLog
+	s.canRestore = true
 	s.OutData = s.Out[len(s.OutTable):]
 	return s.Out, false, nil
 }

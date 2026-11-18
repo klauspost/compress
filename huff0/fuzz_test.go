@@ -26,10 +26,10 @@ func FuzzCompress(f *testing.F) {
 	// Reuse the Scratches across inputs, as zstd does. Each Scratch's buffer
 	// pool keeps it alive until the second GC after use, so one per input
 	// grows the worker's heap until it is OOM-killed.
-	var s, decS Scratch
+	var s, decS, newDecS Scratch
 	f.Fuzz(func(t *testing.T, buf0 []byte) {
 		s.OptimalDepth = len(buf0) > 0 && buf0[0]&8 != 0
-		fuzzReuse(t, buf0, &s, &decS)
+		fuzzReuse(t, buf0, &s, &decS, &newDecS)
 
 		//use of Compress1X
 		s.WantLogLess = 0
@@ -111,8 +111,9 @@ func FuzzCompress(f *testing.F) {
 }
 
 // fuzzReuse compresses part of data with a table from the rest, with every
-// reuse policy. The first 2 bytes choose the split and WantLogLess.
-func fuzzReuse(t *testing.T, data []byte, s, prevDec *Scratch) {
+// reuse policy, then drops the output and restores the previous table.
+// The first 2 bytes choose the split and WantLogLess.
+func fuzzReuse(t *testing.T, data []byte, s, prevDec, newDec *Scratch) {
 	if len(data) < 3 {
 		return
 	}
@@ -142,6 +143,32 @@ func fuzzReuse(t *testing.T, data []byte, s, prevDec *Scratch) {
 					t.Fatal("prev table:", err)
 				}
 			}
+			// restore drops the output, as if it was not written. Only the
+			// table pd decodes may then be reused, and it must be when the
+			// call cannot have dropped it.
+			restore := func(must bool) {
+				ok := s.RestorePrevTable()
+				if ok != s.RestorePrevTable() || ok && (pd == nil || p == ReusePolicyNone) || must && !ok {
+					t.Fatalf("four=%v policy=%d: restored %v, previous table %v", four, p, ok, pd != nil)
+				}
+				if !ok {
+					return
+				}
+				s.Reuse = ReusePolicyMust
+				out, _, err := comp(in, s)
+				if err != nil {
+					return
+				}
+				var got []byte
+				if four {
+					got, err = pd.Decompress4X(out, len(in))
+				} else {
+					got, err = pd.Decompress1X(out)
+				}
+				if err != nil || !bytes.Equal(got, in) {
+					t.Fatalf("four=%v policy=%d: restored table: %v", four, p, err)
+				}
+			}
 			s.Reuse = p
 			out, reused, err := comp(in, s)
 			if p == ReusePolicyNone {
@@ -152,6 +179,8 @@ func fuzzReuse(t *testing.T, data []byte, s, prevDec *Scratch) {
 				if p == ReusePolicyPrefer && newOK {
 					t.Fatalf("four=%v: Prefer failed with %v, but a new table works", four, err)
 				}
+				// Prefer drops a table it could not use.
+				restore(pd != nil && (p == ReusePolicyAllow || p == ReusePolicyMust))
 				continue
 			}
 			wantSize := len(in)
@@ -176,7 +205,7 @@ func fuzzReuse(t *testing.T, data []byte, s, prevDec *Scratch) {
 				if len(s.OutTable)+len(s.OutData) != len(out) {
 					t.Fatalf("four=%v policy=%d: OutTable %d + OutData %d != out %d", four, p, len(s.OutTable), len(s.OutData), len(out))
 				}
-				if dec, rem, err = ReadTable(out, prevDec); err != nil {
+				if dec, rem, err = ReadTable(out, newDec); err != nil {
 					t.Fatalf("four=%v policy=%d: ReadTable: %v", four, p, err)
 				}
 			}
@@ -192,6 +221,7 @@ func fuzzReuse(t *testing.T, data []byte, s, prevDec *Scratch) {
 			if !bytes.Equal(got, in) {
 				t.Fatalf("four=%v policy=%d reused=%v: mismatch", four, p, reused)
 			}
+			restore(pd != nil && p != ReusePolicyNone)
 		}
 	}
 }
