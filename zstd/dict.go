@@ -284,26 +284,16 @@ func BuildDict(o BuildDictOptions) ([]byte, error) {
 		addHist(&ll, block.coders.llEnc.Histogram())
 		addHist(&ml, block.coders.mlEnc.Histogram())
 		addHist(&of, block.coders.ofEnc.Histogram())
+		// Repeat codes reference the training Offsets, then earlier sequences.
+		rep := [3]uint32{uint32(o.Offsets[0]), uint32(o.Offsets[1]), uint32(o.Offsets[2])}
 		for i, seq := range block.sequences {
 			if i > 3 {
 				break
 			}
-			offset := seq.offset
-			if offset == 0 {
-				continue
-			}
-			if int(offset) >= len(o.History) {
-				continue
-			}
-			if offset > 3 {
-				newOffsets[offset-3]++
-			} else {
-				// Repeat codes reference the training Offsets. Skip unset
-				// (zero) entries so they are not ranked as real offsets.
-				prev := o.Offsets[offset-1]
-				if prev > 0 {
-					newOffsets[uint32(prev)]++
-				}
+			rep = ultraNewRep(rep, seq.offset, seq.litLen == 0)
+			// Skip unset (zero) entries so they are not ranked as real offsets.
+			if off := rep[0]; off > 0 && off < uint32(len(o.History)) {
+				newOffsets[off]++
 			}
 		}
 	}

@@ -1404,3 +1404,29 @@ func TestEncoderUltraDictTables(t *testing.T) {
 		})
 	}
 }
+
+// Samples start with a match at Offsets[2], which ultra codes as a repeat
+// code. BuildDict must count it as that offset, not Offsets[code-1].
+func TestBuildDictRepeatOffsets(t *testing.T) {
+	text, err := os.ReadFile("../testdata/Mark.Twain-Tom.Sawyer.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hist := text[:20<<10]
+	var samples [][]byte
+	for i := range 16 {
+		s := bytes.Repeat(hist[len(hist)-7:], 3)
+		samples = append(samples, append(s, text[(30+i)<<10:(31+i)<<10]...))
+	}
+	d, err := BuildDict(BuildDictOptions{ID: 1, Contents: samples, History: hist, Offsets: [3]int{1, 4, 7}, Level: SpeedUltraCompression})
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := InspectDictionary(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Offsets()[0]; got != 7 {
+		t.Errorf("most used offset %d, want 7", got)
+	}
+}
