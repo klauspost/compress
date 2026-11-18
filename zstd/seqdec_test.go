@@ -892,7 +892,7 @@ func TestDecoderShortSequenceCopies(t *testing.T) {
 		{name: "long-words", wordLens: []int{47, 48, 63, 64, 65, 96, 97, 200}, litLens: []int{0, 0, 1, 16, 17}},
 		{name: "offsets40-lits20", litLens: []int{0, 1, 2, 5, 15, 16, 17, 20}, maxOffset: 40},
 	}
-	levels := []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression}
+	levels := []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression, SpeedUltraCompression}
 
 	dec, err := NewReader(nil)
 	if err != nil {
@@ -922,6 +922,10 @@ func TestDecoderShortSequenceCopies(t *testing.T) {
 		}
 
 		for _, level := range levels {
+			// Ultra is slow under race; one case covers its 3-byte matches.
+			if isRaceTest && level == SpeedUltraCompression && tc.maxOffset == 0 {
+				continue
+			}
 			t.Run(tc.name+"/"+level.String(), func(t *testing.T) {
 				enc, err := NewWriter(nil, WithEncoderLevel(level))
 				if err != nil {

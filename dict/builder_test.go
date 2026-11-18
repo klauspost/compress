@@ -11,7 +11,7 @@ import (
 )
 
 func TestZStdDict(t *testing.T) {
-	for _, level := range []zstd.EncoderLevel{zstd.SpeedFastest, zstd.SpeedDefault, zstd.SpeedBetterCompression, zstd.SpeedBestCompression} {
+	for _, level := range []zstd.EncoderLevel{zstd.SpeedFastest, zstd.SpeedDefault, zstd.SpeedBetterCompression, zstd.SpeedBestCompression, zstd.SpeedUltraCompression} {
 		testZStdDict(t, level)
 	}
 }

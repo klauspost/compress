@@ -1289,3 +1289,118 @@ func TestEncoderChooseCompWithDictTables(t *testing.T) {
 		})
 	}
 }
+
+// testEncodeFrame encodes src as a frame with e and d, sizing tables for hint.
+func testEncodeFrame(e encoder, d *dict, src []byte, hint int64) []byte {
+	fh := frameHeader{ContentSize: uint64(len(src)), WindowSize: uint32(e.WindowSize(int64(len(src)))), DictID: d.ID()}
+	e.WindowSize(hint)
+	e.Reset(d, false)
+	blk := e.Block()
+	dst := fh.appendTo(nil)
+	for len(src) > 0 {
+		todo := src[:min(len(src), int(fh.WindowSize), maxCompressedBlockSize)]
+		src = src[len(todo):]
+		blk.pushOffsets()
+		e.Encode(blk, todo)
+		blk.last = len(src) == 0
+		if err := blk.encode(todo, false, false); err != nil {
+			panic(err)
+		}
+		dst = append(dst, blk.output...)
+		blk.reset(nil)
+	}
+	return dst
+}
+
+// The ultra encoder saves the tables of a dictionary loaded twice with the
+// same table size and restores them in later frames. Every frame of the same
+// input and table size must encode alike, whatever the encoder did before.
+func TestEncoderUltraDictTables(t *testing.T) {
+	text, err := os.ReadFile("../testdata/Mark.Twain-Tom.Sawyer.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dA := &dict{id: 1, content: text[:160<<10], offsets: [3]int{1, 4, 8}}
+	// Same ID, so only the pointer tells the dictionaries apart.
+	dB := &dict{id: 1, content: text[160<<10 : 320<<10], offsets: [3]int{1, 4, 8}}
+	// Fills over half of the hash table at the 1M window, which is saved whole.
+	dR := &dict{id: 2, content: appendRandom(nil, rand.New(rand.NewSource(1)), 120<<10), offsets: [3]int{1, 4, 8}}
+	// Matches near the end of the dictionaries, and beyond a 64K window.
+	src := append(append([]byte{}, text[40<<10:42<<10]...), text[150<<10:152<<10]...)
+	big := text[100<<10:]
+
+	// The 64K window is smaller than the dictionaries and their trees.
+	for _, window := range []int32{1 << 16, 1 << 20} {
+		t.Run(fmt.Sprint("window", window>>10, "K"), func(t *testing.T) {
+			newEnc := func() *ultraEncoder {
+				return &ultraEncoder{fastBase: fastBase{maxMatchOff: window, bufferReset: math.MaxInt32 - 2*window}}
+			}
+			e := newEnc()
+			check := func(name string, d *dict, in []byte, hint int64, want []byte) {
+				t.Helper()
+				got := testEncodeFrame(e, d, in, hint)
+				opts := []DOption{WithDecoderConcurrency(1)}
+				if d != nil {
+					opts = append(opts, WithDecoderDictRaw(d.id, d.content))
+				}
+				dec, err := NewReader(nil, opts...)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer dec.Close()
+				decoded, err := dec.DecodeAll(got, nil)
+				if err != nil {
+					t.Fatalf("%s: %v", name, err)
+				}
+				if !bytes.Equal(decoded, in) {
+					t.Fatalf("%s: round trip mismatch", name)
+				}
+				if want != nil && !bytes.Equal(got, want) {
+					t.Fatalf("%s: got %d bytes, want %d bytes as from a new encoder", name, len(got), len(want))
+				}
+			}
+			hint := int64(len(src))
+			wantA := testEncodeFrame(newEnc(), dA, src, hint)
+			wantB := testEncodeFrame(newEnc(), dB, src, hint)
+			wantL := testEncodeFrame(newEnc(), dA, src, 8<<20)
+			srcR := append(append([]byte{}, dR.content[50<<10:52<<10]...), dR.content[110<<10:112<<10]...)
+			wantR := testEncodeFrame(newEnc(), dR, srcR, hint)
+
+			check("load", dA, src, hint, wantA)
+			check("save", dA, src, hint, wantA)
+			check("restore", dA, src, hint, wantA)
+			check("no dict", nil, big, 0, nil)
+			check("restore after no dict", dA, src, hint, wantA)
+			check("same ID", dB, src, hint, wantB)
+			check("dict multi block", dA, big, 0, nil)
+			check("reload", dA, src, hint, wantA)
+			check("save after multi block", dA, src, hint, wantA)
+			check("restore after multi block", dA, src, hint, wantA)
+			check("large tables", dA, src, 8<<20, wantL)
+			check("reload on dirty tables", dA, src, hint, wantA)
+			for _, name := range []string{"load", "save", "restore"} {
+				check("random "+name, dR, srcR, hint, wantR)
+			}
+
+			// Overflow when the next frame starts.
+			reset := e.bufferReset
+			e.bufferReset = e.cur + int32(len(e.hist))
+			check("clear", dA, src, hint, wantA)
+			e.bufferReset = reset
+			check("no dict", nil, big, 0, nil)
+			check("save after clear", dA, src, hint, wantA)
+			check("restore after clear", dA, src, hint, wantA)
+
+			// Overflow before loading the dictionary.
+			end := e.cur + int32(len(e.hist))
+			e.bufferReset = end + int32(len(dA.content)+len(src))
+			check("rebase", dA, src, hint, wantA)
+			if e.cur >= end {
+				t.Fatal("no rebase")
+			}
+			e.bufferReset = reset
+			check("save after rebase", dA, src, hint, wantA)
+			check("restore after rebase", dA, src, hint, wantA)
+		})
+	}
+}

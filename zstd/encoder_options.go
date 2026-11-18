@@ -68,6 +68,8 @@ func (o encoderOptions) encoder() encoder {
 		return &betterFastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize), bufferReset: math.MaxInt32 - int32(o.windowSize*2), lowMem: o.lowMem}}
 	case SpeedBestCompression:
 		return &bestFastEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize), bufferReset: math.MaxInt32 - int32(o.windowSize*2), lowMem: o.lowMem}}
+	case SpeedUltraCompression:
+		return &ultraEncoder{fastBase: fastBase{maxMatchOff: int32(o.windowSize), bufferReset: math.MaxInt32 - int32(o.windowSize*2), lowMem: o.lowMem}}
 	}
 	panic("unknown compression level")
 }
@@ -178,9 +180,18 @@ const (
 	// By using this, notice that CPU usage may go up in the future.
 	SpeedBetterCompression
 
-	// SpeedBestCompression will choose the best available compression option.
-	// This will offer the best compression no matter the CPU cost.
+	// SpeedBestCompression will yield better compression than SpeedBetterCompression,
+	// at a considerably higher CPU cost.
 	SpeedBestCompression
+
+	// SpeedUltraCompression will offer the best compression no matter the CPU cost.
+	// It uses the binary tree match finder and optimal parser of zstd level 19,
+	// and is typically 5-40 times slower than SpeedBestCompression.
+	// Each concurrent encoder may use up to about 100MB, or 30MB with WithLowerEncoderMem,
+	// plus twice the amount by which the window exceeds the default 8MB. Reusing a dictionary for several
+	// frames can add up to 80MB more (20MB with WithLowerEncoderMem).
+	// Use WithEncoderConcurrency to limit the number used by EncodeAll.
+	SpeedUltraCompression
 
 	// speedLast should be kept as the last actual compression option.
 	// The is not for external usage, but is used to keep track of the valid options.
@@ -210,8 +221,10 @@ func EncoderLevelFromZstd(level int) EncoderLevel {
 		return SpeedDefault
 	case level >= 6 && level < 10:
 		return SpeedBetterCompression
-	default:
+	case level >= 10 && level < 18:
 		return SpeedBestCompression
+	default:
+		return SpeedUltraCompression
 	}
 }
 
@@ -226,6 +239,8 @@ func (e EncoderLevel) String() string {
 		return "better"
 	case SpeedBestCompression:
 		return "best"
+	case SpeedUltraCompression:
+		return "ultra"
 	default:
 		return "invalid"
 	}
@@ -255,6 +270,8 @@ func WithEncoderLevel(l EncoderLevel) EOption {
 			case SpeedBetterCompression:
 				o.windowSize = 8 << 20
 			case SpeedBestCompression:
+				o.windowSize = 8 << 20
+			case SpeedUltraCompression:
 				o.windowSize = 8 << 20
 			}
 		}
@@ -367,7 +384,7 @@ func (o *encoderOptions) jobSize() int {
 func (o *encoderOptions) overlapSize() int {
 	var s int
 	switch o.level {
-	case SpeedBestCompression:
+	case SpeedBestCompression, SpeedUltraCompression:
 		s = o.windowSize / 2
 	case SpeedBetterCompression:
 		s = o.windowSize / 4

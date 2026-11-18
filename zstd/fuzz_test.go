@@ -154,7 +154,7 @@ func FuzzEncoding(f *testing.F) {
 	const (
 		// Test a subset of encoders.
 		startFuzz = SpeedFastest
-		endFuzz   = SpeedBestCompression
+		endFuzz   = SpeedUltraCompression
 
 		// Also tests with dictionaries...
 		testDicts = true
@@ -180,8 +180,8 @@ func FuzzEncoding(f *testing.F) {
 	addWithMarker("testdata/fuzz/encode-corpus-encoded.zip", fuzz.TypeGoFuzz)
 
 	var dec *Decoder
-	var encs [SpeedBestCompression + 1]*Encoder
-	var encsD [SpeedBestCompression + 1]*Encoder
+	var encs [endFuzz + 1]*Encoder
+	var encsD [endFuzz + 1]*Encoder
 
 	var dicts [][]byte
 	if testDicts {
@@ -251,6 +251,9 @@ func FuzzEncoding(f *testing.F) {
 		}
 
 		for level := *fuzzStartF; level <= *fuzzEndF; level++ {
+			if EncoderLevel(level) == SpeedUltraCompression && len(data) > 64<<10 {
+				continue
+			}
 			enc := encs[level]
 			dst.Reset()
 			enc.Reset(&dst)

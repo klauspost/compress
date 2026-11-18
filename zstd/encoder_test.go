@@ -25,9 +25,24 @@ import (
 
 var testWindowSizes = []int{MinWindowSize, 1 << 16, 1 << 22, 1 << 24}
 
+// The ultra level is slow, so it gets a reduced test matrix.
+var (
+	ultraTestWindowSizes = []int{1 << 16, 8 << 20}
+	ultraTestOpts        = map[string]bool{"default": true, "lowmem": true, "nolit": true, "1seg": true, "conc": true}
+)
+
 type testEncOpt struct {
-	name string
-	o    []EOption
+	name  string
+	level EncoderLevel
+	o     []EOption
+}
+
+// testWindows returns the window sizes to test level with.
+func testWindows(level EncoderLevel) []int {
+	if level == SpeedUltraCompression {
+		return ultraTestWindowSizes
+	}
+	return testWindowSizes
 }
 
 func getEncOpts(cMax int) []testEncOpt {
@@ -37,11 +52,17 @@ func getEncOpts(cMax int) []testEncOpt {
 			break
 		}
 		for conc := 1; conc <= 4; conc *= 2 {
-			for _, wind := range testWindowSizes {
+			if level == SpeedUltraCompression && conc > 2 {
+				break
+			}
+			for _, wind := range testWindows(level) {
 				addOpt := func(name string, options ...EOption) {
+					if level == SpeedUltraCompression && !ultraTestOpts[name] {
+						return
+					}
 					opts := append([]EOption(nil), WithEncoderLevel(level), WithEncoderConcurrency(conc), WithWindowSize(wind))
 					name = fmt.Sprintf("%s-c%d-w%dk-%s", level.String(), conc, wind/1024, name)
-					o = append(o, testEncOpt{name: name, o: append(opts, options...)})
+					o = append(o, testEncOpt{name: name, level: level, o: append(opts, options...)})
 				}
 				addOpt("default")
 				if testing.Short() {
@@ -132,6 +153,10 @@ func TestEncoder_EncodeAllConcurrent(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer e.Close()
+			n := n
+			if opts.level == SpeedUltraCompression {
+				n = min(n, 8)
+			}
 			var wg sync.WaitGroup
 			wg.Add(n)
 			for i := 0; i < n; i++ {
@@ -186,6 +211,10 @@ func TestEncoder_EncodeAllEncodeXML(t *testing.T) {
 		t.Run(level.String(), func(t *testing.T) {
 			if isRaceTest && level >= SpeedBestCompression {
 				t.SkipNow()
+			}
+			in := in
+			if level == SpeedUltraCompression {
+				in = in[:min(len(in), 512<<10)]
 			}
 			e, err := NewWriter(nil, WithEncoderLevel(level))
 			if err != nil {
@@ -259,6 +288,322 @@ func TestEncoderLongOffsetSequence(t *testing.T) {
 	}
 }
 
+func appendRandom(dst []byte, rng *rand.Rand, n int) []byte {
+	dst = append(dst, make([]byte, n)...)
+	rng.Read(dst[len(dst)-n:])
+	return dst
+}
+
+// appendPeriodic appends n bytes that repeat the previous period bytes,
+// with about one random change per period.
+func appendPeriodic(dst []byte, rng *rand.Rand, n, period int) []byte {
+	for range n {
+		c := dst[len(dst)-period]
+		if rng.Intn(period) == 0 {
+			c = byte(rng.Intn(256))
+		}
+		dst = append(dst, c)
+	}
+	return dst
+}
+
+// TestEncoderUltraBlockReps checks that ultra starts blocks after the first
+// without repeat offsets: the decoder only learns the offsets of a block if
+// the block is written with its sequences, which is decided after parsing.
+func TestEncoderUltraBlockReps(t *testing.T) {
+	// The window limits blocks to 64 KiB.
+	const block = 64 << 10
+	rng := rand.New(rand.NewSource(1))
+	// Each random block ends in a periodic tail too short to pay for its
+	// sequences, so it is written as literals. The next block continues the tail.
+	var in []byte
+	for _, period := range []int{23, 71} {
+		in = appendRandom(in, rng, block-600)
+		in = appendPeriodic(in, rng, block+600, period)
+	}
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	newEnc := func(t *testing.T, opts ...EOption) *Encoder {
+		e, err := NewWriter(nil, append([]EOption{WithEncoderLevel(SpeedUltraCompression), WithWindowSize(block)}, opts...)...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return e
+	}
+	stream := func(t *testing.T, e *Encoder, in []byte) []byte {
+		var buf bytes.Buffer
+		e.Reset(&buf)
+		if _, err := e.Write(in); err != nil {
+			t.Fatal(err)
+		}
+		if err := e.Close(); err != nil {
+			t.Fatal(err)
+		}
+		return buf.Bytes()
+	}
+	check := func(t *testing.T, enc, want []byte) {
+		t.Helper()
+		got, err := dec.DecodeAll(enc, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Fatal("decoded does not match")
+		}
+	}
+	t.Run("sync", func(t *testing.T) {
+		check(t, stream(t, newEnc(t, WithEncoderConcurrency(1)), in), in)
+	})
+	t.Run("async", func(t *testing.T) {
+		check(t, stream(t, newEnc(t, WithEncoderConcurrency(2)), in), in)
+	})
+	t.Run("encodeall", func(t *testing.T) {
+		check(t, newEnc(t).EncodeAll(in, nil), in)
+	})
+	t.Run("jobs", func(t *testing.T) {
+		// Two jobs.
+		in := bytes.Repeat(in, 3)
+		check(t, stream(t, newEnc(t, WithEncoderConcurrency(2), WithConcurrentBlocks(true)), in), in)
+	})
+	t.Run("jobs-reuse", func(t *testing.T) {
+		// The empty job leaves a pooled encoder reset for a frame but unused.
+		// The next stream's second job gets it.
+		e := newEnc(t, WithEncoderConcurrency(2), WithConcurrentBlocks(true))
+		check(t, stream(t, e, nil), nil)
+		// The first job ends with periodic data, the second starts with a run.
+		in := appendRandom(nil, rng, e.o.jobSize()-block)
+		in = appendPeriodic(in, rng, block, 37)
+		in = append(in, 'x')
+		in = append(in, bytes.Repeat([]byte{'a'}, 300)...)
+		in = appendRandom(in, rng, 1000)
+		check(t, stream(t, e, in), in)
+	})
+}
+
+// setUltraBufferReset sets the position limit of e's ultra encoders.
+func setUltraBufferReset(e *Encoder, limit int32) {
+	e.init.Do(e.initialize)
+	for range cap(e.encoders) {
+		enc := <-e.encoders
+		enc.(*ultraEncoder).bufferReset = limit
+		e.encoders <- enc
+	}
+	e.state.encoder.(*ultraEncoder).bufferReset = limit
+}
+
+// TestEncoderUltraRebase lowers the position limit of ultra encoders, so they
+// clear their tables between frames and rebase them within frames.
+// Positions are only compared to each other, so the output must not change.
+func TestEncoderUltraRebase(t *testing.T) {
+	const window = 64 << 10
+	rng := rand.New(rand.NewSource(1))
+	// Random runs and copies of earlier data from up to a window back.
+	in := make([]byte, 0, 1<<20)
+	for len(in) < cap(in) {
+		n := min(16+rng.Intn(2048), cap(in)-len(in))
+		if len(in) < window || rng.Intn(4) == 0 {
+			in = appendRandom(in, rng, n)
+			continue
+		}
+		for i := len(in) - 1 - rng.Intn(window-1); n > 0; n-- {
+			in = append(in, in[i])
+			i++
+		}
+	}
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+
+	// check runs f with opts, then again for each position limit,
+	// and checks that the outputs are equal and decode to want.
+	check := func(t *testing.T, dec *Decoder, limits []int32, want []byte, f func(e *Encoder) []byte, opts ...EOption) {
+		t.Helper()
+		var ref []byte
+		for i, limit := range append([]int32{0}, limits...) {
+			e, err := NewWriter(io.Discard, append([]EOption{WithEncoderLevel(SpeedUltraCompression)}, opts...)...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if limit > 0 {
+				setUltraBufferReset(e, limit)
+			}
+			got := f(e)
+			if i == 0 {
+				ref = got
+				continue
+			}
+			if !bytes.Equal(got, ref) {
+				t.Fatalf("limit %d changed the output: %d bytes, want %d", limit, len(got), len(ref))
+			}
+			dgot, err := dec.DecodeAll(got, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(dgot, want) {
+				t.Fatal("decoded does not match")
+			}
+		}
+	}
+	// The first limit is reached within frames that start at unaligned
+	// positions. The second limit resets most frames and rebases almost every block.
+	limits := []int32{512 << 10, 256 << 10}
+	// sizes are frame or write sizes on both sides of the block size.
+	sizes := []int{1 << 10, 100 << 10, 700 << 10, 7, window, window + 1, 300 << 10}
+	split := func(b []byte, f func(i int, b []byte)) {
+		for i := 0; len(b) > 0; i++ {
+			n := min(sizes[i%len(sizes)], len(b))
+			f(i, b[:n])
+			b = b[n:]
+		}
+	}
+	t.Run("stream", func(t *testing.T) {
+		check(t, dec, limits, in, func(e *Encoder) []byte {
+			var buf bytes.Buffer
+			split(in, func(_ int, b []byte) {
+				e.Reset(&buf)
+				if _, err := e.Write(b); err != nil {
+					t.Fatal(err)
+				}
+				if err := e.Close(); err != nil {
+					t.Fatal(err)
+				}
+			})
+			return buf.Bytes()
+		}, WithWindowSize(window), WithEncoderConcurrency(1))
+	})
+	t.Run("encodeall", func(t *testing.T) {
+		check(t, dec, limits, in, func(e *Encoder) []byte {
+			var out []byte
+			split(in, func(_ int, b []byte) { out = e.EncodeAll(b, out) })
+			return out
+		}, WithWindowSize(window), WithEncoderConcurrency(1))
+	})
+	t.Run("dict", func(t *testing.T) {
+		// Each frame is a prefix of src, which starts with copies from the dictionary.
+		dict, src := in[:window], in[window:]
+		dec, err := NewReader(nil, WithDecoderDictRaw(1, dict))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer dec.Close()
+		var want []byte
+		split(src, func(_ int, b []byte) { want = append(want, src[:len(b)]...) })
+		check(t, dec, limits, want, func(e *Encoder) []byte {
+			var out []byte
+			split(src, func(_ int, b []byte) { out = e.EncodeAll(src[:len(b)], out) })
+			return out
+		}, WithWindowSize(window), WithEncoderConcurrency(1), WithEncoderDictRaw(1, dict))
+	})
+	t.Run("jobs", func(t *testing.T) {
+		check(t, dec, limits, in, func(e *Encoder) []byte {
+			var buf bytes.Buffer
+			e.Reset(&buf)
+			split(in, func(i int, b []byte) {
+				if _, err := e.Write(b); err != nil {
+					t.Fatal(err)
+				}
+				if i%3 == 2 {
+					if err := e.Flush(); err != nil {
+						t.Fatal(err)
+					}
+				}
+			})
+			if err := e.Close(); err != nil {
+				t.Fatal(err)
+			}
+			return buf.Bytes()
+		}, WithWindowSize(window), WithEncoderConcurrency(2), WithConcurrentBlocks(true))
+	})
+	t.Run("window", func(t *testing.T) {
+		// The window spans both frames, so a rebase in the second frame
+		// keeps all of it. The limit is reached in the first copy of the
+		// second frame, so the second copy matches data from before the rebase.
+		frames := [][]byte{in[:512<<10], bytes.Repeat(appendRandom(nil, rng, 256<<10), 2)}
+		var spy *ultraRebaseSpy
+		var size int
+		check(t, dec, []int32{1 << 20}, bytes.Join(frames, nil), func(e *Encoder) []byte {
+			e.init.Do(e.initialize)
+			spy = &ultraRebaseSpy{ultraEncoder: (<-e.encoders).(*ultraEncoder)}
+			e.encoders <- spy
+			out := e.EncodeAll(frames[0], nil)
+			spy.rebased = false
+			n := len(out)
+			out = e.EncodeAll(frames[1], out)
+			size = len(out) - n
+			return out
+		}, WithWindowSize(1<<28), WithLowerEncoderMem(true), WithEncoderConcurrency(1))
+		if !spy.rebased {
+			t.Fatal("no rebase within the second frame")
+		}
+		if size > len(frames[1])*9/16 {
+			t.Fatalf("second frame is %d bytes; was the repeat found?", size)
+		}
+	})
+}
+
+// ultraRebaseSpy records whether a block after the first lowered positions.
+type ultraRebaseSpy struct {
+	*ultraEncoder
+	rebased bool
+}
+
+func (s *ultraRebaseSpy) Encode(blk *blockEnc, src []byte) {
+	first := len(s.hist) == 0
+	pos := s.cur + int32(len(s.hist))
+	s.ultraEncoder.Encode(blk, src)
+	// After the first block, positions grow by len(src) unless rebased.
+	s.rebased = s.rebased || !first && s.cur+int32(len(s.hist)) < pos+int32(len(src))
+}
+
+// TestEncoderUltraFresh encodes the first frame of new ultra encoders from data
+// whose lookups mostly find empty table entries, which read as position 0.
+func TestEncoderUltraFresh(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	in := appendRandom(nil, rng, 300<<10)
+	for i := 64; i < len(in)-16; i += 1 + rng.Intn(1024) {
+		copy(in[i:i+3+rng.Intn(12)], in[rng.Intn(i-16):])
+	}
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	for _, size := range []int{9, 1000, 16<<10 + 1, 200 << 10, len(in)} {
+		for _, stream := range []bool{false, true} {
+			t.Run(fmt.Sprint(size, "-stream-", stream), func(t *testing.T) {
+				in := in[:size]
+				var buf bytes.Buffer
+				e, err := NewWriter(&buf, WithEncoderLevel(SpeedUltraCompression), WithEncoderConcurrency(1))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if stream {
+					if _, err := e.Write(in); err != nil {
+						t.Fatal(err)
+					}
+					if err := e.Close(); err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					buf.Write(e.EncodeAll(in, nil))
+				}
+				got, err := dec.DecodeAll(buf.Bytes(), nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(got, in) {
+					t.Fatal("decoded does not match")
+				}
+			})
+		}
+	}
+}
+
 func TestEncoderRegression(t *testing.T) {
 	defer timeout(4 * time.Minute)()
 	data, err := os.ReadFile("testdata/comp-crashers.zip")
@@ -272,7 +617,14 @@ func TestEncoderRegression(t *testing.T) {
 		return
 	}
 	defer dec.Close()
+	ultraRuns := 0
 	for _, opts := range getEncOpts(2) {
+		// One configuration covers the slow ultra level.
+		if opts.level == SpeedUltraCompression {
+			if ultraRuns++; ultraRuns > 1 {
+				continue
+			}
+		}
 		t.Run(opts.name, func(t *testing.T) {
 			zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 			if err != nil {
@@ -304,6 +656,9 @@ func TestEncoderRegression(t *testing.T) {
 					in, err := io.ReadAll(r)
 					if err != nil {
 						t.Error(err)
+					}
+					if opts.level == SpeedUltraCompression && len(in) > 256<<10 {
+						t.SkipNow()
 					}
 					encoded := enc.EncodeAll(in, nil)
 					if len(encoded) > enc.MaxEncodedSize(len(in)) {
@@ -438,6 +793,10 @@ func TestEncoder_EncodeRLE(t *testing.T) {
 						t.Fatal("Decoded does not match")
 					}
 					t.Log("Encoded content matched")
+					// Ultra parses these blocks, so its output must be turned back into RLE blocks.
+					if level == SpeedUltraCompression && len(dst) > 18+4*len(in)/e.o.blockSize {
+						t.Errorf("got %d bytes, want RLE blocks", len(dst))
+					}
 				})
 			}
 		})
@@ -687,6 +1046,18 @@ func testEncoderRoundtrip(t *testing.T, file string, wantCRC []byte) {
 				input = dec
 				defer dec.Close()
 			}
+			wantCRC := wantCRC
+			if opt.level == SpeedUltraCompression {
+				// The slow ultra level only encodes a prefix.
+				b, err := io.ReadAll(io.LimitReader(input, 512<<10))
+				if err != nil {
+					t.Fatal(err)
+				}
+				input = bytes.NewReader(b)
+				d := xxhash.New()
+				d.Write(b)
+				wantCRC = d.Sum(nil)
+			}
 
 			pr, pw := io.Pipe()
 			dec2, err := NewReader(pr)
@@ -896,6 +1267,10 @@ func TestSilesiaRoundTrip(t *testing.T) {
 	defer dec.Close()
 	for level := SpeedFastest; level < speedLast; level++ {
 		t.Run(level.String(), func(t *testing.T) {
+			in := in
+			if level == SpeedUltraCompression {
+				in = in[:min(len(in), 32<<20)]
+			}
 			var buf bytes.Buffer
 			w, err := NewWriter(&buf, WithEncoderLevel(level))
 			if err != nil {
