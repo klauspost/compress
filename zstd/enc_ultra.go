@@ -54,6 +54,7 @@ type ultraMatch struct {
 type ultraWork struct {
 	opt     [ultraOptNum + 3]ultraOptimal
 	matches [4 + 1<<ultraMaxSearch]ultraMatch
+	fp      [2]ultraFingerprint
 }
 
 // ultraStats holds symbol frequencies and the derived prices, in 1/256 bits.
@@ -95,7 +96,7 @@ type ultraEncoder struct {
 	sizeHint       int64
 	firstReps      [3]uint32
 	ready          bool // tables sized for this frame
-	postSplit      bool
+	split          bool // split blocks, and find changes in the input
 	firstBlock     bool
 	historyPending bool
 
@@ -189,8 +190,8 @@ func (e *ultraEncoder) initFrame() {
 		}
 		wlog = min(wlog, srcLog)
 	}
-	// The reference splits blocks after parsing from a window of 128 KiB.
-	e.postSplit = wlog >= 17
+	// The reference splits blocks from a window of 128 KiB.
+	e.split = wlog >= 17
 	hashLog := min(r.hashLog, wlog+1)
 	chainLog := min(r.chainLog, wlog+1)
 	if e.lowMem {
@@ -361,7 +362,7 @@ func (e *ultraEncoder) Encode(blk *blockEnc, src []byte) {
 	}
 	s := e.addBlock(src)
 	blk.size = len(src)
-	blk.highRatio, blk.ultra, blk.postSplit = true, true, e.postSplit
+	blk.highRatio, blk.ultra, blk.postSplit = true, true, e.split
 	first := e.firstBlock
 	e.firstBlock = false
 	nl, ns := len(blk.literals), len(blk.sequences)
@@ -389,17 +390,19 @@ func (e *ultraEncoder) Encode(blk *blockEnc, src []byte) {
 	}
 
 	end := int32(len(e.hist))
+	// Like the reference's block splitter, look for changes in full blocks after the first.
+	split := e.split && len(src) >= maxCompressedBlockSize && e.st.llSum != 0
 	if first && e.st.llSum == 0 && start == e.lowLimit && len(src) > 8 {
 		// Seed the statistics with a first pass, then parse again
 		// at new positions so nothing from the first pass matches.
-		e.parse(blk, s, end, rep)
+		e.parse(blk, s, end, rep, false)
 		blk.literals, blk.sequences = blk.literals[:nl], blk.sequences[:ns]
 		e.cur += int32(len(src))
 		e.lowLimit = e.cur + s
 		e.nextToUpdate = e.lowLimit
 	}
 	startReps := rep
-	rep, anchor := e.parse(blk, s, end, rep)
+	rep, anchor := e.parse(blk, s, end, rep, split)
 	if anchor < end {
 		blk.literals = append(blk.literals, e.hist[anchor:]...)
 		blk.extraLits = int(end - anchor)
@@ -426,6 +429,52 @@ func ultraRLE(blk *blockEnc, src []byte, nl, ns int) {
 	blk.extraLits = 0
 }
 
+// ultraChunk is the step of the search for changes in the input.
+const ultraChunk = 8 << 10
+
+// ultraFingerprint counts the hashes of the 2-byte strings of some input.
+type ultraFingerprint struct {
+	events [1 << 10]uint32
+	n      uint32
+}
+
+func (f *ultraFingerprint) record(src []byte) {
+	clear(f.events[:])
+	for i := range len(src) - 1 {
+		f.events[uint32(le.Load16(src, i))*0x9e3779b9>>22]++
+	}
+	f.n = uint32(len(src) - 1)
+}
+
+// splitAt returns the start of the first chunk of src whose counts of 2-byte
+// strings differ from those of the chunks before it, or len(src)
+// (ZSTD_splitBlock_byChunks at the btultra2 level).
+func (w *ultraWork) splitAt(src []byte) int {
+	if len(src) < 2*ultraChunk {
+		return len(src)
+	}
+	past, cur := &w.fp[0], &w.fp[1]
+	past.record(src[:ultraChunk])
+	penalty := uint64(3)
+	for pos := ultraChunk; pos+ultraChunk <= len(src); pos += ultraChunk {
+		cur.record(src[pos : pos+ultraChunk])
+		var dev uint64
+		for i, v := range past.events {
+			a, b := uint64(v)*uint64(cur.n), uint64(cur.events[i])*uint64(past.n)
+			dev += max(a, b) - min(a, b)
+		}
+		if dev >= uint64(past.n)*uint64(cur.n)*(14+penalty)/16 {
+			return pos
+		}
+		for i, v := range cur.events {
+			past.events[i] += v
+		}
+		past.n += cur.n
+		penalty -= min(penalty, 1)
+	}
+	return len(src)
+}
+
 // EncodeNoHist will encode a block with no history and no following blocks.
 func (e *ultraEncoder) EncodeNoHist(blk *blockEnc, src []byte) {
 	e.ensureHist(len(src))
@@ -435,7 +484,8 @@ func (e *ultraEncoder) EncodeNoHist(blk *blockEnc, src []byte) {
 // parse runs the optimal parser (ZSTD_compressBlock_opt_generic at optLevel 2)
 // over hist[istart:iend] and appends the sequences to blk.
 // It returns the repeat offsets and the start of the trailing literals.
-func (e *ultraEncoder) parse(blk *blockEnc, istart, iend int32, rep [3]uint32) ([3]uint32, int32) {
+// With split, it rescales the statistics where the input changes.
+func (e *ultraEncoder) parse(blk *blockEnc, istart, iend int32, rep [3]uint32, split bool) ([3]uint32, int32) {
 	src := e.hist
 	st := &e.st
 	opt := &e.ws.opt
@@ -447,10 +497,21 @@ func (e *ultraEncoder) parse(blk *blockEnc, istart, iend int32, rep [3]uint32) (
 	var last ultraOptimal
 
 	st.rescale(src[istart:iend], e.dict)
+	// The reference starts a block where the input changes (ZSTD_splitBlock),
+	// which rescales the statistics. Here only the statistics are rescaled:
+	// the extra blocks cost more than they gain after the post-block splitter.
+	next := iend
+	if split {
+		next = istart + int32(e.ws.splitAt(src[istart:iend]))
+	}
 	if e.cur+ip == e.lowLimit {
 		ip++
 	}
 	for ip < ilimit {
+		if ip >= next {
+			st.rescale(src[ip:iend], e.dict)
+			next += int32(e.ws.splitAt(src[next:iend]))
+		}
 		var cur, lastPos int32
 		litlen := ip - anchor
 		n := e.getAllMatches(&nextToUpdate3, ip, iend, &rep, litlen == 0)

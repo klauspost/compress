@@ -621,6 +621,78 @@ func TestEncoderUltraFresh(t *testing.T) {
 	}
 }
 
+// TestEncoderUltraChanges encodes input whose statistics change within a block.
+// Where ultra rescales its statistics must depend only on the encoder, since an
+// async stream parses a block before the block before it is written.
+func TestEncoderUltraChanges(t *testing.T) {
+	f, err := os.Open("testdata/xml.zst")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	dec, err := NewReader(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	in, err := io.ReadAll(dec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The last block is not full.
+	in = in[:768<<10-1000]
+	if (&ultraWork{}).splitAt(in[4<<17:5<<17]) == 1<<17 {
+		t.Fatal("the fifth block does not change")
+	}
+	var want []byte
+	for _, path := range []string{"encodeall", "sync", "async"} {
+		t.Run(path, func(t *testing.T) {
+			conc := 2
+			if path == "sync" {
+				conc = 1
+			}
+			e, err := NewWriter(nil, WithEncoderLevel(SpeedUltraCompression), WithEncoderConcurrency(conc))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var comp []byte
+			if path == "encodeall" {
+				comp = e.EncodeAll(in, nil)
+			} else {
+				var buf bytes.Buffer
+				e.ResetContentSize(&buf, int64(len(in)))
+				if _, err := e.Write(in); err != nil {
+					t.Fatal(err)
+				}
+				if err := e.Close(); err != nil {
+					t.Fatal(err)
+				}
+				comp = buf.Bytes()
+			}
+			if len(comp) > e.MaxEncodedSize(len(in)) {
+				t.Fatalf("%d bytes, more than MaxEncodedSize", len(comp))
+			}
+			got, err := dec.DecodeAll(comp, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, in) {
+				t.Fatal("decoded does not match")
+			}
+			// Only the frame headers differ.
+			var h Header
+			if err := h.Decode(comp); err != nil {
+				t.Fatal(err)
+			}
+			if want == nil {
+				want = comp[h.HeaderSize:]
+			} else if !bytes.Equal(comp[h.HeaderSize:], want) {
+				t.Fatal("blocks differ from the first path")
+			}
+		})
+	}
+}
+
 func TestEncoderRegression(t *testing.T) {
 	defer timeout(4 * time.Minute)()
 	data, err := os.ReadFile("testdata/comp-crashers.zip")
