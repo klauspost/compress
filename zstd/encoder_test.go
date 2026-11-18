@@ -13,11 +13,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/klauspost/compress/huff0"
 	"github.com/klauspost/compress/internal/silesiatest"
 	"github.com/klauspost/compress/zip"
 	"github.com/klauspost/compress/zstd/internal/xxhash"
@@ -314,12 +316,19 @@ func TestEncoderUltraBlockReps(t *testing.T) {
 	// The window limits blocks to 64 KiB.
 	const block = 64 << 10
 	rng := rand.New(rand.NewSource(1))
-	// Each random block ends in a periodic tail too short to pay for its
-	// sequences, so it is written as literals. The next block continues the tail.
+	// Each random block ends in a short match too costly to code, so the
+	// block is written raw. The next block repeats its offset after one literal.
 	var in []byte
-	for _, period := range []int{23, 71} {
-		in = appendRandom(in, rng, block-600)
-		in = appendPeriodic(in, rng, block+600, period)
+	for range 2 {
+		in = appendRandom(in, rng, block-20)
+		for range 8 {
+			in = append(in, in[len(in)-1000])
+		}
+		in = appendRandom(in, rng, 13)
+		for range 200 {
+			in = append(in, in[len(in)-1000])
+		}
+		in = appendRandom(in, rng, block-201)
 	}
 	dec, err := NewReader(nil)
 	if err != nil {
@@ -354,19 +363,27 @@ func TestEncoderUltraBlockReps(t *testing.T) {
 			t.Fatal("decoded does not match")
 		}
 	}
+	// The rule is only tested when a block is written raw.
+	checkRaw := func(t *testing.T, enc, want []byte) {
+		t.Helper()
+		check(t, enc, want)
+		if lt := literalTypes(t, enc); !slices.Contains(lt, -1) {
+			t.Fatalf("no raw block: literal types %v", lt)
+		}
+	}
 	t.Run("sync", func(t *testing.T) {
-		check(t, stream(t, newEnc(t, WithEncoderConcurrency(1)), in), in)
+		checkRaw(t, stream(t, newEnc(t, WithEncoderConcurrency(1)), in), in)
 	})
 	t.Run("async", func(t *testing.T) {
-		check(t, stream(t, newEnc(t, WithEncoderConcurrency(2)), in), in)
+		checkRaw(t, stream(t, newEnc(t, WithEncoderConcurrency(2)), in), in)
 	})
 	t.Run("encodeall", func(t *testing.T) {
-		check(t, newEnc(t).EncodeAll(in, nil), in)
+		checkRaw(t, newEnc(t).EncodeAll(in, nil), in)
 	})
 	t.Run("jobs", func(t *testing.T) {
 		// Two jobs.
 		in := bytes.Repeat(in, 3)
-		check(t, stream(t, newEnc(t, WithEncoderConcurrency(2), WithConcurrentBlocks(true)), in), in)
+		checkRaw(t, stream(t, newEnc(t, WithEncoderConcurrency(2), WithConcurrentBlocks(true)), in), in)
 	})
 	t.Run("jobs-reuse", func(t *testing.T) {
 		// The empty job leaves a pooled encoder reset for a frame but unused.
@@ -841,6 +858,258 @@ func TestEncoderFlushRawLiterals(t *testing.T) {
 			t.Errorf("stream %d: %v", i, err)
 		} else if !bytes.Equal(got, in) {
 			t.Errorf("stream %d: decoded does not match", i)
+		}
+	}
+}
+
+// TestEncoderLiteralsBound encodes blocks of literals that huff0 codes to 5
+// bytes less, which a 5-byte literals header and the sequence count make 1 byte
+// larger than raw: more than a full block may hold.
+func TestEncoderLiteralsBound(t *testing.T) {
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	for _, level := range []EncoderLevel{SpeedBestCompression, SpeedUltraCompression} {
+		// A full block, and a full block of a 32 KiB window.
+		for _, n := range []int{maxCompressedBlockSize, 32 << 10} {
+			in := huffTunedLits(t, n, level == SpeedUltraCompression)
+			for _, stream := range []bool{false, true} {
+				t.Run(fmt.Sprint(level, "-", n, "-", stream), func(t *testing.T) {
+					opts := []EOption{WithEncoderLevel(level), WithEncoderConcurrency(2)}
+					if n < maxCompressedBlockSize {
+						opts = append(opts, WithWindowSize(n))
+					}
+					var buf bytes.Buffer
+					enc, err := NewWriter(&buf, opts...)
+					if err != nil {
+						t.Fatal(err)
+					}
+					out := enc.EncodeAll(in, nil)
+					if stream {
+						enc.Write(in)
+						if err := enc.Close(); err != nil {
+							t.Fatal(err)
+						}
+						out = buf.Bytes()
+					}
+					var h Header
+					if err := h.Decode(out); err != nil || !h.FirstBlock.OK {
+						t.Fatal("no first block:", err)
+					}
+					// Compressed, the block is 1 byte too large, so it must be raw.
+					// It also fails if the tuning no longer matches the encoder.
+					if h.FirstBlock.Compressed {
+						t.Errorf("block of %d bytes is compressed to %d bytes, want raw", n, h.FirstBlock.CompressedSize)
+					}
+					got, err := dec.DecodeAll(out, nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Equal(got, in) {
+						t.Fatal("decoded does not match")
+					}
+				})
+			}
+		}
+	}
+}
+
+// huffTunedLits returns n bytes that huff0 codes to n-5 bytes in 4 streams.
+// No 3 bytes repeat, so no encoder finds a match.
+func huffTunedLits(t *testing.T, n int, optimalDepth bool) []byte {
+	t.Helper()
+	rng := rand.New(rand.NewSource(int64(n)))
+	b := make([]byte, n)
+	seen := make([]bool, 1<<24)
+	key := func(i int) int { return int(b[i])<<16 | int(b[i+1])<<8 | int(b[i+2]) }
+	// Symbols 0 and 1 are rare, so more of them make the output smaller.
+	sym := func(rare bool) byte {
+		if rare {
+			return byte(rng.Intn(2))
+		}
+		return byte(2 + rng.Intn(254))
+	}
+	for i := range b {
+		for b[i] = sym(rng.Intn(100) < 4); i >= 2 && seen[key(i-2)]; {
+			b[i] = sym(rng.Intn(100) < 4)
+		}
+		if i >= 2 {
+			seen[key(i-2)] = true
+		}
+	}
+	// mark marks the 3 bytes from each of b[lo:hi+1], or fails if one repeats.
+	mark := func(lo, hi int) bool {
+		for j := lo; j <= hi; j++ {
+			if seen[key(j)] {
+				for k := lo; k < j; k++ {
+					seen[key(k)] = false
+				}
+				return false
+			}
+			seen[key(j)] = true
+		}
+		return true
+	}
+	for range 1000 {
+		diff := 64
+		out, _, err := huff0.Compress4X(b, &huff0.Scratch{OptimalDepth: optimalDepth})
+		if err == nil {
+			diff = len(out) - (n - 5)
+		}
+		if diff == 0 {
+			return b
+		}
+		for range 4 * max(diff, -diff) {
+			i := rng.Intn(n)
+			for (b[i] < 2) == (diff > 0) {
+				i = (i + 1) % n
+			}
+			lo, hi := max(i-2, 0), min(i, n-3)
+			for j := lo; j <= hi; j++ {
+				seen[key(j)] = false
+			}
+			old := b[i]
+			if b[i] = sym(diff > 0); !mark(lo, hi) {
+				b[i] = old
+				mark(lo, hi)
+			}
+		}
+	}
+	t.Fatalf("found no %d bytes that huff0 codes to %d bytes", n, n-5)
+	return nil
+}
+
+// TestEncoderKeepLiteralTable checks that best and ultra keep the decoder's
+// literal table after a block whose new table is not written. In "lits", the
+// second block builds a table but stores its literals raw, and the third
+// reuses the table of the first. In "block", ultra builds a table for the
+// first block but stores the block raw, so the second needs a table of its own.
+func TestEncoderKeepLiteralTable(t *testing.T) {
+	rng := rand.New(rand.NewSource(3))
+	in := make([]byte, 0, 3<<10)
+	for range 1 << 10 {
+		in = append(in, 'a'+byte(rng.Intn(16)))
+	}
+	// No 3 bytes repeat in the second block, so it is all literals.
+	seen := map[[3]byte]bool{}
+	for i := 2; i < len(in); i++ {
+		seen[[3]byte(in[i-2:i+1])] = true
+	}
+	for len(in) < 2<<10 {
+		c := byte(rng.Intn(256))
+		if rng.Float64() < 0.53 {
+			c = byte(rng.Intn(64))
+		}
+		if g := [3]byte{in[len(in)-2], in[len(in)-1], c}; !seen[g] {
+			seen[g] = true
+			in = append(in, c)
+		}
+	}
+	for range 1 << 10 {
+		in = append(in, 'a'+byte(rng.Intn(16)))
+	}
+	// Best and ultra differ in OptimalDepth.
+	for _, depth := range []bool{false, true} {
+		if out, _, err := huff0.Compress4X(in[1<<10:2<<10], &huff0.Scratch{OptimalDepth: depth}); err != nil || len(out) >= 1<<10 {
+			t.Fatal("the second block no longer gets a new literal table:", len(out), err)
+		}
+	}
+	// Ultra codes the first block with a new literal table and a short match,
+	// which together are larger than the raw block.
+	rng = rand.New(rand.NewSource(0))
+	var block []byte
+	for len(block) < 1000 {
+		c := byte(rng.Intn(256))
+		if rng.Intn(100) < 22 {
+			c = 'a' + byte(rng.Intn(16))
+		}
+		block = append(block, c)
+	}
+	for range 7 {
+		block = append(block, block[len(block)-500])
+	}
+	block = appendRandom(block, rng, 1<<10-len(block))
+	for range 1 << 10 {
+		block = append(block, block[rng.Intn(1<<10)])
+	}
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	for _, tc := range []struct {
+		name   string
+		in     []byte
+		levels []EncoderLevel
+		want   []int
+	}{
+		{"lits", in, []EncoderLevel{SpeedBestCompression, SpeedUltraCompression}, []int{int(literalsBlockCompressed), -1, int(literalsBlockTreeless)}},
+		{"block", block, []EncoderLevel{SpeedUltraCompression}, []int{-1, int(literalsBlockCompressed)}},
+	} {
+		for _, level := range tc.levels {
+			// 0 is EncodeAll.
+			for _, conc := range []int{0, 1, 2} {
+				t.Run(fmt.Sprint(tc.name, "-", level, "-", conc), func(t *testing.T) {
+					var buf bytes.Buffer
+					enc, err := NewWriter(&buf, WithEncoderLevel(level), WithWindowSize(1<<10), WithEncoderConcurrency(max(conc, 1)))
+					if err != nil {
+						t.Fatal(err)
+					}
+					out := enc.EncodeAll(tc.in, nil)
+					if conc > 0 {
+						enc.Write(tc.in)
+						if err := enc.Close(); err != nil {
+							t.Fatal(err)
+						}
+						out = buf.Bytes()
+					}
+					got, err := dec.DecodeAll(out, nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Equal(got, tc.in) {
+						t.Fatal("decoded does not match")
+					}
+					if lt := literalTypes(t, out); len(lt) < len(tc.want) || !slices.Equal(lt[:len(tc.want)], tc.want) {
+						t.Fatalf("literal types %v, want %v first", lt, tc.want)
+					}
+				})
+			}
+		}
+	}
+}
+
+// literalTypes returns the literals section type of each block in the frame
+// comp, or -1 for a block without one.
+func literalTypes(t *testing.T, comp []byte) []int {
+	t.Helper()
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	block := <-dec.decoders
+	defer func() { dec.decoders <- block }()
+	frame := block.localFrame
+	frame.bBuf = comp
+	frame.history.reset()
+	if err := frame.reset(&frame.bBuf); err != nil {
+		t.Fatal(err)
+	}
+	var types []int
+	for {
+		if err := block.reset(frame.rawInput, frame.WindowSize); err != nil {
+			t.Fatal(err)
+		}
+		lt := -1
+		if block.Type == blockTypeCompressed {
+			lt = int(block.data[0] & 3)
+		}
+		types = append(types, lt)
+		if block.Last {
+			return types
 		}
 	}
 }

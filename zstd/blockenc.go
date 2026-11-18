@@ -30,6 +30,9 @@ type blockEnc struct {
 
 	last   bool
 	lowMem bool
+	// highRatio spends more time on the entropy stage, and ultra more still.
+	// The encoder sets them on every block, so they are not swapped.
+	highRatio, ultra bool
 }
 
 // init should be used once the block has been created.
@@ -338,9 +341,14 @@ func (b *blockEnc) encodeLits(lits []byte, raw bool) error {
 	var bh blockHeader
 	bh.setLast(b.last)
 	bh.setSize(uint32(len(lits)))
+	b.setLitOptions()
 
 	// Don't compress extremely small blocks
-	if len(lits) < 8 || (len(lits) < 32 && b.dictLitEnc == nil) || raw {
+	tiny := len(lits) < 8 || (len(lits) < 32 && b.dictLitEnc == nil)
+	if b.highRatio {
+		tiny = len(lits) < b.minHuffLits()
+	}
+	if tiny || raw {
 		if debugEncoder {
 			println("Adding RAW block, length", len(lits), "last:", b.last)
 		}
@@ -363,15 +371,16 @@ func (b *blockEnc) encodeLits(lits []byte, raw bool) error {
 	if len(lits) >= 1024 {
 		// Use 4 Streams.
 		out, reUsed, err = huff0.Compress4X(lits, b.litEnc)
-	} else if len(lits) > 16 {
+	} else if len(lits) >= b.minHuffLits() {
 		// Use 1 stream
 		single = true
 		out, reUsed, err = huff0.Compress1X(lits, b.litEnc)
 	} else {
 		err = huff0.ErrIncompressible
 	}
-	if err == nil && len(out)+5 > len(lits) {
-		// If we are close, we may still be worse or equal to raw.
+	if err == nil && len(out)+5 >= len(lits) {
+		// If we are close, we may still be worse than raw: the header takes
+		// up to 5 bytes, and the block 1 more for the sequence count.
 		var lh literalsHeader
 		lh.setSizes(len(out), len(lits), single)
 		if len(out)+lh.size() >= len(lits) {
@@ -432,11 +441,33 @@ func (b *blockEnc) encodeLits(lits []byte, raw bool) error {
 
 // dropUnwrittenTable stops later blocks reusing the literal table after
 // compressed literals are written raw: a new table became the previous one,
-// but the decoder never gets it.
+// but the decoder never gets it. With highRatio, the table the decoder has
+// is restored instead.
 func (b *blockEnc) dropUnwrittenTable(reUsed bool) {
-	if !reUsed {
+	switch {
+	case reUsed:
+	case b.highRatio:
+		b.litEnc.RestorePrevTable()
+	default:
 		b.litEnc.Reuse = huff0.ReusePolicyNone
 	}
+}
+
+// setLitOptions sets up the literal encoder for the block.
+func (b *blockEnc) setLitOptions() {
+	if b.highRatio {
+		// The exact size checks keep raw literals when they are smaller.
+		b.litEnc.WantLogLess = 0
+		b.litEnc.OptimalDepth = b.ultra
+	}
+}
+
+// minHuffLits returns the fewest literals worth Huffman coding.
+func (b *blockEnc) minHuffLits() int {
+	if b.highRatio {
+		return 6
+	}
+	return 17
 }
 
 // encodeRLE will encode an RLE block.
@@ -504,7 +535,9 @@ func (b *blockEnc) encode(org []byte, raw, rawAllLits bool) error {
 
 	// We want some difference to at least account for the headers.
 	saved := b.size - len(b.literals) - (b.size >> 6)
-	if saved < 16 {
+	// With highRatio, the sequences are dropped below only if that is smaller.
+	fewMatches := saved < 16
+	if fewMatches && !b.highRatio {
 		if org == nil {
 			return errIncompressible
 		}
@@ -525,6 +558,7 @@ func (b *blockEnc) encode(org []byte, raw, rawAllLits bool) error {
 		reUsed, single bool
 		err            error
 	)
+	b.setLitOptions()
 	if b.dictLitEnc != nil {
 		b.litEnc.TransferCTable(b.dictLitEnc)
 		b.litEnc.Reuse = huff0.ReusePolicyAllow
@@ -533,13 +567,14 @@ func (b *blockEnc) encode(org []byte, raw, rawAllLits bool) error {
 	if len(b.literals) >= 1024 && !raw {
 		// Use 4 Streams.
 		out, reUsed, err = huff0.Compress4X(b.literals, b.litEnc)
-	} else if len(b.literals) > 16 && !raw {
+	} else if len(b.literals) >= b.minHuffLits() && !raw {
 		// Use 1 stream
 		single = true
 		out, reUsed, err = huff0.Compress1X(b.literals, b.litEnc)
 	} else {
 		err = huff0.ErrIncompressible
 	}
+	newTable := err == nil && !reUsed
 
 	if err == nil && len(out)+5 > len(b.literals) {
 		// If we are close, we may still be worse or equal to raw.
@@ -606,6 +641,11 @@ func (b *blockEnc) encode(org []byte, raw, rawAllLits bool) error {
 		}
 		return err
 	}
+	// Size of the literals section if Huffman coded.
+	huffSection := 0
+	if err == nil {
+		huffSection = len(b.output) - bhOffset - 3
+	}
 	// Sequence compression
 
 	// Write the number of sequences
@@ -623,15 +663,16 @@ func (b *blockEnc) encode(org []byte, raw, rawAllLits bool) error {
 		println("Encoding", len(b.sequences), "sequences")
 	}
 	b.genCodes()
-	llEnc, llMode, err := b.chooseComp(b.coders.llEnc, b.coders.llPrev, &fsePredefEnc[tableLiteralLengths], b.sequences[0].llCode)
+	// The format allows offset tables up to log 8, the others up to 9.
+	llEnc, llMode, err := b.chooseComp(b.coders.llEnc, b.coders.llPrev, &fsePredefEnc[tableLiteralLengths], b.sequences[0].llCode, 9)
 	if err != nil {
 		return err
 	}
-	ofEnc, ofMode, err := b.chooseComp(b.coders.ofEnc, b.coders.ofPrev, &fsePredefEnc[tableOffsets], b.sequences[0].ofCode)
+	ofEnc, ofMode, err := b.chooseComp(b.coders.ofEnc, b.coders.ofPrev, &fsePredefEnc[tableOffsets], b.sequences[0].ofCode, 8)
 	if err != nil {
 		return err
 	}
-	mlEnc, mlMode, err := b.chooseComp(b.coders.mlEnc, b.coders.mlPrev, &fsePredefEnc[tableMatchLengths], b.sequences[0].mlCode)
+	mlEnc, mlMode, err := b.chooseComp(b.coders.mlEnc, b.coders.mlPrev, &fsePredefEnc[tableMatchLengths], b.sequences[0].mlCode, 9)
 	if err != nil {
 		return err
 	}
@@ -752,12 +793,29 @@ func (b *blockEnc) encode(org []byte, raw, rawAllLits bool) error {
 	wr.close()
 	b.output = wr.out
 
+	// Literals only would code the matched bytes at about the literals' rate.
+	// The product fits 32 bits, since there are few matched bytes.
+	if fewMatches && huffSection > 0 && org != nil && !rawAllLits &&
+		4+huffSection+huffSection*(len(org)-len(b.literals))/len(b.literals) < len(b.output)-bhOffset {
+		b.output = b.output[:bhOffset]
+		b.popOffsets()
+		if newTable {
+			b.litEnc.RestorePrevTable()
+		}
+		return b.encodeLits(org, rawAllLits)
+	}
+
 	// Maybe even add a bigger margin.
 	if len(b.output)-3-bhOffset >= b.size {
 		// Discard and encode as raw block.
 		b.output = b.encodeRawTo(b.output[:bhOffset], org)
 		b.popOffsets()
-		b.litEnc.Reuse = huff0.ReusePolicyNone
+		switch {
+		case !b.highRatio:
+			b.litEnc.Reuse = huff0.ReusePolicyNone
+		case newTable:
+			b.litEnc.RestorePrevTable()
+		}
 		return nil
 	}
 
@@ -774,7 +832,8 @@ func (b *blockEnc) encode(org []byte, raw, rawAllLits bool) error {
 // chooseComp chooses the cheapest of RLE and the new, predefined and previous table.
 // rle is the code to use if all sequences have the same one.
 // The new table is only built if it could be the cheapest.
-func (b *blockEnc) chooseComp(cur, prev, preDef *fseEncoder, rle uint8) (*fseEncoder, seqCompMode, error) {
+// With b.highRatio, the new table can have table log up to maxLog.
+func (b *blockEnc) chooseComp(cur, prev, preDef *fseEncoder, rle, maxLog uint8) (*fseEncoder, seqCompMode, error) {
 	nSeq := len(b.sequences)
 	if cur.maxCount == nSeq {
 		cur.setRLE(rle)
@@ -805,7 +864,10 @@ func (b *blockEnc) chooseComp(cur, prev, preDef *fseEncoder, rle uint8) (*fseEnc
 		}
 		return prev, compModeRepeat, nil
 	}
-	if err := cur.normalizeCount(nSeq); err != nil {
+	if !b.highRatio {
+		maxLog = maxEncTableLog
+	}
+	if err := cur.normalizeCountMax(nSeq, maxLog); err != nil {
 		return nil, 0, err
 	}
 	nSize := cur.approxSize(hist) + cur.maxHeaderSize()
@@ -816,11 +878,15 @@ func (b *blockEnc) chooseComp(cur, prev, preDef *fseEncoder, rle uint8) (*fseEnc
 	// The previous table may come from a dictionary and fit poorly,
 	// so it is compared against the exact header size, without penalty.
 	nSizePrev := nSize
-	if prevSize != math.MaxUint32 {
+	if prevSize != math.MaxUint32 || b.highRatio {
 		// Written to spare capacity; the real header goes there later.
 		if hdr, err := cur.writeCount(b.output[len(b.output):]); err == nil {
 			nSizePrev = cur.approxSize(hist) + uint32(len(hdr))*8
 		}
+	}
+	if b.highRatio {
+		// No penalty against the predefined table either.
+		nSize = nSizePrev
 	}
 	// Each stream ends with a flush of tableLog bits.
 	nSize += uint32(cur.actualTableLog)

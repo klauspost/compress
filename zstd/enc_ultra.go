@@ -358,6 +358,7 @@ func (e *ultraEncoder) Encode(blk *blockEnc, src []byte) {
 	}
 	s := e.addBlock(src)
 	blk.size = len(src)
+	blk.highRatio, blk.ultra = true, true
 	first := e.firstBlock
 	e.firstBlock = false
 	nl, ns := len(blk.literals), len(blk.sequences)
