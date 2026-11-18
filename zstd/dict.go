@@ -280,6 +280,11 @@ func BuildDict(o BuildDictOptions) ([]byte, error) {
 			continue
 		}
 		seqs += len(block.sequences)
+		// A sample is one block, so a literal run can exceed what LL code
+		// maxLLCode covers. The block is only used for statistics.
+		for i := range block.sequences {
+			block.sequences[i].litLen = min(block.sequences[i].litLen, 1<<17-1)
+		}
 		block.genCodes()
 		addHist(&ll, block.coders.llEnc.Histogram())
 		addHist(&ml, block.coders.mlEnc.Histogram())

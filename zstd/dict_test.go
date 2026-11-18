@@ -7,6 +7,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -246,6 +247,63 @@ func TestBuildDictLargeSamples(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// BuildDict encodes each sample as one block, so a sample can have a literal
+// run longer than the largest literal length code covers.
+func TestBuildDictLongLiterals(t *testing.T) {
+	text, err := os.ReadFile("../testdata/Mark.Twain-Tom.Sawyer.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The start of the de Bruijn sequence B(256, 3): no 3 bytes repeat, so no
+	// level finds a match until the run of one byte, however far it skips.
+	var run []byte
+	for w := []int{-1}; len(run) < 140<<10; {
+		w[len(w)-1]++
+		if 3%len(w) == 0 {
+			for _, v := range w {
+				run = append(run, byte(v))
+			}
+		}
+		for m := len(w); len(w) < 3; {
+			w = append(w, w[len(w)-m])
+		}
+		for w[len(w)-1] == 255 {
+			w = w[:len(w)-1]
+		}
+	}
+	hist := text[100<<10 : 140<<10]
+	var samples [][]byte
+	run = append(run, bytes.Repeat([]byte{'a'}, 16<<10)...)
+	for i := range 2 {
+		samples = append(samples, append(slices.Clip(run), text[i<<10:(i+40)<<10]...))
+	}
+	for level := SpeedFastest; level < speedLast; level++ {
+		t.Run(level.String(), func(t *testing.T) {
+			dict, err := BuildDict(BuildDictOptions{ID: 1, Contents: samples, History: hist, Offsets: [3]int{1, 4, 8}, Level: level})
+			if err != nil {
+				t.Fatal(err)
+			}
+			enc, err := NewWriter(nil, WithEncoderDict(dict), WithEncoderLevel(level), WithEncoderConcurrency(1))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer enc.Close()
+			dec, err := NewReader(nil, WithDecoderDicts(dict), WithDecoderConcurrency(1))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer dec.Close()
+			got, err := dec.DecodeAll(enc.EncodeAll(samples[0], nil), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, samples[0]) {
+				t.Fatal("round trip mismatch")
+			}
+		})
 	}
 }
 
