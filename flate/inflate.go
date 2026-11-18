@@ -620,7 +620,6 @@ func (f *decompressor) dataBlock() {
 	f.buf[2] = uint8(f.b >> 16)
 	f.buf[3] = uint8(f.b >> 24)
 
-	f.roffset += int64(offBytes)
 	f.nb, f.b = 0, 0
 
 	// Length then ones-complement of length.

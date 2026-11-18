@@ -416,8 +416,14 @@ func TestInflateCheckpointResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.Write(raw); err != nil {
-		t.Fatal(err)
+	// Flushing adds stored blocks, which checkpoints after them must account for.
+	for i := 0; i < len(raw); i += 64 << 10 {
+		if _, err := w.Write(raw[i:min(i+64<<10, len(raw))]); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.Flush(); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
