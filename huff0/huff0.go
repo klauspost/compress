@@ -136,6 +136,21 @@ func (s *Scratch) TransferCTable(src *Scratch) {
 	s.prevTableLog = src.prevTableLog
 }
 
+// TableBits fills dst with the code length in bits of each symbol in the
+// table a reuse policy would use: the last new table, or the one from
+// ReadTable or TransferCTable. Symbols the table cannot code get 0.
+// It returns false, with dst all 0, if there is no such table.
+func (s *Scratch) TableBits(dst *[256]uint8) bool {
+	*dst = [256]uint8{}
+	if s.Reuse == ReusePolicyNone {
+		return false
+	}
+	for i, v := range s.prevTable {
+		dst[i] = v.nBits
+	}
+	return len(s.prevTable) > 0
+}
+
 func (s *Scratch) prepare(in []byte) (*Scratch, error) {
 	if len(in) > BlockSizeMax {
 		return nil, ErrTooBig

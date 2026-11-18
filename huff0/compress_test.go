@@ -679,6 +679,73 @@ func TestCompressOptimalDepth(t *testing.T) {
 	t.Log(smaller, "smaller outputs")
 }
 
+func TestTableBits(t *testing.T) {
+	// A 1X stream is the codes plus an end mark, padded to a byte.
+	checkBits := func(t *testing.T, in, data []byte, bits *[256]uint8) {
+		t.Helper()
+		total := 0
+		for _, c := range in {
+			if bits[c] == 0 {
+				t.Fatalf("symbol %d has no code", c)
+			}
+			total += int(bits[c])
+		}
+		if want := (total + 8) / 8; len(data) != want {
+			t.Fatalf("data is %d bytes, the code lengths give %d", len(data), want)
+		}
+	}
+	var bits, got [256]uint8
+	tested := 0
+	for _, test := range testfiles {
+		t.Run(test.name, func(t *testing.T) {
+			in, err := test.fn()
+			if err != nil {
+				t.Fatal(err)
+			}
+			in = in[:min(len(in), BlockSizeMax)]
+			var s Scratch
+			if s.TableBits(&bits) {
+				t.Fatal("table without compressing")
+			}
+			if _, _, err := Compress1X(in, &s); err != nil {
+				return
+			}
+			if !s.TableBits(&bits) {
+				t.Fatal("no table after compressing")
+			}
+			checkBits(t, in, s.OutData, &bits)
+
+			// The same table from ReadTable and TransferCTable, used to
+			// compress other data.
+			dec, _, err := ReadTable(s.OutTable, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var tr Scratch
+			tr.TransferCTable(&s)
+			for _, s2 := range []*Scratch{dec, &tr} {
+				if !s2.TableBits(&got) || got != bits {
+					t.Fatalf("got %v, want %v", got, bits)
+				}
+				s2.Reuse = ReusePolicyMust
+				in2 := in[len(in)/3:]
+				if _, _, err := Compress1X(in2, s2); err != nil {
+					t.Fatal(err)
+				}
+				checkBits(t, in2, s2.OutData, &bits)
+			}
+			s.Reuse = ReusePolicyNone
+			if s.TableBits(&got) || got != [256]uint8{} {
+				t.Fatal("table with ReusePolicyNone")
+			}
+			tested++
+		})
+	}
+	if tested < 5 {
+		t.Fatalf("only %d inputs tested", tested)
+	}
+}
+
 func TestMinTableSize(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	var s Scratch
