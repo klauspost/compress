@@ -79,6 +79,15 @@ func (s *fseEncoder) HistogramFinished(maxSymbol uint8, maxCount int) {
 	s.clearCount = maxCount != 0
 }
 
+// copyFrom makes s a copy of o that shares no memory with it.
+func (s *fseEncoder) copyFrom(o *fseEncoder) {
+	ct := s.ct
+	*s = *o
+	s.ct.tableSymbol = append(ct.tableSymbol[:0], o.ct.tableSymbol...)
+	s.ct.stateTable = append(ct.stateTable[:0], o.ct.stateTable...)
+	s.ct.symbolTT = append(ct.symbolTT[:0], o.ct.symbolTT...)
+}
+
 // allocCtable will allocate tables needed for compression.
 // If existing tables a re big enough, they are simply re-used.
 func (s *fseEncoder) allocCtable() {

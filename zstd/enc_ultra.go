@@ -95,6 +95,7 @@ type ultraEncoder struct {
 	sizeHint       int64
 	firstReps      [3]uint32
 	ready          bool // tables sized for this frame
+	postSplit      bool
 	firstBlock     bool
 	historyPending bool
 
@@ -188,6 +189,8 @@ func (e *ultraEncoder) initFrame() {
 		}
 		wlog = min(wlog, srcLog)
 	}
+	// The reference splits blocks after parsing from a window of 128 KiB.
+	e.postSplit = wlog >= 17
 	hashLog := min(r.hashLog, wlog+1)
 	chainLog := min(r.chainLog, wlog+1)
 	if e.lowMem {
@@ -358,10 +361,17 @@ func (e *ultraEncoder) Encode(blk *blockEnc, src []byte) {
 	}
 	s := e.addBlock(src)
 	blk.size = len(src)
-	blk.highRatio, blk.ultra = true, true
+	blk.highRatio, blk.ultra, blk.postSplit = true, true, e.postSplit
 	first := e.firstBlock
 	e.firstBlock = false
 	nl, ns := len(blk.literals), len(blk.sequences)
+	// Other blocks start with unknown repeat offsets, since the decoder's
+	// depend on how earlier blocks were finally emitted.
+	var rep [3]uint32
+	if first {
+		rep = e.firstReps
+	}
+	blk.startReps = rep
 
 	// The reference does not compress blocks this small.
 	if len(src) < 7 {
@@ -378,12 +388,6 @@ func (e *ultraEncoder) Encode(blk *blockEnc, src []byte) {
 		e.nextToUpdate = start - min(192, start-e.nextToUpdate-384)
 	}
 
-	// Other blocks start with unknown repeat offsets, since the decoder's
-	// depend on how earlier blocks were finally emitted.
-	var rep [3]uint32
-	if first {
-		rep = e.firstReps
-	}
 	end := int32(len(e.hist))
 	if first && e.st.llSum == 0 && start == e.lowLimit && len(src) > 8 {
 		// Seed the statistics with a first pass, then parse again

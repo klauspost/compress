@@ -31,8 +31,24 @@ type blockEnc struct {
 	last   bool
 	lowMem bool
 	// highRatio spends more time on the entropy stage, and ultra more still.
+	// postSplit splits blocks after parsing (see splitParts).
 	// The encoder sets them on every block, so they are not swapped.
-	highRatio, ultra bool
+	highRatio, ultra, postSplit bool
+
+	// startReps are the repeat offsets the encoder assumed at the start of
+	// the block, 0 for unknown. With several parts, the decoder may not get
+	// all of them, so some repeat codes are written as offsets.
+	startReps [3]uint32
+	split     *blockSplit
+	// testCuts, if not nil, are the sequences that tests cut a split block
+	// before, in place of the estimates.
+	testCuts []int
+}
+
+// blockPart is a part of a block that is written as a block of its own.
+// The literals not used by its sequences come last.
+type blockPart struct {
+	lits, seqs, size int // literals, sequences and source bytes
 }
 
 // init should be used once the block has been created.
@@ -520,6 +536,57 @@ func fuzzFseEncoder(data []byte) int {
 // encode will encode the block and append the output in b.output.
 // Previous offset codes must be pushed if more blocks are expected.
 func (b *blockEnc) encode(org []byte, raw, rawAllLits bool) error {
+	if !b.postSplit {
+		return b.encodeBlock(org, raw, rawAllLits)
+	}
+	if b.split == nil {
+		b.split = newBlockSplit()
+	}
+	sp := b.split
+	parts := b.splitParts(raw)
+	if len(parts) == 1 {
+		return b.encodeBlock(org, raw, rawAllLits)
+	}
+
+	// Write the parts in turn, so each continues the entropy tables of the
+	// one before (ZSTD_compressBlock_splitBlock_internal).
+	sp.save(b)
+	lits, seqs, size, last := b.literals, b.sequences, b.size, b.last
+	pushed, parsed := b.prevRecentOffsets, b.recentOffsets
+	start := len(b.output)
+	// The parse continues cRep over all parts. dRep is what the decoder has.
+	cRep, dRep := b.startReps, b.startReps
+	var l, s, o int
+	for i, q := range parts {
+		b.literals, b.sequences, b.size = lits[l:l+q.lits], seqs[s:s+q.seqs], q.size
+		b.last = last && i == len(parts)-1
+		// encodeBlock pops the offsets if it drops the sequences.
+		b.prevRecentOffsets = dRep
+		cRep, b.recentOffsets = sp.resolveReps(b.sequences, s, cRep, dRep)
+		hdr := len(b.output)
+		if err := b.encodeBlock(org[o:o+q.size], raw, rawAllLits); err != nil {
+			b.literals, b.sequences = lits, seqs
+			return err
+		}
+		if blockType(b.output[hdr]>>1&3) == blockTypeCompressed {
+			dRep = b.recentOffsets
+		}
+		l, s, o = l+q.lits, s+q.seqs, o+q.size
+	}
+	b.literals, b.sequences, b.size, b.last = lits, seqs, size, last
+	b.prevRecentOffsets, b.recentOffsets = pushed, dRep
+	if len(b.output)-start <= len(org)+3 {
+		return nil
+	}
+	// Keep the bound of one block: write it whole.
+	b.output = b.output[:start]
+	sp.restore(b)
+	b.recentOffsets = parsed
+	return b.encodeBlock(org, raw, rawAllLits)
+}
+
+// encodeBlock encodes the block as one block.
+func (b *blockEnc) encodeBlock(org []byte, raw, rawAllLits bool) error {
 	if len(b.sequences) == 0 {
 		return b.encodeLits(b.literals, rawAllLits)
 	}
@@ -664,15 +731,15 @@ func (b *blockEnc) encode(org []byte, raw, rawAllLits bool) error {
 	}
 	b.genCodes()
 	// The format allows offset tables up to log 8, the others up to 9.
-	llEnc, llMode, err := b.chooseComp(b.coders.llEnc, b.coders.llPrev, &fsePredefEnc[tableLiteralLengths], b.sequences[0].llCode, 9)
+	llEnc, llMode, _, err := b.chooseComp(len(b.sequences), b.output[len(b.output):], b.coders.llEnc, b.coders.llPrev, &fsePredefEnc[tableLiteralLengths], b.sequences[0].llCode, 9)
 	if err != nil {
 		return err
 	}
-	ofEnc, ofMode, err := b.chooseComp(b.coders.ofEnc, b.coders.ofPrev, &fsePredefEnc[tableOffsets], b.sequences[0].ofCode, 8)
+	ofEnc, ofMode, _, err := b.chooseComp(len(b.sequences), b.output[len(b.output):], b.coders.ofEnc, b.coders.ofPrev, &fsePredefEnc[tableOffsets], b.sequences[0].ofCode, 8)
 	if err != nil {
 		return err
 	}
-	mlEnc, mlMode, err := b.chooseComp(b.coders.mlEnc, b.coders.mlPrev, &fsePredefEnc[tableMatchLengths], b.sequences[0].mlCode, 9)
+	mlEnc, mlMode, _, err := b.chooseComp(len(b.sequences), b.output[len(b.output):], b.coders.mlEnc, b.coders.mlPrev, &fsePredefEnc[tableMatchLengths], b.sequences[0].mlCode, 9)
 	if err != nil {
 		return err
 	}
@@ -829,18 +896,19 @@ func (b *blockEnc) encode(org []byte, raw, rawAllLits bool) error {
 	return nil
 }
 
-// chooseComp chooses the cheapest of RLE and the new, predefined and previous table.
+// chooseComp chooses the cheapest of RLE and the new, predefined and previous table
+// for the histogram of nSeq codes in cur, and returns its estimated size in bits.
 // rle is the code to use if all sequences have the same one.
-// The new table is only built if it could be the cheapest.
+// The new table is only built if it could be the cheapest. Its header is written
+// to the spare capacity of hdr.
 // With b.highRatio, the new table can have table log up to maxLog.
-func (b *blockEnc) chooseComp(cur, prev, preDef *fseEncoder, rle, maxLog uint8) (*fseEncoder, seqCompMode, error) {
-	nSeq := len(b.sequences)
+func (b *blockEnc) chooseComp(nSeq int, hdr []byte, cur, prev, preDef *fseEncoder, rle, maxLog uint8) (*fseEncoder, seqCompMode, uint32, error) {
 	if cur.maxCount == nSeq {
 		cur.setRLE(rle)
 		if debugEncoder {
 			println("Using RLE, code:", rle)
 		}
-		return cur, compModeRLE, nil
+		return cur, compModeRLE, 8, nil
 	}
 	cur.useRLE = false
 	hist := cur.count[:cur.symbolLen]
@@ -857,18 +925,18 @@ func (b *blockEnc) chooseComp(cur, prev, preDef *fseEncoder, rle, maxLog uint8) 
 			if debugEncoder {
 				println("Using predefined", predefSize>>3, "without a new table")
 			}
-			return preDef, compModePredefined, nil
+			return preDef, compModePredefined, predefSize, nil
 		}
 		if debugEncoder {
 			println("Using previous", prevSize>>3, "without a new table")
 		}
-		return prev, compModeRepeat, nil
+		return prev, compModeRepeat, prevSize, nil
 	}
 	if !b.highRatio {
 		maxLog = maxEncTableLog
 	}
 	if err := cur.normalizeCountMax(nSeq, maxLog); err != nil {
-		return nil, 0, err
+		return nil, 0, 0, err
 	}
 	nSize := cur.approxSize(hist) + cur.maxHeaderSize()
 
@@ -879,8 +947,7 @@ func (b *blockEnc) chooseComp(cur, prev, preDef *fseEncoder, rle, maxLog uint8) 
 	// so it is compared against the exact header size, without penalty.
 	nSizePrev := nSize
 	if prevSize != math.MaxUint32 || b.highRatio {
-		// Written to spare capacity; the real header goes there later.
-		if hdr, err := cur.writeCount(b.output[len(b.output):]); err == nil {
+		if hdr, err := cur.writeCount(hdr); err == nil {
 			nSizePrev = cur.approxSize(hist) + uint32(len(hdr))*8
 		}
 	}
@@ -896,18 +963,18 @@ func (b *blockEnc) chooseComp(cur, prev, preDef *fseEncoder, rle, maxLog uint8) 
 		if debugEncoder {
 			println("Using predefined", predefSize>>3, "<=", nSize>>3)
 		}
-		return preDef, compModePredefined, nil
+		return preDef, compModePredefined, predefSize, nil
 	case prevSize <= nSizePrev:
 		if debugEncoder {
 			println("Using previous", prevSize>>3, "<=", nSizePrev>>3)
 		}
-		return prev, compModeRepeat, nil
+		return prev, compModeRepeat, prevSize, nil
 	default:
 		if debugEncoder {
 			println("Using new, predef", predefSize>>3, ". previous:", prevSize>>3, ">", nSize>>3, "header max:", cur.maxHeaderSize()>>3, "bytes")
 			println("tl:", cur.actualTableLog, "symbolLen:", cur.symbolLen, "norm:", cur.norm[:cur.symbolLen], "hist", cur.count[:cur.symbolLen])
 		}
-		return cur, compModeFSE, nil
+		return cur, compModeFSE, nSizePrev, nil
 	}
 }
 
@@ -975,4 +1042,246 @@ func (b *blockEnc) genCodes() {
 	b.coders.mlEnc.HistogramFinished(mlMax, int(slices.Max(mlH[:mlMax+1])))
 	b.coders.ofEnc.HistogramFinished(ofMax, int(slices.Max(ofH[:ofMax+1])))
 	b.coders.llEnc.HistogramFinished(llMax, int(slices.Max(llH[:llMax+1])))
+}
+
+// The post block splitter (ZSTD_deriveBlockSplits) halves the sequences of a
+// block while the halves are estimated smaller. The estimates use the tables
+// from the start of the part being split.
+const (
+	splitMinSeqs = 300 // MIN_SEQUENCES_BLOCK_SPLITTING
+	splitMaxCuts = 196 // ZSTD_MAX_NB_BLOCK_SPLITS
+)
+
+// blockSplit is scratch space for writing a block as several.
+type blockSplit struct {
+	parts []blockPart
+	cuts  []int // sequences to split before
+	litAt []int // literal index of each sequence, and the end
+
+	// Estimates.
+	lit        huff0.Scratch
+	litReuse   bool
+	ll, of, ml fseEncoder
+	hdr        []byte
+
+	// The state before the block, to write it as one block after all.
+	litPrev                huff0.Scratch
+	reuse                  huff0.ReusePolicy
+	dictLit                *huff0.Scratch
+	llPrev, ofPrev, mlPrev fseEncoder
+	offsets                [][2]uint32 // sequence index and repeat code of rewritten offsets
+}
+
+func newBlockSplit() *blockSplit {
+	sp := &blockSplit{hdr: make([]byte, 0, 256)}
+	// Estimates write no output, so it needs no room.
+	sp.lit.Out = make([]byte, 0, 1)
+	return sp
+}
+
+// save keeps the entropy tables from before the block.
+func (sp *blockSplit) save(b *blockEnc) {
+	sp.litPrev.TransferCTable(b.litEnc)
+	sp.reuse, sp.dictLit = b.litEnc.Reuse, b.dictLitEnc
+	sp.llPrev.copyFrom(b.coders.llPrev)
+	sp.ofPrev.copyFrom(b.coders.ofPrev)
+	sp.mlPrev.copyFrom(b.coders.mlPrev)
+	sp.offsets = sp.offsets[:0]
+}
+
+// restore undoes the parts written since save.
+func (sp *blockSplit) restore(b *blockEnc) {
+	b.litEnc.TransferCTable(&sp.litPrev)
+	b.litEnc.Reuse, b.dictLitEnc = sp.reuse, sp.dictLit
+	b.coders.llPrev.copyFrom(&sp.llPrev)
+	b.coders.ofPrev.copyFrom(&sp.ofPrev)
+	b.coders.mlPrev.copyFrom(&sp.mlPrev)
+	for _, o := range sp.offsets {
+		b.sequences[o[0]].offset = o[1]
+	}
+}
+
+// resolveReps rewrites the repeat codes of seqs that the decoder, with repeat
+// offsets dRep, would resolve differently from the parse, which had cRep
+// (ZSTD_seqStore_resolveOffCodes). first is the index of seqs[0] in the block.
+// It returns both repeat offsets after seqs.
+func (sp *blockSplit) resolveReps(seqs []seq, first int, cRep, dRep [3]uint32) ([3]uint32, [3]uint32) {
+	for i := range seqs {
+		s := &seqs[i]
+		off, ll0 := s.offset, s.litLen == 0
+		if off <= 3 {
+			if c := repOffset(cRep, off, ll0); c != repOffset(dRep, off, ll0) {
+				sp.offsets = append(sp.offsets, [2]uint32{uint32(first + i), off})
+				s.offset = c + 3
+			}
+		}
+		cRep, dRep = ultraNewRep(cRep, off, ll0), ultraNewRep(dRep, s.offset, ll0)
+	}
+	return cRep, dRep
+}
+
+// repOffset returns the offset that repeat code offBase refers to with repeat offsets r.
+func repOffset(r [3]uint32, offBase uint32, ll0 bool) uint32 {
+	if ll0 {
+		offBase++
+	}
+	if offBase == 4 {
+		return r[0] - 1
+	}
+	return r[offBase-1]
+}
+
+// splitParts returns the parts the block is written as. It is cut before the
+// sequences where the halves are estimated smaller, or at b.testCuts.
+// The last part also takes the literals after the last sequence.
+func (b *blockEnc) splitParts(raw bool) []blockPart {
+	sp := b.split
+	seqs := b.sequences
+	p := blockPart{lits: len(b.literals), seqs: len(seqs), size: b.size}
+	sp.parts = append(sp.parts[:0], p)
+	if p.seqs < splitMinSeqs && b.testCuts == nil {
+		return sp.parts
+	}
+	sp.litAt = sp.litAt[:0]
+	l := 0
+	for i := range seqs {
+		q := &seqs[i]
+		sp.litAt = append(sp.litAt, l)
+		l += int(q.litLen)
+		q.llCode, q.mlCode, q.ofCode = llCode(q.litLen), mlCode(q.matchLen), ofCode(q.offset)
+	}
+	sp.litAt = append(sp.litAt, p.lits)
+	cuts := b.testCuts
+	if cuts == nil {
+		src := b.dictLitEnc
+		sp.litReuse = src != nil || b.litEnc.Reuse != huff0.ReusePolicyNone
+		if src == nil {
+			src = b.litEnc
+		}
+		if sp.litReuse {
+			sp.lit.TransferCTable(src)
+		}
+		sp.lit.OptimalDepth = b.ultra
+		sp.cuts = sp.cuts[:0]
+		b.splitRange(seqs, 0, len(seqs), b.estPart(seqs, 0, len(seqs), raw), raw)
+		cuts = sp.cuts
+	}
+	if len(cuts) == 0 {
+		return sp.parts
+	}
+	sp.parts = sp.parts[:0]
+	a, lits, size := 0, 0, 0
+	for _, c := range cuts {
+		q := blockPart{lits: sp.litAt[c] - sp.litAt[a], seqs: c - a}
+		q.size = q.lits + q.seqs*zstdMinMatch
+		for _, x := range seqs[a:c] {
+			q.size += int(x.matchLen)
+		}
+		sp.parts = append(sp.parts, q)
+		a, lits, size = c, lits+q.lits, size+q.size
+	}
+	sp.parts = append(sp.parts, blockPart{lits: p.lits - lits, seqs: p.seqs - a, size: p.size - size})
+	return sp.parts
+}
+
+// splitRange adds cuts that split seqs[a:e], estimated at est bytes, where
+// the halves are estimated smaller (ZSTD_deriveBlockSplitsHelper).
+func (b *blockEnc) splitRange(seqs []seq, a, e, est int, raw bool) {
+	sp := b.split
+	if e-a < splitMinSeqs || len(sp.cuts) >= splitMaxCuts {
+		return
+	}
+	m := (a + e) / 2
+	est1, est2 := b.estPart(seqs, a, m, raw), b.estPart(seqs, m, e, raw)
+	if est1+est2 >= est {
+		return
+	}
+	b.splitRange(seqs, a, m, est1, raw)
+	if len(sp.cuts) >= splitMaxCuts {
+		return
+	}
+	sp.cuts = append(sp.cuts, m)
+	b.splitRange(seqs, m, e, est2, raw)
+}
+
+// estPart estimates the size of seqs[a:e] written as a block (ZSTD_estimateBlockSize).
+func (b *blockEnc) estPart(seqs []seq, a, e int, raw bool) int {
+	sp := b.split
+	return 3 + b.estLits(b.literals[sp.litAt[a]:sp.litAt[e]], raw) + b.estSeqs(seqs[a:e])
+}
+
+// estLits estimates the size of the literals section for lits.
+func (b *blockEnc) estLits(lits []byte, raw bool) int {
+	n := len(lits)
+	rawSize := n + 1
+	if n >= 32 {
+		rawSize++
+	}
+	if n >= 4096 {
+		rawSize++
+	}
+	if raw || n < b.minHuffLits() {
+		return rawSize
+	}
+	sp := b.split
+	tableSz, dataSz, reuseSz, err := huff0.EstimateSizes(lits, &sp.lit)
+	switch err {
+	case nil:
+	case huff0.ErrUseRLE:
+		return rawSize - n + 1
+	default:
+		return rawSize
+	}
+	// The header, and the jump table of 4 streams.
+	hdr := 3
+	switch {
+	case n >= 16<<10:
+		hdr = 5 + 6
+	case n >= 1024:
+		hdr = 4 + 6
+	}
+	if sp.litReuse && reuseSz >= 0 && reuseSz < n && (reuseSz <= tableSz+dataSz || tableSz+12 >= n) {
+		return hdr + reuseSz
+	}
+	if tableSz+dataSz >= n {
+		return rawSize
+	}
+	return hdr + tableSz + dataSz
+}
+
+// estSeqs estimates the size of the sequences section for seqs, whose codes are set.
+func (b *blockEnc) estSeqs(seqs []seq) int {
+	sp := b.split
+	llH, ofH, mlH := sp.ll.Histogram(), sp.of.Histogram(), sp.ml.Histogram()
+	clear(llH[:])
+	clear(ofH[:])
+	clear(mlH[:])
+	var llMax, ofMax, mlMax uint8
+	var bits uint32
+	for _, s := range seqs {
+		llH[s.llCode]++
+		ofH[s.ofCode]++
+		mlH[s.mlCode]++
+		llMax, ofMax, mlMax = max(llMax, s.llCode), max(ofMax, s.ofCode), max(mlMax, s.mlCode)
+		bits += uint32(llBitsTable[s.llCode]) + uint32(mlBitsTable[s.mlCode]) + uint32(s.ofCode)
+	}
+	sp.ll.HistogramFinished(llMax, int(slices.Max(llH[:llMax+1])))
+	sp.of.HistogramFinished(ofMax, int(slices.Max(ofH[:ofMax+1])))
+	sp.ml.HistogramFinished(mlMax, int(slices.Max(mlH[:mlMax+1])))
+	n := len(seqs)
+	_, _, ll, err1 := b.chooseComp(n, sp.hdr, &sp.ll, b.coders.llPrev, &fsePredefEnc[tableLiteralLengths], seqs[0].llCode, 9)
+	_, _, of, err2 := b.chooseComp(n, sp.hdr, &sp.of, b.coders.ofPrev, &fsePredefEnc[tableOffsets], seqs[0].ofCode, 8)
+	_, _, ml, err3 := b.chooseComp(n, sp.hdr, &sp.ml, b.coders.mlPrev, &fsePredefEnc[tableMatchLengths], seqs[0].mlCode, 9)
+	if err1 != nil || err2 != nil || err3 != nil {
+		return n * 10
+	}
+	// Number of sequences, modes, and the end mark of the bitstream.
+	hdr := 2
+	if n >= 128 {
+		hdr++
+	}
+	if n >= 0x7f00 {
+		hdr++
+	}
+	return hdr + int(bits+ll+of+ml+8)/8
 }

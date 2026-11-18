@@ -250,13 +250,23 @@ func FuzzEncoding(f *testing.F) {
 			}
 		}
 
+		// Best and ultra split blocks, and cut them into parts of every sequences.
+		every := 0
+		if len(data) > 2 && data[2]&64 == 0 {
+			every = int(data[2] & 63)
+		}
+
 		for level := *fuzzStartF; level <= *fuzzEndF; level++ {
 			if EncoderLevel(level) == SpeedUltraCompression && len(data) > 64<<10 {
 				continue
 			}
+			split := EncoderLevel(level) >= SpeedBestCompression
 			enc := encs[level]
 			dst.Reset()
 			enc.Reset(&dst)
+			if split {
+				setSplitSpy(enc, every)
+			}
 			n, err := enc.Write(data)
 			if err != nil {
 				t.Fatal(err)
@@ -301,6 +311,9 @@ func FuzzEncoding(f *testing.F) {
 			enc = encsD[level]
 			dst.Reset()
 			enc.Reset(&dst)
+			if split {
+				setSplitSpy(enc, every)
+			}
 			if flushed {
 				// At most 256 pieces, so large inputs don't flush every byte.
 				for todo, piece := data, max(1+bufSize%2048, (len(data)+255)/256); len(todo) > 0; todo = todo[n:] {

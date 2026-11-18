@@ -1082,7 +1082,7 @@ func TestEncoderKeepLiteralTable(t *testing.T) {
 }
 
 // literalTypes returns the literals section type of each block in the frame
-// comp, or -1 for a block without one.
+// comp, or -1 for a raw block and -2 for an RLE block.
 func literalTypes(t *testing.T, comp []byte) []int {
 	t.Helper()
 	dec, err := NewReader(nil, WithDecoderConcurrency(1))
@@ -1104,12 +1104,346 @@ func literalTypes(t *testing.T, comp []byte) []int {
 			t.Fatal(err)
 		}
 		lt := -1
-		if block.Type == blockTypeCompressed {
+		switch block.Type {
+		case blockTypeCompressed:
 			lt = int(block.data[0] & 3)
+		case blockTypeRLE:
+			lt = -2
 		}
 		types = append(types, lt)
 		if block.Last {
 			return types
+		}
+	}
+}
+
+// splitTestBlock builds a block from sequences, and where to cut it.
+type splitTestBlock struct {
+	src, lits []byte
+	seqs      []seq
+	cuts      []int
+	rep       [3]uint32 // repeat offsets of the parse
+}
+
+// add appends lits and a match of n bytes at offset off, coded as offBase:
+// off+3 or a repeat code.
+func (b *splitTestBlock) add(t *testing.T, lits []byte, off uint32, n int, offBase uint32) {
+	t.Helper()
+	ll0 := len(lits) == 0
+	if offBase <= 3 && repOffset(b.rep, offBase, ll0) != off || offBase > 3 && offBase != off+3 {
+		t.Fatalf("offBase %d is not offset %d", offBase, off)
+	}
+	b.rep = ultraNewRep(b.rep, offBase, ll0)
+	b.addLits(lits)
+	for range n {
+		b.src = append(b.src, b.src[len(b.src)-int(off)])
+	}
+	b.seqs = append(b.seqs, seq{litLen: uint32(len(lits)), matchLen: uint32(n - zstdMinMatch), offset: offBase})
+}
+
+// addLits appends literals after the last sequence.
+func (b *splitTestBlock) addLits(lits []byte) {
+	b.src = append(b.src, lits...)
+	b.lits = append(b.lits, lits...)
+}
+
+// cut starts a part.
+func (b *splitTestBlock) cut() {
+	b.cuts = append(b.cuts, len(b.seqs))
+}
+
+// encode encodes the block with blk, cut into parts if split is set.
+func (b *splitTestBlock) encode(t *testing.T, blk *blockEnc, split, last bool) []byte {
+	t.Helper()
+	blk.reset(nil)
+	blk.literals = append(blk.literals, b.lits...)
+	blk.sequences = append(blk.sequences, b.seqs...)
+	blk.size, blk.last = len(b.src), last
+	blk.postSplit, blk.testCuts = split, nil
+	if split {
+		blk.testCuts = b.cuts
+	}
+	if err := blk.encode(b.src, false, true); err != nil {
+		t.Fatal(err)
+	}
+	return blk.output
+}
+
+// TestEncoderSplitParts writes a block as compressed, raw and RLE parts. The
+// decoder only gets the repeat offsets of compressed parts, so repeat codes
+// after the others are written as offsets.
+func TestEncoderSplitParts(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	text := func(n int) []byte {
+		b := make([]byte, n)
+		for i := range b {
+			b[i] = 'a' + byte(rng.Intn(16))
+		}
+		return b
+	}
+	b := splitTestBlock{rep: [3]uint32{1, 4, 8}}
+	b.add(t, text(400), 100, 20, 103)
+	for i := range 40 {
+		b.add(t, text(20), 100, 8+i%5, 1)
+	}
+	b.cut()
+	// Raw.
+	b.add(t, appendRandom(nil, rng, 3000), 1234, 4, 1237)
+	b.cut()
+	// The decoder has neither offset 1 from the block start nor 1234
+	// as these repeat codes.
+	b.add(t, text(10), 1, 6, 3)
+	b.add(t, nil, 1234, 6, 1)
+	for range 40 {
+		b.add(t, text(20), 1234, 8, 1)
+	}
+	b.cut()
+	// RLE.
+	b.add(t, []byte{'z'}, 1, 1000, 4)
+	b.cut()
+	// The decoder does not have offset 1.
+	b.add(t, text(10), 1, 5, 1)
+	b.add(t, text(20), 1234, 8, 2)
+	for range 40 {
+		b.add(t, text(20), 1234, 8, 1)
+	}
+	b.addLits(text(30))
+
+	var blk blockEnc
+	blk.init()
+	blk.initNewEncode()
+	blk.highRatio, blk.ultra = true, true
+	// Encoders leave the repeat offsets after the parse.
+	blk.startReps, blk.recentOffsets = [3]uint32{1, 4, 8}, b.rep
+	comp := frameHeader{ContentSize: uint64(len(b.src)), WindowSize: 1 << 20}.appendTo(nil)
+	comp = append(comp, b.encode(t, &blk, true, true)...)
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	got, err := dec.DecodeAll(comp, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, b.src) {
+		t.Fatal("decoded does not match")
+	}
+	if lt := literalTypes(t, comp); len(lt) != 5 || lt[0] < 0 || lt[1] != -1 || lt[2] < 0 || lt[3] != -2 || lt[4] < 0 {
+		t.Fatalf("literal types %v, want parts compressed, raw, compressed, RLE, compressed", lt)
+	}
+	if n := len(blk.split.offsets); n != 3 {
+		t.Fatalf("%d repeat codes written as offsets, want 3", n)
+	}
+}
+
+// TestEncoderSplitBound writes a block whose parts would be larger than a raw
+// block, so it is written whole. Neither it nor the next block may use the
+// tables of the parts.
+func TestEncoderSplitBound(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	text := func(n int, from byte) []byte {
+		b := make([]byte, n)
+		for i := range b {
+			b[i] = from + byte(rng.Intn(16))
+		}
+		return b
+	}
+	// Each block gets new tables.
+	tables := func(t *testing.T, rep [3]uint32, from byte, ml int) *splitTestBlock {
+		b := &splitTestBlock{rep: rep}
+		b.add(t, text(200, from), 50, ml, 53)
+		for i := range 60 {
+			b.add(t, text(5, from), 50, ml+i%3, 1)
+		}
+		return b
+	}
+	// newFrame: the block starts a frame, after one with other tables.
+	// rewrite: some parts write repeat codes as offsets.
+	for _, tc := range []struct{ newFrame, rewrite bool }{{false, false}, {true, false}, {false, true}} {
+		newFrame := tc.newFrame
+		t.Run(fmt.Sprintf("%+v", tc), func(t *testing.T) {
+			var blk blockEnc
+			blk.init()
+			blk.initNewEncode()
+			blk.highRatio, blk.ultra = true, true
+			blk.startReps = [3]uint32{1, 4, 8}
+			a := tables(t, blk.startReps, 'a', 12)
+			comp := append([]byte{}, a.encode(t, &blk, false, false)...)
+			// c is like the first part of b, or like a in a new frame.
+			c := tables(t, [3]uint32{}, 'Q', 4)
+			if newFrame {
+				blk.initNewEncode()
+				comp = comp[:0]
+				c, a.src = tables(t, [3]uint32{}, 'a', 12), nil
+			}
+			blk.startReps = [3]uint32{}
+			b := tables(t, blk.startReps, 'Q', 4)
+			// Raw parts, 3 bytes larger each. As one block, their sequences
+			// fit the tables of the first part, and their literals no table.
+			for i := range 400 {
+				b.cut()
+				b.add(t, appendRandom(nil, rng, 20), 50, 4+i%3, 1)
+				if tc.rewrite && i%10 == 0 {
+					// The next part writes its repeat code of 40 as an offset,
+					// since the decoder lacks 40. As one block, the repeat code
+					// after it would then not refer to 50.
+					b.add(t, appendRandom(nil, rng, 20), 40, 4, 43)
+					b.cut()
+					b.add(t, appendRandom(nil, rng, 20), 40, 4, 1)
+					b.add(t, nil, 50, 4, 1)
+				}
+			}
+			out := b.encode(t, &blk, true, false)
+			if len(out) > len(b.src)+3 {
+				t.Fatalf("%d bytes block is %d bytes", len(b.src), len(out))
+			}
+			comp = append(comp, out...)
+			comp = append(comp, c.encode(t, &blk, false, true)...)
+			src := slices.Concat(a.src, b.src, c.src)
+			comp = append(frameHeader{ContentSize: uint64(len(src)), WindowSize: 1 << 20}.appendTo(nil), comp...)
+			dec, err := NewReader(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer dec.Close()
+			got, err := dec.DecodeAll(comp, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, src) {
+				t.Fatal("decoded does not match")
+			}
+			// b is one block.
+			want := 3
+			if newFrame {
+				want = 2
+			}
+			if n := len(literalTypes(t, comp)); n != want {
+				t.Fatalf("%d blocks, want %d", n, want)
+			}
+		})
+	}
+}
+
+// splitSpy turns on the post-block splitter for every block of an encoder.
+// With every > 0, it cuts blocks into parts of that many sequences instead.
+type splitSpy struct {
+	encoder
+	every int
+}
+
+func (s *splitSpy) Encode(blk *blockEnc, src []byte) {
+	s.encoder.Encode(blk, src)
+	s.cut(blk)
+}
+
+func (s *splitSpy) EncodeNoHist(blk *blockEnc, src []byte) {
+	s.encoder.EncodeNoHist(blk, src)
+	s.cut(blk)
+}
+
+func (s *splitSpy) cut(blk *blockEnc) {
+	blk.postSplit, blk.testCuts = true, nil
+	if s.every <= 0 {
+		return
+	}
+	blk.testCuts = []int{}
+	for c := s.every; c < len(blk.sequences); c += s.every {
+		blk.testCuts = append(blk.testCuts, c)
+	}
+}
+
+// setSplitSpy makes the encoders of e split blocks, and cut them every
+// every sequences. Streams must call it after each Reset.
+func setSplitSpy(e *Encoder, every int) {
+	e.init.Do(e.initialize)
+	spy := func(enc encoder) encoder {
+		if s, ok := enc.(*splitSpy); ok {
+			s.every = every
+			return s
+		}
+		return &splitSpy{encoder: enc, every: every}
+	}
+	for range cap(e.encoders) {
+		e.encoders <- spy(<-e.encoders)
+	}
+	if e.state.encoder != nil {
+		e.state.encoder = spy(e.state.encoder)
+	}
+}
+
+// TestEncoderPostSplit splits blocks on every path. Best does not split by
+// itself. Its parse uses no repeat codes before the third sequence of a
+// block, so its parts can start with unknown repeat offsets.
+func TestEncoderPostSplit(t *testing.T) {
+	f, err := os.Open("testdata/xml.zst")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	dec, err := NewReader(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	in, err := io.ReadAll(dec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Two jobs with concurrent blocks.
+	in = in[:768<<10]
+	dict := readDicts(t, testCreateZipReader("testdata/dict-tests-small.zip", t))[0]
+	for _, level := range []EncoderLevel{SpeedBestCompression, SpeedUltraCompression} {
+		for _, path := range []string{"encodeall", "sync", "async", "jobs", "dict"} {
+			t.Run(fmt.Sprint(level, "-", path), func(t *testing.T) {
+				opts := []EOption{WithEncoderLevel(level), WithEncoderConcurrency(2)}
+				switch path {
+				case "sync":
+					opts = append(opts, WithEncoderConcurrency(1))
+				case "jobs":
+					opts = append(opts, WithConcurrentBlocks(true))
+				case "dict":
+					opts = append(opts, WithEncoderDict(dict))
+				}
+				e, err := NewWriter(nil, opts...)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var buf bytes.Buffer
+				e.Reset(&buf)
+				if level == SpeedBestCompression {
+					setSplitSpy(e, 0)
+				}
+				var comp []byte
+				if path == "encodeall" || path == "dict" {
+					comp = e.EncodeAll(in, nil)
+				} else {
+					if _, err := e.Write(in); err != nil {
+						t.Fatal(err)
+					}
+					if err := e.Close(); err != nil {
+						t.Fatal(err)
+					}
+					comp = buf.Bytes()
+				}
+				dec, err := NewReader(nil, WithDecoderDicts(dict))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer dec.Close()
+				got, err := dec.DecodeAll(comp, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(got, in) {
+					t.Fatal("decoded does not match")
+				}
+				// Six blocks and maybe an empty last one, unless split.
+				if n := len(literalTypes(t, comp)); n <= 7 {
+					t.Fatalf("%d blocks; no block was split", n)
+				}
+			})
 		}
 	}
 }

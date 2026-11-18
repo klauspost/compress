@@ -1278,8 +1278,7 @@ func TestEncoderChooseCompWithDictTables(t *testing.T) {
 				total += int(v)
 			}
 			cur.HistogramFinished(maxSym, maxCount)
-			blk.sequences = make([]seq, total)
-			_, got, err := blk.chooseComp(cur, prev, &fsePredefEnc[tc.table], maxSym, maxEncTableLog)
+			_, got, _, err := blk.chooseComp(total, nil, cur, prev, &fsePredefEnc[tc.table], maxSym, maxEncTableLog)
 			if err != nil {
 				t.Fatal(err)
 			}
