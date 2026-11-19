@@ -184,6 +184,7 @@ func (r *Reader) Reset(reader io.Reader) {
 	r.j = 0
 	r.blockStart = 0
 	r.readHeader = r.ignoreStreamID
+	r.snappyFrame = false
 }
 
 func (r *Reader) readFull(p []byte, allowEOF bool) (ok bool) {
@@ -822,6 +823,8 @@ func (r *Reader) Skip(n int64) error {
 					return r.err
 				}
 			}
+
+			r.snappyFrame = string(r.buf[:len(magicBody)]) == magicBodySnappy
 
 			continue
 		}

@@ -6,6 +6,7 @@ package s2
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"math/rand"
 	"testing"
@@ -202,6 +203,151 @@ func TestReaderSkipCRC(t *testing.T) {
 		}
 		if !bytes.Equal(got, data[4096+100:]) {
 			t.Errorf("chunk type %#x: Read with ReaderIgnoreCRC: wrong data", typ)
+		}
+	}
+}
+
+func TestReaderResetStreamType(t *testing.T) {
+	encode := func(data []byte, opts ...WriterOption) []byte {
+		t.Helper()
+		var buf bytes.Buffer
+		opts = append(opts, WriterConcurrency(1))
+		w := NewWriter(&buf, opts...)
+		if _, err := w.Write(data); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.Close(); err != nil {
+			t.Fatal(err)
+		}
+		return buf.Bytes()
+	}
+	previous := encode([]byte("previous Snappy stream"), WriterSnappyCompat())
+	data := bytes.Repeat([]byte("S2 data after reset "), 8192)
+	for _, uncompressed := range []bool{false, true} {
+		opts := []WriterOption{WriterBlockSize(256 << 10)}
+		name := "compressed"
+		wantType := byte(chunkTypeCompressedData)
+		if uncompressed {
+			opts = append(opts, WriterUncompressed())
+			name = "uncompressed"
+			wantType = chunkTypeUncompressedData
+		}
+		stream := encode(data, opts...)
+		headerLen := len(magicChunk)
+		if stream[headerLen] != wantType {
+			t.Fatalf("%s chunk type: got %x, want %x", name, stream[headerLen], wantType)
+		}
+		for _, concurrent := range []bool{false, true} {
+			operation := "Read"
+			if concurrent {
+				operation = "DecodeConcurrent"
+			}
+			t.Run(name+"/"+operation, func(t *testing.T) {
+				r := NewReader(bytes.NewReader(previous), ReaderIgnoreStreamIdentifier())
+				if _, err := io.ReadAll(r); err != nil {
+					t.Fatal(err)
+				}
+				// A fresh reader already accepts this identifier-free S2 stream.
+				fresh, err := io.ReadAll(NewReader(bytes.NewReader(stream[headerLen:]), ReaderIgnoreStreamIdentifier()))
+				if err != nil || !bytes.Equal(fresh, data) {
+					t.Fatalf("fresh reader: %v, decoded %d bytes", err, len(fresh))
+				}
+				r.Reset(bytes.NewReader(stream[headerLen:]))
+				var got []byte
+				if concurrent {
+					var dst bytes.Buffer
+					_, err = r.DecodeConcurrent(&dst, 2)
+					got = dst.Bytes()
+				} else {
+					got, err = io.ReadAll(r)
+				}
+				if err != nil {
+					t.Fatalf("decode S2 after resetting Snappy reader: %v", err)
+				}
+				if !bytes.Equal(got, data) {
+					t.Fatal("decoded data mismatch")
+				}
+				// A new Snappy identifier must still enforce the smaller block limit.
+				invalidSnappy := append([]byte(magicChunkSnappy), stream[headerLen:]...)
+				r.Reset(bytes.NewReader(invalidSnappy))
+				if concurrent {
+					_, err = r.DecodeConcurrent(io.Discard, 2)
+				} else {
+					_, err = io.ReadAll(r)
+				}
+				if err != ErrCorrupt {
+					t.Fatalf("oversized Snappy block after reset: got %v, want %v", err, ErrCorrupt)
+				}
+			})
+		}
+	}
+}
+
+func TestReaderSkipStreamType(t *testing.T) {
+	encode := func(data []byte, opts ...WriterOption) []byte {
+		t.Helper()
+		var buf bytes.Buffer
+		w := NewWriter(&buf, append(opts, WriterConcurrency(1))...)
+		if _, err := w.Write(data); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.Flush(); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write(bytes.Repeat([]byte("payload "), 16384)); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.Close(); err != nil {
+			t.Fatal(err)
+		}
+		return buf.Bytes()
+	}
+	for _, uncompressed := range []bool{false, true} {
+		opts := []WriterOption{WriterBlockSize(256 << 10)}
+		if uncompressed {
+			opts = append(opts, WriterUncompressed())
+		}
+		s2stream := encode([]byte("x"), opts...)
+		// Keep the same two blocks, changing only the advertised stream type.
+		snappystream := append([]byte(magicChunkSnappy), s2stream[len(magicChunk):]...)
+		for _, snappy := range []bool{false, true} {
+			stream, previous := s2stream, snappystream
+			if snappy {
+				stream, previous = snappystream, s2stream
+			}
+			for _, mode := range []string{"fresh", "reset", "concatenated"} {
+				t.Run(fmt.Sprintf("uncompressed=%v/snappy=%v/%s", uncompressed, snappy, mode), func(t *testing.T) {
+					r := NewReader(bytes.NewReader(stream))
+					var prefix [1]byte
+					switch mode {
+					case "reset":
+						r.Reset(bytes.NewReader(previous))
+						if _, err := io.ReadFull(r, prefix[:]); err != nil {
+							t.Fatal(err)
+						}
+						r.Reset(bytes.NewReader(stream))
+					case "concatenated":
+						// Only consume the first small block of the opposite stream type.
+						firstLen := int(previous[len(magicChunk)+1]) | int(previous[len(magicChunk)+2])<<8 | int(previous[len(magicChunk)+3])<<16
+						joined := append(append([]byte{}, previous[:len(magicChunk)+4+firstLen]...), stream...)
+						r.Reset(bytes.NewReader(joined))
+						if _, err := io.ReadFull(r, prefix[:]); err != nil {
+							t.Fatal(err)
+						}
+					}
+					if err := r.Skip(1); err != nil {
+						t.Fatal(err)
+					}
+					got, err := io.ReadAll(r)
+					if snappy {
+						if err != ErrCorrupt {
+							t.Fatalf("oversized identified Snappy block: got %v, want %v", err, ErrCorrupt)
+						}
+					} else if err != nil || !bytes.Equal(got, bytes.Repeat([]byte("payload "), 16384)) {
+						t.Fatalf("valid S2 block: decoded %d bytes, error %v", len(got), err)
+					}
+				})
+			}
 		}
 	}
 }
