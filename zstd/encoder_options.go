@@ -189,7 +189,8 @@ const (
 	// and is typically 5-40 times slower than SpeedBestCompression.
 	// Each concurrent encoder may use up to about 100MB, or 30MB with WithLowerEncoderMem,
 	// plus twice the amount by which the window exceeds the default 8MB. Reusing a dictionary for several
-	// frames can add up to 80MB more (20MB with WithLowerEncoderMem).
+	// frames can add up to 80MB more (20MB with WithLowerEncoderMem), and a dictionary larger
+	// than the window can add its own size.
 	// Use WithEncoderConcurrency to limit the number used by EncodeAll.
 	SpeedUltraCompression
 

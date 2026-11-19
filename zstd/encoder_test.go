@@ -363,13 +363,17 @@ func TestEncoderUltraBlockReps(t *testing.T) {
 			t.Fatal("decoded does not match")
 		}
 	}
-	// The rule is only tested when a block is written raw.
+	// The rule is only tested when a raw block is followed by sequences.
 	checkRaw := func(t *testing.T, enc, want []byte) {
 		t.Helper()
 		check(t, enc, want)
-		if lt := literalTypes(t, enc); !slices.Contains(lt, -1) {
-			t.Fatalf("no raw block: literal types %v", lt)
+		lt, seqs := blockTypes(t, enc, true)
+		for i := 1; i < len(lt); i++ {
+			if lt[i-1] == -1 && seqs[i] {
+				return
+			}
 		}
+		t.Fatalf("no raw block before sequences: literal types %v, sequences %v", lt, seqs)
 	}
 	t.Run("sync", func(t *testing.T) {
 		checkRaw(t, stream(t, newEnc(t, WithEncoderConcurrency(1)), in), in)
@@ -386,10 +390,16 @@ func TestEncoderUltraBlockReps(t *testing.T) {
 		checkRaw(t, stream(t, newEnc(t, WithEncoderConcurrency(2), WithConcurrentBlocks(true)), in), in)
 	})
 	t.Run("jobs-reuse", func(t *testing.T) {
-		// The empty job leaves a pooled encoder reset for a frame but unused.
-		// The next stream's second job gets it.
-		e := newEnc(t, WithEncoderConcurrency(2), WithConcurrentBlocks(true))
-		check(t, stream(t, e, nil), nil)
+		// Two empty jobs leave both pooled encoders reset for a frame but
+		// unused, so the next stream's second job gets one whichever worker
+		// takes an encoder first.
+		e := newEnc(t, WithEncoderConcurrency(2), WithConcurrentBlocks(true), WithZeroFrames(true))
+		for range 2 {
+			check(t, stream(t, e, nil), nil)
+			if e.state.jobs.jobSeq != 1 {
+				t.Fatal("no job for the empty stream")
+			}
+		}
 		// The first job ends with periodic data, the second starts with a run.
 		in := appendRandom(nil, rng, e.o.jobSize()-block)
 		in = appendPeriodic(in, rng, block, 37)
@@ -1157,6 +1167,14 @@ func TestEncoderKeepLiteralTable(t *testing.T) {
 // comp, or -1 for a raw block and -2 for an RLE block.
 func literalTypes(t *testing.T, comp []byte) []int {
 	t.Helper()
+	types, _ := blockTypes(t, comp, false)
+	return types
+}
+
+// blockTypes returns literalTypes and, with seqs, whether each block has
+// sequences. Finding them decodes the literals, so the frame must not use a dictionary.
+func blockTypes(t *testing.T, comp []byte, seqs bool) ([]int, []bool) {
+	t.Helper()
 	dec, err := NewReader(nil, WithDecoderConcurrency(1))
 	if err != nil {
 		t.Fatal(err)
@@ -1171,6 +1189,7 @@ func literalTypes(t *testing.T, comp []byte) []int {
 		t.Fatal(err)
 	}
 	var types []int
+	var hasSeqs []bool
 	for {
 		if err := block.reset(frame.rawInput, frame.WindowSize); err != nil {
 			t.Fatal(err)
@@ -1183,8 +1202,19 @@ func literalTypes(t *testing.T, comp []byte) []int {
 			lt = -2
 		}
 		types = append(types, lt)
+		if seqs {
+			var rem []byte
+			if block.Type == blockTypeCompressed {
+				// Every block, since treeless literals use an earlier table.
+				if rem, err = block.decodeLiterals(block.data, &frame.history); err != nil {
+					t.Fatal(err)
+				}
+			}
+			// The sequences section starts with 0 if there are none.
+			hasSeqs = append(hasSeqs, len(rem) > 0 && rem[0] != 0)
+		}
 		if block.Last {
-			return types
+			return types, hasSeqs
 		}
 	}
 }
@@ -1474,7 +1504,8 @@ func TestEncoderPostSplit(t *testing.T) {
 				case "sync":
 					opts = append(opts, WithEncoderConcurrency(1))
 				case "jobs":
-					opts = append(opts, WithConcurrentBlocks(true))
+					// Jobs of 512 KiB.
+					opts = append(opts, WithConcurrentBlocks(true), WithWindowSize(128<<10))
 				case "dict":
 					opts = append(opts, WithEncoderDict(dict))
 				}
@@ -1498,6 +1529,9 @@ func TestEncoderPostSplit(t *testing.T) {
 						t.Fatal(err)
 					}
 					comp = buf.Bytes()
+					if path == "jobs" && e.state.jobs.jobSeq != 2 {
+						t.Fatalf("%d jobs, want 2", e.state.jobs.jobSeq)
+					}
 				}
 				dec, err := NewReader(nil, WithDecoderDicts(dict))
 				if err != nil {

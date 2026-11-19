@@ -36,7 +36,7 @@ For now, a high speed (fastest) and medium-fast (default) compressor has been im
 * The "Default" compression ratio is roughly equivalent to zstd level 3 (default).
 * The "Better" compression ratio is roughly equivalent to zstd level 7.
 * The "Best" compression ratio is roughly equivalent to zstd level 11.
-* The "Ultra" compression ratio is roughly equivalent to zstd level 19, at about the same speed. It uses up to about 100 MB per concurrent encoder, or 30 MB with `WithLowerEncoderMem`, plus twice the amount by which the window exceeds the default 8 MB. Reusing a dictionary for several frames can add up to 80 MB more (20 MB with `WithLowerEncoderMem`).
+* The "Ultra" compression ratio is roughly equivalent to zstd level 19, at about the same speed. It uses up to about 100 MB per concurrent encoder, or 30 MB with `WithLowerEncoderMem`, plus twice the amount by which the window exceeds the default 8 MB. Reusing a dictionary for several frames can add up to 80 MB more (20 MB with `WithLowerEncoderMem`), and a dictionary larger than the window can add its own size.
 
 In terms of speed, it is typically 2x as fast as the stdlib deflate/gzip in its fastest mode. 
 The compression ratio compared to stdlib is around level 3, but usually 3x as fast.
