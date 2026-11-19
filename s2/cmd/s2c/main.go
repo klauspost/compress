@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"runtime/pprof"
@@ -22,6 +23,7 @@ import (
 	"unicode"
 
 	"github.com/klauspost/compress/s2"
+	"github.com/klauspost/compress/s2/cmd/internal/fileio"
 	"github.com/klauspost/compress/s2/cmd/internal/filepathx"
 	"github.com/klauspost/compress/s2/cmd/internal/readahead"
 )
@@ -110,25 +112,25 @@ Options:`)
 		// Catch interrupt, so we don't exit at once.
 		// os.Stdin will return EOF, so we should be able to get everything.
 		signal.Notify(make(chan os.Signal, 1), os.Interrupt)
+		var dstFile *os.File
+		var bw *bufio.Writer
 		if len(*out) == 0 {
 			wr.Reset(os.Stdout)
 		} else {
-			if *safe {
-				_, err := os.Stat(*out)
-				if !os.IsNotExist(err) {
-					exitErr(errors.New("destination file exists"))
-				}
-			}
-			dstFile, err := os.OpenFile(*out, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.ModePerm)
+			dstFile, err = fileio.Create(*out, os.ModePerm, *safe)
 			exitErr(err)
-			defer dstFile.Close()
-			bw := bufio.NewWriterSize(dstFile, sz*2)
-			defer bw.Flush()
+			bw = bufio.NewWriterSize(dstFile, sz*2)
 			wr.Reset(bw)
 		}
-		_, err = wr.ReadFrom(os.Stdin)
-		printErr(err)
-		printErr(wr.Close())
+		_, readErr := wr.ReadFrom(os.Stdin)
+		closeErr := wr.Close()
+		if dstFile == nil {
+			printErr(errors.Join(readErr, closeErr))
+			return
+		}
+		flushErr := bw.Flush()
+		fileCloseErr := dstFile.Close()
+		exitErr(errors.Join(readErr, closeErr, flushErr, fileCloseErr))
 		return
 	}
 	var files []string
@@ -185,7 +187,7 @@ Options:`)
 						fmt.Print("Reading ", filename, "...")
 					}
 					// Input file.
-					file, size, _ := openFile(filename)
+					file, size, _, _ := openFile(filename)
 					b := make([]byte, size)
 					_, err = io.ReadFull(file, b)
 					exitErr(err)
@@ -266,7 +268,7 @@ Options:`)
 					fmt.Print("Reading ", filename, "...")
 				}
 				// Input file.
-				file, size, _ := openFile(filename)
+				file, size, _, _ := openFile(filename)
 				b := make([]byte, size)
 				_, err = io.ReadFull(file, b)
 				exitErr(err)
@@ -346,7 +348,6 @@ Options:`)
 				exitErr(errors.New("cannot recompress blocks (yet)"))
 			}
 			func() {
-				var closeOnce sync.Once
 				dstFilename := cleanFileName(fmt.Sprintf("%s%s", filename, ext))
 				if *out != "" {
 					dstFilename = *out
@@ -355,28 +356,11 @@ Options:`)
 					fmt.Print("Compressing ", filename, " -> ", dstFilename)
 				}
 				// Input file.
-				file, _, mode := openFile(filename)
+				file, _, mode, inputInfo := openFile(filename)
 				exitErr(err)
-				defer closeOnce.Do(func() { file.Close() })
-				inBytes, err := io.ReadAll(file)
-				exitErr(err)
+				inBytes, readErr := io.ReadAll(file)
+				exitErr(errors.Join(readErr, file.Close()))
 
-				var out io.Writer
-				switch {
-				case *stdout:
-					out = os.Stdout
-				default:
-					if *safe {
-						_, err := os.Stat(dstFilename)
-						if !os.IsNotExist(err) {
-							exitErr(errors.New("destination file exists"))
-						}
-					}
-					dstFile, err := os.OpenFile(dstFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
-					exitErr(err)
-					defer dstFile.Close()
-					out = dstFile
-				}
 				start := time.Now()
 				var compressed []byte
 				switch {
@@ -399,14 +383,6 @@ Options:`)
 					}
 					compressed = s2.EncodeBetter(nil, inBytes)
 				}
-				_, err = out.Write(compressed)
-				exitErr(err)
-				if !*quiet {
-					elapsed := time.Since(start)
-					mbpersec := (float64(len(inBytes)) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
-					pct := float64(len(compressed)) * 100 / float64(len(inBytes))
-					fmt.Printf(" %d -> %d [%.02f%%]; %.01fMB/s\n", len(inBytes), len(compressed), pct, mbpersec)
-				}
 				if *verify {
 					got, err := s2.Decode(make([]byte, 0, len(inBytes)), compressed)
 					exitErr(err)
@@ -417,15 +393,31 @@ Options:`)
 						fmt.Print("... Verified ok.")
 					}
 				}
+				var dstFile *os.File
+				var tempName string
+				var outputErr error
+				if *stdout {
+					_, outputErr = os.Stdout.Write(compressed)
+				} else {
+					dstFile, tempName, err = createOutput(inputInfo, dstFilename, mode, *safe, *remove)
+					exitErr(err)
+					_, outputErr = dstFile.Write(compressed)
+					outputErr = finishOutput(dstFile, tempName, dstFilename, mode, outputErr)
+					dstFile = nil
+					tempName = ""
+				}
+				exitErr(outputErr)
+				if !*quiet {
+					elapsed := time.Since(start)
+					mbpersec := (float64(len(inBytes)) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
+					pct := float64(len(compressed)) * 100 / float64(len(inBytes))
+					fmt.Printf(" %d -> %d [%.02f%%]; %.01fMB/s\n", len(inBytes), len(compressed), pct, mbpersec)
+				}
 				if *remove {
-					closeOnce.Do(func() {
-						file.Close()
-						if !*quiet {
-							fmt.Println("Removing", filename)
-						}
-						err := os.Remove(filename)
-						exitErr(err)
-					})
+					if !*quiet {
+						fmt.Println("Removing", filename)
+					}
+					exitErr(os.Remove(filename))
 				}
 			}()
 			continue
@@ -451,24 +443,14 @@ Options:`)
 				fmt.Print("Compressing ", filename, " -> ", dstFilename)
 			}
 
-			if dstFilename == filename && !*stdout {
-				if *remove {
-					exitErr(errors.New("cannot remove when input = output"))
-				}
-				renameDst := dstFilename
-				dstFilename = fmt.Sprintf(".tmp-%s%s", time.Now().Format("2006-01-02T15-04-05Z07"), ext)
-				defer func() {
-					exitErr(os.Rename(dstFilename, renameDst))
-				}()
-			}
-
 			// Input file.
-			file, _, mode := openFile(filename)
+			file, _, mode, inputInfo := openFile(filename)
 			exitErr(err)
 			defer closeOnce.Do(func() { file.Close() })
-			src, err := readahead.NewReaderSize(file, *cpu+1, 1<<20)
+			inputReader, err := readahead.NewReaderSize(file, *cpu+1, 1<<20)
 			exitErr(err)
-			defer src.Close()
+			defer inputReader.Close()
+			var src io.Reader = inputReader
 			var rc = &rCounter{
 				in: src,
 			}
@@ -487,32 +469,58 @@ Options:`)
 			}
 
 			var out io.Writer
+			var dstFile *os.File
+			var bw *bufio.Writer
+			var tempName string
 			switch {
 			case *stdout:
 				out = os.Stdout
 			default:
-				if *safe {
-					_, err := os.Stat(dstFilename)
-					if !os.IsNotExist(err) {
-						exitErr(errors.New("destination file exists"))
-					}
-				}
-				dstFile, err := os.OpenFile(dstFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+				dstFile, tempName, err = createOutput(inputInfo, dstFilename, mode, *safe, *remove)
 				exitErr(err)
-				defer dstFile.Close()
-				bw := bufio.NewWriterSize(dstFile, int(sz)*2)
-				defer bw.Flush()
+				bw = bufio.NewWriterSize(dstFile, int(sz)*2)
 				out = bw
+			}
+			replaceInput := tempName != ""
+			exitOutputErr := func(outputErr error) {
+				if outputErr == nil {
+					return
+				}
+				if dstFile != nil {
+					outputErr = finishOutput(dstFile, tempName, dstFilename, mode, outputErr)
+					dstFile = nil
+					tempName = ""
+				}
+				exitErr(outputErr)
+			}
+			closeSource := func() error {
+				readaheadErr := inputReader.Close()
+				var fileErr error
+				closeOnce.Do(func() {
+					fileErr = file.Close()
+				})
+				return errors.Join(readaheadErr, fileErr)
 			}
 			out, errFn := verifyTo(out)
 			wc := wCounter{out: out}
 			wr.Reset(&wc)
-			defer wr.Close()
 			start := time.Now()
 			_, err = wr.ReadFrom(src)
-			exitErr(err)
+			exitOutputErr(err)
 			err = wr.Close()
-			exitErr(err)
+			exitOutputErr(err)
+			exitOutputErr(errFn())
+			if bw != nil {
+				exitOutputErr(bw.Flush())
+			}
+			if replaceInput {
+				exitOutputErr(closeSource())
+			}
+			if dstFile != nil {
+				exitOutputErr(finishOutput(dstFile, tempName, dstFilename, mode, nil))
+				dstFile = nil
+				tempName = ""
+			}
 			if !*quiet {
 				input := rc.n
 				elapsed := time.Since(start)
@@ -520,16 +528,12 @@ Options:`)
 				pct := float64(wc.n) * 100 / float64(input)
 				fmt.Printf(" %d -> %d [%.02f%%]; %.01fMB/s\n", input, wc.n, pct, mbpersec)
 			}
-			exitErr(errFn())
 			if *remove {
-				closeOnce.Do(func() {
-					file.Close()
-					if !*quiet {
-						fmt.Println("Removing", filename)
-					}
-					err := os.Remove(filename)
-					exitErr(err)
-				})
+				exitOutputErr(closeSource())
+				if !*quiet {
+					fmt.Println("Removing", filename)
+				}
+				exitErr(os.Remove(filename))
 			}
 		}()
 	}
@@ -539,20 +543,207 @@ func isHTTP(name string) bool {
 	return strings.HasPrefix(name, "http://") || strings.HasPrefix(name, "https://")
 }
 
-func openFile(name string) (rc io.ReadCloser, size int64, mode os.FileMode) {
+func outputAliasesInput(inputName, outputName string) (bool, error) {
+	if isHTTP(inputName) {
+		return false, nil
+	}
+	inputInfo, err := os.Stat(inputName)
+	if err != nil {
+		return false, err
+	}
+	outputInfo, err := os.Stat(outputName)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if !os.SameFile(inputInfo, outputInfo) {
+		return false, nil
+	}
+	if !inputInfo.Mode().IsRegular() || !outputInfo.Mode().IsRegular() {
+		return false, errors.New("input and output refer to the same non-regular file")
+	}
+	return true, nil
+}
+
+// createOutput opens dst. When dst is the input file it creates a temporary
+// file next to it instead, which finishOutput renames over dst.
+func createOutput(in os.FileInfo, dst string, mode os.FileMode, safe, remove bool) (*os.File, string, error) {
+	if in != nil {
+		outInfo, err := os.Stat(dst)
+		if err == nil && os.SameFile(in, outInfo) {
+			if !in.Mode().IsRegular() || !outInfo.Mode().IsRegular() {
+				return nil, "", errors.New("input and output refer to the same non-regular file")
+			}
+			if remove {
+				return nil, "", errors.New("cannot remove when input = output")
+			}
+			if safe {
+				return nil, "", errors.New("cannot use -safe when output path is the same as the input file")
+			}
+			return createStagedOutput(dst)
+		}
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return nil, "", err
+		}
+	}
+	f, alias, err := openOutputFile(in, dst, mode, safe)
+	if err != nil || !alias {
+		return f, "", err
+	}
+	if remove {
+		if f != nil {
+			err = errors.Join(err, f.Close())
+		}
+		return nil, "", errors.Join(errors.New("cannot remove when input = output"), err)
+	}
+	if f != nil {
+		err = f.Close()
+		if err != nil {
+			return nil, "", err
+		}
+	}
+	return createStagedOutput(dst)
+}
+
+// replaceOutput renames tmp over dst. On systems that cannot replace an
+// existing regular file directly, it keeps dst under a backup name until the
+// replacement succeeds.
+func replaceOutput(tmp, dst string) error {
+	replaceErr := os.Rename(tmp, dst)
+	if replaceErr == nil {
+		return nil
+	}
+	tmpInfo, tmpStatErr := os.Lstat(tmp)
+	if tmpStatErr != nil || !tmpInfo.Mode().IsRegular() {
+		return replaceErr
+	}
+	dstInfo, dstStatErr := os.Lstat(dst)
+	if dstStatErr != nil || !dstInfo.Mode().IsRegular() {
+		return replaceErr
+	}
+
+	backup, err := os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+".backup-*")
+	if err != nil {
+		return errors.Join(replaceErr, err)
+	}
+	backupName := backup.Name()
+	if err := errors.Join(backup.Close(), os.Remove(backupName)); err != nil {
+		return errors.Join(replaceErr, err)
+	}
+	if err := os.Rename(dst, backupName); err != nil {
+		return errors.Join(replaceErr, err)
+	}
+	if err := os.Rename(tmp, dst); err != nil {
+		if restoreErr := os.Rename(backupName, dst); restoreErr != nil {
+			return fmt.Errorf("replace %s: %w; original retained at %s", dst, errors.Join(replaceErr, err, restoreErr), backupName)
+		}
+		return errors.Join(replaceErr, err)
+	}
+	if err := os.Remove(backupName); err != nil {
+		return fmt.Errorf("remove replacement backup %s: %w", backupName, err)
+	}
+	return nil
+}
+
+func createStagedOutput(dst string) (*os.File, string, error) {
+	f, err := os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+".tmp-*")
+	if err != nil {
+		return nil, "", err
+	}
+	return f, f.Name(), nil
+}
+
+type outputHandle interface {
+	Chmod(os.FileMode) error
+	Close() error
+	Stat() (os.FileInfo, error)
+	Sync() error
+}
+
+// finishOutput closes f after writing ended with err. A temporary file
+// replaces dst only if everything succeeded, and is removed otherwise.
+func finishOutput(f outputHandle, tmp, dst string, mode os.FileMode, err error) error {
+	if f == nil {
+		return err
+	}
+	var removePath string
+	var removeIdentity os.FileInfo
+	if tmp == "" && dst != "" {
+		if st, statErr := f.Stat(); statErr == nil && st.Mode().IsRegular() {
+			removePath = dst
+			removeIdentity = st
+		}
+	}
+	if tmp != "" && err == nil {
+		err = errors.Join(f.Sync(), f.Chmod(mode.Perm()))
+	}
+	closeErr := f.Close()
+	err = errors.Join(err, closeErr)
+	if tmp == "" {
+		if closeErr != nil && removePath != "" && removeIdentity != nil {
+			if post, statErr := os.Stat(removePath); statErr == nil && os.SameFile(removeIdentity, post) {
+				err = errors.Join(err, os.Remove(removePath))
+			}
+		}
+		return err
+	}
+	if err == nil {
+		err = replaceOutput(tmp, dst)
+	}
+	if err != nil {
+		removeErr := os.Remove(tmp)
+		if errors.Is(removeErr, os.ErrNotExist) {
+			removeErr = nil
+		}
+		err = errors.Join(err, removeErr)
+	}
+	return err
+}
+
+func openOutputFile(inputInfo os.FileInfo, name string, mode os.FileMode, exclusive bool) (*os.File, bool, error) {
+	flags := os.O_CREATE | os.O_WRONLY
+	if exclusive {
+		flags |= os.O_EXCL
+	}
+	output, err := os.OpenFile(name, flags, mode.Perm())
+	if err != nil {
+		return nil, false, err
+	}
+	outputInfo, err := output.Stat()
+	if err != nil {
+		return nil, false, errors.Join(err, output.Close())
+	}
+	if inputInfo != nil && os.SameFile(inputInfo, outputInfo) {
+		closeErr := output.Close()
+		if !inputInfo.Mode().IsRegular() || !outputInfo.Mode().IsRegular() {
+			return nil, false, errors.Join(errors.New("input and output refer to the same non-regular file"), closeErr)
+		}
+		return nil, true, closeErr
+	}
+	if outputInfo.Mode().IsRegular() {
+		if err := output.Truncate(0); err != nil {
+			return nil, false, errors.Join(err, output.Close())
+		}
+	}
+	return output, false, nil
+}
+
+func openFile(name string) (rc io.ReadCloser, size int64, mode os.FileMode, info os.FileInfo) {
 	if isHTTP(name) {
 		resp, err := http.Get(name)
 		exitErr(err)
 		if resp.StatusCode != http.StatusOK {
 			exitErr(fmt.Errorf("unexpected response status code %v, want OK", resp.Status))
 		}
-		return resp.Body, resp.ContentLength, os.ModePerm
+		return resp.Body, resp.ContentLength, os.ModePerm, nil
 	}
 	file, err := os.Open(name)
 	exitErr(err)
 	st, err := file.Stat()
 	exitErr(err)
-	return file, st.Size(), st.Mode()
+	return file, st.Size(), st.Mode(), st
 }
 
 func cleanFileName(s string) string {
