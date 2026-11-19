@@ -2951,6 +2951,54 @@ func TestDecoderResetConsumesBuffer(t *testing.T) {
 	}
 }
 
+// TestDecoderExecuteErrorNoOutput checks that a block whose sequences fail to
+// execute produces no output. The concurrent decoder used to return the block
+// decoder's output from an earlier stream before the error.
+func TestDecoderExecuteErrorNoOutput(t *testing.T) {
+	// One compressed block: 3 literals, then a match at offset 1000.
+	bad := []byte{
+		0x28, 0xb5, 0x2f, 0xfd, 0x60, 0xeb, 0x02, 0x65, 0x00, 0x00, 0x18,
+		0x61, 0x62, 0x63, 0x01, 0x54, 0x03, 0x09, 0x2d, 0xe5, 0xd7, 0x07,
+	}
+	var input bytes.Buffer
+	for i := 0; input.Len() < 1<<20; i++ {
+		fmt.Fprintf(&input, "record %d\n", i)
+	}
+	enc, err := NewWriter(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	good := enc.EncodeAll(input.Bytes(), nil)
+	for _, concurrent := range []int{1, 4} {
+		for _, writeTo := range []bool{false, true} {
+			t.Run(fmt.Sprintf("concurrent=%d,writeTo=%v", concurrent, writeTo), func(t *testing.T) {
+				dec, err := NewReader(bytes.NewReader(good), WithDecoderConcurrency(concurrent))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer dec.Close()
+				got, err := io.ReadAll(dec)
+				if err != nil || !bytes.Equal(got, input.Bytes()) {
+					t.Fatalf("got %d bytes, %v; want %d bytes", len(got), err, input.Len())
+				}
+				if err := dec.Reset(bytes.NewReader(bad)); err != nil {
+					t.Fatal(err)
+				}
+				if writeTo {
+					var buf bytes.Buffer
+					_, err = dec.WriteTo(&buf)
+					got = buf.Bytes()
+				} else {
+					got, err = io.ReadAll(dec)
+				}
+				if err == nil || len(got) != 0 {
+					t.Fatalf("got %d bytes, %v; want no output and an error", len(got), err)
+				}
+			})
+		}
+	}
+}
+
 // TestStreamRingWraps streams frames long enough to wrap the decoder's
 // history ring many times, so matches start in the previous lap and continue
 // into the current one. "mixed" has back-references at random distances up
