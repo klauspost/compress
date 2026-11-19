@@ -415,7 +415,7 @@ func Test_seqdec_decodeSync(t *testing.T) {
 			}{
 				{"go", 0, true},
 				{"asm-safe", maxCompressedBlockSize, true},
-				{"asm-unsafe", maxCompressedBlockSizeAlloc, false},
+				{"asm-unsafe", maxCompressedBlockSizeAlloc, !haveUnsafeAsm},
 			}
 			var want []byte
 			for i, v := range variants {
@@ -626,8 +626,8 @@ func TestOverlapCopy(t *testing.T) {
 // frame size is known: only the current block needs the slack, so a buffer
 // sized exactly to the frame uses the extended copies until the last block.
 func TestUseSafeDecodeSyncFrameBound(t *testing.T) {
-	if !haveSeqdecAsm {
-		t.Skip("no assembly decoder on this build")
+	if !haveUnsafeAsm {
+		t.Skip("no extended-copy variant on this build")
 	}
 	const mb = maxCompressedBlockSize
 	tests := []struct {

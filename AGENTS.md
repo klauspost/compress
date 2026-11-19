@@ -93,6 +93,13 @@ README describes the packages themselves.
   the `_generate` modules import as `github.com/honeycombio/avo`; keep all
   three on the same fork commit. A change to the generator changes both
   architectures; build and test both.
+- Exception: `zstd/seqdec_arm.s` (GOARCH=arm) is hand-written. The avo fork has
+  no 32-bit ARM backend, so there is no generator for it. It is gated on the
+  `arm.7` build tag because its refill and copy paths use unaligned 32-bit
+  loads; GOARM=5/6 use the generic decoder. Validate changes with
+  `TestArmAsmMatchesGo` under `qemu-arm`:
+  `GOARCH=arm GOARM=7 CGO_ENABLED=0 go test -c -o /tmp/zstdtests ./zstd`,
+  then `(cd zstd && qemu-arm /tmp/zstdtests -test.run TestArmAsmMatchesGo)`.
 - When moving the avo pin, regenerate and check the output is byte-identical
   unless a change is intended, so unrelated printer changes don't slip into a
   review.

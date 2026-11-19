@@ -2,6 +2,7 @@ package zstd
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	rdebug "runtime/debug"
@@ -55,6 +56,32 @@ func FuzzDecodeAll(f *testing.F) {
 		}
 		if !bytes.Equal(b1, b2) {
 			t.Fatalf("Output mismatch, low: %v, hi: %v", err1, err2)
+		}
+
+		decCap, err := NewReader(nil, WithDecoderLowmem(true), WithDecoderConcurrency(1), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true), WithDecodeAllCapLimit(true))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer decCap.Close()
+		limit, prefixLen := min(len(b), 1024), len(b)&7
+		prefix := bytes.Repeat([]byte{0xa5}, prefixLen)
+		dst := make([]byte, prefixLen, prefixLen+limit)
+		copy(dst, prefix)
+		got, capErr := decCap.DecodeAll(b, dst)
+		if len(got) > cap(dst) || cap(got) > cap(dst) {
+			t.Fatalf("capacity limit exceeded: len=%d cap=%d limit=%d", len(got), cap(got), cap(dst))
+		}
+		if capErr == nil && err1 != nil {
+			t.Fatalf("capacity-limited decoder accepted input rejected without the limit: %v", err1)
+		}
+		if err1 == nil {
+			if len(b1) > limit {
+				if !errors.Is(capErr, ErrDecoderSizeExceeded) {
+					t.Fatalf("expected capacity error, got %v", capErr)
+				}
+			} else if capErr != nil || len(got) < prefixLen || !bytes.Equal(got[:prefixLen], prefix) || !bytes.Equal(got[prefixLen:], b1) {
+				t.Fatalf("capacity-limited output differs: %v", capErr)
+			}
 		}
 
 		if compareNonAsm && cpuinfo.HasBMI2() {
