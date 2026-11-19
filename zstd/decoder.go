@@ -834,7 +834,10 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 				if debugDecoder && hasErr {
 					println("executeSequences returned:", do.err)
 				}
-				do.b = block.dst
+				// On error, block.dst still holds this block decoder's previous output.
+				if !hasErr {
+					do.b = block.dst
+				}
 			}
 			if !hasErr {
 				decodedFrame += uint64(len(do.b))
