@@ -29,7 +29,7 @@ type Decoder struct {
 	publishedOptions atomic.Pointer[decoderOptions]
 
 	// Unreferenced decoders, ready for use.
-	decoders chan *blockDec
+	decoders *boundedPool[*blockDec]
 
 	// Current read position used for Reader functionality.
 	current decoderState
@@ -111,12 +111,12 @@ func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
 	}
 
 	// Create decoders
-	d.decoders = make(chan *blockDec, o.concurrent)
+	d.decoders = newBoundedPool[*blockDec](o.concurrent)
 	for i := 0; i < o.concurrent; i++ {
 		dec := newBlockDec(o.lowMem)
 		dec.localFrame = newFrameDec(o)
 		dec.localFrame.o.dicts = nil
-		d.decoders <- dec
+		d.decoders.put(dec)
 	}
 	d.publishedOptions.Store(&o)
 
@@ -162,7 +162,7 @@ func (d *Decoder) Read(p []byte) (int, error) {
 		d.drainOutput()
 	}
 	if debugDecoder {
-		println("returning", n, d.current.err, len(d.decoders))
+		println("returning", n, d.current.err, d.decoders.len())
 	}
 	return n, d.current.err
 }
@@ -299,9 +299,9 @@ func (d *Decoder) drainOutput() {
 	}
 	if d.current.d != nil {
 		if debugDecoder {
-			printf("re-adding current decoder %p, decoders: %d", d.current.d, len(d.decoders))
+			printf("re-adding current decoder %p, decoders: %d", d.current.d, d.decoders.len())
 		}
-		d.decoders <- d.current.d
+		d.decoders.put(d.current.d)
 		d.current.d = nil
 		d.current.b = nil
 	}
@@ -314,7 +314,7 @@ func (d *Decoder) drainOutput() {
 			if debugDecoder {
 				printf("re-adding decoder %p", v.d)
 			}
-			d.decoders <- v.d
+			d.decoders.put(v.d)
 		}
 	}
 	d.current.output = nil
@@ -362,7 +362,10 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 	}
 
 	// Grab a block decoder and frame decoder.
-	block := <-d.decoders
+	block, ok := d.decoders.get()
+	if !ok {
+		return dst, ErrDecoderClosed
+	}
 	frame := block.localFrame
 	o := *d.publishedOptions.Load()
 	frame.setOptions(o)
@@ -382,7 +385,7 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 			frame.history.decoders.br.cursor = 0
 		}
 		frame.o.dicts = nil
-		d.decoders <- block
+		d.decoders.put(block)
 	}()
 	frame.bBuf = input
 
@@ -536,7 +539,12 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 
 func (d *Decoder) nextBlockSync() (ok bool) {
 	if d.current.d == nil {
-		d.current.d = <-d.decoders
+		dec, ok := d.decoders.get()
+		if !ok {
+			d.current.err = ErrDecoderClosed
+			return false
+		}
+		d.current.d = dec
 	}
 	for len(d.current.b) == 0 {
 		if !d.syncStream.inFrame {
@@ -622,7 +630,7 @@ func (d *Decoder) stashDecoder() {
 		if debugDecoder {
 			printf("re-adding current decoder %p", d.current.d)
 		}
-		d.decoders <- d.current.d
+		d.decoders.put(d.current.d)
 		d.current.d = nil
 	}
 }
@@ -640,8 +648,7 @@ func (d *Decoder) Close() {
 		d.current.cancel = nil
 	}
 	if d.decoders != nil {
-		close(d.decoders)
-		for dec := range d.decoders {
+		for _, dec := range d.decoders.close() {
 			dec.Close()
 		}
 		d.decoders = nil
@@ -912,9 +919,7 @@ decodeStream:
 			err = ErrDecoderSizeExceeded
 		}
 		if err != nil {
-			select {
-			case <-ctx.Done():
-			case dec := <-d.decoders:
+			if dec, ok := d.decoders.getContext(ctx); ok {
 				dec.sendErr(err)
 				decodeBlock(dec)
 			}
@@ -923,13 +928,11 @@ decodeStream:
 
 		// Go through all blocks of the frame.
 		for {
-			var dec *blockDec
-			select {
-			case <-ctx.Done():
+			dec, ok := d.decoders.getContext(ctx)
+			if !ok {
 				break decodeStream
-			case dec = <-d.decoders:
-				// Once we have a decoder, we MUST return it.
 			}
+			// Once we have a decoder, we MUST return it.
 			err := frame.next(dec)
 			if !historySent {
 				h := frame.history

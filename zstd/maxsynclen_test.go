@@ -108,8 +108,8 @@ func walkCheckingMaxSyncLen(t *testing.T, comp, want []byte) map[blockType]int {
 		t.Fatal(err)
 	}
 	defer dec.Close()
-	block := <-dec.decoders
-	defer func() { dec.decoders <- block }()
+	block, _ := dec.decoders.get()
+	defer func() { dec.decoders.put(block) }()
 	frame := block.localFrame
 	frame.bBuf = comp
 	frame.history.reset()
@@ -210,8 +210,8 @@ func checkLiteralSlack(t *testing.T, comp []byte, seen map[literalsBlockType]int
 		t.Fatal(err)
 	}
 	defer dec.Close()
-	block := <-dec.decoders
-	defer func() { dec.decoders <- block }()
+	block, _ := dec.decoders.get()
+	defer func() { dec.decoders.put(block) }()
 	frame := block.localFrame
 	frame.bBuf = comp
 	frame.history.reset()
