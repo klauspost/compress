@@ -206,12 +206,16 @@ func (r *Reader) skippable(tmp []byte, n int, allowEOF bool, id uint8) (ok bool)
 		return false
 	}
 	if fn := r.skippableCB[id-0x80]; fn != nil {
-		rd := io.LimitReader(r.r, int64(n))
+		rd := &io.LimitedReader{R: r.r, N: int64(n)}
 		r.err = fn(rd)
 		if r.err != nil {
 			return false
 		}
 		_, r.err = io.CopyBuffer(io.Discard, rd, tmp)
+		if r.err == nil && rd.N > 0 {
+			// The stream ended inside the chunk.
+			r.err = ErrCorrupt
+		}
 		return r.err == nil
 	}
 	if rs, ok := r.r.(io.ReadSeeker); ok {

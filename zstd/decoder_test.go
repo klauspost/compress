@@ -2915,6 +2915,42 @@ func TestDecoderBufferShortcutFallsBackToStreaming(t *testing.T) {
 	}
 }
 
+// TestDecoderResetConsumesBuffer checks that a *bytes.Buffer is drained once
+// the stream is read, on each decode path of Reset.
+func TestDecoderResetConsumesBuffer(t *testing.T) {
+	input := make([]byte, 4<<20)
+	enc, err := NewWriter(nil, WithWindowSize(64<<10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	compressed := enc.EncodeAll(input, nil)
+	for _, tc := range []struct {
+		name string
+		opts []DOption
+	}{
+		{"in-memory", nil},
+		{"stream", []DOption{WithDecodeBuffersBelow(0)}},
+		// The output exceeds the in-memory limit, so Reset streams instead.
+		{"fallback", []DOption{WithDecoderMaxMemory(1 << 20)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := bytes.NewBuffer(compressed)
+			dec, err := NewReader(src, tc.opts...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer dec.Close()
+			got, err := io.ReadAll(dec)
+			if err != nil || !bytes.Equal(got, input) {
+				t.Fatalf("got %d bytes, %v; want %d bytes", len(got), err, len(input))
+			}
+			if src.Len() != 0 {
+				t.Fatalf("source has %d unread bytes", src.Len())
+			}
+		})
+	}
+}
+
 // TestStreamRingWraps streams frames long enough to wrap the decoder's
 // history ring many times, so matches start in the previous lap and continue
 // into the current one. "mixed" has back-references at random distances up

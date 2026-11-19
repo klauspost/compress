@@ -6,6 +6,7 @@
 package s2
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
@@ -225,12 +226,15 @@ func (w *Writer) ReadFrom(r io.Reader) (n int64, err error) {
 			return 0, err
 		}
 	}
-	if br, ok := r.(byter); ok {
-		buf := br.Bytes()
+	if bb, ok := r.(*bytes.Buffer); ok {
+		buf := bb.Bytes()
 		if err := w.EncodeBuffer(buf); err != nil {
 			return 0, err
 		}
-		return int64(len(buf)), w.AsyncFlush()
+		// EncodeBuffer borrows buf until Flush, and ReadFrom must consume r.
+		err := w.Flush()
+		bb.Next(len(buf))
+		return int64(len(buf)), err
 	}
 	for {
 		inbuf := w.buffers.Get().([]byte)[:w.blockSize+obufHeaderLen]
@@ -762,13 +766,12 @@ func (w *Writer) AsyncFlush() error {
 // Flush flushes the Writer to its underlying io.Writer.
 // This does not apply padding.
 func (w *Writer) Flush() error {
-	if err := w.AsyncFlush(); err != nil {
+	err := w.AsyncFlush()
+	if w.output == nil {
 		return err
 	}
-	if w.output == nil {
-		return w.err(nil)
-	}
 
+	// Wait even after an error: queued blocks may still read EncodeBuffer input.
 	// Send empty buffer
 	res := make(chan result)
 	w.output <- res
