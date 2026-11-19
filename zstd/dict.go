@@ -166,6 +166,7 @@ type BuildDictOptions struct {
 	ID uint32
 
 	// Content to use to create dictionary tables.
+	// Only the first 128 KiB of each entry is used.
 	Contents [][]byte
 
 	// History to use for all blocks.
@@ -271,6 +272,8 @@ func BuildDict(o BuildDictOptions) ([]byte, error) {
 		if len(b) < 8 {
 			continue
 		}
+		// Encode takes a single block. Like zstd's trainer, use the start of larger samples.
+		b = b[:min(len(b), maxCompressedBlockSize)]
 		nUsed++
 		enc.Reset(&d, true)
 		enc.Encode(&block, b)
