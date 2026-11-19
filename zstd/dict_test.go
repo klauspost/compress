@@ -326,13 +326,16 @@ func TestEncoder_SmallDict(t *testing.T) {
 			var tmp []byte
 			for i := range encs {
 				t.Run(encNames[i], func(t *testing.T) {
-					b = encs[i].EncodeAll(decoded, b[:0])
-					tmp, err = dec.DecodeAll(in, tmp[:0])
-					if err != nil {
-						t.Fatal(err)
-					}
-					if !bytes.Equal(tmp, decoded) {
-						t.Fatal("output mismatch")
+					// Encode twice to check restoration of the dictionary match table.
+					for range 2 {
+						b = encs[i].EncodeAll(decoded, b[:0])
+						tmp, err = dec.DecodeAll(b, tmp[:0])
+						if err != nil {
+							t.Fatal(err)
+						}
+						if !bytes.Equal(tmp, decoded) {
+							t.Fatal("output mismatch")
+						}
 					}
 
 					tmp = noDictEncs[i].EncodeAll(decoded, tmp[:0])
