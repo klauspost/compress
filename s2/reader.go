@@ -208,6 +208,10 @@ func (r *Reader) skippable(tmp []byte, n int, allowEOF bool, id uint8) (ok bool)
 	if fn := r.skippableCB[id-0x80]; fn != nil {
 		rd := &io.LimitedReader{R: r.r, N: int64(n)}
 		r.err = fn(rd)
+		if r.err == io.EOF && rd.N > 0 {
+			// The stream ended inside the chunk.
+			r.err = ErrCorrupt
+		}
 		if r.err != nil {
 			return false
 		}
