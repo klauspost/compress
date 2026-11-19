@@ -607,24 +607,44 @@ func createOutput(in os.FileInfo, dst string, mode os.FileMode, safe, remove boo
 	return createStagedOutput(dst)
 }
 
-// replaceOutput renames tmp over dst. If dst exists and blocks replace, remove
-// a regular file at dst and retry once (read-only inputs on Windows).
+// replaceOutput renames tmp over dst. On systems that cannot replace an
+// existing regular file directly, it keeps dst under a backup name until the
+// replacement succeeds.
 func replaceOutput(tmp, dst string) error {
-	err := os.Rename(tmp, dst)
-	if err == nil {
+	replaceErr := os.Rename(tmp, dst)
+	if replaceErr == nil {
 		return nil
 	}
-	info, statErr := os.Lstat(dst)
-	if statErr != nil {
-		return err
+	tmpInfo, tmpStatErr := os.Lstat(tmp)
+	if tmpStatErr != nil || !tmpInfo.Mode().IsRegular() {
+		return replaceErr
 	}
-	if !info.Mode().IsRegular() {
-		return err
+	dstInfo, dstStatErr := os.Lstat(dst)
+	if dstStatErr != nil || !dstInfo.Mode().IsRegular() {
+		return replaceErr
 	}
-	if removeErr := os.Remove(dst); removeErr != nil {
-		return errors.Join(err, removeErr)
+
+	backup, err := os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+".backup-*")
+	if err != nil {
+		return errors.Join(replaceErr, err)
 	}
-	return os.Rename(tmp, dst)
+	backupName := backup.Name()
+	if err := errors.Join(backup.Close(), os.Remove(backupName)); err != nil {
+		return errors.Join(replaceErr, err)
+	}
+	if err := os.Rename(dst, backupName); err != nil {
+		return errors.Join(replaceErr, err)
+	}
+	if err := os.Rename(tmp, dst); err != nil {
+		if restoreErr := os.Rename(backupName, dst); restoreErr != nil {
+			return fmt.Errorf("replace %s: %w; original retained at %s", dst, errors.Join(replaceErr, err, restoreErr), backupName)
+		}
+		return errors.Join(replaceErr, err)
+	}
+	if err := os.Remove(backupName); err != nil {
+		return fmt.Errorf("remove replacement backup %s: %w", backupName, err)
+	}
+	return nil
 }
 
 func createStagedOutput(dst string) (*os.File, string, error) {

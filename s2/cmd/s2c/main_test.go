@@ -488,6 +488,27 @@ func TestOpenOutputFile(t *testing.T) {
 	})
 }
 
+func TestReplaceOutputPreservesDestinationWhenSourceIsMissing(t *testing.T) {
+	dir := t.TempDir()
+	dst := filepath.Join(dir, "output.s2")
+	original := []byte("original input")
+	if err := os.WriteFile(dst, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := replaceOutput(filepath.Join(dir, "missing.tmp"), dst)
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("replaceOutput() error = %v, want os.ErrNotExist", err)
+	}
+	got, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatalf("destination was removed after rename failure: %v", err)
+	}
+	if !bytes.Equal(got, original) {
+		t.Fatalf("destination contents = %q, want %q", got, original)
+	}
+}
+
 func TestBlockOutput(t *testing.T) {
 	t.Run("file", func(t *testing.T) {
 		input := []byte("block file output")
@@ -983,12 +1004,14 @@ func writeTestInput(t *testing.T, name string, contents []byte) string {
 
 func assertNoOutputTempFiles(t *testing.T, filename string) {
 	t.Helper()
-	matches, err := filepath.Glob(filepath.Join(filepath.Dir(filename), "."+filepath.Base(filename)+".tmp-*"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(matches) != 0 {
-		t.Fatalf("temporary output remains: %v", matches)
+	for _, suffix := range []string{".tmp-*", ".backup-*"} {
+		matches, err := filepath.Glob(filepath.Join(filepath.Dir(filename), "."+filepath.Base(filename)+suffix))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(matches) != 0 {
+			t.Fatalf("temporary output remains: %v", matches)
+		}
 	}
 }
 
