@@ -70,6 +70,20 @@ func TestInvalidEncoding(t *testing.T) {
 	}
 }
 
+// An empty code (all lengths zero) must not decode with the table of the code
+// built before it, which a later block or a reset reader would otherwise use.
+func TestEmptyEncodingAfterReuse(t *testing.T) {
+	var h huffmanDecoder
+	if !h.init([]int{1, 1}) || !h.init([]int{0, 0}) {
+		t.Fatal("Failed to initialize Huffman decoder")
+	}
+	var f decompressor
+	f.r = bytes.NewReader([]byte{0})
+	if sym, err := f.huffSym(&h); err == nil {
+		t.Fatalf("Empty code decoded symbol %d", sym)
+	}
+}
+
 func TestRegressions(t *testing.T) {
 	// Test fuzzer regressions
 	data, err := os.ReadFile("testdata/regression.zip")
