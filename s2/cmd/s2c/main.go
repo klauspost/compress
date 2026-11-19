@@ -125,7 +125,7 @@ Options:`)
 		_, readErr := wr.ReadFrom(os.Stdin)
 		closeErr := wr.Close()
 		if dstFile == nil {
-			printErr(errors.Join(readErr, closeErr))
+			exitErr(errors.Join(readErr, closeErr))
 			return
 		}
 		flushErr := bw.Flush()
