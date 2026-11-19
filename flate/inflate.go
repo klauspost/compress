@@ -154,6 +154,8 @@ func (h *huffmanDecoder) init(lengths []int) bool {
 	// guaranteed to fail later since the compressed data section must be
 	// composed of at least one symbol (the end-of-block marker).
 	if max == 0 {
+		// chunks is kept across init calls; huffSym only fails if it is zero.
+		clear(h.chunks[:])
 		return true
 	}
 
