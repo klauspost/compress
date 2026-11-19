@@ -118,6 +118,15 @@ func (g *gzRoundtripper) RoundTrip(req *http.Request) (*http.Response, error) {
 			return resp, nil
 		}
 	}
+	// These responses carry no HTTP content to decode. For HEAD and 304,
+	// Content-Encoding describes the representation a GET would transfer.
+	switch {
+	case req.Method == http.MethodHead, resp.StatusCode/100 == 1,
+		resp.StatusCode == http.StatusNoContent, resp.StatusCode == http.StatusResetContent,
+		resp.StatusCode == http.StatusNotModified,
+		req.Method == http.MethodConnect && resp.StatusCode/100 == 2:
+		return resp, nil
+	}
 	// Decompress
 	if (decompress || g.withGzip) && asciiEqualFold(resp.Header.Get("Content-Encoding"), "gzip") {
 		resp.Body = &gzipReader{body: resp.Body}

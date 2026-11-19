@@ -363,6 +363,41 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
+func TestTransportBodylessResponse(t *testing.T) {
+	for _, tt := range []struct {
+		method string
+		status int
+		always bool
+	}{
+		{http.MethodGet, http.StatusNotModified, false},
+		{http.MethodHead, http.StatusOK, true},
+		{http.MethodGet, http.StatusNoContent, false},
+		{http.MethodGet, http.StatusResetContent, false},
+		{http.MethodGet, http.StatusSwitchingProtocols, false},
+		{http.MethodConnect, http.StatusOK, false},
+	} {
+		t.Run(tt.method+"/"+http.StatusText(tt.status), func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, "http://example.org", nil)
+			body := io.NopCloser(bytes.NewReader(nil))
+			parent := roundTripFunc(func(*http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: tt.status,
+					Header:     http.Header{"Content-Encoding": {"gzip"}},
+					Body:       body,
+				}, nil
+			})
+			resp, err := Transport(parent, TransportAlwaysDecompress(tt.always)).RoundTrip(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if resp.Uncompressed || resp.Header.Get("Content-Encoding") != "gzip" || resp.Body != body {
+				t.Errorf("response without content was decoded: Uncompressed=%v, Content-Encoding=%q", resp.Uncompressed, resp.Header.Get("Content-Encoding"))
+			}
+		})
+	}
+}
+
 // stallReader blocks in Read until release is closed, then returns err.
 type stallReader struct {
 	stalled, release chan struct{}
