@@ -620,7 +620,6 @@ func (f *decompressor) dataBlock() {
 	f.buf[2] = uint8(f.b >> 16)
 	f.buf[3] = uint8(f.b >> 24)
 
-	f.roffset += int64(offBytes)
 	f.nb, f.b = 0, 0
 
 	// Length then ones-complement of length.
@@ -868,6 +867,9 @@ func (f *decompressor) applyCP(cp InflateCheckpoint) error {
 		f.b = uint32(c) >> cp.BitOffset
 		f.nb = 8 - uint(cp.BitOffset)
 	}
+	if cp.Final {
+		f.err = io.EOF
+	}
 	return nil
 }
 
@@ -900,7 +902,8 @@ type InflateCheckpoint struct {
 // WithEobCallback will call the provided function after each block
 // with the current gzip checkpoint.
 // After returning the provided window can no longer be referenced.
-// The callback will not be triggered after a block is marked "final".
+// The checkpoint after the final block has Final set and is the last one.
+// Resuming from it returns io.EOF without reading another block.
 // The callback is not retained after Reset.
 func WithEobCallback(cb func(InflateCheckpoint)) ReaderOpt {
 	return func(f *decompressor) {
