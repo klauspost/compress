@@ -565,6 +565,35 @@ func TestInflateCheckpointResetCP(t *testing.T) {
 	}
 }
 
+func TestInflateCheckpointBadBitOffset(t *testing.T) {
+	var compressed bytes.Buffer
+	w, err := NewWriter(&compressed, DefaultCompression)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Write(bytes.Repeat([]byte("the quick brown fox "), 100))
+	w.Close()
+
+	want := CorruptInputError(0)
+	for _, bitOff := range []uint8{8, 9, 255} {
+		cp := InflateCheckpoint{BitOffset: bitOff}
+		r := NewReaderOpts(bytes.NewReader(compressed.Bytes()), WithResumeFrom(cp))
+		if _, err := io.ReadAll(r); err != want {
+			t.Errorf("WithResumeFrom BitOffset %d: got %v, want %v", bitOff, err, want)
+		}
+		dec := NewReader(nil).(interface {
+			io.Reader
+			ResetCP(io.Reader, InflateCheckpoint) error
+		})
+		if err := dec.ResetCP(bytes.NewReader(compressed.Bytes()), cp); err != want {
+			t.Errorf("ResetCP BitOffset %d: got %v, want %v", bitOff, err, want)
+		}
+		if _, err := io.ReadAll(dec); err != want {
+			t.Errorf("Read after ResetCP BitOffset %d: got %v, want %v", bitOff, err, want)
+		}
+	}
+}
+
 func TestReaderPartialBlock(t *testing.T) {
 	data, err := os.ReadFile("testdata/partial-block")
 	if err != nil {

@@ -854,6 +854,10 @@ func (f *decompressor) ResetCP(r io.Reader, cp InflateCheckpoint) error {
 // offsets, and skips cp.BitOffset bits into the first input byte so
 // the next decode aligns with the start of a deflate block.
 func (f *decompressor) applyCP(cp InflateCheckpoint) error {
+	if cp.BitOffset > 7 {
+		f.err = CorruptInputError(cp.CompressedOffset)
+		return f.err
+	}
 	f.dict.init(maxMatchOffset, cp.Window)
 	f.roffset = cp.CompressedOffset
 	f.uncOffset = cp.UncompressedOffset
