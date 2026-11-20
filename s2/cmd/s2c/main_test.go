@@ -1006,13 +1006,17 @@ func writeTestInput(t *testing.T, name string, contents []byte) string {
 
 func assertNoOutputTempFiles(t *testing.T, filename string) {
 	t.Helper()
-	for _, suffix := range []string{".tmp-*", ".backup-*"} {
-		matches, err := filepath.Glob(filepath.Join(filepath.Dir(filename), "."+filepath.Base(filename)+suffix))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(matches) != 0 {
-			t.Fatalf("temporary output remains: %v", matches)
+	entries, err := os.ReadDir(filepath.Dir(filename))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if strings.HasPrefix(name, ".s2-tmp-") ||
+			strings.HasPrefix(name, ".s2-backup-") ||
+			strings.Contains(name, ".tmp-") ||
+			strings.Contains(name, ".backup-") {
+			t.Fatalf("temporary output remains: %s", name)
 		}
 	}
 }

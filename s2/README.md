@@ -166,6 +166,8 @@ To build binaries to the current folder use:
 
 With `-safe`, output uses exclusive creation and fails if any directory entry, including a dangling symbolic link, already exists at the destination.
 
+When a regular local input and output refer to the same file, including through a symbolic or hard link, `s2c` and `s2d` write to a temporary file in the destination directory and replace the destination only after successful completion. Input/output aliases are rejected when either `-safe` or `-rm` is used.
+
 ## s2c
 
 ```
