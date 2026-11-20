@@ -200,6 +200,50 @@ func TestErrorWriter(t *testing.T) {
 	}
 }
 
+// eofWriter accepts limit bytes, then returns io.EOF.
+type eofWriter struct {
+	limit int
+}
+
+func (w *eofWriter) Write(p []byte) (int, error) {
+	if len(p) > w.limit {
+		n := w.limit
+		w.limit = 0
+		return n, io.EOF
+	}
+	w.limit -= len(p)
+	return len(p), nil
+}
+
+func TestDecoderWriteToEOF(t *testing.T) {
+	input := make([]byte, 1<<20)
+	for i := range input {
+		input[i] = byte(i * 31 / 7)
+	}
+	enc, err := NewWriter(nil, WithEncoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	compressed := enc.EncodeAll(input, nil)
+	for _, n := range []int{1, 4} {
+		t.Run(fmt.Sprintf("cpu-%d", n), func(t *testing.T) {
+			dec, err := NewReader(bytes.NewReader(compressed), WithDecoderConcurrency(n))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer dec.Close()
+			// A writer's io.EOF must not be taken as the end of the stream.
+			written, err := io.Copy(&eofWriter{limit: 1000}, dec)
+			if written != 1000 || !errors.Is(err, io.EOF) {
+				t.Fatalf("io.Copy: got (%d, %v), want (1000, io.EOF)", written, err)
+			}
+			if _, err := io.ReadAll(dec); err == nil {
+				t.Error("Read after failed WriteTo: got nil error")
+			}
+		})
+	}
+}
+
 func TestNewDecoder(t *testing.T) {
 	for _, n := range []int{1, 4} {
 		for _, ignoreCRC := range []bool{false, true} {
