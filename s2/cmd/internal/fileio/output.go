@@ -8,6 +8,11 @@ import (
 	"path/filepath"
 )
 
+const (
+	backupOutputPattern = ".s2-backup-*"
+	stagedOutputPattern = ".s2-tmp-*"
+)
+
 // Create opens name for output. Exclusive creation fails if any directory
 // entry, including a dangling symbolic link, already exists at name.
 func Create(name string, mode fs.FileMode, exclusive bool) (*os.File, error) {
@@ -75,7 +80,7 @@ func ReplaceOutput(tmp, dst string) error {
 		return replaceErr
 	}
 
-	backup, err := os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+".backup-*")
+	backup, err := os.CreateTemp(filepath.Dir(dst), backupOutputPattern)
 	if err != nil {
 		return errors.Join(replaceErr, err)
 	}
@@ -99,7 +104,7 @@ func ReplaceOutput(tmp, dst string) error {
 }
 
 func createStagedOutput(dst string) (*os.File, string, error) {
-	f, err := os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+".tmp-*")
+	f, err := os.CreateTemp(filepath.Dir(dst), stagedOutputPattern)
 	if err != nil {
 		return nil, "", err
 	}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,27 +25,27 @@ func TestMain(m *testing.M) {
 func TestOutputAliases(t *testing.T) {
 	tests := []struct {
 		name            string
-		output          func(*testing.T, string) string
+		output          func(*testing.T, string, string) string
 		preservesSource bool
 	}{
 		{
 			name: "same path",
-			output: func(_ *testing.T, input string) string {
+			output: func(_ *testing.T, _, input string) string {
 				return input
 			},
 		},
 		{
 			name: "normalized path",
-			output: func(_ *testing.T, input string) string {
+			output: func(_ *testing.T, _, input string) string {
 				separator := string(os.PathSeparator)
-				return filepath.Dir(input) + separator + "." + separator + filepath.Base(input)
+				return "." + separator + input
 			},
 		},
 		{
 			name: "symbolic link",
-			output: func(t *testing.T, input string) string {
-				name := filepath.Join(filepath.Dir(input), "output.txt")
-				if err := os.Symlink(input, name); err != nil {
+			output: func(t *testing.T, dir, input string) string {
+				name := "output.txt"
+				if err := os.Symlink(input, filepath.Join(dir, name)); err != nil {
 					t.Skipf("symbolic links are unavailable: %v", err)
 				}
 				return name
@@ -53,9 +54,9 @@ func TestOutputAliases(t *testing.T) {
 		},
 		{
 			name: "hard link",
-			output: func(t *testing.T, input string) string {
-				name := filepath.Join(filepath.Dir(input), "output.txt")
-				if err := os.Link(input, name); err != nil {
+			output: func(t *testing.T, dir, input string) string {
+				name := "output.txt"
+				if err := os.Link(filepath.Join(dir, input), filepath.Join(dir, name)); err != nil {
 					t.Skipf("hard links are unavailable: %v", err)
 				}
 				return name
@@ -67,13 +68,14 @@ func TestOutputAliases(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Run("replaces output after successful decode", func(t *testing.T) {
+				dir := t.TempDir()
 				want := []byte("decoded output")
-				input, compressed := writeS2Input(t, want)
-				output := test.output(t, input)
+				input, compressed := writeS2Input(t, dir, want)
+				output := test.output(t, dir, input)
 
-				runS2D(t, "-q", "-o", output, input)
+				runS2D(t, dir, "-q", "-o", output, input)
 
-				got, err := os.ReadFile(output)
+				got, err := os.ReadFile(filepath.Join(dir, output))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -81,7 +83,7 @@ func TestOutputAliases(t *testing.T) {
 					t.Fatalf("output contents = %q, want %q", got, want)
 				}
 				if test.preservesSource {
-					got, err := os.ReadFile(input)
+					got, err := os.ReadFile(filepath.Join(dir, input))
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -89,19 +91,24 @@ func TestOutputAliases(t *testing.T) {
 						t.Fatalf("source contents changed: got %d bytes, want %d", len(got), len(compressed))
 					}
 				}
-				assertNoOutputTempFiles(t, output)
+				assertNoOutputTempFiles(t, dir)
 			})
 
 			for _, flag := range []string{"-safe", "-rm"} {
 				t.Run("rejects "+flag, func(t *testing.T) {
+					dir := t.TempDir()
 					want := []byte("preserve aliased source")
-					input, compressed := writeS2Input(t, want)
-					output := test.output(t, input)
+					input, compressed := writeS2Input(t, dir, want)
+					output := test.output(t, dir, input)
 
-					runS2DWantError(t, "-q", flag, "-o", output, input)
+					wantError := "cannot remove when input = output"
+					if flag == "-safe" {
+						wantError = "cannot use -safe when output path is the same as the input file"
+					}
+					runS2DWantError(t, dir, wantError, "-q", flag, "-o", output, input)
 
 					for _, name := range []string{input, output} {
-						got, err := os.ReadFile(name)
+						got, err := os.ReadFile(filepath.Join(dir, name))
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -109,7 +116,7 @@ func TestOutputAliases(t *testing.T) {
 							t.Fatalf("%s contents changed: got %d bytes, want %d", name, len(got), len(compressed))
 						}
 					}
-					assertNoOutputTempFiles(t, output)
+					assertNoOutputTempFiles(t, dir)
 				})
 			}
 		})
@@ -125,24 +132,25 @@ func TestAliasedOutputFailurePreservesInput(t *testing.T) {
 		{name: "block", args: []string{"-block"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			input := filepath.Join(t.TempDir(), "invalid.s2")
+			dir := t.TempDir()
+			input := "invalid.s2"
 			contents := []byte("not valid s2 data")
-			if err := os.WriteFile(input, contents, 0o600); err != nil {
+			if err := os.WriteFile(filepath.Join(dir, input), contents, 0o600); err != nil {
 				t.Fatal(err)
 			}
 
 			args := append([]string{"-q"}, test.args...)
 			args = append(args, "-o", input, input)
-			runS2DWantError(t, args...)
+			runS2DWantError(t, dir, "s2: corrupt input", args...)
 
-			got, err := os.ReadFile(input)
+			got, err := os.ReadFile(filepath.Join(dir, input))
 			if err != nil {
 				t.Fatal(err)
 			}
 			if !bytes.Equal(got, contents) {
 				t.Fatalf("input contents = %q, want %q", got, contents)
 			}
-			assertNoOutputTempFiles(t, input)
+			assertNoOutputTempFiles(t, dir)
 		})
 	}
 }
@@ -156,81 +164,105 @@ func TestDerivedOutputAliasPreservesSource(t *testing.T) {
 		{name: "hard link", link: os.Link},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
 			want := []byte("decoded derived output")
-			input, compressed := writeS2Input(t, want)
+			input, compressed := writeS2Input(t, dir, want)
 			output := strings.TrimSuffix(input, s2Ext)
-			if err := test.link(input, output); err != nil {
+			if err := test.link(filepath.Join(dir, input), filepath.Join(dir, output)); err != nil {
 				t.Skipf("%s is unavailable: %v", test.name, err)
 			}
 
-			runS2D(t, "-q", input)
+			runS2D(t, dir, "-q", input)
 
-			got, err := os.ReadFile(output)
+			got, err := os.ReadFile(filepath.Join(dir, output))
 			if err != nil {
 				t.Fatal(err)
 			}
 			if !bytes.Equal(got, want) {
 				t.Fatalf("output contents = %q, want %q", got, want)
 			}
-			got, err = os.ReadFile(input)
+			got, err = os.ReadFile(filepath.Join(dir, input))
 			if err != nil {
 				t.Fatal(err)
 			}
 			if !bytes.Equal(got, compressed) {
 				t.Fatalf("source contents changed: got %d bytes, want %d", len(got), len(compressed))
 			}
-			assertNoOutputTempFiles(t, output)
+			assertNoOutputTempFiles(t, dir)
 		})
 	}
 }
 
 func TestBlockAliasedOutput(t *testing.T) {
+	dir := t.TempDir()
 	want := []byte("decoded block output")
-	input := filepath.Join(t.TempDir(), "input.s2")
-	if err := os.WriteFile(input, s2.Encode(nil, want), 0o600); err != nil {
+	input := "input.s2"
+	if err := os.WriteFile(filepath.Join(dir, input), s2.Encode(nil, want), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	runS2D(t, "-q", "-block", "-o", input, input)
+	runS2D(t, dir, "-q", "-block", "-o", input, input)
 
-	got, err := os.ReadFile(input)
+	got, err := os.ReadFile(filepath.Join(dir, input))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(got, want) {
 		t.Fatalf("output contents = %q, want %q", got, want)
 	}
-	assertNoOutputTempFiles(t, input)
+	assertNoOutputTempFiles(t, dir)
 }
 
 func TestDistinctOutputOverwritesExistingFile(t *testing.T) {
+	dir := t.TempDir()
 	want := []byte("decoded distinct output")
-	input, compressed := writeS2Input(t, want)
-	output := filepath.Join(t.TempDir(), "output.txt")
-	if err := os.WriteFile(output, []byte("existing output that is longer"), 0o600); err != nil {
+	input, compressed := writeS2Input(t, dir, want)
+	output := "output.txt"
+	if err := os.WriteFile(filepath.Join(dir, output), []byte("existing output that is longer"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	runS2D(t, "-q", "-o", output, input)
+	runS2D(t, dir, "-q", "-o", output, input)
 
-	got, err := os.ReadFile(output)
+	got, err := os.ReadFile(filepath.Join(dir, output))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(got, want) {
 		t.Fatalf("output contents = %q, want %q", got, want)
 	}
-	got, err = os.ReadFile(input)
+	got, err = os.ReadFile(filepath.Join(dir, input))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(got, compressed) {
 		t.Fatalf("source contents changed: got %d bytes, want %d", len(got), len(compressed))
 	}
-	assertNoOutputTempFiles(t, output)
+	assertNoOutputTempFiles(t, dir)
 }
 
-func writeS2Input(t *testing.T, contents []byte) (string, []byte) {
+func TestInputDirectoryWithGlobMetacharacters(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "s2[ci]")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	want := []byte("decoded output")
+	input, _ := writeS2Input(t, dir, want)
+	output := "output.txt"
+
+	runS2D(t, dir, "-q", "-o", output, input)
+
+	got, err := os.ReadFile(filepath.Join(dir, output))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("output contents = %q, want %q", got, want)
+	}
+	assertNoOutputTempFiles(t, dir)
+}
+
+func writeS2Input(t *testing.T, dir string, contents []byte) (string, []byte) {
 	t.Helper()
 	var encoded bytes.Buffer
 	writer := s2.NewWriter(&encoded)
@@ -240,70 +272,84 @@ func writeS2Input(t *testing.T, contents []byte) (string, []byte) {
 	if err := writer.Close(); err != nil {
 		t.Fatal(err)
 	}
-	name := filepath.Join(t.TempDir(), "input.s2")
-	if err := os.WriteFile(name, encoded.Bytes(), 0o600); err != nil {
+	name := "input.s2"
+	if err := os.WriteFile(filepath.Join(dir, name), encoded.Bytes(), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return name, bytes.Clone(encoded.Bytes())
 }
 
-func assertNoOutputTempFiles(t *testing.T, filename string) {
+func assertNoOutputTempFiles(t *testing.T, dir string) {
 	t.Helper()
-	for _, suffix := range []string{".tmp-*", ".backup-*"} {
-		matches, err := filepath.Glob(filepath.Join(filepath.Dir(filename), "."+filepath.Base(filename)+suffix))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(matches) != 0 {
-			t.Fatalf("temporary output remains: %v", matches)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".s2-tmp-") ||
+			strings.HasPrefix(entry.Name(), ".s2-backup-") {
+			t.Fatalf("temporary output remains: %s", entry.Name())
 		}
 	}
 }
 
-func runS2D(t *testing.T, args ...string) {
+func runS2D(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	_, stderr, err := runS2DProcess(t, args...)
+	_, stderr, err := runS2DProcess(t, dir, args...)
 	if err != nil {
 		t.Fatalf("s2d %v failed: %v\n%s", args, err, stderr)
 	}
 }
 
-func runS2DWantError(t *testing.T, args ...string) {
+func runS2DWantError(t *testing.T, dir, wantDiagnostic string, args ...string) {
 	t.Helper()
-	_, stderr, err := runS2DProcess(t, args...)
-	if err == nil {
-		t.Fatalf("s2d %v unexpectedly succeeded\n%s", args, stderr)
+	_, stderr, err := runS2DProcess(t, dir, args...)
+	var exitError *exec.ExitError
+	if !errors.As(err, &exitError) {
+		t.Fatalf("s2d %v error = %v, want process exit error\n%s", args, err, stderr)
+	}
+	if exitError.ExitCode() != 2 {
+		t.Fatalf("s2d %v exit code = %d, want 2\n%s", args, exitError.ExitCode(), stderr)
+	}
+	if !bytes.Contains(stderr, []byte(wantDiagnostic)) {
+		t.Fatalf("s2d %v stderr = %q, want diagnostic containing %q", args, stderr, wantDiagnostic)
 	}
 }
 
-func runS2DProcess(t *testing.T, args ...string) ([]byte, []byte, error) {
+func runS2DProcess(t *testing.T, dir string, args ...string) ([]byte, []byte, error) {
 	t.Helper()
-	command := exec.Command(os.Args[0], args...)
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := exec.CommandContext(t.Context(), executable, args...)
+	command.Dir = dir
 	command.Env = append(os.Environ(), s2dTestProcess+"=1")
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout
 	command.Stderr = &stderr
-	err := command.Run()
+	err = command.Run()
 	return stdout.Bytes(), stderr.Bytes(), err
 }
 
 func TestSafeOutputDoesNotReplaceExistingFile(t *testing.T) {
-	input, _ := writeS2Input(t, []byte("safe output"))
-	output := filepath.Join(t.TempDir(), "output")
-	if err := os.WriteFile(output, []byte("existing"), 0o600); err != nil {
+	dir := t.TempDir()
+	input, _ := writeS2Input(t, dir, []byte("safe output"))
+	output := "output"
+	if err := os.WriteFile(filepath.Join(dir, output), []byte("existing"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	runS2DWantError(t, "-q", "-safe", "-o", output, input)
+	runS2DWantError(t, dir, output, "-q", "-safe", "-o", output, input)
 
-	got, err := os.ReadFile(output)
+	got, err := os.ReadFile(filepath.Join(dir, output))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(got) != "existing" {
 		t.Fatalf("existing output changed: %q", got)
 	}
-	if _, err := os.Stat(input); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, input)); err != nil {
 		t.Fatalf("source changed after output creation failed: %v", err)
 	}
 }
