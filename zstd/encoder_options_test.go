@@ -70,6 +70,12 @@ func TestEncoderLevelFromString(t *testing.T) {
 			want:  true,
 			want1: SpeedDefault,
 		},
+		{
+			name:  "ultra",
+			args:  args{s: "ultra"},
+			want:  true,
+			want1: SpeedUltraCompression,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -112,6 +118,21 @@ func TestEncoderLevelFromZstd(t *testing.T) {
 			name: "level-4",
 			args: args{level: 4},
 			want: SpeedDefault,
+		},
+		{
+			name: "level-17",
+			args: args{level: 17},
+			want: SpeedBestCompression,
+		},
+		{
+			name: "level-18",
+			args: args{level: 18},
+			want: SpeedUltraCompression,
+		},
+		{
+			name: "level-22",
+			args: args{level: 22},
+			want: SpeedUltraCompression,
 		},
 	}
 	for _, tt := range tests {
@@ -167,6 +188,7 @@ func TestJobAndOverlapSize(t *testing.T) {
 		// windowSize*4 overflows a 32-bit int here, so on 386 this row
 		// checks that jobSize clamps before multiplying.
 		{MaxWindowSize, SpeedBestCompression, 256 << 20, 128 << 20},
+		{8 << 20, SpeedUltraCompression, 32 << 20, 4 << 20},
 	}
 	for _, tt := range tests {
 		o := encoderOptions{windowSize: tt.windowSize, level: tt.level}

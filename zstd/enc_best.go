@@ -138,6 +138,7 @@ func (e *bestFastEncoder) Encode(blk *blockEnc, src []byte) {
 	// Add block to history
 	s := e.addBlock(src)
 	blk.size = len(src)
+	blk.highRatio = true
 
 	// Check RLE first
 	if len(src) > zstdMinMatch {

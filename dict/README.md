@@ -73,7 +73,7 @@ The dictionary will be built using the specified encoder level,
 which will reflect speed and make the dictionary tailored for that level.
 Default will use level 4 (best).
 
-Valid values are 1-4, where 1 = fastest, 2 = default, 3 = better, 4 = best.
+Valid values are 1-5, where 1 = fastest, 2 = default, 3 = better, 4 = best, 5 = ultra.
 
 ## Library
 
