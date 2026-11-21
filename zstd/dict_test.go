@@ -195,6 +195,53 @@ func TestBuildDictFullyMatchableCorpusReturnsError(t *testing.T) {
 	}
 }
 
+// Samples larger than a block were passed to the block encoder whole, which
+// built invalid tables or panicked in fastBase.addBlock.
+func TestBuildDictLargeSample(t *testing.T) {
+	samples, history, src := buildDictLevelPathFixture()
+	for _, size := range []int{200 << 10, 1 << 20} {
+		big := bytes.Repeat(samples[0], size/len(samples[0])+1)[:size]
+		for level := range speedLast {
+			t.Run(fmt.Sprintf("size=%d/level=%d", size, level), func(t *testing.T) {
+				defer func() {
+					if r := recover(); r != nil {
+						t.Fatalf("BuildDict panicked: %v", r)
+					}
+				}()
+				dict, err := BuildDict(BuildDictOptions{
+					ID:       1,
+					Contents: append([][]byte{big}, samples...),
+					History:  history,
+					Offsets:  [3]int{1, 4, 8},
+					Level:    level,
+				})
+				if err != nil {
+					t.Fatalf("BuildDict failed: %v", err)
+				}
+				enc, err := NewWriter(nil, WithEncoderDict(dict), WithEncoderConcurrency(1))
+				if err != nil {
+					t.Fatalf("NewWriter failed: %v", err)
+				}
+				defer enc.Close()
+				dec, err := NewReader(nil, WithDecoderDicts(dict), WithDecoderConcurrency(1))
+				if err != nil {
+					t.Fatalf("NewReader failed: %v", err)
+				}
+				defer dec.Close()
+				for _, in := range [][]byte{src, big} {
+					decoded, err := dec.DecodeAll(enc.EncodeAll(in, nil), nil)
+					if err != nil {
+						t.Fatalf("DecodeAll failed: %v", err)
+					}
+					if !bytes.Equal(decoded, in) {
+						t.Fatal("decoded output mismatch")
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestBuildDictUnknownLevel(t *testing.T) {
 	samples, history, _ := buildDictLevelPathFixture()
 	for _, level := range []EncoderLevel{-1, speedLast} {
