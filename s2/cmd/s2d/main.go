@@ -144,7 +144,7 @@ Options:`)
 					fmt.Print("Reading ", filename, "...")
 				}
 				// Input file.
-				file, size, _ := openFile(filename)
+				file, size, _, _ := openFile(filename)
 				b := make([]byte, size)
 				_, err := io.ReadFull(file, b)
 				exitErr(err)
@@ -221,8 +221,20 @@ Options:`)
 				fmt.Print("Decompressing ", filename, " -> ", dstFilename)
 			}
 			// Input file.
-			file, _, mode := openFile(filename)
+			file, _, mode, inputInfo := openFile(filename)
 			defer closeOnce.Do(func() { file.Close() })
+			var closeRA func() error
+			closeSource := func() error {
+				var raErr error
+				if closeRA != nil {
+					raErr = closeRA()
+				}
+				var fileErr error
+				closeOnce.Do(func() {
+					fileErr = file.Close()
+				})
+				return errors.Join(raErr, fileErr)
+			}
 			var rc interface {
 				io.Reader
 				BytesRead() int64
@@ -245,6 +257,7 @@ Options:`)
 				ra, err := readahead.NewReaderSize(rc, 2, 4<<20)
 				exitErr(err)
 				defer ra.Close()
+				closeRA = ra.Close
 				src = ra
 			} else {
 				src = rc
@@ -252,13 +265,14 @@ Options:`)
 			var out io.Writer
 			var dstFile *os.File
 			var bw *bufio.Writer
+			var tempName string
 			switch {
 			case *verify:
 				out = io.Discard
 			case *stdout:
 				out = os.Stdout
 			default:
-				dstFile, err = fileio.Create(dstFilename, mode, *safe)
+				dstFile, tempName, err = fileio.CreateOutput(inputInfo, dstFilename, mode, *safe, *remove)
 				exitErr(err)
 				out = dstFile
 				if !block {
@@ -266,6 +280,7 @@ Options:`)
 					out = bw
 				}
 			}
+			replaceInput := tempName != ""
 			var decoded io.Reader
 			start := time.Now()
 			if block {
@@ -299,11 +314,19 @@ Options:`)
 			if bw != nil {
 				flushErr = bw.Flush()
 			}
-			var closeErr error
-			if dstFile != nil {
-				closeErr = dstFile.Close()
+			if replaceInput {
+				closeErr := closeSource()
+				err = errors.Join(err, closeErr)
 			}
-			exitErr(errors.Join(err, flushErr, closeErr))
+			if dstFile != nil {
+				outputErr := errors.Join(err, flushErr)
+				finishErr := fileio.FinishOutput(dstFile, tempName, dstFilename, mode, outputErr)
+				dstFile = nil
+				tempName = ""
+				exitErr(finishErr)
+			} else {
+				exitErr(errors.Join(err, flushErr))
+			}
 			if !*quiet {
 				elapsed := time.Since(start)
 				mbPerSec := (float64(output) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
@@ -324,20 +347,20 @@ Options:`)
 	}
 }
 
-func openFile(name string) (rc io.ReadCloser, size int64, mode os.FileMode) {
+func openFile(name string) (rc io.ReadCloser, size int64, mode os.FileMode, info os.FileInfo) {
 	if isHTTP(name) {
 		resp, err := http.Get(name)
 		exitErr(err)
 		if resp.StatusCode != http.StatusOK {
 			exitErr(fmt.Errorf("unexpected response status code %v, want 200 OK", resp.Status))
 		}
-		return resp.Body, resp.ContentLength, os.ModePerm
+		return resp.Body, resp.ContentLength, os.ModePerm, nil
 	}
 	file, err := os.Open(name)
 	exitErr(err)
 	st, err := file.Stat()
 	exitErr(err)
-	return file, st.Size(), st.Mode()
+	return file, st.Size(), st.Mode(), st
 }
 
 func cleanFileName(s string) string {
