@@ -54,7 +54,12 @@ func TestS2SXInput(t *testing.T) {
 		os.Exit(0)
 	}
 
-	stub, err := embeddedFiles.ReadFile(path.Join("sfx-exe", runtime.GOOS+"-"+runtime.GOARCH+".s2"))
+	destOS, destArch := runtime.GOOS, runtime.GOARCH
+	stub, err := embeddedFiles.ReadFile(path.Join("sfx-exe", destOS+"-"+destArch+".s2"))
+	if os.IsNotExist(err) {
+		destOS, destArch = "windows", "amd64"
+		stub, err = embeddedFiles.ReadFile(path.Join("sfx-exe", destOS+"-"+destArch+".s2"))
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +106,7 @@ func TestS2SXInput(t *testing.T) {
 			t.Run(tt.name+"/"+mode, func(t *testing.T) {
 				dir := t.TempDir()
 				name := filepath.Join(dir, "input.bin")
-				args := []string{"-test.run=^TestS2SXInput$", "--", "-q", "-cpu=1"}
+				args := []string{"-test.run=^TestS2SXInput$", "--", "-q", "-cpu=1", "-os=" + destOS, "-arch=" + destArch}
 				if mode == "remove" {
 					args = append(args, "-rm")
 				}
@@ -131,7 +136,7 @@ func TestS2SXInput(t *testing.T) {
 						t.Errorf("source = %x, %v, want %x", got, err, tt.input)
 					}
 					suffix := ".s2sx"
-					if runtime.GOOS == "windows" {
+					if destOS == "windows" {
 						suffix += ".exe"
 					}
 					archive, err = os.ReadFile(name + suffix)
