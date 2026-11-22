@@ -39,6 +39,7 @@ type encoder interface {
 	UseBlock(*blockEnc)
 	Reset(d *dict, singleBlock bool)
 	ResetPrefix(prefix []byte)
+	inPlace(b []byte)
 }
 
 type encoderState struct {

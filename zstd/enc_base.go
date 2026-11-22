@@ -18,11 +18,14 @@ type fastBase struct {
 	maxMatchOff int32
 	bufferReset int32
 	hist        []byte
-	crc         *xxhash.Digest
-	tmp         [8]byte
-	blk         *blockEnc
-	lastDict    *dict
-	lowMem      bool
+	// own is our history buffer while hist is the caller's (see inPlace).
+	own      []byte
+	inp      bool
+	crc      *xxhash.Digest
+	tmp      [8]byte
+	blk      *blockEnc
+	lastDict *dict
+	lowMem   bool
 }
 
 // CRC returns the underlying CRC writer.
@@ -54,7 +57,29 @@ func (e *fastBase) Block() *blockEnc {
 	return e.blk
 }
 
+// inPlace encodes the following blocks where they are, instead of copying
+// them into hist. b is the history, and the blocks must follow it within
+// cap(b). They must not change until inPlace(nil) or a reset.
+func (e *fastBase) inPlace(b []byte) {
+	if e.inp {
+		// Continue positions after b, so its table entries leave the window.
+		e.cur += int32(len(e.hist))
+		e.hist, e.own, e.inp = e.own, nil, false
+	}
+	if b != nil {
+		e.own, e.hist, e.inp = e.hist[:0], b, true
+	}
+}
+
 func (e *fastBase) addBlock(src []byte) int32 {
+	if e.inp {
+		s := int32(len(e.hist))
+		e.hist = e.hist[:int(s)+len(src)]
+		if len(src) > 0 && &e.hist[s] != &src[0] {
+			panic("zstd: block does not follow its history")
+		}
+		return s
+	}
 	if debugAsserts && e.cur > e.bufferReset {
 		panic(fmt.Sprintf("ecur (%d) > buffer reset (%d)", e.cur, e.bufferReset))
 	}
@@ -147,6 +172,7 @@ func (e *fastBase) resetBasePrefix(prefix []byte) {
 		e.crc.Reset()
 	}
 	e.blk.dictLitEnc = nil
+	e.inPlace(nil)
 	e.ensureHist(len(prefix) + maxCompressedBlockSize)
 	// Bump cur so old table entries fall outside the window.
 	// When cur >= bufferReset, leave it; the first Encode call
@@ -160,6 +186,7 @@ func (e *fastBase) resetBasePrefix(prefix []byte) {
 
 // Reset the encoding table.
 func (e *fastBase) resetBase(d *dict, singleBlock bool) {
+	e.inPlace(nil)
 	if e.blk == nil {
 		e.blk = &blockEnc{lowMem: e.lowMem}
 		e.blk.init()
