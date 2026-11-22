@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	mrand "math/rand"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -1663,13 +1664,63 @@ func BenchmarkConcurrentBlocks(b *testing.B) {
 	}
 }
 
-func BenchmarkConcurrentBlocks_GobStream(b *testing.B) {
-	input, err := os.ReadFile("testdata/gob-stream")
-	if err != nil {
-		b.Skip("testdata/gob-stream not available:", err)
+// gobStream returns testdata/gob-stream, the input of the README table.
+// Without it, it decompresses testdata/gob-stream.zst, downloading it first.
+func gobStream(b *testing.B) []byte {
+	if input, err := os.ReadFile("testdata/gob-stream"); err == nil {
+		return input
 	}
+	const name, url = "testdata/gob-stream.zst", "https://klauspost.com/files/compress/gob-stream.zst"
+	if _, err := os.Stat(name); err != nil {
+		if err := downloadFile(name, url); err != nil {
+			b.Skip("testdata/gob-stream not available:", err)
+		}
+	}
+	compressed, err := os.ReadFile(name)
+	if err != nil {
+		b.Fatal(err)
+	}
+	dec, err := NewReader(nil)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer dec.Close()
+	input, err := dec.DecodeAll(compressed, nil)
+	if err != nil {
+		b.Fatal(name, err)
+	}
+	return input
+}
 
-	levels := []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression}
+// downloadFile writes url to name. A partial download does not keep the name.
+func downloadFile(name, url string) error {
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("%s: %s", url, resp.Status)
+	}
+	f, err := os.Create(name + ".tmp")
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(f, resp.Body)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		os.Remove(f.Name())
+		return err
+	}
+	return os.Rename(f.Name(), name)
+}
+
+func BenchmarkConcurrentBlocks_GobStream(b *testing.B) {
+	input := gobStream(b)
+
+	levels := []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression, SpeedUltraCompression}
 	for _, level := range levels {
 		for _, conc := range []int{1, 4, 16} {
 			for _, cb := range []bool{false, true} {

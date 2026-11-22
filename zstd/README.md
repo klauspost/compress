@@ -118,7 +118,7 @@ depends on the input. The overlap is at most half a job, so at the best level
 with windows over 256 MiB each job sees less of the previous data than the
 window allows, and the loss may be larger.
 
-Benchmark on 1.8GB GOB stream (AMD Ryzen 9 9950X):
+Benchmark on 1.8GB GOB stream (AMD Ryzen 9 9950X; `BenchmarkConcurrentBlocks_GobStream`, which downloads the stream):
 
 | Level   |  1 thread  |     4 threads      |     16 threads      | 1T ratio | 16T ratio |
 |---------|:----------:|:------------------:|:-------------------:|:--------:|:---------:|
@@ -126,6 +126,7 @@ Benchmark on 1.8GB GOB stream (AMD Ryzen 9 9950X):
 | default | 722 MB/s   | 2718 MB/s (3.8×)   | 6560 MB/s (9.1×)    | 10.62%   | 10.66%    |
 | better  | 378 MB/s   | 1090 MB/s (2.9×)   | 2510 MB/s (6.6×)    | 9.05%    | 9.12%     |
 | best    | 136 MB/s   | 424 MB/s (3.1×)    | 1015 MB/s (7.5×)    | 8.44%    | 8.45%     |
+| ultra   | 6.1 MB/s   | 17.7 MB/s (2.9×)   | 56.0 MB/s (9.2×)    | 6.61%    | 6.61%     |
 
 Notes:
 * Not compatible with dictionary encoding.
