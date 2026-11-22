@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/iotest"
 	"time"
 )
 
@@ -1512,6 +1513,18 @@ func TestConcurrentBlocks_Ring(t *testing.T) {
 							if err := enc.Flush(); err != nil {
 								t.Fatal(err)
 							}
+						case r < 6:
+							// Fill the slot, and return its last bytes with io.EOF.
+							js := &enc.state.jobs
+							n := js.limit - js.end
+							if n == 0 {
+								n = js.jobSize
+							}
+							n = min(len(rem), n)
+							if _, err := enc.ReadFrom(iotest.DataErrReader(bytes.NewReader(rem[:n]))); err != nil {
+								t.Fatal(err)
+							}
+							rem = rem[n:]
 						case r < 12:
 							n := min(len(rem), rng.Intn(1<<20))
 							if _, err := enc.ReadFrom(bytes.NewReader(rem[:n])); err != nil {
@@ -1694,7 +1707,7 @@ func gobStream(b *testing.B) []byte {
 
 // downloadFile writes url to name. A partial download does not keep the name.
 func downloadFile(name, url string) error {
-	resp, err := http.Get(url)
+	resp, err := (&http.Client{Timeout: 10 * time.Minute}).Get(url)
 	if err != nil {
 		return err
 	}

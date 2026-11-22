@@ -495,6 +495,12 @@ func (e *Encoder) readFromJobs(r io.Reader) (n int64, err error) {
 		n2, err := r.Read(js.ring[js.end:js.limit])
 		js.end += n2
 		n += int64(n2)
+		// Before err: a Reader may return its last bytes with io.EOF.
+		if js.end == js.limit {
+			if err := e.dispatchJob(false); err != nil {
+				return n, err
+			}
+		}
 		switch err {
 		case io.EOF:
 			return n, nil
@@ -502,11 +508,6 @@ func (e *Encoder) readFromJobs(r io.Reader) (n int64, err error) {
 		default:
 			e.state.err = err
 			return n, err
-		}
-		if js.end == js.limit {
-			if err := e.dispatchJob(false); err != nil {
-				return n, err
-			}
 		}
 	}
 }
