@@ -1459,6 +1459,91 @@ func TestConcurrentBlocks_ManySmallWrites(t *testing.T) {
 	}
 }
 
+// TestConcurrentBlocks_Ring round-trips streams of random writes, flushes and
+// ReadFrom calls through the input ring, at every level.
+func TestConcurrentBlocks_Ring(t *testing.T) {
+	rng := mrand.New(mrand.NewSource(1))
+	words := make([][]byte, 300)
+	for i := range words {
+		words[i] = make([]byte, 3+rng.Intn(12))
+		for j := range words[i] {
+			words[i][j] = byte('a' + rng.Intn(26))
+		}
+	}
+	// With 512 KiB jobs the ring grows to at most 6 slots, through 1, 2 and 4,
+	// so the first stream also wraps a ring it does not replace.
+	var src []byte
+	for len(src) < 8<<20 {
+		if rng.Intn(50) == 0 {
+			src = appendRandom(src, rng, rng.Intn(200))
+		}
+		src = append(src, words[rng.Intn(len(words))]...)
+		src = append(src, ' ')
+	}
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	levels := []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression, SpeedUltraCompression}
+	if testing.Short() {
+		levels = levels[:2]
+	}
+	for _, level := range levels {
+		for _, conc := range []int{2, 4} {
+			t.Run(fmt.Sprint(level, "-", conc), func(t *testing.T) {
+				// The smallest window gives the smallest jobs.
+				enc, err := NewWriter(nil, WithEncoderLevel(level), WithEncoderConcurrency(conc),
+					WithConcurrentBlocks(true), WithWindowSize(MinWindowSize))
+				if err != nil {
+					t.Fatal(err)
+				}
+				for stream := range 3 {
+					var buf bytes.Buffer
+					enc.Reset(&buf)
+					in := src
+					if stream > 0 {
+						in = src[:rng.Intn(len(src)/4)]
+					}
+					for rem := in; len(rem) > 0; {
+						switch r := rng.Intn(100); {
+						case r < 3:
+							if err := enc.Flush(); err != nil {
+								t.Fatal(err)
+							}
+						case r < 12:
+							n := min(len(rem), rng.Intn(1<<20))
+							if _, err := enc.ReadFrom(bytes.NewReader(rem[:n])); err != nil {
+								t.Fatal(err)
+							}
+							rem = rem[n:]
+						default:
+							n := min(len(rem), 1+rng.Intn(64<<10))
+							if _, err := enc.Write(rem[:n]); err != nil {
+								t.Fatal(err)
+							}
+							rem = rem[n:]
+						}
+					}
+					if err := enc.Close(); err != nil {
+						t.Fatal(err)
+					}
+					if enc.state.jobs.ring != nil {
+						t.Fatal("ring kept after Close")
+					}
+					got, err := dec.DecodeAll(buf.Bytes(), nil)
+					if err != nil {
+						t.Fatalf("stream %d (%d bytes): %v", stream, len(in), err)
+					}
+					if !bytes.Equal(got, in) {
+						t.Fatalf("stream %d (%d bytes): mismatch", stream, len(in))
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestConcurrentBlocks_StreamDecode(t *testing.T) {
 	rng := mrand.New(mrand.NewSource(11))
 	input := make([]byte, 2<<20)

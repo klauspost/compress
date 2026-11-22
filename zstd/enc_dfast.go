@@ -1051,7 +1051,9 @@ func (e *doubleFastEncoder) Reset(d *dict, singleBlock bool) {
 }
 
 func (e *doubleFastEncoder) ResetPrefix(prefix []byte) {
-	e.fastEncoder.ResetPrefix(prefix)
+	if e.fastEncoder.resetPrefix(prefix) {
+		e.longTable = [dFastLongTableSize]tableEntry{}
+	}
 	if len(prefix) < 8 {
 		return
 	}

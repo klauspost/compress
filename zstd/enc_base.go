@@ -155,10 +155,12 @@ func (e *fastBase) matchlen(s, t int32, src []byte) int32 {
 	return int32(matchLen(src[s:], src[t:]))
 }
 
-// resetBasePrefix resets the encoder state and loads prefix as initial history.
+// resetBasePrefix resets the encoder state and uses prefix as initial history,
+// in place: the blocks to encode must follow it within cap(prefix).
+// It reports whether positions restarted, so the caller must clear its tables.
 // This is used for parallel job encoding where non-first jobs need overlap context.
 // Rep offsets are set to defaults [1,4,8] (invalidated, matching C behavior).
-func (e *fastBase) resetBasePrefix(prefix []byte) {
+func (e *fastBase) resetBasePrefix(prefix []byte) (restart bool) {
 	if e.blk == nil {
 		e.blk = &blockEnc{lowMem: e.lowMem}
 		e.blk.init()
@@ -173,15 +175,17 @@ func (e *fastBase) resetBasePrefix(prefix []byte) {
 	}
 	e.blk.dictLitEnc = nil
 	e.inPlace(nil)
-	e.ensureHist(len(prefix) + maxCompressedBlockSize)
-	// Bump cur so old table entries fall outside the window.
-	// When cur >= bufferReset, leave it; the first Encode call
-	// will shift/clear tables, preserving valid prefix entries.
 	if e.cur < e.bufferReset {
+		// Bump cur so old table entries fall outside the window.
 		e.cur += e.maxMatchOff + int32(len(e.hist))
+	} else {
+		// A shift would keep the entries just before prefix,
+		// since prefix is shorter than the window.
+		e.cur, restart = e.maxMatchOff, true
 	}
 	e.hist = e.hist[:0]
-	e.hist = append(e.hist, prefix...)
+	e.inPlace(prefix)
+	return restart
 }
 
 // Reset the encoding table.

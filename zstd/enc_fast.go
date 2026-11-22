@@ -798,9 +798,16 @@ func (e *fastEncoder) Reset(d *dict, singleBlock bool) {
 }
 
 func (e *fastEncoder) ResetPrefix(prefix []byte) {
-	e.resetBasePrefix(prefix)
+	e.resetPrefix(prefix)
+}
+
+// resetPrefix is ResetPrefix, reporting whether positions restarted.
+func (e *fastEncoder) resetPrefix(prefix []byte) (restart bool) {
+	if restart = e.resetBasePrefix(prefix); restart {
+		e.table = [tableSize]tableEntry{}
+	}
 	if len(prefix) < 8 {
-		return
+		return restart
 	}
 	end := e.cur + int32(len(prefix)) - 8
 	// Index every 4th
@@ -808,6 +815,7 @@ func (e *fastEncoder) ResetPrefix(prefix []byte) {
 		cv := load6432(prefix, i-e.cur)
 		e.table[hashLen(cv, tableBits, tableFastHashLen)] = tableEntry{val: uint32(cv), offset: i}
 	}
+	return restart
 }
 
 // ResetDict will reset and set a dictionary if not nil
