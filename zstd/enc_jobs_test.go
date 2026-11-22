@@ -139,8 +139,14 @@ func getConcBlockOpts(cMax int) []testEncOpt {
 			break
 		}
 		for conc := 2; conc <= 4; conc *= 2 {
-			for _, wind := range testWindowSizes {
+			if level == SpeedUltraCompression && conc > 2 {
+				break
+			}
+			for _, wind := range testWindows(level) {
 				addOpt := func(name string, options ...EOption) {
+					if level == SpeedUltraCompression && !ultraTestOpts[name] {
+						return
+					}
 					opts := append([]EOption(nil),
 						WithEncoderLevel(level),
 						WithEncoderConcurrency(conc),
@@ -148,7 +154,7 @@ func getConcBlockOpts(cMax int) []testEncOpt {
 						WithConcurrentBlocks(true),
 					)
 					name = fmt.Sprintf("%s-c%d-w%dk-%s", level.String(), conc, wind/1024, name)
-					o = append(o, testEncOpt{name: name, o: append(opts, options...)})
+					o = append(o, testEncOpt{name: name, level: level, o: append(opts, options...)})
 				}
 				addOpt("default")
 				if testing.Short() {
@@ -173,7 +179,7 @@ func getConcBlockOpts(cMax int) []testEncOpt {
 }
 
 func TestConcurrentBlocks_RoundTrip(t *testing.T) {
-	levels := []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression}
+	levels := []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression, SpeedUltraCompression}
 	sizes := []int{0, 1, 100, 1 << 16, 1 << 20, 4 << 20}
 
 	dec, err := NewReader(nil)
@@ -187,6 +193,10 @@ func TestConcurrentBlocks_RoundTrip(t *testing.T) {
 	for _, level := range levels {
 		for _, size := range sizes {
 			for _, conc := range []int{2, 4} {
+				// Ultra is slow under race; the small cases still run it in jobs.
+				if isRaceTest && level == SpeedUltraCompression && (size > 1<<16 || conc > 2) {
+					continue
+				}
 				name := fmt.Sprintf("%s-sz%d-c%d", level, size, conc)
 				t.Run(name, func(t *testing.T) {
 					input := make([]byte, size)
@@ -244,7 +254,14 @@ func TestConcurrentBlocks_Regression(t *testing.T) {
 	}
 	defer dec.Close()
 
+	ultraRuns := 0
 	for _, opts := range getConcBlockOpts(2) {
+		// One configuration covers the slow ultra level.
+		if opts.level == SpeedUltraCompression {
+			if ultraRuns++; ultraRuns > 1 {
+				continue
+			}
+		}
 		t.Run(opts.name, func(t *testing.T) {
 			zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 			if err != nil {
@@ -269,6 +286,9 @@ func TestConcurrentBlocks_Regression(t *testing.T) {
 					in, err := io.ReadAll(r)
 					if err != nil {
 						t.Error(err)
+					}
+					if opts.level == SpeedUltraCompression && len(in) > 256<<10 {
+						t.SkipNow()
 					}
 
 					// Test EncodeAll path (uses encoder pool, not concurrent blocks).
@@ -1117,7 +1137,7 @@ func TestConcurrentBlocks_LargeAllLevels(t *testing.T) {
 		input[i] = byte(rng.Intn(64))
 	}
 
-	levels := []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression}
+	levels := []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression, SpeedUltraCompression}
 	for _, level := range levels {
 		t.Run(level.String(), func(t *testing.T) {
 			var buf bytes.Buffer

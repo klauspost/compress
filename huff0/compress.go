@@ -13,6 +13,10 @@ import (
 // Supply a Scratch object. The scratch object contains state about re-use,
 // So when sharing across independent encodes, be sure to set the re-use policy.
 func Compress1X(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
+	if s != nil {
+		// Even a failed call leaves nothing to restore.
+		s.canRestore = false
+	}
 	s, err = s.prepare(in)
 	if err != nil {
 		return nil, false, err
@@ -26,6 +30,10 @@ func Compress1X(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
 // Supply a Scratch object. The scratch object contains state about re-use,
 // So when sharing across independent encodes, be sure to set the re-use policy.
 func Compress4X(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
+	if s != nil {
+		// Even a failed call leaves nothing to restore.
+		s.canRestore = false
+	}
 	s, err = s.prepare(in)
 	if err != nil {
 		return nil, false, err
@@ -46,6 +54,7 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 	if s.Reuse == ReusePolicyNone {
 		s.prevTable = s.prevTable[:0]
 	}
+	prevLen := len(s.prevTable)
 
 	// Create histogram, if none was provided.
 	maxCount := s.maxCount
@@ -149,8 +158,11 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 		s.OutTable = nil
 		return nil, false, ErrIncompressible
 	}
-	// Move current table into previous.
-	s.prevTable, s.prevTableLog, s.cTable = s.cTable, s.actualTableLog, s.prevTable[:0]
+	// Move current table into previous. Keep the old one for RestorePrevTable,
+	// with its length from before a Prefer fallback dropped it.
+	s.oldTable, s.prevTable, s.cTable = s.prevTable[:prevLen], s.cTable, s.oldTable[:0]
+	s.oldTableLog, s.prevTableLog = s.prevTableLog, s.actualTableLog
+	s.canRestore = true
 	s.OutData = s.Out[len(s.OutTable):]
 	return s.Out, false, nil
 }
@@ -467,6 +479,44 @@ func (s *Scratch) optimalTableLog() {
 	s.actualTableLog = tableLog
 }
 
+// optimalDepth sets s.actualTableLog to the code length limit giving the
+// smallest table plus data, as HUF_optimalTableLog does with
+// HUF_flags_optimalDepth. Limits below minTablelog are fine: tables are
+// written with the actual depth, which can already be lower.
+func (s *Scratch) optimalDepth() {
+	nonZero := uint32(0)
+	for _, v := range s.count[:s.symbolLen] {
+		if v > 0 {
+			nonZero++
+		}
+	}
+	minLog := uint8(highBit32(nonZero) + 1)
+	maxLog := max(s.TableLog, minLog)
+	bestLog, bestSize := maxLog, math.MaxInt-1
+	for tl := minLog; tl <= maxLog; tl++ {
+		s.actualTableLog = tl
+		if s.buildCTableLog() != nil {
+			continue
+		}
+		// A limit that doesn't bind gives the same table as all higher ones.
+		if s.actualTableLog < tl && tl > minLog {
+			break
+		}
+		hSize, err := s.cTable.estTableSize(s)
+		if err != nil {
+			continue
+		}
+		size := hSize + s.cTable.estimateSize(s.count[:s.symbolLen])
+		if size > bestSize+1 {
+			break
+		}
+		if size < bestSize {
+			bestLog, bestSize = tl, size
+		}
+	}
+	s.actualTableLog = bestLog
+}
+
 type cTableEntry struct {
 	val   uint16
 	nBits uint8
@@ -476,7 +526,17 @@ type cTableEntry struct {
 const huffNodesMask = huffNodesLen - 1
 
 func (s *Scratch) buildCTable() error {
-	s.optimalTableLog()
+	if s.OptimalDepth {
+		s.optimalDepth()
+	} else {
+		s.optimalTableLog()
+	}
+	return s.buildCTableLog()
+}
+
+// buildCTableLog builds s.cTable with code lengths limited to s.actualTableLog,
+// which it sets to the longest code.
+func (s *Scratch) buildCTableLog() error {
 	s.huffSort()
 	if cap(s.cTable) < maxSymbolValue+1 {
 		s.cTable = make([]cTableEntry, s.symbolLen, maxSymbolValue+1)
