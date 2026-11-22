@@ -226,7 +226,8 @@ func (e *Encoder) writeJobs(p []byte) (n int, err error) {
 		js.end += c
 		n += c
 		p = p[c:]
-		if js.end == js.limit {
+		// A full first buffer moves to the ring instead (see nextSlot).
+		if js.end == js.limit && !js.first {
 			if err := e.dispatchJob(false); err != nil {
 				return n, err
 			}
@@ -496,7 +497,8 @@ func (e *Encoder) readFromJobs(r io.Reader) (n int64, err error) {
 		js.end += n2
 		n += int64(n2)
 		// Before err: a Reader may return its last bytes with io.EOF.
-		if js.end == js.limit {
+		// A full first buffer moves to the ring instead (see nextSlot).
+		if js.end == js.limit && !js.first {
 			if err := e.dispatchJob(false); err != nil {
 				return n, err
 			}

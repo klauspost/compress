@@ -107,9 +107,13 @@ A job is one window long at the fastest and default levels, two windows at
 better, and four at best and ultra; at least 512 KiB and at most 256 MiB, so
 even large windows (`WithWindowSize`) split the input into several jobs. Each
 job starts with half a window of the previous data as history (a whole window
-at ultra), at most half a job. The input is kept in one buffer of about n+2
-jobs, which grows with the stream up to 2 GiB, and jobs are compressed where
-they are, so the history is not copied.
+at ultra), at most half a job. The input is kept in one buffer of n+2 jobs
+plus that history, at most 2 GiB, and jobs are compressed where they are, so
+the history is not copied. With 16 goroutines the buffer is 74 MB at the
+fastest level, 148 MB at default, 292 MB at better and 580 MB at best. A
+stream starts in a buffer of half a job and moves to the full buffer when that
+fills, so a short stream does not allocate it. The full buffer is kept for the
+next stream, unless the encoder stays idle.
 
 For windows of 128 MiB and up this trades some total CPU time and a little
 ratio for much lower wall time and peak memory. On the benchmark corpora,
@@ -122,11 +126,11 @@ Benchmark on 1.8GB GOB stream (AMD Ryzen 9 9950X; `BenchmarkConcurrentBlocks_Gob
 
 | Level   |  1 thread  |     4 threads      |     16 threads      | 1T ratio | 16T ratio |
 |---------|:----------:|:------------------:|:-------------------:|:--------:|:---------:|
-| fastest | 895 MB/s   | 3487 MB/s (3.9×)   | 9563 MB/s (10.7×)   | 12.19%   | 12.20%    |
-| default | 722 MB/s   | 2718 MB/s (3.8×)   | 6560 MB/s (9.1×)    | 10.62%   | 10.66%    |
-| better  | 378 MB/s   | 1090 MB/s (2.9×)   | 2510 MB/s (6.6×)    | 9.05%    | 9.12%     |
-| best    | 136 MB/s   | 424 MB/s (3.1×)    | 1015 MB/s (7.5×)    | 8.44%    | 8.45%     |
-| ultra   | 6.1 MB/s   | 17.7 MB/s (2.9×)   | 56.0 MB/s (9.2×)    | 6.61%    | 6.61%     |
+| fastest | 895 MB/s   | 3579 MB/s (4.0×)   | 9716 MB/s (10.9×)   | 12.19%   | 12.20%    |
+| default | 722 MB/s   | 2675 MB/s (3.7×)   | 6533 MB/s (9.0×)    | 10.62%   | 10.66%    |
+| better  | 378 MB/s   | 1175 MB/s (3.1×)   | 2613 MB/s (6.9×)    | 9.05%    | 9.12%     |
+| best    | 136 MB/s   | 418 MB/s (3.1×)    | 1031 MB/s (7.6×)    | 8.44%    | 8.45%     |
+| ultra   | 6.1 MB/s   | 18.3 MB/s (3.0×)   | 56.1 MB/s (9.2×)    | 6.61%    | 6.61%     |
 
 Notes:
 * Not compatible with dictionary encoding.

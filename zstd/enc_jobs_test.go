@@ -1472,8 +1472,8 @@ func TestConcurrentBlocks_Ring(t *testing.T) {
 			words[i][j] = byte('a' + rng.Intn(26))
 		}
 	}
-	// With 512 KiB jobs the ring grows to at most 6 slots, through 1, 2 and 4,
-	// so the first stream also wraps a ring it does not replace.
+	// Streams start in an output buffer of 256 KiB, and move to a ring of up
+	// to 6 slots of 512 KiB when it fills, so the first stream wraps the ring.
 	var src []byte
 	for len(src) < 8<<20 {
 		if rng.Intn(50) == 0 {
@@ -1492,11 +1492,14 @@ func TestConcurrentBlocks_Ring(t *testing.T) {
 		levels = levels[:2]
 	}
 	for _, level := range levels {
-		for _, conc := range []int{2, 4} {
-			t.Run(fmt.Sprint(level, "-", conc), func(t *testing.T) {
+		for _, c := range []struct {
+			conc   int
+			lowMem bool
+		}{{2, false}, {4, false}, {2, true}, {4, true}} {
+			t.Run(fmt.Sprint(level, "-", c.conc, "-lowmem-", c.lowMem), func(t *testing.T) {
 				// The smallest window gives the smallest jobs.
-				enc, err := NewWriter(nil, WithEncoderLevel(level), WithEncoderConcurrency(conc),
-					WithConcurrentBlocks(true), WithWindowSize(MinWindowSize))
+				enc, err := NewWriter(nil, WithEncoderLevel(level), WithEncoderConcurrency(c.conc),
+					WithConcurrentBlocks(true), WithWindowSize(MinWindowSize), WithLowerEncoderMem(c.lowMem))
 				if err != nil {
 					t.Fatal(err)
 				}
