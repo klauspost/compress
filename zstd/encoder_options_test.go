@@ -181,14 +181,19 @@ func TestJobAndOverlapSize(t *testing.T) {
 		level                EncoderLevel
 		jobSize, overlapSize int
 	}{
-		{MinWindowSize, SpeedDefault, 512 << 10, MinWindowSize / 8},
+		{MinWindowSize, SpeedDefault, 512 << 10, MinWindowSize / 2},
+		{4 << 20, SpeedFastest, 4 << 20, 2 << 20},
+		{8 << 20, SpeedDefault, 8 << 20, 4 << 20},
+		{8 << 20, SpeedBetterCompression, 16 << 20, 4 << 20},
+		{8 << 20, SpeedBestCompression, 32 << 20, 4 << 20},
+		{8 << 20, SpeedUltraCompression, 32 << 20, 8 << 20},
 		{64 << 20, SpeedBestCompression, 256 << 20, 32 << 20},
-		{128 << 20, SpeedBetterCompression, 256 << 20, 32 << 20},
+		{128 << 20, SpeedBetterCompression, 256 << 20, 64 << 20},
 		{128 << 20, SpeedBestCompression, 256 << 20, 64 << 20},
 		// windowSize*4 overflows a 32-bit int here, so on 386 this row
 		// checks that jobSize clamps before multiplying.
 		{MaxWindowSize, SpeedBestCompression, 256 << 20, 128 << 20},
-		{8 << 20, SpeedUltraCompression, 32 << 20, 4 << 20},
+		{MaxWindowSize, SpeedUltraCompression, 256 << 20, 128 << 20},
 	}
 	for _, tt := range tests {
 		o := encoderOptions{windowSize: tt.windowSize, level: tt.level}

@@ -103,23 +103,29 @@ Each non-first job receives an overlap prefix from the previous job for match co
 so compression ratio is only marginally affected. Output is flushed in order,
 producing a valid single-frame zstd stream.
 
-A job is four windows long, at least 512 KiB and at most 256 MiB, so even
-large windows (`WithWindowSize`) split the input into several jobs. For windows
-of 128 MiB and up this trades some total CPU time and a little ratio for much
-lower wall time and peak memory. On the benchmark corpora, output at the best
-level with a 256 MiB window grew by under 0.5%; the loss depends on the input.
-The overlap is at most half a job, so at the best level with windows over
-256 MiB each job sees less of the previous data than the window allows, and the
-loss may be larger.
+A job is one window long at the fastest and default levels, two windows at
+better, and four at best and ultra; at least 512 KiB and at most 256 MiB, so
+even large windows (`WithWindowSize`) split the input into several jobs. Each
+job starts with half a window of the previous data as history (a whole window
+at ultra), at most half a job. The input is kept in one buffer of about n+2
+jobs, which grows with the stream up to 2 GiB, and jobs are compressed where
+they are, so the history is not copied.
+
+For windows of 128 MiB and up this trades some total CPU time and a little
+ratio for much lower wall time and peak memory. On the benchmark corpora,
+output at the best level with a 256 MiB window grew by under 0.5%; the loss
+depends on the input. The overlap is at most half a job, so at the best level
+with windows over 256 MiB each job sees less of the previous data than the
+window allows, and the loss may be larger.
 
 Benchmark on 1.8GB GOB stream (AMD Ryzen 9 9950X):
 
 | Level   |  1 thread  |     4 threads      |     16 threads      | 1T ratio | 16T ratio |
 |---------|:----------:|:------------------:|:-------------------:|:--------:|:---------:|
-| fastest | 783 MB/s   | 2950 MB/s (3.8×)   | 6939 MB/s (8.9×)    | 12.24%   | 12.26%    |
-| default | 728 MB/s   | 2533 MB/s (3.5×)   | 5340 MB/s (7.3×)    | 10.67%   | 10.68%    |
-| better  | 434 MB/s   | 1105 MB/s (2.5×)   | 2206 MB/s (5.1×)    | 9.14%    | 9.21%     |
-| best    | 129 MB/s   | 367 MB/s (2.8×)    | 884 MB/s (6.8×)     | 8.48%    | 8.63%     |
+| fastest | 895 MB/s   | 3487 MB/s (3.9×)   | 9563 MB/s (10.7×)   | 12.19%   | 12.20%    |
+| default | 722 MB/s   | 2718 MB/s (3.8×)   | 6560 MB/s (9.1×)    | 10.62%   | 10.66%    |
+| better  | 378 MB/s   | 1090 MB/s (2.9×)   | 2510 MB/s (6.6×)    | 9.05%    | 9.12%     |
+| best    | 136 MB/s   | 424 MB/s (3.1×)    | 1015 MB/s (7.5×)    | 8.44%    | 8.45%     |
 
 Notes:
 * Not compatible with dictionary encoding.

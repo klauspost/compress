@@ -531,8 +531,8 @@ func TestConcurrentBlocks_JobBoundaries(t *testing.T) {
 	}
 	defer dec.Close()
 
-	const windowSize = 1 << 20 // 1MB -> jobSize = 4MB
-	jobSize := windowSize * 4
+	const windowSize = 1 << 20
+	jobSize := (&encoderOptions{windowSize: windowSize, level: SpeedDefault}).jobSize()
 
 	rng := mrand.New(mrand.NewSource(77))
 
