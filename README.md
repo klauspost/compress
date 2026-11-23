@@ -702,6 +702,11 @@ Memory usage is typically 1MB for a Writer. stdlib is in the same range.
 If you expect to have a lot of concurrently allocated Writers consider using 
 the stateless compression described below.
 
+Level 10, `UltraCompression` in flate, gzip and zlib, chooses matches with an optimal parser.
+Output is typically 4% smaller than with level 9 (`BestCompression`) and decompresses about as fast,
+but compressing takes about 10 times as long. A level 10 Writer holds up to about 20MB while compressing large inputs.
+The standard library does not accept level 10.
+
 For compression performance, see: [this spreadsheet](https://docs.google.com/spreadsheets/d/1nuNE2nPfuINCZJRMt6wFWhKpToF95I47XjSsc-1rbPQ/edit?usp=sharing).
 
 To disable all assembly add `-tags=noasm`. This works across all packages.

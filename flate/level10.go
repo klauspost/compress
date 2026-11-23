@@ -382,9 +382,13 @@ func (e *ultraEnc) parseRegion(w *huffmanBitWriter, start, end int32) {
 	e.base = start
 	if e.defaultCosts() < n>>ultraFewShift || n < ultraSmall {
 		// Hardly anything matches, or the region is small,
-		// so more passes and blocks would not pay.
+		// so more passes would not pay. Splitting still finds what to store.
 		e.dp(0, n, &e.costs, maxMatchLength)
-		e.emit(w, 0, n)
+		bs := int32(0)
+		for _, be := range e.splitBlocks(n) {
+			e.emit(w, bs, be)
+			bs = be
+		}
 		return
 	}
 	// Parse the region with one code to find where its statistics change.
@@ -624,8 +628,13 @@ func (e *ultraEnc) split(a, b int, ends *[]int32) {
 	*ends = append(*ends, e.unitPos[b])
 }
 
-// estimate returns the approximate size in bits of units a to b as one block,
-// leaving out extra bits, which don't depend on the split.
+// stored returns the size in bits of units a to b as stored blocks.
+func (e *ultraEnc) stored(a, b int) int {
+	n := int(e.unitPos[b] - e.unitPos[a])
+	return 8*n + 40*((n+maxStoreBlockSize-1)/maxStoreBlockSize)
+}
+
+// estimate returns the approximate size in bits of units a to b as one block.
 func (e *ultraEnc) estimate(a, b int) float64 {
 	pa := e.pre[a*ultraSyms : (a+1)*ultraSyms]
 	pb := e.pre[b*ultraSyms : (b+1)*ultraSyms]
@@ -645,10 +654,19 @@ func (e *ultraEnc) estimate(a, b int) float64 {
 			bits += float64(total)*float64(mFastLog2(float32(total))) - sum
 		}
 	}
-	return bits + ultraHeaderBase + ultraHeaderPerSym*float64(used)
+	// Extra bits don't depend on the split, but count against storing.
+	var extra uint32
+	for s := lengthCodesStart; s < literalCount; s++ {
+		extra += (pb[s] - pa[s]) * uint32(lengthExtraBits[s-lengthCodesStart])
+	}
+	for s := range offsetCodeCount {
+		extra += (pb[literalCount+s] - pa[literalCount+s]) * uint32(offsetExtraBits[s])
+	}
+	bits += ultraHeaderBase + ultraHeaderPerSym*float64(used) + float64(extra)
+	return min(bits, float64(e.stored(a, b)))
 }
 
-// exact returns the size in bits of units a to b as one dynamic block.
+// exact returns the size in bits of units a to b as one dynamic or stored block.
 func (e *ultraEnc) exact(a, b int) int {
 	pa := e.pre[a*ultraSyms : (a+1)*ultraSyms]
 	pb := e.pre[b*ultraSyms : (b+1)*ultraSyms]
@@ -661,7 +679,7 @@ func (e *ultraEnc) exact(a, b int) int {
 	}
 	f.lit[endBlockMarker] = 1
 	var c ultraCosts
-	return e.buildCodes(&c)
+	return min(e.buildCodes(&c), e.stored(a, b))
 }
 
 // buildCodes builds Huffman codes for e.freqs, sets c to the costs they give,

@@ -511,6 +511,13 @@ func TestUltraStreams(t *testing.T) {
 		text[i] = "abcdefghijklmnopqrstuvwxyz ,.\n"[rng.Intn(30)]
 	}
 	repeated := bytes.Repeat(text, 80)
+	// Literals that Huffman codes well but that hardly match,
+	// followed by data that only storing keeps at its size.
+	skewed := make([]byte, 4096)
+	for i := range skewed {
+		skewed[i] = byte(rng.Intn(16))
+	}
+	mixed := append(skewed, random[:100000]...)
 	for _, tc := range []struct {
 		name        string
 		in, dict    []byte
@@ -521,6 +528,7 @@ func TestUltraStreams(t *testing.T) {
 		{name: "3", in: []byte{1, 2, 1}},
 		{name: "random", in: random},
 		{name: "zeros", in: make([]byte, 1<<20)},
+		{name: "skewed-random", in: mixed},
 		{name: "dict-small", in: text, dict: text[:100]},
 		{name: "dict-large", in: repeated[:100000], dict: random[:100000]},
 		{name: "dict-matches", in: repeated[20000:60000], dict: repeated[:50000]},
@@ -571,6 +579,10 @@ func TestUltraStreams(t *testing.T) {
 			}
 			if tc.name == "zeros" && buf.Len() > 2048 {
 				t.Errorf("zeros compressed to %d bytes", buf.Len())
+			}
+			// The random part must be stored on its own.
+			if tc.name == "skewed-random" && buf.Len() > len(tc.in)-len(skewed)*3/8 {
+				t.Errorf("skewed then random input compressed to %d bytes", buf.Len())
 			}
 		})
 	}

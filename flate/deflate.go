@@ -22,7 +22,7 @@ const (
 
 	// UltraCompression chooses among all matches with an optimal parser.
 	// Output is typically 4% smaller than with BestCompression, at about
-	// 10 times the time (2 to 50 times, depending on the input).
+	// 10 times the time (2 to 35 times, depending on the input).
 	// A Writer holds up to about 20 MB while compressing large inputs.
 	UltraCompression = 10
 
