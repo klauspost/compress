@@ -37,7 +37,7 @@ func TestWriterMemUsage(t *testing.T) {
 			StatelessDeflate(io.Discard, data, false, nil)
 		})
 	})
-	for level := HuffmanOnly; level <= BestCompression; level++ {
+	for level := HuffmanOnly; level <= UltraCompression; level++ {
 		t.Run(fmt.Sprint("level-", level), func(t *testing.T) {
 			var zr *Writer
 			var err error
@@ -72,7 +72,7 @@ func TestWriterRegression(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for level := HuffmanOnly; level <= BestCompression; level++ {
+	for level := HuffmanOnly; level <= UltraCompression; level++ {
 		t.Run(fmt.Sprint("level_", level), func(t *testing.T) {
 			zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 			if err != nil {
@@ -282,7 +282,7 @@ func TestWriteError(t *testing.T) {
 	in := buf.Bytes()
 	// We create our own buffer to control number of writes.
 	copyBuf := make([]byte, 128)
-	for l := range 10 {
+	for l := range UltraCompression + 1 {
 		for fail := 1; fail <= 256; fail *= 2 {
 			// Fail after 'fail' writes
 			ew := &errorWriter{N: fail}
@@ -402,6 +402,7 @@ func TestDeterministicL6(t *testing.T)  { testDeterministic(6, t) }
 func TestDeterministicL7(t *testing.T)  { testDeterministic(7, t) }
 func TestDeterministicL8(t *testing.T)  { testDeterministic(8, t) }
 func TestDeterministicL9(t *testing.T)  { testDeterministic(9, t) }
+func TestDeterministicL10(t *testing.T) { testDeterministic(10, t) }
 func TestDeterministicL0(t *testing.T)  { testDeterministic(0, t) }
 func TestDeterministicLM2(t *testing.T) { testDeterministic(-2, t) }
 
@@ -477,7 +478,7 @@ func testDeterministic(i int, t *testing.T) {
 
 func BenchmarkCompressAllocations(b *testing.B) {
 	payload := []byte(strings.Repeat("Tiny payload", 20))
-	for j := -2; j <= 9; j++ {
+	for j := -2; j <= UltraCompression; j++ {
 		b.Run("level("+strconv.Itoa(j)+")", func(b *testing.B) {
 			b.Run("flate", func(b *testing.B) {
 				b.ReportAllocs()
@@ -518,7 +519,7 @@ func TestNonCompressedBlockDoesntAddDict(t *testing.T) {
 	data := make([]byte, 763)
 	rand.New(rand.NewSource(42)).Read(data)
 	dict := []byte("0123456789abcdefghij")
-	for l := HuffmanOnly; l <= BestCompression; l++ {
+	for l := HuffmanOnly; l <= UltraCompression; l++ {
 		t.Run(fmt.Sprintf("level=%d", l), func(t *testing.T) {
 			var b bytes.Buffer
 			w, err := NewWriterDict(&b, l, dict)
@@ -561,8 +562,13 @@ func TestSilesiaRoundTrip(t *testing.T) {
 			t.Fatal("output differs from input")
 		}
 	}
-	for level := HuffmanOnly; level <= BestCompression; level++ {
+	for level := HuffmanOnly; level <= UltraCompression; level++ {
 		t.Run(fmt.Sprint("level", level), func(t *testing.T) {
+			in := in
+			if level == UltraCompression {
+				// Level 10 is slow; a prefix covers it.
+				in = in[:min(len(in), 16<<20)]
+			}
 			var buf bytes.Buffer
 			w, err := NewWriter(&buf, level)
 			if err != nil {

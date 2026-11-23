@@ -175,7 +175,7 @@ func TestOneMByte(t *testing.T) {
 	var input [1024 * 1024]byte
 
 	var compressedOutput bytes.Buffer
-	for level := HuffmanOnly; level <= BestCompression; level++ {
+	for level := HuffmanOnly; level <= UltraCompression; level++ {
 		compressedOutput.Reset()
 		compressor, err := NewWriter(&compressedOutput, level)
 		if err != nil {
@@ -378,16 +378,16 @@ func testToFromWithLevelAndLimit(t *testing.T, level int, input []byte, name str
 	testSync(t, level, input, name)
 }
 
-func testToFromWithLimit(t *testing.T, input []byte, name string, limit [11]int) {
-	for i := range 10 {
+func testToFromWithLimit(t *testing.T, input []byte, name string, limit [12]int) {
+	for i := range 11 {
 		testToFromWithLevelAndLimit(t, i, input, name, limit[i])
 	}
-	testToFromWithLevelAndLimit(t, -2, input, name, limit[10])
+	testToFromWithLevelAndLimit(t, -2, input, name, limit[11])
 }
 
 func TestDeflateInflate(t *testing.T) {
 	for i, h := range deflateInflateTests {
-		testToFromWithLimit(t, h.in, fmt.Sprintf("#%d", i), [11]int{})
+		testToFromWithLimit(t, h.in, fmt.Sprintf("#%d", i), [12]int{})
 	}
 }
 
@@ -403,19 +403,19 @@ func TestReverseBits(t *testing.T) {
 type deflateInflateStringTest struct {
 	filename string
 	label    string
-	limit    [11]int // Number 11 is ConstantCompression
+	limit    [12]int // Number 12 is ConstantCompression
 }
 
 var deflateInflateStringTests = []deflateInflateStringTest{
 	{
 		"../testdata/e.txt",
 		"2.718281828...",
-		[...]int{100018, 67900, 50960, 51150, 50930, 50790, 50790, 50790, 50790, 50790, 43683 + 100},
+		[...]int{100018, 67900, 50960, 51150, 50930, 50790, 50790, 50790, 50790, 50790, 43600, 43683 + 100},
 	},
 	{
 		"../testdata/Mark.Twain-Tom.Sawyer.txt",
 		"Mark.Twain-Tom.Sawyer",
-		[...]int{387999, 185000, 182361, 179974, 174124, 168819, 162936, 160506, 160295, 160295, 233460 + 100},
+		[...]int{387999, 185000, 182361, 179974, 174124, 168819, 162936, 160506, 160295, 160295, 147400, 233460 + 100},
 	},
 }
 
@@ -498,6 +498,161 @@ func TestWriterDict(t *testing.T) {
 	}
 }
 
+// TestUltraStreams round-trips level 10 streams at its edges: tiny and
+// incompressible inputs, long runs, dictionaries over the window size,
+// and positions rebased while matches reach back across the rebase.
+func TestUltraStreams(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	random := make([]byte, 300<<10)
+	rng.Read(random)
+	// Text repeating every 20000 bytes, so matches reach back across rebases.
+	text := make([]byte, 20000)
+	for i := range text {
+		text[i] = "abcdefghijklmnopqrstuvwxyz ,.\n"[rng.Intn(30)]
+	}
+	repeated := bytes.Repeat(text, 200)
+	for _, tc := range []struct {
+		name        string
+		in, dict    []byte
+		bufferReset int32 // 0 keeps the default
+	}{
+		{name: "empty"},
+		{name: "1", in: []byte{1}},
+		{name: "3", in: []byte{1, 2, 1}},
+		{name: "random", in: random},
+		{name: "zeros", in: make([]byte, 1<<20)},
+		{name: "dict-small", in: text, dict: text[:100]},
+		{name: "dict-large", in: repeated[:100000], dict: random[:100000]},
+		{name: "dict-matches", in: repeated[20000:60000], dict: repeated[:50000]},
+		{name: "rebase", in: repeated, bufferReset: 1 << 20},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			w, err := NewWriterDict(&buf, UltraCompression, tc.dict)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.bufferReset != 0 {
+				w.d.ultra = newUltraEnc()
+				w.d.ultra.bufferReset = tc.bufferReset
+				w.Reset(&buf)
+			}
+			// The second round tests Reset after the first stream.
+			for round := range 2 {
+				buf.Reset()
+				w.Reset(&buf)
+				for j := 0; j < len(tc.in); j += 100 << 10 {
+					w.Write(tc.in[j:min(j+100<<10, len(tc.in))])
+				}
+				if err := w.Close(); err != nil {
+					t.Fatal(err)
+				}
+				got, err := io.ReadAll(NewReaderDict(bytes.NewReader(buf.Bytes()), tc.dict))
+				if err != nil {
+					t.Fatal(round, err)
+				}
+				if !bytes.Equal(got, tc.in) {
+					t.Fatal(round, "output differs from input")
+				}
+			}
+			if tc.bufferReset != 0 {
+				// A rebase drops only entries outside the window,
+				// so the output must not change.
+				var want bytes.Buffer
+				w, _ := NewWriterDict(&want, UltraCompression, tc.dict)
+				w.Write(tc.in)
+				w.Close()
+				if !bytes.Equal(buf.Bytes(), want.Bytes()) {
+					t.Error("output differs from output without rebase")
+				}
+			}
+			if tc.name == "random" && buf.Len() > len(tc.in)+len(tc.in)/1000 {
+				t.Errorf("random input grew to %d bytes", buf.Len())
+			}
+			if tc.name == "zeros" && buf.Len() > 2048 {
+				t.Errorf("zeros compressed to %d bytes", buf.Len())
+			}
+		})
+	}
+}
+
+// TestUltraFlush round-trips level 10 streams flushed at short intervals.
+// The end of the input at a flush must not leave the match finder with tree
+// nodes ordered on bytes it has not seen, or with insertions whose window
+// has been dropped.
+func TestUltraFlush(t *testing.T) {
+	// Random data with few symbols matches often at all distances.
+	sym := func(n int) []byte {
+		rng := rand.New(rand.NewSource(3))
+		b := make([]byte, 40<<10)
+		for i := range b {
+			b[i] = byte(rng.Intn(n))
+		}
+		return b
+	}
+	sym8, sym16 := sym(8), sym(16)
+	// Long runs of one byte, broken up now and then.
+	runs := make([]byte, 16<<10)
+	rng := rand.New(rand.NewSource(1))
+	for i := range runs {
+		runs[i] = 0x98
+		if rng.Intn(40) == 0 {
+			runs[i] = byte(rng.Intn(256))
+		}
+	}
+	text := bytes.Repeat([]byte("Long matches cross the flush points. "), 1500)
+	for _, tc := range []struct {
+		name  string
+		in    []byte
+		chunk int // 0: the next input byte plus one
+		dict  bool
+	}{
+		{"runs-data", runs, 0, false},
+		{"sym8-4", sym8, 4, false},
+		{"sym8-8", sym8, 8, false},
+		{"sym16-9", sym16, 9, false},
+		{"text-1", text, 1, false},
+		{"text-100", text, 100, false},
+		{"text-4000", text, 4000, false},
+		{"text-dict-50", text, 50, true},
+		{"text-dict-300", text, 300, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var dict []byte
+			if tc.dict {
+				dict = tc.in[:len(tc.in)/2]
+			}
+			var buf bytes.Buffer
+			w, err := NewWriterDict(&buf, UltraCompression, dict)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for j := 0; j < len(tc.in); {
+				n := tc.chunk
+				if n == 0 {
+					n = int(tc.in[j]) + 1
+				}
+				n = min(n, len(tc.in)-j)
+				w.Write(tc.in[j : j+n])
+				j += n
+				if err := w.Flush(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := w.Close(); err != nil {
+				t.Fatal(err)
+			}
+			got, err := io.ReadAll(NewReaderDict(&buf, dict))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, tc.in) {
+				t.Fatal("output differs from input")
+			}
+		})
+	}
+}
+
 // TestSmallFlushKeepsHistory checks that a block too small to compress does not
 // discard the match history, so data written after it, up to Close, can still
 // be matched against data written before it.
@@ -512,7 +667,7 @@ func TestSmallFlushKeepsHistory(t *testing.T) {
 		create func(io.Writer) (*Writer, error)
 	}
 	var writers []writerCase
-	for level := 1; level <= 9; level++ {
+	for level := 1; level <= UltraCompression; level++ {
 		writers = append(writers, writerCase{fmt.Sprintf("level=%d", level),
 			func(w io.Writer) (*Writer, error) { return NewWriter(w, level) }})
 	}
@@ -600,7 +755,7 @@ func TestRegression2508(t *testing.T) {
 }
 
 func TestWriterReset(t *testing.T) {
-	for level := -2; level <= 9; level++ {
+	for level := -2; level <= UltraCompression; level++ {
 		if level == -1 {
 			level++
 		}
@@ -637,19 +792,21 @@ func TestWriterReset(t *testing.T) {
 
 		// We don't care if there are values in the window, as long as it is at d.index is 0
 		w.d.window = wref.d.window
+		// Level 10 keeps its tables; testResetOutput checks its output after Reset.
+		w.d.ultra = wref.d.ultra
 		if !reflect.DeepEqual(w, wref) {
 			t.Errorf("level %d Writer not reset after Reset", level)
 		}
 	}
 
-	for i := HuffmanOnly; i <= BestCompression; i++ {
+	for i := HuffmanOnly; i <= UltraCompression; i++ {
 		testResetOutput(t, fmt.Sprint("level-", i), func(w io.Writer) (*Writer, error) { return NewWriter(w, i) })
 	}
 	dict := []byte(strings.Repeat("we are the world - how are you?", 3))
-	for i := HuffmanOnly; i <= BestCompression; i++ {
+	for i := HuffmanOnly; i <= UltraCompression; i++ {
 		testResetOutput(t, fmt.Sprint("dict-level-", i), func(w io.Writer) (*Writer, error) { return NewWriterDict(w, i, dict) })
 	}
-	for i := HuffmanOnly; i <= BestCompression; i++ {
+	for i := HuffmanOnly; i <= UltraCompression; i++ {
 		testResetOutput(t, fmt.Sprint("dict-reset-level-", i), func(w io.Writer) (*Writer, error) {
 			w2, err := NewWriter(nil, i)
 			if err != nil {

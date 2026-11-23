@@ -627,6 +627,51 @@ func (w *huffmanBitWriter) writeBlock(tokens *tokens, eof bool, input []byte) {
 	w.writeTokens(tokens.Slice(), literalEncoding.codes, offsetEncoding.codes)
 }
 
+// writeBlockUltra writes the tokens, which encode input, as the smallest of
+// a stored, a fixed and a dynamic block, comparing exact sizes.
+// It never leaves the block open for reuse.
+func (w *huffmanBitWriter) writeBlockUltra(tokens *tokens, eof bool, input []byte) {
+	if w.err != nil {
+		return
+	}
+	noOffsets := tokens.offHist == [32]uint16{}
+	tokens.AddEOB()
+	numLiterals, numOffsets := w.indexTokens(tokens, false)
+	w.generate()
+	extraBits := w.extraBitSize()
+	w.generateCodegen(numLiterals, numOffsets, w.literalEncoding, w.offsetEncoding)
+	w.codegenEncoding.generate(w.codegenFreq[:], 7)
+	dynSize, numCodegens := w.dynamicSize(w.literalEncoding, w.offsetEncoding, extraBits)
+	fixedSize := w.fixedSize(extraBits)
+	if noOffsets {
+		// indexTokens counts one offset so that a dynamic table can be written.
+		fixedSize -= int(fixedOffsetEncoding.codes[0].len())
+	}
+	// Stored blocks are byte aligned after their 3 bit header,
+	// and hold at most maxStoreBlockSize bytes each.
+	storedSize := math.MaxInt
+	if input != nil {
+		storedSize = int(-(w.nbits+3)&7) + 32 + 8*len(input) + 40*((len(input)-1)/maxStoreBlockSize)
+	}
+
+	switch {
+	case storedSize <= min(fixedSize, dynSize):
+		for len(input) > maxStoreBlockSize {
+			w.writeStoredHeader(maxStoreBlockSize, false)
+			w.writeBytes(input[:maxStoreBlockSize])
+			input = input[maxStoreBlockSize:]
+		}
+		w.writeStoredHeader(len(input), eof)
+		w.writeBytes(input)
+	case fixedSize <= dynSize:
+		w.writeFixedHeader(eof)
+		w.writeTokens(tokens.Slice(), fixedLiteralEncoding.codes, fixedOffsetEncoding.codes)
+	default:
+		w.writeDynamicHeader(numLiterals, numOffsets, numCodegens, eof)
+		w.writeTokens(tokens.Slice(), w.literalEncoding.codes, w.offsetEncoding.codes)
+	}
+}
+
 // writeBlockDynamic encodes a block using a dynamic Huffman table.
 // This should be used if the symbols used have a disproportionate
 // histogram distribution.
