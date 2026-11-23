@@ -644,14 +644,16 @@ func (w *huffmanBitWriter) writeBlockUltra(tokens *tokens, eof bool, input []byt
 	dynSize, numCodegens := w.dynamicSize(w.literalEncoding, w.offsetEncoding, extraBits)
 	fixedSize := w.fixedSize(extraBits)
 	if noOffsets {
-		// indexTokens counts one offset so that a dynamic table can be written.
+		// indexTokens counts one offset so that a dynamic table can be
+		// written, but none is emitted.
 		fixedSize -= int(fixedOffsetEncoding.codes[0].len())
+		dynSize -= int(w.offsetEncoding.codes[0].len())
 	}
 	// Stored blocks are byte aligned after their 3 bit header,
 	// and hold at most maxStoreBlockSize bytes each.
 	storedSize := math.MaxInt
 	if input != nil {
-		storedSize = int(-(w.nbits+3)&7) + 32 + 8*len(input) + 40*((len(input)-1)/maxStoreBlockSize)
+		storedSize = 3 + int(-(w.nbits+3)&7) + 32 + 8*len(input) + 40*((len(input)-1)/maxStoreBlockSize)
 	}
 
 	switch {

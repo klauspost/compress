@@ -400,8 +400,8 @@ func testWriterEOF(t *testing.T, ttype string, test huffTest, useInput bool) {
 	t.Log("EOF ok")
 }
 
-// TestWriteBlockUltra checks that writeBlockUltra picks a block no larger
-// than a fixed or stored block, or what writeBlock picks, and decodes.
+// TestWriteBlockUltra checks that writeBlockUltra writes the smallest of a
+// stored, a fixed and a dynamic block, to the bit, and that it decodes.
 func TestWriteBlockUltra(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	random := make([]byte, 60000)
@@ -414,6 +414,14 @@ func TestWriteBlockUltra(t *testing.T) {
 	}
 	const sentence = "Huffman tables for this text, and for this text again. "
 	text := []byte(strings.Repeat(sentence, 400))
+	// Literals 0-143 and the even ones up to 196: a fixed block is
+	// 3 bits smaller than a stored one.
+	var fixedWins []byte
+	for i := 0; i <= 196; i++ {
+		if i < 144 || i%2 == 0 {
+			fixedWins = append(fixedWins, byte(i))
+		}
+	}
 	for _, tc := range []struct {
 		name       string
 		in         []byte
@@ -424,6 +432,9 @@ func TestWriteBlockUltra(t *testing.T) {
 		{"tiny", []byte("a"), 1, 0},
 		{"short-text", text[:40], 40, 0},
 		{"text", text, len(sentence), len(sentence)},
+		// A dynamic block is one bit smaller than a fixed one.
+		{"dynamic-wins", []byte("aaccbaacacccbcac"), 16, 0},
+		{"fixed-wins", fixedWins, len(fixedWins), 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tokens := func() *tokens {
@@ -440,27 +451,46 @@ func TestWriteBlockUltra(t *testing.T) {
 				}
 				return &tok
 			}
-			write := func(f func(w *huffmanBitWriter)) []byte {
+			// write returns the bits written by f, and the stream with them.
+			write := func(f func(w *huffmanBitWriter)) (int, []byte) {
 				var buf bytes.Buffer
 				w := newHuffmanBitWriter(&buf)
 				f(w)
+				bits := 8*(buf.Len()+int(w.nbytes)) + int(w.nbits)
 				w.writeStoredHeader(0, true)
 				w.flush()
-				return buf.Bytes()
+				return bits, buf.Bytes()
 			}
-			got := write(func(w *huffmanBitWriter) { w.writeBlockUltra(tokens(), false, tc.in) })
-			fixed := write(func(w *huffmanBitWriter) {
+			gotBits, got := write(func(w *huffmanBitWriter) { w.writeBlockUltra(tokens(), false, tc.in) })
+			fixedBits, fixed := write(func(w *huffmanBitWriter) {
 				tok := tokens()
 				tok.AddEOB()
 				w.writeFixedHeader(false)
 				w.writeTokens(tok.Slice(), fixedLiteralEncoding.codes, fixedOffsetEncoding.codes)
 			})
-			block := write(func(w *huffmanBitWriter) { w.writeBlock(tokens(), false, tc.in) })
-			stored := len(tc.in) + 5*((len(tc.in)+maxStoreBlockSize-1)/maxStoreBlockSize) + 2
-			if len(got) > min(len(fixed), len(block), stored) {
-				t.Errorf("got %d bytes, fixed %d, writeBlock %d, stored %d", len(got), len(fixed), len(block), stored)
+			dynBits, dyn := write(func(w *huffmanBitWriter) {
+				tok := tokens()
+				tok.AddEOB()
+				numLiterals, numOffsets := w.indexTokens(tok, false)
+				w.generate()
+				w.generateCodegen(numLiterals, numOffsets, w.literalEncoding, w.offsetEncoding)
+				w.codegenEncoding.generate(w.codegenFreq[:], 7)
+				_, numCodegens := w.headerSize()
+				w.writeDynamicHeader(numLiterals, numOffsets, numCodegens, false)
+				w.writeTokens(tok.Slice(), w.literalEncoding.codes, w.offsetEncoding.codes)
+			})
+			storedBits, stored := write(func(w *huffmanBitWriter) {
+				for in := tc.in; len(in) > 0; {
+					n := min(len(in), maxStoreBlockSize)
+					w.writeStoredHeader(n, false)
+					w.writeBytes(in[:n])
+					in = in[n:]
+				}
+			})
+			if want := min(fixedBits, dynBits, storedBits); gotBits != want {
+				t.Errorf("got %d bits; fixed %d, dynamic %d, stored %d", gotBits, fixedBits, dynBits, storedBits)
 			}
-			for _, b := range [][]byte{got, fixed} {
+			for _, b := range [][]byte{got, fixed, dyn, stored} {
 				out, err := io.ReadAll(NewReader(bytes.NewReader(b)))
 				if err != nil || !bytes.Equal(out, tc.in) {
 					t.Fatalf("round trip failed: %v", err)

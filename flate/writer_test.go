@@ -552,13 +552,13 @@ func TestNonCompressedBlockDoesntAddDict(t *testing.T) {
 // and decodes the standard library's encoding.
 func TestSilesiaRoundTrip(t *testing.T) {
 	in := silesiatest.Tar(t)
-	check := func(t *testing.T, r io.Reader) {
+	check := func(t *testing.T, r io.Reader, want []byte) {
 		t.Helper()
 		got, err := io.ReadAll(r)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !bytes.Equal(got, in) {
+		if !bytes.Equal(got, want) {
 			t.Fatal("output differs from input")
 		}
 	}
@@ -580,8 +580,8 @@ func TestSilesiaRoundTrip(t *testing.T) {
 			if err := w.Close(); err != nil {
 				t.Fatal(err)
 			}
-			check(t, NewReader(bytes.NewReader(buf.Bytes())))
-			check(t, flate.NewReader(bytes.NewReader(buf.Bytes())))
+			check(t, NewReader(bytes.NewReader(buf.Bytes())), in)
+			check(t, flate.NewReader(bytes.NewReader(buf.Bytes())), in)
 		})
 	}
 	t.Run("stdlib-encoded", func(t *testing.T) {
@@ -596,7 +596,7 @@ func TestSilesiaRoundTrip(t *testing.T) {
 		if err := w.Close(); err != nil {
 			t.Fatal(err)
 		}
-		check(t, NewReader(&buf))
+		check(t, NewReader(&buf), in)
 	})
 }
 
