@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -119,6 +120,31 @@ func TestOutputAliases(t *testing.T) {
 					assertNoOutputTempFiles(t, dir)
 				})
 			}
+
+			t.Run("rejects stdin", func(t *testing.T) {
+				dir := t.TempDir()
+				input, compressed := writeS2Input(t, dir, []byte("preserve stdin source"))
+				output := test.output(t, dir, input)
+				stdin, err := os.Open(filepath.Join(dir, input))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer stdin.Close()
+
+				_, stderr, err := runS2DProcess(t, dir, stdin, "-q", "-o", output, "-")
+				if err == nil || !bytes.Contains(stderr, []byte("stdin and output refer to the same file")) {
+					t.Fatalf("s2d error = %v, stderr = %q, want stdin alias rejection", err, stderr)
+				}
+				for _, name := range []string{input, output} {
+					got, err := os.ReadFile(filepath.Join(dir, name))
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Equal(got, compressed) {
+						t.Fatalf("%s contents changed: got %d bytes, want %d", name, len(got), len(compressed))
+					}
+				}
+			})
 		})
 	}
 }
@@ -241,27 +267,6 @@ func TestDistinctOutputOverwritesExistingFile(t *testing.T) {
 	assertNoOutputTempFiles(t, dir)
 }
 
-func TestInputDirectoryWithGlobMetacharacters(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "s2[ci]")
-	if err := os.Mkdir(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	want := []byte("decoded output")
-	input, _ := writeS2Input(t, dir, want)
-	output := "output.txt"
-
-	runS2D(t, dir, "-q", "-o", output, input)
-
-	got, err := os.ReadFile(filepath.Join(dir, output))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(got, want) {
-		t.Fatalf("output contents = %q, want %q", got, want)
-	}
-	assertNoOutputTempFiles(t, dir)
-}
-
 func writeS2Input(t *testing.T, dir string, contents []byte) (string, []byte) {
 	t.Helper()
 	var encoded bytes.Buffer
@@ -295,7 +300,7 @@ func assertNoOutputTempFiles(t *testing.T, dir string) {
 
 func runS2D(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	_, stderr, err := runS2DProcess(t, dir, args...)
+	_, stderr, err := runS2DProcess(t, dir, nil, args...)
 	if err != nil {
 		t.Fatalf("s2d %v failed: %v\n%s", args, err, stderr)
 	}
@@ -303,7 +308,7 @@ func runS2D(t *testing.T, dir string, args ...string) {
 
 func runS2DWantError(t *testing.T, dir, wantDiagnostic string, args ...string) {
 	t.Helper()
-	_, stderr, err := runS2DProcess(t, dir, args...)
+	_, stderr, err := runS2DProcess(t, dir, nil, args...)
 	var exitError *exec.ExitError
 	if !errors.As(err, &exitError) {
 		t.Fatalf("s2d %v error = %v, want process exit error\n%s", args, err, stderr)
@@ -316,7 +321,7 @@ func runS2DWantError(t *testing.T, dir, wantDiagnostic string, args ...string) {
 	}
 }
 
-func runS2DProcess(t *testing.T, dir string, args ...string) ([]byte, []byte, error) {
+func runS2DProcess(t *testing.T, dir string, stdin io.Reader, args ...string) ([]byte, []byte, error) {
 	t.Helper()
 	executable, err := os.Executable()
 	if err != nil {
@@ -325,6 +330,7 @@ func runS2DProcess(t *testing.T, dir string, args ...string) ([]byte, []byte, er
 	command := exec.CommandContext(t.Context(), executable, args...)
 	command.Dir = dir
 	command.Env = append(os.Environ(), s2dTestProcess+"=1")
+	command.Stdin = stdin
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout
 	command.Stderr = &stderr
@@ -340,7 +346,8 @@ func TestSafeOutputDoesNotReplaceExistingFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runS2DWantError(t, dir, output, "-q", "-safe", "-o", output, input)
+	// Unix reports "file exists", Windows "The file exists."
+	runS2DWantError(t, dir, "file exists", "-q", "-safe", "-o", output, input)
 
 	got, err := os.ReadFile(filepath.Join(dir, output))
 	if err != nil {

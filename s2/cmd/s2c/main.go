@@ -116,7 +116,7 @@ Options:`)
 		if len(*out) == 0 {
 			wr.Reset(os.Stdout)
 		} else {
-			dstFile, err = fileio.Create(*out, os.ModePerm, *safe)
+			dstFile, err = fileio.CreateStdinOutput(*out, *safe)
 			exitErr(err)
 			bw = bufio.NewWriterSize(dstFile, sz*2)
 			wr.Reset(bw)
