@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"syscall"
 	"testing"
+
+	"github.com/klauspost/compress/s2/cmd/internal/fileio"
 )
 
 func TestCreateOutputRejectsFIFOAlias(t *testing.T) {
@@ -20,7 +22,7 @@ func TestCreateOutputRejectsFIFOAlias(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, _, err := createOutput(inputInfo, fifo, 0o600, false, false); err == nil {
-		t.Fatal("createOutput() unexpectedly accepted a FIFO alias")
+	if _, _, err := fileio.CreateOutput(inputInfo, fifo, 0o600, false, false); err == nil {
+		t.Fatal("fileio.CreateOutput() unexpectedly accepted a FIFO alias")
 	}
 }

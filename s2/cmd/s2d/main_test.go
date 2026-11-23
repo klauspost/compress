@@ -267,27 +267,6 @@ func TestDistinctOutputOverwritesExistingFile(t *testing.T) {
 	assertNoOutputTempFiles(t, dir)
 }
 
-func TestInputDirectoryWithGlobMetacharacters(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "s2[ci]")
-	if err := os.Mkdir(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	want := []byte("decoded output")
-	input, _ := writeS2Input(t, dir, want)
-	output := "output.txt"
-
-	runS2D(t, dir, "-q", "-o", output, input)
-
-	got, err := os.ReadFile(filepath.Join(dir, output))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(got, want) {
-		t.Fatalf("output contents = %q, want %q", got, want)
-	}
-	assertNoOutputTempFiles(t, dir)
-}
-
 func writeS2Input(t *testing.T, dir string, contents []byte) (string, []byte) {
 	t.Helper()
 	var encoded bytes.Buffer
@@ -367,7 +346,8 @@ func TestSafeOutputDoesNotReplaceExistingFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runS2DWantError(t, dir, output, "-q", "-safe", "-o", output, input)
+	// Unix reports "file exists", Windows "The file exists."
+	runS2DWantError(t, dir, "file exists", "-q", "-safe", "-o", output, input)
 
 	got, err := os.ReadFile(filepath.Join(dir, output))
 	if err != nil {

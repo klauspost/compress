@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/s2"
+	"github.com/klauspost/compress/s2/cmd/internal/fileio"
 )
 
 const s2cTestProcess = "S2C_TEST_PROCESS"
@@ -178,16 +179,16 @@ func TestOpenOutputFile(t *testing.T) {
 				t.Skipf("%s is unavailable: %v", test.name, err)
 			}
 
-			output, aliases, err := openOutputFile(inputInfo, outputName, 0o600, false)
+			output, aliases, err := fileio.OpenOutputFile(inputInfo, outputName, 0o600, false)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if output != nil {
 				output.Close()
-				t.Fatal("openOutputFile() returned an output for an input alias")
+				t.Fatal("fileio.OpenOutputFile() returned an output for an input alias")
 			}
 			if !aliases {
-				t.Fatal("openOutputFile() did not detect the late input alias")
+				t.Fatal("fileio.OpenOutputFile() did not detect the late input alias")
 			}
 			got, err := os.ReadFile(inputName)
 			if err != nil {
@@ -219,7 +220,7 @@ func TestOpenOutputFile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		output, aliases, err := openOutputFile(inputInfo, outputName, 0o600, false)
+		output, aliases, err := fileio.OpenOutputFile(inputInfo, outputName, 0o600, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -267,7 +268,7 @@ func TestOpenOutputFile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		output, aliases, err := openOutputFile(inputInfo, outputName, 0o600, false)
+		output, aliases, err := fileio.OpenOutputFile(inputInfo, outputName, 0o600, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -317,7 +318,7 @@ func TestOpenOutputFile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		output, aliases, err := openOutputFile(inputInfo, outputName, 0o600, false)
+		output, aliases, err := fileio.OpenOutputFile(inputInfo, outputName, 0o600, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -352,12 +353,12 @@ func TestOpenOutputFile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		output, aliases, err := openOutputFile(inputInfo, os.DevNull, 0o600, false)
+		output, aliases, err := fileio.OpenOutputFile(inputInfo, os.DevNull, 0o600, false)
 		if output != nil {
 			output.Close()
 		}
 		if err == nil {
-			t.Fatal("openOutputFile() unexpectedly accepted a nonregular alias")
+			t.Fatal("fileio.OpenOutputFile() unexpectedly accepted a nonregular alias")
 		}
 		if aliases {
 			t.Fatal("rejected nonregular alias should not request input replacement")
@@ -376,7 +377,7 @@ func TestOpenOutputFile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		output, aliases, err := openOutputFile(inputInfo, os.DevNull, 0o600, false)
+		output, aliases, err := fileio.OpenOutputFile(inputInfo, os.DevNull, 0o600, false)
 		if err != nil {
 			t.Skipf("null device is unavailable: %v", err)
 		}
@@ -412,7 +413,7 @@ func TestOpenOutputFile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		output, tempName, err := createOutput(inputInfo, inputName, 0o644, false, false)
+		output, tempName, err := fileio.CreateOutput(inputInfo, inputName, 0o644, false, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -420,13 +421,13 @@ func TestOpenOutputFile(t *testing.T) {
 			if output != nil {
 				output.Close()
 			}
-			t.Fatal("createOutput() did not stage a temporary file for a read-only alias")
+			t.Fatal("fileio.CreateOutput() did not stage a temporary file for a read-only alias")
 		}
 		if _, err := output.Write([]byte("compressed")); err != nil {
 			output.Close()
 			t.Fatal(err)
 		}
-		if err := finishOutput(output, tempName, inputName, 0o644, nil); err != nil {
+		if err := fileio.FinishOutput(output, tempName, inputName, 0o644, nil); err != nil {
 			t.Fatal(err)
 		}
 		got, err := os.ReadFile(inputName)
@@ -453,8 +454,8 @@ func TestOpenOutputFile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, _, err := createOutput(inputInfo, inputName, 0o600, true, false); err == nil {
-			t.Fatal("createOutput() unexpectedly accepted -safe with an input alias")
+		if _, _, err := fileio.CreateOutput(inputInfo, inputName, 0o600, true, false); err == nil {
+			t.Fatal("fileio.CreateOutput() unexpectedly accepted -safe with an input alias")
 		}
 	})
 
@@ -470,12 +471,12 @@ func TestOpenOutputFile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		output, aliases, err := openOutputFile(inputInfo, inputName, 0o600, true)
+		output, aliases, err := fileio.OpenOutputFile(inputInfo, inputName, 0o600, true)
 		if output != nil {
 			output.Close()
 		}
 		if err == nil {
-			t.Fatal("openOutputFile() unexpectedly replaced an existing safe output")
+			t.Fatal("fileio.OpenOutputFile() unexpectedly replaced an existing safe output")
 		}
 		if aliases {
 			t.Fatal("exclusive creation should fail before alias replacement")
@@ -498,9 +499,9 @@ func TestReplaceOutputPreservesDestinationWhenSourceIsMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := replaceOutput(filepath.Join(dir, "missing.tmp"), dst)
+	err := fileio.ReplaceOutput(filepath.Join(dir, "missing.tmp"), dst)
 	if !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("replaceOutput() error = %v, want os.ErrNotExist", err)
+		t.Fatalf("fileio.ReplaceOutput() error = %v, want os.ErrNotExist", err)
 	}
 	got, err := os.ReadFile(dst)
 	if err != nil {
@@ -856,9 +857,9 @@ func TestBlockOutputFailureCleanup(t *testing.T) {
 			output.Close()
 			t.Fatalf("write error = %v, want %v", err, writeErr)
 		}
-		err = finishOutput(output, "", name, 0o600, writeErr)
+		err = fileio.FinishOutput(output, "", name, 0o600, writeErr)
 		if !errors.Is(err, writeErr) {
-			t.Fatalf("finishOutput() error = %v, want %v", err, writeErr)
+			t.Fatalf("fileio.FinishOutput() error = %v, want %v", err, writeErr)
 		}
 		got, err := os.ReadFile(name)
 		if err != nil {
@@ -880,9 +881,9 @@ func TestBlockOutputFailureCleanup(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err = finishOutput(&failOutputFile{File: output, closeErr: closeErr}, "", name, 0o600, nil)
+		err = fileio.FinishOutput(&failOutputFile{File: output, closeErr: closeErr}, "", name, 0o600, nil)
 		if !errors.Is(err, closeErr) {
-			t.Fatalf("finishOutput() error = %v, want %v", err, closeErr)
+			t.Fatalf("fileio.FinishOutput() error = %v, want %v", err, closeErr)
 		}
 		if _, err := os.Stat(name); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("direct output was not removed: %v", err)
@@ -902,9 +903,9 @@ func TestBlockOutputFailureCleanup(t *testing.T) {
 			output.Close()
 			t.Fatalf("write error = %v, want %v", err, writeErr)
 		}
-		err = finishOutput(output, tempName, finalName, 0o600, writeErr)
+		err = fileio.FinishOutput(output, tempName, finalName, 0o600, writeErr)
 		if !errors.Is(err, writeErr) {
-			t.Fatalf("finishOutput() error = %v, want %v", err, writeErr)
+			t.Fatalf("fileio.FinishOutput() error = %v, want %v", err, writeErr)
 		}
 		assertNoOutputTempFiles(t, finalName)
 	})
@@ -918,9 +919,9 @@ func TestBlockOutputFailureCleanup(t *testing.T) {
 		}
 		tempName := output.Name()
 
-		err = finishOutput(&failOutputFile{File: output, closeErr: closeErr}, tempName, finalName, 0o600, nil)
+		err = fileio.FinishOutput(&failOutputFile{File: output, closeErr: closeErr}, tempName, finalName, 0o600, nil)
 		if !errors.Is(err, closeErr) {
-			t.Fatalf("finishOutput() error = %v, want %v", err, closeErr)
+			t.Fatalf("fileio.FinishOutput() error = %v, want %v", err, closeErr)
 		}
 		assertNoOutputTempFiles(t, finalName)
 	})
@@ -947,9 +948,9 @@ func TestBlockOutputFailureCleanup(t *testing.T) {
 			err:         closeErr,
 		}
 
-		err = finishOutput(closer, "", name, 0o600, writeErr)
+		err = fileio.FinishOutput(closer, "", name, 0o600, writeErr)
 		if !errors.Is(err, writeErr) || !errors.Is(err, closeErr) {
-			t.Fatalf("finishOutput() error = %v, want write and close errors", err)
+			t.Fatalf("fileio.FinishOutput() error = %v, want write and close errors", err)
 		}
 		got, err := os.ReadFile(name)
 		if err != nil {
