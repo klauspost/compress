@@ -22,12 +22,15 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	// "github.com/DataDog/zstd"
 	// zstd "github.com/valyala/gozstd"
 
+	"github.com/klauspost/compress/internal/pool"
 	"github.com/klauspost/compress/internal/silesiatest"
 	"github.com/klauspost/compress/zstd/internal/xxhash"
 )
@@ -3267,4 +3270,213 @@ func TestDecodeAllContentSizeAlloc(t *testing.T) {
 			}
 		})
 	}
+}
+
+// An Encoder or Decoder made inside a testing/synctest bubble must stay
+// usable after the bubble ends: programs keep them for reuse, so the next
+// user may be another bubble or none.
+
+func synctestInput() []byte {
+	return bytes.Repeat([]byte("synctest bubbles and zstd "), 1000)
+}
+
+func synctestCompressed(t *testing.T) (in, comp []byte) {
+	t.Helper()
+	in = synctestInput()
+	enc, err := NewWriter(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer enc.Close()
+	return in, enc.EncodeAll(in, nil)
+}
+
+// waitForWaiters returns once n calls of Get wait on p. A Get waits on a
+// Mutex, which synctest.Wait does not see as blocked, so this yields instead.
+func waitForWaiters[T any](p *pool.Bounded[T], n int) {
+	for p.Waiting() < n {
+		runtime.Gosched()
+	}
+}
+
+func TestSynctestDecoderOutlivesBubble(t *testing.T) {
+	in := synctestInput()
+	enc, err := NewWriter(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	comp := enc.EncodeAll(in, nil)
+	enc.Close()
+
+	var dec *Decoder
+	synctest.Test(t, func(t *testing.T) {
+		var err error
+		dec, err = NewReader(nil, WithDecoderConcurrency(2))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := dec.DecodeAll(comp, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, in) {
+			t.Fatal("decoded output differs inside the bubble")
+		}
+	})
+	defer dec.Close()
+
+	got, err := dec.DecodeAll(comp, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, in) {
+		t.Fatal("decoded output differs outside the bubble")
+	}
+	synctest.Test(t, func(t *testing.T) {
+		got, err := dec.DecodeAll(comp, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, in) {
+			t.Fatal("decoded output differs in a second bubble")
+		}
+	})
+}
+
+// A Decoder made outside any bubble, as a package variable is, has its
+// only block decoder busy outside. A DecodeAll inside a bubble waits for
+// it and is woken by the holder outside. A wait on a sync.Cond would be
+// a fatal error here: "semaphore wake of synctest goroutine from outside
+// bubble".
+func TestSynctestOutsideWakesBubbleWaiter(t *testing.T) {
+	in, comp := synctestCompressed(t)
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+
+	block, ok := dec.decoders.Get()
+	if !ok {
+		t.Fatal("no block decoder")
+	}
+	release := make(chan struct{})
+	returned := make(chan struct{})
+	go func() {
+		<-release
+		dec.decoders.Put(block)
+		close(returned)
+	}()
+	synctest.Test(t, func(t *testing.T) {
+		var finished atomic.Bool
+		go func() {
+			got, err := dec.DecodeAll(comp, nil)
+			if err != nil {
+				t.Error(err)
+			} else if !bytes.Equal(got, in) {
+				t.Error("decoded output differs")
+			}
+			finished.Store(true)
+		}()
+		waitForWaiters(dec.decoders, 1)
+		close(release)
+		for !finished.Load() {
+			runtime.Gosched()
+		}
+	})
+	<-returned
+}
+
+// With concurrency 1, DecodeAll calls wait while the one block decoder
+// is in use, and all finish once it is given back.
+func TestDecodeAllWaitsForBlockDecoder(t *testing.T) {
+	in, comp := synctestCompressed(t)
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+
+	block, ok := dec.decoders.Get()
+	if !ok {
+		t.Fatal("no block decoder")
+	}
+	const calls = 4
+	var wg sync.WaitGroup
+	var done atomic.Int32
+	for range calls {
+		wg.Go(func() {
+			got, err := dec.DecodeAll(comp, nil)
+			if err != nil {
+				t.Error(err)
+			} else if !bytes.Equal(got, in) {
+				t.Error("decoded output differs")
+			}
+			done.Add(1)
+		})
+	}
+	waitForWaiters(dec.decoders, calls)
+	if n := done.Load(); n != 0 {
+		t.Fatalf("%d DecodeAll calls finished while the block decoder was held", n)
+	}
+	dec.decoders.Put(block)
+	wg.Wait()
+	if n := done.Load(); n != calls {
+		t.Fatalf("%d DecodeAll calls finished; want %d", n, calls)
+	}
+}
+
+// A DecodeAll that waits when the Decoder is closed, or that starts
+// after, returns ErrDecoderClosed.
+func TestDecodeAllAfterClose(t *testing.T) {
+	_, comp := synctestCompressed(t)
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, ok := dec.decoders.Get()
+	if !ok {
+		t.Fatal("no block decoder")
+	}
+	errc := make(chan error, 1)
+	go func() {
+		_, err := dec.DecodeAll(comp, nil)
+		errc <- err
+	}()
+	waitForWaiters(dec.decoders, 1)
+	dec.Close()
+	if err := <-errc; err != ErrDecoderClosed {
+		t.Fatalf("waiting DecodeAll: err %v; want ErrDecoderClosed", err)
+	}
+	dec.decoders.Put(block)
+	if _, err := dec.DecodeAll(comp, nil); err != ErrDecoderClosed {
+		t.Fatalf("DecodeAll after Close: err %v; want ErrDecoderClosed", err)
+	}
+}
+
+// A stream decoder with several goroutines runs inside a bubble and is
+// closed there.
+func TestSynctestStreamDecoder(t *testing.T) {
+	in := synctestInput()
+	enc, err := NewWriter(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	comp := enc.EncodeAll(in, nil)
+	enc.Close()
+
+	synctest.Test(t, func(t *testing.T) {
+		dec, err := NewReader(bytes.NewReader(comp), WithDecoderConcurrency(4))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer dec.Close()
+		got, err := io.ReadAll(dec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, in) {
+			t.Fatal("decoded output differs")
+		}
+	})
 }
