@@ -363,6 +363,136 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
+type nopReadWriteCloser struct {
+	bytes.Buffer
+}
+
+func (*nopReadWriteCloser) Close() error { return nil }
+
+func TestTransportWritableBody(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		encoding string
+		always   bool
+		custom   bool
+	}{
+		{name: "gzip", encoding: "gzip"},
+		{name: "zstd", encoding: "zstd"},
+		{name: "always-decompress", encoding: "gzip", always: true},
+		{name: "custom-eval", encoding: "gzip", custom: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "http://example.org", nil)
+			body := &nopReadWriteCloser{}
+			parent := roundTripFunc(func(*http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: http.StatusSwitchingProtocols,
+					Header:     http.Header{"Content-Encoding": {tt.encoding}},
+					Body:       body,
+				}, nil
+			})
+			var opts []transportOption
+			if tt.always {
+				opts = append(opts, TransportAlwaysDecompress(true))
+			}
+			var evalCalled bool
+			if tt.custom {
+				opts = append(opts, TransportCustomEval(func(http.Header) bool {
+					evalCalled = true
+					return true
+				}))
+			}
+			resp, err := Transport(parent, opts...).RoundTrip(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if tt.custom && !evalCalled {
+				t.Errorf("TransportCustomEval callback was not invoked")
+			}
+			if resp.Uncompressed || resp.Header.Get("Content-Encoding") != tt.encoding || resp.Body != body {
+				t.Errorf("writable body was wrapped: Uncompressed=%v, Content-Encoding=%q, sameBody=%v",
+					resp.Uncompressed, resp.Header.Get("Content-Encoding"), resp.Body == body)
+			}
+			if _, ok := resp.Body.(io.ReadWriteCloser); !ok {
+				t.Errorf("response body lost io.ReadWriteCloser")
+			}
+		})
+	}
+
+	t.Run("http1-101-upgrade", func(t *testing.T) {
+		serverDone := make(chan struct{})
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer close(serverDone)
+			hj, ok := w.(http.Hijacker)
+			if !ok {
+				t.Errorf("ResponseWriter does not implement http.Hijacker")
+				return
+			}
+			conn, rw, err := hj.Hijack()
+			if err != nil {
+				t.Errorf("Hijack: %v", err)
+				return
+			}
+			defer conn.Close()
+			_, err = rw.WriteString("HTTP/1.1 101 Switching Protocols\r\n" +
+				"Connection: Upgrade\r\n" +
+				"Upgrade: echo\r\n" +
+				"Content-Encoding: gzip\r\n\r\n")
+			if err != nil {
+				return
+			}
+			if err := rw.Flush(); err != nil {
+				return
+			}
+			buf := make([]byte, 4)
+			if _, err := io.ReadFull(rw, buf); err != nil {
+				return
+			}
+			_, _ = conn.Write(buf)
+		}))
+		defer server.Close()
+
+		tr := &http.Transport{}
+		defer tr.CloseIdleConnections()
+		req, err := http.NewRequest(http.MethodGet, server.URL, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Connection", "Upgrade")
+		req.Header.Set("Upgrade", "echo")
+
+		resp, err := Transport(tr).RoundTrip(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			resp.Body.Close()
+			<-serverDone
+		}()
+		if resp.StatusCode != http.StatusSwitchingProtocols {
+			t.Fatalf("got status %d, want 101", resp.StatusCode)
+		}
+		rwc, ok := resp.Body.(io.ReadWriteCloser)
+		if !ok {
+			t.Fatalf("resp.Body (%T) does not implement io.ReadWriteCloser", resp.Body)
+		}
+		if resp.Uncompressed {
+			t.Errorf("101 response marked Uncompressed")
+		}
+		if _, err := rwc.Write([]byte("ping")); err != nil {
+			t.Fatalf("write upgraded body: %v", err)
+		}
+		got := make([]byte, 4)
+		if _, err := io.ReadFull(rwc, got); err != nil {
+			t.Fatalf("read upgraded body: %v", err)
+		}
+		if string(got) != "ping" {
+			t.Errorf("got %q, want %q", got, "ping")
+		}
+	})
+}
+
 // stallReader blocks in Read until release is closed, then returns err.
 type stallReader struct {
 	stalled, release chan struct{}
