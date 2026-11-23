@@ -23,6 +23,21 @@ func Create(name string, mode fs.FileMode, exclusive bool) (*os.File, error) {
 	return os.OpenFile(name, flag, mode.Perm())
 }
 
+// CreateStdinOutput opens name like Create, but fails if name is the regular
+// file stdin reads from, since truncating it would destroy the input.
+func CreateStdinOutput(name string, exclusive bool) (*os.File, error) {
+	in, err := os.Stdin.Stat()
+	// Only a regular file loses data; a device like os.DevNull may be both.
+	if err != nil || !in.Mode().IsRegular() {
+		in = nil
+	}
+	f, alias, err := OpenOutputFile(in, name, os.ModePerm, exclusive)
+	if alias {
+		return nil, errors.Join(errors.New("stdin and output refer to the same file"), err)
+	}
+	return f, err
+}
+
 // CreateOutput opens dst. When dst aliases the input file it creates a
 // temporary file next to dst instead, which FinishOutput renames over dst.
 func CreateOutput(in fs.FileInfo, dst string, mode fs.FileMode, exclusive, remove bool) (*os.File, string, error) {

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -119,6 +120,31 @@ func TestOutputAliases(t *testing.T) {
 					assertNoOutputTempFiles(t, dir)
 				})
 			}
+
+			t.Run("rejects stdin", func(t *testing.T) {
+				dir := t.TempDir()
+				input, compressed := writeS2Input(t, dir, []byte("preserve stdin source"))
+				output := test.output(t, dir, input)
+				stdin, err := os.Open(filepath.Join(dir, input))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer stdin.Close()
+
+				_, stderr, err := runS2DProcess(t, dir, stdin, "-q", "-o", output, "-")
+				if err == nil || !bytes.Contains(stderr, []byte("stdin and output refer to the same file")) {
+					t.Fatalf("s2d error = %v, stderr = %q, want stdin alias rejection", err, stderr)
+				}
+				for _, name := range []string{input, output} {
+					got, err := os.ReadFile(filepath.Join(dir, name))
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Equal(got, compressed) {
+						t.Fatalf("%s contents changed: got %d bytes, want %d", name, len(got), len(compressed))
+					}
+				}
+			})
 		})
 	}
 }
@@ -295,7 +321,7 @@ func assertNoOutputTempFiles(t *testing.T, dir string) {
 
 func runS2D(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	_, stderr, err := runS2DProcess(t, dir, args...)
+	_, stderr, err := runS2DProcess(t, dir, nil, args...)
 	if err != nil {
 		t.Fatalf("s2d %v failed: %v\n%s", args, err, stderr)
 	}
@@ -303,7 +329,7 @@ func runS2D(t *testing.T, dir string, args ...string) {
 
 func runS2DWantError(t *testing.T, dir, wantDiagnostic string, args ...string) {
 	t.Helper()
-	_, stderr, err := runS2DProcess(t, dir, args...)
+	_, stderr, err := runS2DProcess(t, dir, nil, args...)
 	var exitError *exec.ExitError
 	if !errors.As(err, &exitError) {
 		t.Fatalf("s2d %v error = %v, want process exit error\n%s", args, err, stderr)
@@ -316,7 +342,7 @@ func runS2DWantError(t *testing.T, dir, wantDiagnostic string, args ...string) {
 	}
 }
 
-func runS2DProcess(t *testing.T, dir string, args ...string) ([]byte, []byte, error) {
+func runS2DProcess(t *testing.T, dir string, stdin io.Reader, args ...string) ([]byte, []byte, error) {
 	t.Helper()
 	executable, err := os.Executable()
 	if err != nil {
@@ -325,6 +351,7 @@ func runS2DProcess(t *testing.T, dir string, args ...string) ([]byte, []byte, er
 	command := exec.CommandContext(t.Context(), executable, args...)
 	command.Dir = dir
 	command.Env = append(os.Environ(), s2dTestProcess+"=1")
+	command.Stdin = stdin
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout
 	command.Stderr = &stderr

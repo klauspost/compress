@@ -778,6 +778,31 @@ func TestStreamOutputAliases(t *testing.T) {
 					assertNoOutputTempFiles(t, output)
 				})
 			}
+
+			t.Run("rejects stdin", func(t *testing.T) {
+				input := []byte("preserve stdin source")
+				filename := writeTestInput(t, "input.txt", input)
+				output := test.output(t, filename)
+				stdin, err := os.Open(filename)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer stdin.Close()
+
+				_, stderr, err := runS2CProcess(t, stdin, "-q", "-o", output, "-")
+				if err == nil || !bytes.Contains(stderr, []byte("stdin and output refer to the same file")) {
+					t.Fatalf("s2c error = %v, stderr = %q, want stdin alias rejection", err, stderr)
+				}
+				for _, name := range []string{filename, output} {
+					got, err := os.ReadFile(name)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Equal(got, input) {
+						t.Fatalf("%s contents = %q, want %q", name, got, input)
+					}
+				}
+			})
 		})
 	}
 
@@ -1054,7 +1079,7 @@ func assertStreamDecodesTo(t *testing.T, filename string, want []byte) {
 
 func runS2C(t *testing.T, args ...string) []byte {
 	t.Helper()
-	stdout, stderr, err := runS2CProcess(t, args...)
+	stdout, stderr, err := runS2CProcess(t, nil, args...)
 	if err != nil {
 		t.Fatalf("s2c %v failed: %v\n%s", args, err, stderr)
 	}
@@ -1063,16 +1088,17 @@ func runS2C(t *testing.T, args ...string) []byte {
 
 func runS2CWantError(t *testing.T, args ...string) {
 	t.Helper()
-	_, stderr, err := runS2CProcess(t, args...)
+	_, stderr, err := runS2CProcess(t, nil, args...)
 	if err == nil {
 		t.Fatalf("s2c %v unexpectedly succeeded\n%s", args, stderr)
 	}
 }
 
-func runS2CProcess(t *testing.T, args ...string) ([]byte, []byte, error) {
+func runS2CProcess(t *testing.T, stdin io.Reader, args ...string) ([]byte, []byte, error) {
 	t.Helper()
 	cmd := exec.Command(os.Args[0], args...)
 	cmd.Env = append(os.Environ(), s2cTestProcess+"=1")
+	cmd.Stdin = stdin
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
