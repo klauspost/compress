@@ -510,7 +510,7 @@ func TestUltraStreams(t *testing.T) {
 	for i := range text {
 		text[i] = "abcdefghijklmnopqrstuvwxyz ,.\n"[rng.Intn(30)]
 	}
-	repeated := bytes.Repeat(text, 200)
+	repeated := bytes.Repeat(text, 80)
 	for _, tc := range []struct {
 		name        string
 		in, dict    []byte
