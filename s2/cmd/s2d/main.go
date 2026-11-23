@@ -92,7 +92,7 @@ Options:`)
 			return
 		}
 		dstFilename := *out
-		dstFile, err := fileio.Create(dstFilename, os.ModePerm, *safe)
+		dstFile, err := fileio.CreateStdinOutput(dstFilename, *safe)
 		exitErr(err)
 		bw := bufio.NewWriterSize(dstFile, 4<<20)
 		_, copyErr := io.Copy(bw, r)
