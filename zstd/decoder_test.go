@@ -3480,3 +3480,38 @@ func TestSynctestStreamDecoder(t *testing.T) {
 		}
 	})
 }
+
+// An async stream decoder reads a stream to its end inside a bubble and
+// is reset and used again outside it.
+func TestSynctestStreamDecoderOutlivesBubble(t *testing.T) {
+	in, comp := synctestCompressed(t)
+	var dec *Decoder
+	synctest.Test(t, func(t *testing.T) {
+		var err error
+		dec, err = NewReader(nil, WithDecoderConcurrency(4))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := dec.Reset(bytes.NewReader(comp)); err != nil {
+			t.Fatal(err)
+		}
+		got, err := io.ReadAll(dec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, in) {
+			t.Fatal("decoded output differs inside the bubble")
+		}
+	})
+	defer dec.Close()
+	if err := dec.Reset(bytes.NewReader(comp)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(dec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, in) {
+		t.Fatal("decoded output differs outside the bubble")
+	}
+}

@@ -324,6 +324,8 @@ func (d *Decoder) drainOutput() {
 	}
 	d.current.output = nil
 	d.current.flushed = true
+	// Release streamWg in the bubble that started the stream, if any.
+	d.streamWg.Wait()
 }
 
 // WriteTo writes data to w until there's no more data to write or when an error occurs.
