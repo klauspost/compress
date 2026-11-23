@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -88,5 +89,47 @@ func TestCreateStripsSpecialModeBits(t *testing.T) {
 	}
 	if special := info.Mode() & (os.ModeSetuid | os.ModeSetgid | os.ModeSticky); special != 0 {
 		t.Fatalf("output retained special mode bits: %v", special)
+	}
+}
+
+func TestCreateOutputStagesMaximumBasename(t *testing.T) {
+	dir := t.TempDir()
+	name := filepath.Join(dir, strings.Repeat("a", 255))
+	if err := os.WriteFile(name, []byte("compressed"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	inputInfo, err := os.Stat(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	output, temporaryName, err := CreateOutput(inputInfo, name, inputInfo.Mode(), false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if temporaryName == "" {
+		_ = output.Close()
+		t.Fatal("CreateOutput did not stage an input alias")
+	}
+	if _, err := output.Write([]byte("decoded")); err != nil {
+		_ = output.Close()
+		t.Fatal(err)
+	}
+	if err := FinishOutput(output, temporaryName, name, inputInfo.Mode(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(name); err != nil || string(got) != "decoded" {
+		t.Fatalf("finished output = %q, %v", got, err)
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), strings.TrimSuffix(stagedOutputPattern, "*")) ||
+			strings.HasPrefix(entry.Name(), strings.TrimSuffix(backupOutputPattern, "*")) {
+			t.Fatalf("temporary output remains: %s", entry.Name())
+		}
 	}
 }
