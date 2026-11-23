@@ -16,6 +16,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -832,6 +833,10 @@ func (r *Reader) initFileList() {
 		// because it appears as a prefix in a path.
 		dirs := make(map[string]bool)
 
+		// Preallocate the minimum size of the index.
+		// We may also synthesize additional directory entries.
+		r.fileList = make([]fileListEntry, 0, len(r.File))
+
 		for _, file := range r.File {
 			isDir := len(file.Name) > 0 && file.Name[len(file.Name)-1] == '/'
 			name := toValidName(file.Name)
@@ -874,6 +879,7 @@ func (r *Reader) initFileList() {
 				files[name] = idx
 			}
 		}
+		r.fileList = slices.Grow(r.fileList, len(dirs))
 		for dir := range dirs {
 			if _, ok := knownDirs[dir]; !ok {
 				if idx, ok := files[dir]; ok {
@@ -889,14 +895,19 @@ func (r *Reader) initFileList() {
 			}
 		}
 
-		sort.Slice(r.fileList, func(i, j int) bool { return fileEntryLess(r.fileList[i].name, r.fileList[j].name) })
+		slices.SortFunc(r.fileList, func(a, b fileListEntry) int {
+			return fileEntryCompare(a.name, b.name)
+		})
 	})
 }
 
-func fileEntryLess(x, y string) bool {
+func fileEntryCompare(x, y string) int {
 	xdir, xelem, _ := split(x)
 	ydir, yelem, _ := split(y)
-	return xdir < ydir || xdir == ydir && xelem < yelem
+	if xdir != ydir {
+		return strings.Compare(xdir, ydir)
+	}
+	return strings.Compare(xelem, yelem)
 }
 
 // Open opens the named file in the ZIP archive,
