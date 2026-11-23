@@ -259,11 +259,16 @@ func (w *wCounter) Write(p []byte) (n int, err error) {
 }
 
 func isS2Input(rd io.Reader) (bool, io.Reader) {
-	var tmp [4]byte
-	n, err := io.ReadFull(rd, tmp[:])
+	var tmp [10]byte
+	n, err := io.ReadFull(rd, tmp[:4])
+	if err == nil && bytes.Equal(tmp[:4], []byte{0xff, 0x06, 0x00, 0x00}) {
+		var bodyLen int
+		bodyLen, err = io.ReadFull(rd, tmp[4:])
+		n += bodyLen
+	}
 	switch err {
 	case nil:
-		return bytes.Equal(tmp[:], []byte{0xff, 0x06, 0x00, 0x00}), io.MultiReader(bytes.NewBuffer(tmp[:]), rd)
+		return string(tmp[:n]) == "\xff\x06\x00\x00S2sTwO" || string(tmp[:n]) == "\xff\x06\x00\x00sNaPpY", io.MultiReader(bytes.NewBuffer(tmp[:n]), rd)
 	case io.ErrUnexpectedEOF, io.EOF:
 		return false, bytes.NewBuffer(tmp[:n])
 	}
