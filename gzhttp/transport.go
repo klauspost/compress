@@ -56,7 +56,8 @@ func TransportEnableGzip(b bool) transportOption {
 // TransportCustomEval will send the header of a response to a custom function.
 // If the function returns false, the response will be returned as-is,
 // Otherwise it will be decompressed based on Content-Encoding field, regardless
-// of whether the transport added the encoding.
+// of whether the transport added the encoding, unless the response body is
+// writable (such as a 101 Switching Protocols upgrade).
 func TransportCustomEval(fn func(header http.Header) bool) transportOption {
 	return func(c *gzRoundtripper) {
 		c.customEval = fn
@@ -118,13 +119,9 @@ func (g *gzRoundtripper) RoundTrip(req *http.Request) (*http.Response, error) {
 			return resp, nil
 		}
 	}
-	// These responses carry no HTTP content to decode. For HEAD and 304,
-	// Content-Encoding describes the representation a GET would transfer.
-	switch {
-	case req.Method == http.MethodHead, resp.StatusCode/100 == 1,
-		resp.StatusCode == http.StatusNoContent, resp.StatusCode == http.StatusResetContent,
-		resp.StatusCode == http.StatusNotModified,
-		req.Method == http.MethodConnect && resp.StatusCode/100 == 2:
+	// Do not wrap writable bodies (such as 101 Switching Protocols or
+	// tunnels), since the decoders only implement io.ReadCloser.
+	if _, ok := resp.Body.(io.Writer); ok {
 		return resp, nil
 	}
 	// Decompress
