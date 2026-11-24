@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/klauspost/compress/huff0"
@@ -410,14 +411,27 @@ func TestEncoderUltraBlockReps(t *testing.T) {
 	})
 }
 
+// forEachEncoder replaces each free encoder of e with what f returns for it.
+// It takes them all before putting any back, as the pool hands out the last
+// one put back.
+func forEachEncoder(e *Encoder, f func(encoder) encoder) {
+	e.init.Do(e.initialize)
+	encs := make([]encoder, 0, e.encoders.Len())
+	for range e.encoders.Len() {
+		enc, _ := e.encoders.Get()
+		encs = append(encs, enc)
+	}
+	for _, enc := range encs {
+		e.encoders.Put(f(enc))
+	}
+}
+
 // setUltraBufferReset sets the position limit of e's ultra encoders.
 func setUltraBufferReset(e *Encoder, limit int32) {
-	e.init.Do(e.initialize)
-	for range cap(e.encoders) {
-		enc := <-e.encoders
+	forEachEncoder(e, func(enc encoder) encoder {
 		enc.(*ultraEncoder).bufferReset = limit
-		e.encoders <- enc
-	}
+		return enc
+	})
 	e.state.encoder.(*ultraEncoder).bufferReset = limit
 }
 
@@ -555,8 +569,9 @@ func TestEncoderUltraRebase(t *testing.T) {
 		var size int
 		check(t, dec, []int32{1 << 20}, bytes.Join(frames, nil), func(e *Encoder) []byte {
 			e.init.Do(e.initialize)
-			spy = &ultraRebaseSpy{ultraEncoder: (<-e.encoders).(*ultraEncoder)}
-			e.encoders <- spy
+			enc, _ := e.encoders.Get()
+			spy = &ultraRebaseSpy{ultraEncoder: enc.(*ultraEncoder)}
+			e.encoders.Put(spy)
 			out := e.EncodeAll(frames[0], nil)
 			spy.rebased = false
 			n := len(out)
@@ -1180,8 +1195,8 @@ func blockTypes(t *testing.T, comp []byte, seqs bool) ([]int, []bool) {
 		t.Fatal(err)
 	}
 	defer dec.Close()
-	block := <-dec.decoders
-	defer func() { dec.decoders <- block }()
+	block, _ := dec.decoders.Get()
+	defer dec.decoders.Put(block)
 	frame := block.localFrame
 	frame.bBuf = comp
 	frame.history.reset()
@@ -1467,9 +1482,7 @@ func setSplitSpy(e *Encoder, every int) {
 		}
 		return &splitSpy{encoder: enc, every: every}
 	}
-	for range cap(e.encoders) {
-		e.encoders <- spy(<-e.encoders)
-	}
+	forEachEncoder(e, spy)
 	if e.state.encoder != nil {
 		e.state.encoder = spy(e.state.encoder)
 	}
@@ -2647,5 +2660,37 @@ func TestEncodeTo(t *testing.T) {
 				t.Logf("want: %x\ngot:  %x", in, got)
 			}
 		})
+	}
+}
+
+func TestSynctestEncoderOutlivesBubble(t *testing.T) {
+	in := synctestInput()
+	var enc *Encoder
+	var compIn []byte
+	synctest.Test(t, func(t *testing.T) {
+		var err error
+		enc, err = NewWriter(nil, WithEncoderConcurrency(2))
+		if err != nil {
+			t.Fatal(err)
+		}
+		compIn = enc.EncodeAll(in, nil)
+	})
+	defer enc.Close()
+
+	compOut := enc.EncodeAll(in, nil)
+	if !bytes.Equal(compIn, compOut) {
+		t.Fatal("EncodeAll gave other output outside the bubble")
+	}
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	got, err := dec.DecodeAll(compOut, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, in) {
+		t.Fatal("round trip differs")
 	}
 }
