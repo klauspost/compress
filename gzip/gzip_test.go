@@ -372,6 +372,7 @@ func TestFile1x6(t *testing.T)  { testFile(1, 6, t) }
 func TestFile1x7(t *testing.T)  { testFile(1, 7, t) }
 func TestFile1x8(t *testing.T)  { testFile(1, 8, t) }
 func TestFile1x9(t *testing.T)  { testFile(1, 9, t) }
+func TestFile1x10(t *testing.T) { testFile(1, 10, t) }
 func TestFile10(t *testing.T)   { testFile(10, DefaultCompression, t) }
 
 func TestFile50(t *testing.T) {
@@ -504,15 +505,16 @@ func TestDeterministicLM2(t *testing.T) { testDeterm(-2, t) }
 
 // Level 0 is not deterministic since it depends on the size of each write.
 // func TestDeterministicL0(t *testing.T)  { testDeterm(0, t) }
-func TestDeterministicL1(t *testing.T) { testDeterm(1, t) }
-func TestDeterministicL2(t *testing.T) { testDeterm(2, t) }
-func TestDeterministicL3(t *testing.T) { testDeterm(3, t) }
-func TestDeterministicL4(t *testing.T) { testDeterm(4, t) }
-func TestDeterministicL5(t *testing.T) { testDeterm(5, t) }
-func TestDeterministicL6(t *testing.T) { testDeterm(6, t) }
-func TestDeterministicL7(t *testing.T) { testDeterm(7, t) }
-func TestDeterministicL8(t *testing.T) { testDeterm(8, t) }
-func TestDeterministicL9(t *testing.T) { testDeterm(9, t) }
+func TestDeterministicL1(t *testing.T)  { testDeterm(1, t) }
+func TestDeterministicL2(t *testing.T)  { testDeterm(2, t) }
+func TestDeterministicL3(t *testing.T)  { testDeterm(3, t) }
+func TestDeterministicL4(t *testing.T)  { testDeterm(4, t) }
+func TestDeterministicL5(t *testing.T)  { testDeterm(5, t) }
+func TestDeterministicL6(t *testing.T)  { testDeterm(6, t) }
+func TestDeterministicL7(t *testing.T)  { testDeterm(7, t) }
+func TestDeterministicL8(t *testing.T)  { testDeterm(8, t) }
+func TestDeterministicL9(t *testing.T)  { testDeterm(9, t) }
+func TestDeterministicL10(t *testing.T) { testDeterm(10, t) }
 
 func testDeterm(level int, t *testing.T) {
 	var length = 500000
@@ -618,7 +620,7 @@ func benchmarkGzipN(b *testing.B, level int) {
 
 func BenchmarkCompressAllocations(b *testing.B) {
 	payload := []byte(strings.Repeat("Tiny payload", 20))
-	for j := -2; j <= 9; j++ {
+	for j := -2; j <= UltraCompression; j++ {
 		b.Run("level("+strconv.Itoa(j)+")", func(b *testing.B) {
 			b.Run("gzip", func(b *testing.B) {
 				b.ReportAllocs()
@@ -698,5 +700,26 @@ func TestWriterClosePreservesFooterError(t *testing.T) {
 	}
 	if err := w.Close(); err != want {
 		t.Fatalf("Close: got %v, want %v", err, want)
+	}
+}
+
+// TestHeaderXFL checks the compression flags in the gzip header.
+func TestHeaderXFL(t *testing.T) {
+	for _, tc := range []struct{ level, xfl int }{
+		{BestSpeed, 4},
+		{DefaultCompression, 0},
+		{BestCompression, 2},
+		{UltraCompression, 2},
+	} {
+		var buf bytes.Buffer
+		w, err := NewWriterLevel(&buf, tc.level)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.Write([]byte("hello"))
+		w.Close()
+		if got := int(buf.Bytes()[8]); got != tc.xfl {
+			t.Errorf("level %d: XFL %d, want %d", tc.level, got, tc.xfl)
+		}
 	}
 }

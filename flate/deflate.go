@@ -20,6 +20,12 @@ const (
 	BestCompression    = 9
 	DefaultCompression = -1
 
+	// UltraCompression chooses among all matches with an optimal parser.
+	// Output is typically 4% smaller than with BestCompression, at about
+	// 10 times the time (2 to 35 times, depending on the input).
+	// A Writer holds up to about 20 MB while compressing large inputs.
+	UltraCompression = 10
+
 	// HuffmanOnly disables Lempel-Ziv match searching and only performs Huffman
 	// entropy encoding. This mode is useful in compressing data that has
 	// already been compressed with an LZ style algorithm (e.g. Snappy or LZ4)
@@ -128,6 +134,7 @@ type compressor struct {
 	tokens tokens
 	fast   fastEnc
 	state  *advancedState
+	ultra  *ultraEnc
 
 	sync          bool // requesting flush
 	closing       bool // sync is from close, so no more data follows
@@ -220,6 +227,13 @@ func (d *compressor) writeBlockSkip(tok *tokens, index int, eof bool) error {
 func (d *compressor) fillWindow(b []byte) {
 	// Do not fill window if we are in store-only or huffman mode.
 	if d.level <= 0 && d.level > -MinCustomWindowSize {
+		return
+	}
+	if d.level == UltraCompression {
+		if d.ultra == nil {
+			d.ultra = newUltraEnc()
+		}
+		d.ultra.loadDict(b)
 		return
 	}
 	if d.fast != nil {
@@ -858,6 +872,9 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 		d.initDeflate()
 		d.fill = (*compressor).fillDeflate
 		d.step = (*compressor).deflateLazy
+	case level == UltraCompression:
+		d.fill = (*compressor).fillUltra
+		d.step = (*compressor).stepUltra
 	case -level >= MinCustomWindowSize && -level <= MaxCustomWindowSize:
 		d.w.logNewTablePenalty = 7
 		d.fast = &fastEncL5Window{maxOffset: int32(-level), cur: maxStoreBlockSize}
@@ -865,7 +882,7 @@ func (d *compressor) init(w io.Writer, level int) (err error) {
 		d.fill = (*compressor).fillBlock
 		d.step = (*compressor).storeFast
 	default:
-		return fmt.Errorf("flate: invalid compression level %d: want value in range [-2, 9]", level)
+		return fmt.Errorf("flate: invalid compression level %d: want value in range [-2, 10]", level)
 	}
 	d.level = level
 	return nil
@@ -877,6 +894,13 @@ func (d *compressor) reset(w io.Writer) {
 	d.sync = false
 	d.closing = false
 	d.err = nil
+	if d.level == UltraCompression {
+		if d.ultra != nil {
+			d.ultra.reset()
+		}
+		d.windowEnd = 0
+		return
+	}
 	// We only need to reset a few things for Snappy.
 	if d.fast != nil {
 		d.fast.Reset()
@@ -929,6 +953,7 @@ func (d *compressor) close() error {
 // NewWriter returns a new Writer compressing data at the given level.
 // Following zlib, levels range from 1 (BestSpeed) to 9 (BestCompression);
 // higher levels typically run slower but compress more.
+// Level 10 (UltraCompression) is much slower again, and compresses more.
 // Level 0 (NoCompression) does not attempt any compression; it only adds the
 // necessary DEFLATE framing.
 // Level -1 (DefaultCompression) uses the default compression level.
@@ -936,7 +961,7 @@ func (d *compressor) close() error {
 // a very fast compression for all types of input, but sacrificing considerable
 // compression efficiency.
 //
-// If level is in the range [-2, 9] then the error returned will be nil.
+// If level is in the range [-2, 10] then the error returned will be nil.
 // Otherwise the error returned will be non-nil.
 func NewWriter(w io.Writer, level int) (*Writer, error) {
 	var dw Writer

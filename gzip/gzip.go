@@ -24,6 +24,10 @@ const (
 	ConstantCompression = flate.ConstantCompression
 	HuffmanOnly         = flate.HuffmanOnly
 
+	// UltraCompression is the strongest and slowest level.
+	// See flate.UltraCompression.
+	UltraCompression = flate.UltraCompression
+
 	// StatelessCompression will do compression but without maintaining any state
 	// between Write calls.
 	// There will be no memory kept between Write calls,
@@ -64,10 +68,10 @@ func NewWriter(w io.Writer) *Writer {
 // of assuming DefaultCompression.
 //
 // The compression level can be DefaultCompression, NoCompression, or any
-// integer value between BestSpeed and BestCompression inclusive. The error
+// integer value between BestSpeed and UltraCompression inclusive. The error
 // returned will be nil if the level is valid.
 func NewWriterLevel(w io.Writer, level int) (*Writer, error) {
-	if level < StatelessCompression || level > BestCompression {
+	if level < StatelessCompression || level > UltraCompression {
 		return nil, fmt.Errorf("gzip: invalid compression level: %d", level)
 	}
 	z := new(Writer)
@@ -205,7 +209,7 @@ func (z *Writer) Write(p []byte) (int, error) {
 			// modified time is not set.
 			le.PutUint32(z.buf[4:8], uint32(z.ModTime.Unix()))
 		}
-		if z.level == BestCompression {
+		if z.level >= BestCompression {
 			z.buf[8] = 2
 		} else if z.level == BestSpeed {
 			z.buf[8] = 4

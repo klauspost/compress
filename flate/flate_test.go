@@ -107,7 +107,7 @@ func TestRegressions(t *testing.T) {
 			if testing.Short() && len(data1) > 10000 {
 				t.SkipNow()
 			}
-			for level := 0; level <= 9; level++ {
+			for level := 0; level <= UltraCompression; level++ {
 				t.Run(fmt.Sprint(tt.Name+"-level", 1), func(t *testing.T) {
 					buf := new(bytes.Buffer)
 					fw, err := NewWriter(buf, level)

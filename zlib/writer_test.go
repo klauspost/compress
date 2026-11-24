@@ -146,7 +146,7 @@ func TestWriter(t *testing.T) {
 		testLevelDict(t, tag, b, DefaultCompression, "")
 		testLevelDict(t, tag, b, NoCompression, "")
 		testLevelDict(t, tag, b, HuffmanOnly, "")
-		for level := BestSpeed; level <= BestCompression; level++ {
+		for level := BestSpeed; level <= UltraCompression; level++ {
 			testLevelDict(t, tag, b, level, "")
 		}
 	}
@@ -157,7 +157,7 @@ func TestWriterBig(t *testing.T) {
 		testFileLevelDict(t, fn, DefaultCompression, "")
 		testFileLevelDict(t, fn, NoCompression, "")
 		testFileLevelDict(t, fn, HuffmanOnly, "")
-		for level := BestSpeed; level <= BestCompression; level++ {
+		for level := BestSpeed; level <= UltraCompression; level++ {
 			testFileLevelDict(t, fn, level, "")
 			if level >= 1 && testing.Short() {
 				break
@@ -175,7 +175,7 @@ func TestWriterDict(t *testing.T) {
 		testFileLevelDict(t, fn, DefaultCompression, dictionary)
 		testFileLevelDict(t, fn, NoCompression, dictionary)
 		testFileLevelDict(t, fn, HuffmanOnly, dictionary)
-		for level := BestSpeed; level <= BestCompression; level++ {
+		for level := BestSpeed; level <= UltraCompression; level++ {
 			testFileLevelDict(t, fn, level, dictionary)
 			if level >= 1 && testing.Short() {
 				break
@@ -199,7 +199,7 @@ func TestWriterReset(t *testing.T) {
 		if testing.Short() {
 			break
 		}
-		for level := BestSpeed; level <= BestCompression; level++ {
+		for level := BestSpeed; level <= UltraCompression; level++ {
 			testFileLevelDictReset(t, fn, level, nil)
 		}
 	}
@@ -219,5 +219,28 @@ func TestWriterDictIsUsed(t *testing.T) {
 	output := buf.Bytes()
 	if len(output) > expectedMaxSize {
 		t.Errorf("result too large (got %d, want <= %d bytes). Is the dictionary being used?", len(output), expectedMaxSize)
+	}
+}
+
+// TestHeaderFLEVEL checks the compression level in the zlib header.
+func TestHeaderFLEVEL(t *testing.T) {
+	for _, tc := range []struct{ level, flevel int }{
+		{HuffmanOnly, 0},
+		{BestSpeed, 0},
+		{5, 1},
+		{DefaultCompression, 2},
+		{BestCompression, 3},
+		{UltraCompression, 3},
+	} {
+		var buf bytes.Buffer
+		w, err := NewWriterLevel(&buf, tc.level)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.Write([]byte("hello"))
+		w.Close()
+		if got := int(buf.Bytes()[1] >> 6); got != tc.flevel {
+			t.Errorf("level %d: FLEVEL %d, want %d", tc.level, got, tc.flevel)
+		}
 	}
 }
