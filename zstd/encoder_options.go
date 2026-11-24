@@ -375,22 +375,28 @@ func WithConcurrentBlocks(b bool) EOption {
 var maxJobSize = 256 << 20
 
 // jobSize returns the input section size per parallel job.
+// Jobs index their prefix where it is, so short jobs with a long prefix keep
+// the ratio and give more parallelism. Best and ultra insert every position
+// of the prefix, so their jobs stay longer.
 func (o *encoderOptions) jobSize() int {
+	windows := 1
+	switch o.level {
+	case SpeedBetterCompression:
+		windows = 2
+	case SpeedBestCompression, SpeedUltraCompression:
+		windows = 4
+	}
 	// Clamp before multiplying: windowSize*4 overflows a 32-bit int for
 	// windows of 512 MiB.
-	return max(min(o.windowSize, maxJobSize/4)*4, 512<<10)
+	return max(min(o.windowSize, maxJobSize/windows)*windows, 512<<10)
 }
 
 // overlapSize returns the overlap prefix size for parallel jobs.
 func (o *encoderOptions) overlapSize() int {
-	var s int
-	switch o.level {
-	case SpeedBestCompression, SpeedUltraCompression:
-		s = o.windowSize / 2
-	case SpeedBetterCompression:
-		s = o.windowSize / 4
-	default:
-		s = o.windowSize / 8
+	s := o.windowSize / 2
+	if o.level == SpeedUltraCompression {
+		// Like the reference's btultra2.
+		s = o.windowSize
 	}
 	return min(s, o.jobSize()/2)
 }

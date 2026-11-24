@@ -103,23 +103,34 @@ Each non-first job receives an overlap prefix from the previous job for match co
 so compression ratio is only marginally affected. Output is flushed in order,
 producing a valid single-frame zstd stream.
 
-A job is four windows long, at least 512 KiB and at most 256 MiB, so even
-large windows (`WithWindowSize`) split the input into several jobs. For windows
-of 128 MiB and up this trades some total CPU time and a little ratio for much
-lower wall time and peak memory. On the benchmark corpora, output at the best
-level with a 256 MiB window grew by under 0.5%; the loss depends on the input.
-The overlap is at most half a job, so at the best level with windows over
-256 MiB each job sees less of the previous data than the window allows, and the
-loss may be larger.
+A job is one window long at the fastest and default levels, two windows at
+better, and four at best and ultra; at least 512 KiB and at most 256 MiB, so
+even large windows (`WithWindowSize`) split the input into several jobs. Each
+job starts with half a window of the previous data as history (a whole window
+at ultra), at most half a job. The input is kept in one buffer of n+2 jobs
+plus that history, at most 2 GiB, and jobs are compressed where they are, so
+the history is not copied. With 16 goroutines the buffer is 74 MB at the
+fastest level, 148 MB at default, 292 MB at better and 580 MB at best. A
+stream starts in a buffer of half a job and moves to the full buffer when that
+fills, so a short stream does not allocate it. The full buffer is kept for the
+next stream, unless the encoder stays idle.
 
-Benchmark on 1.8GB GOB stream (AMD Ryzen 9 9950X):
+For windows of 128 MiB and up this trades some total CPU time and a little
+ratio for much lower wall time and peak memory. On the benchmark corpora,
+output at the best level with a 256 MiB window grew by under 0.5%; the loss
+depends on the input. The overlap is at most half a job, so at the best level
+with windows over 256 MiB each job sees less of the previous data than the
+window allows, and the loss may be larger.
+
+Benchmark on 1.8GB GOB stream (AMD Ryzen 9 9950X; `BenchmarkConcurrentBlocks_GobStream`, which downloads the stream):
 
 | Level   |  1 thread  |     4 threads      |     16 threads      | 1T ratio | 16T ratio |
 |---------|:----------:|:------------------:|:-------------------:|:--------:|:---------:|
-| fastest | 783 MB/s   | 2950 MB/s (3.8×)   | 6939 MB/s (8.9×)    | 12.24%   | 12.26%    |
-| default | 728 MB/s   | 2533 MB/s (3.5×)   | 5340 MB/s (7.3×)    | 10.67%   | 10.68%    |
-| better  | 434 MB/s   | 1105 MB/s (2.5×)   | 2206 MB/s (5.1×)    | 9.14%    | 9.21%     |
-| best    | 129 MB/s   | 367 MB/s (2.8×)    | 884 MB/s (6.8×)     | 8.48%    | 8.63%     |
+| fastest | 895 MB/s   | 3579 MB/s (4.0×)   | 9716 MB/s (10.9×)   | 12.19%   | 12.20%    |
+| default | 722 MB/s   | 2675 MB/s (3.7×)   | 6533 MB/s (9.0×)    | 10.62%   | 10.66%    |
+| better  | 378 MB/s   | 1175 MB/s (3.1×)   | 2613 MB/s (6.9×)    | 9.05%    | 9.12%     |
+| best    | 136 MB/s   | 418 MB/s (3.1×)    | 1031 MB/s (7.6×)    | 8.44%    | 8.45%     |
+| ultra   | 6.1 MB/s   | 18.3 MB/s (3.0×)   | 56.1 MB/s (9.2×)    | 6.61%    | 6.61%     |
 
 Notes:
 * Not compatible with dictionary encoding.

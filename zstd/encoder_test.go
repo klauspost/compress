@@ -310,6 +310,141 @@ func appendPeriodic(dst []byte, rng *rand.Rand, n, period int) []byte {
 	return dst
 }
 
+// TestEncoderInPlace checks that encoding blocks where they are gives the
+// same output as copying them into the history, also after the copy has moved
+// the window down.
+func TestEncoderInPlace(t *testing.T) {
+	initPredefined()
+	const block = 64 << 10
+	n := 2 << 20
+	if testing.Short() {
+		n = 512 << 10
+	}
+	rng := rand.New(rand.NewSource(1))
+	src := appendRandom(nil, rng, 4<<10)
+	for len(src) < n {
+		// Short and long distances, some past the 256 KiB window.
+		dist := 1 + rng.Intn(min(len(src), 64<<10<<rng.Intn(5)))
+		src = appendPeriodic(src, rng, rng.Intn(4<<10), dist)
+		src = appendRandom(src, rng, rng.Intn(1<<10))
+	}
+	for _, level := range []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression, SpeedUltraCompression} {
+		for _, lowMem := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%v-lowmem-%v", level, lowMem), func(t *testing.T) {
+				var o encoderOptions
+				o.setDefault()
+				o.level, o.windowSize, o.lowMem = level, 256<<10, lowMem
+				ref, enc := o.encoder(), o.encoder()
+				ref.Reset(nil, false)
+				enc.Reset(nil, false)
+				enc.inPlace(src[:0])
+				for i := 0; i < len(src); i += block {
+					b := src[i:min(i+block, len(src))]
+					var out [2][]byte
+					for j, e := range [2]encoder{ref, enc} {
+						blk := e.Block()
+						blk.pushOffsets()
+						e.Encode(blk, b)
+						blk.last = i+block >= len(src)
+						if err := blk.encode(b, false, true); err != nil {
+							t.Fatal(err)
+						}
+						out[j] = bytes.Clone(blk.output)
+						blk.reset(nil)
+					}
+					if !bytes.Equal(out[0], out[1]) {
+						t.Fatalf("block at %d differs", i)
+					}
+				}
+			})
+		}
+	}
+}
+
+// encoderBase returns the shared state of enc and the positions in its match
+// tables.
+func encoderBase(enc encoder) (*fastBase, []int32) {
+	var pos []int32
+	switch e := enc.(type) {
+	case *fastEncoder:
+		for _, v := range e.table {
+			pos = append(pos, v.offset)
+		}
+		return &e.fastBase, pos
+	case *doubleFastEncoder:
+		for _, v := range e.table {
+			pos = append(pos, v.offset)
+		}
+		for _, v := range e.longTable {
+			pos = append(pos, v.offset)
+		}
+		return &e.fastBase, pos
+	case *betterFastEncoder:
+		for _, v := range e.table {
+			pos = append(pos, v.offset)
+		}
+		for _, v := range e.longTable {
+			pos = append(pos, v.offset, v.prev)
+		}
+		return &e.fastBase, pos
+	case *bestFastEncoder:
+		for _, v := range e.table {
+			pos = append(pos, v.offset, v.prev)
+		}
+		for _, v := range e.longTable {
+			pos = append(pos, v.offset, v.prev)
+		}
+		return &e.fastBase, pos
+	}
+	panic(fmt.Sprintf("unexpected encoder %T", enc))
+}
+
+// TestEncoderPrefixRestart encodes a job in place whose history ends at the
+// position limit. The next prefix is shorter than the window, so shifting
+// the tables would keep entries from just before it, and positions must
+// restart instead. Ultra starts frames above all old positions instead.
+func TestEncoderPrefixRestart(t *testing.T) {
+	initPredefined()
+	const window, prefix, job, block = 64 << 10, 32 << 10, 256 << 10, 64 << 10
+	rng := rand.New(rand.NewSource(1))
+	src := appendRandom(nil, rng, 4<<10)
+	for len(src) < prefix+job+block {
+		src = appendPeriodic(src, rng, rng.Intn(4<<10), 1+rng.Intn(min(len(src), window)))
+		src = appendRandom(src, rng, rng.Intn(1<<10))
+	}
+	for _, level := range []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression} {
+		t.Run(level.String(), func(t *testing.T) {
+			var o encoderOptions
+			o.setDefault()
+			o.level, o.windowSize = level, window
+			enc := o.encoder()
+			base, _ := encoderBase(enc)
+			// A new encoder puts the first prefix at the window, so this
+			// job's history ends at the limit.
+			base.bufferReset = window + prefix + job
+			encode := func(hist, blocks []byte) {
+				enc.ResetPrefix(hist)
+				blk := enc.Block()
+				for i := 0; i < len(blocks); i += block {
+					blk.pushOffsets()
+					enc.Encode(blk, blocks[i:min(i+block, len(blocks))])
+					blk.reset(nil)
+				}
+			}
+			encode(src[:prefix:prefix+job], src[prefix:prefix+job])
+			enc.inPlace(nil)
+			end := prefix + job
+			encode(src[job:end:end+block], src[end:end+block])
+			_, pos := encoderBase(enc)
+			for _, p := range pos {
+				if p > base.cur-base.maxMatchOff && p < base.cur {
+					t.Fatalf("position %d is within the window before the history at %d", p, base.cur)
+				}
+			}
+		})
+	}
+}
+
 // TestEncoderUltraBlockReps checks that ultra starts blocks after the first
 // without repeat offsets: the decoder only learns the offsets of a block if
 // the block is written with its sequences, which is decided after parsing.

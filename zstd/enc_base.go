@@ -18,11 +18,14 @@ type fastBase struct {
 	maxMatchOff int32
 	bufferReset int32
 	hist        []byte
-	crc         *xxhash.Digest
-	tmp         [8]byte
-	blk         *blockEnc
-	lastDict    *dict
-	lowMem      bool
+	// own is our history buffer while hist is the caller's (see inPlace).
+	own      []byte
+	inp      bool
+	crc      *xxhash.Digest
+	tmp      [8]byte
+	blk      *blockEnc
+	lastDict *dict
+	lowMem   bool
 }
 
 // CRC returns the underlying CRC writer.
@@ -54,7 +57,29 @@ func (e *fastBase) Block() *blockEnc {
 	return e.blk
 }
 
+// inPlace encodes the following blocks where they are, instead of copying
+// them into hist. b is the history, and the blocks must follow it within
+// cap(b). They must not change until inPlace(nil) or a reset.
+func (e *fastBase) inPlace(b []byte) {
+	if e.inp {
+		// Continue positions after b, so its table entries leave the window.
+		e.cur += int32(len(e.hist))
+		e.hist, e.own, e.inp = e.own, nil, false
+	}
+	if b != nil {
+		e.own, e.hist, e.inp = e.hist[:0], b, true
+	}
+}
+
 func (e *fastBase) addBlock(src []byte) int32 {
+	if e.inp {
+		s := int32(len(e.hist))
+		e.hist = e.hist[:int(s)+len(src)]
+		if len(src) > 0 && &e.hist[s] != &src[0] {
+			panic("zstd: block does not follow its history")
+		}
+		return s
+	}
 	if debugAsserts && e.cur > e.bufferReset {
 		panic(fmt.Sprintf("ecur (%d) > buffer reset (%d)", e.cur, e.bufferReset))
 	}
@@ -131,10 +156,12 @@ func (e *fastBase) matchlen(s, t int32, src []byte) int32 {
 	return int32(matchLen(src[s:], src[t:]))
 }
 
-// resetBasePrefix resets the encoder state and loads prefix as initial history.
+// resetBasePrefix resets the encoder state and uses prefix as initial history,
+// in place: the blocks to encode must follow it within cap(prefix).
+// It reports whether positions restarted, so the caller must clear its tables.
 // This is used for parallel job encoding where non-first jobs need overlap context.
 // Rep offsets are set to defaults [1,4,8] (invalidated, matching C behavior).
-func (e *fastBase) resetBasePrefix(prefix []byte) {
+func (e *fastBase) resetBasePrefix(prefix []byte) (restart bool) {
 	if e.blk == nil {
 		e.blk = &blockEnc{lowMem: e.lowMem}
 		e.blk.init()
@@ -148,19 +175,23 @@ func (e *fastBase) resetBasePrefix(prefix []byte) {
 		e.crc.Reset()
 	}
 	e.blk.dictLitEnc = nil
-	e.ensureHist(len(prefix) + maxCompressedBlockSize)
-	// Bump cur so old table entries fall outside the window.
-	// When cur >= bufferReset, leave it; the first Encode call
-	// will shift/clear tables, preserving valid prefix entries.
+	e.inPlace(nil)
 	if e.cur < e.bufferReset {
+		// Bump cur so old table entries fall outside the window.
 		e.cur += e.maxMatchOff + int32(len(e.hist))
+	} else {
+		// A shift would keep the entries just before prefix,
+		// since prefix is shorter than the window.
+		e.cur, restart = e.maxMatchOff, true
 	}
 	e.hist = e.hist[:0]
-	e.hist = append(e.hist, prefix...)
+	e.inPlace(prefix)
+	return restart
 }
 
 // Reset the encoding table.
 func (e *fastBase) resetBase(d *dict, singleBlock bool) {
+	e.inPlace(nil)
 	if e.blk == nil {
 		e.blk = &blockEnc{lowMem: e.lowMem}
 		e.blk.init()

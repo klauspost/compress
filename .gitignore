@@ -33,3 +33,6 @@ perf.data.old
 
 # Silesia corpus, fetched by testdata/fetch_silesia.sh
 **/testdata/silesia.tar*
+
+# Gob stream, fetched by BenchmarkConcurrentBlocks_GobStream
+zstd/testdata/gob-stream*

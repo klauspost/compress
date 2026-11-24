@@ -558,7 +558,10 @@ func (e *bestFastEncoder) Reset(d *dict, singleBlock bool) {
 }
 
 func (e *bestFastEncoder) ResetPrefix(prefix []byte) {
-	e.resetBasePrefix(prefix)
+	if e.resetBasePrefix(prefix) {
+		e.table = [bestShortTableSize]prevEntry{}
+		e.longTable = [bestLongTableSize]prevEntry{}
+	}
 	if len(prefix) < 8 {
 		return
 	}

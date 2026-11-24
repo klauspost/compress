@@ -40,6 +40,7 @@ type encoder interface {
 	UseBlock(*blockEnc)
 	Reset(d *dict, singleBlock bool)
 	ResetPrefix(prefix []byte)
+	inPlace(b []byte)
 }
 
 type encoderState struct {
@@ -107,15 +108,9 @@ func (e *Encoder) Reset(w io.Writer) {
 	if e.o.concurrentBlocks {
 		e.shutdownJobWorkers()
 		js := &s.jobs
-		js.jobSize = e.o.jobSize()
-		js.overlapSize = e.o.overlapSize()
-		// js.filling is allocated lazily on first Write/ReadFrom so callers
-		// that only use EncodeAll don't pay the jobSize cost (up to maxJobSize).
-		js.filling = js.filling[:0]
-		if js.nextPrefix != nil {
-			js.putOverlapBuf(js.nextPrefix)
-			js.nextPrefix = nil
-		}
+		// The ring is allocated on the first Write/ReadFrom, so callers
+		// that only use EncodeAll don't pay for it.
+		js.resetRing(&e.o)
 		js.jobSeq = 0
 		js.flushedSeq = 0
 		js.flusherErr = nil
@@ -221,35 +216,22 @@ func (e *Encoder) Write(p []byte) (n int, err error) {
 }
 
 func (e *Encoder) writeJobs(p []byte) (n int, err error) {
-	s := &e.state
-	js := &s.jobs
-	jobSize := js.jobSize
-	if cap(js.filling) == 0 && len(p) > 0 {
-		js.filling = make([]byte, 0, jobSize)
-	}
+	js := &e.state.jobs
 	for len(p) > 0 {
-		if len(p)+len(js.filling) < jobSize {
-			if e.o.crc {
-				_, _ = s.encoder.CRC().Write(p)
+		if js.end == js.limit {
+			if err := e.nextSlot(); err != nil {
+				return n, err
 			}
-			js.filling = append(js.filling, p...)
-			return n + len(p), nil
 		}
-		add := p
-		if len(p)+len(js.filling) > jobSize {
-			add = add[:jobSize-len(js.filling)]
-		}
-		if e.o.crc {
-			_, _ = s.encoder.CRC().Write(add)
-		}
-		js.filling = append(js.filling, add...)
-		p = p[len(add):]
-		n += len(add)
-		if len(js.filling) < jobSize {
-			return n, nil
-		}
-		if err := e.dispatchJob(false); err != nil {
-			return n, err
+		c := copy(js.ring[js.end:js.limit], p)
+		js.end += c
+		n += c
+		p = p[c:]
+		// A full first buffer moves to the ring instead (see nextSlot).
+		if js.end == js.limit && !js.first {
+			if err := e.dispatchJob(false); err != nil {
+				return n, err
+			}
 		}
 	}
 	return n, nil
@@ -506,47 +488,30 @@ func (e *Encoder) ReadFrom(r io.Reader) (n int64, err error) {
 
 func (e *Encoder) readFromJobs(r io.Reader) (n int64, err error) {
 	js := &e.state.jobs
-	jobSize := js.jobSize
-
-	// Flush any current filling.
-	if len(js.filling) > 0 {
-		if err := e.dispatchJob(false); err != nil {
-			return 0, err
-		}
-	}
-
-	if cap(js.filling) < jobSize {
-		js.filling = make([]byte, 0, jobSize)
-	}
-	js.filling = js.filling[:jobSize]
-	src := js.filling
 	for {
-		n2, err := r.Read(src)
-		if e.o.crc {
-			_, _ = e.state.encoder.CRC().Write(src[:n2])
+		if js.end == js.limit {
+			if err := e.nextSlot(); err != nil {
+				return n, err
+			}
 		}
-		src = src[n2:]
+		n2, err := r.Read(js.ring[js.end:js.limit])
+		js.end += n2
 		n += int64(n2)
+		// Before err: a Reader may return its last bytes with io.EOF.
+		// A full first buffer moves to the ring instead (see nextSlot).
+		if js.end == js.limit && !js.first {
+			if err := e.dispatchJob(false); err != nil {
+				return n, err
+			}
+		}
 		switch err {
 		case io.EOF:
-			js.filling = js.filling[:len(js.filling)-len(src)]
 			return n, nil
 		case nil:
 		default:
 			e.state.err = err
 			return n, err
 		}
-		if len(src) > 0 {
-			continue
-		}
-		if err = e.dispatchJob(false); err != nil {
-			return n, err
-		}
-		if cap(js.filling) < jobSize {
-			js.filling = make([]byte, 0, jobSize)
-		}
-		js.filling = js.filling[:jobSize]
-		src = js.filling
 	}
 }
 
@@ -580,7 +545,7 @@ func (e *Encoder) Flush() error {
 
 func (e *Encoder) flushJobs() error {
 	js := &e.state.jobs
-	if len(js.filling) > 0 {
+	if js.end > js.start {
 		if err := e.dispatchJob(false); err != nil {
 			return err
 		}
@@ -669,7 +634,7 @@ func (e *Encoder) closeJobs() error {
 	}
 
 	if s.w == nil {
-		if len(js.filling) == 0 && !s.headerWritten && !s.eofWritten && s.nInput == 0 {
+		if js.end == js.start && !s.headerWritten && !s.eofWritten && s.nInput == 0 {
 			return nil
 		}
 		return errors.New("zstd: encoder has no writer")
@@ -709,7 +674,7 @@ func (e *Encoder) closeJobs() error {
 	// Add padding
 	if s.err == nil && e.o.pad > 0 {
 		add := calcSkippableFrame(s.nWritten, int64(e.o.pad))
-		frame, err := skippableFrame(js.filling[:0], add, rand.Reader)
+		frame, err := skippableFrame(s.filling[:0], add, rand.Reader)
 		if err != nil {
 			return err
 		}
