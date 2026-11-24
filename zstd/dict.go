@@ -166,6 +166,7 @@ type BuildDictOptions struct {
 	ID uint32
 
 	// Content to use to create dictionary tables.
+	// Only the first 128 KiB of each entry is used.
 	Contents [][]byte
 
 	// History to use for all blocks.
@@ -271,6 +272,8 @@ func BuildDict(o BuildDictOptions) ([]byte, error) {
 		if len(b) < 8 {
 			continue
 		}
+		// Encode takes a single block. Like zstd's trainer, use the start of larger samples.
+		b = b[:min(len(b), maxCompressedBlockSize)]
 		nUsed++
 		enc.Reset(&d, true)
 		enc.Encode(&block, b)
@@ -280,11 +283,6 @@ func BuildDict(o BuildDictOptions) ([]byte, error) {
 			continue
 		}
 		seqs += len(block.sequences)
-		// A sample is one block, so a literal run can exceed what LL code
-		// maxLLCode covers. The block is only used for statistics.
-		for i := range block.sequences {
-			block.sequences[i].litLen = min(block.sequences[i].litLen, 1<<17-1)
-		}
 		block.genCodes()
 		addHist(&ll, block.coders.llEnc.Histogram())
 		addHist(&ml, block.coders.mlEnc.Histogram())
