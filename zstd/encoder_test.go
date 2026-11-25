@@ -2829,3 +2829,89 @@ func TestSynctestEncoderOutlivesBubble(t *testing.T) {
 		t.Fatal("round trip differs")
 	}
 }
+
+func TestEncoderReadFromAfterClose(t *testing.T) {
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+
+	multiBlock := bytes.Repeat([]byte("multi-block payload "), 12<<10) // > 128 KiB blockSize
+	largeAfter := bytes.Repeat([]byte("X"), 200<<10)
+
+	modes := []struct {
+		name string
+		opts []EOption
+	}{
+		{"sync", []EOption{WithEncoderConcurrency(1)}},
+		{"async", []EOption{WithEncoderConcurrency(2)}},
+		{"concurrent-blocks", []EOption{WithEncoderConcurrency(2), WithConcurrentBlocks(true)}},
+	}
+	payloads := []struct {
+		name string
+		data []byte
+	}{
+		{"empty", nil},
+		{"single-block", []byte("hello world")},
+		{"multi-block", multiBlock},
+	}
+
+	for _, m := range modes {
+		for _, p := range payloads {
+			t.Run(m.name+"/"+p.name, func(t *testing.T) {
+				var out bytes.Buffer
+				enc, err := NewWriter(&out, m.opts...)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(p.data) > 0 {
+					if _, err := enc.Write(p.data); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if err := enc.Close(); err != nil {
+					t.Fatal(err)
+				}
+				if err := enc.Close(); err != nil {
+					t.Fatalf("second Close: %v", err)
+				}
+				if err := enc.Flush(); err != nil {
+					t.Fatalf("Flush after Close: %v", err)
+				}
+				closedLen := out.Len()
+
+				for _, after := range []struct {
+					name string
+					data []byte
+				}{
+					{"small", []byte("after close")},
+					{"large", largeAfter},
+				} {
+					src := bytes.NewReader(after.data)
+					n, err := enc.ReadFrom(src)
+					if !errors.Is(err, ErrEncoderClosed) {
+						t.Fatalf("ReadFrom(%s) after Close: got err=%v, want ErrEncoderClosed", after.name, err)
+					}
+					if n != 0 {
+						t.Fatalf("ReadFrom(%s) after Close: got n=%d, want 0", after.name, n)
+					}
+					if src.Len() != len(after.data) {
+						t.Fatalf("ReadFrom(%s) after Close consumed %d bytes from reader", after.name, len(after.data)-src.Len())
+					}
+					if out.Len() != closedLen {
+						t.Fatalf("ReadFrom(%s) after Close wrote %d bytes to closed stream", after.name, out.Len()-closedLen)
+					}
+				}
+
+				got, err := dec.DecodeAll(out.Bytes(), nil)
+				if err != nil {
+					t.Fatalf("DecodeAll after rejected ReadFrom: %v", err)
+				}
+				if !bytes.Equal(got, p.data) {
+					t.Fatalf("decoded mismatch: got %d bytes, want %d", len(got), len(p.data))
+				}
+			})
+		}
+	}
+}

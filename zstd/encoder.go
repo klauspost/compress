@@ -436,6 +436,9 @@ func (e *Encoder) ReadFrom(r io.Reader) (n int64, err error) {
 	if debugEncoder {
 		println("Using ReadFrom")
 	}
+	if e.state.eofWritten {
+		return 0, ErrEncoderClosed
+	}
 
 	if e.o.concurrentBlocks {
 		return e.readFromJobs(r)
@@ -588,6 +591,10 @@ func (e *Encoder) Close() error {
 		}
 	}
 	if e.state.fullFrameWritten {
+		if s.err == nil {
+			s.err = ErrEncoderClosed
+			return nil
+		}
 		return s.err
 	}
 	s.wg.Wait()
