@@ -211,11 +211,6 @@ sequenceDecs_decode_amd64_adjust_three:
 	SUB $1, R10, R0
 
 sequenceDecs_decode_amd64_adjust_test_temp_valid:
-	TST  R0, R0
-	BNE  sequenceDecs_decode_amd64_adjust_temp_valid
-	MOVD $0x00000001, R0
-
-sequenceDecs_decode_amd64_adjust_temp_valid:
 	CMP  $0x01, R1
 	CSEL NE, R11, R12, R12
 	MOVD R10, R11
@@ -485,11 +480,6 @@ sequenceDecs_decode_56_amd64_adjust_three:
 	SUB $1, R10, R0
 
 sequenceDecs_decode_56_amd64_adjust_test_temp_valid:
-	TST  R0, R0
-	BNE  sequenceDecs_decode_56_amd64_adjust_temp_valid
-	MOVD $0x00000001, R0
-
-sequenceDecs_decode_56_amd64_adjust_temp_valid:
 	CMP  $0x01, R1
 	CSEL NE, R11, R12, R12
 	MOVD R10, R11
@@ -1891,11 +1881,7 @@ sequenceDecs_decodeSync_amd64_adjust_offset_nonzero:
 	CSEL EQ, R14, R13, R13
 	ADD  R0<<3, R1, R15
 	MOVD 144(R15), R16
-	ADDS R16, R13, R13
-	BNE  sequenceDecs_decodeSync_amd64_adjust_temp_valid
-	MOVD $0x00000001, R13
-
-sequenceDecs_decodeSync_amd64_adjust_temp_valid:
+	ADD  R16, R13, R13
 	CMP  $0x01, R20
 	BEQ  sequenceDecs_decodeSync_amd64_adjust_skip
 	MOVD 152(R1), R0
@@ -2455,11 +2441,7 @@ sequenceDecs_decodeSync_safe_amd64_adjust_offset_nonzero:
 	CSEL EQ, R14, R13, R13
 	ADD  R0<<3, R1, R15
 	MOVD 144(R15), R16
-	ADDS R16, R13, R13
-	BNE  sequenceDecs_decodeSync_safe_amd64_adjust_temp_valid
-	MOVD $0x00000001, R13
-
-sequenceDecs_decodeSync_safe_amd64_adjust_temp_valid:
+	ADD  R16, R13, R13
 	CMP  $0x01, R20
 	BEQ  sequenceDecs_decodeSync_safe_amd64_adjust_skip
 	MOVD 152(R1), R0

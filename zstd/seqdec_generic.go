@@ -92,12 +92,6 @@ func (s *sequenceDecs) decode(seqs []seqVals) error {
 					temp = prev0 - 1
 				}
 
-				if temp == 0 {
-					// 0 is not valid; input is corrupted; force offset to 1
-					println("WARNING: temp was 0")
-					temp = 1
-				}
-
 				if mo != 1 {
 					prev2 = prev1
 				}

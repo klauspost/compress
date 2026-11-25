@@ -93,14 +93,15 @@ func TestSequenceDecsAdjustOffset(t *testing.T) {
 			prevOffset: [3]int{110, 111, 222},
 		},
 	}, {
-		offset:     3,
-		litLen:     1,
+		offset:     2,
+		litLen:     0,
 		offsetB:    0,
 		prevOffset: [3]int{1, 222, 333},
 
+		// Repeated_Offset1 - 1 is 0, which is invalid; the decoders reject it.
 		res: result{
-			offset:     1,
-			prevOffset: [3]int{1, 1, 222},
+			offset:     0,
+			prevOffset: [3]int{0, 1, 222},
 		},
 	},
 	}
@@ -170,6 +171,69 @@ func readDecoders(tb testing.TB, buf *bytes.Buffer, ref testSequence) sequenceDe
 	s.maxBits = s.litLengths.fse.maxBits + s.offsets.fse.maxBits + s.matchLengths.fse.maxBits
 	s.br = &bitReader{}
 	return s
+}
+
+// A sequence without literals and offset value 3 means Repeated_Offset1 - 1,
+// which is 0 while Repeated_Offset1 is still its initial 1. That frame is
+// corrupt; offset value 2 is the control.
+func TestDecoderZeroRepeatOffset(t *testing.T) {
+	// A raw block of 8 bytes, then a block with one sequence: no literals,
+	// offset code 1 and match length 3.
+	const raw = "\x28\xb5\x2f\xfd\x00\x18\x40\x00\x00abcdefgh"
+	// rle has RLE codes, and its bitstream is the offset value.
+	rle := func(offsetValue byte) []byte {
+		return []byte(raw + "\x3d\x00\x00\x00\x01\x54\x00\x01\x00" + string(offsetValue))
+	}
+	// predefined has the predefined tables, which take other decoders. The
+	// last bit read, the low bit of the first byte, is the extra bit of the
+	// offset value.
+	predefined := func(offsetValue byte) []byte {
+		return []byte(raw + "\x35\x00\x00\x00\x01\x00" + string([]byte{0x80 | (offsetValue - 2)}) + "\x0b\x04")
+	}
+	test := func(t *testing.T) {
+		for _, tt := range []struct {
+			name string
+			in   []byte
+			want string // empty when decoding must fail
+		}{
+			{"zero", rle(3), ""},
+			{"repeat-3", rle(2), "abcdefghabc"},
+			{"predefined-zero", predefined(3), ""},
+			{"predefined-repeat-3", predefined(2), "abcdefghabc"},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				for _, c := range []int{1, 4} {
+					dec, err := NewReader(nil, WithDecoderConcurrency(c))
+					if err != nil {
+						t.Fatal(err)
+					}
+					check := func(what string, got []byte, err error) {
+						t.Helper()
+						if tt.want == "" && err == nil || tt.want != "" && (err != nil || string(got) != tt.want) {
+							t.Errorf("%s, concurrency %d: got %q, %v, want %q", what, c, got, err, tt.want)
+						}
+					}
+					got, err := dec.DecodeAll(tt.in, nil)
+					check("DecodeAll", got, err)
+					// With room for the output, DecodeAll takes the safe variants.
+					got, err = dec.DecodeAll(tt.in, make([]byte, 0, 1<<20))
+					check("DecodeAll with room", got, err)
+					if err := dec.Reset(bytes.NewReader(tt.in)); err != nil {
+						t.Fatal(err)
+					}
+					got, err = io.ReadAll(dec)
+					check("stream", got, err)
+					dec.Close()
+				}
+			})
+		}
+	}
+	test(t)
+	// The assembly has variants with and without BMI2.
+	if cpuinfo.HasBMI2() {
+		defer cpuinfo.DisableBMI2()()
+		t.Run("nobmi2", test)
+	}
 }
 
 func Test_seqdec_decode_regression(t *testing.T) {
