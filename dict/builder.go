@@ -154,6 +154,9 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 		// Happens with a single input, or inputs that are identical or share nothing.
 		return nil, fmt.Errorf("no content is repeated more than average across inputs")
 	}
+	// The comparator below is not a strict ordering, so the result depends on
+	// the input order, which comes from a map. Start from hash order.
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].hash < sorted[j].hash })
 	sort.Slice(sorted, func(i, j int) bool {
 		if true {
 			// Group very similar counts together and emit low offsets first.
@@ -263,6 +266,9 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 			}
 			if len(sortedPrev) > 0 {
 				sort.Slice(sortedPrev, func(i, j int) bool {
+					if sortedPrev[i].n == sortedPrev[j].n {
+						return sortedPrev[i].hash < sortedPrev[j].hash
+					}
 					return sortedPrev[i].n > sortedPrev[j].n
 				})
 				bestPrev := output[sortedPrev[0].hash]
@@ -322,6 +328,9 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 				}
 				sort.Slice(sortedFollow, func(i, j int) bool {
 					if sortedFollow[i].n == sortedFollow[j].n {
+						if sortedFollow[i].offset == sortedFollow[j].offset {
+							return sortedFollow[i].hash < sortedFollow[j].hash
+						}
 						return sortedFollow[i].offset > sortedFollow[j].offset
 					}
 					return sortedFollow[i].n > sortedFollow[j].n
