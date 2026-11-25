@@ -1213,21 +1213,22 @@ func TestDecoderDictPastWindow(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				check := func(what string, got []byte, err error) {
+				// check compares got with tt.want after prefix.
+				check := func(what, prefix string, got []byte, err error) {
 					t.Helper()
-					if tt.want == "" && err == nil || tt.want != "" && (err != nil || string(got) != tt.want) {
-						t.Errorf("%s, concurrency %d: got %d bytes, %v, want %d bytes", what, c, len(got), err, len(tt.want))
+					if tt.want == "" && err == nil || tt.want != "" && (err != nil || string(got) != prefix+tt.want) {
+						t.Errorf("%s, concurrency %d: got %d bytes, %v, want %d bytes", what, c, len(got), err, len(prefix+tt.want))
 					}
 				}
 				got, err := dec.DecodeAll(tt.in, nil)
-				check("DecodeAll", got, err)
+				check("DecodeAll", "", got, err)
 				got, err = dec.DecodeAll(tt.in, []byte("dst"))
-				check("DecodeAll to dst", bytes.TrimPrefix(got, []byte("dst")), err)
+				check("DecodeAll to dst", "dst", got, err)
 				if err := dec.Reset(bytes.NewReader(tt.in)); err != nil {
 					t.Fatal(err)
 				}
 				got, err = io.ReadAll(dec)
-				check("stream", got, err)
+				check("stream", "", got, err)
 				dec.Close()
 			}
 		})
