@@ -2,7 +2,6 @@ package zstd
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
@@ -208,8 +207,16 @@ func TestBuildDictDerivedID(t *testing.T) {
 		}
 		return d
 	}
+	dictID := func(d []byte) uint32 {
+		t.Helper()
+		i, err := InspectDictionary(d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return i.ID()
+	}
 	d := build(0, false)
-	id := binary.LittleEndian.Uint32(d[4:8])
+	id := dictID(d)
 	if id < 32768 || id >= 1<<31 {
 		t.Errorf("ID %d is in a reserved range", id)
 	}
@@ -217,7 +224,7 @@ func TestBuildDictDerivedID(t *testing.T) {
 		t.Error("ID 0 changed more than the ID")
 	}
 	// The same content with other tables gets another ID.
-	if other := build(0, true); binary.LittleEndian.Uint32(other[4:8]) == id {
+	if dictID(build(0, true)) == id {
 		t.Errorf("ID %d for both", id)
 	}
 }
