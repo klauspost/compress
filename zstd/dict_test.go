@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/bits"
 	"math/rand"
 	"os"
 	"strings"
@@ -1169,6 +1170,67 @@ func TestDecoderDictReuseAfterLargeStream(t *testing.T) {
 		if !bytes.Equal(got, payload) {
 			t.Fatalf("decode %d: output mismatch: got %d bytes, want %d", i, len(got), len(payload))
 		}
+	}
+}
+
+// TestDecoderDictPastWindow checks that matches can reach the dictionary
+// only until more than a window of the frame, here 1 KiB, was decoded.
+func TestDecoderDictPastWindow(t *testing.T) {
+	// frame returns a frame with raw blocks of the sizes in raw, then a block
+	// with one 4-byte match at offset off.
+	frame := func(off int, raw ...int) []byte {
+		f := []byte{0x28, 0xb5, 0x2f, 0xfd, 3, 0, 1, 0, 0, 0}
+		for _, n := range raw {
+			f = append(f, byte(n<<3), byte(n>>5), byte(n>>13))
+			f = append(f, bytes.Repeat([]byte("x"), n)...)
+		}
+		// With RLE codes, the bitstream is the offset value, its top bit the end mark.
+		v := off + 3
+		code := bits.Len(uint(v)) - 1
+		bs := []byte{byte(v), byte(v >> 8)}[:code/8+1]
+		f = append(f, byte((6+len(bs))<<3|5), 0, 0, 0, 1, 0x54, 0, byte(code), 1)
+		return append(f, bs...)
+	}
+	x := strings.Repeat("x", 1024)
+	tests := []struct {
+		name string
+		in   []byte
+		want string // empty when decoding must fail
+	}{
+		{"within", frame(1000+16, 1000), x[:1000] + "AAAA"},
+		{"at-window", frame(1024+16, 1024), x + "AAAA"},
+		{"past-window", frame(1032+16, 1024, 8), ""},
+		{"past-window-last", frame(1032+1, 1024, 8), ""},
+		{"far", frame(2048+16, 1024, 1024), ""},
+		{"history", frame(1024, 1024, 1024), x + x + "xxxx"},
+		// Only output of the frame itself counts.
+		{"second-frame", append(frame(1024, 1024, 1024), frame(1000+16, 1000)...), x + x + "xxxx" + x[:1000] + "AAAA"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, c := range []int{1, 4} {
+				dec, err := NewReader(nil, WithDecoderConcurrency(c), WithDecoderDictRaw(1, []byte(strings.Repeat("A", 16))))
+				if err != nil {
+					t.Fatal(err)
+				}
+				check := func(what string, got []byte, err error) {
+					t.Helper()
+					if tt.want == "" && err == nil || tt.want != "" && (err != nil || string(got) != tt.want) {
+						t.Errorf("%s, concurrency %d: got %d bytes, %v, want %d bytes", what, c, len(got), err, len(tt.want))
+					}
+				}
+				got, err := dec.DecodeAll(tt.in, nil)
+				check("DecodeAll", got, err)
+				got, err = dec.DecodeAll(tt.in, []byte("dst"))
+				check("DecodeAll to dst", bytes.TrimPrefix(got, []byte("dst")), err)
+				if err := dec.Reset(bytes.NewReader(tt.in)); err != nil {
+					t.Fatal(err)
+				}
+				got, err = io.ReadAll(dec)
+				check("stream", got, err)
+				dec.Close()
+			}
+		})
 	}
 }
 
