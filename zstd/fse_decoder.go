@@ -82,7 +82,8 @@ func (s *fseDecoder) readNCount(b *byteReader, t tableIndex) error {
 	}
 	bitStream := b.Uint32NC()
 	nbBits := uint((bitStream & 0xF) + minTablelog) // extract tableLog
-	if nbBits > tablelogAbsoluteMax {
+	// The format allows offset tables up to log 8, the others up to 9.
+	if nbBits > tablelogAbsoluteMax || t == tableOffsets && nbBits > 8 {
 		println("Invalid tablelog:", nbBits)
 		return errors.New("tableLog too large")
 	}

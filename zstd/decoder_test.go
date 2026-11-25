@@ -3245,6 +3245,56 @@ func TestDecodeAllExactCapacity(t *testing.T) {
 	}
 }
 
+// TestDecoderTableLogLimits checks the accuracy log limits of sequence
+// tables: offset tables may use up to log 8, the others up to log 9.
+func TestDecoderTableLogLimits(t *testing.T) {
+	// Two symbols with equal probability, at log 8 and log 9.
+	const log8, log9 = "\x13\xf8\x0f", "\x14\xf0\x3f"
+	// frame returns a raw block of 8 bytes, then a block with one sequence
+	// without literals, with offset code 0 and match length code 0 from the
+	// given tables. Initial states of 0 select symbol 0.
+	frame := func(modes byte, tables, bits string) []byte {
+		blk := "\x00\x01" + string(modes) + tables + bits
+		hdr := string([]byte{byte(len(blk)<<3 | 5), 0, 0})
+		return []byte("\x28\xb5\x2f\xfd\x00\x18\x40\x00\x00abcdefgh" + hdr + blk)
+	}
+	tests := []struct {
+		name string
+		in   []byte
+		want string // empty when decoding must fail
+	}{
+		// Offsets in FSE mode, the others in RLE mode.
+		{"offsets-log-8", frame(0x64, "\x00"+log8+"\x00", "\x00\x01"), "abcdefghefg"},
+		{"offsets-log-9", frame(0x64, "\x00"+log9+"\x00", "\x00\x02"), ""},
+		// Match lengths in FSE mode, the others in RLE mode.
+		{"match-lengths-log-9", frame(0x58, "\x00\x00"+log9, "\x00\x02"), "abcdefghefg"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, c := range []int{1, 4} {
+				dec, err := NewReader(nil, WithDecoderConcurrency(c))
+				if err != nil {
+					t.Fatal(err)
+				}
+				check := func(what string, got []byte, err error) {
+					t.Helper()
+					if tt.want == "" && err == nil || tt.want != "" && (err != nil || string(got) != tt.want) {
+						t.Errorf("%s, concurrency %d: got %q, %v, want %q", what, c, got, err, tt.want)
+					}
+				}
+				got, err := dec.DecodeAll(tt.in, nil)
+				check("DecodeAll", got, err)
+				if err := dec.Reset(bytes.NewReader(tt.in)); err != nil {
+					t.Fatal(err)
+				}
+				got, err = io.ReadAll(dec)
+				check("stream", got, err)
+				dec.Close()
+			}
+		})
+	}
+}
+
 // TestDecodeAllContentSizeAlloc decodes frames that declare far more content
 // than they hold. DecodeAll must fail without allocating the declared size,
 // which on 32-bit platforms also overflowed an int.
