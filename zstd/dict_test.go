@@ -2,9 +2,11 @@ package zstd
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"math"
+	"math/bits"
 	"math/rand"
 	"os"
 	"strings"
@@ -854,6 +856,74 @@ func readDicts(tb testing.TB, zr *zip.Reader) [][]byte {
 		}()
 	}
 	return dicts
+}
+
+// TestDecoderDictHistory checks which dictionary bytes frames can match.
+// The formatted dictionary is the example of "Matches into a formatted
+// dictionary header" in the reference decoder's decompressor_permissive.md,
+// with two-symbol FSE tables: a 28-byte header, then 16 bytes of content.
+func TestDecoderDictHistory(t *testing.T) {
+	content := strings.Repeat("A", 16)
+	formatted := []byte("\x37\xa4\x30\xec\x01\x00\x00\x00\x80\x10\x10\x3f\x10\x3f\x10\x3f" +
+		"\x04\x00\x00\x00\x04\x00\x00\x00\x04\x00\x00\x00" + content)
+	// match returns a frame with dictionary ID id, none if 0, holding a
+	// single block with no literals and one 4-byte match at offset off.
+	match := func(id byte, off int) []byte {
+		frame := []byte{0x28, 0xb5, 0x2f, 0xfd, 0, 0}
+		if id != 0 {
+			frame = []byte{0x28, 0xb5, 0x2f, 0xfd, 3, 0, id, 0, 0, 0}
+		}
+		// With RLE codes, the bitstream is just the offset value's extra bits
+		// below the end mark, which is the offset value itself.
+		v := off + 3
+		return append(frame, 0x3d, 0, 0, 0, 1, 0x54, 0, byte(bits.Len(uint(v))-1), 1, byte(v))
+	}
+	tests := []struct {
+		name   string
+		opts   []DOption
+		frames [][]byte
+		want   string // empty when decoding must fail
+		err    error  // the error, if a specific one
+	}{
+		{"content", []DOption{WithDecoderDicts(formatted)}, [][]byte{match(1, 16)}, "AAAA", nil},
+		{"before-content", []DOption{WithDecoderDicts(formatted)}, [][]byte{match(1, 17)}, "", nil},
+		{"magic", []DOption{WithDecoderDicts(formatted)}, [][]byte{match(1, 44)}, "", nil},
+		{"raw-magic", []DOption{WithDecoderDictRaw(1, formatted)}, [][]byte{match(1, 44)}, string(formatted[:4]), nil},
+		{"unknown-id", []DOption{WithDecoderDicts(formatted)}, [][]byte{match(2, 16)}, "", ErrUnknownDictionary},
+		// A frame without ID doesn't use the dictionary of the previous frame.
+		{"no-id", []DOption{WithDecoderDicts(formatted)}, [][]byte{match(1, 16), match(0, 16)}, "", nil},
+		{"id-0", []DOption{WithDecoderDicts(formatted), WithDecoderDictRaw(0, []byte(strings.Repeat("B", 16)))},
+			[][]byte{match(1, 16), match(0, 16)}, "AAAABBBB", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			check := func(what string, got []byte, err error) {
+				t.Helper()
+				if tt.want == "" {
+					if err == nil || tt.err != nil && !errors.Is(err, tt.err) {
+						t.Errorf("%s: got %q, %v, want an error", what, got, err)
+					}
+				} else if err != nil || string(got) != tt.want {
+					t.Errorf("%s: got %q, %v, want %q", what, got, err, tt.want)
+				}
+			}
+			in := bytes.Join(tt.frames, nil)
+			for _, c := range []int{1, 4} {
+				dec, err := NewReader(nil, append([]DOption{WithDecoderConcurrency(c)}, tt.opts...)...)
+				if err != nil {
+					t.Fatal(err)
+				}
+				got, err := dec.DecodeAll(in, nil)
+				check(fmt.Sprintf("DecodeAll, concurrency %d", c), got, err)
+				if err := dec.Reset(bytes.NewReader(in)); err != nil {
+					t.Fatal(err)
+				}
+				got, err = io.ReadAll(dec)
+				check(fmt.Sprintf("stream, concurrency %d", c), got, err)
+				dec.Close()
+			}
+		})
+	}
 }
 
 // Test decoding of zstd --patch-from output.

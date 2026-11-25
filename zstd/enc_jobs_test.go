@@ -646,7 +646,8 @@ func TestConcurrentBlocks_ResetContentSize(t *testing.T) {
 	defer dec.Close()
 
 	rng := mrand.New(mrand.NewSource(22))
-	input := make([]byte, 1<<20)
+	// Three jobs of the 1 MiB window.
+	input := make([]byte, 3<<20)
 	for i := range input {
 		input[i] = byte(rng.Intn(64))
 	}
@@ -676,23 +677,32 @@ func TestConcurrentBlocks_ResetContentSize(t *testing.T) {
 		}
 	})
 
-	t.Run("wrong_size", func(t *testing.T) {
-		var buf bytes.Buffer
-		enc, err := NewWriter(nil,
-			WithEncoderConcurrency(2),
-			WithConcurrentBlocks(true),
-			WithWindowSize(1<<20),
-		)
-		if err != nil {
-			t.Fatal(err)
+	// As without concurrent blocks, Close fails and the output doesn't decode.
+	for _, delta := range []int{-1, 100} {
+		for _, concurrentBlocks := range []bool{false, true} {
+			t.Run(fmt.Sprintf("wrong_size_%d_blocks_%v", delta, concurrentBlocks), func(t *testing.T) {
+				var buf bytes.Buffer
+				enc, err := NewWriter(nil,
+					WithEncoderConcurrency(2),
+					WithConcurrentBlocks(concurrentBlocks),
+					WithWindowSize(1<<20),
+				)
+				if err != nil {
+					t.Fatal(err)
+				}
+				enc.ResetContentSize(&buf, int64(len(input)+delta))
+				if _, err := enc.Write(input); err != nil {
+					t.Fatal(err)
+				}
+				if err := enc.Close(); err == nil {
+					t.Fatal("expected error for wrong content size")
+				}
+				if _, err := dec.DecodeAll(buf.Bytes(), nil); err == nil {
+					t.Fatal("output of a failed Close decoded")
+				}
+			})
 		}
-		enc.ResetContentSize(&buf, int64(len(input)+100))
-		enc.Write(input)
-		err = enc.Close()
-		if err == nil {
-			t.Fatal("expected error for wrong content size")
-		}
-	})
+	}
 }
 
 func TestConcurrentBlocks_WindowSizes(t *testing.T) {
