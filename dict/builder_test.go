@@ -180,7 +180,7 @@ func TestBuildDictDeterministic(t *testing.T) {
 		for _, b := range builders {
 			for _, hb := range []int{4, 6, 8} {
 				t.Run(fmt.Sprintf("%s-%s-%d", set.name, b.name, hb), func(t *testing.T) {
-					o := Options{MaxDictSize: 4096, HashBytes: hb, ZstdDictID: 1}
+					o := Options{MaxDictSize: 4096, HashBytes: hb}
 					want, err := b.build(set.samples, o)
 					if err != nil {
 						t.Fatal(err)

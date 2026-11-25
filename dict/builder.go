@@ -10,9 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
 	"sort"
-	"time"
 
 	"github.com/klauspost/compress/s2"
 	"github.com/klauspost/compress/zstd"
@@ -42,7 +40,7 @@ type Options struct {
 	Output io.Writer
 
 	// ZstdDictID is the Zstd dictionary ID to use.
-	// Leave at zero to generate a random ID.
+	// Leave at zero to derive one from the dictionary.
 	ZstdDictID uint32
 
 	// ZstdDictCompat will make the dictionary compatible with Zstd v1.5.5 and earlier.
@@ -67,10 +65,6 @@ const (
 // BuildZstdDict will build a Zstandard dictionary from the provided input.
 func BuildZstdDict(input [][]byte, o Options) ([]byte, error) {
 	o.outFormat = formatZstd
-	if o.ZstdDictID == 0 {
-		rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-		o.ZstdDictID = 32768 + uint32(rng.Int31n((1<<31)-32768))
-	}
 	return buildDict(input, o)
 }
 
