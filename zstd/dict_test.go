@@ -2,6 +2,7 @@ package zstd
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
@@ -192,6 +193,32 @@ func TestBuildDictFullyMatchableCorpusReturnsError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "0 literals") {
 		t.Fatalf("BuildDict error = %v, want mention 0 literals", err)
+	}
+}
+
+// With ID 0, BuildDict derives the ID from the dictionary, outside the
+// ranges the format reserves.
+func TestBuildDictDerivedID(t *testing.T) {
+	samples, history, _ := buildDictLevelPathFixture()
+	build := func(id uint32, compat bool) []byte {
+		t.Helper()
+		d, err := BuildDict(BuildDictOptions{ID: id, Contents: samples, History: history, Offsets: [3]int{1, 4, 8}, CompatV155: compat})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	d := build(0, false)
+	id := binary.LittleEndian.Uint32(d[4:8])
+	if id < 32768 || id >= 1<<31 {
+		t.Errorf("ID %d is in a reserved range", id)
+	}
+	if explicit := build(1, false); !bytes.Equal(d[8:], explicit[8:]) {
+		t.Error("ID 0 changed more than the ID")
+	}
+	// The same content with other tables gets another ID.
+	if other := build(0, true); binary.LittleEndian.Uint32(other[4:8]) == id {
+		t.Errorf("ID %d for both", id)
 	}
 }
 

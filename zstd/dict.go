@@ -10,6 +10,7 @@ import (
 	"sort"
 
 	"github.com/klauspost/compress/huff0"
+	"github.com/klauspost/compress/zstd/internal/xxhash"
 )
 
 type dict struct {
@@ -162,7 +163,8 @@ func InspectDictionary(b []byte) (interface {
 }
 
 type BuildDictOptions struct {
-	// Dictionary ID.
+	// Dictionary ID. If 0, one is derived from the dictionary,
+	// outside the ranges the format reserves.
 	ID uint32
 
 	// Content to use to create dictionary tables.
@@ -556,6 +558,12 @@ func BuildDict(o BuildDictOptions) ([]byte, error) {
 	out.Write(binary.LittleEndian.AppendUint32(nil, uint32(o.Offsets[1])))
 	out.Write(binary.LittleEndian.AppendUint32(nil, uint32(o.Offsets[2])))
 	out.Write(hist)
+	if o.ID == 0 {
+		// As the reference does from the content, but hashing the tables
+		// too, so dictionaries built at other levels get other IDs.
+		b := out.Bytes()
+		binary.LittleEndian.PutUint32(b[4:8], uint32(xxhash.Sum64(b[8:])%((1<<31)-32768))+32768)
+	}
 	if _, err := loadDict(out.Bytes()); err != nil {
 		return nil, fmt.Errorf("built dictionary failed validation: %w", err)
 	}
