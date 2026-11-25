@@ -335,6 +335,8 @@ func (e *Encoder) dispatchJob(final bool) error {
 	fErr := js.flusherErr
 	js.mu.Unlock()
 	if fErr != nil {
+		// Kept, as a Flush that returns it may leave room in the slot.
+		s.err = fErr
 		return fErr
 	}
 

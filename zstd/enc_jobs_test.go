@@ -1344,6 +1344,14 @@ func TestConcurrentBlocks_ErrorEndsStream(t *testing.T) {
 	}
 	defer dec.Close()
 	errRead, errWrite := errors.New("read failed"), errors.New("write failed")
+	write := func(size int) func(*Encoder, *slowBuffer) error {
+		return func(enc *Encoder, w *slowBuffer) error {
+			w.err = errWrite
+			// The error may show here or later.
+			enc.Write(make([]byte, size))
+			return errWrite
+		}
+	}
 	readFrom := func(size int) func(*Encoder, *slowBuffer) error {
 		return func(enc *Encoder, _ *slowBuffer) error {
 			r := io.MultiReader(bytes.NewReader(make([]byte, size)), iotest.ErrReader(errRead))
@@ -1360,12 +1368,9 @@ func TestConcurrentBlocks_ErrorEndsStream(t *testing.T) {
 		// Before the frame header is written, and after two jobs of the 1 MiB window.
 		{"read-1000", readFrom(1000)},
 		{"read-2.5MiB", readFrom(5 << 19)},
-		{"write-2.5MiB", func(enc *Encoder, w *slowBuffer) error {
-			w.err = errWrite
-			// The error may show here or later.
-			enc.Write(make([]byte, 5<<19))
-			return errWrite
-		}},
+		// Less than a job, written by Flush or Close, and more.
+		{"write-600KiB", write(600 << 10)},
+		{"write-2.5MiB", write(5 << 19)},
 	} {
 		for _, concurrentBlocks := range []bool{false, true} {
 			for _, flush := range []bool{false, true} {
@@ -1384,6 +1389,15 @@ func TestConcurrentBlocks_ErrorEndsStream(t *testing.T) {
 					if flush {
 						if err := enc.Flush(); !errors.Is(err, want) {
 							t.Errorf("Flush: got %v, want %v", err, want)
+						}
+						// With concurrent blocks, even small writes fail after it.
+						if concurrentBlocks {
+							if _, err := enc.Write([]byte("x")); !errors.Is(err, want) {
+								t.Errorf("small Write after Flush: got %v, want %v", err, want)
+							}
+							if _, err := enc.ReadFrom(strings.NewReader("x")); !errors.Is(err, want) {
+								t.Errorf("short ReadFrom after Flush: got %v, want %v", err, want)
+							}
 						}
 						n = w.Len()
 					}

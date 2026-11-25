@@ -569,6 +569,9 @@ func (e *Encoder) flushJobs() error {
 	js.mu.Lock()
 	fErr := js.flusherErr
 	js.mu.Unlock()
+	if fErr != nil {
+		e.state.err = fErr
+	}
 	return fErr
 }
 
