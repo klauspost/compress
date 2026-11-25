@@ -1307,6 +1307,145 @@ func TestConcurrentBlocks_Reset(t *testing.T) {
 	}
 }
 
+// slowBuffer is a bytes.Buffer with slow writes, so a write left running
+// when a call returns shows up after it. With err set, every write after
+// the first, the frame header, fails with it.
+type slowBuffer struct {
+	mu     sync.Mutex
+	b      bytes.Buffer
+	err    error
+	writes int
+}
+
+func (w *slowBuffer) Write(p []byte) (int, error) {
+	time.Sleep(time.Millisecond)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.writes++
+	if w.err != nil && w.writes > 1 {
+		return 0, w.err
+	}
+	return w.b.Write(p)
+}
+
+func (w *slowBuffer) Len() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.b.Len()
+}
+
+// After a failed read in ReadFrom or a failed write, Flush, Close and later
+// writes report the error, and the frame stays unfinished, with and without
+// concurrent blocks.
+func TestConcurrentBlocks_ErrorEndsStream(t *testing.T) {
+	dec, err := NewReader(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	errRead, errWrite := errors.New("read failed"), errors.New("write failed")
+	readFrom := func(size int) func(*Encoder, *slowBuffer) error {
+		return func(enc *Encoder, _ *slowBuffer) error {
+			r := io.MultiReader(bytes.NewReader(make([]byte, size)), iotest.ErrReader(errRead))
+			if _, err := enc.ReadFrom(r); !errors.Is(err, errRead) {
+				t.Fatalf("ReadFrom: got %v, want %v", err, errRead)
+			}
+			return errRead
+		}
+	}
+	for _, tc := range []struct {
+		name  string
+		start func(*Encoder, *slowBuffer) error // returns the error to report
+	}{
+		// Before the frame header is written, and after two jobs of the 1 MiB window.
+		{"read-1000", readFrom(1000)},
+		{"read-2.5MiB", readFrom(5 << 19)},
+		{"write-2.5MiB", func(enc *Encoder, w *slowBuffer) error {
+			w.err = errWrite
+			// The error may show here or later.
+			enc.Write(make([]byte, 5<<19))
+			return errWrite
+		}},
+	} {
+		for _, concurrentBlocks := range []bool{false, true} {
+			for _, flush := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s_blocks_%v_flush_%v", tc.name, concurrentBlocks, flush), func(t *testing.T) {
+					var w slowBuffer
+					enc, err := NewWriter(&w,
+						WithEncoderConcurrency(2),
+						WithConcurrentBlocks(concurrentBlocks),
+						WithWindowSize(1<<20),
+					)
+					if err != nil {
+						t.Fatal(err)
+					}
+					want := tc.start(enc, &w)
+					var n int
+					if flush {
+						if err := enc.Flush(); !errors.Is(err, want) {
+							t.Errorf("Flush: got %v, want %v", err, want)
+						}
+						n = w.Len()
+					}
+					if err := enc.Close(); !errors.Is(err, want) {
+						t.Errorf("Close: got %v, want %v", err, want)
+					}
+					if !flush {
+						n = w.Len()
+					}
+					// Writes of more than a block fail in both modes.
+					if _, err := enc.Write(make([]byte, 1<<20)); err == nil {
+						t.Error("Write after the error succeeded")
+					}
+					if _, err := enc.ReadFrom(bytes.NewReader(make([]byte, 1<<20))); err == nil {
+						t.Error("ReadFrom after the error succeeded")
+					}
+					// Wait for anything still being written.
+					enc.Reset(nil)
+					if concurrentBlocks && w.Len() != n {
+						t.Errorf("%d bytes written after the error was returned", w.Len()-n)
+					}
+					if out := w.b.Bytes(); len(out) > 0 {
+						if _, err := dec.DecodeAll(out, nil); err == nil {
+							t.Error("unfinished frame decoded")
+						}
+					}
+				})
+			}
+		}
+	}
+}
+
+// A second Close after a wrong content size reports it again and writes nothing.
+func TestConcurrentBlocks_CloseAfterSizeError(t *testing.T) {
+	for _, size := range []int{0, 1000} {
+		for _, concurrentBlocks := range []bool{false, true} {
+			t.Run(fmt.Sprintf("size_%d_blocks_%v", size, concurrentBlocks), func(t *testing.T) {
+				var w slowBuffer
+				enc, err := NewWriter(nil, WithEncoderConcurrency(2), WithConcurrentBlocks(concurrentBlocks))
+				if err != nil {
+					t.Fatal(err)
+				}
+				enc.ResetContentSize(&w, int64(size+1))
+				if _, err := enc.Write(make([]byte, size)); err != nil {
+					t.Fatal(err)
+				}
+				if err := enc.Close(); err == nil {
+					t.Fatal("expected error for wrong content size")
+				}
+				n := w.Len()
+				if err := enc.Close(); err == nil {
+					t.Error("second Close succeeded")
+				}
+				enc.Reset(nil)
+				if w.Len() != n {
+					t.Errorf("second Close wrote %d bytes", w.Len()-n)
+				}
+			})
+		}
+	}
+}
+
 func TestConcurrentBlocks_ReadFrom(t *testing.T) {
 	dec, err := NewReader(nil)
 	if err != nil {
