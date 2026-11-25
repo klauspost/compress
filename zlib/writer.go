@@ -95,6 +95,16 @@ func (z *Writer) Reset(w io.Writer) {
 	z.wroteHeader = false
 }
 
+// write writes b to z.w and reports io.ErrShortWrite if the underlying
+// writer accepts fewer bytes than given without returning an error.
+func (z *Writer) write(b []byte) error {
+	n, err := z.w.Write(b)
+	if err == nil && n != len(b) {
+		err = io.ErrShortWrite
+	}
+	return err
+}
+
 // writeHeader writes the ZLIB header.
 func (z *Writer) writeHeader() (err error) {
 	z.wroteHeader = true
@@ -122,13 +132,13 @@ func (z *Writer) writeHeader() (err error) {
 		z.scratch[1] |= 1 << 5
 	}
 	z.scratch[1] += uint8(31 - binary.BigEndian.Uint16(z.scratch[:2])%31)
-	if _, err = z.w.Write(z.scratch[0:2]); err != nil {
+	if err = z.write(z.scratch[0:2]); err != nil {
 		return err
 	}
 	if z.dict != nil {
 		// The next four bytes are the Adler-32 checksum of the dictionary.
 		binary.BigEndian.PutUint32(z.scratch[:], adler32.Checksum(z.dict))
-		if _, err = z.w.Write(z.scratch[0:4]); err != nil {
+		if err = z.write(z.scratch[0:4]); err != nil {
 			return err
 		}
 	}
@@ -194,6 +204,6 @@ func (z *Writer) Close() error {
 	checksum := z.digest.Sum32()
 	// ZLIB (RFC 1950) is big-endian, unlike GZIP (RFC 1952).
 	binary.BigEndian.PutUint32(z.scratch[:], checksum)
-	_, z.err = z.w.Write(z.scratch[0:4])
+	z.err = z.write(z.scratch[0:4])
 	return z.err
 }
