@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/iotest"
 	"testing/synctest"
 	"time"
 
@@ -2195,6 +2196,36 @@ func TestEncoderReadFrom(t *testing.T) {
 		t.Fatalf("output mismatch, got %s", string(decoded))
 	}
 	dec.Close()
+}
+
+// headerWriter accepts the first write, the frame header, and fails the rest.
+type headerWriter struct{ wrote bool }
+
+func (w *headerWriter) Write(p []byte) (int, error) {
+	if w.wrote {
+		return 0, errors.New("write failed")
+	}
+	w.wrote = true
+	return len(p), nil
+}
+
+// A failed read in ReadFrom is kept as the error, also while the block
+// before it is being encoded and stores a failed write of the block before
+// that. Run with -race.
+func TestEncoderReadFromErrorWhileEncoding(t *testing.T) {
+	errRead := errors.New("read failed")
+	enc, err := NewWriter(&headerWriter{}, WithEncoderConcurrency(2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Two blocks, then the error.
+	r := io.MultiReader(bytes.NewReader(make([]byte, 2*maxCompressedBlockSize)), iotest.ErrReader(errRead))
+	if _, err := enc.ReadFrom(r); !errors.Is(err, errRead) {
+		t.Fatalf("ReadFrom: got %v, want %v", err, errRead)
+	}
+	if err := enc.Close(); !errors.Is(err, errRead) {
+		t.Errorf("Close: got %v, want %v", err, errRead)
+	}
 }
 
 func TestInterleavedWriteReadFrom(t *testing.T) {
