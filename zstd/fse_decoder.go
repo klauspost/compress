@@ -187,9 +187,6 @@ func (s *fseDecoder) readNCount(b *byteReader, t tableIndex) error {
 		}
 	}
 	s.symbolLen = charnum
-	if s.symbolLen <= 1 {
-		return fmt.Errorf("symbolLen (%d) too small", s.symbolLen)
-	}
 	// A run of zero counts can step past maxSymbol, so check the total.
 	if s.symbolLen > maxSymbol+1 {
 		return fmt.Errorf("symbolLen (%d) too big", s.symbolLen)

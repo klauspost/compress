@@ -856,6 +856,38 @@ func readDicts(tb testing.TB, zr *zip.Reader) [][]byte {
 	return dicts
 }
 
+// singleSymbolDict is the example dictionary of "Matches into a formatted
+// dictionary header" in the reference decoder's decompressor_permissive.md.
+// Its sequence tables each hold one symbol: literal length 0, offset code 0
+// and match length 3.
+var singleSymbolDict = []byte("\x37\xa4\x30\xec\x01\x00\x00\x00\x80\x10\xf0\x03\xf0\x03\xf0\x03" +
+	"\x04\x00\x00\x00\x04\x00\x00\x00\x04\x00\x00\x00" + strings.Repeat("A", 16))
+
+func TestEncoderSingleSymbolDict(t *testing.T) {
+	dec, err := NewReader(nil, WithDecoderDicts(singleSymbolDict))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	text, err := os.ReadFile("../testdata/Mark.Twain-Tom.Sawyer.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for level := SpeedFastest; level < speedLast; level++ {
+		enc, err := NewWriter(nil, WithEncoderDict(singleSymbolDict), WithEncoderLevel(level))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, in := range []string{"AAAA", strings.Repeat("A", 100), strings.Repeat("AAAB", 100), string(text[:20000])} {
+			got, err := dec.DecodeAll(enc.EncodeAll([]byte(in), nil), nil)
+			if err != nil || string(got) != in {
+				t.Errorf("level %v, %d bytes: round trip failed: %v", level, len(in), err)
+			}
+		}
+		enc.Close()
+	}
+}
+
 // Test decoding of zstd --patch-from output.
 func TestDecoderRawDict(t *testing.T) {
 	t.Parallel()
