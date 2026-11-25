@@ -351,3 +351,102 @@ func TestReaderSkipStreamType(t *testing.T) {
 		}
 	}
 }
+
+func TestReadSeekerSeekDiscardsStaleBlock(t *testing.T) {
+	const blockSize = 1 << 20
+	blocks := [][]byte{
+		bytes.Repeat([]byte{'A'}, blockSize),
+		bytes.Repeat([]byte{'B'}, blockSize),
+		bytes.Repeat([]byte{'C'}, blockSize),
+	}
+	var compressed bytes.Buffer
+	w := NewWriter(&compressed, WriterBlockSize(blockSize), WriterAddIndex(), WriterConcurrency(1))
+	for _, blk := range blocks {
+		if _, err := w.Write(blk); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	stream := compressed.Bytes()
+
+	cases := []struct {
+		name     string
+		initRead int64 // <0 skips initial read
+		seekTo   int64
+		readOff  int64
+		useRel   bool
+		wantByte byte
+	}{
+		{
+			name:     "fresh_seek_block2_then_read_block1",
+			initRead: -1,
+			seekTo:   2 * blockSize,
+			readOff:  blockSize + 100,
+			wantByte: 'B',
+		},
+		{
+			name:     "read_block0_seek_block2_then_seek_back",
+			initRead: 0,
+			seekTo:   2 * blockSize,
+			readOff:  -100,
+			useRel:   true,
+			wantByte: 'B',
+		},
+		{
+			name:     "read_block2_seek_block1_then_read_block0",
+			initRead: 2 * blockSize,
+			seekTo:   blockSize,
+			readOff:  0,
+			wantByte: 'A',
+		},
+		{
+			name:     "read_block0_seek_block2_then_read_block2",
+			initRead: 0,
+			seekTo:   2 * blockSize,
+			readOff:  2 * blockSize,
+			wantByte: 'C',
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rs, err := NewReader(bytes.NewReader(stream)).ReadSeeker(true, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var tmp [16]byte
+			if tc.initRead >= 0 {
+				if _, err := rs.ReadAt(tmp[:], tc.initRead); err != nil {
+					t.Fatal(err)
+				}
+			}
+			pos, err := rs.Seek(tc.seekTo, io.SeekStart)
+			if err != nil || pos != tc.seekTo {
+				t.Fatalf("Seek(%d): pos=%d err=%v", tc.seekTo, pos, err)
+			}
+			if cur, err := rs.Seek(0, io.SeekCurrent); err != nil || cur != tc.seekTo {
+				t.Fatalf("Seek(0, SeekCurrent): got %d, err=%v; want %d", cur, err, tc.seekTo)
+			}
+			got := make([]byte, 16)
+			if tc.useRel {
+				wantPos := tc.seekTo + tc.readOff
+				if pos, err := rs.Seek(tc.readOff, io.SeekCurrent); err != nil || pos != wantPos {
+					t.Fatalf("relative Seek(%d): pos=%d err=%v, want %d", tc.readOff, pos, err, wantPos)
+				}
+				if _, err := io.ReadFull(rs, got); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if _, err := rs.ReadAt(got, tc.readOff); err != nil {
+					t.Fatal(err)
+				}
+			}
+			want := bytes.Repeat([]byte{tc.wantByte}, len(got))
+			if !bytes.Equal(got, want) {
+				t.Fatalf("got %q, want %q", got, want)
+			}
+		})
+	}
+}

@@ -993,8 +993,8 @@ func (r *ReadSeeker) Seek(offset int64, whence int) (int64, error) {
 		return 0, err
 	}
 
-	r.i = r.j                     // Remove rest of current block.
-	r.blockStart = u - int64(r.j) // Adjust current block start for accounting.
+	r.i, r.j = 0, 0
+	r.blockStart = u
 	if u < absOffset {
 		// Forward inside block
 		return absOffset, r.Skip(absOffset - u)
