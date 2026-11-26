@@ -2387,6 +2387,48 @@ func timeout(after time.Duration) (cancel func()) {
 	}
 }
 
+// A destination prefix is not part of the decoded-size limit.
+func TestDecodeAllPrefixWithMaxMemory(t *testing.T) {
+	const maxMemory = 1024
+	prefix := bytes.Repeat([]byte("p"), 2*maxMemory)
+	enc, err := NewWriter(nil, WithZeroFrames(true), WithSingleSegment(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer enc.Close()
+	for _, limitToCap := range []bool{false, true} {
+		for _, tt := range []struct {
+			name   string
+			size   int
+			frames int
+		}{
+			{"empty", 0, 1},
+			{"single", 256, 1},
+			{"concatenated", 512, 2},
+		} {
+			t.Run(fmt.Sprintf("cap=%v/%s", limitToCap, tt.name), func(t *testing.T) {
+				dec, err := NewReader(nil, WithDecoderMaxMemory(maxMemory), WithDecodeAllCapLimit(limitToCap), WithDecoderConcurrency(1))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer dec.Close()
+				input := bytes.Repeat([]byte("abcd"), tt.size/4)
+				compressed := bytes.Repeat(enc.EncodeAll(input, nil), tt.frames)
+				dst := make([]byte, len(prefix), len(prefix)+2*maxMemory)
+				copy(dst, prefix)
+				got, err := dec.DecodeAll(compressed, dst)
+				if err != nil {
+					t.Fatalf("DecodeAll error = %v", err)
+				}
+				want := append(append([]byte(nil), prefix...), bytes.Repeat(input, tt.frames)...)
+				if !bytes.Equal(got, want) {
+					t.Fatal("decoded output does not match prefix and payload")
+				}
+			})
+		}
+	}
+}
+
 func TestWithDecodeAllCapLimit(t *testing.T) {
 	var encs []*Encoder
 	var decs []*Decoder
