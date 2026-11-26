@@ -10,6 +10,7 @@ import (
 	oldgz "compress/gzip"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -818,15 +819,18 @@ func TestWriteToThenReadSingleStream(t *testing.T) {
 	}
 }
 
-// eofWriter accepts up to n bytes and reports io.EOF. A destination that
+// eofWriter accepts up to n bytes and reports err. A destination that
 // returns io.EOF is a write failure, not the end of the compressed stream.
-type eofWriter struct{ n int }
+type eofWriter struct {
+	n   int
+	err error
+}
 
 func (w *eofWriter) Write(p []byte) (int, error) {
 	if len(p) > w.n {
 		p = p[:w.n]
 	}
-	return len(p), io.EOF
+	return len(p), w.err
 }
 
 func TestWriteToDoesNotTreatWriterEOFAsEndOfStream(t *testing.T) {
@@ -839,35 +843,49 @@ func TestWriteToDoesNotTreatWriterEOFAsEndOfStream(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	z, err := NewReader(bytes.NewReader(buf.Bytes()))
-	if err != nil {
-		t.Fatal(err)
-	}
+	for _, werr := range []error{io.EOF, fmt.Errorf("closed: %w", io.EOF), errors.New("disk full")} {
+		t.Run(werr.Error(), func(t *testing.T) {
+			// A destination write failure is not truncated gzip input. Later
+			// calls must report it neither as io.ErrUnexpectedEOF nor as an
+			// error that errors.Is takes for a clean end of stream. Other
+			// writer errors stay identifiable.
+			bad := func(err error) bool {
+				if errors.Is(werr, io.EOF) {
+					return err == nil || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
+				}
+				return !errors.Is(err, werr)
+			}
+			z, err := NewReader(bytes.NewReader(buf.Bytes()))
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	dst := &eofWriter{n: 4}
-	n, err := z.WriteTo(dst)
-	if err != io.EOF {
-		t.Fatalf("first WriteTo: got %v, want io.EOF", err)
-	}
-	if n != 4 {
-		t.Fatalf("first WriteTo wrote %d bytes, want 4", n)
-	}
+			dst := &eofWriter{n: 4, err: werr}
+			n, err := z.WriteTo(dst)
+			if err != werr {
+				t.Fatalf("first WriteTo: got %v, want %v", err, werr)
+			}
+			if n != 4 {
+				t.Fatalf("first WriteTo wrote %d bytes, want 4", n)
+			}
 
-	// A destination write failure is not truncated gzip input. Later calls
-	// must keep reporting the writer's io.EOF (identifiable via errors.Is),
-	// neither as a clean end of stream nor as io.ErrUnexpectedEOF.
-	n2, err2 := z.WriteTo(dst)
-	if !errors.Is(err2, io.EOF) || err2 == io.EOF || errors.Is(err2, io.ErrUnexpectedEOF) {
-		t.Errorf("second WriteTo: got %v, want a wrapped io.EOF", err2)
-	}
-	if n2 != 0 {
-		t.Errorf("second WriteTo wrote %d bytes, want 0", n2)
-	}
-	rn, rerr := z.Read(make([]byte, 4))
-	if !errors.Is(rerr, io.EOF) || rerr == io.EOF || errors.Is(rerr, io.ErrUnexpectedEOF) {
-		t.Errorf("Read after failed WriteTo: got %v, want a wrapped io.EOF", rerr)
-	}
-	if rn != 0 {
-		t.Errorf("Read after failed WriteTo returned %d bytes, want 0", rn)
+			n2, err2 := z.WriteTo(dst)
+			if bad(err2) {
+				t.Errorf("second WriteTo: got %v, want the write error", err2)
+			}
+			if n2 != 0 {
+				t.Errorf("second WriteTo wrote %d bytes, want 0", n2)
+			}
+			rn, rerr := z.Read(make([]byte, 4))
+			if bad(rerr) {
+				t.Errorf("Read after failed WriteTo: got %v, want the write error", rerr)
+			}
+			if rn != 0 {
+				t.Errorf("Read after failed WriteTo returned %d bytes, want 0", rn)
+			}
+			if err := z.Close(); bad(err) {
+				t.Errorf("Close after failed WriteTo: got %v, want the write error", err)
+			}
+		})
 	}
 }
