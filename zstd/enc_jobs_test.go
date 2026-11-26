@@ -1354,12 +1354,12 @@ func TestConcurrentBlocks_ErrorEndsStream(t *testing.T) {
 	}
 	defer dec.Close()
 	errRead, errWrite := errors.New("read failed"), errors.New("write failed")
-	write := func(size int) func(*Encoder, *slowBuffer) error {
+	write := func(size int, werr error) func(*Encoder, *slowBuffer) error {
 		return func(enc *Encoder, w *slowBuffer) error {
-			w.err = errWrite
+			w.err = werr
 			// The error may show here or later.
 			enc.Write(make([]byte, size))
-			return errWrite
+			return werr
 		}
 	}
 	readFrom := func(size int) func(*Encoder, *slowBuffer) error {
@@ -1371,18 +1371,38 @@ func TestConcurrentBlocks_ErrorEndsStream(t *testing.T) {
 			return errRead
 		}
 	}
+	closedDst := func(size int) func(*Encoder, *slowBuffer) error {
+		return func(enc *Encoder, _ *slowBuffer) error {
+			dst, _ := NewWriter(io.Discard)
+			dst.Close()
+			enc.Reset(dst)
+			enc.Write(make([]byte, size))
+			return ErrEncoderClosed
+		}
+	}
 	for _, tc := range []struct {
-		name  string
-		start func(*Encoder, *slowBuffer) error // returns the error to report
+		name       string
+		start      func(*Encoder, *slowBuffer) error // returns the error to report
+		blocksOnly bool
 	}{
 		// Before the frame header is written, and after two jobs of the 1 MiB window.
-		{"read-1000", readFrom(1000)},
-		{"read-2.5MiB", readFrom(5 << 19)},
+		{"read-1000", readFrom(1000), false},
+		{"read-2.5MiB", readFrom(5 << 19), false},
 		// Less than a job, written by Flush or Close, and more.
-		{"write-600KiB", write(600 << 10)},
-		{"write-2.5MiB", write(5 << 19)},
+		{"write-600KiB", write(600<<10, errWrite), false},
+		{"write-2.5MiB", write(5<<19, errWrite), false},
+		// A destination may return ErrEncoderClosed, after the frame header or,
+		// as a closed Encoder does, for every write. Without concurrent blocks,
+		// Flush and Close return nil for it.
+		{"closed-600KiB", write(600<<10, ErrEncoderClosed), true},
+		{"closed-2.5MiB", write(5<<19, ErrEncoderClosed), true},
+		{"closed-dst-1000", closedDst(1000), true},
+		{"closed-dst-2.5MiB", closedDst(5 << 19), true},
 	} {
 		for _, concurrentBlocks := range []bool{false, true} {
+			if tc.blocksOnly && !concurrentBlocks {
+				continue
+			}
 			for _, flush := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%s_blocks_%v_flush_%v", tc.name, concurrentBlocks, flush), func(t *testing.T) {
 					var w slowBuffer
@@ -1414,8 +1434,17 @@ func TestConcurrentBlocks_ErrorEndsStream(t *testing.T) {
 					if err := enc.Close(); !errors.Is(err, want) {
 						t.Errorf("Close: got %v, want %v", err, want)
 					}
+					if concurrentBlocks && enc.state.jobs.started {
+						t.Error("job workers still running after Close")
+					}
 					if !flush {
 						n = w.Len()
+					}
+					if err := enc.Close(); !errors.Is(err, want) {
+						t.Errorf("second Close: got %v, want %v", err, want)
+					}
+					if err := enc.Flush(); !errors.Is(err, want) {
+						t.Errorf("Flush after Close: got %v, want %v", err, want)
 					}
 					// Writes of more than a block fail in both modes.
 					if _, err := enc.Write(make([]byte, 1<<20)); err == nil {

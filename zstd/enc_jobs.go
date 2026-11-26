@@ -58,6 +58,9 @@ type jobState struct {
 
 	flusherErr error
 	started    bool
+	// closed is set when Close finished the stream. The destination may
+	// return ErrEncoderClosed too, so state.err can't tell.
+	closed bool
 
 	outputPool sync.Pool // *[]byte buffers for compressed output
 }

@@ -115,6 +115,7 @@ func (e *Encoder) Reset(w io.Writer) {
 		js.flushedSeq = 0
 		js.flusherErr = nil
 		js.started = false
+		js.closed = false
 	}
 
 	s.wg.Wait()
@@ -554,9 +555,12 @@ func (e *Encoder) Flush() error {
 
 func (e *Encoder) flushJobs() error {
 	js := &e.state.jobs
+	if js.closed {
+		return nil
+	}
 	// An earlier error, such as a failed read in ReadFrom, ends the stream,
 	// as without concurrent blocks.
-	if err := e.state.err; err != nil && !errors.Is(err, ErrEncoderClosed) {
+	if err := e.state.err; err != nil {
 		e.waitAllJobs()
 		return err
 	}
@@ -651,7 +655,7 @@ func (e *Encoder) closeJobs() error {
 	s := &e.state
 	js := &s.jobs
 
-	if errors.Is(s.err, ErrEncoderClosed) {
+	if js.closed {
 		return nil
 	}
 
@@ -672,9 +676,6 @@ func (e *Encoder) closeJobs() error {
 	// The errors below are kept, as the input ring is released.
 	if err := e.dispatchJob(true); err != nil {
 		e.shutdownJobWorkers()
-		if errors.Is(s.err, ErrEncoderClosed) {
-			return nil
-		}
 		s.err = err
 		return err
 	}
@@ -688,6 +689,7 @@ func (e *Encoder) closeJobs() error {
 	if s.fullFrameWritten {
 		e.shutdownJobWorkers()
 		s.err = ErrEncoderClosed
+		js.closed = true
 		return nil
 	}
 
@@ -714,6 +716,7 @@ func (e *Encoder) closeJobs() error {
 	}
 	if s.err == nil {
 		s.err = ErrEncoderClosed
+		js.closed = true
 		return nil
 	}
 	return s.err
