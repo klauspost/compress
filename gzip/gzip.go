@@ -187,6 +187,9 @@ func (z *Writer) Write(p []byte) (int, error) {
 	if z.err != nil {
 		return 0, z.err
 	}
+	if z.closed {
+		return 0, errors.New("gzip: Write after Close")
+	}
 	var n int
 	// Write the GZIP header lazily.
 	if !z.wroteHeader {
@@ -247,7 +250,11 @@ func (z *Writer) Write(p []byte) (int, error) {
 	z.size += uint32(len(p))
 	z.digest = crc32.Update(z.digest, crc32.IEEETable, p)
 	if z.level == StatelessCompression {
-		return len(p), flate.StatelessDeflate(z.w, p, false, nil)
+		z.err = flate.StatelessDeflate(z.w, p, false, nil)
+		if z.err != nil {
+			return 0, z.err
+		}
+		return len(p), nil
 	}
 	n, z.err = z.compressor.Write(p)
 	return n, z.err
@@ -287,13 +294,13 @@ func (z *Writer) Close() error {
 	if z.closed {
 		return nil
 	}
-	z.closed = true
 	if !z.wroteHeader {
 		z.Write(nil)
 		if z.err != nil {
 			return z.err
 		}
 	}
+	z.closed = true
 	if z.level == StatelessCompression {
 		z.err = flate.StatelessDeflate(z.w, nil, true, nil)
 	} else {

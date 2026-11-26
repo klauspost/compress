@@ -111,10 +111,10 @@ build_table_main_table:
 	SUB   R0, R9, R9
 	MOVD  (R6)(R8<<3), R8
 	ORR   R1, R8, R8
-	MOVD  R9, R10
-	AND   $0x0000ffff, R10, R10
-	LSL   $0x10, R10, R10
-	ORR   R10, R8, R8
+	MOVD  R9, R1
+	AND   $0x0000ffff, R1, R1
+	LSL   $0x10, R1, R1
+	ORR   R1, R8, R8
 	MOVD  R8, (R5)(R7<<3)
 	CMP   R0, R9
 	BLE   build_table_check1_ok
@@ -126,20 +126,6 @@ build_table_main_table:
 	RET
 
 build_table_check1_ok:
-	TST  $0xff, R1
-	BNE  build_table_check2_ok
-	AND  $0xffff, R7, R16
-	AND  $0xffff, R9, R15
-	CMP  R16, R15
-	BNE  build_table_check2_ok
-	MOVD ctx+8(FP), R0
-	MOVD R9, 32(R0)
-	MOVD R7, 40(R0)
-	MOVD $+3, R16
-	MOVD R16, ret+16(FP)
-	RET
-
-build_table_check2_ok:
 	ADD  $1, R7, R7
 	CMP  R0, R7
 	BLT  build_table_main_table

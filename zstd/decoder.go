@@ -576,6 +576,7 @@ func (d *Decoder) nextBlockSync() (ok bool) {
 			println("History trimmed:", len(d.frame.history.b), "decoded already:", d.syncStream.decodedFrame)
 		}
 		histBefore := len(d.frame.history.b)
+		d.frame.history.expireDict(d.syncStream.decodedFrame)
 		d.current.err = d.current.d.decodeBuf(&d.frame.history)
 
 		if d.current.err != nil {
@@ -804,6 +805,7 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 				fcs = block.async.fcs
 				decodedFrame = 0
 			}
+			hist.expireDict(decodedFrame)
 			do := decodeOutput{err: block.err, d: block}
 			switch block.Type {
 			case blockTypeRLE:

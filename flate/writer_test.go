@@ -325,6 +325,150 @@ func TestWriteError(t *testing.T) {
 	}
 }
 
+func TestCloseError(t *testing.T) {
+	writers := []struct {
+		name string
+		open func(io.Writer) (*Writer, error)
+	}{
+		{"huffman-only", func(w io.Writer) (*Writer, error) { return NewWriter(w, HuffmanOnly) }},
+		{"no-compression", func(w io.Writer) (*Writer, error) { return NewWriter(w, NoCompression) }},
+		{"best-speed", func(w io.Writer) (*Writer, error) { return NewWriter(w, BestSpeed) }},
+		{"default", func(w io.Writer) (*Writer, error) { return NewWriter(w, DefaultCompression) }},
+		{"best-compression", func(w io.Writer) (*Writer, error) { return NewWriter(w, BestCompression) }},
+		{"ultra", func(w io.Writer) (*Writer, error) { return NewWriter(w, UltraCompression) }},
+		{"window-1024", func(w io.Writer) (*Writer, error) { return NewWriterWindow(w, 1024) }},
+	}
+
+	payload := []byte("hello world")
+	for _, tc := range writers {
+		for _, failCase := range []struct {
+			name  string
+			input []byte
+		}{
+			{"empty", nil},
+			{"small", payload},
+		} {
+			t.Run(tc.name+"/"+failCase.name, func(t *testing.T) {
+				w, err := tc.open(&errorWriter{N: 0})
+				if err != nil {
+					t.Fatalf("open: %v", err)
+				}
+				if len(failCase.input) > 0 {
+					if _, err := w.Write(failCase.input); err != nil {
+						t.Fatalf("Write: unexpected error %v", err)
+					}
+				}
+				if err := w.Close(); err != io.ErrClosedPipe {
+					t.Fatalf("Close: got %v, want %v", err, io.ErrClosedPipe)
+				}
+				if n, err := w.Write([]byte("more")); n != 0 || err != io.ErrClosedPipe {
+					t.Fatalf("Write after failed Close: got (%d, %v), want (0, %v)", n, err, io.ErrClosedPipe)
+				}
+				if err := w.Flush(); err != io.ErrClosedPipe {
+					t.Fatalf("Flush after failed Close: got %v, want %v", err, io.ErrClosedPipe)
+				}
+				if err := w.Close(); err != io.ErrClosedPipe {
+					t.Fatalf("second Close: got %v, want %v", err, io.ErrClosedPipe)
+				}
+				if w.d.w.writer != nil {
+					t.Fatal("Close did not release underlying writer reference")
+				}
+
+				// Reset must clear the error and allow reuse.
+				var buf bytes.Buffer
+				w.Reset(&buf)
+				if _, err := w.Write(payload); err != nil {
+					t.Fatalf("Write after Reset: %v", err)
+				}
+				if err := w.Close(); err != nil {
+					t.Fatalf("Close after Reset: %v", err)
+				}
+				got, err := io.ReadAll(NewReader(&buf))
+				if err != nil {
+					t.Fatalf("ReadAll after Reset: %v", err)
+				}
+				if !bytes.Equal(got, payload) {
+					t.Fatalf("roundtrip after Reset: got %q, want %q", got, payload)
+				}
+			})
+		}
+	}
+}
+
+func TestWriteAfterClose(t *testing.T) {
+	writers := []struct {
+		name string
+		open func(io.Writer) (*Writer, error)
+	}{
+		{"huffman-only", func(w io.Writer) (*Writer, error) { return NewWriter(w, HuffmanOnly) }},
+		{"no-compression", func(w io.Writer) (*Writer, error) { return NewWriter(w, NoCompression) }},
+		{"best-speed", func(w io.Writer) (*Writer, error) { return NewWriter(w, BestSpeed) }},
+		{"default", func(w io.Writer) (*Writer, error) { return NewWriter(w, DefaultCompression) }},
+		{"best-compression", func(w io.Writer) (*Writer, error) { return NewWriter(w, BestCompression) }},
+		{"ultra", func(w io.Writer) (*Writer, error) { return NewWriter(w, UltraCompression) }},
+		{"window-1024", func(w io.Writer) (*Writer, error) { return NewWriterWindow(w, 1024) }},
+	}
+
+	const wantClosedErr = "flate: closed writer"
+	payload := []byte("hello world")
+	for _, tc := range writers {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			w, err := tc.open(&buf)
+			if err != nil {
+				t.Fatalf("open: %v", err)
+			}
+			if _, err := w.Write(payload); err != nil {
+				t.Fatalf("Write: %v", err)
+			}
+			if err := w.Close(); err != nil {
+				t.Fatalf("Close: %v", err)
+			}
+			if w.d.w.writer != nil {
+				t.Fatal("Close did not release underlying writer reference")
+			}
+			if err := w.Close(); err != nil {
+				t.Fatalf("second Close: got %v, want nil", err)
+			}
+			if n, err := w.Write([]byte("more")); n != 0 || err == nil || err.Error() != wantClosedErr {
+				t.Fatalf("Write after Close: got (%d, %v), want (0, %q)", n, err, wantClosedErr)
+			}
+			if err := w.Flush(); err == nil || err.Error() != wantClosedErr {
+				t.Fatalf("Flush after Close: got %v, want %q", err, wantClosedErr)
+			}
+			if err := w.Close(); err != nil {
+				t.Fatalf("Close after Write-after-Close: got %v, want nil", err)
+			}
+
+			got, err := io.ReadAll(NewReader(bytes.NewReader(buf.Bytes())))
+			if err != nil {
+				t.Fatalf("ReadAll: %v", err)
+			}
+			if !bytes.Equal(got, payload) {
+				t.Fatalf("roundtrip: got %q, want %q", got, payload)
+			}
+
+			// Reset must clear closed state and allow reuse.
+			var buf2 bytes.Buffer
+			w.Reset(&buf2)
+			reused := []byte("reused payload")
+			if _, err := w.Write(reused); err != nil {
+				t.Fatalf("Write after Reset: %v", err)
+			}
+			if err := w.Close(); err != nil {
+				t.Fatalf("Close after Reset: %v", err)
+			}
+			got2, err := io.ReadAll(NewReader(&buf2))
+			if err != nil {
+				t.Fatalf("ReadAll after Reset: %v", err)
+			}
+			if !bytes.Equal(got2, reused) {
+				t.Fatalf("roundtrip after Reset: got %q, want %q", got2, reused)
+			}
+		})
+	}
+}
+
 // Test if errors from the underlying writer is passed upwards.
 func TestWriter_Reset(t *testing.T) {
 	buf := new(bytes.Buffer)

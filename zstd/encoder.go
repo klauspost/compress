@@ -474,6 +474,8 @@ func (e *Encoder) ReadFrom(r io.Reader) (n int64, err error) {
 			if debugEncoder {
 				println("ReadFrom: got error:", err)
 			}
+			// The goroutine encoding the previous block may set err too.
+			e.state.wg.Wait()
 			e.state.err = err
 			return n, err
 		}
@@ -532,22 +534,20 @@ func (e *Encoder) Flush() error {
 	if e.o.concurrentBlocks {
 		return e.flushJobs()
 	}
+	var err error
 	if len(s.filling) > 0 {
-		err := e.nextBlock(false)
-		if err != nil {
-			if errors.Is(s.err, ErrEncoderClosed) {
-				return nil
-			}
-			return err
-		}
+		err = e.nextBlock(false)
 	}
 	s.wg.Wait()
 	s.wWg.Wait()
-	if s.err != nil {
+	if err == nil {
+		err = s.err
+	}
+	if err != nil {
 		if errors.Is(s.err, ErrEncoderClosed) {
 			return nil
 		}
-		return s.err
+		return err
 	}
 	return s.writeErr
 }
@@ -594,6 +594,8 @@ func (e *Encoder) Close() error {
 	}
 
 	err := e.nextBlock(true)
+	s.wg.Wait()
+	s.wWg.Wait()
 	if err != nil {
 		if errors.Is(s.err, ErrEncoderClosed) {
 			return nil
@@ -612,8 +614,6 @@ func (e *Encoder) Close() error {
 		}
 		return s.err
 	}
-	s.wg.Wait()
-	s.wWg.Wait()
 
 	if s.err != nil {
 		return s.err

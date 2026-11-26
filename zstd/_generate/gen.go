@@ -861,14 +861,6 @@ func (o options) adjustOffset(name string, moP, llP Mem, offsetB reg.GPVirtual, 
 		LEAQ(Mem{Base: offsets[0], Disp: -1}, temp)
 
 		Label(name + "_test_temp_valid")
-		// if temp == 0 {
-		//     temp = 1
-		// }
-		TESTQ(temp, temp)
-		JNZ(LabelRef(name + "_temp_valid"))
-		MOVQ(U32(1), temp)
-
-		Label(name + "_temp_valid")
 		// if offset != 1 {
 		//     s.prevOffset[2] = s.prevOffset[1]
 		// }
@@ -998,13 +990,6 @@ func (o options) adjustOffsetInMemory(name string, moP, llP Mem, offsetB reg.GPV
 		}
 
 		temp := DX
-		// if temp == 0 {
-		//     temp = 1
-		// }
-		JNZ(LabelRef(name + "_temp_valid"))
-		MOVQ(U32(1), temp)
-
-		Label(name + "_temp_valid")
 		// if offset != 1 {
 		//     s.prevOffset[2] = s.prevOffset[1]
 		// }
