@@ -444,6 +444,12 @@ The concurrency level will, for streams, determine how many blocks ahead the com
 
 Since "blocks" are quite dependent on the output of the previous block stream decoding will only have limited concurrency.
 
+Frames do not depend on each other, so a stream written as a series of independent frames,
+for example by writing the output of `EncodeAll` on fixed-size chunks one after another,
+can be decoded with one frame per core using `WithDecodeFramesConcurrently(maxFrameSize)`.
+Each frame is decoded whole into memory, so only frames that decode to at most `maxFrameSize` bytes
+are decoded this way; from the first frame that does not qualify the rest of the stream is decoded as usual.
+
 In practice this means that concurrency is often limited to utilizing about 3 cores effectively.
   
 ### Benchmarks

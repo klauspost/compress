@@ -2041,6 +2041,70 @@ func BenchmarkDecoderWithCustomFiles(b *testing.B) {
 	}
 }
 
+// BenchmarkDecodeFramesConcurrently re-encodes up to 256 MiB of each custom
+// file as independent 8 MiB frames and decodes them as a stream.
+func BenchmarkDecodeFramesConcurrently(b *testing.B) {
+	files, _ := filepath.Glob("testdata/benchmark-custom/*.zst")
+	if len(files) == 0 {
+		b.Skip("place .zst files in testdata/benchmark-custom")
+	}
+	const frameSize = 8 << 20
+	for _, path := range files {
+		f, err := os.Open(path)
+		if err != nil {
+			b.Fatal(err)
+		}
+		dec, err := NewReader(f)
+		if err != nil {
+			b.Fatal(err)
+		}
+		in, err := io.ReadAll(io.LimitReader(dec, 256<<20))
+		dec.Close()
+		f.Close()
+		if err != nil {
+			b.Fatal(err)
+		}
+		for _, level := range []EncoderLevel{SpeedDefault, SpeedBestCompression} {
+			enc, err := NewWriter(nil, WithEncoderLevel(level), WithEncoderConcurrency(1))
+			if err != nil {
+				b.Fatal(err)
+			}
+			var stream []byte
+			for chunk := range slices.Chunk(in, frameSize) {
+				stream = enc.EncodeAll(chunk, stream)
+			}
+			enc.Close()
+			for _, mode := range []struct {
+				name string
+				opts []DOption
+			}{
+				{"sync", []DOption{WithDecoderConcurrency(1)}},
+				{"stream", []DOption{WithDecoderConcurrency(0)}},
+				{"frames", []DOption{WithDecoderConcurrency(0), WithDecodeFramesConcurrently(frameSize)}},
+			} {
+				b.Run(filepath.Base(path)+"/"+level.String()+"/"+mode.name, func(b *testing.B) {
+					dec, err := NewReader(nil, mode.opts...)
+					if err != nil {
+						b.Fatal(err)
+					}
+					defer dec.Close()
+					b.SetBytes(int64(len(in)))
+					b.ReportAllocs()
+					for b.Loop() {
+						if err := dec.Reset(bytes.NewReader(stream)); err != nil {
+							b.Fatal(err)
+						}
+						n, err := io.Copy(io.Discard, dec)
+						if err != nil || n != int64(len(in)) {
+							b.Fatal(n, err)
+						}
+					}
+				})
+			}
+		}
+	}
+}
+
 func testDecoderDecodeAll(t *testing.T, fn string, dec *Decoder) {
 	zr := testCreateZipReader(fn, t)
 	var want = make(map[string][]byte)
@@ -3514,4 +3578,160 @@ func TestSynctestStreamDecoderOutlivesBubble(t *testing.T) {
 	if !bytes.Equal(got, in) {
 		t.Fatal("decoded output differs outside the bubble")
 	}
+}
+
+func TestDecodeFramesConcurrently(t *testing.T) {
+	in, err := os.ReadFile("../testdata/Mark.Twain-Tom.Sawyer.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for len(in) < 2<<20 {
+		in = append(in, in...)
+	}
+	const limit = 256 << 10
+	encAll, err := NewWriter(nil, WithEncoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer encAll.Close()
+	encNoCRC, err := NewWriter(nil, WithEncoderConcurrency(1), WithEncoderCRC(false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer encNoCRC.Close()
+	sized := func(dst []byte, n int) []byte { return encAll.EncodeAll(in[len(in)-n:], dst) }
+	noCRC := func(dst []byte, n int) []byte { return encNoCRC.EncodeAll(in[:n], dst) }
+	unsized := func(dst []byte, n int) []byte {
+		var buf bytes.Buffer
+		enc, err := NewWriter(&buf, WithEncoderConcurrency(1))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := enc.Write(in[:n]); err != nil {
+			t.Fatal(err)
+		}
+		if err := enc.Close(); err != nil {
+			t.Fatal(err)
+		}
+		return append(dst, buf.Bytes()...)
+	}
+	skippable := func(dst []byte, n int) []byte {
+		dst = binary.LittleEndian.AppendUint32(dst, 0x184D2A5f)
+		dst = binary.LittleEndian.AppendUint32(dst, uint32(n))
+		return append(dst, in[:n]...)
+	}
+	chunks := func(f func([]byte, int) []byte, size, n int) []byte {
+		var dst []byte
+		for range n {
+			dst = f(dst, size)
+		}
+		return dst
+	}
+	join := func(parts ...[]byte) []byte { return slices.Concat(parts...) }
+	many := chunks(sized, 100<<10, 20)
+	small := sized(nil, 1000)
+
+	tests := []struct {
+		name    string
+		stream  []byte
+		wantErr bool
+	}{
+		{name: "empty"},
+		{name: "sized", stream: many},
+		{name: "no-crc", stream: chunks(noCRC, 200<<10, 10)},
+		{name: "empty-frames", stream: join(chunks(sized, 0, 5), many)},
+		{name: "skippable", stream: join(skippable(nil, 10), many, skippable(nil, 0), many, skippable(nil, 100))},
+		{name: "unsized", stream: chunks(unsized, 100<<10, 10)},
+		{name: "unsized-large", stream: join(many, unsized(nil, limit+1), many)},
+		{name: "sized-large", stream: join(many, sized(nil, limit+1), many)},
+		{name: "truncated", stream: many[:len(many)-10], wantErr: true},
+		{name: "truncated-header", stream: join(many, small[:6]), wantErr: true},
+		{name: "truncated-skippable", stream: join(many, skippable(nil, 100)[:50]), wantErr: true},
+		{name: "trailing-garbage", stream: join(many, []byte("garbage!")), wantErr: true},
+		{name: "corrupt", stream: func() []byte {
+			b := slices.Clone(many)
+			b[len(b)/2] ^= 0x55
+			return b
+		}(), wantErr: true},
+		{name: "corrupt-crc", stream: func() []byte {
+			b := join(many, small, many)
+			b[len(many)+len(small)-1] ^= 1
+			return b
+		}(), wantErr: true},
+	}
+	serial, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer serial.Close()
+	dec, err := NewReader(nil, WithDecoderConcurrency(4), WithDecodeFramesConcurrently(limit))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := serial.Reset(bytes.NewReader(tt.stream)); err != nil {
+				t.Fatal(err)
+			}
+			want, wantErr := io.ReadAll(serial)
+			if (wantErr != nil) != tt.wantErr {
+				t.Fatalf("serial decoder: got error %v, want error: %v", wantErr, tt.wantErr)
+			}
+			for _, writeTo := range []bool{false, true} {
+				if err := dec.Reset(bytes.NewReader(tt.stream)); err != nil {
+					t.Fatal(err)
+				}
+				var got []byte
+				if writeTo {
+					var buf bytes.Buffer
+					_, err = dec.WriteTo(&buf)
+					got = buf.Bytes()
+				} else {
+					got, err = io.ReadAll(struct{ io.Reader }{dec})
+				}
+				if (err != nil) != tt.wantErr {
+					t.Fatalf("WriteTo %v: got error %v, want error: %v", writeTo, err, tt.wantErr)
+				}
+				if !bytes.HasPrefix(want, got) || (err == nil && len(got) != len(want)) {
+					t.Fatalf("WriteTo %v: output mismatch, got %d bytes, want %d", writeTo, len(got), len(want))
+				}
+			}
+		})
+	}
+
+	// Truncate a stream at every offset.
+	short := join(sized(nil, 300), skippable(nil, 5), noCRC(nil, 200), sized(nil, 0), sized(nil, 300))
+	for n := range len(short) {
+		if err := serial.Reset(bytes.NewReader(short[:n])); err != nil {
+			t.Fatal(err)
+		}
+		want, wantErr := io.ReadAll(serial)
+		if err := dec.Reset(bytes.NewReader(short[:n])); err != nil {
+			t.Fatal(err)
+		}
+		got, err := io.ReadAll(struct{ io.Reader }{dec})
+		if (err != nil) != (wantErr != nil) || !bytes.HasPrefix(want, got) || (err == nil && len(got) != len(want)) {
+			t.Fatalf("truncated to %d: got %d bytes, error %v; want %d bytes, error %v", n, len(got), err, len(want), wantErr)
+		}
+	}
+
+	// Reset and Close part-way through a stream.
+	stream := join(many, many)
+	for _, n := range []int{0, 1, 300 << 10, 1 << 20} {
+		if err := dec.Reset(bytes.NewReader(stream)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.ReadFull(dec, make([]byte, n)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	d2, err := NewReader(bytes.NewReader(stream), WithDecodeFramesConcurrently(limit))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.ReadFull(d2, make([]byte, 1<<20)); err != nil {
+		t.Fatal(err)
+	}
+	d2.Close()
 }

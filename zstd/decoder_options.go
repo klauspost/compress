@@ -25,6 +25,8 @@ type decoderOptions struct {
 	limitToCap      bool
 	decodeBufsBelow int
 	resetOpt        bool
+
+	frameConcurrentMax uint64
 }
 
 func (o *decoderOptions) setDefault() {
@@ -184,6 +186,26 @@ func WithDecodeBuffersBelow(size int) DOption {
 			return errors.New("WithDecodeBuffersBelow cannot be changed on Reset")
 		}
 		o.decodeBufsBelow = size
+		return nil
+	}
+}
+
+// WithDecodeFramesConcurrently lets a stream decoder decode up to the
+// decoder concurrency of frames at once, when the stream consists of
+// independent frames that each decode to at most maxFrameSize bytes,
+// such as the output of several EncodeAll calls written one after another.
+// Each frame is decoded whole, so up to about twice the concurrency of
+// frames is held in memory.
+// Frames must declare their content size, or have few enough blocks that
+// their size cannot exceed maxFrameSize.
+// From the first frame that does not qualify, the rest of the stream is
+// decoded as usual.
+// A value of 0 disables it, which is the default.
+// Has no effect with a concurrency of 1.
+// Can be changed with ResetWithOptions.
+func WithDecodeFramesConcurrently(maxFrameSize uint64) DOption {
+	return func(o *decoderOptions) error {
+		o.frameConcurrentMax = maxFrameSize
 		return nil
 	}
 }

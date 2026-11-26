@@ -46,6 +46,9 @@ type Decoder struct {
 
 	frame *frameDec
 
+	// Buffers for frames decoded concurrently.
+	frameBufs, frameIn chan []byte
+
 	// streamWg is the waitgroup for all streams
 	streamWg sync.WaitGroup
 }
@@ -64,6 +67,9 @@ type decoderState struct {
 
 	// crc of current frame
 	crc *xxhash.Digest
+
+	// frameBuf is the buffer of the current concurrently decoded frame.
+	frameBuf []byte
 
 	flushed bool
 }
@@ -123,6 +129,8 @@ func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
 		dec.localFrame.o.dicts = nil
 		d.decoders.Put(dec)
 	}
+	d.frameBufs = make(chan []byte, o.concurrent+2)
+	d.frameIn = make(chan []byte, o.concurrent)
 	d.publishedOptions.Store(&o)
 
 	if r == nil {
@@ -261,10 +269,16 @@ func (d *Decoder) Reset(r io.Reader) error {
 		return d.startSyncDecoder(r)
 	}
 
-	d.current.output = make(chan decodeOutput, o.concurrent)
 	ctx, cancel := context.WithCancel(context.Background())
 	d.current.cancel = cancel
 	d.streamWg.Add(1)
+	if o.frameConcurrentMax > 0 {
+		// Frames are large, so only buffer one decoded frame.
+		d.current.output = make(chan decodeOutput, 1)
+		go d.startFrameDecoder(ctx, r, d.current.output, o)
+		return nil
+	}
+	d.current.output = make(chan decodeOutput, o.concurrent)
 	go d.startStreamDecoder(ctx, r, d.current.output)
 
 	return nil
@@ -496,6 +510,10 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 
 	//ASYNC:
 	d.stashDecoder()
+	if d.current.frameBuf != nil {
+		d.putFrameBuf(d.current.frameBuf)
+		d.current.frameBuf = nil
+	}
 	if blocking {
 		d.current.decodeOutput, ok = <-d.current.output
 	} else {
@@ -511,7 +529,12 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 		return false
 	}
 	next := d.current.decodeOutput
-	if next.d != nil && next.d.async.newHist != nil {
+	if next.d == nil {
+		// A whole frame from DecodeAll, which checked its checksum.
+		d.current.frameBuf = next.b
+		return true
+	}
+	if next.d.async.newHist != nil {
 		d.current.crc.Reset()
 	}
 	if debugDecoder {
@@ -527,7 +550,7 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 	if len(next.b) > 0 {
 		d.current.crc.Write(next.b)
 	}
-	if next.err == nil && next.d != nil && next.d.hasCRC {
+	if next.err == nil && next.d.hasCRC {
 		got := uint32(d.current.crc.Sum64())
 		if got != next.d.checkCRC {
 			if debugDecoder {
