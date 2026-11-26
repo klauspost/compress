@@ -16,7 +16,9 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"testing/iotest"
 	"testing/synctest"
 	"time"
 
@@ -2913,5 +2915,69 @@ func TestEncoderReadFromAfterClose(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// lateWriter records writes made after closed is set.
+type lateWriter struct{ closed, late atomic.Bool }
+
+func (w *lateWriter) Write(p []byte) (int, error) {
+	// Slow writes keep the last block queued behind them.
+	time.Sleep(time.Millisecond)
+	if w.closed.Load() {
+		w.late.Store(true)
+	}
+	return len(p), nil
+}
+
+// Close and Flush wait for the blocks they encode in the background, also
+// when they return an error, so nothing is written after they return.
+func TestEncoderErrorWaitsForWrites(t *testing.T) {
+	// Not a multiple of the block size, so a block is left to encode.
+	input := make([]byte, 1<<20+7)
+	failingReader := func() io.Reader {
+		return io.MultiReader(bytes.NewReader(input), iotest.ErrReader(errors.New("read failed")))
+	}
+	for _, tt := range []struct {
+		name string
+		run  func(e *Encoder, w io.Writer) error
+	}{
+		{"close-size-small", func(e *Encoder, w io.Writer) error {
+			e.ResetContentSize(w, int64(len(input)-1))
+			e.Write(input)
+			return e.Close()
+		}},
+		{"close-size-large", func(e *Encoder, w io.Writer) error {
+			e.ResetContentSize(w, int64(len(input)+1))
+			e.Write(input)
+			return e.Close()
+		}},
+		{"close-read-error", func(e *Encoder, w io.Writer) error {
+			e.Reset(w)
+			e.ReadFrom(failingReader())
+			return e.Close()
+		}},
+		{"flush-read-error", func(e *Encoder, w io.Writer) error {
+			e.Reset(w)
+			e.ReadFrom(failingReader())
+			return e.Flush()
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var w lateWriter
+			enc, err := NewWriter(nil, WithEncoderConcurrency(2))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := tt.run(enc, &w); err == nil {
+				t.Fatal("expected an error")
+			}
+			w.closed.Store(true)
+			// Reset waits for anything left running.
+			enc.Reset(nil)
+			if w.late.Load() {
+				t.Error("written after returning")
+			}
+		})
 	}
 }
