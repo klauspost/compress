@@ -829,10 +829,10 @@ func (d *compressor) write(b []byte) (n int, err error) {
 }
 
 func (d *compressor) syncFlush() error {
-	d.sync = true
 	if d.err != nil {
 		return d.err
 	}
+	d.sync = true
 	d.step(d)
 	if d.err == nil {
 		d.w.writeStoredHeader(0, false)
@@ -932,7 +932,12 @@ func (d *compressor) reset(w io.Writer) {
 	}
 }
 
+var errWriterClosed = errors.New("flate: closed writer")
+
 func (d *compressor) close() error {
+	if d.err == errWriterClosed {
+		return nil
+	}
 	if d.err != nil {
 		return d.err
 	}
@@ -940,14 +945,23 @@ func (d *compressor) close() error {
 	d.closing = true
 	d.step(d)
 	if d.err != nil {
+		d.w.reset(nil)
 		return d.err
 	}
 	if d.w.writeStoredHeader(0, true); d.w.err != nil {
-		return d.w.err
+		d.err = d.w.err
+		d.w.reset(nil)
+		return d.err
 	}
 	d.w.flush()
+	if d.w.err != nil {
+		d.err = d.w.err
+		d.w.reset(nil)
+		return d.err
+	}
 	d.w.reset(nil)
-	return d.w.err
+	d.err = errWriterClosed
+	return nil
 }
 
 // NewWriter returns a new Writer compressing data at the given level.
