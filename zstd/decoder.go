@@ -378,6 +378,11 @@ func (d *Decoder) WriteTo(w io.Writer) (int64, error) {
 // DecodeAll can be used concurrently.
 // The Decoder concurrency limits will be respected.
 func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
+	return d.decodeAll(input, dst, *d.publishedOptions.Load())
+}
+
+// decodeAll is DecodeAll with the given options.
+func (d *Decoder) decodeAll(input, dst []byte, o decoderOptions) ([]byte, error) {
 	if d.decoders == nil {
 		return dst, ErrDecoderClosed
 	}
@@ -388,7 +393,6 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 		return dst, ErrDecoderClosed
 	}
 	frame := block.localFrame
-	o := *d.publishedOptions.Load()
 	frame.setOptions(o)
 	initialSize := len(dst)
 	defer func() {

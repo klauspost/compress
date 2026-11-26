@@ -31,6 +31,8 @@ func (d *Decoder) startFrameDecoder(ctx context.Context, r io.Reader, output cha
 	}()
 	limit := min(o.frameConcurrentMax, o.maxDecodedSize)
 	maxWindow := d.frame.o.maxWindowSize
+	// Decode with the stream's options; the cap limit is for DecodeAll calls.
+	o.limitToCap = false
 
 	// DecodeAll waits for a free block decoder, which bounds the frames
 	// decoded at once. pending bounds how far reading runs ahead.
@@ -63,7 +65,7 @@ func (d *Decoder) startFrameDecoder(ctx context.Context, r io.Reader, output cha
 		pending <- ch
 		dst := d.getFrameBuf(size)
 		go func() {
-			b, err := d.DecodeAll(frame, dst)
+			b, err := d.decodeAll(frame, dst, o)
 			d.putFrameIn(frame)
 			if err != nil {
 				// Partial output may include part of the failing block.
@@ -87,8 +89,8 @@ func (d *Decoder) startFrameDecoder(ctx context.Context, r io.Reader, output cha
 	}
 }
 
-// getFrameBuf returns an empty buffer for a frame of size bytes, reusing one
-// the reader has finished with if it is large enough.
+// getFrameBuf returns a buffer the reader has finished with if it holds a
+// frame of size bytes, or nil to let DecodeAll allocate.
 func (d *Decoder) getFrameBuf(size uint64) []byte {
 	select {
 	case b := <-d.frameBufs:
@@ -97,10 +99,7 @@ func (d *Decoder) getFrameBuf(size uint64) []byte {
 		}
 	default:
 	}
-	if size == fcsUnknown {
-		return nil
-	}
-	return make([]byte, 0, size+compressedBlockOverAlloc)
+	return nil
 }
 
 // putFrameBuf keeps b for reuse by getFrameBuf.

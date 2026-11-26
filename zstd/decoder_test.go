@@ -3607,11 +3607,22 @@ func TestDecodeFramesConcurrently(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := enc.Write(in[:n]); err != nil {
+		// A flush before the end leaves the content size out of the header.
+		if _, err := enc.Write(in[:n/2]); err != nil {
+			t.Fatal(err)
+		}
+		if err := enc.Flush(); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := enc.Write(in[n/2 : n]); err != nil {
 			t.Fatal(err)
 		}
 		if err := enc.Close(); err != nil {
 			t.Fatal(err)
+		}
+		var h Header
+		if err := h.Decode(buf.Bytes()); err != nil || h.HasFCS {
+			t.Fatalf("frame has a content size: %v", err)
 		}
 		return append(dst, buf.Bytes()...)
 	}
@@ -3714,6 +3725,26 @@ func TestDecodeFramesConcurrently(t *testing.T) {
 		if (err != nil) != (wantErr != nil) || !bytes.HasPrefix(want, got) || (err == nil && len(got) != len(want)) {
 			t.Fatalf("truncated to %d: got %d bytes, error %v; want %d bytes, error %v", n, len(got), err, len(want), wantErr)
 		}
+	}
+
+	// Frames are decoded with the options of the stream: neither the cap limit
+	// for DecodeAll nor a failed ResetWithOptions applies to them.
+	unsizedStream := chunks(unsized, 100<<10, 10)
+	capped, err := NewReader(bytes.NewReader(unsizedStream), WithDecoderConcurrency(4), WithDecodeAllCapLimit(true), WithDecodeFramesConcurrently(limit))
+	if err != nil {
+		t.Fatal(err)
+	}
+	head := make([]byte, 10)
+	if _, err := io.ReadFull(capped, head); err != nil {
+		t.Fatal(err)
+	}
+	if err := capped.ResetWithOptions(nil, WithDecoderMaxMemory(1024), WithDecoderConcurrency(1)); err == nil {
+		t.Fatal("ResetWithOptions changed the concurrency")
+	}
+	rest, err := io.ReadAll(struct{ io.Reader }{capped})
+	capped.Close()
+	if err != nil || !bytes.Equal(append(head, rest...), slices.Repeat(in[:100<<10], 10)) {
+		t.Fatalf("capped decoder: got %d bytes, error %v", len(head)+len(rest), err)
 	}
 
 	// Reset and Close part-way through a stream.

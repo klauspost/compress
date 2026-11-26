@@ -119,8 +119,9 @@ func FuzzDecoder(f *testing.F) {
 		}
 		defer decHi.Close()
 
-		// Concurrent frames, with a small limit to also hand off to the stream decoder.
-		decFrames, err := NewReader(brFrames, WithDecoderConcurrency(2), WithDecodeFramesConcurrently(64<<10), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true), WithDecodeBuffersBelow(8<<10))
+		// Concurrent frames, with a small limit to also hand off to the stream
+		// decoder. Hide Bytes so small inputs are not decoded with DecodeAll.
+		decFrames, err := NewReader(struct{ io.Reader }{brFrames}, WithDecoderConcurrency(2), WithDecodeFramesConcurrently(256<<10), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true), WithDecodeBuffersBelow(8<<10))
 		if err != nil {
 			t.Fatal(err)
 		}
