@@ -3272,6 +3272,46 @@ func TestDecodeAllContentSizeAlloc(t *testing.T) {
 	}
 }
 
+// TestDecoderSingleSymbolTables decodes sequence tables that give one symbol
+// the whole probability. The format allows them, and the reference decoder
+// accepts them, though its encoder uses RLE mode instead.
+func TestDecoderSingleSymbolTables(t *testing.T) {
+	tests := []struct {
+		name  string
+		opts  []DOption
+		frame string
+		want  string
+	}{
+		// A raw block, then a block with three "\xf0\x03" tables, each symbol 0 with
+		// probability 32 of 32: no literals, repeat offset 2 (4), match length 3.
+		{"block", nil, "\x28\xb5\x2f\xfd\x00\x00\x20\x00\x00abcd\x5d\x00\x00\x00\x01\xa8\xf0\x03\xf0\x03\xf0\x03\x00\x80", "abcdabc"},
+		// The same sequence from the tables of singleSymbolDict, in repeat mode.
+		{"dict", []DOption{WithDecoderDicts(singleSymbolDict)}, "\x28\xb5\x2f\xfd\x03\x00\x01\x00\x00\x00\x2d\x00\x00\x00\x01\xfc\x00\x80", "AAA"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, c := range []int{1, 4} {
+				dec, err := NewReader(nil, append([]DOption{WithDecoderConcurrency(c)}, tt.opts...)...)
+				if err != nil {
+					t.Fatal(err)
+				}
+				got, err := dec.DecodeAll([]byte(tt.frame), nil)
+				if err != nil || string(got) != tt.want {
+					t.Errorf("DecodeAll, concurrency %d: got %q, %v, want %q", c, got, err, tt.want)
+				}
+				if err := dec.Reset(strings.NewReader(tt.frame)); err != nil {
+					t.Fatal(err)
+				}
+				got, err = io.ReadAll(dec)
+				if err != nil || string(got) != tt.want {
+					t.Errorf("stream, concurrency %d: got %q, %v, want %q", c, got, err, tt.want)
+				}
+				dec.Close()
+			}
+		})
+	}
+}
+
 // An Encoder or Decoder made inside a testing/synctest bubble must stay
 // usable after the bubble ends: programs keep them for reuse, so the next
 // user may be another bubble or none.

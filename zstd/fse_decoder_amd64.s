@@ -100,10 +100,10 @@ build_table_main_table:
 	SUBQ    AX, R10
 	MOVQ    (DI)(R9*8), R9
 	ORQ     CX, R9
-	MOVQ    R10, R11
-	ANDQ    $0x0000ffff, R11
-	SHLQ    $0x10, R11
-	ORQ     R11, R9
+	MOVQ    R10, CX
+	ANDQ    $0x0000ffff, CX
+	SHLQ    $0x10, CX
+	ORQ     CX, R9
 	MOVQ    R9, (SI)(R8*8)
 	CMPQ    R10, AX
 	JLE     build_table_check1_ok
@@ -114,17 +114,6 @@ build_table_main_table:
 	RET
 
 build_table_check1_ok:
-	TESTB CL, CL
-	JNZ   build_table_check2_ok
-	CMPW  R10, R8
-	JNE   build_table_check2_ok
-	MOVQ  ctx+8(FP), AX
-	MOVQ  R10, 32(AX)
-	MOVQ  R8, 40(AX)
-	MOVQ  $+3, ret+16(FP)
-	RET
-
-build_table_check2_ok:
 	INCQ R8
 	CMPQ R8, AX
 	JL   build_table_main_table

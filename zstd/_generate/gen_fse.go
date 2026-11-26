@@ -25,7 +25,6 @@ func main() {
 const (
 	errorCorruptedNormalizedCounter = 1
 	errorNewStateTooBig             = 2
-	errorNewStateNoBits             = 3
 )
 
 type buildDtable struct {
@@ -243,10 +242,6 @@ func (b *buildDtable) buildTable() {
 			if newState > tableSize {
 				return fmt.Errorf("newState (%d) outside table size (%d)", newState, tableSize)
 			}
-			if newState == uint16(u) && nBits == 0 {
-				// Seems weird that this is possible with nbits > 0.
-				return fmt.Errorf("newState (%d) == oldState (%d) and no bits", newState, u)
-			}
 			s.dt[u&maxTableMask] = ext[symbol] | decSymbol(nBits) | decSymbol(newState)<<16
 		}
 	*/
@@ -309,20 +304,6 @@ func (b *buildDtable) buildTable() {
 
 			b.returnError(errorNewStateTooBig, newState, b.tableSize)
 			Label("build_table_check1_ok")
-		}
-
-		// if newState == uint16(u) && nBits == 0 {
-		// 	// Seems weird that this is possible with nbits > 0.
-		// 	return fmt.Errorf("newState (%d) == oldState (%d) and no bits", newState, u)
-		// }
-		{
-			TESTB(nBits.As8(), nBits.As8())
-			JNZ(LabelRef("build_table_check2_ok"))
-			CMPW(newState.As16(), u.As16())
-			JNE(LabelRef("build_table_check2_ok"))
-
-			b.returnError(errorNewStateNoBits, newState, u)
-			Label("build_table_check2_ok")
 		}
 	}
 	INCQ(u)
