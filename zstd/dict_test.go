@@ -959,6 +959,41 @@ func TestDecoderRawDict(t *testing.T) {
 	}
 }
 
+// Dictionaries have the sequence table limits of blocks: offset tables up
+// to accuracy log 8. Encoders and decoders load them the same way.
+func TestDictOffsetTableLog(t *testing.T) {
+	dict := func(offsets string) []byte {
+		return []byte("\x37\xa4\x30\xec\x01\x00\x00\x00\x80\x10" + offsets + "\x10\x3f\x10\x3f" +
+			"\x04\x00\x00\x00\x04\x00\x00\x00\x04\x00\x00\x00" + strings.Repeat("A", 16))
+	}
+	// Offset tables of two symbols with equal probability.
+	for _, tt := range []struct {
+		name    string
+		offsets string
+		ok      bool
+	}{
+		{"log-8", "\x13\xf8\x0f", true},
+		{"log-9", "\x14\xf0\x3f", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dec, err := NewReader(nil, WithDecoderDicts(dict(tt.offsets)))
+			if err == nil {
+				dec.Close()
+			}
+			if (err == nil) != tt.ok {
+				t.Errorf("WithDecoderDicts: got %v", err)
+			}
+			enc, err := NewWriter(nil, WithEncoderDict(dict(tt.offsets)))
+			if err == nil {
+				enc.Close()
+			}
+			if (err == nil) != tt.ok {
+				t.Errorf("WithEncoderDict: got %v", err)
+			}
+		})
+	}
+}
+
 // TestEncoderDictResetDifferentContent verifies that ResetWithOptions correctly
 // handles switching between raw dicts that share the same ID but have different
 // content lengths. Previously, the encoder cached dict tables by ID only, so a
