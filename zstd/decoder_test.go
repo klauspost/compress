@@ -3743,7 +3743,7 @@ func TestDecodeFramesConcurrently(t *testing.T) {
 	}
 	rest, err := io.ReadAll(struct{ io.Reader }{capped})
 	capped.Close()
-	if err != nil || !bytes.Equal(append(head, rest...), slices.Repeat(in[:100<<10], 10)) {
+	if err != nil || !bytes.Equal(slices.Concat(head, rest), slices.Repeat(in[:100<<10], 10)) {
 		t.Fatalf("capped decoder: got %d bytes, error %v", len(head)+len(rest), err)
 	}
 
