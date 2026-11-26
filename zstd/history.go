@@ -77,6 +77,15 @@ func (h *history) setDict(dict *dict) {
 	h.huffTree = dict.litEnc
 }
 
+// expireDict drops the dictionary from the sequence decoder when more than
+// a window of the frame was decoded before the next block, as matches may
+// only reach it until then.
+func (h *history) expireDict(decoded uint64) {
+	if decoded > uint64(h.windowSize) {
+		h.decoders.dict = nil
+	}
+}
+
 // ensureBlockRing makes room for the next block without moving history,
 // as the reference decoder does. b is a prefix of ring capped to one block
 // of space. When a block no longer fits, the data written so far becomes

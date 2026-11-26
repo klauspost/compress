@@ -23,6 +23,10 @@ const (
 	DefaultCompression  = flate.DefaultCompression
 	ConstantCompression = flate.ConstantCompression // Deprecated: Use HuffmanOnly.
 	HuffmanOnly         = flate.HuffmanOnly
+
+	// UltraCompression is the strongest and slowest level.
+	// See flate.UltraCompression.
+	UltraCompression = flate.UltraCompression
 )
 
 // A Writer takes data written to it and writes the compressed
@@ -52,7 +56,7 @@ func NewWriter(w io.Writer) *Writer {
 // of assuming DefaultCompression.
 //
 // The compression level can be DefaultCompression, NoCompression, HuffmanOnly
-// or any integer value between BestSpeed and BestCompression inclusive.
+// or any integer value between BestSpeed and UltraCompression inclusive.
 // The error returned will be nil if the level is valid.
 func NewWriterLevel(w io.Writer, level int) (*Writer, error) {
 	return NewWriterLevelDict(w, level, nil)
@@ -64,7 +68,7 @@ func NewWriterLevel(w io.Writer, level int) (*Writer, error) {
 // The dictionary may be nil. If not, its contents should not be modified until
 // the Writer is closed.
 func NewWriterLevelDict(w io.Writer, level int, dict []byte) (*Writer, error) {
-	if level < HuffmanOnly || level > BestCompression {
+	if level < HuffmanOnly || level > UltraCompression {
 		return nil, fmt.Errorf("zlib: invalid compression level: %d", level)
 	}
 	return &Writer{
@@ -91,6 +95,16 @@ func (z *Writer) Reset(w io.Writer) {
 	z.wroteHeader = false
 }
 
+// write writes b to z.w and reports io.ErrShortWrite if the underlying
+// writer accepts fewer bytes than given without returning an error.
+func (z *Writer) write(b []byte) error {
+	n, err := z.w.Write(b)
+	if err == nil && n != len(b) {
+		err = io.ErrShortWrite
+	}
+	return err
+}
+
 // writeHeader writes the ZLIB header.
 func (z *Writer) writeHeader() (err error) {
 	z.wroteHeader = true
@@ -109,7 +123,7 @@ func (z *Writer) writeHeader() (err error) {
 		z.scratch[1] = 1 << 6
 	case 6, -1:
 		z.scratch[1] = 2 << 6
-	case 7, 8, 9:
+	case 7, 8, 9, 10:
 		z.scratch[1] = 3 << 6
 	default:
 		panic("unreachable")
@@ -118,13 +132,13 @@ func (z *Writer) writeHeader() (err error) {
 		z.scratch[1] |= 1 << 5
 	}
 	z.scratch[1] += uint8(31 - binary.BigEndian.Uint16(z.scratch[:2])%31)
-	if _, err = z.w.Write(z.scratch[0:2]); err != nil {
+	if err = z.write(z.scratch[0:2]); err != nil {
 		return err
 	}
 	if z.dict != nil {
 		// The next four bytes are the Adler-32 checksum of the dictionary.
 		binary.BigEndian.PutUint32(z.scratch[:], adler32.Checksum(z.dict))
-		if _, err = z.w.Write(z.scratch[0:4]); err != nil {
+		if err = z.write(z.scratch[0:4]); err != nil {
 			return err
 		}
 	}
@@ -190,6 +204,6 @@ func (z *Writer) Close() error {
 	checksum := z.digest.Sum32()
 	// ZLIB (RFC 1950) is big-endian, unlike GZIP (RFC 1952).
 	binary.BigEndian.PutUint32(z.scratch[:], checksum)
-	_, z.err = z.w.Write(z.scratch[0:4])
+	z.err = z.write(z.scratch[0:4])
 	return z.err
 }

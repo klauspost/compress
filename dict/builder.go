@@ -10,9 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
 	"sort"
-	"time"
 
 	"github.com/klauspost/compress/s2"
 	"github.com/klauspost/compress/zstd"
@@ -42,7 +40,7 @@ type Options struct {
 	Output io.Writer
 
 	// ZstdDictID is the Zstd dictionary ID to use.
-	// Leave at zero to generate a random ID.
+	// Leave at zero to derive one from the dictionary.
 	ZstdDictID uint32
 
 	// ZstdDictCompat will make the dictionary compatible with Zstd v1.5.5 and earlier.
@@ -67,10 +65,6 @@ const (
 // BuildZstdDict will build a Zstandard dictionary from the provided input.
 func BuildZstdDict(input [][]byte, o Options) ([]byte, error) {
 	o.outFormat = formatZstd
-	if o.ZstdDictID == 0 {
-		rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-		o.ZstdDictID = 32768 + uint32(rng.Int31n((1<<31)-32768))
-	}
 	return buildDict(input, o)
 }
 
@@ -154,6 +148,9 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 		// Happens with a single input, or inputs that are identical or share nothing.
 		return nil, fmt.Errorf("no content is repeated more than average across inputs")
 	}
+	// The comparator below is not a strict ordering, so the result depends on
+	// the input order, which comes from a map. Start from hash order.
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].hash < sorted[j].hash })
 	sort.Slice(sorted, func(i, j int) bool {
 		if true {
 			// Group very similar counts together and emit low offsets first.
@@ -263,6 +260,9 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 			}
 			if len(sortedPrev) > 0 {
 				sort.Slice(sortedPrev, func(i, j int) bool {
+					if sortedPrev[i].n == sortedPrev[j].n {
+						return sortedPrev[i].hash < sortedPrev[j].hash
+					}
 					return sortedPrev[i].n > sortedPrev[j].n
 				})
 				bestPrev := output[sortedPrev[0].hash]
@@ -322,6 +322,9 @@ func buildDict(input [][]byte, o Options) ([]byte, error) {
 				}
 				sort.Slice(sortedFollow, func(i, j int) bool {
 					if sortedFollow[i].n == sortedFollow[j].n {
+						if sortedFollow[i].offset == sortedFollow[j].offset {
+							return sortedFollow[i].hash < sortedFollow[j].hash
+						}
 						return sortedFollow[i].offset > sortedFollow[j].offset
 					}
 					return sortedFollow[i].n > sortedFollow[j].n

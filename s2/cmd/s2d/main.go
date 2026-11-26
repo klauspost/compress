@@ -18,6 +18,7 @@ import (
 	"unicode"
 
 	"github.com/klauspost/compress/s2"
+	"github.com/klauspost/compress/s2/cmd/internal/fileio"
 	"github.com/klauspost/compress/s2/cmd/internal/filepathx"
 	"github.com/klauspost/compress/s2/cmd/internal/readahead"
 )
@@ -91,19 +92,13 @@ Options:`)
 			return
 		}
 		dstFilename := *out
-		if *safe {
-			_, err := os.Stat(dstFilename)
-			if !os.IsNotExist(err) {
-				exitErr(errors.New("destination files exists"))
-			}
-		}
-		dstFile, err := os.OpenFile(dstFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.ModePerm)
+		dstFile, err := fileio.CreateStdinOutput(dstFilename, *safe)
 		exitErr(err)
-		defer dstFile.Close()
 		bw := bufio.NewWriterSize(dstFile, 4<<20)
-		defer bw.Flush()
-		_, err = io.Copy(bw, r)
-		exitErr(err)
+		_, copyErr := io.Copy(bw, r)
+		flushErr := bw.Flush()
+		closeErr := dstFile.Close()
+		exitErr(errors.Join(copyErr, flushErr, closeErr))
 		return
 	}
 	var files []string
@@ -149,7 +144,7 @@ Options:`)
 					fmt.Print("Reading ", filename, "...")
 				}
 				// Input file.
-				file, size, _ := openFile(filename)
+				file, size, _, _ := openFile(filename)
 				b := make([]byte, size)
 				_, err := io.ReadFull(file, b)
 				exitErr(err)
@@ -221,13 +216,24 @@ Options:`)
 		}
 
 		func() {
-			var closeOnce sync.Once
 			if !*quiet {
 				fmt.Print("Decompressing ", filename, " -> ", dstFilename)
 			}
 			// Input file.
-			file, _, mode := openFile(filename)
-			defer closeOnce.Do(func() { file.Close() })
+			file, _, mode, inputInfo := openFile(filename)
+			var closeSourceOnce sync.Once
+			var closeSourceErr error
+			var inputReader io.Closer
+			closeSource := func() error {
+				closeSourceOnce.Do(func() {
+					if inputReader != nil {
+						closeSourceErr = inputReader.Close()
+					}
+					closeSourceErr = errors.Join(closeSourceErr, file.Close())
+				})
+				return closeSourceErr
+			}
+			defer closeSource()
 			var rc interface {
 				io.Reader
 				BytesRead() int64
@@ -249,53 +255,69 @@ Options:`)
 			if !block && tailBytes == 0 && offset == 0 {
 				ra, err := readahead.NewReaderSize(rc, 2, 4<<20)
 				exitErr(err)
-				defer ra.Close()
+				inputReader = ra
 				src = ra
 			} else {
 				src = rc
 			}
-			if *safe {
-				_, err := os.Stat(dstFilename)
-				if !os.IsNotExist(err) {
-					exitErr(errors.New("destination files exists"))
-				}
-			}
 			var out io.Writer
+			var dstFile *os.File
+			var bw *bufio.Writer
+			var tempName string
 			switch {
 			case *verify:
 				out = io.Discard
 			case *stdout:
 				out = os.Stdout
 			default:
-				dstFile, err := os.OpenFile(dstFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+				dstFile, tempName, err = fileio.CreateOutput(inputInfo, dstFilename, mode, *safe, *remove)
 				exitErr(err)
-				defer dstFile.Close()
 				out = dstFile
 				if !block {
-					bw := bufio.NewWriterSize(dstFile, 4<<20)
-					defer bw.Flush()
+					bw = bufio.NewWriterSize(dstFile, 4<<20)
 					out = bw
+				}
+			}
+			replaceInput := tempName != ""
+			finishOutput := func(outputErr error) error {
+				if replaceInput {
+					outputErr = errors.Join(outputErr, closeSource())
+				}
+				if dstFile != nil {
+					if replaceInput {
+						outputErr = fileio.FinishOutput(dstFile, tempName, dstFilename, mode, outputErr)
+					} else {
+						outputErr = errors.Join(outputErr, dstFile.Close())
+					}
+					dstFile = nil
+					tempName = ""
+				}
+				return outputErr
+			}
+			exitOutputErr := func(outputErr error) {
+				if outputErr != nil {
+					exitErr(finishOutput(outputErr))
 				}
 			}
 			var decoded io.Reader
 			start := time.Now()
 			if block {
 				all, err := io.ReadAll(src)
-				exitErr(err)
+				exitOutputErr(err)
 				b, err := s2.Decode(nil, all)
-				exitErr(err)
+				exitOutputErr(err)
 				decoded = bytes.NewReader(b)
 			} else {
 				r.Reset(src)
 				if tailBytes > 0 || offset > 0 {
 					rs, err := r.ReadSeeker(tailBytes > 0, nil)
-					exitErr(err)
+					exitOutputErr(err)
 					if tailBytes > 0 {
 						_, err = rs.Seek(-tailBytes, io.SeekEnd)
 					} else {
 						_, err = rs.Seek(offset, io.SeekStart)
 					}
-					exitErr(err)
+					exitOutputErr(err)
 				}
 				decoded = r
 			}
@@ -306,7 +328,11 @@ Options:`)
 			} else {
 				output, err = io.Copy(out, decoded)
 			}
-			exitErr(err)
+			var flushErr error
+			if bw != nil {
+				flushErr = bw.Flush()
+			}
+			exitErr(finishOutput(errors.Join(err, flushErr)))
 			if !*quiet {
 				elapsed := time.Since(start)
 				mbPerSec := (float64(output) / (1024 * 1024)) / (float64(elapsed) / (float64(time.Second)))
@@ -314,33 +340,30 @@ Options:`)
 				fmt.Printf(" %d -> %d [%.02f%%]; %.01fMB/s\n", rc.BytesRead(), output, pct, mbPerSec)
 			}
 			if *remove && !*verify {
-				closeOnce.Do(func() {
-					file.Close()
-					if !*quiet {
-						fmt.Println("Removing", filename)
-					}
-					err := os.Remove(filename)
-					exitErr(err)
-				})
+				exitErr(closeSource())
+				if !*quiet {
+					fmt.Println("Removing", filename)
+				}
+				exitErr(os.Remove(filename))
 			}
 		}()
 	}
 }
 
-func openFile(name string) (rc io.ReadCloser, size int64, mode os.FileMode) {
+func openFile(name string) (rc io.ReadCloser, size int64, mode os.FileMode, info os.FileInfo) {
 	if isHTTP(name) {
 		resp, err := http.Get(name)
 		exitErr(err)
 		if resp.StatusCode != http.StatusOK {
 			exitErr(fmt.Errorf("unexpected response status code %v, want 200 OK", resp.Status))
 		}
-		return resp.Body, resp.ContentLength, os.ModePerm
+		return resp.Body, resp.ContentLength, os.ModePerm, nil
 	}
 	file, err := os.Open(name)
 	exitErr(err)
 	st, err := file.Stat()
 	exitErr(err)
-	return file, st.Size(), st.Mode()
+	return file, st.Size(), st.Mode(), st
 }
 
 func cleanFileName(s string) string {

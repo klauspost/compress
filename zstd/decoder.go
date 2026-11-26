@@ -5,6 +5,7 @@
 package zstd
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/klauspost/compress/internal/pool"
 	"github.com/klauspost/compress/zstd/internal/xxhash"
 )
 
@@ -29,7 +31,7 @@ type Decoder struct {
 	publishedOptions atomic.Pointer[decoderOptions]
 
 	// Unreferenced decoders, ready for use.
-	decoders chan *blockDec
+	decoders *pool.Bounded[*blockDec]
 
 	// Current read position used for Reader functionality.
 	current decoderState
@@ -85,6 +87,10 @@ var (
 // can run multiple concurrent stateless decodes. It is even possible to
 // use stateless decodes while a stream is being decoded.
 //
+// Using one Decoder for a stream and DecodeAll at the same time can crash
+// or hang when either runs in a testing/synctest bubble; use separate Decoders.
+// Finish a stream (read to EOF, Reset or Close) in the bubble that started it.
+//
 // The Reset function can be used to initiate a new stream, which will considerably
 // reduce the allocations normally caused by NewReader.
 func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
@@ -111,12 +117,12 @@ func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
 	}
 
 	// Create decoders
-	d.decoders = make(chan *blockDec, o.concurrent)
+	d.decoders = pool.NewBounded[*blockDec](o.concurrent)
 	for i := 0; i < o.concurrent; i++ {
 		dec := newBlockDec(o.lowMem)
 		dec.localFrame = newFrameDec(o)
 		dec.localFrame.o.dicts = nil
-		d.decoders <- dec
+		d.decoders.Put(dec)
 	}
 	d.publishedOptions.Store(&o)
 
@@ -162,7 +168,7 @@ func (d *Decoder) Read(p []byte) (int, error) {
 		d.drainOutput()
 	}
 	if debugDecoder {
-		println("returning", n, d.current.err, len(d.decoders))
+		println("returning", n, d.current.err, d.decoders.Len())
 	}
 	return n, d.current.err
 }
@@ -208,6 +214,10 @@ func (d *Decoder) Reset(r io.Reader) error {
 
 		dst, err := d.DecodeAll(b, dst)
 		if !errors.Is(err, ErrDecoderSizeExceeded) {
+			// Consume the input, as streaming from the buffer would.
+			if buf, ok := r.(*bytes.Buffer); ok {
+				buf.Next(len(b))
+			}
 			if err == nil {
 				err = io.EOF
 			}
@@ -295,9 +305,9 @@ func (d *Decoder) drainOutput() {
 	}
 	if d.current.d != nil {
 		if debugDecoder {
-			printf("re-adding current decoder %p, decoders: %d", d.current.d, len(d.decoders))
+			printf("re-adding current decoder %p, decoders: %d", d.current.d, d.decoders.Len())
 		}
-		d.decoders <- d.current.d
+		d.decoders.Put(d.current.d)
 		d.current.d = nil
 		d.current.b = nil
 	}
@@ -310,11 +320,13 @@ func (d *Decoder) drainOutput() {
 			if debugDecoder {
 				printf("re-adding decoder %p", v.d)
 			}
-			d.decoders <- v.d
+			d.decoders.Put(v.d)
 		}
 	}
 	d.current.output = nil
 	d.current.flushed = true
+	// Release streamWg in the bubble that started the stream, if any.
+	d.streamWg.Wait()
 }
 
 // WriteTo writes data to w until there's no more data to write or when an error occurs.
@@ -363,7 +375,10 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 	}
 
 	// Grab a block decoder and frame decoder.
-	block := <-d.decoders
+	block, ok := d.decoders.Get()
+	if !ok {
+		return dst, ErrDecoderClosed
+	}
 	frame := block.localFrame
 	o := *d.publishedOptions.Load()
 	frame.setOptions(o)
@@ -383,7 +398,7 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 			frame.history.decoders.br.cursor = 0
 		}
 		frame.o.dicts = nil
-		d.decoders <- block
+		d.decoders.Put(block)
 	}()
 	frame.bBuf = input
 
@@ -537,7 +552,8 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 
 func (d *Decoder) nextBlockSync() (ok bool) {
 	if d.current.d == nil {
-		d.current.d = <-d.decoders
+		// Close sets d.current.err, so nextBlock does not get here after it.
+		d.current.d, _ = d.decoders.Get()
 	}
 	for len(d.current.b) == 0 {
 		if !d.syncStream.inFrame {
@@ -566,6 +582,7 @@ func (d *Decoder) nextBlockSync() (ok bool) {
 			println("History trimmed:", len(d.frame.history.b), "decoded already:", d.syncStream.decodedFrame)
 		}
 		histBefore := len(d.frame.history.b)
+		d.frame.history.expireDict(d.syncStream.decodedFrame)
 		d.current.err = d.current.d.decodeBuf(&d.frame.history)
 
 		if d.current.err != nil {
@@ -623,7 +640,7 @@ func (d *Decoder) stashDecoder() {
 		if debugDecoder {
 			printf("re-adding current decoder %p", d.current.d)
 		}
-		d.decoders <- d.current.d
+		d.decoders.Put(d.current.d)
 		d.current.d = nil
 	}
 }
@@ -641,11 +658,10 @@ func (d *Decoder) Close() {
 		d.current.cancel = nil
 	}
 	if d.decoders != nil {
-		close(d.decoders)
-		for dec := range d.decoders {
+		// Keep the closed pool, so a racing DecodeAll gets ErrDecoderClosed.
+		for _, dec := range d.decoders.Close() {
 			dec.Close()
 		}
-		d.decoders = nil
 	}
 	if d.current.d != nil {
 		d.current.d.Close()
@@ -795,6 +811,7 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 				fcs = block.async.fcs
 				decodedFrame = 0
 			}
+			hist.expireDict(decodedFrame)
 			do := decodeOutput{err: block.err, d: block}
 			switch block.Type {
 			case blockTypeRLE:
@@ -835,7 +852,10 @@ func (d *Decoder) startStreamDecoder(ctx context.Context, r io.Reader, output ch
 				if debugDecoder && hasErr {
 					println("executeSequences returned:", do.err)
 				}
-				do.b = block.dst
+				// On error, block.dst still holds this block decoder's previous output.
+				if !hasErr {
+					do.b = block.dst
+				}
 			}
 			if !hasErr {
 				decodedFrame += uint64(len(do.b))
@@ -913,9 +933,7 @@ decodeStream:
 			err = ErrDecoderSizeExceeded
 		}
 		if err != nil {
-			select {
-			case <-ctx.Done():
-			case dec := <-d.decoders:
+			if dec, ok := d.decoders.GetContext(ctx); ok {
 				dec.sendErr(err)
 				decodeBlock(dec)
 			}
@@ -924,13 +942,11 @@ decodeStream:
 
 		// Go through all blocks of the frame.
 		for {
-			var dec *blockDec
-			select {
-			case <-ctx.Done():
+			dec, ok := d.decoders.GetContext(ctx)
+			if !ok {
 				break decodeStream
-			case dec = <-d.decoders:
-				// Once we have a decoder, we MUST return it.
 			}
+			// Once we have a decoder, we MUST return it.
 			err := frame.next(dec)
 			if !historySent {
 				h := frame.history

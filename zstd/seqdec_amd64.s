@@ -239,11 +239,6 @@ sequenceDecs_decode_amd64_adjust_three:
 	LEAQ -1(R11), AX
 
 sequenceDecs_decode_amd64_adjust_test_temp_valid:
-	TESTQ AX, AX
-	JNZ   sequenceDecs_decode_amd64_adjust_temp_valid
-	MOVQ  $0x00000001, AX
-
-sequenceDecs_decode_amd64_adjust_temp_valid:
 	CMPQ    CX, $0x01
 	CMOVQNE R12, R13
 	MOVQ    R11, R12
@@ -536,11 +531,6 @@ sequenceDecs_decode_56_amd64_adjust_three:
 	LEAQ -1(R11), AX
 
 sequenceDecs_decode_56_amd64_adjust_test_temp_valid:
-	TESTQ AX, AX
-	JNZ   sequenceDecs_decode_56_amd64_adjust_temp_valid
-	MOVQ  $0x00000001, AX
-
-sequenceDecs_decode_56_amd64_adjust_temp_valid:
 	CMPQ    CX, $0x01
 	CMOVQNE R12, R13
 	MOVQ    R11, R12
@@ -844,11 +834,6 @@ sequenceDecs_decode_bmi2_adjust_three:
 	LEAQ -1(R10), R13
 
 sequenceDecs_decode_bmi2_adjust_test_temp_valid:
-	TESTQ R13, R13
-	JNZ   sequenceDecs_decode_bmi2_adjust_temp_valid
-	MOVQ  $0x00000001, R13
-
-sequenceDecs_decode_bmi2_adjust_temp_valid:
 	CMPQ    CX, $0x01
 	CMOVQNE R11, R12
 	MOVQ    R10, R11
@@ -1123,11 +1108,6 @@ sequenceDecs_decode_56_bmi2_adjust_three:
 	LEAQ -1(R10), R13
 
 sequenceDecs_decode_56_bmi2_adjust_test_temp_valid:
-	TESTQ R13, R13
-	JNZ   sequenceDecs_decode_56_bmi2_adjust_temp_valid
-	MOVQ  $0x00000001, R13
-
-sequenceDecs_decode_56_bmi2_adjust_temp_valid:
 	CMPQ    CX, $0x01
 	CMOVQNE R11, R12
 	MOVQ    R10, R11
@@ -2579,14 +2559,10 @@ sequenceDecs_decodeSync_amd64_adjust_offset_nonzero:
 	CMOVQEQ R14, AX
 	CMOVQEQ R15, R14
 	ADDQ    144(CX)(AX*8), R14
-	JNZ     sequenceDecs_decodeSync_amd64_adjust_temp_valid
-	MOVQ    $0x00000001, R14
-
-sequenceDecs_decodeSync_amd64_adjust_temp_valid:
-	CMPQ R13, $0x01
-	JZ   sequenceDecs_decodeSync_amd64_adjust_skip
-	MOVQ 152(CX), AX
-	MOVQ AX, 160(CX)
+	CMPQ    R13, $0x01
+	JZ      sequenceDecs_decodeSync_amd64_adjust_skip
+	MOVQ    152(CX), AX
+	MOVQ    AX, 160(CX)
 
 sequenceDecs_decodeSync_amd64_adjust_skip:
 	MOVQ 144(CX), AX
@@ -3133,14 +3109,10 @@ sequenceDecs_decodeSync_bmi2_adjust_offset_nonzero:
 	CMOVQEQ R14, R12
 	CMOVQEQ R15, R14
 	ADDQ    144(CX)(R12*8), R14
-	JNZ     sequenceDecs_decodeSync_bmi2_adjust_temp_valid
-	MOVQ    $0x00000001, R14
-
-sequenceDecs_decodeSync_bmi2_adjust_temp_valid:
-	CMPQ R13, $0x01
-	JZ   sequenceDecs_decodeSync_bmi2_adjust_skip
-	MOVQ 152(CX), R12
-	MOVQ R12, 160(CX)
+	CMPQ    R13, $0x01
+	JZ      sequenceDecs_decodeSync_bmi2_adjust_skip
+	MOVQ    152(CX), R12
+	MOVQ    R12, 160(CX)
 
 sequenceDecs_decodeSync_bmi2_adjust_skip:
 	MOVQ 144(CX), R12
@@ -3705,14 +3677,10 @@ sequenceDecs_decodeSync_safe_amd64_adjust_offset_nonzero:
 	CMOVQEQ R14, AX
 	CMOVQEQ R15, R14
 	ADDQ    144(CX)(AX*8), R14
-	JNZ     sequenceDecs_decodeSync_safe_amd64_adjust_temp_valid
-	MOVQ    $0x00000001, R14
-
-sequenceDecs_decodeSync_safe_amd64_adjust_temp_valid:
-	CMPQ R13, $0x01
-	JZ   sequenceDecs_decodeSync_safe_amd64_adjust_skip
-	MOVQ 152(CX), AX
-	MOVQ AX, 160(CX)
+	CMPQ    R13, $0x01
+	JZ      sequenceDecs_decodeSync_safe_amd64_adjust_skip
+	MOVQ    152(CX), AX
+	MOVQ    AX, 160(CX)
 
 sequenceDecs_decodeSync_safe_amd64_adjust_skip:
 	MOVQ 144(CX), AX
@@ -4344,14 +4312,10 @@ sequenceDecs_decodeSync_safe_bmi2_adjust_offset_nonzero:
 	CMOVQEQ R14, R12
 	CMOVQEQ R15, R14
 	ADDQ    144(CX)(R12*8), R14
-	JNZ     sequenceDecs_decodeSync_safe_bmi2_adjust_temp_valid
-	MOVQ    $0x00000001, R14
-
-sequenceDecs_decodeSync_safe_bmi2_adjust_temp_valid:
-	CMPQ R13, $0x01
-	JZ   sequenceDecs_decodeSync_safe_bmi2_adjust_skip
-	MOVQ 152(CX), R12
-	MOVQ R12, 160(CX)
+	CMPQ    R13, $0x01
+	JZ      sequenceDecs_decodeSync_safe_bmi2_adjust_skip
+	MOVQ    152(CX), R12
+	MOVQ    R12, 160(CX)
 
 sequenceDecs_decodeSync_safe_bmi2_adjust_skip:
 	MOVQ 144(CX), R12

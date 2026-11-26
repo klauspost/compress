@@ -13,7 +13,8 @@ import (
 )
 
 const (
-	// For encoding we only support up to
+	// For encoding we only support up to this,
+	// but blockEnc.highRatio allows 9 for literal and match lengths.
 	maxEncTableLog    = 8
 	maxEncTablesize   = 1 << maxTableLog
 	maxEncTableMask   = (1 << maxTableLog) - 1
@@ -76,6 +77,15 @@ func (s *fseEncoder) HistogramFinished(maxSymbol uint8, maxCount int) {
 	s.maxCount = maxCount
 	s.symbolLen = uint16(maxSymbol) + 1
 	s.clearCount = maxCount != 0
+}
+
+// copyFrom makes s a copy of o that shares no memory with it.
+func (s *fseEncoder) copyFrom(o *fseEncoder) {
+	ct := s.ct
+	*s = *o
+	s.ct.tableSymbol = append(ct.tableSymbol[:0], o.ct.tableSymbol...)
+	s.ct.stateTable = append(ct.stateTable[:0], o.ct.stateTable...)
+	s.ct.symbolTT = append(ct.symbolTT[:0], o.ct.symbolTT...)
 }
 
 // allocCtable will allocate tables needed for compression.
@@ -259,10 +269,15 @@ func (s *fseEncoder) setBits(transform []byte) {
 // the total is equal to the table size.
 // If successful, compression tables will also be made ready.
 func (s *fseEncoder) normalizeCount(length int) error {
+	return s.normalizeCountMax(length, maxEncTableLog)
+}
+
+// normalizeCountMax is normalizeCount with a table log of up to maxLog.
+func (s *fseEncoder) normalizeCountMax(length int, maxLog uint8) error {
 	if s.reUsed {
 		return nil
 	}
-	s.optimalTableLog(length)
+	s.optimalTableLog(length, maxLog)
 	var (
 		tableLog          = s.actualTableLog
 		scale             = 62 - uint64(tableLog)
@@ -428,8 +443,8 @@ func (s *fseEncoder) normalizeCount2(length int) error {
 }
 
 // optimalTableLog calculates and sets the optimal tableLog in s.actualTableLog
-func (s *fseEncoder) optimalTableLog(length int) {
-	tableLog := uint8(maxEncTableLog)
+func (s *fseEncoder) optimalTableLog(length int, maxLog uint8) {
+	tableLog := maxLog
 	minBitsSrc := highBit(uint32(length)) + 1
 	minBitsSymbols := highBit(uint32(s.symbolLen-1)) + 2
 	minBits := uint8(minBitsSymbols)
@@ -449,8 +464,8 @@ func (s *fseEncoder) optimalTableLog(length int) {
 	if tableLog < minEncTablelog {
 		tableLog = minEncTablelog
 	}
-	if tableLog > maxEncTableLog {
-		tableLog = maxEncTableLog
+	if tableLog > maxLog {
+		tableLog = maxLog
 	}
 	s.actualTableLog = tableLog
 }

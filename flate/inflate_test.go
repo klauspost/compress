@@ -416,8 +416,14 @@ func TestInflateCheckpointResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.Write(raw); err != nil {
-		t.Fatal(err)
+	// Flushing adds stored blocks, which checkpoints after them must account for.
+	for i := 0; i < len(raw); i += 64 << 10 {
+		if _, err := w.Write(raw[i:min(i+64<<10, len(raw))]); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.Flush(); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
@@ -429,12 +435,15 @@ func TestInflateCheckpointResume(t *testing.T) {
 	}
 	var cps []cpRec
 	var seenFinal bool
+	var final InflateCheckpoint
 	cb := func(cp InflateCheckpoint) {
 		if cp.Final {
 			if seenFinal {
 				t.Fatalf("final callback called twice")
 			}
 			seenFinal = true
+			final = cp
+			final.Window = bytes.Clone(cp.Window)
 			return
 		}
 		// Window is reused between callbacks, copy it.
@@ -467,7 +476,7 @@ func TestInflateCheckpointResume(t *testing.T) {
 		}
 	}
 
-	// Resume from every checkpoint (the final block no longer triggers cb).
+	// Resume from every non-final checkpoint.
 	sawBitOffset := false
 	for i, rec := range cps {
 		cp := rec.cp
@@ -489,6 +498,13 @@ func TestInflateCheckpointResume(t *testing.T) {
 	}
 	if !sawBitOffset {
 		t.Errorf("no non-zero BitOffset checkpoints — BitOffset resume path not exercised")
+	}
+
+	// The final checkpoint has nothing left to decode and must not read past the stream.
+	in := bytes.NewReader(append(bytes.Clone(compressed.Bytes()[final.CompressedOffset:]), "trailer"...))
+	got, err := io.ReadAll(NewReaderOpts(in, WithResumeFrom(final)))
+	if err != nil || len(got) != 0 || in.Len() != len("trailer") {
+		t.Errorf("resume from final: %d bytes, err %v, %d of trailer left", len(got), err, in.Len())
 	}
 }
 
@@ -546,6 +562,35 @@ func TestInflateCheckpointResetCP(t *testing.T) {
 	}
 	if want := raw[cp.UncompressedOffset:]; !bytes.Equal(got, want) {
 		t.Fatalf("ResetCP output mismatch (%d vs %d bytes)", len(got), len(want))
+	}
+}
+
+func TestInflateCheckpointBadBitOffset(t *testing.T) {
+	var compressed bytes.Buffer
+	w, err := NewWriter(&compressed, DefaultCompression)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Write(bytes.Repeat([]byte("the quick brown fox "), 100))
+	w.Close()
+
+	want := CorruptInputError(0)
+	for _, bitOff := range []uint8{8, 9, 255} {
+		cp := InflateCheckpoint{BitOffset: bitOff}
+		r := NewReaderOpts(bytes.NewReader(compressed.Bytes()), WithResumeFrom(cp))
+		if _, err := io.ReadAll(r); err != want {
+			t.Errorf("WithResumeFrom BitOffset %d: got %v, want %v", bitOff, err, want)
+		}
+		dec := NewReader(nil).(interface {
+			io.Reader
+			ResetCP(io.Reader, InflateCheckpoint) error
+		})
+		if err := dec.ResetCP(bytes.NewReader(compressed.Bytes()), cp); err != want {
+			t.Errorf("ResetCP BitOffset %d: got %v, want %v", bitOff, err, want)
+		}
+		if _, err := io.ReadAll(dec); err != want {
+			t.Errorf("Read after ResetCP BitOffset %d: got %v, want %v", bitOff, err, want)
+		}
 	}
 }
 

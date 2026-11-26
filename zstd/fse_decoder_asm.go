@@ -33,7 +33,6 @@ func buildDtable_asm(s *fseDecoder, ctx *buildDtableAsmContext) int
 const (
 	errorCorruptedNormalizedCounter = 1
 	errorNewStateTooBig             = 2
-	errorNewStateNoBits             = 3
 )
 
 // fillDtable fills the decoding table; see buildDtable.
@@ -56,11 +55,6 @@ func (s *fseDecoder) fillDtable(ext *symbolExt) error {
 			newState := decSymbol(ctx.errParam1)
 			size := ctx.errParam2
 			return fmt.Errorf("newState (%d) outside table size (%d)", newState, size)
-
-		case errorNewStateNoBits:
-			newState := decSymbol(ctx.errParam1)
-			oldState := decSymbol(ctx.errParam2)
-			return fmt.Errorf("newState (%d) == oldState (%d) and no bits", newState, oldState)
 
 		default:
 			return fmt.Errorf("buildDtable_asm returned unhandled nonzero code = %d", code)

@@ -117,10 +117,6 @@ func (s *sequenceDecs) initialize(br *bitReader, hist *history, out []byte) erro
 	s.maxBits = s.litLengths.fse.maxBits + s.offsets.fse.maxBits + s.matchLengths.fse.maxBits
 	s.windowSize = hist.windowSize
 	s.out = out
-	s.dict = nil
-	if hist.dict != nil {
-		s.dict = hist.dict.content
-	}
 	return nil
 }
 
@@ -359,11 +355,8 @@ func (s *sequenceDecs) decodeSync(hist []byte) error {
 				default:
 					temp = prev0 - 1
 				}
-
 				if temp == 0 {
-					// 0 is not valid; input is corrupted; force offset to 1
-					println("WARNING: temp was 0")
-					temp = 1
+					return fmt.Errorf("zero matchoff and matchlen (%d) > 0", ml)
 				}
 
 				if mo != 1 {
@@ -603,12 +596,6 @@ func (s *sequenceDecs) adjustOffset(offset, litLen int, offsetB uint8) int {
 		temp = s.prevOffset[0] - 1
 	} else {
 		temp = s.prevOffset[offset]
-	}
-
-	if temp == 0 {
-		// 0 is not valid; input is corrupted; force offset to 1
-		println("temp was 0")
-		temp = 1
 	}
 
 	if offset != 1 {
