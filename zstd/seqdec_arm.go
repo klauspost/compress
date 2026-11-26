@@ -1,4 +1,4 @@
-//go:build arm && arm.7 && !noasm && !nounsafe && gc
+//go:build linux && arm && arm.7 && !noasm && !nounsafe && gc
 
 package zstd
 
@@ -139,7 +139,7 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 			ctx.errMO, int(ctx.outPos)-startSize)
 	case errorNotEnoughLiterals:
 		return true, fmt.Errorf("unexpected literal count, want %d bytes, but only %d is available",
-			ctx.errLL, int(ctx.litLen-ctx.litPos)+int(ctx.errLL))
+			ctx.errLL, int(ctx.litLen-ctx.litPos))
 	case errorNotEnoughSpace, errorNotEnoughCapacity:
 		if errCode == errorNotEnoughCapacity && s.limitToCap {
 			return true, ErrDecoderSizeExceeded

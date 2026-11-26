@@ -1,15 +1,7 @@
-//go:build arm && arm.7 && !noasm && !nounsafe && gc
+//go:build linux && arm && arm.7 && !noasm && !nounsafe && gc
 
 #include "textflag.h"
 #include "go_asm.h"
-
-// Linux enables ARMv7 unaligned single-word and halfword accesses in normal RAM.
-#ifdef GOOS_linux
-#define ARM_UNALIGNED 1
-#endif
-#ifdef GOOS_android
-#define ARM_UNALIGNED 1
-#endif
 
 // func sequenceDecs_decodeSync_arm(ctx *armSeqCtx) int32
 //
@@ -25,11 +17,9 @@
 //   R3  cursor            R7  out write ptr     R8  literals read ptr
 //   R4 R5 R6 R9 R11 R12   scratch
 //
-// R10 (g) and R11 (the assembler's REGTMP) must not hold long-lived values:
-// the assembler itself clobbers R11 when it needs a temporary for a large
-// immediate, and the runtime requires R10 to remain valid for signal handling.
-// In particular, AND $511 and CMP $131074 may overwrite R11; reload any
-// scratch value held there after these pseudo-instructions.
+// R10 (g) must never be written at all; the runtime requires it for signal
+// handling. R11 is the assembler's REGTMP and is clobbered on large immediates
+// (such as AND $511 and CMP $131074), so do not hold long-lived values there.
 //
 // This file is hand-written on purpose. The other zstd assembly is lowered by
 // the honeycombio/avo fork from zstd/_generate, but avo has no 32-bit ARM
@@ -37,8 +27,8 @@
 // TestArmAsmMatchesGo (run under qemu-arm, see zstd/seqdec_arm_test.go) is the
 // reference check for changes here. See the exception in AGENTS.md.
 //
-// Linux/Android use unaligned loads and copies. Elsewhere, refills use byte
-// loads and wide copies require both addresses to be word-aligned.
+// Gated on linux (which includes android), where user space allows unaligned
+// ARMv7 single-word and halfword accesses in normal RAM.
 
 #define CTXP      ctxp-4(SP)
 #define OUTBASE   outbase-8(SP)
@@ -146,20 +136,9 @@ mainloop:
 	SUB $4, R3
 	MOVW INBASE, R9
 	ADD R3, R9, R9
-#ifdef ARM_UNALIGNED
 	MOVW R2, R12
 	MOVW (R9), R2
 	MOVW R12, R1
-#else
-	MOVW R2, R1
-	MOVBU (R9), R2
-	MOVBU 1(R9), R12
-	ORR R12<<8, R2
-	MOVBU 2(R9), R12
-	ORR R12<<16, R2
-	MOVBU 3(R9), R12
-	ORR R12<<24, R2
-#endif
 	SUB $32, R0
 	B of_fill_done
 of_fill_done_byte:
@@ -220,20 +199,9 @@ of_gb_shift:
 	SUB $4, R3
 	MOVW INBASE, R9
 	ADD R3, R9, R9
-#ifdef ARM_UNALIGNED
 	MOVW R2, R12
 	MOVW (R9), R2
 	MOVW R12, R1
-#else
-	MOVW R2, R1
-	MOVBU (R9), R2
-	MOVBU 1(R9), R12
-	ORR R12<<8, R2
-	MOVBU 2(R9), R12
-	ORR R12<<16, R2
-	MOVBU 3(R9), R12
-	ORR R12<<24, R2
-#endif
 	SUB $32, R0
 	B ml_nofill
 ml2_byte:
@@ -349,9 +317,7 @@ adj_idx2:
 	MOVW PREV2, R11
 adj_temp:
 	CMP $0, R11
-	BNE adj_tok
-	MOVW $1, R11
-adj_tok:
+	BEQ err_mismatch
 	CMP $1, R6
 	BEQ adj_noshift
 	MOVW PREV1, R9
@@ -372,20 +338,9 @@ adj_done:
 	SUB $4, R3
 	MOVW INBASE, R9
 	ADD R3, R9, R9
-#ifdef ARM_UNALIGNED
 	MOVW R2, R12
 	MOVW (R9), R2
 	MOVW R12, R1
-#else
-	MOVW R2, R1
-	MOVBU (R9), R2
-	MOVBU 1(R9), R12
-	ORR R12<<8, R2
-	MOVBU 2(R9), R12
-	ORR R12<<16, R2
-	MOVBU 3(R9), R12
-	ORR R12<<24, R2
-#endif
 	SUB $32, R0
 	B st_fill_done
 st_fill_done_byte:
@@ -433,11 +388,6 @@ st_fill_done:
 	BHI err_mllen
 
 	// ---- copy literals ----
-#ifndef ARM_UNALIGNED
-	ORR R7, R8, R4
-	TST $3, R4
-	BNE lit_t1
-#endif
 	CMP $8, R9
 	BLO lit_tail
 lit_l8:
@@ -473,17 +423,11 @@ lit_t1:
 	MOVB R4, (R7)
 	ADD $1, R7
 	ADD $1, R8
-#ifndef ARM_UNALIGNED
-	SUB $1, R9
-	B lit_t1
-#endif
 lit_done:
 
 	// ---- match ----
 	MOVW MOV, R6
 	MOVW MLV, R9
-	CMP $0, R9
-	BEQ seq_done
 	CMP $0, R6
 	BEQ err_mismatch
 	MOVW OUTBASE, R11
@@ -510,11 +454,6 @@ lit_done:
 	BLS hist_all
 	// copy v bytes, then the rest from out
 	MOVW R4, R5
-#ifndef ARM_UNALIGNED
-	ORR R7, R12, R4
-	TST $3, R4
-	BNE hist_l_t1
-#endif
 	CMP $8, R5
 	BLO hist_l_tail
 hist_l8:
@@ -550,10 +489,6 @@ hist_l_t1:
 	MOVB R4, (R7)
 	ADD $1, R12
 	ADD $1, R7
-#ifndef ARM_UNALIGNED
-	SUB $1, R5
-	B hist_l_t1
-#endif
 hist_l_done:
 	MOVW MLV, R9
 	MOVW TMP1, R4
@@ -562,11 +497,6 @@ hist_l_done:
 	B match_out
 hist_all:
 	MOVW R9, R5
-#ifndef ARM_UNALIGNED
-	ORR R7, R12, R4
-	TST $3, R4
-	BNE hist_a_t1
-#endif
 	CMP $8, R5
 	BLO hist_a_tail
 hist_a8:
@@ -601,23 +531,12 @@ hist_a_t1:
 	MOVBU (R12), R4
 	MOVB R4, (R7)
 	ADD $1, R7
-#ifdef ARM_UNALIGNED
 	B seq_done
-#else
-	ADD $1, R12
-	SUB $1, R5
-	B hist_a_t1
-#endif
 
 match_out:
 	// src = outPtr - mo
 	MOVW R7, R12
 	SUB R6, R12, R12
-#ifndef ARM_UNALIGNED
-	ORR R7, R12, R4
-	TST $3, R4
-	BNE match_ovl
-#endif
 	CMP $8, R6
 	BLO match_ovl
 match_l8:
@@ -705,13 +624,10 @@ upd_gb_shift:
 	MOVW $32, R12
 	SUB R5, R12, R12
 	SRL R12, R4
-	MOVW R4, TMP1
 	B upd_ll
 
 upd_zero:
 	MOVW $0, R4
-	MOVW R4, TMP1
-	B upd_ll
 
 upd_ll:
 	// ll: low = bits >> ((ofNb+mlNb)&31) then & mask(llNb)

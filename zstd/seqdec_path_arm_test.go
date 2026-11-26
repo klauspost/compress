@@ -1,4 +1,4 @@
-//go:build arm && arm.7 && !noasm && !nounsafe && gc
+//go:build linux && arm && arm.7 && !noasm && !nounsafe && gc
 
 package zstd
 
