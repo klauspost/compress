@@ -471,6 +471,8 @@ func (e *Encoder) ReadFrom(r io.Reader) (n int64, err error) {
 			if debugEncoder {
 				println("ReadFrom: got error:", err)
 			}
+			// The goroutine encoding the previous block may set err too.
+			e.state.wg.Wait()
 			e.state.err = err
 			return n, err
 		}
