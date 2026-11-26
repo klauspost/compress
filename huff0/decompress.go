@@ -157,6 +157,7 @@ func ReadTable(in []byte, s *Scratch) (s2 *Scratch, remain []byte, err error) {
 	cTable = cTable[:maxSymbolValue+1]
 	s.prevTable = cTable[:s.symbolLen]
 	s.prevTableLog = s.actualTableLog
+	s.canRestore = false
 
 	for n, w := range s.huffWeight[:s.symbolLen] {
 		if w == 0 {

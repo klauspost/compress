@@ -10,6 +10,7 @@ import (
 	"sort"
 
 	"github.com/klauspost/compress/huff0"
+	"github.com/klauspost/compress/zstd/internal/xxhash"
 )
 
 type dict struct {
@@ -162,10 +163,12 @@ func InspectDictionary(b []byte) (interface {
 }
 
 type BuildDictOptions struct {
-	// Dictionary ID.
+	// Dictionary ID. If 0, one is derived from the dictionary,
+	// outside the ranges the format reserves.
 	ID uint32
 
 	// Content to use to create dictionary tables.
+	// Only the first 128 KiB of each entry is used.
 	Contents [][]byte
 
 	// History to use for all blocks.
@@ -271,6 +274,8 @@ func BuildDict(o BuildDictOptions) ([]byte, error) {
 		if len(b) < 8 {
 			continue
 		}
+		// Encode takes a single block. Like zstd's trainer, use the start of larger samples.
+		b = b[:min(len(b), maxCompressedBlockSize)]
 		nUsed++
 		enc.Reset(&d, true)
 		enc.Encode(&block, b)
@@ -284,26 +289,16 @@ func BuildDict(o BuildDictOptions) ([]byte, error) {
 		addHist(&ll, block.coders.llEnc.Histogram())
 		addHist(&ml, block.coders.mlEnc.Histogram())
 		addHist(&of, block.coders.ofEnc.Histogram())
+		// Repeat codes reference the training Offsets, then earlier sequences.
+		rep := [3]uint32{uint32(o.Offsets[0]), uint32(o.Offsets[1]), uint32(o.Offsets[2])}
 		for i, seq := range block.sequences {
 			if i > 3 {
 				break
 			}
-			offset := seq.offset
-			if offset == 0 {
-				continue
-			}
-			if int(offset) >= len(o.History) {
-				continue
-			}
-			if offset > 3 {
-				newOffsets[offset-3]++
-			} else {
-				// Repeat codes reference the training Offsets. Skip unset
-				// (zero) entries so they are not ranked as real offsets.
-				prev := o.Offsets[offset-1]
-				if prev > 0 {
-					newOffsets[uint32(prev)]++
-				}
+			rep = ultraNewRep(rep, seq.offset, seq.litLen == 0)
+			// Skip unset (zero) entries so they are not ranked as real offsets.
+			if off := rep[0]; off > 0 && off < uint32(len(o.History)) {
+				newOffsets[off]++
 			}
 		}
 	}
@@ -563,6 +558,12 @@ func BuildDict(o BuildDictOptions) ([]byte, error) {
 	out.Write(binary.LittleEndian.AppendUint32(nil, uint32(o.Offsets[1])))
 	out.Write(binary.LittleEndian.AppendUint32(nil, uint32(o.Offsets[2])))
 	out.Write(hist)
+	if o.ID == 0 {
+		// As the reference does from the content, but hashing the tables
+		// too, so dictionaries built at other levels get other IDs.
+		b := out.Bytes()
+		binary.LittleEndian.PutUint32(b[4:8], uint32(xxhash.Sum64(b[8:])%((1<<31)-32768))+32768)
+	}
 	if _, err := loadDict(out.Bytes()); err != nil {
 		return nil, fmt.Errorf("built dictionary failed validation: %w", err)
 	}

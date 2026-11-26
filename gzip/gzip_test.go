@@ -372,6 +372,7 @@ func TestFile1x6(t *testing.T)  { testFile(1, 6, t) }
 func TestFile1x7(t *testing.T)  { testFile(1, 7, t) }
 func TestFile1x8(t *testing.T)  { testFile(1, 8, t) }
 func TestFile1x9(t *testing.T)  { testFile(1, 9, t) }
+func TestFile1x10(t *testing.T) { testFile(1, 10, t) }
 func TestFile10(t *testing.T)   { testFile(10, DefaultCompression, t) }
 
 func TestFile50(t *testing.T) {
@@ -504,15 +505,16 @@ func TestDeterministicLM2(t *testing.T) { testDeterm(-2, t) }
 
 // Level 0 is not deterministic since it depends on the size of each write.
 // func TestDeterministicL0(t *testing.T)  { testDeterm(0, t) }
-func TestDeterministicL1(t *testing.T) { testDeterm(1, t) }
-func TestDeterministicL2(t *testing.T) { testDeterm(2, t) }
-func TestDeterministicL3(t *testing.T) { testDeterm(3, t) }
-func TestDeterministicL4(t *testing.T) { testDeterm(4, t) }
-func TestDeterministicL5(t *testing.T) { testDeterm(5, t) }
-func TestDeterministicL6(t *testing.T) { testDeterm(6, t) }
-func TestDeterministicL7(t *testing.T) { testDeterm(7, t) }
-func TestDeterministicL8(t *testing.T) { testDeterm(8, t) }
-func TestDeterministicL9(t *testing.T) { testDeterm(9, t) }
+func TestDeterministicL1(t *testing.T)  { testDeterm(1, t) }
+func TestDeterministicL2(t *testing.T)  { testDeterm(2, t) }
+func TestDeterministicL3(t *testing.T)  { testDeterm(3, t) }
+func TestDeterministicL4(t *testing.T)  { testDeterm(4, t) }
+func TestDeterministicL5(t *testing.T)  { testDeterm(5, t) }
+func TestDeterministicL6(t *testing.T)  { testDeterm(6, t) }
+func TestDeterministicL7(t *testing.T)  { testDeterm(7, t) }
+func TestDeterministicL8(t *testing.T)  { testDeterm(8, t) }
+func TestDeterministicL9(t *testing.T)  { testDeterm(9, t) }
+func TestDeterministicL10(t *testing.T) { testDeterm(10, t) }
 
 func testDeterm(level int, t *testing.T) {
 	var length = 500000
@@ -618,7 +620,7 @@ func benchmarkGzipN(b *testing.B, level int) {
 
 func BenchmarkCompressAllocations(b *testing.B) {
 	payload := []byte(strings.Repeat("Tiny payload", 20))
-	for j := -2; j <= 9; j++ {
+	for j := -2; j <= UltraCompression; j++ {
 		b.Run("level("+strconv.Itoa(j)+")", func(b *testing.B) {
 			b.Run("gzip", func(b *testing.B) {
 				b.ReportAllocs()
@@ -652,4 +654,244 @@ func BenchmarkCompressAllocationsSingle(b *testing.B) {
 			w.Close()
 		}
 	})
+}
+
+// shortFooterWriter accepts the first 4 bytes of the 8-byte CRC/ISIZE
+// footer and reports success, violating io.Writer's contract. Close must
+// still surface the truncation instead of reporting a complete stream.
+type shortFooterWriter struct{ buf bytes.Buffer }
+
+func (w *shortFooterWriter) Write(p []byte) (int, error) {
+	if len(p) == 8 {
+		return w.buf.Write(p[:4])
+	}
+	return w.buf.Write(p)
+}
+
+func TestWriterCloseReportsShortFooterWrite(t *testing.T) {
+	w := NewWriter(&shortFooterWriter{})
+	if _, err := w.Write([]byte("payload")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	err := w.Close()
+	if err == nil {
+		t.Fatal("Close returned nil after a short footer write; truncated gzip stream reported as success")
+	}
+	if !strings.Contains(err.Error(), "short write") {
+		t.Fatalf("expected a short write error, got %v", err)
+	}
+}
+
+// A writer that fails outright must keep that exact error.
+type errFooterWriter struct{ err error }
+
+func (w *errFooterWriter) Write(p []byte) (int, error) {
+	if len(p) == 8 {
+		return 0, w.err
+	}
+	return len(p), nil
+}
+
+func TestWriterClosePreservesFooterError(t *testing.T) {
+	want := io.ErrClosedPipe
+	w := NewWriter(&errFooterWriter{err: want})
+	if _, err := w.Write([]byte("payload")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := w.Close(); err != want {
+		t.Fatalf("Close: got %v, want %v", err, want)
+	}
+}
+
+// TestHeaderXFL checks the compression flags in the gzip header.
+func TestHeaderXFL(t *testing.T) {
+	for _, tc := range []struct{ level, xfl int }{
+		{BestSpeed, 4},
+		{DefaultCompression, 0},
+		{BestCompression, 2},
+		{UltraCompression, 2},
+	} {
+		var buf bytes.Buffer
+		w, err := NewWriterLevel(&buf, tc.level)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.Write([]byte("hello"))
+		w.Close()
+		if got := int(buf.Bytes()[8]); got != tc.xfl {
+			t.Errorf("level %d: XFL %d, want %d", tc.level, got, tc.xfl)
+		}
+	}
+}
+
+// failOnCallWriter fails on a single 0-based Write call while letting earlier
+// and later writes succeed, to catch callers that forget to record z.err.
+type failOnCallWriter struct {
+	buf      bytes.Buffer
+	calls    int
+	failCall int
+	err      error
+}
+
+func (w *failOnCallWriter) Write(p []byte) (int, error) {
+	call := w.calls
+	w.calls++
+	if call == w.failCall {
+		return 0, w.err
+	}
+	return w.buf.Write(p)
+}
+
+func TestStatelessWriteError(t *testing.T) {
+	payload := []byte("hello stateless world")
+
+	t.Run("write-body", func(t *testing.T) {
+		dst := &failOnCallWriter{failCall: 1, err: io.ErrClosedPipe}
+		w, err := NewWriterLevel(dst, StatelessCompression)
+		if err != nil {
+			t.Fatalf("NewWriterLevel: %v", err)
+		}
+		if n, err := w.Write(payload); n != 0 || err != io.ErrClosedPipe {
+			t.Fatalf("Write: got (%d, %v), want (0, %v)", n, err, io.ErrClosedPipe)
+		}
+		callsAfterFail := dst.calls
+		lenAfterFail := dst.buf.Len()
+
+		if n, err := w.Write([]byte("more")); n != 0 || err != io.ErrClosedPipe {
+			t.Fatalf("second Write: got (%d, %v), want (0, %v)", n, err, io.ErrClosedPipe)
+		}
+		if err := w.Flush(); err != io.ErrClosedPipe {
+			t.Fatalf("Flush: got %v, want %v", err, io.ErrClosedPipe)
+		}
+		if err := w.Close(); err != io.ErrClosedPipe {
+			t.Fatalf("Close: got %v, want %v", err, io.ErrClosedPipe)
+		}
+		if dst.calls != callsAfterFail || dst.buf.Len() != lenAfterFail {
+			t.Fatalf("underlying writer mutated after failure: calls %d->%d, len %d->%d",
+				callsAfterFail, dst.calls, lenAfterFail, dst.buf.Len())
+		}
+
+		var okBuf bytes.Buffer
+		w.Reset(&okBuf)
+		if n, err := w.Write(payload); n != len(payload) || err != nil {
+			t.Fatalf("Write after Reset: got (%d, %v), want (%d, nil)", n, err, len(payload))
+		}
+		if err := w.Close(); err != nil {
+			t.Fatalf("Close after Reset: %v", err)
+		}
+		r, err := NewReader(&okBuf)
+		if err != nil {
+			t.Fatalf("NewReader: %v", err)
+		}
+		got, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatalf("ReadAll: %v", err)
+		}
+		if !bytes.Equal(got, payload) {
+			t.Fatalf("roundtrip after Reset: got %q, want %q", got, payload)
+		}
+	})
+
+	t.Run("close-empty-lazy-write", func(t *testing.T) {
+		dst := &failOnCallWriter{failCall: 1, err: io.ErrClosedPipe}
+		w, err := NewWriterLevel(dst, StatelessCompression)
+		if err != nil {
+			t.Fatalf("NewWriterLevel: %v", err)
+		}
+		if err := w.Close(); err != io.ErrClosedPipe {
+			t.Fatalf("Close: got %v, want %v", err, io.ErrClosedPipe)
+		}
+		callsAfterFail := dst.calls
+		lenAfterFail := dst.buf.Len()
+		if err := w.Close(); err != io.ErrClosedPipe {
+			t.Fatalf("second Close: got %v, want %v", err, io.ErrClosedPipe)
+		}
+		if n, err := w.Write(payload); n != 0 || err != io.ErrClosedPipe {
+			t.Fatalf("Write after failed Close: got (%d, %v), want (0, %v)", n, err, io.ErrClosedPipe)
+		}
+		if dst.calls != callsAfterFail || dst.buf.Len() != lenAfterFail {
+			t.Fatalf("underlying writer mutated after failure: calls %d->%d, len %d->%d",
+				callsAfterFail, dst.calls, lenAfterFail, dst.buf.Len())
+		}
+	})
+}
+
+func TestWriteAfterClose(t *testing.T) {
+	writers := []struct {
+		name string
+		open func(io.Writer) (*Writer, error)
+	}{
+		{"stateless", func(w io.Writer) (*Writer, error) { return NewWriterLevel(w, StatelessCompression) }},
+		{"no-compression", func(w io.Writer) (*Writer, error) { return NewWriterLevel(w, NoCompression) }},
+		{"best-speed", func(w io.Writer) (*Writer, error) { return NewWriterLevel(w, BestSpeed) }},
+		{"default", func(w io.Writer) (*Writer, error) { return NewWriterLevel(w, DefaultCompression) }},
+		{"best-compression", func(w io.Writer) (*Writer, error) { return NewWriterLevel(w, BestCompression) }},
+		{"ultra", func(w io.Writer) (*Writer, error) { return NewWriterLevel(w, UltraCompression) }},
+		{"window-1024", func(w io.Writer) (*Writer, error) { return NewWriterWindow(w, 1024) }},
+	}
+
+	const wantClosedErr = "gzip: Write after Close"
+	payload := []byte("hello gzip")
+	for _, tc := range writers {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			w, err := tc.open(&buf)
+			if err != nil {
+				t.Fatalf("open: %v", err)
+			}
+			if _, err := w.Write(payload); err != nil {
+				t.Fatalf("Write: %v", err)
+			}
+			if err := w.Close(); err != nil {
+				t.Fatalf("Close: %v", err)
+			}
+			closedLen := buf.Len()
+
+			if n, err := w.Write([]byte("after close")); n != 0 || err == nil || err.Error() != wantClosedErr {
+				t.Fatalf("Write after Close: got (%d, %v), want (0, %q)", n, err, wantClosedErr)
+			}
+			if buf.Len() != closedLen {
+				t.Fatalf("Write after Close appended %d bytes past trailer", buf.Len()-closedLen)
+			}
+			if err := w.Flush(); err != nil {
+				t.Fatalf("Flush after Close: got %v, want nil", err)
+			}
+			if err := w.Close(); err != nil {
+				t.Fatalf("second Close: got %v, want nil", err)
+			}
+
+			r, err := NewReader(bytes.NewReader(buf.Bytes()))
+			if err != nil {
+				t.Fatalf("NewReader: %v", err)
+			}
+			got, err := io.ReadAll(r)
+			if err != nil {
+				t.Fatalf("ReadAll: %v", err)
+			}
+			if !bytes.Equal(got, payload) {
+				t.Fatalf("roundtrip: got %q, want %q", got, payload)
+			}
+
+			var buf2 bytes.Buffer
+			w.Reset(&buf2)
+			reused := []byte("reused gzip")
+			if _, err := w.Write(reused); err != nil {
+				t.Fatalf("Write after Reset: %v", err)
+			}
+			if err := w.Close(); err != nil {
+				t.Fatalf("Close after Reset: %v", err)
+			}
+			r2, err := NewReader(&buf2)
+			if err != nil {
+				t.Fatalf("NewReader after Reset: %v", err)
+			}
+			got2, err := io.ReadAll(r2)
+			if err != nil {
+				t.Fatalf("ReadAll after Reset: %v", err)
+			}
+			if !bytes.Equal(got2, reused) {
+				t.Fatalf("roundtrip after Reset: got %q, want %q", got2, reused)
+			}
+		})
+	}
 }

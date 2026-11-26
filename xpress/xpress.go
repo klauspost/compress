@@ -332,6 +332,9 @@ func AppendHDecompressed(out, in []byte, decompressed_size int) ([]byte, error) 
 		if len(out)-base > MaxSize-mlen {
 			return out[:base], errTooLarge
 		}
+		if mlen > decompressed_size-(len(out)-base) {
+			return out[:base], errCorrupt
+		}
 		start := len(out) - moff
 		for j := 0; j < mlen; j++ {
 			out = append(out, out[start+j])

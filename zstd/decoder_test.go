@@ -22,12 +22,15 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	// "github.com/DataDog/zstd"
 	// zstd "github.com/valyala/gozstd"
 
+	"github.com/klauspost/compress/internal/pool"
 	"github.com/klauspost/compress/internal/silesiatest"
 	"github.com/klauspost/compress/zstd/internal/xxhash"
 )
@@ -2384,6 +2387,48 @@ func timeout(after time.Duration) (cancel func()) {
 	}
 }
 
+// A destination prefix is not part of the decoded-size limit.
+func TestDecodeAllPrefixWithMaxMemory(t *testing.T) {
+	const maxMemory = 1024
+	prefix := bytes.Repeat([]byte("p"), 2*maxMemory)
+	enc, err := NewWriter(nil, WithZeroFrames(true), WithSingleSegment(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer enc.Close()
+	for _, limitToCap := range []bool{false, true} {
+		for _, tt := range []struct {
+			name   string
+			size   int
+			frames int
+		}{
+			{"empty", 0, 1},
+			{"single", 256, 1},
+			{"concatenated", 512, 2},
+		} {
+			t.Run(fmt.Sprintf("cap=%v/%s", limitToCap, tt.name), func(t *testing.T) {
+				dec, err := NewReader(nil, WithDecoderMaxMemory(maxMemory), WithDecodeAllCapLimit(limitToCap), WithDecoderConcurrency(1))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer dec.Close()
+				input := bytes.Repeat([]byte("abcd"), tt.size/4)
+				compressed := bytes.Repeat(enc.EncodeAll(input, nil), tt.frames)
+				dst := make([]byte, len(prefix), len(prefix)+2*maxMemory)
+				copy(dst, prefix)
+				got, err := dec.DecodeAll(compressed, dst)
+				if err != nil {
+					t.Fatalf("DecodeAll error = %v", err)
+				}
+				want := append(append([]byte(nil), prefix...), bytes.Repeat(input, tt.frames)...)
+				if !bytes.Equal(got, want) {
+					t.Fatal("decoded output does not match prefix and payload")
+				}
+			})
+		}
+	}
+}
+
 func TestWithDecodeAllCapLimit(t *testing.T) {
 	var encs []*Encoder
 	var decs []*Decoder
@@ -3041,6 +3086,90 @@ func TestDecoderBufferShortcutFallsBackToStreaming(t *testing.T) {
 	}
 }
 
+// TestDecoderResetConsumesBuffer checks that a *bytes.Buffer is drained once
+// the stream is read, on each decode path of Reset.
+func TestDecoderResetConsumesBuffer(t *testing.T) {
+	input := make([]byte, 4<<20)
+	enc, err := NewWriter(nil, WithWindowSize(64<<10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	compressed := enc.EncodeAll(input, nil)
+	for _, tc := range []struct {
+		name string
+		opts []DOption
+	}{
+		{"in-memory", nil},
+		{"stream", []DOption{WithDecodeBuffersBelow(0)}},
+		// The output exceeds the in-memory limit, so Reset streams instead.
+		{"fallback", []DOption{WithDecoderMaxMemory(1 << 20)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := bytes.NewBuffer(compressed)
+			dec, err := NewReader(src, tc.opts...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer dec.Close()
+			got, err := io.ReadAll(dec)
+			if err != nil || !bytes.Equal(got, input) {
+				t.Fatalf("got %d bytes, %v; want %d bytes", len(got), err, len(input))
+			}
+			if src.Len() != 0 {
+				t.Fatalf("source has %d unread bytes", src.Len())
+			}
+		})
+	}
+}
+
+// TestDecoderExecuteErrorNoOutput checks that a block whose sequences fail to
+// execute produces no output. The concurrent decoder used to return the block
+// decoder's output from an earlier stream before the error.
+func TestDecoderExecuteErrorNoOutput(t *testing.T) {
+	// One compressed block: 3 literals, then a match at offset 1000.
+	bad := []byte{
+		0x28, 0xb5, 0x2f, 0xfd, 0x60, 0xeb, 0x02, 0x65, 0x00, 0x00, 0x18,
+		0x61, 0x62, 0x63, 0x01, 0x54, 0x03, 0x09, 0x2d, 0xe5, 0xd7, 0x07,
+	}
+	var input bytes.Buffer
+	for i := 0; input.Len() < 1<<20; i++ {
+		fmt.Fprintf(&input, "record %d\n", i)
+	}
+	enc, err := NewWriter(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	good := enc.EncodeAll(input.Bytes(), nil)
+	for _, concurrent := range []int{1, 4} {
+		for _, writeTo := range []bool{false, true} {
+			t.Run(fmt.Sprintf("concurrent=%d,writeTo=%v", concurrent, writeTo), func(t *testing.T) {
+				dec, err := NewReader(bytes.NewReader(good), WithDecoderConcurrency(concurrent))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer dec.Close()
+				got, err := io.ReadAll(dec)
+				if err != nil || !bytes.Equal(got, input.Bytes()) {
+					t.Fatalf("got %d bytes, %v; want %d bytes", len(got), err, input.Len())
+				}
+				if err := dec.Reset(bytes.NewReader(bad)); err != nil {
+					t.Fatal(err)
+				}
+				if writeTo {
+					var buf bytes.Buffer
+					_, err = dec.WriteTo(&buf)
+					got = buf.Bytes()
+				} else {
+					got, err = io.ReadAll(dec)
+				}
+				if err == nil || len(got) != 0 {
+					t.Fatalf("got %d bytes, %v; want no output and an error", len(got), err)
+				}
+			})
+		}
+	}
+}
+
 // TestStreamRingWraps streams frames long enough to wrap the decoder's
 // history ring many times, so matches start in the previous lap and continue
 // into the current one. "mixed" has back-references at random distances up
@@ -3284,6 +3413,56 @@ func TestDecodeAllExactCapacity(t *testing.T) {
 	}
 }
 
+// TestDecoderTableLogLimits checks the accuracy log limits of sequence
+// tables: offset tables may use up to log 8, the others up to log 9.
+func TestDecoderTableLogLimits(t *testing.T) {
+	// Two symbols with equal probability, at log 8 and log 9.
+	const log8, log9 = "\x13\xf8\x0f", "\x14\xf0\x3f"
+	// frame returns a raw block of 8 bytes, then a block with one sequence
+	// without literals, with offset code 0 and match length code 0 from the
+	// given tables. Initial states of 0 select symbol 0.
+	frame := func(modes byte, tables, bits string) []byte {
+		blk := "\x00\x01" + string(modes) + tables + bits
+		hdr := string([]byte{byte(len(blk)<<3 | 5), 0, 0})
+		return []byte("\x28\xb5\x2f\xfd\x00\x18\x40\x00\x00abcdefgh" + hdr + blk)
+	}
+	tests := []struct {
+		name string
+		in   []byte
+		want string // empty when decoding must fail
+	}{
+		// Offsets in FSE mode, the others in RLE mode.
+		{"offsets-log-8", frame(0x64, "\x00"+log8+"\x00", "\x00\x01"), "abcdefghefg"},
+		{"offsets-log-9", frame(0x64, "\x00"+log9+"\x00", "\x00\x02"), ""},
+		// Match lengths in FSE mode, the others in RLE mode.
+		{"match-lengths-log-9", frame(0x58, "\x00\x00"+log9, "\x00\x02"), "abcdefghefg"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, c := range []int{1, 4} {
+				dec, err := NewReader(nil, WithDecoderConcurrency(c))
+				if err != nil {
+					t.Fatal(err)
+				}
+				check := func(what string, got []byte, err error) {
+					t.Helper()
+					if tt.want == "" && err == nil || tt.want != "" && (err != nil || string(got) != tt.want) {
+						t.Errorf("%s, concurrency %d: got %q, %v, want %q", what, c, got, err, tt.want)
+					}
+				}
+				got, err := dec.DecodeAll(tt.in, nil)
+				check("DecodeAll", got, err)
+				if err := dec.Reset(bytes.NewReader(tt.in)); err != nil {
+					t.Fatal(err)
+				}
+				got, err = io.ReadAll(dec)
+				check("stream", got, err)
+				dec.Close()
+			}
+		})
+	}
+}
+
 // TestDecodeAllContentSizeAlloc decodes frames that declare far more content
 // than they hold. DecodeAll must fail without allocating the declared size,
 // which on 32-bit platforms also overflowed an int.
@@ -3308,5 +3487,289 @@ func TestDecodeAllContentSizeAlloc(t *testing.T) {
 				t.Errorf("allocated %d bytes for a %d byte input", cap(got), len(in))
 			}
 		})
+	}
+}
+
+// TestDecoderSingleSymbolTables decodes sequence tables that give one symbol
+// the whole probability. The format allows them, and the reference decoder
+// accepts them, though its encoder uses RLE mode instead.
+func TestDecoderSingleSymbolTables(t *testing.T) {
+	tests := []struct {
+		name  string
+		opts  []DOption
+		frame string
+		want  string
+	}{
+		// A raw block, then a block with three "\xf0\x03" tables, each symbol 0 with
+		// probability 32 of 32: no literals, repeat offset 2 (4), match length 3.
+		{"block", nil, "\x28\xb5\x2f\xfd\x00\x00\x20\x00\x00abcd\x5d\x00\x00\x00\x01\xa8\xf0\x03\xf0\x03\xf0\x03\x00\x80", "abcdabc"},
+		// The same sequence from the tables of singleSymbolDict, in repeat mode.
+		{"dict", []DOption{WithDecoderDicts(singleSymbolDict)}, "\x28\xb5\x2f\xfd\x03\x00\x01\x00\x00\x00\x2d\x00\x00\x00\x01\xfc\x00\x80", "AAA"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, c := range []int{1, 4} {
+				dec, err := NewReader(nil, append([]DOption{WithDecoderConcurrency(c)}, tt.opts...)...)
+				if err != nil {
+					t.Fatal(err)
+				}
+				got, err := dec.DecodeAll([]byte(tt.frame), nil)
+				if err != nil || string(got) != tt.want {
+					t.Errorf("DecodeAll, concurrency %d: got %q, %v, want %q", c, got, err, tt.want)
+				}
+				if err := dec.Reset(strings.NewReader(tt.frame)); err != nil {
+					t.Fatal(err)
+				}
+				got, err = io.ReadAll(dec)
+				if err != nil || string(got) != tt.want {
+					t.Errorf("stream, concurrency %d: got %q, %v, want %q", c, got, err, tt.want)
+				}
+				dec.Close()
+			}
+		})
+	}
+}
+
+// An Encoder or Decoder made inside a testing/synctest bubble must stay
+// usable after the bubble ends: programs keep them for reuse, so the next
+// user may be another bubble or none.
+
+func synctestInput() []byte {
+	return bytes.Repeat([]byte("synctest bubbles and zstd "), 1000)
+}
+
+func synctestCompressed(t *testing.T) (in, comp []byte) {
+	t.Helper()
+	in = synctestInput()
+	enc, err := NewWriter(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer enc.Close()
+	return in, enc.EncodeAll(in, nil)
+}
+
+// waitForWaiters returns once n calls of Get wait on p. A Get waits on a
+// Mutex, which synctest.Wait does not see as blocked, so this yields instead.
+func waitForWaiters[T any](p *pool.Bounded[T], n int) {
+	for p.Waiting() < n {
+		runtime.Gosched()
+	}
+}
+
+func TestSynctestDecoderOutlivesBubble(t *testing.T) {
+	in := synctestInput()
+	enc, err := NewWriter(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	comp := enc.EncodeAll(in, nil)
+	enc.Close()
+
+	var dec *Decoder
+	synctest.Test(t, func(t *testing.T) {
+		var err error
+		dec, err = NewReader(nil, WithDecoderConcurrency(2))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := dec.DecodeAll(comp, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, in) {
+			t.Fatal("decoded output differs inside the bubble")
+		}
+	})
+	defer dec.Close()
+
+	got, err := dec.DecodeAll(comp, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, in) {
+		t.Fatal("decoded output differs outside the bubble")
+	}
+	synctest.Test(t, func(t *testing.T) {
+		got, err := dec.DecodeAll(comp, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, in) {
+			t.Fatal("decoded output differs in a second bubble")
+		}
+	})
+}
+
+// A Decoder made outside any bubble, as a package variable is, has its
+// only block decoder busy outside. A DecodeAll inside a bubble waits for
+// it and is woken by the holder outside. A wait on a sync.Cond would be
+// a fatal error here: "semaphore wake of synctest goroutine from outside
+// bubble".
+func TestSynctestOutsideWakesBubbleWaiter(t *testing.T) {
+	in, comp := synctestCompressed(t)
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+
+	block, ok := dec.decoders.Get()
+	if !ok {
+		t.Fatal("no block decoder")
+	}
+	release := make(chan struct{})
+	returned := make(chan struct{})
+	go func() {
+		<-release
+		dec.decoders.Put(block)
+		close(returned)
+	}()
+	synctest.Test(t, func(t *testing.T) {
+		var finished atomic.Bool
+		go func() {
+			got, err := dec.DecodeAll(comp, nil)
+			if err != nil {
+				t.Error(err)
+			} else if !bytes.Equal(got, in) {
+				t.Error("decoded output differs")
+			}
+			finished.Store(true)
+		}()
+		waitForWaiters(dec.decoders, 1)
+		close(release)
+		for !finished.Load() {
+			runtime.Gosched()
+		}
+	})
+	<-returned
+}
+
+// With concurrency 1, DecodeAll calls wait while the one block decoder
+// is in use, and all finish once it is given back.
+func TestDecodeAllWaitsForBlockDecoder(t *testing.T) {
+	in, comp := synctestCompressed(t)
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+
+	block, ok := dec.decoders.Get()
+	if !ok {
+		t.Fatal("no block decoder")
+	}
+	const calls = 4
+	var wg sync.WaitGroup
+	var done atomic.Int32
+	for range calls {
+		wg.Go(func() {
+			got, err := dec.DecodeAll(comp, nil)
+			if err != nil {
+				t.Error(err)
+			} else if !bytes.Equal(got, in) {
+				t.Error("decoded output differs")
+			}
+			done.Add(1)
+		})
+	}
+	waitForWaiters(dec.decoders, calls)
+	if n := done.Load(); n != 0 {
+		t.Fatalf("%d DecodeAll calls finished while the block decoder was held", n)
+	}
+	dec.decoders.Put(block)
+	wg.Wait()
+	if n := done.Load(); n != calls {
+		t.Fatalf("%d DecodeAll calls finished; want %d", n, calls)
+	}
+}
+
+// A DecodeAll that waits when the Decoder is closed, or that starts
+// after, returns ErrDecoderClosed.
+func TestDecodeAllAfterClose(t *testing.T) {
+	_, comp := synctestCompressed(t)
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, ok := dec.decoders.Get()
+	if !ok {
+		t.Fatal("no block decoder")
+	}
+	errc := make(chan error, 1)
+	go func() {
+		_, err := dec.DecodeAll(comp, nil)
+		errc <- err
+	}()
+	waitForWaiters(dec.decoders, 1)
+	dec.Close()
+	if err := <-errc; err != ErrDecoderClosed {
+		t.Fatalf("waiting DecodeAll: err %v; want ErrDecoderClosed", err)
+	}
+	dec.decoders.Put(block)
+	if _, err := dec.DecodeAll(comp, nil); err != ErrDecoderClosed {
+		t.Fatalf("DecodeAll after Close: err %v; want ErrDecoderClosed", err)
+	}
+}
+
+// A stream decoder with several goroutines runs inside a bubble and is
+// closed there.
+func TestSynctestStreamDecoder(t *testing.T) {
+	in := synctestInput()
+	enc, err := NewWriter(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	comp := enc.EncodeAll(in, nil)
+	enc.Close()
+
+	synctest.Test(t, func(t *testing.T) {
+		dec, err := NewReader(bytes.NewReader(comp), WithDecoderConcurrency(4))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer dec.Close()
+		got, err := io.ReadAll(dec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, in) {
+			t.Fatal("decoded output differs")
+		}
+	})
+}
+
+// An async stream decoder reads a stream to its end inside a bubble and
+// is reset and used again outside it.
+func TestSynctestStreamDecoderOutlivesBubble(t *testing.T) {
+	in, comp := synctestCompressed(t)
+	var dec *Decoder
+	synctest.Test(t, func(t *testing.T) {
+		var err error
+		dec, err = NewReader(nil, WithDecoderConcurrency(4))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := dec.Reset(bytes.NewReader(comp)); err != nil {
+			t.Fatal(err)
+		}
+		got, err := io.ReadAll(dec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, in) {
+			t.Fatal("decoded output differs inside the bubble")
+		}
+	})
+	defer dec.Close()
+	if err := dec.Reset(bytes.NewReader(comp)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(dec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, in) {
+		t.Fatal("decoded output differs outside the bubble")
 	}
 }

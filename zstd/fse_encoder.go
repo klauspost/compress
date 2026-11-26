@@ -8,10 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/bits"
+	"slices"
 )
 
 const (
-	// For encoding we only support up to
+	// For encoding we only support up to this,
+	// but blockEnc.highRatio allows 9 for literal and match lengths.
 	maxEncTableLog    = 8
 	maxEncTablesize   = 1 << maxTableLog
 	maxEncTableMask   = (1 << maxTableLog) - 1
@@ -74,6 +77,15 @@ func (s *fseEncoder) HistogramFinished(maxSymbol uint8, maxCount int) {
 	s.maxCount = maxCount
 	s.symbolLen = uint16(maxSymbol) + 1
 	s.clearCount = maxCount != 0
+}
+
+// copyFrom makes s a copy of o that shares no memory with it.
+func (s *fseEncoder) copyFrom(o *fseEncoder) {
+	ct := s.ct
+	*s = *o
+	s.ct.tableSymbol = append(ct.tableSymbol[:0], o.ct.tableSymbol...)
+	s.ct.stateTable = append(ct.stateTable[:0], o.ct.stateTable...)
+	s.ct.symbolTT = append(ct.symbolTT[:0], o.ct.symbolTT...)
 }
 
 // allocCtable will allocate tables needed for compression.
@@ -257,10 +269,15 @@ func (s *fseEncoder) setBits(transform []byte) {
 // the total is equal to the table size.
 // If successful, compression tables will also be made ready.
 func (s *fseEncoder) normalizeCount(length int) error {
+	return s.normalizeCountMax(length, maxEncTableLog)
+}
+
+// normalizeCountMax is normalizeCount with a table log of up to maxLog.
+func (s *fseEncoder) normalizeCountMax(length int, maxLog uint8) error {
 	if s.reUsed {
 		return nil
 	}
-	s.optimalTableLog(length)
+	s.optimalTableLog(length, maxLog)
 	var (
 		tableLog          = s.actualTableLog
 		scale             = 62 - uint64(tableLog)
@@ -426,8 +443,8 @@ func (s *fseEncoder) normalizeCount2(length int) error {
 }
 
 // optimalTableLog calculates and sets the optimal tableLog in s.actualTableLog
-func (s *fseEncoder) optimalTableLog(length int) {
-	tableLog := uint8(maxEncTableLog)
+func (s *fseEncoder) optimalTableLog(length int, maxLog uint8) {
+	tableLog := maxLog
 	minBitsSrc := highBit(uint32(length)) + 1
 	minBitsSymbols := highBit(uint32(s.symbolLen-1)) + 2
 	minBits := uint8(minBitsSymbols)
@@ -447,8 +464,8 @@ func (s *fseEncoder) optimalTableLog(length int) {
 	if tableLog < minEncTablelog {
 		tableLog = minEncTablelog
 	}
-	if tableLog > maxEncTableLog {
-		tableLog = maxEncTableLog
+	if tableLog > maxLog {
+		tableLog = maxLog
 	}
 	s.actualTableLog = tableLog
 }
@@ -657,6 +674,49 @@ func (s *fseEncoder) approxSize(hist []uint32) uint32 {
 		cost += v * bitCost
 	}
 	return cost >> kAccuracyLog
+}
+
+// minNewSize returns a lower bound in bits for coding hist, which sums
+// to total, with a new table: its entropy, the header and the smallest
+// final state flush.
+func minNewSize(hist []uint32, total int) uint32 {
+	lt := log2Fix8(uint32(total))
+	var sum uint32
+	// writeCount writes 4 bits of table log, then each count in at least
+	// log2(remaining) bits, and every later non-zero count leaves at least
+	// one in remaining. A zero count is followed by 2 bits per 3 more zeros, plus 2.
+	hdr := uint32(4)
+	nnz, zeros := uint32(0), uint32(0)
+	for i, c := range slices.Backward(hist) {
+		if c == 0 {
+			zeros++
+			continue
+		}
+		if zeros > 0 {
+			hdr += highBit(nnz+1) + 2 + 2*((zeros-1)/3)
+			zeros = 0
+		}
+		nnz++
+		if i > 0 {
+			hdr += highBit(nnz + 1)
+		}
+		sum += c * (lt - log2Fix8(c))
+	}
+	if zeros > 0 {
+		hdr += 2 + 2*((zeros-1)/3)
+	}
+	// The first count is written with tableLog bits.
+	hdr += minEncTablelog
+	// log2Fix8 is up to 0.09 bits low, which can raise each cost by as much.
+	sum -= min(sum, uint32(total)*24)
+	return sum>>8 + (hdr+7)&^7 + minEncTablelog
+}
+
+// log2Fix8 returns log2(v) in 8.8 fixed point for v > 0.
+// The fraction is interpolated linearly, so it is at most 0.09 low.
+func log2Fix8(v uint32) uint32 {
+	k := uint32(bits.Len32(v)) - 1
+	return k<<8 | (v<<(31-k))>>23&255
 }
 
 // maxHeaderSize returns the maximum header size in bits.

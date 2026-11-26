@@ -60,10 +60,6 @@ func (s *fseDecoder) fillDtable(ext *symbolExt) error {
 			if newState > tableSize {
 				return fmt.Errorf("newState (%d) outside table size (%d)", newState, tableSize)
 			}
-			if newState == uint16(u) && nBits == 0 {
-				// Seems weird that this is possible with nbits > 0.
-				return fmt.Errorf("newState (%d) == oldState (%d) and no bits", newState, u)
-			}
 			s.dt[u&maxTableMask] = ext[symbol] | decSymbol(nBits) | decSymbol(newState)<<16
 		}
 	}

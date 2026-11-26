@@ -32,6 +32,10 @@ jobs:
     - name: Test
       run: go test ./...
 
+    - name: Test SFX
+      working-directory: s2/cmd/_s2sx
+      run: go test ./_unpack
+
     - name: Test No-asm
       run: go test -tags=noasm ./...
 
@@ -207,7 +211,7 @@ jobs:
         tags: [ '', 'noasm,nounsafe' ]
         # Targets that reach assembly or the unsafe loaders in internal/le.
         test: [
-          flate/FuzzEncoding, flate/FuzzInflateBufio,
+          flate/FuzzEncoding, flate/FuzzEncodingFlush, flate/FuzzInflateBufio,
           huff0/FuzzCompress, huff0/FuzzDecompress1x,
           s2/FuzzDictBlocks, s2/FuzzEncodingBlocks, s2/FuzzStreamDecode, s2/FuzzDecodeBlock,
           snappy/xerial/FuzzDecode, snappy/xerial/FuzzEncode,

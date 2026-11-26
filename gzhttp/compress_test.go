@@ -184,6 +184,44 @@ func TestGzipHandlerRangeReply(t *testing.T) {
 	assertEqual(t, testBody, resp.Body.Bytes())
 }
 
+// A 206 response is a part of the representation and must not be compressed,
+// also when it has no Content-Range header (the multipart/byteranges answer to
+// a request for several ranges).
+func TestGzipHandlerPartialContentNoRangeHeader(t *testing.T) {
+	tests := []struct {
+		name  string
+		write func(w http.ResponseWriter)
+	}{
+		{"write", func(w http.ResponseWriter) {
+			w.WriteHeader(http.StatusPartialContent)
+			w.Write(testBody)
+		}},
+		{"flush", func(w http.ResponseWriter) {
+			w.WriteHeader(http.StatusPartialContent)
+			w.Write(testBody[:100])
+			w.(http.Flusher).Flush()
+			w.Write(testBody[100:])
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "multipart/byteranges; boundary=b")
+				tt.write(w)
+			}))
+			req, _ := http.NewRequest("GET", "/", nil)
+			req.Header.Set("Accept-Encoding", "gzip")
+
+			resp := httptest.NewRecorder()
+			handler.ServeHTTP(resp, req)
+			res := resp.Result()
+			assertEqual(t, http.StatusPartialContent, res.StatusCode)
+			assertEqual(t, "", res.Header.Get("Content-Encoding"))
+			assertEqual(t, testBody, resp.Body.Bytes())
+		})
+	}
+}
+
 func TestGzipHandlerAcceptRange(t *testing.T) {
 	handler := GzipHandler(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -865,6 +903,52 @@ func TestFlushError(t *testing.T) {
 
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("want %v, got %v", tt.wantErr, err)
+			}
+		})
+	}
+}
+
+type flushErrorWriter struct {
+	noFlushWriter
+	flushErr error
+}
+
+func (w *flushErrorWriter) FlushError() error { return w.flushErr }
+
+func TestFlushErrorBufferedWrite(t *testing.T) {
+	writeErr := errors.New("buffered write failed")
+	flushErr := errors.New("flush failed")
+	tests := []struct {
+		name        string
+		encoding    string
+		contentType string
+		writeErr    error
+		flushErr    error
+		wantErr     error
+	}{
+		{"plain write error", "gzip", "image/jpeg", writeErr, nil, writeErr},
+		{"plain write error before flush error", "gzip", "image/jpeg", writeErr, flushErr, writeErr},
+		{"plain flush error", "gzip", "image/jpeg", nil, flushErr, flushErr},
+		{"plain success", "gzip", "image/jpeg", nil, nil, nil},
+		{"gzip write error", "gzip", "text/plain", writeErr, nil, writeErr},
+		{"zstd write error", "zstd", "text/plain", writeErr, nil, writeErr},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got error
+			handler := GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set(contentType, tt.contentType)
+				n, err := w.Write(smallTestBody)
+				assertEqual(t, len(smallTestBody), n)
+				assertNil(t, err)
+				got = http.NewResponseController(w).Flush()
+			}))
+			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			r.Header.Set(acceptEncoding, tt.encoding)
+			w := &flushErrorWriter{noFlushWriter: noFlushWriter{header: http.Header{}, err: tt.writeErr}, flushErr: tt.flushErr}
+			handler.ServeHTTP(w, r)
+			if !errors.Is(got, tt.wantErr) {
+				t.Fatalf("Flush: want %v, got %v", tt.wantErr, got)
 			}
 		})
 	}
@@ -2469,6 +2553,63 @@ func TestSelectEncodingAcceptWildcards(t *testing.T) {
 	}
 }
 
+// A client may split Accept-Encoding over several field lines, which means the
+// same as the comma list they join to (RFC 9110, section 5.3).
+func TestAcceptEncodingFieldLines(t *testing.T) {
+	tests := []struct {
+		name       string
+		lines      []string
+		preferZstd bool
+		want       encoding
+	}{
+		{"gzip-on-second-line", []string{"deflate", "gzip"}, true, encodingGzip},
+		{"zstd-on-second-line", []string{"br", "zstd"}, true, encodingZstd},
+		{"both-on-own-lines-prefers-zstd", []string{"gzip", "zstd"}, true, encodingZstd},
+		{"both-on-own-lines-prefers-gzip", []string{"gzip", "zstd"}, false, encodingGzip},
+		{"qvalue-on-later-line", []string{"gzip;q=0.5", "zstd;q=1.0"}, false, encodingZstd},
+		{"empty-first-line", []string{"", "gzip"}, true, encodingGzip},
+		{"accepts-neither", []string{"br", "deflate"}, true, encodingNone},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, _ := http.NewRequest("GET", "/", nil)
+			for _, line := range tt.lines {
+				req.Header.Add("Accept-Encoding", line)
+			}
+			got := selectEncoding(req, true, true, tt.preferZstd, false)
+			if got != tt.want {
+				t.Errorf("selectEncoding() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestAcceptEncodingFieldLinesHandler checks that a response is compressed when
+// the supported coding is not on the first Accept-Encoding field line.
+func TestAcceptEncodingFieldLinesHandler(t *testing.T) {
+	handler := newTestHandler(testBody)
+
+	req, _ := http.NewRequest("GET", "/whatever", nil)
+	req.Header.Add("Accept-Encoding", "deflate")
+	req.Header.Add("Accept-Encoding", "gzip")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+
+	assertEqual(t, "gzip", res.Header().Get("Content-Encoding"))
+	zr, err := gzip.NewReader(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(zr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, testBody) {
+		t.Error("decompressed body differs from the original")
+	}
+}
+
 func TestAcceptWildcardsOption(t *testing.T) {
 	body := strings.Repeat("hello world ", 200)
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2868,5 +3009,101 @@ func TestRequestContentEncodingOrder(t *testing.T) {
 			}
 			assertEqual(t, testBody, gotBody)
 		})
+	}
+}
+
+// A buffered write must commit the same status as an immediate net/http write.
+func TestWriteCommitsStatus(t *testing.T) {
+	for _, encoding := range []string{"identity", "gzip", "zstd"} {
+		for _, size := range []int{0, 3, DefaultMinSize + 1} {
+			for _, initial := range []int{0, http.StatusCreated} {
+				t.Run(fmt.Sprintf("%s/size=%d/status=%d", encoding, size, initial), func(t *testing.T) {
+					body := strings.Repeat("x", size)
+					handler := GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						if initial != 0 {
+							w.WriteHeader(initial)
+						}
+						if _, err := io.WriteString(w, body); err != nil {
+							t.Fatal(err)
+						}
+						w.WriteHeader(http.StatusInternalServerError)
+					}))
+					r := httptest.NewRequest(http.MethodGet, "/", nil)
+					r.Header.Set(acceptEncoding, encoding)
+					w := httptest.NewRecorder()
+					handler.ServeHTTP(w, r)
+					want := initial
+					if want == 0 {
+						want = http.StatusOK
+					}
+					assertEqual(t, want, w.Result().StatusCode)
+					var reader io.Reader = w.Body
+					switch w.Header().Get(contentEncoding) {
+					case "gzip":
+						gz, err := gzip.NewReader(w.Body)
+						if err != nil {
+							t.Fatal(err)
+						}
+						defer gz.Close()
+						reader = gz
+					case "zstd":
+						zr, err := zstd.NewReader(w.Body)
+						if err != nil {
+							t.Fatal(err)
+						}
+						defer zr.Close()
+						reader = zr
+					}
+					got, err := io.ReadAll(reader)
+					if err != nil {
+						t.Fatal(err)
+					}
+					assertEqual(t, body, string(got))
+				})
+			}
+		}
+	}
+}
+
+type statusRecordingWriter struct {
+	*httptest.ResponseRecorder
+	statuses []int
+}
+
+func (w *statusRecordingWriter) WriteHeader(code int) {
+	w.statuses = append(w.statuses, code)
+	if code >= 200 {
+		w.ResponseRecorder.WriteHeader(code)
+	}
+}
+
+func TestWriteHeaderAfterFinalStatus(t *testing.T) {
+	for _, encoding := range []string{"gzip", "zstd"} {
+		for _, size := range []int{0, 3, DefaultMinSize + 1} {
+			for _, explicit := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/size=%d/explicit=%t", encoding, size, explicit), func(t *testing.T) {
+					handler := GzipHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.WriteHeader(http.StatusEarlyHints)
+						if explicit {
+							w.WriteHeader(http.StatusCreated)
+						}
+						if _, err := io.WriteString(w, strings.Repeat("x", size)); err != nil {
+							t.Fatal(err)
+						}
+						w.WriteHeader(http.StatusProcessing)
+						w.WriteHeader(http.StatusInternalServerError)
+					}))
+					r := httptest.NewRequest(http.MethodGet, "/", nil)
+					r.Header.Set(acceptEncoding, encoding)
+					w := &statusRecordingWriter{ResponseRecorder: httptest.NewRecorder()}
+					handler.ServeHTTP(w, r)
+					want := http.StatusOK
+					if explicit {
+						want = http.StatusCreated
+					}
+					assertEqual(t, []int{http.StatusEarlyHints, want}, w.statuses)
+				})
+			}
+		}
 	}
 }

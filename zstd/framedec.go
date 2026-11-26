@@ -332,8 +332,8 @@ func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {
 		d.history.decoders.maxSyncLen = uint64(cap(dst) - len(dst))
 	}
 	if d.FrameContentSize != fcsUnknown {
-		if !d.o.limitToCap || d.FrameContentSize+uint64(len(dst)) < d.history.decoders.maxSyncLen {
-			d.history.decoders.maxSyncLen = d.FrameContentSize + uint64(len(dst))
+		if !d.o.limitToCap || d.FrameContentSize < d.history.decoders.maxSyncLen {
+			d.history.decoders.maxSyncLen = d.FrameContentSize
 		}
 		if d.history.decoders.maxSyncLen > d.o.maxDecodedSize {
 			if debugDecoder {
@@ -358,6 +358,7 @@ func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {
 		if debugDecoder {
 			println("next block:", dec)
 		}
+		d.history.expireDict(uint64(len(d.history.b) - crcStart))
 		if d.o.limitToCap {
 			remaining := cap(dst) - len(d.history.b)
 			d.history.decoders.outputLimit = remaining

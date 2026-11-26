@@ -20,7 +20,7 @@ var isRaceTest bool
 
 // Fuzzing tweaks:
 var fuzzStartF = flag.Int("fuzz-start", int(SpeedFastest), "Start fuzzing at this level")
-var fuzzEndF = flag.Int("fuzz-end", int(SpeedBestCompression), "End fuzzing at this level (inclusive)")
+var fuzzEndF = flag.Int("fuzz-end", int(SpeedUltraCompression), "End fuzzing at this level (inclusive)")
 var fuzzMaxF = flag.Int("fuzz-max", 1<<20, "Maximum input size")
 
 func TestMain(m *testing.M) {

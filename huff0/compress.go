@@ -13,6 +13,10 @@ import (
 // Supply a Scratch object. The scratch object contains state about re-use,
 // So when sharing across independent encodes, be sure to set the re-use policy.
 func Compress1X(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
+	if s != nil {
+		// Even a failed call leaves nothing to restore.
+		s.canRestore = false
+	}
 	s, err = s.prepare(in)
 	if err != nil {
 		return nil, false, err
@@ -26,6 +30,10 @@ func Compress1X(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
 // Supply a Scratch object. The scratch object contains state about re-use,
 // So when sharing across independent encodes, be sure to set the re-use policy.
 func Compress4X(in []byte, s *Scratch) (out []byte, reUsed bool, err error) {
+	if s != nil {
+		// Even a failed call leaves nothing to restore.
+		s.canRestore = false
+	}
 	s, err = s.prepare(in)
 	if err != nil {
 		return nil, false, err
@@ -46,6 +54,7 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 	if s.Reuse == ReusePolicyNone {
 		s.prevTable = s.prevTable[:0]
 	}
+	prevLen := len(s.prevTable)
 
 	// Create histogram, if none was provided.
 	maxCount := s.maxCount
@@ -100,6 +109,16 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 		}
 		// Do not attempt to re-use later.
 		s.prevTable = s.prevTable[:0]
+		s.Out = s.Out[:0]
+	}
+
+	var oldSize int
+	if s.Reuse == ReusePolicyAllow && canReuse {
+		oldSize = s.prevTable.estimateSize(s.count[:s.symbolLen])
+		// Skip the new table if it can't be smaller.
+		if oldSize <= s.minNewSize(len(in)) {
+			return s.compressReused(in, compressor, wantSize)
+		}
 	}
 
 	// Calculate new table.
@@ -112,35 +131,17 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 		panic("invalid table generated")
 	}
 
+	// Write the new table first, so its size counts against it.
+	err = s.cTable.write(s)
 	if s.Reuse == ReusePolicyAllow && canReuse {
 		hSize := len(s.Out)
-		oldSize := s.prevTable.estimateSize(s.count[:s.symbolLen])
 		newSize := s.cTable.estimateSize(s.count[:s.symbolLen])
-		if oldSize <= hSize+newSize || hSize+12 >= wantSize {
-			// Retain cTable even if we re-use.
-			keepTable := s.cTable
-			keepTL := s.actualTableLog
-
-			s.cTable = s.prevTable
-			s.actualTableLog = s.prevTableLog
-			s.Out, err = compressor(in)
-
-			// Restore ctable.
-			s.cTable = keepTable
-			s.actualTableLog = keepTL
-			if err != nil {
-				return nil, false, err
-			}
-			if len(s.Out) >= wantSize {
-				return nil, false, ErrIncompressible
-			}
-			s.OutData = s.Out
-			return s.Out, true, nil
+		if err != nil || oldSize <= hSize+newSize || hSize+12 >= wantSize {
+			return s.compressReused(in, compressor, wantSize)
 		}
 	}
 
 	// Use new table
-	err = s.cTable.write(s)
 	if err != nil {
 		s.OutTable = nil
 		return nil, false, err
@@ -157,10 +158,37 @@ func compress(in []byte, s *Scratch, compressor func(src []byte) ([]byte, error)
 		s.OutTable = nil
 		return nil, false, ErrIncompressible
 	}
-	// Move current table into previous.
-	s.prevTable, s.prevTableLog, s.cTable = s.cTable, s.actualTableLog, s.prevTable[:0]
+	// Move current table into previous. Keep the old one for RestorePrevTable,
+	// with its length from before a Prefer fallback dropped it.
+	s.oldTable, s.prevTable, s.cTable = s.prevTable[:prevLen], s.cTable, s.oldTable[:0]
+	s.oldTableLog, s.prevTableLog = s.prevTableLog, s.actualTableLog
+	s.canRestore = true
 	s.OutData = s.Out[len(s.OutTable):]
 	return s.Out, false, nil
+}
+
+// compressReused compresses in with the previous table.
+func (s *Scratch) compressReused(in []byte, compressor func(src []byte) ([]byte, error), wantSize int) (out []byte, reUsed bool, err error) {
+	s.Out = s.Out[:0]
+	// Retain cTable even if we re-use.
+	keepTable := s.cTable
+	keepTL := s.actualTableLog
+
+	s.cTable = s.prevTable
+	s.actualTableLog = s.prevTableLog
+	s.Out, err = compressor(in)
+
+	// Restore ctable.
+	s.cTable = keepTable
+	s.actualTableLog = keepTL
+	if err != nil {
+		return nil, false, err
+	}
+	if len(s.Out) >= wantSize {
+		return nil, false, ErrIncompressible
+	}
+	s.OutData = s.Out
+	return s.Out, true, nil
 }
 
 // EstimateSizes will estimate the data sizes
@@ -451,6 +479,44 @@ func (s *Scratch) optimalTableLog() {
 	s.actualTableLog = tableLog
 }
 
+// optimalDepth sets s.actualTableLog to the code length limit giving the
+// smallest table plus data, as HUF_optimalTableLog does with
+// HUF_flags_optimalDepth. Limits below minTablelog are fine: tables are
+// written with the actual depth, which can already be lower.
+func (s *Scratch) optimalDepth() {
+	nonZero := uint32(0)
+	for _, v := range s.count[:s.symbolLen] {
+		if v > 0 {
+			nonZero++
+		}
+	}
+	minLog := uint8(highBit32(nonZero) + 1)
+	maxLog := max(s.TableLog, minLog)
+	bestLog, bestSize := maxLog, math.MaxInt-1
+	for tl := minLog; tl <= maxLog; tl++ {
+		s.actualTableLog = tl
+		if s.buildCTableLog() != nil {
+			continue
+		}
+		// A limit that doesn't bind gives the same table as all higher ones.
+		if s.actualTableLog < tl && tl > minLog {
+			break
+		}
+		hSize, err := s.cTable.estTableSize(s)
+		if err != nil {
+			continue
+		}
+		size := hSize + s.cTable.estimateSize(s.count[:s.symbolLen])
+		if size > bestSize+1 {
+			break
+		}
+		if size < bestSize {
+			bestLog, bestSize = tl, size
+		}
+	}
+	s.actualTableLog = bestLog
+}
+
 type cTableEntry struct {
 	val   uint16
 	nBits uint8
@@ -460,7 +526,17 @@ type cTableEntry struct {
 const huffNodesMask = huffNodesLen - 1
 
 func (s *Scratch) buildCTable() error {
-	s.optimalTableLog()
+	if s.OptimalDepth {
+		s.optimalDepth()
+	} else {
+		s.optimalTableLog()
+	}
+	return s.buildCTableLog()
+}
+
+// buildCTableLog builds s.cTable with code lengths limited to s.actualTableLog,
+// which it sets to the longest code.
+func (s *Scratch) buildCTableLog() error {
 	s.huffSort()
 	if cap(s.cTable) < maxSymbolValue+1 {
 		s.cTable = make([]cTableEntry, s.symbolLen, maxSymbolValue+1)

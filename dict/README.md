@@ -64,7 +64,7 @@ Usually lengths around 6-8 are best.
 - `-max` Max input length to index per input file. Default 32768. All inputs are truncated to this.
 - `-o` Output name. Default `dictionary.bin`.
 - `-q`    Do not print progress
-- `-dictID` zstd dictionary ID. 0 will be random. Default 0.
+- `-dictID` zstd dictionary ID. 0 derives one from the dictionary. Default 0.
 - `-zcompat` Generate dictionary compatible with zstd 1.5.5 and older. Default true.
 - `-zlevel` Zstandard compression level.
 
@@ -73,7 +73,7 @@ The dictionary will be built using the specified encoder level,
 which will reflect speed and make the dictionary tailored for that level.
 Default will use level 4 (best).
 
-Valid values are 1-4, where 1 = fastest, 2 = default, 3 = better, 4 = best.
+Valid values are 1-5, where 1 = fastest, 2 = default, 3 = better, 4 = best, 5 = ultra.
 
 ## Library
 
@@ -97,7 +97,7 @@ func main() {
 	dict, err := dict.BuildZstdDict(samples, dict.Options{
 		HashBytes:      6,
 		MaxDictSize:    114688,
-		ZstdDictID:     0, // Random
+		ZstdDictID:     0, // Derived from the dictionary
 		ZstdDictCompat: false,
 		ZstdLevel:      zstd.SpeedBestCompression,
 	})

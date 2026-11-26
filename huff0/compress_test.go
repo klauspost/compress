@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -513,6 +515,381 @@ func TestCompress1XReuse(t *testing.T) {
 			t.Logf("Estimate: table %d, got %d, data %d, got %d, reuse: %d", tbSz, len(s.OutTable), dSz, len(s.OutData), reSz)
 			t.Logf("%s: %d -> %d bytes (%.2f:1) %t", test.name, len(buf0), len(b), float64(len(buf0))/float64(len(b)), re)
 		})
+	}
+}
+
+func TestCompress1XReuseCountsTable(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	letters := func(n, skew int) []byte {
+		b := make([]byte, n)
+		for i := range b {
+			b[i] = 'a' + byte(rng.Intn(26))
+			if rng.Intn(skew) == 0 {
+				b[i] = 'a' + byte(rng.Intn(4))
+			}
+		}
+		return b
+	}
+	prev := letters(4096, 1000)
+	smaller := 0
+	for i := range 100 {
+		in := letters(200, 3)
+		size := func(p ReusePolicy) int {
+			// The comparison must also use a table from the depth search.
+			s := Scratch{OptimalDepth: i%2 == 1}
+			if _, _, err := Compress1X(prev, &s); err != nil {
+				t.Fatal(err)
+			}
+			s.Reuse = p
+			out, _, err := Compress1X(in, &s)
+			if err != nil {
+				t.Fatal(i, p, err)
+			}
+			return len(out)
+		}
+		reused, fresh, got := size(ReusePolicyPrefer), size(ReusePolicyNone), size(ReusePolicyAllow)
+		if got > min(reused, fresh) {
+			t.Fatalf("%d: got %d bytes, reusing gives %d and a new table %d", i, got, reused, fresh)
+		}
+		if reused < fresh {
+			smaller++
+		}
+	}
+	if smaller == 0 {
+		t.Fatal("reusing never wins; the test needs other input")
+	}
+}
+
+func TestCompressPreferFallback(t *testing.T) {
+	// The previous table has long codes for 1-4, so reusing it is rejected
+	// and a new table must be used.
+	prev := []byte(strings.Repeat("the quick brown fox jumps over the lazy dog ", 100) + "\x01\x02\x03\x04")
+	rng := rand.New(rand.NewSource(1))
+	in := make([]byte, 2000)
+	for i := range in {
+		in[i] = 1 + byte(rng.Intn(4))
+	}
+	for _, tc := range []struct {
+		name string
+		comp func([]byte, *Scratch) ([]byte, bool, error)
+		dec  func(*Scratch, []byte, int) ([]byte, error)
+		in   []byte
+	}{
+		{"1X", Compress1X, func(s *Scratch, b []byte, _ int) ([]byte, error) { return s.Decompress1X(b) }, in[:500]},
+		{"4X", Compress4X, (*Scratch).Decompress4X, in},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var s Scratch
+			if _, _, err := tc.comp(prev, &s); err != nil {
+				t.Fatal(err)
+			}
+			s.Reuse = ReusePolicyPrefer
+			out, reUsed, err := tc.comp(tc.in, &s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if reUsed {
+				t.Fatal("reused a table with long codes")
+			}
+			dt, rem, err := ReadTable(out, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := tc.dec(dt, rem, len(tc.in))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, tc.in) {
+				t.Fatal("output mismatch")
+			}
+		})
+	}
+}
+
+func TestCompressOptimalDepth(t *testing.T) {
+	var inputs [][]byte
+	for _, test := range testfiles {
+		b, err := test.fn()
+		if err != nil {
+			t.Fatal(err)
+		}
+		inputs = append(inputs, b)
+	}
+	for _, test := range testfilesExtended {
+		b, _ := test.fn()
+		inputs = append(inputs, b)
+	}
+	smaller := 0
+	for _, four := range []bool{false, true} {
+		comp, streams := Compress1X, 1
+		if four {
+			comp, streams = Compress4X, 4
+		}
+		// est is the table plus estimated data, which the search minimises.
+		run := func(in []byte, wll uint8, opt bool) (out []byte, est int, err error) {
+			s := Scratch{WantLogLess: wll, OptimalDepth: opt}
+			out, _, err = comp(in, &s)
+			if err == nil {
+				est = len(s.OutTable) + s.prevTable.estimateSize(s.count[:s.symbolLen])
+			}
+			return out, est, err
+		}
+		for i, in := range inputs {
+			in = in[:min(len(in), BlockSizeMax)]
+			for _, wll := range []uint8{0, 4} {
+				def, defEst, defErr := run(in, wll, false)
+				out, est, err := run(in, wll, true)
+				if err != nil {
+					if defErr == nil {
+						t.Fatalf("four=%v input %d: %v, but works without OptimalDepth", four, i, err)
+					}
+					continue
+				}
+				if defErr == nil {
+					// The padding of each stream isn't in the estimate.
+					if est > defEst || len(out) > len(def)+streams {
+						t.Fatalf("four=%v input %d: %d bytes (est %d), %d without OptimalDepth (est %d)", four, i, len(out), est, len(def), defEst)
+					}
+					if len(out) < len(def) {
+						smaller++
+					}
+				}
+				dec, rem, err := ReadTable(out, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var got []byte
+				if four {
+					got, err = dec.Decompress4X(rem, len(in))
+				} else {
+					got, err = dec.Decompress1X(rem)
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(got, in) {
+					t.Fatalf("four=%v input %d: output mismatch", four, i)
+				}
+			}
+		}
+	}
+	if smaller == 0 {
+		t.Fatal("OptimalDepth never helps; the test needs other input")
+	}
+	t.Log(smaller, "smaller outputs")
+}
+
+func TestTableBits(t *testing.T) {
+	// A 1X stream is the codes plus an end mark, padded to a byte.
+	checkBits := func(t *testing.T, in, data []byte, bits *[256]uint8) {
+		t.Helper()
+		total := 0
+		for _, c := range in {
+			if bits[c] == 0 {
+				t.Fatalf("symbol %d has no code", c)
+			}
+			total += int(bits[c])
+		}
+		if want := (total + 8) / 8; len(data) != want {
+			t.Fatalf("data is %d bytes, the code lengths give %d", len(data), want)
+		}
+	}
+	var bits, got [256]uint8
+	tested := 0
+	for _, test := range testfiles {
+		t.Run(test.name, func(t *testing.T) {
+			in, err := test.fn()
+			if err != nil {
+				t.Fatal(err)
+			}
+			in = in[:min(len(in), BlockSizeMax)]
+			var s Scratch
+			if s.TableBits(&bits) {
+				t.Fatal("table without compressing")
+			}
+			if _, _, err := Compress1X(in, &s); err != nil {
+				return
+			}
+			if !s.TableBits(&bits) {
+				t.Fatal("no table after compressing")
+			}
+			checkBits(t, in, s.OutData, &bits)
+
+			// The same table from ReadTable and TransferCTable, used to
+			// compress other data.
+			dec, _, err := ReadTable(s.OutTable, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var tr Scratch
+			tr.TransferCTable(&s)
+			for _, s2 := range []*Scratch{dec, &tr} {
+				if !s2.TableBits(&got) || got != bits {
+					t.Fatalf("got %v, want %v", got, bits)
+				}
+				s2.Reuse = ReusePolicyMust
+				in2 := in[len(in)/3:]
+				if _, _, err := Compress1X(in2, s2); err != nil {
+					t.Fatal(err)
+				}
+				checkBits(t, in2, s2.OutData, &bits)
+			}
+			s.Reuse = ReusePolicyNone
+			if s.TableBits(&got) || got != [256]uint8{} {
+				t.Fatal("table with ReusePolicyNone")
+			}
+			tested++
+		})
+	}
+	if tested < 5 {
+		t.Fatalf("only %d inputs tested", tested)
+	}
+}
+
+func TestRestorePrevTable(t *testing.T) {
+	// The text's table has long codes for 1-4, so other gets a new table,
+	// also with ReusePolicyPrefer.
+	text := []byte(strings.Repeat("the quick brown fox jumps over the lazy dog ", 100) + "\x01\x02\x03\x04")
+	rng := rand.New(rand.NewSource(1))
+	other := make([]byte, 2000)
+	for i := range other {
+		other[i] = 1 + byte(rng.Intn(4))
+	}
+	for _, tc := range []struct {
+		name string
+		comp func([]byte, *Scratch) ([]byte, bool, error)
+		dec  func(*Scratch, []byte, int) ([]byte, error)
+	}{
+		{"1X", Compress1X, func(s *Scratch, b []byte, _ int) ([]byte, error) { return s.Decompress1X(b) }},
+		{"4X", Compress4X, (*Scratch).Decompress4X},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var s Scratch
+			var bits, decBits [256]uint8
+			comp := func(in []byte, p ReusePolicy) ([]byte, bool, error) {
+				s.Reuse = p
+				return tc.comp(in, &s)
+			}
+			// write compresses in with a new table and returns its decoder.
+			write := func(in []byte) *Scratch {
+				t.Helper()
+				out, _, err := comp(in, ReusePolicyNone)
+				if err != nil {
+					t.Fatal(err)
+				}
+				dec, _, err := ReadTable(out, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				dec.TableBits(&decBits)
+				return dec
+			}
+
+			// Without a table before, there is none after.
+			if _, _, err := comp(other, ReusePolicyAllow); err != nil {
+				t.Fatal(err)
+			}
+			if s.RestorePrevTable() || s.RestorePrevTable() {
+				t.Fatal("restored a table on a new Scratch")
+			}
+			if _, _, err := comp(text, ReusePolicyMust); err != ErrIncompressible {
+				t.Fatal("reused after restoring no table:", err)
+			}
+
+			for _, p := range []ReusePolicy{ReusePolicyNone, ReusePolicyAllow, ReusePolicyPrefer} {
+				dec := write(text)
+				if _, reused, err := comp(other, p); err != nil || reused {
+					t.Fatalf("policy %d: no new table: %v", p, err)
+				}
+				ok := s.RestorePrevTable()
+				if ok2 := s.RestorePrevTable(); ok != ok2 || ok != (p != ReusePolicyNone) {
+					t.Fatalf("policy %d: restored %v, then %v", p, ok, ok2)
+				}
+				if !ok {
+					continue
+				}
+				if !s.TableBits(&bits) || bits != decBits {
+					t.Fatalf("policy %d: restored another table", p)
+				}
+				in := text[:1000]
+				out, reused, err := comp(in, ReusePolicyMust)
+				if err != nil || !reused {
+					t.Fatalf("policy %d: no reuse: %v", p, err)
+				}
+				got, err := tc.dec(dec, out, len(in))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(got, in) {
+					t.Fatalf("policy %d: output mismatch", p)
+				}
+			}
+
+			// Calls that reuse the table or fail leave nothing to restore,
+			// also after a new table that was used.
+			for _, in := range [][]byte{other, make([]byte, 100), make([]byte, BlockSizeMax+1)} {
+				write(other)
+				comp(in, ReusePolicyAllow)
+				if !s.RestorePrevTable() || !s.TableBits(&bits) || bits != decBits {
+					t.Fatalf("%d bytes: restore changed the table", len(in))
+				}
+			}
+		})
+	}
+}
+
+func TestMinTableSize(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	var s Scratch
+	tested := 0
+	for i := range 20000 {
+		// Use `used` of the first `symbols` values, including the last,
+		// with a random skew.
+		symbols := 2 + rng.Intn(maxSymbolValue)
+		used := 2 + rng.Intn(symbols-1)
+		vals := rng.Perm(symbols - 1)[:used-1]
+		vals = append(vals, symbols-1)
+		skew := 2 * rng.Float64()
+		cum := make([]float64, used)
+		sum := 0.0
+		for j := range cum {
+			sum += math.Pow(float64(j+1), -skew)
+			cum[j] = sum
+		}
+		in := make([]byte, used+rng.Intn([]int{16, 128, 1024, 8192}[i%4]))
+		for j := range in {
+			k := j
+			if k >= used {
+				k, _ = slices.BinarySearch(cum, rng.Float64()*sum)
+			}
+			in[j] = byte(vals[k])
+		}
+		s.Reuse = ReusePolicyNone
+		if _, _, err := Compress1X(in, &s); err != nil {
+			continue
+		}
+		tested++
+		lb := s.minNewSize(len(in))
+		if got := len(s.OutTable) + s.prevTable.estimateSize(s.count[:s.symbolLen]); lb > got {
+			t.Fatalf("%d: lower bound %d > size %d, %d of %d symbols", i, lb, got, used, symbols)
+		}
+		// The fixed-point entropy may be lower than minSize by rounding, and
+		// by up to 0.006 bits per count for counts above 512.
+		if ent := lb - s.minTableSize(used-1); ent > s.minSize(len(in)) || ent < s.minSize(len(in))-1-len(in)/1024 {
+			t.Fatalf("%d: entropy %d, want %d", i, ent, s.minSize(len(in)))
+		}
+	}
+	if tested < 10000 {
+		t.Fatalf("only %d of the inputs were compressed", tested)
+	}
+}
+
+func TestLog2Bounds(t *testing.T) {
+	for v := uint32(1); v <= BlockSizeMax; v++ {
+		lo, hi := log2Bounds(v)
+		if f := math.Log2(float64(v)) * (1 << 16); float64(lo) > f || float64(hi) < f {
+			t.Fatalf("log2(%d) = %f, bounds %d, %d", v, f, lo, hi)
+		}
 	}
 }
 

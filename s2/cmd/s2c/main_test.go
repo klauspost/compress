@@ -1,0 +1,1185 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/klauspost/compress/s2"
+	"github.com/klauspost/compress/s2/cmd/internal/fileio"
+)
+
+const s2cTestProcess = "S2C_TEST_PROCESS"
+
+func TestMain(m *testing.M) {
+	if os.Getenv(s2cTestProcess) == "1" {
+		main()
+		return
+	}
+	os.Exit(m.Run())
+}
+
+func TestOutputAliasesInput(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "input.txt")
+	if err := os.WriteFile(input, []byte("input"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	different := filepath.Join(dir, "different.txt")
+	if err := os.WriteFile(different, []byte("different"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name   string
+		output func(*testing.T) string
+		want   bool
+	}{
+		{
+			name: "same path",
+			output: func(*testing.T) string {
+				return input
+			},
+			want: true,
+		},
+		{
+			name: "normalized path",
+			output: func(*testing.T) string {
+				sep := string(os.PathSeparator)
+				return filepath.Dir(input) + sep + "." + sep + filepath.Base(input)
+			},
+			want: true,
+		},
+		{
+			name: "symbolic link",
+			output: func(t *testing.T) string {
+				name := filepath.Join(dir, "symlink.txt")
+				if err := os.Symlink(input, name); err != nil {
+					t.Skipf("symbolic links are unavailable: %v", err)
+				}
+				return name
+			},
+			want: true,
+		},
+		{
+			name: "hard link",
+			output: func(t *testing.T) string {
+				name := filepath.Join(dir, "hardlink.txt")
+				if err := os.Link(input, name); err != nil {
+					t.Skipf("hard links are unavailable: %v", err)
+				}
+				return name
+			},
+			want: true,
+		},
+		{
+			name: "different file",
+			output: func(*testing.T) string {
+				return different
+			},
+		},
+		{
+			name: "missing destination",
+			output: func(*testing.T) string {
+				return filepath.Join(dir, "missing.txt")
+			},
+		},
+	}
+	if runtime.GOOS == "windows" {
+		tests = append(tests, struct {
+			name   string
+			output func(*testing.T) string
+			want   bool
+		}{
+			name: "case-insensitive Windows path",
+			output: func(*testing.T) string {
+				return strings.ToUpper(input)
+			},
+			want: true,
+		})
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := outputAliasesInput(input, test.output(t))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != test.want {
+				t.Fatalf("outputAliasesInput() = %v, want %v", got, test.want)
+			}
+		})
+	}
+
+	t.Run("source stat error", func(t *testing.T) {
+		_, err := outputAliasesInput(filepath.Join(dir, "missing-input.txt"), input)
+		if !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("outputAliasesInput() error = %v, want os.ErrNotExist", err)
+		}
+	})
+
+	t.Run("nonregular alias", func(t *testing.T) {
+		if _, err := os.Stat(os.DevNull); err != nil {
+			t.Skipf("null device is unavailable: %v", err)
+		}
+		if _, err := outputAliasesInput(os.DevNull, os.DevNull); err == nil {
+			t.Fatal("outputAliasesInput() unexpectedly accepted a nonregular alias")
+		}
+	})
+}
+
+func TestOpenOutputFile(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		link func(string, string) error
+	}{
+		{name: "hard link", link: os.Link},
+		{name: "symbolic link", link: os.Symlink},
+	} {
+		t.Run("detects alias introduced after path check/"+test.name, func(t *testing.T) {
+			dir := t.TempDir()
+			inputName := filepath.Join(dir, "input.txt")
+			outputName := filepath.Join(dir, "output.txt")
+			inputContents := []byte("preserve input")
+			if err := os.WriteFile(inputName, inputContents, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(outputName, []byte("different"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			aliases, err := outputAliasesInput(inputName, outputName)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if aliases {
+				t.Fatal("initial destination unexpectedly aliases the input")
+			}
+
+			input, err := os.Open(inputName)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer input.Close()
+			inputInfo, err := input.Stat()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Remove(outputName); err != nil {
+				t.Fatal(err)
+			}
+			if err := test.link(inputName, outputName); err != nil {
+				t.Skipf("%s is unavailable: %v", test.name, err)
+			}
+
+			output, aliases, err := fileio.OpenOutputFile(inputInfo, outputName, 0o600, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if output != nil {
+				output.Close()
+				t.Fatal("fileio.OpenOutputFile() returned an output for an input alias")
+			}
+			if !aliases {
+				t.Fatal("fileio.OpenOutputFile() did not detect the late input alias")
+			}
+			got, err := os.ReadFile(inputName)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, inputContents) {
+				t.Fatalf("input contents = %q, want %q", got, inputContents)
+			}
+		})
+	}
+
+	t.Run("truncates distinct regular output", func(t *testing.T) {
+		dir := t.TempDir()
+		inputName := filepath.Join(dir, "input.txt")
+		outputName := filepath.Join(dir, "output.txt")
+		if err := os.WriteFile(inputName, []byte("input"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(outputName, []byte("long existing output"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		input, err := os.Open(inputName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer input.Close()
+		inputInfo, err := input.Stat()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		output, aliases, err := fileio.OpenOutputFile(inputInfo, outputName, 0o600, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if aliases {
+			output.Close()
+			t.Fatal("distinct output unexpectedly aliases input")
+		}
+		if _, err := output.Write([]byte("new")); err != nil {
+			output.Close()
+			t.Fatal(err)
+		}
+		if err := output.Close(); err != nil {
+			t.Fatal(err)
+		}
+		got, err := os.ReadFile(outputName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != "new" {
+			t.Fatalf("output contents = %q, want new", got)
+		}
+	})
+
+	t.Run("follows symlink to distinct output", func(t *testing.T) {
+		dir := t.TempDir()
+		inputName := filepath.Join(dir, "input.txt")
+		targetName := filepath.Join(dir, "target.txt")
+		outputName := filepath.Join(dir, "output.txt")
+		if err := os.WriteFile(inputName, []byte("input"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(targetName, []byte("old target"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(targetName, outputName); err != nil {
+			t.Skipf("symbolic links are unavailable: %v", err)
+		}
+		input, err := os.Open(inputName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer input.Close()
+		inputInfo, err := input.Stat()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		output, aliases, err := fileio.OpenOutputFile(inputInfo, outputName, 0o600, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if aliases {
+			output.Close()
+			t.Fatal("symlink target unexpectedly aliases input")
+		}
+		if _, err := output.Write([]byte("new target")); err != nil {
+			output.Close()
+			t.Fatal(err)
+		}
+		if err := output.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if info, err := os.Lstat(outputName); err != nil {
+			t.Fatal(err)
+		} else if info.Mode()&os.ModeSymlink == 0 {
+			t.Fatal("output symlink was replaced")
+		}
+		got, err := os.ReadFile(targetName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != "new target" {
+			t.Fatalf("symlink target contents = %q, want new target", got)
+		}
+	})
+
+	t.Run("creates dangling symlink target", func(t *testing.T) {
+		dir := t.TempDir()
+		inputName := filepath.Join(dir, "input.txt")
+		targetName := filepath.Join(dir, "target.txt")
+		outputName := filepath.Join(dir, "output.txt")
+		if err := os.WriteFile(inputName, []byte("input"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(targetName, outputName); err != nil {
+			t.Skipf("symbolic links are unavailable: %v", err)
+		}
+		input, err := os.Open(inputName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer input.Close()
+		inputInfo, err := input.Stat()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		output, aliases, err := fileio.OpenOutputFile(inputInfo, outputName, 0o600, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if aliases {
+			output.Close()
+			t.Fatal("dangling symlink target unexpectedly aliases input")
+		}
+		if _, err := output.Write([]byte("created target")); err != nil {
+			output.Close()
+			t.Fatal(err)
+		}
+		if err := output.Close(); err != nil {
+			t.Fatal(err)
+		}
+		got, err := os.ReadFile(targetName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != "created target" {
+			t.Fatalf("created target contents = %q, want created target", got)
+		}
+	})
+
+	t.Run("rejects nonregular alias", func(t *testing.T) {
+		input, err := os.Open(os.DevNull)
+		if err != nil {
+			t.Skipf("null device is unavailable: %v", err)
+		}
+		defer input.Close()
+		inputInfo, err := input.Stat()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		output, aliases, err := fileio.OpenOutputFile(inputInfo, os.DevNull, 0o600, false)
+		if output != nil {
+			output.Close()
+		}
+		if err == nil {
+			t.Fatal("fileio.OpenOutputFile() unexpectedly accepted a nonregular alias")
+		}
+		if aliases {
+			t.Fatal("rejected nonregular alias should not request input replacement")
+		}
+	})
+
+	t.Run("writes distinct nonregular output", func(t *testing.T) {
+		inputName := writeTestInput(t, "input.txt", []byte("input"))
+		input, err := os.Open(inputName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer input.Close()
+		inputInfo, err := input.Stat()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		output, aliases, err := fileio.OpenOutputFile(inputInfo, os.DevNull, 0o600, false)
+		if err != nil {
+			t.Skipf("null device is unavailable: %v", err)
+		}
+		if aliases {
+			output.Close()
+			t.Fatal("null device unexpectedly aliases regular input")
+		}
+		if _, err := output.Write([]byte("discarded")); err != nil {
+			output.Close()
+			t.Fatal(err)
+		}
+		if err := output.Close(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("createOutput read-only alias stages without opening destination", func(t *testing.T) {
+		dir := t.TempDir()
+		inputName := filepath.Join(dir, "input.txt")
+		if err := os.WriteFile(inputName, []byte("input"), 0o444); err != nil {
+			t.Fatal(err)
+		}
+		input, err := os.Open(inputName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		inputInfo, err := input.Stat()
+		if err != nil {
+			input.Close()
+			t.Fatal(err)
+		}
+		if err := input.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		output, tempName, err := fileio.CreateOutput(inputInfo, inputName, 0o644, false, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tempName == "" {
+			if output != nil {
+				output.Close()
+			}
+			t.Fatal("fileio.CreateOutput() did not stage a temporary file for a read-only alias")
+		}
+		if _, err := output.Write([]byte("compressed")); err != nil {
+			output.Close()
+			t.Fatal(err)
+		}
+		if err := fileio.FinishOutput(output, tempName, inputName, 0o644, nil); err != nil {
+			t.Fatal(err)
+		}
+		got, err := os.ReadFile(inputName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != "compressed" {
+			t.Fatalf("input contents = %q, want compressed", got)
+		}
+	})
+
+	t.Run("createOutput safe alias rejects before staging", func(t *testing.T) {
+		inputName := writeTestInput(t, "input.txt", []byte("input"))
+		input, err := os.Open(inputName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		inputInfo, err := input.Stat()
+		if err != nil {
+			input.Close()
+			t.Fatal(err)
+		}
+		if err := input.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, _, err := fileio.CreateOutput(inputInfo, inputName, 0o600, true, false); err == nil {
+			t.Fatal("fileio.CreateOutput() unexpectedly accepted -safe with an input alias")
+		}
+	})
+
+	t.Run("safe output never opens existing alias", func(t *testing.T) {
+		inputName := writeTestInput(t, "input.txt", []byte("input"))
+		input, err := os.Open(inputName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer input.Close()
+		inputInfo, err := input.Stat()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		output, aliases, err := fileio.OpenOutputFile(inputInfo, inputName, 0o600, true)
+		if output != nil {
+			output.Close()
+		}
+		if err == nil {
+			t.Fatal("fileio.OpenOutputFile() unexpectedly replaced an existing safe output")
+		}
+		if aliases {
+			t.Fatal("exclusive creation should fail before alias replacement")
+		}
+		got, err := os.ReadFile(inputName)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != "input" {
+			t.Fatalf("input contents = %q, want input", got)
+		}
+	})
+}
+
+func TestReplaceOutputPreservesDestinationWhenSourceIsMissing(t *testing.T) {
+	dir := t.TempDir()
+	dst := filepath.Join(dir, "output.s2")
+	original := []byte("original input")
+	if err := os.WriteFile(dst, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := fileio.ReplaceOutput(filepath.Join(dir, "missing.tmp"), dst)
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("fileio.ReplaceOutput() error = %v, want os.ErrNotExist", err)
+	}
+	got, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatalf("destination was removed after rename failure: %v", err)
+	}
+	if !bytes.Equal(got, original) {
+		t.Fatalf("destination contents = %q, want %q", got, original)
+	}
+}
+
+func TestBlockOutput(t *testing.T) {
+	t.Run("file", func(t *testing.T) {
+		input := []byte("block file output")
+		filename := writeTestInput(t, "input.txt", input)
+
+		runS2C(t, "-block", "-q", "-verify", filename)
+
+		compressed, err := os.ReadFile(filename + ".s2.block")
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded, err := s2.Decode(nil, compressed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(decoded, input) {
+			t.Fatalf("decoded output = %q, want %q", decoded, input)
+		}
+	})
+
+	t.Run("replace input", func(t *testing.T) {
+		input := []byte("replace input after successful block output")
+		filename := writeTestInput(t, "replace.txt", input)
+
+		runS2C(t, "-block", "-q", "-verify", "-o", filename, filename)
+
+		compressed, err := os.ReadFile(filename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded, err := s2.Decode(nil, compressed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(decoded, input) {
+			t.Fatalf("decoded output = %q, want %q", decoded, input)
+		}
+		assertNoOutputTempFiles(t, filename)
+	})
+
+	for _, flag := range []string{"-safe", "-rm"} {
+		t.Run("replace input rejects "+flag, func(t *testing.T) {
+			input := []byte("preserve input when replacement is rejected")
+			filename := writeTestInput(t, "preserve.txt", input)
+
+			runS2CWantError(t, "-block", "-q", flag, "-o", filename, filename)
+
+			got, err := os.ReadFile(filename)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, input) {
+				t.Fatalf("input contents = %q, want %q", got, input)
+			}
+			assertNoOutputTempFiles(t, filename)
+		})
+	}
+
+	t.Run("remove source after success", func(t *testing.T) {
+		input := []byte("remove source after successful output")
+		filename := writeTestInput(t, "remove.txt", input)
+		output := filename + ".s2.block"
+		if err := os.WriteFile(output, []byte("existing"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		runS2CWantError(t, "-block", "-q", "-rm", "-safe", filename)
+		if got, err := os.ReadFile(filename); err != nil {
+			t.Fatalf("source was removed after failed output: %v", err)
+		} else if !bytes.Equal(got, input) {
+			t.Fatalf("source contents = %q, want %q", got, input)
+		}
+
+		if err := os.Remove(output); err != nil {
+			t.Fatal(err)
+		}
+		runS2C(t, "-block", "-q", "-rm", filename)
+		if _, err := os.Stat(filename); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("source still exists after successful output: %v", err)
+		}
+		compressed, err := os.ReadFile(output)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded, err := s2.Decode(nil, compressed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(decoded, input) {
+			t.Fatalf("decoded output = %q, want %q", decoded, input)
+		}
+	})
+
+	t.Run("multiple stdout outputs", func(t *testing.T) {
+		first := []byte("first block")
+		second := []byte("second block")
+		firstFile := writeTestInput(t, "first.txt", first)
+		secondFile := writeTestInput(t, "second.txt", second)
+
+		got := runS2C(t, "-block", "-q", "-c", firstFile, secondFile)
+		firstBlock := s2.EncodeBetter(nil, first)
+		secondBlock := s2.EncodeBetter(nil, second)
+		want := append(firstBlock, secondBlock...)
+		if !bytes.Equal(got, want) {
+			t.Fatalf("stdout length = %d, want %d", len(got), len(want))
+		}
+	})
+}
+
+func TestBlockOutputAliases(t *testing.T) {
+	tests := []struct {
+		name            string
+		output          func(*testing.T, string) string
+		preservesSource bool
+	}{
+		{
+			name: "normalized path",
+			output: func(_ *testing.T, input string) string {
+				sep := string(os.PathSeparator)
+				return filepath.Dir(input) + sep + "." + sep + filepath.Base(input)
+			},
+		},
+		{
+			name: "symbolic link",
+			output: func(t *testing.T, input string) string {
+				name := filepath.Join(filepath.Dir(input), "symlink.txt")
+				if err := os.Symlink(input, name); err != nil {
+					t.Skipf("symbolic links are unavailable: %v", err)
+				}
+				return name
+			},
+			preservesSource: true,
+		},
+		{
+			name: "hard link",
+			output: func(t *testing.T, input string) string {
+				name := filepath.Join(filepath.Dir(input), "hardlink.txt")
+				if err := os.Link(input, name); err != nil {
+					t.Skipf("hard links are unavailable: %v", err)
+				}
+				return name
+			},
+			preservesSource: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Run("replace input", func(t *testing.T) {
+				input := []byte("replace aliased input after successful block output")
+				filename := writeTestInput(t, "input.txt", input)
+				output := test.output(t, filename)
+
+				runS2C(t, "-block", "-q", "-verify", "-o", output, filename)
+				assertBlockDecodesTo(t, output, input)
+				if test.preservesSource {
+					got, err := os.ReadFile(filename)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Equal(got, input) {
+						t.Fatalf("source contents = %q, want %q", got, input)
+					}
+				}
+				assertNoOutputTempFiles(t, output)
+			})
+
+			for _, flag := range []string{"-safe", "-rm"} {
+				t.Run("rejects "+flag, func(t *testing.T) {
+					input := []byte("preserve aliased input when replacement is rejected")
+					filename := writeTestInput(t, "input.txt", input)
+					output := test.output(t, filename)
+
+					runS2CWantError(t, "-block", "-q", flag, "-o", output, filename)
+					for _, name := range []string{filename, output} {
+						got, err := os.ReadFile(name)
+						if err != nil {
+							t.Fatal(err)
+						}
+						if !bytes.Equal(got, input) {
+							t.Fatalf("%s contents = %q, want %q", name, got, input)
+						}
+					}
+					assertNoOutputTempFiles(t, output)
+				})
+			}
+		})
+	}
+}
+
+func TestStreamOutputAliases(t *testing.T) {
+	tests := []struct {
+		name            string
+		output          func(*testing.T, string) string
+		preservesSource bool
+	}{
+		{
+			name: "normalized path",
+			output: func(_ *testing.T, input string) string {
+				sep := string(os.PathSeparator)
+				return filepath.Dir(input) + sep + "." + sep + filepath.Base(input)
+			},
+		},
+		{
+			name: "symbolic link",
+			output: func(t *testing.T, input string) string {
+				name := filepath.Join(filepath.Dir(input), "symlink.txt")
+				if err := os.Symlink(input, name); err != nil {
+					t.Skipf("symbolic links are unavailable: %v", err)
+				}
+				return name
+			},
+			preservesSource: true,
+		},
+		{
+			name: "hard link",
+			output: func(t *testing.T, input string) string {
+				name := filepath.Join(filepath.Dir(input), "hardlink.txt")
+				if err := os.Link(input, name); err != nil {
+					t.Skipf("hard links are unavailable: %v", err)
+				}
+				return name
+			},
+			preservesSource: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Run("replace input", func(t *testing.T) {
+				input := []byte("replace aliased input after successful stream output")
+				filename := writeTestInput(t, "input.txt", input)
+				output := test.output(t, filename)
+
+				runS2C(t, "-q", "-verify", "-o", output, filename)
+				assertStreamDecodesTo(t, output, input)
+				if test.preservesSource {
+					got, err := os.ReadFile(filename)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Equal(got, input) {
+						t.Fatalf("source contents = %q, want %q", got, input)
+					}
+				}
+				assertNoOutputTempFiles(t, output)
+			})
+
+			for _, flag := range []string{"-safe", "-rm"} {
+				t.Run("rejects "+flag, func(t *testing.T) {
+					input := []byte("preserve aliased input when replacement is rejected")
+					filename := writeTestInput(t, "input.txt", input)
+					output := test.output(t, filename)
+
+					runS2CWantError(t, "-q", flag, "-o", output, filename)
+					for _, name := range []string{filename, output} {
+						got, err := os.ReadFile(name)
+						if err != nil {
+							t.Fatal(err)
+						}
+						if !bytes.Equal(got, input) {
+							t.Fatalf("%s contents = %q, want %q", name, got, input)
+						}
+					}
+					assertNoOutputTempFiles(t, output)
+				})
+			}
+
+			t.Run("rejects stdin", func(t *testing.T) {
+				input := []byte("preserve stdin source")
+				filename := writeTestInput(t, "input.txt", input)
+				output := test.output(t, filename)
+				stdin, err := os.Open(filename)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer stdin.Close()
+
+				_, stderr, err := runS2CProcess(t, stdin, "-q", "-o", output, "-")
+				if err == nil || !bytes.Contains(stderr, []byte("stdin and output refer to the same file")) {
+					t.Fatalf("s2c error = %v, stderr = %q, want stdin alias rejection", err, stderr)
+				}
+				for _, name := range []string{filename, output} {
+					got, err := os.ReadFile(name)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Equal(got, input) {
+						t.Fatalf("%s contents = %q, want %q", name, got, input)
+					}
+				}
+			})
+		})
+	}
+
+	t.Run("remove source after success", func(t *testing.T) {
+		input := []byte("close and remove source after successful stream output")
+		filename := writeTestInput(t, "remove.txt", input)
+		output := filename + ".compressed"
+
+		runS2C(t, "-q", "-rm", "-o", output, filename)
+		if _, err := os.Stat(filename); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("source still exists after successful output: %v", err)
+		}
+		assertStreamDecodesTo(t, output, input)
+	})
+
+	t.Run("recompress replaces input", func(t *testing.T) {
+		input := []byte("recompress aliased stream input")
+		filename := filepath.Join(t.TempDir(), "input.s2")
+		compressed := s2.NewWriter(nil)
+		var encoded bytes.Buffer
+		compressed.Reset(&encoded)
+		if _, err := compressed.Write(input); err != nil {
+			t.Fatal(err)
+		}
+		if err := compressed.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filename, encoded.Bytes(), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		runS2C(t, "-q", "-recomp", "-o", filename, filename)
+		assertStreamDecodesTo(t, filename, input)
+		assertNoOutputTempFiles(t, filename)
+	})
+}
+
+func TestBlockOutputFailureCleanup(t *testing.T) {
+	const contents = "compressed block"
+	writeErr := errors.New("injected write failure")
+	closeErr := errors.New("injected close failure")
+
+	t.Run("direct write failure leaves partial output", func(t *testing.T) {
+		name := filepath.Join(t.TempDir(), "partial.s2.block")
+		output, err := os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		writer := &failAfterWriter{out: output, limit: 3, err: writeErr}
+		if _, err := writer.Write([]byte(contents)); !errors.Is(err, writeErr) {
+			output.Close()
+			t.Fatalf("write error = %v, want %v", err, writeErr)
+		}
+		err = fileio.FinishOutput(output, "", name, 0o600, writeErr)
+		if !errors.Is(err, writeErr) {
+			t.Fatalf("fileio.FinishOutput() error = %v, want %v", err, writeErr)
+		}
+		got, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatalf("partial output was removed: %v", err)
+		}
+		if want := contents[:3]; string(got) != want {
+			t.Fatalf("partial output = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("direct close failure removes output", func(t *testing.T) {
+		name := filepath.Join(t.TempDir(), "partial.s2.block")
+		output, err := os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := output.Write([]byte(contents)); err != nil {
+			output.Close()
+			t.Fatal(err)
+		}
+
+		err = fileio.FinishOutput(&failOutputFile{File: output, closeErr: closeErr}, "", name, 0o600, nil)
+		if !errors.Is(err, closeErr) {
+			t.Fatalf("fileio.FinishOutput() error = %v, want %v", err, closeErr)
+		}
+		if _, err := os.Stat(name); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("direct output was not removed: %v", err)
+		}
+	})
+
+	t.Run("temporary write failure removes output", func(t *testing.T) {
+		dir := t.TempDir()
+		finalName := filepath.Join(dir, "output.s2.block")
+		output, err := os.CreateTemp(dir, "."+filepath.Base(finalName)+".tmp-*")
+		if err != nil {
+			t.Fatal(err)
+		}
+		tempName := output.Name()
+		writer := &failAfterWriter{out: output, limit: 3, err: writeErr}
+		if _, err := writer.Write([]byte(contents)); !errors.Is(err, writeErr) {
+			output.Close()
+			t.Fatalf("write error = %v, want %v", err, writeErr)
+		}
+		err = fileio.FinishOutput(output, tempName, finalName, 0o600, writeErr)
+		if !errors.Is(err, writeErr) {
+			t.Fatalf("fileio.FinishOutput() error = %v, want %v", err, writeErr)
+		}
+		assertNoOutputTempFiles(t, finalName)
+	})
+
+	t.Run("temporary close failure removes output", func(t *testing.T) {
+		dir := t.TempDir()
+		finalName := filepath.Join(dir, "output.s2.block")
+		output, err := os.CreateTemp(dir, "."+filepath.Base(finalName)+".tmp-*")
+		if err != nil {
+			t.Fatal(err)
+		}
+		tempName := output.Name()
+
+		err = fileio.FinishOutput(&failOutputFile{File: output, closeErr: closeErr}, tempName, finalName, 0o600, nil)
+		if !errors.Is(err, closeErr) {
+			t.Fatalf("fileio.FinishOutput() error = %v, want %v", err, closeErr)
+		}
+		assertNoOutputTempFiles(t, finalName)
+	})
+
+	t.Run("foreign destination replacement remains", func(t *testing.T) {
+		dir := t.TempDir()
+		name := filepath.Join(dir, "output.s2.block")
+		movedName := filepath.Join(dir, "partial-output")
+		replacement := []byte("replacement from another writer")
+		output, err := os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		writer := &failAfterWriter{out: output, limit: 3, err: writeErr}
+		if _, err := writer.Write([]byte(contents)); !errors.Is(err, writeErr) {
+			output.Close()
+			t.Fatalf("write error = %v, want %v", err, writeErr)
+		}
+		closer := &replaceOnClose{
+			file:        output,
+			name:        name,
+			movedName:   movedName,
+			replacement: replacement,
+			err:         closeErr,
+		}
+
+		err = fileio.FinishOutput(closer, "", name, 0o600, writeErr)
+		if !errors.Is(err, writeErr) || !errors.Is(err, closeErr) {
+			t.Fatalf("fileio.FinishOutput() error = %v, want write and close errors", err)
+		}
+		got, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatalf("foreign replacement was removed: %v", err)
+		}
+		if !bytes.Equal(got, replacement) {
+			t.Fatalf("foreign replacement = %q, want %q", got, replacement)
+		}
+	})
+}
+
+type failAfterWriter struct {
+	out   io.Writer
+	limit int
+	err   error
+}
+
+func (w *failAfterWriter) Write(p []byte) (int, error) {
+	if len(p) > w.limit {
+		p = p[:w.limit]
+	}
+	n, err := w.out.Write(p)
+	if err != nil {
+		return n, err
+	}
+	return n, w.err
+}
+
+type failOutputFile struct {
+	*os.File
+	closeErr error
+}
+
+func (f *failOutputFile) Close() error {
+	return errors.Join(f.File.Close(), f.closeErr)
+}
+
+type replaceOnClose struct {
+	file        *os.File
+	name        string
+	movedName   string
+	replacement []byte
+	err         error
+}
+
+func (c *replaceOnClose) Chmod(mode os.FileMode) error {
+	return c.file.Chmod(mode)
+}
+
+func (c *replaceOnClose) Stat() (os.FileInfo, error) {
+	return c.file.Stat()
+}
+
+func (c *replaceOnClose) Sync() error {
+	return c.file.Sync()
+}
+
+func (c *replaceOnClose) Close() error {
+	if err := c.file.Close(); err != nil {
+		return errors.Join(err, c.err)
+	}
+	if err := os.Rename(c.name, c.movedName); err != nil {
+		return errors.Join(err, c.err)
+	}
+	if err := os.WriteFile(c.name, c.replacement, 0o600); err != nil {
+		return errors.Join(err, c.err)
+	}
+	return c.err
+}
+
+func writeTestInput(t *testing.T, name string, contents []byte) string {
+	t.Helper()
+	filename := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(filename, contents, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return filename
+}
+
+func assertNoOutputTempFiles(t *testing.T, filename string) {
+	t.Helper()
+	entries, err := os.ReadDir(filepath.Dir(filename))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if strings.HasPrefix(name, ".s2-tmp-") ||
+			strings.HasPrefix(name, ".s2-backup-") ||
+			strings.Contains(name, ".tmp-") ||
+			strings.Contains(name, ".backup-") {
+			t.Fatalf("temporary output remains: %s", name)
+		}
+	}
+}
+
+func assertBlockDecodesTo(t *testing.T, filename string, want []byte) {
+	t.Helper()
+	compressed, err := os.ReadFile(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := s2.Decode(nil, compressed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("decoded output = %q, want %q", got, want)
+	}
+}
+
+func assertStreamDecodesTo(t *testing.T, filename string, want []byte) {
+	t.Helper()
+	compressed, err := os.Open(filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, readErr := io.ReadAll(s2.NewReader(compressed))
+	closeErr := compressed.Close()
+	if err := errors.Join(readErr, closeErr); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("decoded output = %q, want %q", got, want)
+	}
+}
+
+func runS2C(t *testing.T, args ...string) []byte {
+	t.Helper()
+	stdout, stderr, err := runS2CProcess(t, nil, args...)
+	if err != nil {
+		t.Fatalf("s2c %v failed: %v\n%s", args, err, stderr)
+	}
+	return stdout
+}
+
+func runS2CWantError(t *testing.T, args ...string) {
+	t.Helper()
+	_, stderr, err := runS2CProcess(t, nil, args...)
+	if err == nil {
+		t.Fatalf("s2c %v unexpectedly succeeded\n%s", args, stderr)
+	}
+}
+
+func runS2CProcess(t *testing.T, stdin io.Reader, args ...string) ([]byte, []byte, error) {
+	t.Helper()
+	cmd := exec.Command(os.Args[0], args...)
+	cmd.Env = append(os.Environ(), s2cTestProcess+"=1")
+	cmd.Stdin = stdin
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	return stdout.Bytes(), stderr.Bytes(), err
+}
+
+func TestStdin(t *testing.T) {
+	if mode := os.Getenv("S2C_TEST_STDIN"); mode != "" {
+		var file *os.File
+		switch mode {
+		case "read":
+			file = os.Stdin
+		case "write", "close":
+			file = os.Stdout
+		}
+		if file != nil {
+			if err := file.Close(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		// The child command uses -- in place of the program name.
+		os.Args = os.Args[2:]
+		main()
+		os.Exit(0)
+	}
+
+	for _, tt := range []struct {
+		name        string
+		input       string
+		op          string
+		args        []string
+		diagnostics int
+	}{
+		{name: "success", input: "hello\n"},
+		{name: "write", input: "hello\n", op: "write", diagnostics: 2},
+		{name: "close", op: "write", args: []string{"-pad=32"}, diagnostics: 1},
+		{name: "read", op: "read", diagnostics: 2},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestStdin$", "--", "-cpu=1")
+			cmd.Args = append(cmd.Args, tt.args...)
+			cmd.Args = append(cmd.Args, "-")
+			cmd.Env = append(os.Environ(), "S2C_TEST_STDIN="+tt.name)
+			cmd.Stdin = strings.NewReader(tt.input)
+			var stdout, stderr bytes.Buffer
+			cmd.Stdout, cmd.Stderr = &stdout, &stderr
+			err := cmd.Run()
+			var exitErr *exec.ExitError
+			if err != nil && (!errors.As(err, &exitErr) || exitErr.ExitCode() != 2) {
+				t.Fatalf("run s2c: %v; stdout=%q; stderr=%q", err, stdout.String(), stderr.String())
+			}
+			wantStatus := 0
+			wantStderr := ""
+			if tt.op != "" {
+				wantStatus = 2
+				file := os.Stdout
+				if tt.op == "read" {
+					file = os.Stdin
+				}
+				pathErr := &os.PathError{Op: tt.op, Path: file.Name(), Err: os.ErrClosed}
+				wantStderr = "\nERROR: " + strings.TrimSuffix(strings.Repeat(pathErr.Error()+"\n", tt.diagnostics), "\n") + "\n"
+			}
+			if got := cmd.ProcessState.ExitCode(); got != wantStatus {
+				t.Errorf("exit status = %d, want %d; stderr=%q", got, wantStatus, stderr.String())
+			}
+			if stderr.String() != wantStderr {
+				t.Errorf("stderr = %q, want %q", stderr.String(), wantStderr)
+			}
+			if wantStatus == 0 {
+				decoded, err := io.ReadAll(s2.NewReader(&stdout))
+				if err != nil {
+					t.Fatalf("decoding stdout: %v", err)
+				}
+				if string(decoded) != tt.input {
+					t.Errorf("decoded stdin = %q, want %q", decoded, tt.input)
+				}
+			}
+		})
+	}
+}

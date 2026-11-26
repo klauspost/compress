@@ -2,9 +2,11 @@ package zstd
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"math"
+	"math/bits"
 	"math/rand"
 	"os"
 	"strings"
@@ -195,6 +197,40 @@ func TestBuildDictFullyMatchableCorpusReturnsError(t *testing.T) {
 	}
 }
 
+// With ID 0, BuildDict derives the ID from the dictionary, outside the
+// ranges the format reserves.
+func TestBuildDictDerivedID(t *testing.T) {
+	samples, history, _ := buildDictLevelPathFixture()
+	build := func(id uint32, compat bool) []byte {
+		t.Helper()
+		d, err := BuildDict(BuildDictOptions{ID: id, Contents: samples, History: history, Offsets: [3]int{1, 4, 8}, CompatV155: compat})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	dictID := func(d []byte) uint32 {
+		t.Helper()
+		i, err := InspectDictionary(d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return i.ID()
+	}
+	d := build(0, false)
+	id := dictID(d)
+	if id < 32768 || id >= 1<<31 {
+		t.Errorf("ID %d is in a reserved range", id)
+	}
+	if explicit := build(1, false); !bytes.Equal(d[8:], explicit[8:]) {
+		t.Error("ID 0 changed more than the ID")
+	}
+	// The same content with other tables gets another ID.
+	if dictID(build(0, true)) == id {
+		t.Errorf("ID %d for both", id)
+	}
+}
+
 func TestBuildDictUnknownLevel(t *testing.T) {
 	samples, history, _ := buildDictLevelPathFixture()
 	for _, level := range []EncoderLevel{-1, speedLast} {
@@ -206,6 +242,54 @@ func TestBuildDictUnknownLevel(t *testing.T) {
 		})
 		if err == nil {
 			t.Errorf("level %d: want error", level)
+		}
+	}
+}
+
+// BuildDict's history buffer holds the dictionary plus one block; samples
+// that overflow it must work with histories shorter and longer than the window.
+// A repetitive sample also has a match longer than any match length code covers.
+func TestBuildDictLargeSamples(t *testing.T) {
+	in, err := os.ReadFile("../testdata/Mark.Twain-Tom.Sawyer.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const sampleSize = 200 << 10
+	for _, histSize := range []int{100 << 10, 140 << 10} {
+		hist := in[:histSize]
+		tail := in[len(in)-sampleSize:]
+		for _, tt := range []struct {
+			name    string
+			samples [][]byte
+		}{
+			{"text", [][]byte{in[histSize : histSize+sampleSize], tail}},
+			{"repeat", [][]byte{bytes.Repeat(in[histSize:histSize+64], sampleSize/64), tail}},
+		} {
+			for level := SpeedFastest; level < speedLast; level++ {
+				t.Run(fmt.Sprintf("hist%dK-%s-%s", histSize>>10, tt.name, level), func(t *testing.T) {
+					dict, err := BuildDict(BuildDictOptions{ID: 1, Contents: tt.samples, History: hist, Offsets: [3]int{1, 4, 8}, Level: level})
+					if err != nil {
+						t.Fatal(err)
+					}
+					enc, err := NewWriter(nil, WithEncoderDict(dict), WithEncoderLevel(level), WithEncoderConcurrency(1))
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer enc.Close()
+					dec, err := NewReader(nil, WithDecoderDicts(dict), WithDecoderConcurrency(1))
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer dec.Close()
+					got, err := dec.DecodeAll(enc.EncodeAll(tt.samples[0], nil), nil)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if !bytes.Equal(got, tt.samples[0]) {
+						t.Fatal("round trip mismatch")
+					}
+				})
+			}
 		}
 	}
 }
@@ -326,13 +410,16 @@ func TestEncoder_SmallDict(t *testing.T) {
 			var tmp []byte
 			for i := range encs {
 				t.Run(encNames[i], func(t *testing.T) {
-					b = encs[i].EncodeAll(decoded, b[:0])
-					tmp, err = dec.DecodeAll(in, tmp[:0])
-					if err != nil {
-						t.Fatal(err)
-					}
-					if !bytes.Equal(tmp, decoded) {
-						t.Fatal("output mismatch")
+					// Encode twice to check restoration of the dictionary match table.
+					for range 2 {
+						b = encs[i].EncodeAll(decoded, b[:0])
+						tmp, err = dec.DecodeAll(b, tmp[:0])
+						if err != nil {
+							t.Fatal(err)
+						}
+						if !bytes.Equal(tmp, decoded) {
+							t.Fatal("output mismatch")
+						}
 					}
 
 					tmp = noDictEncs[i].EncodeAll(decoded, tmp[:0])
@@ -805,6 +892,38 @@ func readDicts(tb testing.TB, zr *zip.Reader) [][]byte {
 	return dicts
 }
 
+// singleSymbolDict is the example dictionary of "Matches into a formatted
+// dictionary header" in the reference decoder's decompressor_permissive.md.
+// Its sequence tables each hold one symbol: literal length 0, offset code 0
+// and match length 3.
+var singleSymbolDict = []byte("\x37\xa4\x30\xec\x01\x00\x00\x00\x80\x10\xf0\x03\xf0\x03\xf0\x03" +
+	"\x04\x00\x00\x00\x04\x00\x00\x00\x04\x00\x00\x00" + strings.Repeat("A", 16))
+
+func TestEncoderSingleSymbolDict(t *testing.T) {
+	dec, err := NewReader(nil, WithDecoderDicts(singleSymbolDict))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	text, err := os.ReadFile("../testdata/Mark.Twain-Tom.Sawyer.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for level := SpeedFastest; level < speedLast; level++ {
+		enc, err := NewWriter(nil, WithEncoderDict(singleSymbolDict), WithEncoderLevel(level))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, in := range []string{"AAAA", strings.Repeat("A", 100), strings.Repeat("AAAB", 100), string(text[:20000])} {
+			got, err := dec.DecodeAll(enc.EncodeAll([]byte(in), nil), nil)
+			if err != nil || string(got) != in {
+				t.Errorf("level %v, %d bytes: round trip failed: %v", level, len(in), err)
+			}
+		}
+		enc.Close()
+	}
+}
+
 // Test decoding of zstd --patch-from output.
 func TestDecoderRawDict(t *testing.T) {
 	t.Parallel()
@@ -837,6 +956,41 @@ func TestDecoderRawDict(t *testing.T) {
 
 	if !bytes.Equal(out, ref) {
 		t.Errorf("mismatch: got %q, wanted %q", out, ref)
+	}
+}
+
+// Dictionaries have the sequence table limits of blocks: offset tables up
+// to accuracy log 8. Encoders and decoders load them the same way.
+func TestDictOffsetTableLog(t *testing.T) {
+	dict := func(offsets string) []byte {
+		return []byte("\x37\xa4\x30\xec\x01\x00\x00\x00\x80\x10" + offsets + "\x10\x3f\x10\x3f" +
+			"\x04\x00\x00\x00\x04\x00\x00\x00\x04\x00\x00\x00" + strings.Repeat("A", 16))
+	}
+	// Offset tables of two symbols with equal probability.
+	for _, tt := range []struct {
+		name    string
+		offsets string
+		ok      bool
+	}{
+		{"log-8", "\x13\xf8\x0f", true},
+		{"log-9", "\x14\xf0\x3f", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dec, err := NewReader(nil, WithDecoderDicts(dict(tt.offsets)))
+			if err == nil {
+				dec.Close()
+			}
+			if (err == nil) != tt.ok {
+				t.Errorf("WithDecoderDicts: got %v", err)
+			}
+			enc, err := NewWriter(nil, WithEncoderDict(dict(tt.offsets)))
+			if err == nil {
+				enc.Close()
+			}
+			if (err == nil) != tt.ok {
+				t.Errorf("WithEncoderDict: got %v", err)
+			}
+		})
 	}
 }
 
@@ -990,6 +1144,74 @@ func TestEncoderDictAddViaReset(t *testing.T) {
 	}
 }
 
+// TestDecoderDictHistory checks which dictionary bytes frames can match.
+// The formatted dictionary is the example of "Matches into a formatted
+// dictionary header" in the reference decoder's decompressor_permissive.md,
+// with two-symbol FSE tables: a 28-byte header, then 16 bytes of content.
+func TestDecoderDictHistory(t *testing.T) {
+	content := strings.Repeat("A", 16)
+	formatted := []byte("\x37\xa4\x30\xec\x01\x00\x00\x00\x80\x10\x10\x3f\x10\x3f\x10\x3f" +
+		"\x04\x00\x00\x00\x04\x00\x00\x00\x04\x00\x00\x00" + content)
+	// match returns a frame with dictionary ID id, none if 0, holding a
+	// single block with no literals and one 4-byte match at offset off.
+	match := func(id byte, off int) []byte {
+		frame := []byte{0x28, 0xb5, 0x2f, 0xfd, 0, 0}
+		if id != 0 {
+			frame = []byte{0x28, 0xb5, 0x2f, 0xfd, 3, 0, id, 0, 0, 0}
+		}
+		// With RLE codes, the bitstream is just the offset value's extra bits
+		// below the end mark, which is the offset value itself.
+		v := off + 3
+		return append(frame, 0x3d, 0, 0, 0, 1, 0x54, 0, byte(bits.Len(uint(v))-1), 1, byte(v))
+	}
+	tests := []struct {
+		name   string
+		opts   []DOption
+		frames [][]byte
+		want   string // empty when decoding must fail
+		err    error  // the error, if a specific one
+	}{
+		{"content", []DOption{WithDecoderDicts(formatted)}, [][]byte{match(1, 16)}, "AAAA", nil},
+		{"before-content", []DOption{WithDecoderDicts(formatted)}, [][]byte{match(1, 17)}, "", nil},
+		{"magic", []DOption{WithDecoderDicts(formatted)}, [][]byte{match(1, 44)}, "", nil},
+		{"raw-magic", []DOption{WithDecoderDictRaw(1, formatted)}, [][]byte{match(1, 44)}, string(formatted[:4]), nil},
+		{"unknown-id", []DOption{WithDecoderDicts(formatted)}, [][]byte{match(2, 16)}, "", ErrUnknownDictionary},
+		// A frame without ID doesn't use the dictionary of the previous frame.
+		{"no-id", []DOption{WithDecoderDicts(formatted)}, [][]byte{match(1, 16), match(0, 16)}, "", nil},
+		{"id-0", []DOption{WithDecoderDicts(formatted), WithDecoderDictRaw(0, []byte(strings.Repeat("B", 16)))},
+			[][]byte{match(1, 16), match(0, 16)}, "AAAABBBB", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			check := func(what string, got []byte, err error) {
+				t.Helper()
+				if tt.want == "" {
+					if err == nil || tt.err != nil && !errors.Is(err, tt.err) {
+						t.Errorf("%s: got %q, %v, want an error", what, got, err)
+					}
+				} else if err != nil || string(got) != tt.want {
+					t.Errorf("%s: got %q, %v, want %q", what, got, err, tt.want)
+				}
+			}
+			in := bytes.Join(tt.frames, nil)
+			for _, c := range []int{1, 4} {
+				dec, err := NewReader(nil, append([]DOption{WithDecoderConcurrency(c)}, tt.opts...)...)
+				if err != nil {
+					t.Fatal(err)
+				}
+				got, err := dec.DecodeAll(in, nil)
+				check(fmt.Sprintf("DecodeAll, concurrency %d", c), got, err)
+				if err := dec.Reset(bytes.NewReader(in)); err != nil {
+					t.Fatal(err)
+				}
+				got, err = io.ReadAll(dec)
+				check(fmt.Sprintf("stream, concurrency %d", c), got, err)
+				dec.Close()
+			}
+		})
+	}
+}
+
 // TestSharedDecoderTrainedDictRace verifies concurrent DecodeAll on one Decoder
 // that holds a trained dictionary does not race on dict.litEnc (gh-1180).
 func TestSharedDecoderTrainedDictRace(t *testing.T) {
@@ -1121,6 +1343,68 @@ func TestDecoderDictReuseAfterLargeStream(t *testing.T) {
 	}
 }
 
+// TestDecoderDictPastWindow checks that matches can reach the dictionary
+// only until more than a window of the frame, here 1 KiB, was decoded.
+func TestDecoderDictPastWindow(t *testing.T) {
+	// frame returns a frame with raw blocks of the sizes in raw, then a block
+	// with one 4-byte match at offset off.
+	frame := func(off int, raw ...int) []byte {
+		f := []byte{0x28, 0xb5, 0x2f, 0xfd, 3, 0, 1, 0, 0, 0}
+		for _, n := range raw {
+			f = append(f, byte(n<<3), byte(n>>5), byte(n>>13))
+			f = append(f, bytes.Repeat([]byte("x"), n)...)
+		}
+		// With RLE codes, the bitstream is the offset value, its top bit the end mark.
+		v := off + 3
+		code := bits.Len(uint(v)) - 1
+		bs := []byte{byte(v), byte(v >> 8)}[:code/8+1]
+		f = append(f, byte((6+len(bs))<<3|5), 0, 0, 0, 1, 0x54, 0, byte(code), 1)
+		return append(f, bs...)
+	}
+	x := strings.Repeat("x", 1024)
+	tests := []struct {
+		name string
+		in   []byte
+		want string // empty when decoding must fail
+	}{
+		{"within", frame(1000+16, 1000), x[:1000] + "AAAA"},
+		{"at-window", frame(1024+16, 1024), x + "AAAA"},
+		{"past-window", frame(1032+16, 1024, 8), ""},
+		{"past-window-last", frame(1032+1, 1024, 8), ""},
+		{"far", frame(2048+16, 1024, 1024), ""},
+		{"history", frame(1024, 1024, 1024), x + x + "xxxx"},
+		// Only output of the frame itself counts.
+		{"second-frame", append(frame(1024, 1024, 1024), frame(1000+16, 1000)...), x + x + "xxxx" + x[:1000] + "AAAA"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, c := range []int{1, 4} {
+				dec, err := NewReader(nil, WithDecoderConcurrency(c), WithDecoderDictRaw(1, []byte(strings.Repeat("A", 16))))
+				if err != nil {
+					t.Fatal(err)
+				}
+				// check compares got with tt.want after prefix.
+				check := func(what, prefix string, got []byte, err error) {
+					t.Helper()
+					if tt.want == "" && err == nil || tt.want != "" && (err != nil || string(got) != prefix+tt.want) {
+						t.Errorf("%s, concurrency %d: got %d bytes, %v, want %d bytes", what, c, len(got), err, len(prefix+tt.want))
+					}
+				}
+				got, err := dec.DecodeAll(tt.in, nil)
+				check("DecodeAll", "", got, err)
+				got, err = dec.DecodeAll(tt.in, []byte("dst"))
+				check("DecodeAll to dst", "dst", got, err)
+				if err := dec.Reset(bytes.NewReader(tt.in)); err != nil {
+					t.Fatal(err)
+				}
+				got, err = io.ReadAll(dec)
+				check("stream", "", got, err)
+				dec.Close()
+			}
+		})
+	}
+}
+
 func TestEncoderDictSeedsSequenceTables(t *testing.T) {
 	initPredefined()
 	zr := testCreateZipReader("testdata/dict-tests-small.zip", t)
@@ -1239,12 +1523,154 @@ func TestEncoderChooseCompWithDictTables(t *testing.T) {
 				total += int(v)
 			}
 			cur.HistogramFinished(maxSym, maxCount)
-			if err := cur.normalizeCount(total); err != nil {
+			_, got, _, err := blk.chooseComp(total, nil, cur, prev, &fsePredefEnc[tc.table], maxSym, maxEncTableLog)
+			if err != nil {
 				t.Fatal(err)
 			}
-			if _, got := blk.chooseComp(cur, prev, &fsePredefEnc[tc.table]); got != tc.want {
+			if got != tc.want {
 				t.Fatalf("got mode %d, want %d", got, tc.want)
 			}
 		})
+	}
+}
+
+// testEncodeFrame encodes src as a frame with e and d, sizing tables for hint.
+func testEncodeFrame(e encoder, d *dict, src []byte, hint int64) []byte {
+	fh := frameHeader{ContentSize: uint64(len(src)), WindowSize: uint32(e.WindowSize(int64(len(src)))), DictID: d.ID()}
+	e.WindowSize(hint)
+	e.Reset(d, false)
+	blk := e.Block()
+	dst := fh.appendTo(nil)
+	for len(src) > 0 {
+		todo := src[:min(len(src), int(fh.WindowSize), maxCompressedBlockSize)]
+		src = src[len(todo):]
+		blk.pushOffsets()
+		e.Encode(blk, todo)
+		blk.last = len(src) == 0
+		if err := blk.encode(todo, false, false); err != nil {
+			panic(err)
+		}
+		dst = append(dst, blk.output...)
+		blk.reset(nil)
+	}
+	return dst
+}
+
+// The ultra encoder saves the tables of a dictionary loaded twice with the
+// same table size and restores them in later frames. Every frame of the same
+// input and table size must encode alike, whatever the encoder did before.
+func TestEncoderUltraDictTables(t *testing.T) {
+	text, err := os.ReadFile("../testdata/Mark.Twain-Tom.Sawyer.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dA := &dict{id: 1, content: text[:160<<10], offsets: [3]int{1, 4, 8}}
+	// Same ID, so only the pointer tells the dictionaries apart.
+	dB := &dict{id: 1, content: text[160<<10 : 320<<10], offsets: [3]int{1, 4, 8}}
+	// Fills over half of the hash table at the 1M window, which is saved whole.
+	dR := &dict{id: 2, content: appendRandom(nil, rand.New(rand.NewSource(1)), 120<<10), offsets: [3]int{1, 4, 8}}
+	// Matches near the end of the dictionaries, and beyond a 64K window.
+	src := append(append([]byte{}, text[40<<10:42<<10]...), text[150<<10:152<<10]...)
+	big := text[100<<10:]
+
+	// The 64K window is smaller than the dictionaries and their trees.
+	for _, window := range []int32{1 << 16, 1 << 20} {
+		t.Run(fmt.Sprint("window", window>>10, "K"), func(t *testing.T) {
+			newEnc := func() *ultraEncoder {
+				return &ultraEncoder{fastBase: fastBase{maxMatchOff: window, bufferReset: math.MaxInt32 - 2*window}}
+			}
+			e := newEnc()
+			check := func(name string, d *dict, in []byte, hint int64, want []byte) {
+				t.Helper()
+				got := testEncodeFrame(e, d, in, hint)
+				opts := []DOption{WithDecoderConcurrency(1)}
+				if d != nil {
+					opts = append(opts, WithDecoderDictRaw(d.id, d.content))
+				}
+				dec, err := NewReader(nil, opts...)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer dec.Close()
+				decoded, err := dec.DecodeAll(got, nil)
+				if err != nil {
+					t.Fatalf("%s: %v", name, err)
+				}
+				if !bytes.Equal(decoded, in) {
+					t.Fatalf("%s: round trip mismatch", name)
+				}
+				if want != nil && !bytes.Equal(got, want) {
+					t.Fatalf("%s: got %d bytes, want %d bytes as from a new encoder", name, len(got), len(want))
+				}
+			}
+			hint := int64(len(src))
+			wantA := testEncodeFrame(newEnc(), dA, src, hint)
+			wantB := testEncodeFrame(newEnc(), dB, src, hint)
+			wantL := testEncodeFrame(newEnc(), dA, src, 8<<20)
+			srcR := append(append([]byte{}, dR.content[50<<10:52<<10]...), dR.content[110<<10:112<<10]...)
+			wantR := testEncodeFrame(newEnc(), dR, srcR, hint)
+
+			check("load", dA, src, hint, wantA)
+			check("save", dA, src, hint, wantA)
+			check("restore", dA, src, hint, wantA)
+			check("no dict", nil, big, 0, nil)
+			check("restore after no dict", dA, src, hint, wantA)
+			check("same ID", dB, src, hint, wantB)
+			check("dict multi block", dA, big, 0, nil)
+			check("reload", dA, src, hint, wantA)
+			check("save after multi block", dA, src, hint, wantA)
+			check("restore after multi block", dA, src, hint, wantA)
+			check("large tables", dA, src, 8<<20, wantL)
+			check("reload on dirty tables", dA, src, hint, wantA)
+			for _, name := range []string{"load", "save", "restore"} {
+				check("random "+name, dR, srcR, hint, wantR)
+			}
+
+			// Overflow when the next frame starts.
+			reset := e.bufferReset
+			e.bufferReset = e.cur + int32(len(e.hist))
+			check("clear", dA, src, hint, wantA)
+			e.bufferReset = reset
+			check("no dict", nil, big, 0, nil)
+			check("save after clear", dA, src, hint, wantA)
+			check("restore after clear", dA, src, hint, wantA)
+
+			// Overflow before loading the dictionary.
+			end := e.cur + int32(len(e.hist))
+			e.bufferReset = end + int32(len(dA.content)+len(src))
+			check("rebase", dA, src, hint, wantA)
+			if e.cur >= end {
+				t.Fatal("no rebase")
+			}
+			e.bufferReset = reset
+			check("save after rebase", dA, src, hint, wantA)
+			check("restore after rebase", dA, src, hint, wantA)
+		})
+	}
+}
+
+// Samples start with a match at Offsets[2], which ultra codes as a repeat
+// code. BuildDict must count it as that offset, not Offsets[code-1].
+func TestBuildDictRepeatOffsets(t *testing.T) {
+	text, err := os.ReadFile("../testdata/Mark.Twain-Tom.Sawyer.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hist := text[:20<<10]
+	var samples [][]byte
+	for i := range 16 {
+		s := bytes.Repeat(hist[len(hist)-7:], 3)
+		samples = append(samples, append(s, text[(30+i)<<10:(31+i)<<10]...))
+	}
+	d, err := BuildDict(BuildDictOptions{ID: 1, Contents: samples, History: hist, Offsets: [3]int{1, 4, 7}, Level: SpeedUltraCompression})
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := InspectDictionary(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Offsets()[0]; got != 7 {
+		t.Errorf("most used offset %d, want 7", got)
 	}
 }

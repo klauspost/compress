@@ -11,10 +11,12 @@ import (
 	"fmt"
 	"io"
 	mrand "math/rand"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"testing"
+	"testing/iotest"
 	"time"
 )
 
@@ -139,8 +141,14 @@ func getConcBlockOpts(cMax int) []testEncOpt {
 			break
 		}
 		for conc := 2; conc <= 4; conc *= 2 {
-			for _, wind := range testWindowSizes {
+			if level == SpeedUltraCompression && conc > 2 {
+				break
+			}
+			for _, wind := range testWindows(level) {
 				addOpt := func(name string, options ...EOption) {
+					if level == SpeedUltraCompression && !ultraTestOpts[name] {
+						return
+					}
 					opts := append([]EOption(nil),
 						WithEncoderLevel(level),
 						WithEncoderConcurrency(conc),
@@ -148,7 +156,7 @@ func getConcBlockOpts(cMax int) []testEncOpt {
 						WithConcurrentBlocks(true),
 					)
 					name = fmt.Sprintf("%s-c%d-w%dk-%s", level.String(), conc, wind/1024, name)
-					o = append(o, testEncOpt{name: name, o: append(opts, options...)})
+					o = append(o, testEncOpt{name: name, level: level, o: append(opts, options...)})
 				}
 				addOpt("default")
 				if testing.Short() {
@@ -173,7 +181,7 @@ func getConcBlockOpts(cMax int) []testEncOpt {
 }
 
 func TestConcurrentBlocks_RoundTrip(t *testing.T) {
-	levels := []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression}
+	levels := []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression, SpeedUltraCompression}
 	sizes := []int{0, 1, 100, 1 << 16, 1 << 20, 4 << 20}
 
 	dec, err := NewReader(nil)
@@ -187,6 +195,10 @@ func TestConcurrentBlocks_RoundTrip(t *testing.T) {
 	for _, level := range levels {
 		for _, size := range sizes {
 			for _, conc := range []int{2, 4} {
+				// Ultra is slow under race; the small cases still run it in jobs.
+				if isRaceTest && level == SpeedUltraCompression && (size > 1<<16 || conc > 2) {
+					continue
+				}
 				name := fmt.Sprintf("%s-sz%d-c%d", level, size, conc)
 				t.Run(name, func(t *testing.T) {
 					input := make([]byte, size)
@@ -244,7 +256,14 @@ func TestConcurrentBlocks_Regression(t *testing.T) {
 	}
 	defer dec.Close()
 
+	ultraRuns := 0
 	for _, opts := range getConcBlockOpts(2) {
+		// One configuration covers the slow ultra level.
+		if opts.level == SpeedUltraCompression {
+			if ultraRuns++; ultraRuns > 1 {
+				continue
+			}
+		}
 		t.Run(opts.name, func(t *testing.T) {
 			zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 			if err != nil {
@@ -269,6 +288,9 @@ func TestConcurrentBlocks_Regression(t *testing.T) {
 					in, err := io.ReadAll(r)
 					if err != nil {
 						t.Error(err)
+					}
+					if opts.level == SpeedUltraCompression && len(in) > 256<<10 {
+						t.SkipNow()
 					}
 
 					// Test EncodeAll path (uses encoder pool, not concurrent blocks).
@@ -511,8 +533,8 @@ func TestConcurrentBlocks_JobBoundaries(t *testing.T) {
 	}
 	defer dec.Close()
 
-	const windowSize = 1 << 20 // 1MB -> jobSize = 4MB
-	jobSize := windowSize * 4
+	const windowSize = 1 << 20
+	jobSize := (&encoderOptions{windowSize: windowSize, level: SpeedDefault}).jobSize()
 
 	rng := mrand.New(mrand.NewSource(77))
 
@@ -624,7 +646,8 @@ func TestConcurrentBlocks_ResetContentSize(t *testing.T) {
 	defer dec.Close()
 
 	rng := mrand.New(mrand.NewSource(22))
-	input := make([]byte, 1<<20)
+	// Three jobs of the 1 MiB window.
+	input := make([]byte, 3<<20)
 	for i := range input {
 		input[i] = byte(rng.Intn(64))
 	}
@@ -654,23 +677,32 @@ func TestConcurrentBlocks_ResetContentSize(t *testing.T) {
 		}
 	})
 
-	t.Run("wrong_size", func(t *testing.T) {
-		var buf bytes.Buffer
-		enc, err := NewWriter(nil,
-			WithEncoderConcurrency(2),
-			WithConcurrentBlocks(true),
-			WithWindowSize(1<<20),
-		)
-		if err != nil {
-			t.Fatal(err)
+	// As without concurrent blocks, Close fails and the output doesn't decode.
+	for _, delta := range []int{-1, 100} {
+		for _, concurrentBlocks := range []bool{false, true} {
+			t.Run(fmt.Sprintf("wrong_size_%d_blocks_%v", delta, concurrentBlocks), func(t *testing.T) {
+				var buf bytes.Buffer
+				enc, err := NewWriter(nil,
+					WithEncoderConcurrency(2),
+					WithConcurrentBlocks(concurrentBlocks),
+					WithWindowSize(1<<20),
+				)
+				if err != nil {
+					t.Fatal(err)
+				}
+				enc.ResetContentSize(&buf, int64(len(input)+delta))
+				if _, err := enc.Write(input); err != nil {
+					t.Fatal(err)
+				}
+				if err := enc.Close(); err == nil {
+					t.Fatal("expected error for wrong content size")
+				}
+				if _, err := dec.DecodeAll(buf.Bytes(), nil); err == nil {
+					t.Fatal("output of a failed Close decoded")
+				}
+			})
 		}
-		enc.ResetContentSize(&buf, int64(len(input)+100))
-		enc.Write(input)
-		err = enc.Close()
-		if err == nil {
-			t.Fatal("expected error for wrong content size")
-		}
-	})
+	}
 }
 
 func TestConcurrentBlocks_WindowSizes(t *testing.T) {
@@ -1117,7 +1149,7 @@ func TestConcurrentBlocks_LargeAllLevels(t *testing.T) {
 		input[i] = byte(rng.Intn(64))
 	}
 
-	levels := []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression}
+	levels := []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression, SpeedUltraCompression}
 	for _, level := range levels {
 		t.Run(level.String(), func(t *testing.T) {
 			var buf bytes.Buffer
@@ -1439,6 +1471,106 @@ func TestConcurrentBlocks_ManySmallWrites(t *testing.T) {
 	}
 }
 
+// TestConcurrentBlocks_Ring round-trips streams of random writes, flushes and
+// ReadFrom calls through the input ring, at every level.
+func TestConcurrentBlocks_Ring(t *testing.T) {
+	rng := mrand.New(mrand.NewSource(1))
+	words := make([][]byte, 300)
+	for i := range words {
+		words[i] = make([]byte, 3+rng.Intn(12))
+		for j := range words[i] {
+			words[i][j] = byte('a' + rng.Intn(26))
+		}
+	}
+	// Streams start in an output buffer of 256 KiB, and move to a ring of up
+	// to 6 slots of 512 KiB when it fills, so the first stream wraps the ring.
+	var src []byte
+	for len(src) < 8<<20 {
+		if rng.Intn(50) == 0 {
+			src = appendRandom(src, rng, rng.Intn(200))
+		}
+		src = append(src, words[rng.Intn(len(words))]...)
+		src = append(src, ' ')
+	}
+	dec, err := NewReader(nil, WithDecoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dec.Close()
+	levels := []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression, SpeedUltraCompression}
+	if testing.Short() {
+		levels = levels[:2]
+	}
+	for _, level := range levels {
+		for _, c := range []struct {
+			conc   int
+			lowMem bool
+		}{{2, false}, {4, false}, {2, true}, {4, true}} {
+			t.Run(fmt.Sprint(level, "-", c.conc, "-lowmem-", c.lowMem), func(t *testing.T) {
+				// The smallest window gives the smallest jobs.
+				enc, err := NewWriter(nil, WithEncoderLevel(level), WithEncoderConcurrency(c.conc),
+					WithConcurrentBlocks(true), WithWindowSize(MinWindowSize), WithLowerEncoderMem(c.lowMem))
+				if err != nil {
+					t.Fatal(err)
+				}
+				for stream := range 3 {
+					var buf bytes.Buffer
+					enc.Reset(&buf)
+					in := src
+					if stream > 0 {
+						in = src[:rng.Intn(len(src)/4)]
+					}
+					for rem := in; len(rem) > 0; {
+						switch r := rng.Intn(100); {
+						case r < 3:
+							if err := enc.Flush(); err != nil {
+								t.Fatal(err)
+							}
+						case r < 6:
+							// Fill the slot, and return its last bytes with io.EOF.
+							js := &enc.state.jobs
+							n := js.limit - js.end
+							if n == 0 {
+								n = js.jobSize
+							}
+							n = min(len(rem), n)
+							if _, err := enc.ReadFrom(iotest.DataErrReader(bytes.NewReader(rem[:n]))); err != nil {
+								t.Fatal(err)
+							}
+							rem = rem[n:]
+						case r < 12:
+							n := min(len(rem), rng.Intn(1<<20))
+							if _, err := enc.ReadFrom(bytes.NewReader(rem[:n])); err != nil {
+								t.Fatal(err)
+							}
+							rem = rem[n:]
+						default:
+							n := min(len(rem), 1+rng.Intn(64<<10))
+							if _, err := enc.Write(rem[:n]); err != nil {
+								t.Fatal(err)
+							}
+							rem = rem[n:]
+						}
+					}
+					if err := enc.Close(); err != nil {
+						t.Fatal(err)
+					}
+					if enc.state.jobs.ring != nil {
+						t.Fatal("ring kept after Close")
+					}
+					got, err := dec.DecodeAll(buf.Bytes(), nil)
+					if err != nil {
+						t.Fatalf("stream %d (%d bytes): %v", stream, len(in), err)
+					}
+					if !bytes.Equal(got, in) {
+						t.Fatalf("stream %d (%d bytes): mismatch", stream, len(in))
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestConcurrentBlocks_StreamDecode(t *testing.T) {
 	rng := mrand.New(mrand.NewSource(11))
 	input := make([]byte, 2<<20)
@@ -1558,13 +1690,63 @@ func BenchmarkConcurrentBlocks(b *testing.B) {
 	}
 }
 
-func BenchmarkConcurrentBlocks_GobStream(b *testing.B) {
-	input, err := os.ReadFile("testdata/gob-stream")
-	if err != nil {
-		b.Skip("testdata/gob-stream not available:", err)
+// gobStream returns testdata/gob-stream, the input of the README table.
+// Without it, it decompresses testdata/gob-stream.zst, downloading it first.
+func gobStream(b *testing.B) []byte {
+	if input, err := os.ReadFile("testdata/gob-stream"); err == nil {
+		return input
 	}
+	const name, url = "testdata/gob-stream.zst", "https://klauspost.com/files/compress/gob-stream.zst"
+	if _, err := os.Stat(name); err != nil {
+		if err := downloadFile(name, url); err != nil {
+			b.Skip("testdata/gob-stream not available:", err)
+		}
+	}
+	compressed, err := os.ReadFile(name)
+	if err != nil {
+		b.Fatal(err)
+	}
+	dec, err := NewReader(nil)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer dec.Close()
+	input, err := dec.DecodeAll(compressed, nil)
+	if err != nil {
+		b.Fatal(name, err)
+	}
+	return input
+}
 
-	levels := []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression}
+// downloadFile writes url to name. A partial download does not keep the name.
+func downloadFile(name, url string) error {
+	resp, err := (&http.Client{Timeout: 10 * time.Minute}).Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("%s: %s", url, resp.Status)
+	}
+	f, err := os.Create(name + ".tmp")
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(f, resp.Body)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		os.Remove(f.Name())
+		return err
+	}
+	return os.Rename(f.Name(), name)
+}
+
+func BenchmarkConcurrentBlocks_GobStream(b *testing.B) {
+	input := gobStream(b)
+
+	levels := []EncoderLevel{SpeedFastest, SpeedDefault, SpeedBetterCompression, SpeedBestCompression, SpeedUltraCompression}
 	for _, level := range levels {
 		for _, conc := range []int{1, 4, 16} {
 			for _, cb := range []bool{false, true} {

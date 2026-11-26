@@ -6,24 +6,43 @@ package zstd
 
 import (
 	"fmt"
+	"math"
 	rdebug "runtime/debug"
 	"sync"
 )
 
+// maxRingSize caps the input ring of parallel jobs.
+// With very large jobs, fewer of them run at once.
+const maxRingSize = min(2<<30, math.MaxInt>>2)
+
 type encJob struct {
-	prefix []byte        // overlap from previous job (nil for first)
-	input  []byte        // job's own input data (swapped from filling)
+	prefix []byte        // history before input, with input in its capacity
+	input  []byte        // job's own input data, in the ring
 	last   bool          // last block of last job gets last=true
 	output []byte        // compressed blocks (filled by worker)
 	err    error         // encoding error
 	done   chan struct{} // closed when complete
 }
 
+// jobState keeps the input of parallel jobs in a ring: an overlap area, then
+// slots of jobSize. Writes fill the ring, workers encode it where it is, and
+// a job's prefix is the input before it, so only a wrap copies the prefix,
+// into the overlap area. A stream starts in an output buffer instead, and
+// moves to the ring when that fills.
 type jobState struct {
 	jobSize     int
 	overlapSize int
-	filling     []byte // accumulates input up to jobSize
-	nextPrefix  []byte // overlap prefix prepared for the next dispatched job
+	maxSlots    int
+
+	ring     []byte
+	first    bool      // ring is the output buffer the stream started in
+	ringPool sync.Pool // *[]byte rings, kept between streams
+	slotSeq  []int     // jobs to flush before a slot can be written again
+	slot     int       // slot being filled
+	hist     int       // start of the input usable as history
+	start    int       // start of the input not dispatched yet
+	end      int       // end of the input
+	limit    int       // end of the slot
 
 	jobSeq int // next job sequence number
 
@@ -40,9 +59,7 @@ type jobState struct {
 	flusherErr error
 	started    bool
 
-	inputPool   sync.Pool // *[]byte buffers of jobSize cap
-	outputPool  sync.Pool // *[]byte buffers for compressed output
-	overlapPool sync.Pool // *[]byte buffers for overlap prefixes
+	outputPool sync.Pool // *[]byte buffers for compressed output
 }
 
 func (e *Encoder) startJobWorkers() {
@@ -70,9 +87,9 @@ func (e *Encoder) jobWorker() {
 	js := &e.state.jobs
 	defer js.workerWg.Done()
 	for job := range js.jobCh {
-		enc := <-e.encoders
+		enc, _ := e.encoders.Get()
 		e.compressJob(enc, job)
-		e.encoders <- enc
+		e.encoders.Put(enc)
 		close(job.done)
 	}
 }
@@ -84,11 +101,14 @@ func (e *Encoder) compressJob(enc encoder, job *encJob) {
 			rdebug.PrintStack()
 		}
 	}()
+	// Pooled encoders must not keep the ring.
+	defer enc.inPlace(nil)
 
 	if len(job.prefix) > 0 {
 		enc.ResetPrefix(job.prefix)
 	} else {
 		enc.Reset(nil, false)
+		enc.inPlace(job.prefix)
 	}
 
 	data := job.input
@@ -118,26 +138,15 @@ func (e *Encoder) compressJob(enc encoder, job *encJob) {
 			job.err = err
 			return
 		}
+		if len(job.output)+len(blk.output) > cap(job.output) && !e.o.lowMem {
+			// Grow once, to the most a job can take: blocks are at most
+			// 3 bytes larger than their input.
+			js := &e.state.jobs
+			n := js.jobSize + 3*((js.jobSize+e.o.blockSize-1)/e.o.blockSize)
+			job.output = append(make([]byte, 0, n), job.output...)
+		}
 		job.output = append(job.output, blk.output...)
 		blk.reset(nil)
-	}
-}
-
-func (js *jobState) getInputBuf(size int) []byte {
-	if v := js.inputPool.Get(); v != nil {
-		bp := v.(*[]byte)
-		b := *bp
-		if cap(b) >= size {
-			return b[:0]
-		}
-	}
-	return make([]byte, 0, size)
-}
-
-func (js *jobState) putInputBuf(b []byte) {
-	if cap(b) > 0 {
-		b = b[:0]
-		js.inputPool.Put(&b)
 	}
 }
 
@@ -159,35 +168,11 @@ func (js *jobState) putOutputBuf(b []byte) {
 	}
 }
 
-func (js *jobState) getOverlapBuf(size int) []byte {
-	if v := js.overlapPool.Get(); v != nil {
-		bp := v.(*[]byte)
-		b := *bp
-		if cap(b) >= size {
-			return b[:size]
-		}
-	}
-	return make([]byte, size)
-}
-
-func (js *jobState) putOverlapBuf(b []byte) {
-	if cap(b) > 0 {
-		b = b[:0]
-		js.overlapPool.Put(&b)
-	}
-}
-
 func (e *Encoder) jobFlusher() {
 	js := &e.state.jobs
 	defer js.flusherWg.Done()
 	for job := range js.resultCh {
 		<-job.done
-		// Worker has fully exited compressJob, so the prefix is no longer
-		// in use. Return it to the pool regardless of outcome.
-		if job.prefix != nil {
-			js.putOverlapBuf(job.prefix)
-			job.prefix = nil
-		}
 		if job.err != nil {
 			js.mu.Lock()
 			js.flusherErr = job.err
@@ -196,6 +181,11 @@ func (e *Encoder) jobFlusher() {
 			for range js.resultCh {
 			}
 			return
+		}
+		// Hashing here keeps it off the writer's goroutine.
+		// The input stays in the ring until flushedSeq passes the job.
+		if e.o.crc {
+			_, _ = e.state.encoder.CRC().Write(job.input)
 		}
 		if len(job.output) > 0 {
 			_, err := e.state.w.Write(job.output)
@@ -210,11 +200,8 @@ func (e *Encoder) jobFlusher() {
 			}
 			e.state.nWritten += int64(len(job.output))
 		}
-		// Return buffers to pools.
-		js.putInputBuf(job.input)
 		js.putOutputBuf(job.output)
-		job.input = nil
-		job.output = nil
+		job.prefix, job.input, job.output = nil, nil, nil
 
 		js.mu.Lock()
 		js.flushedSeq++
@@ -223,16 +210,17 @@ func (e *Encoder) jobFlusher() {
 	}
 }
 
+// shutdownJobWorkers stops the workers and the flusher, and releases the ring.
 func (e *Encoder) shutdownJobWorkers() {
 	js := &e.state.jobs
-	if !js.started {
-		return
+	if js.started {
+		close(js.jobCh)
+		js.workerWg.Wait()
+		close(js.resultCh)
+		js.flusherWg.Wait()
+		js.started = false
 	}
-	close(js.jobCh)
-	js.workerWg.Wait()
-	close(js.resultCh)
-	js.flusherWg.Wait()
-	js.started = false
+	js.releaseRing()
 }
 
 // waitAllJobs blocks until all dispatched jobs have been flushed.
@@ -248,6 +236,97 @@ func (e *Encoder) waitAllJobs() {
 	js.mu.Unlock()
 }
 
+// resetRing sets the ring layout for the options and starts a stream:
+// the next slot is the first, with no history.
+func (js *jobState) resetRing(o *encoderOptions) {
+	js.jobSize, js.overlapSize = o.jobSize(), o.overlapSize()
+	// A slot is held by its own job and by the prefixes of the next
+	// ceil(overlap/jobSize) jobs, and one slot is being filled.
+	slots := o.concurrent + 1 + (js.overlapSize+js.jobSize-1)/js.jobSize
+	js.maxSlots = min(slots, (maxRingSize-js.overlapSize)/js.jobSize)
+	js.slot = -1
+	js.hist, js.start, js.end, js.limit = 0, 0, 0, 0
+}
+
+// releaseRing keeps the input buffer for the next stream, in the pool it came
+// from. The pools let an idle encoder drop it.
+func (js *jobState) releaseRing() {
+	if js.first {
+		js.putOutputBuf(js.ring)
+	} else if js.ring != nil {
+		r := js.ring
+		js.ringPool.Put(&r)
+	}
+	js.ring, js.slotSeq, js.first = nil, nil, false
+}
+
+// newRing takes a ring from the pool, or allocates one.
+func (js *jobState) newRing() {
+	n := js.overlapSize + js.maxSlots*js.jobSize
+	if v, ok := js.ringPool.Get().(*[]byte); ok && len(*v) == n {
+		js.ring = *v
+	} else {
+		js.ring = make([]byte, n)
+	}
+	js.slotSeq = make([]int, js.maxSlots)
+}
+
+// slotOf returns the slot of ring position i. The overlap area is part of the first.
+func (js *jobState) slotOf(i int) int {
+	return max(i-js.overlapSize, 0) / js.jobSize
+}
+
+// nextSlot makes room for more input. A stream starts in an output buffer of
+// half a job, so a short stream needs no ring. When it fills, the history and
+// the input not dispatched yet move to the ring. Only a Flush dispatches jobs
+// from the buffer, and it waits for them, so the buffer is free then.
+// In the ring, it moves to the next slot once the jobs using it are flushed,
+// or back to the first when the first two are free, so that input the workers
+// keep up with stays in cache.
+func (e *Encoder) nextSlot() error {
+	js := &e.state.jobs
+	if js.ring == nil {
+		n := js.jobSize / 2
+		js.ring, js.first = js.getOutputBuf(n)[:n], true
+		js.hist, js.start, js.end, js.limit = 0, 0, 0, n
+		return nil
+	}
+	i := js.slot + 1
+	if js.first || i == js.maxSlots {
+		i = 0
+	}
+	js.mu.Lock()
+	if i > 1 && js.flushedSeq >= js.slotSeq[0] && js.flushedSeq >= js.slotSeq[1] {
+		i = 0
+	}
+	for !js.first && js.flushedSeq < js.slotSeq[i] && js.flusherErr == nil {
+		js.cond.Wait()
+	}
+	err := js.flusherErr
+	js.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	if js.first {
+		buf := js.ring
+		js.newRing()
+		h := min(js.start-js.hist, js.overlapSize)
+		copy(js.ring[js.overlapSize-h:], buf[js.start-h:js.end])
+		js.putOutputBuf(buf)
+		js.first = false
+		js.hist, js.end = js.overlapSize-h, js.overlapSize+js.end-js.start
+		js.start = js.overlapSize
+	} else if i == 0 {
+		h := min(js.end-js.hist, js.overlapSize)
+		copy(js.ring[js.overlapSize-h:js.overlapSize], js.ring[js.end-h:js.end])
+		js.hist = js.overlapSize - h
+		js.start, js.end = js.overlapSize, js.overlapSize
+	}
+	js.slot = i
+	js.limit = js.overlapSize + (i+1)*js.jobSize
+	return nil
+}
+
 func (e *Encoder) dispatchJob(final bool) error {
 	s := &e.state
 	js := &s.jobs
@@ -259,25 +338,26 @@ func (e *Encoder) dispatchJob(final bool) error {
 		return fErr
 	}
 
+	filling := js.ring[js.start:js.end]
 	if !s.headerWritten {
 		// Single-block optimization: fall through to encodeAll path.
-		if final && len(js.filling) > 0 && len(js.filling) <= e.o.blockSize {
-			s.current = e.encodeAll(s.encoder, js.filling, s.current[:0])
+		if final && len(filling) > 0 && len(filling) <= e.o.blockSize {
+			s.current = e.encodeAll(s.encoder, filling, s.current[:0])
 			var n2 int
 			n2, s.err = s.w.Write(s.current)
 			if s.err != nil {
 				return s.err
 			}
 			s.nWritten += int64(n2)
-			s.nInput += int64(len(js.filling))
+			s.nInput += int64(len(filling))
 			s.current = s.current[:0]
-			js.filling = js.filling[:0]
+			js.start = js.end
 			s.headerWritten = true
 			s.fullFrameWritten = true
 			s.eofWritten = true
 			return nil
 		}
-		if final && len(js.filling) == 0 && !e.o.fullZero {
+		if final && len(filling) == 0 && !e.o.fullZero {
 			s.headerWritten = true
 			s.fullFrameWritten = true
 			s.eofWritten = true
@@ -302,7 +382,7 @@ func (e *Encoder) dispatchJob(final bool) error {
 		s.headerWritten = true
 	}
 
-	if len(js.filling) == 0 && !final {
+	if len(filling) == 0 && !final {
 		return nil
 	}
 
@@ -310,33 +390,27 @@ func (e *Encoder) dispatchJob(final bool) error {
 		e.startJobWorkers()
 	}
 
-	// Estimate output size for pooled buffer.
-	outputEst := max(len(js.filling)/2, 512)
+	// Every job takes half a job, so pooled buffers have that size, or the
+	// most a job can take once one has grown (see compressJob).
+	outputEst := js.jobSize / 2
+	if e.o.lowMem {
+		outputEst = max(len(filling)/2, 512)
+	}
 
+	pstart := max(js.hist, js.start-js.overlapSize)
 	job := &encJob{
+		prefix: js.ring[pstart:js.start:js.end],
+		input:  filling,
 		last:   final,
 		done:   make(chan struct{}),
 		output: js.getOutputBuf(outputEst),
 	}
-
-	// Each job owns its prefix slice; the flusher returns it to the pool
-	// after <-job.done, so workers and dispatch never share a buffer.
-	if js.nextPrefix != nil {
-		job.prefix = js.nextPrefix
-		js.nextPrefix = nil
+	if js.end > pstart && !js.first {
+		for i := js.slotOf(pstart); i <= js.slotOf(js.end-1); i++ {
+			js.slotSeq[i] = js.jobSeq + 1
+		}
 	}
-
-	// Build the next job's prefix from the tail of this job's input.
-	if !final && len(js.filling) > 0 {
-		overlapLen := min(js.overlapSize, len(js.filling))
-		np := js.getOverlapBuf(overlapLen)
-		copy(np, js.filling[len(js.filling)-overlapLen:])
-		js.nextPrefix = np
-	}
-
-	// Swap filling buffer into job — zero-copy for the input data.
-	job.input = js.filling
-	js.filling = js.getInputBuf(js.jobSize)
+	js.start = js.end
 
 	s.nInput += int64(len(job.input))
 	js.jobSeq++

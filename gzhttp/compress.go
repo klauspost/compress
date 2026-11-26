@@ -109,7 +109,8 @@ type GzipResponseWriter struct {
 	zw          writer.ZstdWriter
 	zstdJitter  []byte // Jitter to write as skippable frame on Close
 
-	code int // Saves the WriteHeader value.
+	code        int  // Saves the WriteHeader value.
+	wroteHeader bool // A final status has been selected, even while buffering.
 
 	minSize          int    // Specifies the minimum response size to gzip. If the response length is bigger than this value, it is compressed.
 	buf              []byte // Holds the first part of the write before reaching the minSize or the end of the write.
@@ -135,6 +136,9 @@ func (w GzipResponseWriterWithCloseNotify) CloseNotify() <-chan bool {
 
 // Write appends data to the gzip writer.
 func (w *GzipResponseWriter) Write(b []byte) (int, error) {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
 	// Compression writer is initialized. Use it.
 	if w.gw != nil {
 		return w.gw.Write(b)
@@ -163,7 +167,7 @@ func (w *GzipResponseWriter) Write(b []byte) (int, error) {
 	hdr := w.Header()
 
 	// Only continue if they didn't already choose an encoding or a known unhandled content length or type.
-	if len(hdr[HeaderNoCompression]) == 0 && hdr.Get(contentEncoding) == "" && hdr.Get(contentRange) == "" {
+	if len(hdr[HeaderNoCompression]) == 0 && hdr.Get(contentEncoding) == "" && !w.partialContent() {
 		// Check more expensive parts now.
 		cl, _ := atoi(hdr.Get(contentLength))
 		ct := hdr.Get(contentType)
@@ -224,6 +228,14 @@ func (w *GzipResponseWriter) Unwrap() http.ResponseWriter {
 }
 
 var castagnoliTable = crc32.MakeTable(crc32.Castagnoli)
+
+// partialContent reports whether the response is a part of the representation,
+// which must not be compressed on the fly. A single range is marked by a
+// Content-Range header, but the multipart/byteranges answer to a request for
+// several ranges has none, so the 206 status is checked as well.
+func (w *GzipResponseWriter) partialContent() bool {
+	return w.code == http.StatusPartialContent || w.Header().Get(contentRange) != ""
+}
 
 // startCompression initializes the compression writer and writes the buffer.
 func (w *GzipResponseWriter) startCompression(remain []byte) error {
@@ -394,15 +406,17 @@ func (w *GzipResponseWriter) startPlain() error {
 // WriteHeader just saves the response code until close or GZIP effective writes.
 // In the specific case of 1xx status codes, WriteHeader is directly calling the wrapped ResponseWriter.
 func (w *GzipResponseWriter) WriteHeader(code int) {
+	if w.wroteHeader {
+		return
+	}
 	// Handle informational headers
 	if code >= 100 && code <= 199 {
 		w.ResponseWriter.WriteHeader(code)
 		return
 	}
 
-	if w.code == 0 {
-		w.code = code
-	}
+	w.wroteHeader = true
+	w.code = code
 }
 
 // init grabs a new compression writer from the appropriate pool.
@@ -438,7 +452,6 @@ func (w *GzipResponseWriter) Close() error {
 		var (
 			ct = w.Header().Get(contentType)
 			ce = w.Header().Get(contentEncoding)
-			cr = w.Header().Get(contentRange)
 		)
 
 		// Detects the response content-type when it does not exist and the response has a body.
@@ -452,7 +465,7 @@ func (w *GzipResponseWriter) Close() error {
 			}
 		}
 
-		if len(w.buf) == 0 || len(w.buf) < w.minSize || len(w.Header()[HeaderNoCompression]) != 0 || ce != "" || cr != "" || !w.contentTypeFilter(ct) {
+		if len(w.buf) == 0 || len(w.buf) < w.minSize || len(w.Header()[HeaderNoCompression]) != 0 || ce != "" || w.partialContent() || !w.contentTypeFilter(ct) {
 			// Compression not triggered, write out regular response.
 			return w.startPlain()
 		}
@@ -523,7 +536,6 @@ func (w *GzipResponseWriter) FlushError() error {
 			cl, _ = atoi(w.Header().Get(contentLength))
 			ct    = w.Header().Get(contentType)
 			ce    = w.Header().Get(contentEncoding)
-			cr    = w.Header().Get(contentRange)
 		)
 
 		// Detects the response content-type when it does not exist and the response has a body.
@@ -542,10 +554,14 @@ func (w *GzipResponseWriter) FlushError() error {
 		}
 
 		// See if we should compress...
-		if len(w.Header()[HeaderNoCompression]) == 0 && ce == "" && cr == "" && cl >= w.minSize && w.contentTypeFilter(ct) {
-			w.startCompression(nil)
+		if len(w.Header()[HeaderNoCompression]) == 0 && ce == "" && !w.partialContent() && cl >= w.minSize && w.contentTypeFilter(ct) {
+			if err := w.startCompression(nil); err != nil {
+				return err
+			}
 		} else {
-			w.startPlain()
+			if err := w.startPlain(); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -626,7 +642,7 @@ func NewWrapper(opts ...option) (func(http.Handler) http.HandlerFunc, error) {
 		return func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add(vary, acceptEncoding)
 			if c.allowCompressedRequests && contentGzip(r) {
-				if rest, _ := splitOuterCoding(joinContentEncoding(r)); rest != "" {
+				if rest, _ := splitOuterCoding(joinFieldLines(r, contentEncoding)); rest != "" {
 					r.Header.Set(contentEncoding, rest)
 				} else {
 					r.Header.Del(contentEncoding)
@@ -1039,15 +1055,15 @@ func contentGzip(r *http.Request) bool {
 	}
 	// Content-Encoding lists codings in the order they were applied, so only the
 	// last one is removable here.
-	_, outer := splitOuterCoding(joinContentEncoding(r))
+	_, outer := splitOuterCoding(joinFieldLines(r, contentEncoding))
 	coding, _, err := parseCoding(outer)
 	return err == nil && coding == "gzip"
 }
 
-// joinContentEncoding returns the Content-Encoding field lines as the single
-// comma list they are equivalent to. A sender may split the list across lines.
-func joinContentEncoding(r *http.Request) string {
-	v := r.Header.Values(contentEncoding)
+// joinFieldLines returns the field lines for key as the single comma list they
+// are equivalent to. A sender may split a list across lines (RFC 9110, section 5.3).
+func joinFieldLines(r *http.Request, key string) string {
+	v := r.Header.Values(key)
 	if len(v) == 1 {
 		return v[0]
 	}
@@ -1070,7 +1086,7 @@ func acceptsGzip(r *http.Request) bool {
 	// due to a bug in nginx:
 	//   https://trac.nginx.org/nginx/ticket/358
 	//   https://golang.org/issue/5522
-	return r.Method != http.MethodHead && parseEncodingGzip(r.Header.Get(acceptEncoding)) > 0
+	return r.Method != http.MethodHead && parseEncodingGzip(joinFieldLines(r, acceptEncoding)) > 0
 }
 
 // selectEncoding determines the best encoding based on Accept-Encoding header.
@@ -1080,7 +1096,7 @@ func selectEncoding(r *http.Request, gzipEnabled, zstdEnabled, preferZstd, accep
 		return encodingNone
 	}
 
-	ae := r.Header.Get(acceptEncoding)
+	ae := joinFieldLines(r, acceptEncoding)
 	if ae == "" {
 		return encodingNone
 	}

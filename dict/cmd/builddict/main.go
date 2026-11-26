@@ -23,9 +23,9 @@ var (
 	wantMaxBytes   = flag.Int("max", 32<<10, "Max input length to index per input file")
 	wantOutput     = flag.String("o", "dictionary.bin", "Output name")
 	wantFormat     = flag.String("format", "zstd", `Output type. "zstd" "s2" or "raw"`)
-	wantZstdID     = flag.Uint("dictID", 0, "Zstd dictionary ID. Default (0) will be random")
+	wantZstdID     = flag.Uint("dictID", 0, "Zstd dictionary ID. Default (0) derives one from the dictionary")
 	wantZstdCompat = flag.Bool("zcompat", true, "Generate dictionary compatible with zstd 1.5.5 and older")
-	wantZstdLevel  = flag.Int("zlevel", 0, "Zstd compression level. 0-4")
+	wantZstdLevel  = flag.Int("zlevel", 0, "Zstd compression level. 0-5")
 	quiet          = flag.Bool("q", false, "Do not print progress")
 )
 
