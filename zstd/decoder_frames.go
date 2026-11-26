@@ -145,8 +145,7 @@ func readParallelFrame(r io.Reader, buf []byte, limit, maxWindow uint64) (frame 
 			err = io.ErrUnexpectedEOF
 		}
 	}()
-	// Magic, the largest frame header and a block header.
-	var hdr [4 + 14 + 3]byte
+	var hdr [len(frameMagic) + HeaderMaxSize]byte
 	for {
 		if n, err := io.ReadFull(r, hdr[:4]); err != nil {
 			if err == io.EOF {
