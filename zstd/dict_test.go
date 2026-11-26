@@ -195,6 +195,40 @@ func TestBuildDictFullyMatchableCorpusReturnsError(t *testing.T) {
 	}
 }
 
+// With ID 0, BuildDict derives the ID from the dictionary, outside the
+// ranges the format reserves.
+func TestBuildDictDerivedID(t *testing.T) {
+	samples, history, _ := buildDictLevelPathFixture()
+	build := func(id uint32, compat bool) []byte {
+		t.Helper()
+		d, err := BuildDict(BuildDictOptions{ID: id, Contents: samples, History: history, Offsets: [3]int{1, 4, 8}, CompatV155: compat})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	dictID := func(d []byte) uint32 {
+		t.Helper()
+		i, err := InspectDictionary(d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return i.ID()
+	}
+	d := build(0, false)
+	id := dictID(d)
+	if id < 32768 || id >= 1<<31 {
+		t.Errorf("ID %d is in a reserved range", id)
+	}
+	if explicit := build(1, false); !bytes.Equal(d[8:], explicit[8:]) {
+		t.Error("ID 0 changed more than the ID")
+	}
+	// The same content with other tables gets another ID.
+	if dictID(build(0, true)) == id {
+		t.Errorf("ID %d for both", id)
+	}
+}
+
 func TestBuildDictUnknownLevel(t *testing.T) {
 	samples, history, _ := buildDictLevelPathFixture()
 	for _, level := range []EncoderLevel{-1, speedLast} {
