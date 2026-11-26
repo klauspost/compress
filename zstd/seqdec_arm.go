@@ -21,53 +21,53 @@ const (
 )
 
 // armSeqCtx is the flat 4-byte-aligned descriptor handed to the assembly. All
-// fields are 32 bits wide so asm offsets are independent of the Go struct
-// layout rules for 64-bit fields on 32-bit targets.
+// fields are 32 bits wide so field offsets stay uniform on 32-bit targets;
+// seqdec_arm.s accesses them through go_asm.h.
 type armSeqCtx struct {
-	inBase   uintptr // 0
-	cursor   int32   // 4
-	bitsRead int32   // 8
-	valHi    uint32  // 12
-	valLo    uint32  // 16
+	inBase   unsafe.Pointer
+	cursor   int32
+	bitsRead int32
+	valHi    uint32
+	valLo    uint32
 
-	llTable uintptr // 20
-	mlTable uintptr // 24
-	ofTable uintptr // 28
+	llTable unsafe.Pointer
+	mlTable unsafe.Pointer
+	ofTable unsafe.Pointer
 
-	llHdr  uint32 // 32
-	llBase uint32 // 36
-	mlHdr  uint32 // 40
-	mlBase uint32 // 44
-	ofHdr  uint32 // 48
-	ofBase uint32 // 52
+	llHdr  uint32
+	llBase uint32
+	mlHdr  uint32
+	mlBase uint32
+	ofHdr  uint32
+	ofBase uint32
 
-	prev0 int32 // 56
-	prev1 int32 // 60
-	prev2 int32 // 64
+	prev0 int32
+	prev1 int32
+	prev2 int32
 
-	nSeqs int32 // 68
+	nSeqs int32
 
-	outBase uintptr // 72
-	outLen  int32   // 76
-	outCap  int32   // 80
+	outBase unsafe.Pointer
+	outLen  int32
+	outCap  int32
 
-	litBase uintptr // 84
-	litLen  int32   // 88
-	litPos  int32   // 92
+	litBase unsafe.Pointer
+	litLen  int32
+	litPos  int32
 
-	histBase uintptr // 96
-	histLen  int32   // 100
+	histBase unsafe.Pointer
+	histLen  int32
 
-	windowSize int32 // 104
-	maxBlock   int32 // 108
-	startSize  int32 // 112
-	maxBits    int32 // 116
+	windowSize int32
+	maxBlock   int32
+	startSize  int32
+	maxBits    int32
 
-	outPos int32 // 120 (result)
+	outPos int32 // result
 
-	errLL int32 // 124
-	errML int32 // 128
-	errMO int32 // 132
+	errLL int32
+	errML int32
+	errMO int32
 }
 
 // armSeqdecTestHook is nil outside path-selection tests.
@@ -94,14 +94,14 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 	mlD := s.matchLengths.state.state
 	ofD := s.offsets.state.state
 	ctx := armSeqCtx{
-		inBase:     uintptr(unsafe.Pointer(unsafe.SliceData(br.in))),
+		inBase:     unsafe.Pointer(unsafe.SliceData(br.in)),
 		cursor:     int32(br.cursor),
 		bitsRead:   int32(br.bitsRead),
 		valHi:      uint32(br.value >> 32),
 		valLo:      uint32(br.value),
-		llTable:    uintptr(unsafe.Pointer(unsafe.SliceData(s.litLengths.fse.dt[:]))),
-		mlTable:    uintptr(unsafe.Pointer(unsafe.SliceData(s.matchLengths.fse.dt[:]))),
-		ofTable:    uintptr(unsafe.Pointer(unsafe.SliceData(s.offsets.fse.dt[:]))),
+		llTable:    unsafe.Pointer(unsafe.SliceData(s.litLengths.fse.dt[:])),
+		mlTable:    unsafe.Pointer(unsafe.SliceData(s.matchLengths.fse.dt[:])),
+		ofTable:    unsafe.Pointer(unsafe.SliceData(s.offsets.fse.dt[:])),
 		llHdr:      uint32(llD),
 		llBase:     uint32(llD >> 32),
 		mlHdr:      uint32(mlD),
@@ -112,13 +112,13 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 		prev1:      int32(s.prevOffset[1]),
 		prev2:      int32(s.prevOffset[2]),
 		nSeqs:      int32(s.nSeqs),
-		outBase:    uintptr(unsafe.Pointer(unsafe.SliceData(s.out))),
+		outBase:    unsafe.Pointer(unsafe.SliceData(s.out)),
 		outLen:     int32(len(s.out)),
 		outCap:     int32(s.syncOutCap()),
-		litBase:    uintptr(unsafe.Pointer(unsafe.SliceData(s.literals))),
+		litBase:    unsafe.Pointer(unsafe.SliceData(s.literals)),
 		litLen:     int32(len(s.literals)),
 		litPos:     0,
-		histBase:   uintptr(unsafe.Pointer(unsafe.SliceData(hist))),
+		histBase:   unsafe.Pointer(unsafe.SliceData(hist)),
 		histLen:    int32(len(hist)),
 		windowSize: int32(s.windowSize),
 		maxBlock:   int32(maxBlockSize),

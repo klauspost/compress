@@ -1,6 +1,7 @@
 //go:build arm && arm.7 && !noasm && !nounsafe && gc
 
 #include "textflag.h"
+#include "go_asm.h"
 
 // Linux enables ARMv7 unaligned single-word and halfword accesses in normal RAM.
 #ifdef GOOS_linux
@@ -72,62 +73,62 @@
 TEXT ·sequenceDecs_decodeSync_arm(SB), NOSPLIT, $128-8
 	MOVW ctx+0(FP), R9
 	MOVW R9, CTXP
-	MOVW 0(R9), R11
+	MOVW armSeqCtx_inBase(R9), R11
 	MOVW R11, INBASE
-	MOVW 4(R9), R3        // cursor
-	MOVW 8(R9), R0        // bitsRead
-	MOVW 12(R9), R1       // hi
-	MOVW 16(R9), R2       // lo
-	MOVW 20(R9), R11
+	MOVW armSeqCtx_cursor(R9), R3   // cursor
+	MOVW armSeqCtx_bitsRead(R9), R0 // bitsRead
+	MOVW armSeqCtx_valHi(R9), R1    // hi
+	MOVW armSeqCtx_valLo(R9), R2    // lo
+	MOVW armSeqCtx_llTable(R9), R11
 	MOVW R11, LLTAB
-	MOVW 24(R9), R11
+	MOVW armSeqCtx_mlTable(R9), R11
 	MOVW R11, MLTAB
-	MOVW 28(R9), R11
+	MOVW armSeqCtx_ofTable(R9), R11
 	MOVW R11, OFTAB
-	MOVW 32(R9), R11
+	MOVW armSeqCtx_llHdr(R9), R11
 	MOVW R11, LLHDR
-	MOVW 36(R9), R11
+	MOVW armSeqCtx_llBase(R9), R11
 	MOVW R11, LLBASE
-	MOVW 40(R9), R11
+	MOVW armSeqCtx_mlHdr(R9), R11
 	MOVW R11, MLHDR
-	MOVW 44(R9), R11
+	MOVW armSeqCtx_mlBase(R9), R11
 	MOVW R11, MLBASE
-	MOVW 48(R9), R11
+	MOVW armSeqCtx_ofHdr(R9), R11
 	MOVW R11, OFHDR
-	MOVW 52(R9), R11
+	MOVW armSeqCtx_ofBase(R9), R11
 	MOVW R11, OFBASE
-	MOVW 56(R9), R11
+	MOVW armSeqCtx_prev0(R9), R11
 	MOVW R11, PREV0
-	MOVW 60(R9), R11
+	MOVW armSeqCtx_prev1(R9), R11
 	MOVW R11, PREV1
-	MOVW 64(R9), R11
+	MOVW armSeqCtx_prev2(R9), R11
 	MOVW R11, PREV2
-	MOVW 68(R9), R11
+	MOVW armSeqCtx_nSeqs(R9), R11
 	MOVW R11, NSEQ
-	MOVW 72(R9), R11
+	MOVW armSeqCtx_outBase(R9), R11
 	MOVW R11, OUTBASE
-	MOVW 76(R9), R7       // outLen
-	ADD R11, R7, R7       // outPtr
-	MOVW 84(R9), R11
+	MOVW armSeqCtx_outLen(R9), R7   // outLen
+	ADD R11, R7, R7                 // outPtr
+	MOVW armSeqCtx_litBase(R9), R11
 	MOVW R11, LITBASE
-	MOVW 88(R9), R4       // litLen
-	MOVW 92(R9), R8       // litPos
-	ADD R11, R8, R8       // litPtr
-	ADD R4, R11, R4       // litEnd
+	MOVW armSeqCtx_litLen(R9), R4   // litLen
+	MOVW armSeqCtx_litPos(R9), R8   // litPos
+	ADD R11, R8, R8                 // litPtr
+	ADD R4, R11, R4                 // litEnd
 	MOVW R4, LITEND
-	MOVW 96(R9), R11
+	MOVW armSeqCtx_histBase(R9), R11
 	MOVW R11, HISTBASE
-	MOVW 100(R9), R11
+	MOVW armSeqCtx_histLen(R9), R11
 	MOVW R11, HISTLEN
-	MOVW 104(R9), R11
+	MOVW armSeqCtx_windowSize(R9), R11
 	MOVW R11, WINDOW
-	MOVW 108(R9), R11
+	MOVW armSeqCtx_maxBlock(R9), R11
 	MOVW R11, MAXBLOCK
-	MOVW 112(R9), R11
+	MOVW armSeqCtx_startSize(R9), R11
 	MOVW R11, STARTSZ
-	MOVW 116(R9), R11
+	MOVW armSeqCtx_maxBits(R9), R11
 	MOVW R11, MAXBITS
-	MOVW 80(R9), R11
+	MOVW armSeqCtx_outCap(R9), R11
 	MOVW R11, OUTCAP
 
 mainloop:
@@ -813,56 +814,56 @@ err_lit:
 
 publish_ml:
 	MOVW CTXP, R9
-	MOVW R6, 128(R9)
+	MOVW R6, armSeqCtx_errML(R9)
 	B publish
 publish_mo:
 	MOVW CTXP, R9
-	MOVW R6, 132(R9)
+	MOVW R6, armSeqCtx_errMO(R9)
 	B publish
 publish_ll:
 	MOVW CTXP, R9
-	MOVW R6, 124(R9)
+	MOVW R6, armSeqCtx_errLL(R9)
 	B publish
 
 publish:
 	MOVW CTXP, R9
-	MOVW R3, 4(R9)
-	MOVW R0, 8(R9)
-	MOVW R1, 12(R9)
-	MOVW R2, 16(R9)
+	MOVW R3, armSeqCtx_cursor(R9)
+	MOVW R0, armSeqCtx_bitsRead(R9)
+	MOVW R1, armSeqCtx_valHi(R9)
+	MOVW R2, armSeqCtx_valLo(R9)
 	MOVW PREV0, R11
-	MOVW R11, 56(R9)
+	MOVW R11, armSeqCtx_prev0(R9)
 	MOVW PREV1, R11
-	MOVW R11, 60(R9)
+	MOVW R11, armSeqCtx_prev1(R9)
 	MOVW PREV2, R11
-	MOVW R11, 64(R9)
+	MOVW R11, armSeqCtx_prev2(R9)
 	MOVW LITBASE, R11
 	SUB R11, R8, R11
-	MOVW R11, 92(R9)
+	MOVW R11, armSeqCtx_litPos(R9)
 	MOVW OUTBASE, R11
 	SUB R11, R7, R11
-	MOVW R11, 120(R9)
+	MOVW R11, armSeqCtx_outPos(R9)
 	MOVW R5, ret+4(FP)
 	RET
 
 finish:
 	MOVW CTXP, R9
-	MOVW R3, 4(R9)
-	MOVW R0, 8(R9)
-	MOVW R1, 12(R9)
-	MOVW R2, 16(R9)
+	MOVW R3, armSeqCtx_cursor(R9)
+	MOVW R0, armSeqCtx_bitsRead(R9)
+	MOVW R1, armSeqCtx_valHi(R9)
+	MOVW R2, armSeqCtx_valLo(R9)
 	MOVW PREV0, R11
-	MOVW R11, 56(R9)
+	MOVW R11, armSeqCtx_prev0(R9)
 	MOVW PREV1, R11
-	MOVW R11, 60(R9)
+	MOVW R11, armSeqCtx_prev1(R9)
 	MOVW PREV2, R11
-	MOVW R11, 64(R9)
+	MOVW R11, armSeqCtx_prev2(R9)
 	MOVW LITBASE, R11
 	SUB R11, R8, R11
-	MOVW R11, 92(R9)
+	MOVW R11, armSeqCtx_litPos(R9)
 	MOVW OUTBASE, R11
 	SUB R11, R7, R11
-	MOVW R11, 120(R9)
+	MOVW R11, armSeqCtx_outPos(R9)
 	MOVW $0, R0
 	MOVW R0, ret+4(FP)
 	RET
