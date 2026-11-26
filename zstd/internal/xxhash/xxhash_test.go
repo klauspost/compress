@@ -89,7 +89,7 @@ func TestWriteAlignment(t *testing.T) {
 			input[i] = byte(i*37 + i/7)
 		}
 		want := Sum64(input)
-		for offset := 0; offset < 8; offset++ {
+		for offset := range 8 {
 			t.Run(fmt.Sprintf("size=%d/offset=%d", size, offset), func(t *testing.T) {
 				buf := make([]byte, offset+size)[offset:]
 				copy(buf, input)
