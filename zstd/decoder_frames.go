@@ -32,50 +32,30 @@ func (d *Decoder) startFrameDecoder(ctx context.Context, r io.Reader, output cha
 	limit := min(o.frameConcurrentMax, o.maxDecodedSize)
 	maxWindow := d.frame.o.maxWindowSize
 
-	fctx, failed := context.WithCancel(ctx)
-	defer failed()
-	n := o.concurrent
-	// A frame holds a token from when it is read until its output is sent.
-	tokens := make(chan struct{}, n)
-	pending := make(chan chan frameResult, n)
+	// DecodeAll waits for a free block decoder, which bounds the frames
+	// decoded at once. pending bounds how far reading runs ahead.
+	pending := make(chan chan frameResult, o.concurrent)
 	fwdDone := make(chan struct{})
 	go func() {
 		defer close(fwdDone)
-		stopped := false
 		for ch := range pending {
 			// Always wait, so no DecodeAll outlives the stream.
 			res := <-ch
-			<-tokens
-			if stopped {
-				continue
-			}
 			select {
 			case output <- decodeOutput{b: res.b, err: res.err}:
-			case <-fctx.Done():
-			}
-			if res.err != nil || fctx.Err() != nil {
-				stopped = true
-				failed()
+			case <-ctx.Done():
 			}
 		}
 	}()
 
+	// After an error, the reader cancels ctx and drains output.
 	var tail io.Reader
-	for {
-		select {
-		case tokens <- struct{}{}:
-		case <-fctx.Done():
-		}
-		if fctx.Err() != nil {
-			break
-		}
+	for ctx.Err() == nil {
 		frame, size, ok, err := readParallelFrame(r, d.getFrameIn(), limit, maxWindow)
 		if err == io.EOF {
-			<-tokens
 			break
 		}
 		if !ok {
-			<-tokens
 			tail = io.MultiReader(bytes.NewReader(frame), errorOr(r, err))
 			break
 		}
@@ -96,7 +76,7 @@ func (d *Decoder) startFrameDecoder(ctx context.Context, r io.Reader, output cha
 	<-fwdDone
 
 	switch {
-	case fctx.Err() != nil:
+	case ctx.Err() != nil:
 		close(output)
 	case tail != nil:
 		handedOff = true
@@ -195,40 +175,30 @@ func readParallelFrame(r io.Reader, buf []byte, limit, maxWindow uint64) (frame 
 	if _, err := io.ReadFull(r, hdr[4:5]); err != nil {
 		return append(buf, hdr[:4]...), 0, false, err
 	}
+	// Dictionary ID and content size fields, then a window descriptor or a
+	// one-byte content size.
 	fhd := hdr[4]
-	single := fhd&(1<<5) != 0
-	fcsSize := [4]int{0, 2, 4, 8}[fhd>>6]
-	if fcsSize == 0 && single {
-		fcsSize = 1
-	}
-	hdrLen := 5 + [4]int{0, 1, 2, 4}[fhd&3] + fcsSize
-	if !single {
+	hdrLen := 5 + [4]int{0, 1, 2, 4}[fhd&3] + [4]int{0, 2, 4, 8}[fhd>>6]
+	if fhd&(1<<5) == 0 || fhd>>6 == 0 {
 		hdrLen++
 	}
 	if n, err := io.ReadFull(r, hdr[5:hdrLen+3]); err != nil {
 		return append(buf, hdr[:5+n]...), 0, false, err
 	}
 	buf = append(buf, hdr[:hdrLen+3]...)
-
+	var h Header
+	if err := h.Decode(hdr[:hdrLen+3]); err != nil {
+		return buf, 0, false, nil
+	}
 	size = fcsUnknown
-	fcs := hdr[hdrLen-fcsSize : hdrLen]
-	switch fcsSize {
-	case 1:
-		size = uint64(fcs[0])
-	case 2:
-		size = uint64(binary.LittleEndian.Uint16(fcs)) + 256
-	case 4:
-		size = uint64(binary.LittleEndian.Uint32(fcs))
-	case 8:
-		size = binary.LittleEndian.Uint64(fcs)
+	if h.HasFCS {
+		size = h.FrameContentSize
 	}
-	window := max(size, MinWindowSize)
-	if !single {
-		wd := hdr[5]
-		base := uint64(1) << (10 + wd>>3)
-		window = base + base/8*uint64(wd&7)
+	window := h.WindowSize
+	if h.SingleSegment {
+		window = max(size, MinWindowSize)
 	}
-	if window > maxWindow || (size != fcsUnknown && size > limit) {
+	if window > maxWindow || (h.HasFCS && size > limit) {
 		return buf, 0, false, nil
 	}
 
@@ -237,24 +207,24 @@ func readParallelFrame(r io.Reader, buf []byte, limit, maxWindow uint64) (frame 
 	var decoded uint64
 	for {
 		bh := buf[len(buf)-3:]
-		h := uint32(bh[0]) | uint32(bh[1])<<8 | uint32(bh[2])<<16
-		last := h&1 != 0
-		n := int(h >> 3)
-		switch blockType((h >> 1) & 3) {
+		v := uint32(bh[0]) | uint32(bh[1])<<8 | uint32(bh[2])<<16
+		last := v&1 != 0
+		n := int(v >> 3)
+		switch blockType((v >> 1) & 3) {
 		case blockTypeRLE:
 			n = 1
 		case blockTypeReserved:
 			return buf, 0, false, nil
 		}
 		decoded += maxCompressedBlockSize
-		if n > maxCompressedBlockSize || (size == fcsUnknown && decoded > limit) ||
+		if n > maxCompressedBlockSize || (!h.HasFCS && decoded > limit) ||
 			uint64(len(buf)) > limit+limit/16+1024 {
 			return buf, 0, false, nil
 		}
 		next := 3
 		if last {
 			next = 0
-			if fhd&(1<<2) != 0 {
+			if h.HasCheckSum {
 				next = 4
 			}
 		}
