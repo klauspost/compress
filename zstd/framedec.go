@@ -357,6 +357,7 @@ func (d *frameDec) runDecoder(dst []byte, dec *blockDec) ([]byte, error) {
 		if debugDecoder {
 			println("next block:", dec)
 		}
+		d.history.expireDict(uint64(len(d.history.b) - crcStart))
 		err = dec.decodeBuf(&d.history)
 		if err != nil {
 			break

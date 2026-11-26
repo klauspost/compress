@@ -117,10 +117,6 @@ func (s *sequenceDecs) initialize(br *bitReader, hist *history, out []byte) erro
 	s.maxBits = s.litLengths.fse.maxBits + s.offsets.fse.maxBits + s.matchLengths.fse.maxBits
 	s.windowSize = hist.windowSize
 	s.out = out
-	s.dict = nil
-	if hist.dict != nil {
-		s.dict = hist.dict.content
-	}
 	return nil
 }
 
