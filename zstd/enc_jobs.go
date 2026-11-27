@@ -58,6 +58,9 @@ type jobState struct {
 
 	flusherErr error
 	started    bool
+	// closed is set when Close finished the stream. The destination may
+	// return ErrEncoderClosed too, so state.err can't tell.
+	closed bool
 
 	outputPool sync.Pool // *[]byte buffers for compressed output
 }
@@ -335,6 +338,8 @@ func (e *Encoder) dispatchJob(final bool) error {
 	fErr := js.flusherErr
 	js.mu.Unlock()
 	if fErr != nil {
+		// Kept, as a Flush that returns it may leave room in the slot.
+		s.err = fErr
 		return fErr
 	}
 

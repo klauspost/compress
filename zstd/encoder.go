@@ -115,6 +115,7 @@ func (e *Encoder) Reset(w io.Writer) {
 		js.flushedSeq = 0
 		js.flusherErr = nil
 		js.started = false
+		js.closed = false
 	}
 
 	s.wg.Wait()
@@ -216,6 +217,9 @@ func (e *Encoder) Write(p []byte) (n int, err error) {
 }
 
 func (e *Encoder) writeJobs(p []byte) (n int, err error) {
+	if err := e.state.err; err != nil {
+		return 0, err
+	}
 	js := &e.state.jobs
 	for len(p) > 0 {
 		if js.end == js.limit {
@@ -492,6 +496,9 @@ func (e *Encoder) ReadFrom(r io.Reader) (n int64, err error) {
 }
 
 func (e *Encoder) readFromJobs(r io.Reader) (n int64, err error) {
+	if err := e.state.err; err != nil {
+		return 0, err
+	}
 	js := &e.state.jobs
 	for {
 		if js.end == js.limit {
@@ -548,6 +555,15 @@ func (e *Encoder) Flush() error {
 
 func (e *Encoder) flushJobs() error {
 	js := &e.state.jobs
+	if js.closed {
+		return nil
+	}
+	// An earlier error, such as a failed read in ReadFrom, ends the stream,
+	// as without concurrent blocks.
+	if err := e.state.err; err != nil {
+		e.waitAllJobs()
+		return err
+	}
 	if js.end > js.start {
 		if err := e.dispatchJob(false); err != nil {
 			return err
@@ -557,6 +573,9 @@ func (e *Encoder) flushJobs() error {
 	js.mu.Lock()
 	fErr := js.flusherErr
 	js.mu.Unlock()
+	if fErr != nil {
+		e.state.err = fErr
+	}
 	return fErr
 }
 
@@ -636,7 +655,7 @@ func (e *Encoder) closeJobs() error {
 	s := &e.state
 	js := &s.jobs
 
-	if errors.Is(s.err, ErrEncoderClosed) {
+	if js.closed {
 		return nil
 	}
 
@@ -647,22 +666,30 @@ func (e *Encoder) closeJobs() error {
 		return errors.New("zstd: encoder has no writer")
 	}
 
+	// An earlier error, such as a failed read in ReadFrom, leaves the frame
+	// unfinished, as without concurrent blocks.
+	if s.err != nil {
+		e.shutdownJobWorkers()
+		return s.err
+	}
+
+	// The errors below are kept, as the input ring is released.
 	if err := e.dispatchJob(true); err != nil {
 		e.shutdownJobWorkers()
-		if errors.Is(s.err, ErrEncoderClosed) {
-			return nil
-		}
+		s.err = err
 		return err
 	}
 
 	if s.frameContentSize > 0 && s.nInput != s.frameContentSize {
 		e.shutdownJobWorkers()
-		return fmt.Errorf("frame content size %d given, but %d bytes was written", s.frameContentSize, s.nInput)
+		s.err = fmt.Errorf("frame content size %d given, but %d bytes was written", s.frameContentSize, s.nInput)
+		return s.err
 	}
 
 	if s.fullFrameWritten {
 		e.shutdownJobWorkers()
 		s.err = ErrEncoderClosed
+		js.closed = true
 		return nil
 	}
 
@@ -689,6 +716,7 @@ func (e *Encoder) closeJobs() error {
 	}
 	if s.err == nil {
 		s.err = ErrEncoderClosed
+		js.closed = true
 		return nil
 	}
 	return s.err
