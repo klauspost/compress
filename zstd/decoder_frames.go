@@ -276,10 +276,10 @@ func readParallelFrame(r io.Reader, buf []byte, limit, maxWindow uint64, dicts m
 	}
 }
 
-// errorOr returns r, or a reader that returns err if err is not an EOF.
-// A wrapped EOF came from r itself, so it is returned to the caller.
+// errorOr returns r if err is nil, or a reader that returns err, so a read
+// error is reported after the bytes read before it and r is not read again.
 func errorOr(r io.Reader, err error) io.Reader {
-	if err == nil || err == io.EOF || err == io.ErrUnexpectedEOF {
+	if err == nil {
 		return r
 	}
 	return errReader{err}

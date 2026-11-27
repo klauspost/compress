@@ -204,7 +204,8 @@ func WithDecodeBuffersBelow(size int) DOption {
 // so this is not suited to streams that are flushed and read interactively.
 // If a frame decoded this way is corrupt, none of its output is returned.
 // A value of 0 disables it, which is the default.
-// Has no effect with a concurrency of 1.
+// Has no effect with a concurrency of 1, or on input that
+// WithDecodeBuffersBelow decodes in memory instead.
 // Can be changed with ResetWithOptions.
 func WithDecodeFramesConcurrently(maxFrameSize uint64) DOption {
 	return func(o *decoderOptions) error {

@@ -2083,6 +2083,9 @@ func BenchmarkDecodeFramesConcurrently(b *testing.B) {
 				{"frames", []DOption{WithDecoderConcurrency(0), WithDecodeFramesConcurrently(frameSize)}},
 			} {
 				b.Run(filepath.Base(path)+"/"+level.String()+"/"+mode.name, func(b *testing.B) {
+					if mode.name != "sync" && runtime.GOMAXPROCS(0) == 1 {
+						b.Skip("decodes synchronously with GOMAXPROCS=1")
+					}
 					dec, err := NewReader(nil, mode.opts...)
 					if err != nil {
 						b.Fatal(err)
@@ -3595,7 +3598,7 @@ func TestSynctestFrameDecoderOutlivesBubble(t *testing.T) {
 		comp = enc.EncodeAll(chunk, comp)
 	}
 	enc.Close()
-	decode := func(dec *Decoder, where string) {
+	decode := func(t *testing.T, dec *Decoder, where string) {
 		t.Helper()
 		if err := dec.Reset(bytes.NewReader(comp)); err != nil {
 			t.Fatal(err)
@@ -3615,10 +3618,10 @@ func TestSynctestFrameDecoderOutlivesBubble(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		decode(dec, "inside")
+		decode(t, dec, "inside")
 	})
 	defer dec.Close()
-	decode(dec, "outside")
+	decode(t, dec, "outside")
 }
 
 func TestDecodeFramesConcurrently(t *testing.T) {
@@ -3856,6 +3859,36 @@ func TestDecodeFramesConcurrently(t *testing.T) {
 		t.Fatalf("wrapped EOF from the source: got %v, want %v", err, errConn)
 	}
 
+	// After a write error, WriteTo does not write the rest of the frame again.
+	for _, opts := range [][]DOption{{WithDecoderConcurrency(4)}, {WithDecoderConcurrency(4), WithDecodeFramesConcurrently(limit)}} {
+		wdec, err := NewReader(bytes.NewReader(many), opts...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w := &limitedWriter{n: 100}
+		if _, err := wdec.WriteTo(w); err != errLimitedWriter {
+			t.Fatalf("first WriteTo: got %v", err)
+		}
+		n, err := wdec.WriteTo(w)
+		wdec.Close()
+		if n != 0 || err != errLimitedWriter {
+			t.Fatalf("second WriteTo: wrote %d bytes, error %v; want 0, %v", n, err, errLimitedWriter)
+		}
+	}
+
+	// A read error is returned even if the source would go on.
+	for _, cut := range [][2][]byte{
+		{join(small, small[:len(small)/2]), small[len(small)/2:]},
+		{join(small, skippable(nil, 100)[:50]), skippable(nil, 100)[50:]},
+	} {
+		if err := dec.Reset(&errOnceReader{r: bytes.NewReader(cut[0]), err: io.ErrUnexpectedEOF, then: bytes.NewReader(cut[1])}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.Copy(io.Discard, struct{ io.Reader }{dec}); err != io.ErrUnexpectedEOF {
+			t.Fatalf("read error, then more input: got %v, want %v", err, io.ErrUnexpectedEOF)
+		}
+	}
+
 	// Reset and Close part-way through a stream.
 	stream := join(many, many)
 	for _, n := range []int{0, 1, 300 << 10, 1 << 20} {
@@ -3876,10 +3909,11 @@ func TestDecodeFramesConcurrently(t *testing.T) {
 	d2.Close()
 }
 
-// errOnceReader reads r, then returns err once, then io.EOF.
+// errOnceReader reads r, then returns err once, then reads then, or
+// returns io.EOF if then is nil.
 type errOnceReader struct {
-	r   io.Reader
-	err error
+	r, then io.Reader
+	err     error
 }
 
 func (e *errOnceReader) Read(p []byte) (int, error) {
@@ -3887,9 +3921,28 @@ func (e *errOnceReader) Read(p []byte) (int, error) {
 	if n > 0 || err != io.EOF {
 		return n, err
 	}
-	err, e.err = e.err, nil
-	if err == nil {
-		err = io.EOF
+	if e.err != nil {
+		err, e.err = e.err, nil
+		return 0, err
 	}
-	return 0, err
+	if e.then != nil {
+		e.r, e.then = e.then, nil
+		return e.r.Read(p)
+	}
+	return 0, io.EOF
+}
+
+var errLimitedWriter = errors.New("writer full")
+
+// limitedWriter accepts n bytes, then returns errLimitedWriter.
+type limitedWriter struct{ n int }
+
+func (w *limitedWriter) Write(p []byte) (int, error) {
+	if len(p) <= w.n {
+		w.n -= len(p)
+		return len(p), nil
+	}
+	n := w.n
+	w.n = 0
+	return n, errLimitedWriter
 }

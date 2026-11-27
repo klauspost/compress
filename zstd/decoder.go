@@ -324,6 +324,12 @@ func (d *Decoder) drainOutput() {
 		d.current.d = nil
 		d.current.b = nil
 	}
+	if d.current.frameBuf != nil {
+		// A whole frame from the concurrent frame decoder.
+		d.frameBufs.put(d.current.frameBuf)
+		d.current.frameBuf = nil
+		d.current.b = nil
+	}
 	if d.current.output == nil || d.current.flushed {
 		println("current already flushed")
 		return
