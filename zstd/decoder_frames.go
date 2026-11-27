@@ -12,6 +12,9 @@ import (
 	"sync"
 )
 
+// frameDecodeHook, if set by a test, is called as each frame starts decoding.
+var frameDecodeHook func()
+
 // frameResult is the output of one frame decoded by DecodeAll.
 type frameResult struct {
 	b   []byte
@@ -77,6 +80,9 @@ func (d *Decoder) startFrameDecoder(ctx context.Context, r io.Reader, output cha
 		pending <- ch
 		dst := d.getFrameBuf(size)
 		go func() {
+			if frameDecodeHook != nil {
+				frameDecodeHook()
+			}
 			b, err := d.decodeAll(frame, dst, o)
 			d.frameIn.put(frame)
 			if err != nil {

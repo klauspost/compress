@@ -392,10 +392,6 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 
 // decodeAll is DecodeAll with the given options.
 func (d *Decoder) decodeAll(input, dst []byte, o decoderOptions) ([]byte, error) {
-	if d.decoders == nil {
-		return dst, ErrDecoderClosed
-	}
-
 	// Grab a block decoder and frame decoder.
 	block, ok := d.decoders.Get()
 	if !ok {

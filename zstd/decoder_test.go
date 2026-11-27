@@ -3704,6 +3704,7 @@ func TestDecodeFramesConcurrently(t *testing.T) {
 		{name: "truncated-header", stream: join(many, small[:6]), wantErr: true},
 		{name: "truncated-skippable", stream: join(many, skippable(nil, 100)[:50]), wantErr: true},
 		{name: "trailing-garbage", stream: join(many, []byte("garbage!")), wantErr: true},
+		{name: "not-skippable", stream: join(many, []byte{0x60, 0x2a, 0x4d, 0x18, 0, 0, 0, 0}, many), wantErr: true},
 		{name: "corrupt", stream: func() []byte {
 			b := slices.Clone(many)
 			b[len(b)/2] ^= 0x55
@@ -3757,6 +3758,79 @@ func TestDecodeFramesConcurrently(t *testing.T) {
 				}
 			}
 		})
+	}
+
+	// Which frames readParallelFrame hands to the stream decoder.
+	dictOpts, err := NewReader(nil, WithDecoderDictRaw(77, in[:32<<10]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	knownDicts := dictOpts.publishedOptions.Load().dicts
+	dictOpts.Close()
+	encDict77, err := NewWriter(nil, WithEncoderConcurrency(1), WithEncoderDictRaw(77, in[:32<<10]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dict77 := encDict77.EncodeAll(in[:1000], nil)
+	encDict77.Close()
+	for _, tc := range []struct {
+		name      string
+		frame     []byte
+		maxWindow uint64
+		dicts     map[uint32]*dict
+		ok        bool
+	}{
+		{name: "sized", frame: sized(nil, 100<<10), ok: true},
+		{name: "sized over limit", frame: sized(nil, limit+1)},
+		{name: "unsized", frame: unsized(nil, 100<<10), ok: true},
+		{name: "unsized over limit", frame: unsized(nil, limit+1)},
+		{name: "window over maximum", frame: sized(nil, 100<<10), maxWindow: 64 << 10},
+		{name: "known dictionary", frame: dict77, dicts: knownDicts, ok: true},
+		{name: "unknown dictionary", frame: dict77},
+	} {
+		maxWindow := tc.maxWindow
+		if maxWindow == 0 {
+			maxWindow = MaxWindowSize
+		}
+		frame, _, ok, err := readParallelFrame(bytes.NewReader(tc.frame), nil, limit, maxWindow, tc.dicts)
+		if err != nil || ok != tc.ok {
+			t.Fatalf("readParallelFrame %s: ok %v, error %v; want ok %v", tc.name, ok, err, tc.ok)
+		}
+		if ok && !bytes.Equal(frame, tc.frame) {
+			t.Fatalf("readParallelFrame %s: got %d bytes, want the %d-byte frame", tc.name, len(frame), len(tc.frame))
+		}
+	}
+
+	// Frames are decoded concurrently: a second frame starts decoding while
+	// the first waits for it.
+	var mu sync.Mutex
+	started, alone := 0, false
+	both := make(chan struct{})
+	frameDecodeHook = func() {
+		mu.Lock()
+		started++
+		if started == 2 {
+			close(both)
+		}
+		mu.Unlock()
+		select {
+		case <-both:
+		case <-time.After(10 * time.Second):
+			mu.Lock()
+			alone = true
+			mu.Unlock()
+		}
+	}
+	if err := dec.Reset(bytes.NewReader(many)); err != nil {
+		t.Fatal(err)
+	}
+	_, err = io.Copy(io.Discard, struct{ io.Reader }{dec})
+	frameDecodeHook = nil
+	if err != nil {
+		t.Fatal(err)
+	}
+	if alone {
+		t.Fatal("no two frames were decoded at the same time")
 	}
 
 	// Truncate a stream at every offset.
@@ -3879,7 +3953,7 @@ func TestDecodeFramesConcurrently(t *testing.T) {
 	// A read error is returned even if the source would go on.
 	for _, cut := range [][2][]byte{
 		{join(small, small[:len(small)/2]), small[len(small)/2:]},
-		{join(small, skippable(nil, 100)[:50]), skippable(nil, 100)[50:]},
+		{join(small, skippable(nil, 100)[:50]), join(skippable(nil, 100)[50:], small)},
 	} {
 		if err := dec.Reset(&errOnceReader{r: bytes.NewReader(cut[0]), err: io.ErrUnexpectedEOF, then: bytes.NewReader(cut[1])}); err != nil {
 			t.Fatal(err)
