@@ -34,8 +34,9 @@ func (d *Decoder) startFrameDecoder(ctx context.Context, r io.Reader, output cha
 	// Decode with the stream's options; the cap limit is for DecodeAll calls.
 	o.limitToCap = false
 
-	// DecodeAll waits for a free block decoder, which bounds the frames
-	// decoded at once. pending bounds how far reading runs ahead.
+	// A frame holds a token from before it is read until it is decoded, so
+	// the buffers of frames in flight fit the pools.
+	tokens := make(chan struct{}, o.concurrent)
 	pending := make(chan chan frameResult, o.concurrent)
 	fwdDone := make(chan struct{})
 	go func() {
@@ -43,6 +44,7 @@ func (d *Decoder) startFrameDecoder(ctx context.Context, r io.Reader, output cha
 		for ch := range pending {
 			// Always wait, so no DecodeAll outlives the stream.
 			res := <-ch
+			<-tokens
 			select {
 			case output <- decodeOutput{b: res.b, err: res.err}:
 			case <-ctx.Done():
@@ -52,8 +54,18 @@ func (d *Decoder) startFrameDecoder(ctx context.Context, r io.Reader, output cha
 
 	// After an error, the reader cancels ctx and drains output.
 	var tail io.Reader
-	for ctx.Err() == nil {
+	for {
+		select {
+		case tokens <- struct{}{}:
+		case <-ctx.Done():
+		}
+		if ctx.Err() != nil {
+			break
+		}
 		frame, size, ok, err := readParallelFrame(r, d.getFrameIn(), limit, maxWindow)
+		if err == io.EOF || !ok {
+			<-tokens
+		}
 		if err == io.EOF {
 			break
 		}
