@@ -182,7 +182,7 @@ func readParallelFrame(r io.Reader, buf []byte, limit, maxWindow uint64, dicts m
 		}
 	}
 
-	// Frame header (RFC 8878 3.1.1.1) and the first block header.
+	// Frame header (RFC 8878 3.1.1.1).
 	if _, err := io.ReadFull(r, hdr[4:5]); err != nil {
 		return append(buf, hdr[:4]...), 0, false, err
 	}
@@ -193,12 +193,12 @@ func readParallelFrame(r io.Reader, buf []byte, limit, maxWindow uint64, dicts m
 	if fhd&(1<<5) == 0 || fhd>>6 == 0 {
 		hdrLen++
 	}
-	if n, err := io.ReadFull(r, hdr[5:hdrLen+3]); err != nil {
+	if n, err := io.ReadFull(r, hdr[5:hdrLen]); err != nil {
 		return append(buf, hdr[:5+n]...), 0, false, err
 	}
-	buf = append(buf, hdr[:hdrLen+3]...)
+	buf = append(buf, hdr[:hdrLen]...)
 	var h Header
-	if err := h.Decode(hdr[:hdrLen+3]); err != nil {
+	if err := h.Decode(hdr[:hdrLen]); err != nil {
 		return buf, 0, false, nil
 	}
 	size = fcsUnknown
@@ -215,6 +215,11 @@ func readParallelFrame(r io.Reader, buf []byte, limit, maxWindow uint64, dicts m
 	// The stream decoder reports a missing dictionary before reading on.
 	if _, ok := dicts[h.DictionaryID]; !ok && h.DictionaryID != 0 {
 		return buf, 0, false, nil
+	}
+	start := len(buf)
+	buf = slices.Grow(buf, 3)[:start+3]
+	if m, err := io.ReadFull(r, buf[start:]); err != nil {
+		return buf[:start+m], 0, false, err
 	}
 
 	// Blocks (RFC 8878 3.1.1.2). Each read takes a block and the header of
