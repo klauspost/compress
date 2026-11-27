@@ -3747,6 +3747,33 @@ func TestDecodeFramesConcurrently(t *testing.T) {
 		t.Fatalf("capped decoder: got %d bytes, error %v", len(head)+len(rest), err)
 	}
 
+	// An unknown dictionary is reported without waiting for more input.
+	encDict, err := NewWriter(nil, WithEncoderConcurrency(1), WithEncoderDictRaw(77, in[:32<<10]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pr, pw := io.Pipe()
+	// Close the pipe before the decoder, so a failure does not hang Close.
+	defer pw.Close()
+	go pw.Write(join(small, encDict.EncodeAll(in[:1000], nil)))
+	encDict.Close()
+	if err := dec.Reset(pr); err != nil {
+		t.Fatal(err)
+	}
+	dictErr := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(io.Discard, struct{ io.Reader }{dec})
+		dictErr <- err
+	}()
+	select {
+	case err := <-dictErr:
+		if !errors.Is(err, ErrUnknownDictionary) {
+			t.Fatalf("unknown dictionary: got %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("unknown dictionary not reported while input is pending")
+	}
+
 	// Reset and Close part-way through a stream.
 	stream := join(many, many)
 	for _, n := range []int{0, 1, 300 << 10, 1 << 20} {

@@ -62,7 +62,7 @@ func (d *Decoder) startFrameDecoder(ctx context.Context, r io.Reader, output cha
 		if ctx.Err() != nil {
 			break
 		}
-		frame, size, ok, err := readParallelFrame(r, d.getFrameIn(), limit, maxWindow)
+		frame, size, ok, err := readParallelFrame(r, d.getFrameIn(), limit, maxWindow, o.dicts)
 		if err == io.EOF || !ok {
 			<-tokens
 		}
@@ -145,12 +145,13 @@ func (d *Decoder) putFrameIn(b []byte) {
 
 // readParallelFrame reads the next frame from r, appending it to buf and
 // skipping skippable frames. It returns the frame and its content size, or
-// fcsUnknown, with ok set if it decodes to at most limit bytes and has a window
-// of at most maxWindow. Otherwise it returns ok=false with the bytes read so far
+// fcsUnknown, with ok set if it decodes to at most limit bytes, has a window
+// of at most maxWindow and its dictionary, if any, is in dicts. Otherwise it
+// returns ok=false with the bytes read so far
 // and any read error, and the caller decodes the rest of the stream serially,
 // so that decoder reports any problem with the frame. At a clean end of r it
 // returns io.EOF.
-func readParallelFrame(r io.Reader, buf []byte, limit, maxWindow uint64) (frame []byte, size uint64, ok bool, err error) {
+func readParallelFrame(r io.Reader, buf []byte, limit, maxWindow uint64, dicts map[uint32]*dict) (frame []byte, size uint64, ok bool, err error) {
 	defer func() {
 		// Only an end of r between frames is clean.
 		if err == io.EOF && frame != nil {
@@ -209,6 +210,10 @@ func readParallelFrame(r io.Reader, buf []byte, limit, maxWindow uint64) (frame 
 		window = max(size, MinWindowSize)
 	}
 	if window > maxWindow || (h.HasFCS && size > limit) {
+		return buf, 0, false, nil
+	}
+	// The stream decoder reports a missing dictionary before reading on.
+	if _, ok := dicts[h.DictionaryID]; !ok && h.DictionaryID != 0 {
 		return buf, 0, false, nil
 	}
 
