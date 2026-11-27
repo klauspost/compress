@@ -10,6 +10,7 @@ package flate
 import (
 	"bufio"
 	"compress/flate"
+	"errors"
 	"fmt"
 	"io"
 	"math/bits"
@@ -429,9 +430,14 @@ func (f *decompressor) WriteTo(w io.Writer) (int64, error) {
 			n, err := w.Write(f.toRead)
 			total += int64(n)
 			if err != nil {
-				// f.err doubles as the end-of-stream marker, so keep a
-				// writer's io.EOF distinct from a clean end of the input.
-				f.err = noEOF(err)
+				// f.err doubles as the end-of-stream marker and callers check
+				// it with errors.Is, so a writer's io.EOF must not be kept as
+				// is or wrapped with %w. It is not truncated input
+				// (io.ErrUnexpectedEOF) either.
+				f.err = err
+				if errors.Is(err, io.EOF) {
+					f.err = fmt.Errorf("flate: write: %v", err)
+				}
 				// A later Read must not replay bytes already handed to
 				// the writer, even when the write also returned an error.
 				f.toRead = f.toRead[:0]
