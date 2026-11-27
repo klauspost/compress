@@ -10,6 +10,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -39,6 +40,7 @@ func (w *partialWriter) Write(p []byte) (int, error) {
 func TestWriteToShortWriteDoesNotReplayData(t *testing.T) {
 	const payload = "hello world, this is a reasonably long payload for flate"
 	wantErr := errors.New("writer failed")
+	wrappedEOF := fmt.Errorf("closed: %w", io.EOF)
 	for _, tc := range []struct {
 		name    string
 		newW    func() io.Writer
@@ -50,7 +52,8 @@ func TestWriteToShortWriteDoesNotReplayData(t *testing.T) {
 		{"zero bytes, no error", func() io.Writer { return &partialWriter{n: 0} }, 0, io.ErrShortWrite, io.ErrShortWrite},
 		{"one byte with error", func() io.Writer { return &partialWriter{n: 1, err: wantErr} }, 1, wantErr, wantErr},
 		{"zero bytes with error", func() io.Writer { return &partialWriter{n: 0, err: wantErr} }, 0, wantErr, wantErr},
-		{"writer returns EOF", func() io.Writer { return &partialWriter{n: 1, err: io.EOF} }, 1, io.EOF, io.ErrUnexpectedEOF},
+		{"writer returns EOF", func() io.Writer { return &partialWriter{n: 1, err: io.EOF} }, 1, io.EOF, errors.New("flate: write: EOF")},
+		{"writer returns wrapped EOF", func() io.Writer { return &partialWriter{n: 1, err: wrappedEOF} }, 1, wrappedEOF, errors.New("flate: write: closed: EOF")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf bytes.Buffer
@@ -79,7 +82,12 @@ func TestWriteToShortWriteDoesNotReplayData(t *testing.T) {
 			if got != 0 {
 				t.Errorf("Read returned %d bytes after the failed write: %q", got, p[:got])
 			}
-			if err != tc.readErr {
+			ok := err == tc.readErr
+			if errors.Is(tc.err, io.EOF) {
+				// A writer's io.EOF is kept as a new error, so compare it by text.
+				ok = err != nil && err.Error() == tc.readErr.Error() && !errors.Is(err, io.EOF)
+			}
+			if !ok {
 				t.Errorf("Read got %v, want %v", err, tc.readErr)
 			}
 			// A fresh reader must not let io.ReadAll report success on
