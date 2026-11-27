@@ -65,11 +65,13 @@ func (d *Decoder) startFrameDecoder(ctx context.Context, r io.Reader, output cha
 		if ctx.Err() != nil {
 			break
 		}
-		frame, size, ok, err := readParallelFrame(r, d.frameIn.get(), limit, maxWindow, o.dicts)
+		in := d.frameIn.get()
+		frame, size, ok, err := readParallelFrame(r, in, limit, maxWindow, o.dicts)
 		if err == io.EOF || !ok {
 			<-tokens
 		}
 		if err == io.EOF {
+			d.frameIn.put(in)
 			break
 		}
 		if !ok {
@@ -256,10 +258,16 @@ func readParallelFrame(r io.Reader, buf []byte, limit, maxWindow uint64, dicts m
 			(bt == blockTypeCompressed && n < 2) {
 			return buf, 0, false, nil
 		}
+		// Raw and RLE blocks give their size; a compressed block decodes to
+		// at most the window or the maximum block size.
+		if bt == blockTypeCompressed {
+			decoded += min(window, maxCompressedBlockSize)
+		} else {
+			decoded += uint64(n)
+		}
 		if bt == blockTypeRLE {
 			n = 1
 		}
-		decoded += maxCompressedBlockSize
 		if (!h.HasFCS && decoded > limit) ||
 			uint64(len(buf)) > limit+limit/16+1024 {
 			return buf, 0, false, nil

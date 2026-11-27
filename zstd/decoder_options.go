@@ -23,8 +23,8 @@ type decoderOptions struct {
 	dicts           map[uint32]*dict
 	ignoreChecksum  bool
 	limitToCap      bool
+	resetOpt        bool // with the bools above, keeps the struct 64 bytes
 	decodeBufsBelow int
-	resetOpt        bool
 
 	frameConcurrentMax uint64
 }
@@ -194,14 +194,18 @@ func WithDecodeBuffersBelow(size int) DOption {
 // decoder concurrency of frames at once, when the stream consists of
 // independent frames that each decode to at most maxFrameSize bytes,
 // such as the output of several EncodeAll calls written one after another.
-// Each frame is decoded whole, so up to about twice the concurrency of
-// frames is held in memory.
-// Frames must declare their content size, or have few enough blocks that
-// their size cannot exceed maxFrameSize.
+// Each frame is decoded whole, so up to the concurrency plus three decoded
+// frames are held while decoding. Up to the concurrency plus two decoded
+// frames and the concurrency of compressed frames are kept for reuse until
+// a Reset with a nil reader or without this option, or Close.
+// Frames must declare their content size, or have blocks that cannot
+// decode to more than maxFrameSize.
 // From the first frame that does not qualify, the rest of the stream is
 // decoded as usual.
-// A frame's output is only returned once the whole frame has been read,
-// so this is not suited to streams that are flushed and read interactively.
+// A frame's output is only returned once the whole frame has been read, or,
+// for a frame without a content size, once it could exceed maxFrameSize.
+// Frames from an Encoder used as a stream have no content size, so this is
+// not suited to streams that are flushed and read interactively.
 // If a frame decoded this way is corrupt, none of its output is returned.
 // A value of 0 disables it, which is the default.
 // Has no effect with a concurrency of 1, or on input that

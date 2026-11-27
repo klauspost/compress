@@ -3784,6 +3784,27 @@ func TestDecodeFramesConcurrently(t *testing.T) {
 		{name: "sized over limit", frame: sized(nil, limit+1)},
 		{name: "unsized", frame: unsized(nil, 100<<10), ok: true},
 		{name: "unsized over limit", frame: unsized(nil, limit+1)},
+		{name: "unsized, flushed, within limit", frame: func() []byte {
+			// Two compressed blocks and the empty last block that Close
+			// writes after a Flush.
+			var buf bytes.Buffer
+			enc, err := NewWriter(&buf, WithEncoderConcurrency(1))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, part := range [][]byte{in[:limit/2], in[limit/2 : limit]} {
+				if _, err := enc.Write(part); err != nil {
+					t.Fatal(err)
+				}
+				if err := enc.Flush(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := enc.Close(); err != nil {
+				t.Fatal(err)
+			}
+			return buf.Bytes()
+		}(), ok: true},
 		{name: "window over maximum", frame: sized(nil, 100<<10), maxWindow: 64 << 10},
 		{name: "known dictionary", frame: dict77, dicts: knownDicts, ok: true},
 		{name: "unknown dictionary", frame: dict77},
@@ -3799,6 +3820,32 @@ func TestDecodeFramesConcurrently(t *testing.T) {
 		if ok && !bytes.Equal(frame, tc.frame) {
 			t.Fatalf("readParallelFrame %s: got %d bytes, want the %d-byte frame", tc.name, len(frame), len(tc.frame))
 		}
+	}
+
+	// The buffers kept for reuse are dropped by Reset with a nil reader or
+	// without the option.
+	for _, reset := range []func() error{
+		func() error { return dec.Reset(nil) },
+		func() error { return dec.ResetWithOptions(bytes.NewReader(many), WithDecodeFramesConcurrently(0)) },
+	} {
+		if err := dec.ResetWithOptions(bytes.NewReader(many), WithDecodeFramesConcurrently(limit)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.Copy(io.Discard, struct{ io.Reader }{dec}); err != nil {
+			t.Fatal(err)
+		}
+		if len(dec.frameBufs.bufs) == 0 || len(dec.frameIn.bufs) == 0 {
+			t.Fatal("no buffers kept after decoding frames")
+		}
+		if err := reset(); err != nil {
+			t.Fatal(err)
+		}
+		if len(dec.frameBufs.bufs) != 0 || len(dec.frameIn.bufs) != 0 {
+			t.Fatalf("kept %d decoded and %d compressed buffers after Reset", len(dec.frameBufs.bufs), len(dec.frameIn.bufs))
+		}
+	}
+	if err := dec.ResetWithOptions(nil, WithDecodeFramesConcurrently(limit)); err != nil {
+		t.Fatal(err)
 	}
 
 	// Frames are decoded concurrently: a second frame starts decoding while
@@ -3943,7 +3990,9 @@ func TestDecodeFramesConcurrently(t *testing.T) {
 		if _, err := wdec.WriteTo(w); err != errLimitedWriter {
 			t.Fatalf("first WriteTo: got %v", err)
 		}
-		n, err := wdec.WriteTo(w)
+		// A fresh writer, so a frame written again shows in n.
+		var fresh bytes.Buffer
+		n, err := wdec.WriteTo(&fresh)
 		wdec.Close()
 		if n != 0 || err != errLimitedWriter {
 			t.Fatalf("second WriteTo: wrote %d bytes, error %v; want 0, %v", n, err, errLimitedWriter)

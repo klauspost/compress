@@ -202,10 +202,17 @@ func (d *Decoder) Reset(r io.Reader) error {
 			d.current.b = d.current.b[:0]
 		}
 		d.current.flushed = true
+		d.frameBufs.clear()
+		d.frameIn.clear()
 		return nil
 	}
 
 	o := *d.publishedOptions.Load()
+	if o.frameConcurrentMax == 0 {
+		// Drop buffers kept for concurrently decoded frames.
+		d.frameBufs.clear()
+		d.frameIn.clear()
+	}
 
 	// If bytes buffer and < 5MB, do sync decoding anyway.
 	if bb, ok := r.(byter); ok && bb.Len() < o.decodeBufsBelow && !o.limitToCap {
