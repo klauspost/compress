@@ -47,7 +47,7 @@ type Decoder struct {
 	frame *frameDec
 
 	// Buffers for frames decoded concurrently.
-	frameBufs, frameIn chan []byte
+	frameBufs, frameIn bufCache
 
 	// streamWg is the waitgroup for all streams
 	streamWg sync.WaitGroup
@@ -129,8 +129,8 @@ func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
 		dec.localFrame.o.dicts = nil
 		d.decoders.Put(dec)
 	}
-	d.frameBufs = make(chan []byte, o.concurrent+2)
-	d.frameIn = make(chan []byte, o.concurrent)
+	d.frameBufs.max = o.concurrent + 2
+	d.frameIn.max = o.concurrent
 	d.publishedOptions.Store(&o)
 
 	if r == nil {
@@ -378,6 +378,9 @@ func (d *Decoder) WriteTo(w io.Writer) (int64, error) {
 // DecodeAll can be used concurrently.
 // The Decoder concurrency limits will be respected.
 func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
+	if d.decoders == nil {
+		return dst, ErrDecoderClosed
+	}
 	return d.decodeAll(input, dst, *d.publishedOptions.Load())
 }
 
@@ -515,7 +518,7 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 	//ASYNC:
 	d.stashDecoder()
 	if d.current.frameBuf != nil {
-		d.putFrameBuf(d.current.frameBuf)
+		d.frameBufs.put(d.current.frameBuf)
 		d.current.frameBuf = nil
 	}
 	if blocking {
@@ -687,6 +690,10 @@ func (d *Decoder) Close() {
 		d.current.d.Close()
 		d.current.d = nil
 	}
+	d.current.b = nil
+	d.current.frameBuf = nil
+	d.frameBufs.clear()
+	d.frameIn.clear()
 	d.current.err = ErrDecoderClosed
 }
 

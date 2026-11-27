@@ -3516,6 +3516,10 @@ func TestDecodeAllAfterClose(t *testing.T) {
 	if _, err := dec.DecodeAll(comp, nil); err != ErrDecoderClosed {
 		t.Fatalf("DecodeAll after Close: err %v; want ErrDecoderClosed", err)
 	}
+	var zero Decoder
+	if _, err := zero.DecodeAll(comp, nil); err != ErrDecoderClosed {
+		t.Fatalf("DecodeAll on a zero Decoder: err %v; want ErrDecoderClosed", err)
+	}
 }
 
 // A stream decoder with several goroutines runs inside a bubble and is
@@ -3578,6 +3582,43 @@ func TestSynctestStreamDecoderOutlivesBubble(t *testing.T) {
 	if !bytes.Equal(got, in) {
 		t.Fatal("decoded output differs outside the bubble")
 	}
+}
+
+func TestSynctestFrameDecoderOutlivesBubble(t *testing.T) {
+	in, _ := synctestCompressed(t)
+	enc, err := NewWriter(nil, WithEncoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var comp []byte
+	for chunk := range slices.Chunk(in, max(len(in)/8, 1)) {
+		comp = enc.EncodeAll(chunk, comp)
+	}
+	enc.Close()
+	decode := func(dec *Decoder, where string) {
+		t.Helper()
+		if err := dec.Reset(bytes.NewReader(comp)); err != nil {
+			t.Fatal(err)
+		}
+		got, err := io.ReadAll(dec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, in) {
+			t.Fatalf("decoded output differs %s the bubble", where)
+		}
+	}
+	var dec *Decoder
+	synctest.Test(t, func(t *testing.T) {
+		var err error
+		dec, err = NewReader(nil, WithDecoderConcurrency(4), WithDecodeFramesConcurrently(1<<20))
+		if err != nil {
+			t.Fatal(err)
+		}
+		decode(dec, "inside")
+	})
+	defer dec.Close()
+	decode(dec, "outside")
 }
 
 func TestDecodeFramesConcurrently(t *testing.T) {
@@ -3646,6 +3687,7 @@ func TestDecodeFramesConcurrently(t *testing.T) {
 		name    string
 		stream  []byte
 		wantErr bool
+		wantOut []byte
 	}{
 		{name: "empty"},
 		{name: "sized", stream: many},
@@ -3668,7 +3710,7 @@ func TestDecodeFramesConcurrently(t *testing.T) {
 			b := join(many, small, many)
 			b[len(many)+len(small)-1] ^= 1
 			return b
-		}(), wantErr: true},
+		}(), wantErr: true, wantOut: bytes.Repeat(in[len(in)-100<<10:], 20)},
 	}
 	serial, err := NewReader(nil, WithDecoderConcurrency(1))
 	if err != nil {
@@ -3703,6 +3745,9 @@ func TestDecodeFramesConcurrently(t *testing.T) {
 				}
 				if (err != nil) != tt.wantErr {
 					t.Fatalf("WriteTo %v: got error %v, want error: %v", writeTo, err, tt.wantErr)
+				}
+				if tt.wantOut != nil && !bytes.Equal(got, tt.wantOut) {
+					t.Fatalf("WriteTo %v: got %d bytes, want exactly the %d bytes of the frames before the corrupt one", writeTo, len(got), len(tt.wantOut))
 				}
 				if !bytes.HasPrefix(want, got) || (err == nil && len(got) != len(want)) {
 					t.Fatalf("WriteTo %v: output mismatch, got %d bytes, want %d", writeTo, len(got), len(want))
@@ -3747,39 +3792,68 @@ func TestDecodeFramesConcurrently(t *testing.T) {
 		t.Fatalf("capped decoder: got %d bytes, error %v", len(head)+len(rest), err)
 	}
 
-	// An unknown dictionary is reported without waiting for more input, also
-	// when only the frame header has arrived.
+	// Errors the stream decoder finds in a frame header or block header are
+	// reported without waiting for more input.
 	encDict, err := NewWriter(nil, WithEncoderConcurrency(1), WithEncoderDictRaw(77, in[:32<<10]))
 	if err != nil {
 		t.Fatal(err)
 	}
 	dictFrame := encDict.EncodeAll(in[:1000], nil)
 	encDict.Close()
-	var dictHeader Header
+	var dictHeader, smallHeader Header
 	if err := dictHeader.Decode(dictFrame); err != nil {
 		t.Fatal(err)
 	}
-	for _, sent := range [][]byte{dictFrame, dictFrame[:dictHeader.HeaderSize]} {
+	if err := smallHeader.Decode(small); err != nil {
+		t.Fatal(err)
+	}
+	blockHeader := func(bt blockType, size int) []byte {
+		v := 1 | uint32(bt)<<1 | uint32(size)<<3
+		return []byte{byte(v), byte(v >> 8), byte(v >> 16)}
+	}
+	for _, tc := range []struct {
+		name string
+		sent []byte
+		want error
+	}{
+		{name: "unknown dictionary", sent: dictFrame, want: ErrUnknownDictionary},
+		{name: "unknown dictionary, header only", sent: dictFrame[:dictHeader.HeaderSize], want: ErrUnknownDictionary},
+		{name: "reserved descriptor bit", sent: []byte{0x28, 0xb5, 0x2f, 0xfd, 1 << 3}},
+		{name: "oversized RLE block", sent: join(small[:smallHeader.HeaderSize], blockHeader(blockTypeRLE, 200<<10))},
+		{name: "one-byte compressed block", sent: join(small[:smallHeader.HeaderSize], blockHeader(blockTypeCompressed, 1))},
+	} {
 		pr, pw := io.Pipe()
-		// Close the pipe before the decoder, so a failure does not hang Close.
-		defer pw.Close()
-		go pw.Write(join(small, sent))
+		go pw.Write(join(small, tc.sent))
 		if err := dec.Reset(pr); err != nil {
 			t.Fatal(err)
 		}
-		dictErr := make(chan error, 1)
+		done := make(chan error, 1)
 		go func() {
 			_, err := io.Copy(io.Discard, struct{ io.Reader }{dec})
-			dictErr <- err
+			done <- err
 		}()
 		select {
-		case err := <-dictErr:
-			if !errors.Is(err, ErrUnknownDictionary) {
-				t.Fatalf("unknown dictionary, %d bytes sent: got %v", len(sent), err)
+		case err := <-done:
+			pw.Close()
+			if err == nil || (tc.want != nil && !errors.Is(err, tc.want)) {
+				t.Fatalf("%s: got error %v, want %v", tc.name, err, tc.want)
 			}
 		case <-time.After(10 * time.Second):
-			t.Fatalf("unknown dictionary not reported while input is pending, %d bytes sent", len(sent))
+			// Let the copy finish before the decoder is closed.
+			pw.Close()
+			<-done
+			t.Fatalf("%s: error not reported while input is pending", tc.name)
 		}
+	}
+
+	// An error from the source that wraps an EOF is returned, not treated
+	// as the end of the stream.
+	errConn := fmt.Errorf("connection reset: %w", io.ErrUnexpectedEOF)
+	if err := dec.Reset(&errOnceReader{r: bytes.NewReader(join(small, small[:len(small)/2])), err: errConn}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.Copy(io.Discard, struct{ io.Reader }{dec}); err != errConn {
+		t.Fatalf("wrapped EOF from the source: got %v, want %v", err, errConn)
 	}
 
 	// Reset and Close part-way through a stream.
@@ -3792,7 +3866,7 @@ func TestDecodeFramesConcurrently(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	d2, err := NewReader(bytes.NewReader(stream), WithDecodeFramesConcurrently(limit))
+	d2, err := NewReader(bytes.NewReader(stream), WithDecoderConcurrency(4), WithDecodeFramesConcurrently(limit))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3800,4 +3874,22 @@ func TestDecodeFramesConcurrently(t *testing.T) {
 		t.Fatal(err)
 	}
 	d2.Close()
+}
+
+// errOnceReader reads r, then returns err once, then io.EOF.
+type errOnceReader struct {
+	r   io.Reader
+	err error
+}
+
+func (e *errOnceReader) Read(p []byte) (int, error) {
+	n, err := e.r.Read(p)
+	if n > 0 || err != io.EOF {
+		return n, err
+	}
+	err, e.err = e.err, nil
+	if err == nil {
+		err = io.EOF
+	}
+	return 0, err
 }

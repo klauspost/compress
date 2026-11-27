@@ -202,7 +202,7 @@ func WithDecodeBuffersBelow(size int) DOption {
 // decoded as usual.
 // A frame's output is only returned once the whole frame has been read,
 // so this is not suited to streams that are flushed and read interactively.
-// If a frame is corrupt, none of its output is returned.
+// If a frame decoded this way is corrupt, none of its output is returned.
 // A value of 0 disables it, which is the default.
 // Has no effect with a concurrency of 1.
 // Can be changed with ResetWithOptions.

@@ -446,7 +446,8 @@ Since "blocks" are quite dependent on the output of the previous block stream de
 
 Frames do not depend on each other, so a stream written as a series of independent frames,
 for example by writing the output of `EncodeAll` on fixed-size chunks one after another,
-can be decoded with one frame per core using `WithDecodeFramesConcurrently(maxFrameSize)`.
+can be decoded several frames at a time using `WithDecodeFramesConcurrently(maxFrameSize)`,
+up to the decoder concurrency set with `WithDecoderConcurrency`.
 Each frame is decoded whole into memory, so only frames that decode to at most `maxFrameSize` bytes
 are decoded this way; from the first frame that does not qualify the rest of the stream is decoded as usual.
 

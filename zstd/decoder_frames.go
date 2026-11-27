@@ -7,9 +7,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"errors"
 	"io"
 	"slices"
+	"sync"
 )
 
 // frameResult is the output of one frame decoded by DecodeAll.
@@ -62,7 +62,7 @@ func (d *Decoder) startFrameDecoder(ctx context.Context, r io.Reader, output cha
 		if ctx.Err() != nil {
 			break
 		}
-		frame, size, ok, err := readParallelFrame(r, d.getFrameIn(), limit, maxWindow, o.dicts)
+		frame, size, ok, err := readParallelFrame(r, d.frameIn.get(), limit, maxWindow, o.dicts)
 		if err == io.EOF || !ok {
 			<-tokens
 		}
@@ -78,7 +78,7 @@ func (d *Decoder) startFrameDecoder(ctx context.Context, r io.Reader, output cha
 		dst := d.getFrameBuf(size)
 		go func() {
 			b, err := d.decodeAll(frame, dst, o)
-			d.putFrameIn(frame)
+			d.frameIn.put(frame)
 			if err != nil {
 				// Partial output may include part of the failing block.
 				b = nil
@@ -101,46 +101,55 @@ func (d *Decoder) startFrameDecoder(ctx context.Context, r io.Reader, output cha
 	}
 }
 
-// getFrameBuf returns a buffer the reader has finished with if it holds a
-// frame of size bytes, or nil to let DecodeAll allocate.
-func (d *Decoder) getFrameBuf(size uint64) []byte {
-	select {
-	case b := <-d.frameBufs:
-		if size == fcsUnknown || uint64(cap(b)) >= size+compressedBlockOverAlloc {
-			return b[:0]
-		}
-	default:
-	}
-	return nil
+// bufCache keeps up to max buffers for reuse. It uses no channel, so a
+// Decoder made in a testing/synctest bubble can be used outside it.
+type bufCache struct {
+	mu   sync.Mutex
+	bufs [][]byte
+	max  int
 }
 
-// putFrameBuf keeps b for reuse by getFrameBuf.
-func (d *Decoder) putFrameBuf(b []byte) {
+// get returns a kept buffer, or nil.
+func (c *bufCache) get() []byte {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	n := len(c.bufs)
+	if n == 0 {
+		return nil
+	}
+	b := c.bufs[n-1]
+	c.bufs[n-1] = nil
+	c.bufs = c.bufs[:n-1]
+	return b[:0]
+}
+
+// put keeps b if there is room.
+func (c *bufCache) put(b []byte) {
 	if cap(b) == 0 {
 		return
 	}
-	select {
-	case d.frameBufs <- b:
-	default:
+	c.mu.Lock()
+	if len(c.bufs) < c.max {
+		c.bufs = append(c.bufs, b)
 	}
+	c.mu.Unlock()
 }
 
-// getFrameIn returns an empty buffer for a compressed frame.
-func (d *Decoder) getFrameIn() []byte {
-	select {
-	case b := <-d.frameIn:
-		return b[:0]
-	default:
-		return nil
-	}
+// clear drops all kept buffers.
+func (c *bufCache) clear() {
+	c.mu.Lock()
+	c.bufs = nil
+	c.mu.Unlock()
 }
 
-// putFrameIn keeps b for reuse by getFrameIn.
-func (d *Decoder) putFrameIn(b []byte) {
-	select {
-	case d.frameIn <- b:
-	default:
+// getFrameBuf returns a buffer the reader has finished with if it holds a
+// frame of size bytes, or nil to let DecodeAll allocate.
+func (d *Decoder) getFrameBuf(size uint64) []byte {
+	b := d.frameBufs.get()
+	if b != nil && (size == fcsUnknown || uint64(cap(b)) >= size+compressedBlockOverAlloc) {
+		return b
 	}
+	return nil
 }
 
 // readParallelFrame reads the next frame from r, appending it to buf and
@@ -189,6 +198,10 @@ func readParallelFrame(r io.Reader, buf []byte, limit, maxWindow uint64, dicts m
 	// Dictionary ID and content size fields, then a window descriptor or a
 	// one-byte content size.
 	fhd := hdr[4]
+	if fhd&(1<<3) != 0 {
+		// Reserved bit: the stream decoder reports it.
+		return append(buf, hdr[:5]...), 0, false, nil
+	}
 	hdrLen := 5 + [4]int{0, 1, 2, 4}[fhd&3] + [4]int{0, 2, 4, 8}[fhd>>6]
 	if fhd&(1<<5) == 0 || fhd>>6 == 0 {
 		hdrLen++
@@ -230,14 +243,18 @@ func readParallelFrame(r io.Reader, buf []byte, limit, maxWindow uint64, dicts m
 		v := uint32(bh[0]) | uint32(bh[1])<<8 | uint32(bh[2])<<16
 		last := v&1 != 0
 		n := int(v >> 3)
-		switch blockType((v >> 1) & 3) {
-		case blockTypeRLE:
-			n = 1
-		case blockTypeReserved:
+		// Hand the stream decoder any block header it rejects, before
+		// waiting for the payload.
+		bt := blockType((v >> 1) & 3)
+		if bt == blockTypeReserved || n > maxCompressedBlockSize || uint64(n) > window ||
+			(bt == blockTypeCompressed && n < 2) {
 			return buf, 0, false, nil
 		}
+		if bt == blockTypeRLE {
+			n = 1
+		}
 		decoded += maxCompressedBlockSize
-		if n > maxCompressedBlockSize || (!h.HasFCS && decoded > limit) ||
+		if (!h.HasFCS && decoded > limit) ||
 			uint64(len(buf)) > limit+limit/16+1024 {
 			return buf, 0, false, nil
 		}
@@ -260,8 +277,9 @@ func readParallelFrame(r io.Reader, buf []byte, limit, maxWindow uint64, dicts m
 }
 
 // errorOr returns r, or a reader that returns err if err is not an EOF.
+// A wrapped EOF came from r itself, so it is returned to the caller.
 func errorOr(r io.Reader, err error) io.Reader {
-	if err == nil || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+	if err == nil || err == io.EOF || err == io.ErrUnexpectedEOF {
 		return r
 	}
 	return errReader{err}
