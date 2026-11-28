@@ -99,13 +99,14 @@ const errorOverread = 6
 func (s *sequenceDecs) useSafeDecodeSync() bool {
 	// A block never produces more than maxBlockSize bytes.
 	maxBlockSize := min(s.windowSize, maxCompressedBlockSize)
-	if s.maxSyncLen == 0 && cap(s.out)-len(s.out) < maxBlockSize+compressedBlockOverAlloc {
+	outCap := s.syncOutCap()
+	if s.maxSyncLen == 0 && outCap-len(s.out) < maxBlockSize+compressedBlockOverAlloc {
 		return true
 	}
 	// The block, not the rest of the frame, must fit with the slack: a
 	// buffer sized exactly to the frame needs the safe copies only for the
 	// final block(s).
-	if s.maxSyncLen > 0 && cap(s.out)-len(s.out)-compressedBlockOverAlloc < min(int(s.maxSyncLen), maxBlockSize) {
+	if s.maxSyncLen > 0 && outCap-len(s.out)-compressedBlockOverAlloc < min(int(s.maxSyncLen), maxBlockSize) {
 		return true
 	}
 	if cap(s.literals) < len(s.literals)+compressedBlockOverAlloc {
@@ -137,7 +138,7 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 		ofState:     uint64(s.offsets.state.state),
 		iteration:   s.nSeqs - 1,
 		litRemain:   len(s.literals),
-		out:         s.out,
+		out:         s.out[:len(s.out):s.syncOutCap()],
 		outPosition: len(s.out),
 		literals:    s.literals,
 		windowSize:  s.windowSize,
@@ -171,6 +172,9 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 
 	case errorNotEnoughSpace:
 		size := ctx.outPosition + ctx.ll + ctx.ml
+		if s.limitToCap && size-startSize <= maxBlockSize && size-startSize > s.outputLimit {
+			return true, ErrDecoderSizeExceeded
+		}
 		if debugDecoder {
 			println("msl:", s.maxSyncLen, "cap", cap(s.out), "bef:", startSize, "sz:", size-startSize, "mbs:", maxBlockSize, "outsz:", cap(s.out)-startSize)
 		}
@@ -188,6 +192,9 @@ func (s *sequenceDecs) decodeSyncSimple(hist []byte) (bool, error) {
 	if err != nil {
 		printf("Closing sequences: %v, %+v\n", err, *br)
 		return true, err
+	}
+	if s.limitToCap && s.seqSize > s.outputLimit {
+		return true, ErrDecoderSizeExceeded
 	}
 
 	s.literals = s.literals[ctx.litPosition:]
