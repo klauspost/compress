@@ -136,6 +136,8 @@ func FuzzDecoder(f *testing.F) {
 
 	brLow := newBytesReader(nil)
 	brHi := newBytesReader(nil)
+	brFrames := newBytesReader(nil)
+	brCRC := newBytesReader(nil)
 	f.Fuzz(func(t *testing.T, b []byte) {
 		// Just test if we crash...
 		defer func() {
@@ -146,6 +148,8 @@ func FuzzDecoder(f *testing.F) {
 		}()
 		brLow.Reset(b)
 		brHi.Reset(b)
+		brFrames.Reset(b)
+		brCRC.Reset(b)
 		decLow, err := NewReader(brLow, WithDecoderLowmem(true), WithDecoderConcurrency(2), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), IgnoreChecksum(true), WithDecodeBuffersBelow(8<<10))
 		if err != nil {
 			t.Fatal(err)
@@ -159,6 +163,20 @@ func FuzzDecoder(f *testing.F) {
 		}
 		defer decHi.Close()
 
+		// Concurrent frames, with a small limit to also hand off to the stream
+		// decoder, checking checksums against a sync decoder that does too.
+		// Hide Bytes so small inputs are not decoded with DecodeAll.
+		decFrames, err := NewReader(struct{ io.Reader }{brFrames}, WithDecoderConcurrency(2), WithDecodeFramesConcurrently(256<<10), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), WithDecodeBuffersBelow(8<<10))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer decFrames.Close()
+		decCRC, err := NewReader(brCRC, WithDecoderConcurrency(1), WithDecoderMaxMemory(20<<20), WithDecoderMaxWindow(1<<20), WithDecodeBuffersBelow(8<<10))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer decCRC.Close()
+
 		if debugDecoder {
 			fmt.Println("LOW CONCURRENT")
 		}
@@ -168,6 +186,16 @@ func FuzzDecoder(f *testing.F) {
 			fmt.Println("HI NOT CONCURRENT")
 		}
 		b2, err2 := io.ReadAll(decHi)
+		b3, err3 := io.ReadAll(decFrames)
+		b4, err4 := io.ReadAll(decCRC)
+		if (err3 == nil) != (err4 == nil) {
+			t.Errorf("err frames concurrent: %v, sync with checksums: %v", err3, err4)
+		}
+		// On error, the stream decoder may return more of a frame than the sync one.
+		if err4 == nil && !bytes.Equal(b4, b3) || !bytes.HasPrefix(b4, b3) && !bytes.HasPrefix(b3, b4) {
+			t.Fatalf("Output mismatch, frames concurrent: %v, sync with checksums: %v", err3, err4)
+		}
+
 		if err1 != err2 {
 			if (err1 == nil) != (err2 == nil) {
 				t.Errorf("err low concurrent: %v, hi: %v", err1, err2)

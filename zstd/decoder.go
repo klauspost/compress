@@ -46,6 +46,9 @@ type Decoder struct {
 
 	frame *frameDec
 
+	// Buffers for frames decoded concurrently.
+	frameBufs, frameIn bufCache
+
 	// streamWg is the waitgroup for all streams
 	streamWg sync.WaitGroup
 }
@@ -64,6 +67,9 @@ type decoderState struct {
 
 	// crc of current frame
 	crc *xxhash.Digest
+
+	// frameBuf is the buffer of the current concurrently decoded frame.
+	frameBuf []byte
 
 	flushed bool
 }
@@ -123,6 +129,8 @@ func NewReader(r io.Reader, opts ...DOption) (*Decoder, error) {
 		dec.localFrame.o.dicts = nil
 		d.decoders.Put(dec)
 	}
+	d.frameBufs.max = o.concurrent + 2
+	d.frameIn.max = o.concurrent
 	d.publishedOptions.Store(&o)
 
 	if r == nil {
@@ -194,10 +202,17 @@ func (d *Decoder) Reset(r io.Reader) error {
 			d.current.b = d.current.b[:0]
 		}
 		d.current.flushed = true
+		d.frameBufs.clear()
+		d.frameIn.clear()
 		return nil
 	}
 
 	o := *d.publishedOptions.Load()
+	if o.frameConcurrentMax == 0 {
+		// Drop buffers kept for concurrently decoded frames.
+		d.frameBufs.clear()
+		d.frameIn.clear()
+	}
 
 	// If bytes buffer and < 5MB, do sync decoding anyway.
 	if bb, ok := r.(byter); ok && bb.Len() < o.decodeBufsBelow && !o.limitToCap {
@@ -261,10 +276,16 @@ func (d *Decoder) Reset(r io.Reader) error {
 		return d.startSyncDecoder(r)
 	}
 
-	d.current.output = make(chan decodeOutput, o.concurrent)
 	ctx, cancel := context.WithCancel(context.Background())
 	d.current.cancel = cancel
 	d.streamWg.Add(1)
+	if o.frameConcurrentMax > 0 {
+		// Frames are large, so only buffer one decoded frame.
+		d.current.output = make(chan decodeOutput, 1)
+		go d.startFrameDecoder(ctx, r, d.current.output, o)
+		return nil
+	}
+	d.current.output = make(chan decodeOutput, o.concurrent)
 	go d.startStreamDecoder(ctx, r, d.current.output)
 
 	return nil
@@ -308,6 +329,12 @@ func (d *Decoder) drainOutput() {
 		}
 		d.decoders.Put(d.current.d)
 		d.current.d = nil
+		d.current.b = nil
+	}
+	if d.current.frameBuf != nil {
+		// A whole frame from the concurrent frame decoder.
+		d.frameBufs.put(d.current.frameBuf)
+		d.current.frameBuf = nil
 		d.current.b = nil
 	}
 	if d.current.output == nil || d.current.flushed {
@@ -367,14 +394,17 @@ func (d *Decoder) DecodeAll(input, dst []byte) ([]byte, error) {
 	if d.decoders == nil {
 		return dst, ErrDecoderClosed
 	}
+	return d.decodeAll(input, dst, *d.publishedOptions.Load())
+}
 
+// decodeAll is DecodeAll with the given options.
+func (d *Decoder) decodeAll(input, dst []byte, o decoderOptions) ([]byte, error) {
 	// Grab a block decoder and frame decoder.
 	block, ok := d.decoders.Get()
 	if !ok {
 		return dst, ErrDecoderClosed
 	}
 	frame := block.localFrame
-	o := *d.publishedOptions.Load()
 	frame.setOptions(o)
 	initialSize := len(dst)
 	defer func() {
@@ -496,6 +526,10 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 
 	//ASYNC:
 	d.stashDecoder()
+	if d.current.frameBuf != nil {
+		d.frameBufs.put(d.current.frameBuf)
+		d.current.frameBuf = nil
+	}
 	if blocking {
 		d.current.decodeOutput, ok = <-d.current.output
 	} else {
@@ -511,7 +545,12 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 		return false
 	}
 	next := d.current.decodeOutput
-	if next.d != nil && next.d.async.newHist != nil {
+	if next.d == nil {
+		// A whole frame from DecodeAll, which checked its checksum.
+		d.current.frameBuf = next.b
+		return true
+	}
+	if next.d.async.newHist != nil {
 		d.current.crc.Reset()
 	}
 	if debugDecoder {
@@ -527,7 +566,7 @@ func (d *Decoder) nextBlock(blocking bool) (ok bool) {
 	if len(next.b) > 0 {
 		d.current.crc.Write(next.b)
 	}
-	if next.err == nil && next.d != nil && next.d.hasCRC {
+	if next.err == nil && next.d.hasCRC {
 		got := uint32(d.current.crc.Sum64())
 		if got != next.d.checkCRC {
 			if debugDecoder {
@@ -661,6 +700,10 @@ func (d *Decoder) Close() {
 		d.current.d.Close()
 		d.current.d = nil
 	}
+	d.current.b = nil
+	d.current.frameBuf = nil
+	d.frameBufs.clear()
+	d.frameIn.clear()
 	d.current.err = ErrDecoderClosed
 }
 
