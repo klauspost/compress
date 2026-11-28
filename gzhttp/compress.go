@@ -628,6 +628,9 @@ func NewWrapper(opts ...option) (func(http.Handler) http.HandlerFunc, error) {
 		},
 		preferZstd:  true,
 		gzipEnabled: true,
+
+		requestGzipAccepted: true,
+		requestZstdAccepted: true,
 	}
 
 	for _, o := range opts {
@@ -641,7 +644,7 @@ func NewWrapper(opts ...option) (func(http.Handler) http.HandlerFunc, error) {
 	return func(h http.Handler) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add(vary, acceptEncoding)
-			if c.allowCompressedRequests && contentGzip(r) {
+			if enc := c.requestEncoding(r); enc != encodingNone {
 				if rest, _ := splitOuterCoding(joinFieldLines(r, contentEncoding)); rest != "" {
 					r.Header.Set(contentEncoding, rest)
 				} else {
@@ -650,7 +653,12 @@ func NewWrapper(opts ...option) (func(http.Handler) http.HandlerFunc, error) {
 				// The decoded length is unknown, as for a response Transport decodes.
 				r.Header.Del(contentLength)
 				r.ContentLength = -1
-				r.Body = &gzipReader{body: r.Body}
+				switch enc {
+				case encodingGzip:
+					r.Body = &gzipReader{body: r.Body}
+				case encodingZstd:
+					r.Body = &zstdReader{body: r.Body}
+				}
 			}
 
 			enc := selectEncoding(r, c.gzipEnabled, c.zstdEnabled, c.preferZstd, c.acceptWildcards)
@@ -742,6 +750,11 @@ type config struct {
 	sha256Jitter            bool
 	allowCompressedRequests bool
 
+	// Request codings decoded when compressed requests are allowed
+	requestGzipAccepted bool
+	requestZstdAccepted bool
+	requestEncodingErr  error
+
 	// Zstd support
 	zstdEnabled bool
 	zstdLevel   int
@@ -774,6 +787,10 @@ func (c *config) validate() error {
 		return errors.New("at least one compression encoding (gzip or zstd) must be enabled")
 	}
 
+	if c.requestEncodingErr != nil {
+		return c.requestEncodingErr
+	}
+
 	if c.minSize < 0 {
 		return fmt.Errorf("minimum size must be more than zero")
 	}
@@ -801,11 +818,39 @@ func MinSize(size int) option {
 }
 
 // AllowCompressedRequests will enable or disable RFC 7694 compressed requests.
+// Request bodies are decoded when their outermost coding is one set by
+// AcceptRequestEncodings.
 // By default this is Disabled.
 // See https://datatracker.ietf.org/doc/html/rfc7694
 func AllowCompressedRequests(b bool) option {
 	return func(c *config) {
 		c.allowCompressedRequests = b
+	}
+}
+
+// AcceptRequestEncodings sets the codings, "gzip" and "zstd", that
+// AllowCompressedRequests decodes. Requests with other codings are passed on
+// as they are.
+//
+// A zstd decoder may use up to 8 MiB, the window size RFC 9659 allows,
+// as set by the frame header the client sends.
+// The decoded size is not limited; wrap the body with http.MaxBytesReader
+// in the handler to limit it.
+//
+// Default: "gzip", "zstd".
+func AcceptRequestEncodings(encodings []string) option {
+	return func(c *config) {
+		c.requestGzipAccepted, c.requestZstdAccepted, c.requestEncodingErr = false, false, nil
+		for _, e := range encodings {
+			switch strings.ToLower(strings.TrimSpace(e)) {
+			case "gzip":
+				c.requestGzipAccepted = true
+			case "zstd":
+				c.requestZstdAccepted = true
+			default:
+				c.requestEncodingErr = fmt.Errorf("unsupported request encoding: %q", e)
+			}
+		}
 	}
 }
 
@@ -1048,16 +1093,25 @@ func varyListsAcceptEncoding(h http.Header) bool {
 	return false
 }
 
-// contentGzip returns true if the outermost content coding of the request body is gzip.
-func contentGzip(r *http.Request) bool {
-	if r.Method == http.MethodHead || r.Body == nil {
-		return false
+// requestEncoding returns the coding to remove from the request body when
+// compressed requests are allowed: the outermost one if it is accepted.
+func (c *config) requestEncoding(r *http.Request) encoding {
+	if !c.allowCompressedRequests || r.Method == http.MethodHead || r.Body == nil {
+		return encodingNone
 	}
 	// Content-Encoding lists codings in the order they were applied, so only the
 	// last one is removable here.
 	_, outer := splitOuterCoding(joinFieldLines(r, contentEncoding))
 	coding, _, err := parseCoding(outer)
-	return err == nil && coding == "gzip"
+	switch {
+	case err != nil:
+		return encodingNone
+	case coding == "gzip" && c.requestGzipAccepted:
+		return encodingGzip
+	case coding == "zstd" && c.requestZstdAccepted:
+		return encodingZstd
+	}
+	return encodingNone
 }
 
 // joinFieldLines returns the field lines for key as the single comma list they

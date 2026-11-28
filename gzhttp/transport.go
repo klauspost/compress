@@ -175,10 +175,10 @@ func (g *readGuard) close() bool {
 
 var gzReaderPool sync.Pool
 
-// gzipReader wraps a response body so it can lazily
+// gzipReader wraps a request or response body so it can lazily
 // call gzip.NewReader on the first call to Read
 type gzipReader struct {
-	body  io.ReadCloser // underlying HTTP/1 response body framing
+	body  io.ReadCloser // underlying HTTP/1 body framing
 	zr    *gzip.Reader  // lazily-initialized gzip reader
 	zerr  error         // any error from gzip.NewReader; sticky
 	guard readGuard     // lets Close run during a Read
@@ -253,10 +253,10 @@ var zstdReaderPool sync.Pool
 // content coding. Chrome enforces the same limit.
 const zstdMaxWindow = 8 << 20
 
-// zstdReader wraps a response body so it can lazily
+// zstdReader wraps a request or response body so it can lazily
 // call zstd.NewReader on the first call to Read
 type zstdReader struct {
-	body  io.ReadCloser // underlying HTTP/1 response body framing
+	body  io.ReadCloser // underlying HTTP/1 body framing
 	zr    *zstd.Decoder // lazily-initialized zstd reader
 	zerr  error         // any error from zstd.NewReader; sticky
 	guard readGuard     // lets Close run during a Read
