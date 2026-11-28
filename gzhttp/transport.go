@@ -249,6 +249,10 @@ func lower(b byte) byte {
 // zstdReaderPool pools zstd decoders.
 var zstdReaderPool sync.Pool
 
+// zstdMaxWindow is the window size limit RFC 9659 sets for the zstd
+// content coding. Chrome enforces the same limit.
+const zstdMaxWindow = 8 << 20
+
 // zstdReader wraps a response body so it can lazily
 // call zstd.NewReader on the first call to Read
 type zstdReader struct {
@@ -276,7 +280,7 @@ func (zr *zstdReader) Read(p []byte) (n int, err error) {
 			zr.zerr = reader.Reset(zr.body)
 			zr.zr = reader
 		} else {
-			zr.zr, zr.zerr = zstd.NewReader(zr.body, zstd.WithDecoderLowmem(true), zstd.WithDecoderMaxWindow(32<<20), zstd.WithDecoderConcurrency(1))
+			zr.zr, zr.zerr = zstd.NewReader(zr.body, zstd.WithDecoderLowmem(true), zstd.WithDecoderMaxWindow(zstdMaxWindow), zstd.WithDecoderConcurrency(1))
 		}
 		if zr.zerr != nil {
 			return 0, zr.zerr
