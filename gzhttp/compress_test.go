@@ -2912,6 +2912,17 @@ func TestRequestContentEncodingOrder(t *testing.T) {
 			if err := w.Close(); err != nil {
 				t.Fatal(err)
 			}
+		case "zstd":
+			w, err := zstd.NewWriter(&buf)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := w.Write(b); err != nil {
+				t.Fatal(err)
+			}
+			if err := w.Close(); err != nil {
+				t.Fatal(err)
+			}
 		default:
 			t.Fatalf("unknown coding %q", coding)
 		}
@@ -2936,6 +2947,17 @@ func TestRequestContentEncodingOrder(t *testing.T) {
 				t.Fatalf("flate read: %v", err)
 			}
 			return out
+		case "zstd":
+			zr, err := zstd.NewReader(bytes.NewReader(b))
+			if err != nil {
+				t.Fatalf("zstd.NewReader: %v", err)
+			}
+			defer zr.Close()
+			out, err := io.ReadAll(zr)
+			if err != nil {
+				t.Fatalf("zstd read: %v", err)
+			}
+			return out
 		}
 		t.Fatalf("unknown coding %q", coding)
 		return nil
@@ -2956,6 +2978,12 @@ func TestRequestContentEncodingOrder(t *testing.T) {
 		{"three codings", []string{"deflate, gzip, gzip"}, []string{"deflate", "gzip", "gzip"}, []string{"deflate, gzip"}},
 		{"split lines, gzip outermost", []string{"deflate", "gzip"}, []string{"deflate", "gzip"}, []string{"deflate"}},
 		{"split lines, gzip not outermost", []string{"gzip", "deflate"}, []string{"gzip", "deflate"}, []string{"gzip", "deflate"}},
+		{"single zstd", []string{"zstd"}, []string{"zstd"}, nil},
+		{"zstd uppercase", []string{"ZSTD"}, []string{"zstd"}, nil},
+		{"zstd outermost", []string{"gzip, zstd"}, []string{"gzip", "zstd"}, []string{"gzip"}},
+		{"gzip over zstd", []string{"zstd, gzip"}, []string{"zstd", "gzip"}, []string{"zstd"}},
+		{"zstd not outermost", []string{"zstd, deflate"}, []string{"zstd", "deflate"}, []string{"zstd, deflate"}},
+		{"split lines, zstd outermost", []string{"deflate", "zstd"}, []string{"deflate", "zstd"}, []string{"deflate"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			body := testBody
@@ -2991,7 +3019,7 @@ func TestRequestContentEncodingOrder(t *testing.T) {
 
 			// A decoded body has no known length; one passed through keeps its own.
 			wantLen, wantCL := int64(len(body)), strconv.Itoa(len(body))
-			if tc.applied[len(tc.applied)-1] == "gzip" {
+			if !slices.Equal(tc.wantCE, tc.sent) {
 				wantLen, wantCL = -1, ""
 			}
 			assertEqual(t, wantLen, gotLen)
@@ -3009,6 +3037,133 @@ func TestRequestContentEncodingOrder(t *testing.T) {
 			}
 			assertEqual(t, testBody, gotBody)
 		})
+	}
+}
+
+// zstd request bodies are decoded with the 8 MiB window limit RFC 9659 sets
+// for the zstd content coding.
+func TestRequestZstd(t *testing.T) {
+	encode := func(t *testing.T, b []byte, opts ...zstd.EOption) []byte {
+		t.Helper()
+		var buf bytes.Buffer
+		w, err := zstd.NewWriter(&buf, opts...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write(b); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.Close(); err != nil {
+			t.Fatal(err)
+		}
+		return buf.Bytes()
+	}
+	// The encoder shrinks the window of a small frame, so use one larger than a block.
+	big := bytes.Repeat(testBody, 1<<20/len(testBody)+1)
+	for _, tc := range []struct {
+		name    string
+		body    []byte
+		want    []byte
+		wantErr error
+	}{
+		{"small", encode(t, []byte("hello")), []byte("hello"), nil},
+		{"empty", encode(t, nil), []byte{}, nil},
+		{"8 MiB window", encode(t, big, zstd.WithWindowSize(8<<20)), big, nil},
+		{"16 MiB window", encode(t, big, zstd.WithWindowSize(16<<20)), nil, zstd.ErrWindowSizeExceeded},
+		{"not zstd", testBody, nil, zstd.ErrMagicMismatch},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			wrapper, err := NewWrapper(AllowCompressedRequests(true))
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Run twice so the second request may get a pooled decoder.
+			for range 2 {
+				var got []byte
+				var readErr error
+				handler := wrapper(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					got, readErr = io.ReadAll(r.Body)
+				}))
+				req, _ := http.NewRequest("POST", "/whatever", bytes.NewReader(tc.body))
+				req.Header.Set("Content-Encoding", "zstd")
+				handler.ServeHTTP(httptest.NewRecorder(), req)
+				if !errors.Is(readErr, tc.wantErr) {
+					t.Fatalf("got error %v, want %v", readErr, tc.wantErr)
+				}
+				if tc.wantErr == nil {
+					assertEqual(t, tc.want, got)
+				}
+			}
+		})
+	}
+}
+
+// AcceptRequestEncodings selects the request codings that are decoded;
+// requests with other codings reach the handler unchanged.
+func TestAcceptRequestEncodings(t *testing.T) {
+	var zbuf bytes.Buffer
+	zw, err := zstd.NewWriter(&zbuf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := zw.Write(testBody); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	bodies := map[string][]byte{
+		"gzip": gzipStrLevel(testBody, gzip.DefaultCompression),
+		"zstd": zbuf.Bytes(),
+	}
+
+	for _, tc := range []struct {
+		name    string
+		opts    []option
+		decoded []string
+	}{
+		{"default", nil, []string{"gzip", "zstd"}},
+		{"gzip only", []option{AcceptRequestEncodings([]string{"gzip"})}, []string{"gzip"}},
+		{"zstd only", []option{AcceptRequestEncodings([]string{" ZSTD "})}, []string{"zstd"}},
+		{"none", []option{AcceptRequestEncodings(nil)}, nil},
+		// EnableGzip and EnableZstd only affect responses.
+		{"gzip responses disabled", []option{EnableGzip(false)}, []string{"gzip", "zstd"}},
+		{"zstd responses disabled", []option{EnableZstd(false)}, []string{"gzip", "zstd"}},
+	} {
+		wrapper, err := NewWrapper(append(tc.opts, AllowCompressedRequests(true))...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, coding := range []string{"gzip", "zstd"} {
+			t.Run(tc.name+"/"+coding, func(t *testing.T) {
+				var gotCE string
+				var got []byte
+				var readErr error
+				handler := wrapper(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					gotCE = r.Header.Get("Content-Encoding")
+					got, readErr = io.ReadAll(r.Body)
+				}))
+				req, _ := http.NewRequest("POST", "/whatever", bytes.NewReader(bodies[coding]))
+				req.Header.Set("Content-Encoding", coding)
+				handler.ServeHTTP(httptest.NewRecorder(), req)
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				if slices.Contains(tc.decoded, coding) {
+					assertEqual(t, "", gotCE)
+					assertEqual(t, testBody, got)
+				} else {
+					assertEqual(t, coding, gotCE)
+					assertEqual(t, bodies[coding], got)
+				}
+			})
+		}
+	}
+
+	for _, bad := range [][]string{{"gzip", "br"}, {"gzip", ""}, {" "}} {
+		if _, err := NewWrapper(AcceptRequestEncodings(bad)); err == nil {
+			t.Errorf("NewWrapper accepted request encodings %q", bad)
+		}
 	}
 }
 

@@ -6,6 +6,7 @@ package gzhttp
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -158,6 +159,46 @@ func TestTransportZstd(t *testing.T) {
 	}
 	if !bytes.Equal(got, bin) {
 		t.Errorf("data mismatch")
+	}
+}
+
+// Responses are decoded with the 8 MiB window limit RFC 9659 sets for zstd.
+func TestTransportZstdWindow(t *testing.T) {
+	// The encoder shrinks the window of a small frame, so use one larger than a block.
+	bin := bytes.Repeat([]byte("abcdefgh"), 1<<20/8)
+	for _, tc := range []struct {
+		window  int
+		wantErr error
+	}{
+		{8 << 20, nil},
+		{16 << 20, zstd.ErrWindowSizeExceeded},
+	} {
+		var buf bytes.Buffer
+		enc, err := zstd.NewWriter(&buf, zstd.WithWindowSize(tc.window))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := enc.Write(bin); err != nil {
+			t.Fatal(err)
+		}
+		if err := enc.Close(); err != nil {
+			t.Fatal(err)
+		}
+		server := httptest.NewServer(newTestHandler(buf.Bytes()))
+		c := http.Client{Transport: Transport(http.DefaultTransport)}
+		resp, err := c.Get(server.URL + "/zstd")
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		server.Close()
+		if !errors.Is(err, tc.wantErr) {
+			t.Fatalf("window %d: got error %v, want %v", tc.window, err, tc.wantErr)
+		}
+		if tc.wantErr == nil && !bytes.Equal(got, bin) {
+			t.Errorf("window %d: data mismatch", tc.window)
+		}
 	}
 }
 

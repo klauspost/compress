@@ -172,6 +172,20 @@ Default zstd settings are conservative for broad compatibility:
 - Window size: 128KB - minimal memory usage
 - Concurrency: 1 - single-threaded per request
 
+With `AllowCompressedRequests(true)`, gzip and zstd request bodies are decoded.
+To decode only gzip request bodies, list the codings to accept:
+
+```Go
+wrapper, _ := gzhttp.NewWrapper(
+	gzhttp.AllowCompressedRequests(true),
+	gzhttp.AcceptRequestEncodings([]string{"gzip"}),
+)
+```
+
+A zstd request may have a window of up to 8 MiB, the limit RFC 9659 sets for HTTP,
+so its decoder uses a little more than that.
+The decoded size is not limited; wrap the body with `http.MaxBytesReader` in the handler to limit it.
+
 ### Performance
 
 #### Gzip vs Zstd
