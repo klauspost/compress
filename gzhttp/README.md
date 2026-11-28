@@ -182,7 +182,8 @@ wrapper, _ := gzhttp.NewWrapper(
 )
 ```
 
-A zstd request may make the decoder use up to 8 MiB, the window size RFC 9659 allows for HTTP.
+A zstd request may have a window of up to 8 MiB, the limit RFC 9659 sets for HTTP,
+so its decoder uses a little more than that.
 The decoded size is not limited; wrap the body with `http.MaxBytesReader` in the handler to limit it.
 
 ### Performance

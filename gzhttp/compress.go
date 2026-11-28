@@ -832,8 +832,8 @@ func AllowCompressedRequests(b bool) option {
 // AllowCompressedRequests decodes. Requests with other codings are passed on
 // as they are.
 //
-// A zstd decoder may use up to 8 MiB, the window size RFC 9659 allows,
-// as set by the frame header the client sends.
+// A zstd request may have a window of up to 8 MiB, the limit RFC 9659 sets,
+// so its decoder uses a little more than that.
 // The decoded size is not limited; wrap the body with http.MaxBytesReader
 // in the handler to limit it.
 //
